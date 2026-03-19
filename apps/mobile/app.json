@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Smart",
+    "slug": "smart",
+    "scheme": "smart",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.smart.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
+      }
+    },
+    "android": {
+      "package": "com.smart.mobile",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

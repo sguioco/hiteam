@@ -1,0 +1,201 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ShiftStatus } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
+import { CreateShiftDto } from './dto/create-shift.dto';
+
+@Injectable()
+export class ScheduleService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
+
+  listTemplates(tenantId: string) {
+    return this.prisma.shiftTemplate.findMany({
+      where: { tenantId },
+      include: {
+        location: true,
+        position: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  listShifts(tenantId: string) {
+    return this.prisma.shift.findMany({
+      where: { tenantId },
+      include: {
+        employee: true,
+        location: true,
+        position: true,
+        template: true,
+      },
+      orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
+      take: 50,
+    });
+  }
+
+  async createTemplate(tenantId: string, actorUserId: string, dto: CreateShiftTemplateDto) {
+    const template = await this.prisma.shiftTemplate.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        code: dto.code,
+        locationId: dto.locationId,
+        positionId: dto.positionId,
+        startsAtLocal: dto.startsAtLocal,
+        endsAtLocal: dto.endsAtLocal,
+        gracePeriodMinutes: dto.gracePeriodMinutes,
+      },
+      include: {
+        location: true,
+        position: true,
+      },
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'shift_template',
+      entityId: template.id,
+      action: 'schedule.template_created',
+      metadata: { code: dto.code },
+    });
+
+    return template;
+  }
+
+  async createShift(tenantId: string, actorUserId: string, dto: CreateShiftDto) {
+    const template = await this.prisma.shiftTemplate.findFirst({
+      where: { tenantId, id: dto.templateId },
+      include: { location: true, position: true },
+    });
+
+    if (!template) {
+      throw new NotFoundException('Shift template not found.');
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: dto.employeeId },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const shiftDate = new Date(dto.shiftDate);
+    shiftDate.setHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    if (Number.isNaN(shiftDate.getTime()) || shiftDate < todayStart) {
+      throw new BadRequestException('Shift date cannot be in the past.');
+    }
+
+    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal);
+    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
+
+    const shift = await this.prisma.shift.create({
+      data: {
+        tenantId,
+        templateId: template.id,
+        employeeId: employee.id,
+        locationId: template.locationId,
+        positionId: template.positionId,
+        shiftDate,
+        startsAt,
+        endsAt,
+      },
+      include: {
+        employee: true,
+        location: true,
+        position: true,
+        template: true,
+      },
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'shift',
+      entityId: shift.id,
+      action: 'schedule.shift_created',
+      metadata: { employeeId: employee.id, templateId: template.id, shiftDate: shiftDate.toISOString() },
+    });
+
+    return shift;
+  }
+
+  async myShifts(userId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    return this.prisma.shift.findMany({
+      where: { employeeId: employee.id },
+      include: {
+        location: true,
+        position: true,
+        template: true,
+      },
+      orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
+      take: 30,
+    });
+  }
+
+  async findCurrentShift(employeeId: string) {
+    const now = new Date();
+    const startOfWindow = new Date(now);
+    startOfWindow.setDate(startOfWindow.getDate() - 1);
+    startOfWindow.setHours(0, 0, 0, 0);
+    const endOfWindow = new Date(now);
+    endOfWindow.setDate(endOfWindow.getDate() + 1);
+    endOfWindow.setHours(23, 59, 59, 999);
+
+    const shifts = await this.prisma.shift.findMany({
+      where: {
+        employeeId,
+        status: ShiftStatus.PUBLISHED,
+        startsAt: {
+          gte: startOfWindow,
+          lte: endOfWindow,
+        },
+      },
+      include: {
+        location: true,
+        position: true,
+        template: true,
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+
+    const activeShift = shifts.find((shift) => now >= shift.startsAt && now <= shift.endsAt);
+    if (activeShift) {
+      return activeShift;
+    }
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    return shifts.find((shift) => shift.shiftDate >= todayStart && shift.shiftDate <= todayEnd) ?? null;
+  }
+
+  private mergeDateAndTime(baseDate: Date, localTime: string): Date {
+    const [hoursRaw, minutesRaw] = localTime.split(':');
+    const merged = new Date(baseDate);
+    merged.setHours(Number(hoursRaw), Number(minutesRaw), 0, 0);
+    return merged;
+  }
+
+  private mergeShiftEnd(baseDate: Date, startsAtLocal: string, endsAtLocal: string): Date {
+    const startsAt = this.mergeDateAndTime(baseDate, startsAtLocal);
+    const endsAt = this.mergeDateAndTime(baseDate, endsAtLocal);
+
+    if (endsAt <= startsAt) {
+      endsAt.setDate(endsAt.getDate() + 1);
+    }
+
+    return endsAt;
+  }
+}

@@ -1,0 +1,17 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+out
+dist
+coverage
+.env
+.env.*
+.expo
+apps/mobile/.expo
+apps/mobile/dist
+apps/mobile/web-build
+apps/api/dist
+apps/web-admin/.next
+*.log
+.DS_Store

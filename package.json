@@ -1,0 +1,37 @@
+{
+  "name": "smart-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "turbo run dev --parallel --filter=@smart/api --filter=@smart/web-admin",
+    "dev:all": "turbo run dev --parallel",
+    "dev:mobile": "pnpm --filter @smart/mobile dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:infra": "docker compose up -d postgres redis minio createbuckets",
+    "dev:down": "docker compose down",
+    "db:generate": "node scripts/run-api-prisma.cjs generate",
+    "db:push": "node scripts/run-api-prisma.cjs push",
+    "db:seed": "node scripts/run-api-prisma.cjs seed",
+    "db:push:docker": "node scripts/run-api-prisma.cjs push --profile=docker",
+    "db:seed:docker": "node scripts/run-api-prisma.cjs seed --profile=docker",
+    "docker:apps": "docker compose up -d --build api web-admin",
+    "docker:infra": "docker compose up -d postgres redis minio createbuckets",
+    "docker:down": "docker compose down",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "dotenv": "^17.3.1",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "motion": "^12.38.0",
+    "styled-components": "^6.3.11",
+    "tailwind-merge": "^3.5.0"
+  }
+}
