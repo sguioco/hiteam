@@ -1,0 +1,898 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useMemo, useEffect, useState } from "react";
+import { ImagePlus } from "lucide-react";
+import { AdminShell } from "../../components/admin-shell";
+import {
+  LocationAddressDetails,
+  LocationMapPicker,
+  LocationSelection,
+} from "../../components/location-map-picker";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import Upload from "../../components/ui/Upload";
+import { apiRequest } from "../../lib/api";
+import { toAdminHref } from "../../lib/admin-routes";
+import { getSession } from "../../lib/auth";
+
+type Company = {
+  id: string;
+  googlePlaceId?: string | null;
+  logoUrl?: string | null;
+  name: string;
+};
+
+type Location = {
+  address: string;
+  geofenceRadiusMeters?: number;
+  latitude?: number;
+  longitude?: number;
+  timezone: string;
+};
+
+type OrganizationSetupResponse = {
+  company: Company | null;
+  configured: boolean;
+  defaultGeofenceRadiusMeters: number;
+  location: Location | null;
+};
+
+type EmployeeSummary = {
+  id: string;
+  company?: {
+    id: string;
+  } | null;
+};
+
+type SetupDraft = {
+  address: string;
+  companyLogoUrl: string;
+  companyName: string;
+  details: LocationAddressDetails | null;
+  geofenceRadiusMeters: number;
+  googlePlaceId: string;
+  latitude: string;
+  longitude: string;
+  timezone: string;
+};
+
+type SetupMode = "create" | "update";
+type TimeZonePreset = {
+  address: string;
+  latitude: string;
+  longitude: string;
+};
+
+const MIN_GEOFENCE_RADIUS_METERS = 100;
+const DEFAULT_GEOFENCE_RADIUS_METERS = 100;
+const MAX_GEOFENCE_RADIUS_METERS = 1000;
+const GEOFENCE_STEP_METERS = 25;
+const PREFERRED_TIME_ZONES = [
+  "UTC",
+  "Europe/London",
+  "Europe/Berlin",
+  "Europe/Moscow",
+  "Asia/Dubai",
+  "Asia/Tashkent",
+  "Asia/Almaty",
+  "Asia/Bangkok",
+  "Asia/Novosibirsk",
+  "Asia/Tokyo",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+];
+
+const TIME_ZONE_LABEL_OVERRIDES: Record<string, string> = {
+  "Asia/Bangkok": "Bangkok, Thailand",
+};
+
+const EMPTY_SETUP: OrganizationSetupResponse = {
+  company: null,
+  configured: false,
+  defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
+  location: null,
+};
+
+const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
+  "UTC-08:00": {
+    address: "Downtown Anchorage, Alaska, United States",
+    latitude: "61.217381",
+    longitude: "-149.863129",
+  },
+  "UTC-07:00": {
+    address: "Denver, Colorado, United States",
+    latitude: "39.739236",
+    longitude: "-104.990251",
+  },
+  "UTC-06:00": {
+    address: "Chicago, Illinois, United States",
+    latitude: "41.878113",
+    longitude: "-87.629799",
+  },
+  "UTC-05:00": {
+    address: "Manhattan, New York, United States",
+    latitude: "40.758000",
+    longitude: "-73.985500",
+  },
+  "UTC+00:00": {
+    address: "Westminster, London, United Kingdom",
+    latitude: "51.500729",
+    longitude: "-0.124625",
+  },
+  "UTC+01:00": {
+    address: "Alexanderplatz, Berlin, Germany",
+    latitude: "52.521918",
+    longitude: "13.413215",
+  },
+  "UTC+03:00": {
+    address: "Moscow City, Moscow, Russia",
+    latitude: "55.749447",
+    longitude: "37.537087",
+  },
+  "UTC+04:00": {
+    address:
+      "Burj Khalifa, Downtown Dubai, Dubai, United Arab Emirates",
+    latitude: "25.197197",
+    longitude: "55.274376",
+  },
+  "UTC+05:00": {
+    address: "Tashkent City, Tashkent, Uzbekistan",
+    latitude: "41.299496",
+    longitude: "69.240074",
+  },
+  "UTC+06:00": {
+    address: "Almaty, Kazakhstan",
+    latitude: "43.238949",
+    longitude: "76.889709",
+  },
+  "UTC+07:00": {
+    address: "Bangkok, Thailand",
+    latitude: "13.756331",
+    longitude: "100.501762",
+  },
+  "UTC+09:00": {
+    address: "Shinjuku, Tokyo, Japan",
+    latitude: "35.693840",
+    longitude: "139.703549",
+  },
+};
+
+function getTimeZoneOffsetLabel(timeZone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const zoneName =
+      parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+0";
+    const normalized = zoneName.replace("GMT", "UTC");
+
+    if (normalized === "UTC") {
+      return "UTC+00:00";
+    }
+
+    const match = normalized.match(/^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/);
+    if (!match) {
+      return normalized;
+    }
+
+    const [, sign, hours, minutes] = match;
+    return `UTC${sign}${hours.padStart(2, "0")}:${(minutes ?? "00").padStart(2, "0")}`;
+  } catch {
+    return "UTC+00:00";
+  }
+}
+
+function parseOffsetToMinutes(offsetLabel: string) {
+  const match = offsetLabel.match(/^UTC([+-])(\d{2}):(\d{2})$/);
+  if (!match) {
+    return 0;
+  }
+
+  const [, sign, hours, minutes] = match;
+  const total = Number(hours) * 60 + Number(minutes);
+  return sign === "-" ? -total : total;
+}
+
+function buildTimeZoneOptions(selectedTimeZone?: string) {
+  const source = (() => {
+    try {
+      if (typeof Intl.supportedValuesOf === "function") {
+        const values = Intl.supportedValuesOf("timeZone");
+        if (values.length) {
+          return values;
+        }
+      }
+    } catch {
+      return PREFERRED_TIME_ZONES;
+    }
+
+    return PREFERRED_TIME_ZONES;
+  })();
+
+  const uniqueByOffset = new Map<string, string>();
+
+  for (const timeZone of [selectedTimeZone, ...PREFERRED_TIME_ZONES, ...source]) {
+    if (!timeZone) {
+      continue;
+    }
+
+    const offset = getTimeZoneOffsetLabel(timeZone);
+    if (!uniqueByOffset.has(offset)) {
+      uniqueByOffset.set(offset, timeZone);
+    }
+  }
+
+  return Array.from(uniqueByOffset.entries())
+    .sort(
+      ([leftOffset], [rightOffset]) =>
+        parseOffsetToMinutes(leftOffset) - parseOffsetToMinutes(rightOffset),
+    )
+    .map(([offset, timeZone]) => ({
+      label: `${offset} · ${TIME_ZONE_LABEL_OVERRIDES[timeZone] ?? timeZone}`,
+      timeZone,
+    }));
+}
+
+function normalizeRadius(value?: number | null) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_GEOFENCE_RADIUS_METERS;
+  }
+
+  return Math.min(
+    MAX_GEOFENCE_RADIUS_METERS,
+    Math.max(MIN_GEOFENCE_RADIUS_METERS, value),
+  );
+}
+
+function createEmptyDraft(): SetupDraft {
+  const detectedTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  return {
+    address: "",
+    companyLogoUrl: "",
+    companyName: "",
+    details: null,
+    geofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
+    googlePlaceId: "",
+    latitude: "",
+    longitude: "",
+    timezone: detectedTimeZone,
+  };
+}
+
+function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
+  return {
+    address: setup.location?.address ?? "",
+    companyLogoUrl: setup.company?.logoUrl ?? "",
+    companyName: setup.company?.name ?? "",
+    details: null,
+    geofenceRadiusMeters: normalizeRadius(
+      setup.location?.geofenceRadiusMeters ??
+        setup.defaultGeofenceRadiusMeters ??
+        DEFAULT_GEOFENCE_RADIUS_METERS,
+    ),
+    googlePlaceId: setup.company?.googlePlaceId ?? "",
+    latitude:
+      typeof setup.location?.latitude === "number"
+        ? String(setup.location.latitude)
+        : "",
+    longitude:
+      typeof setup.location?.longitude === "number"
+        ? String(setup.location.longitude)
+        : "",
+    timezone:
+      setup.location?.timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      "UTC",
+  };
+}
+
+function hasDraftCoordinates(draft: SetupDraft) {
+  return draft.latitude.trim() !== "" && draft.longitude.trim() !== "";
+}
+
+export default function OrganizationPage() {
+  const [setup, setSetup] = useState<OrganizationSetupResponse | null>(null);
+  const [employeeCount, setEmployeeCount] = useState(0);
+  const [draft, setDraft] = useState<SetupDraft>(createEmptyDraft);
+  const [radiusInput, setRadiusInput] = useState(String(DEFAULT_GEOFENCE_RADIUS_METERS));
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSetupOpen, setIsSetupOpen] = useState(false);
+  const [setupMode, setSetupMode] = useState<SetupMode>("create");
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const timeZoneOptions = useMemo(
+    () => buildTimeZoneOptions(draft.timezone),
+    [draft.timezone],
+  );
+  const timeZonePreset = useMemo(
+    () => TIME_ZONE_PRESETS[getTimeZoneOffsetLabel(draft.timezone)] ?? null,
+    [draft.timezone],
+  );
+
+  async function loadData() {
+    const session = getSession();
+
+    if (!session) {
+      setSetup(EMPTY_SETUP);
+      setEmployeeCount(0);
+      setDraft(buildDraftFromSetup(EMPTY_SETUP));
+      setError("Сессия истекла или токен недействителен. Войди заново.");
+      return;
+    }
+
+    try {
+      const [nextSetup, employees] = await Promise.all([
+        apiRequest<OrganizationSetupResponse>("/org/setup", {
+          token: session.accessToken,
+        }),
+        apiRequest<EmployeeSummary[]>("/employees", {
+          token: session.accessToken,
+        }),
+      ]);
+
+      setSetup(nextSetup);
+      setEmployeeCount(
+        nextSetup.company?.id
+          ? employees.filter(
+              (employee) => employee.company?.id === nextSetup.company?.id,
+            ).length
+          : 0,
+      );
+      setDraft(buildDraftFromSetup(nextSetup));
+      setRadiusInput(
+        String(
+          normalizeRadius(
+            nextSetup.location?.geofenceRadiusMeters ??
+              nextSetup.defaultGeofenceRadiusMeters,
+          ),
+        ),
+      );
+      setError(null);
+      setIsSetupOpen(!nextSetup.configured);
+      setSetupMode(nextSetup.configured ? "update" : "create");
+    } catch (loadError) {
+      setSetup(EMPTY_SETUP);
+      setEmployeeCount(0);
+      setDraft(buildDraftFromSetup(EMPTY_SETUP));
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Не удалось загрузить организацию.",
+      );
+    }
+  }
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!isSetupOpen || !timeZonePreset) {
+      return;
+    }
+
+    if (draft.address.trim() || hasDraftCoordinates(draft)) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      address: timeZonePreset.address,
+      latitude: timeZonePreset.latitude,
+      longitude: timeZonePreset.longitude,
+    }));
+  }, [
+    draft,
+    isSetupOpen,
+    timeZonePreset,
+  ]);
+
+  function updateDraft<K extends keyof SetupDraft>(
+    key: K,
+    value: SetupDraft[K],
+  ) {
+    setDraft((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function handleMapSelect(next: LocationSelection) {
+    setDraft((current) => ({
+      ...current,
+      address: next.address ?? current.address,
+      companyName:
+        current.companyName || next.suggestedCompanyName || current.companyName,
+      details: next.details ?? current.details,
+      googlePlaceId: next.googlePlaceId ?? current.googlePlaceId,
+      latitude: next.latitude,
+      longitude: next.longitude,
+    }));
+  }
+
+  function handleLogoChange(files: File[]) {
+    const [file] = files;
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        updateDraft("companyLogoUrl", reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function openCreateSetup() {
+    setDraft(createEmptyDraft());
+    setRadiusInput(String(DEFAULT_GEOFENCE_RADIUS_METERS));
+    setError(null);
+    setMessage(null);
+    setSetupMode("create");
+    setIsSetupOpen(true);
+  }
+
+  function openUpdateSetup() {
+    const nextDraft = buildDraftFromSetup(setup ?? EMPTY_SETUP);
+    setDraft(nextDraft);
+    setRadiusInput(String(nextDraft.geofenceRadiusMeters));
+    setError(null);
+    setMessage(null);
+    setSetupMode("update");
+    setIsSetupOpen(true);
+  }
+
+  async function handleDeleteOrganization() {
+    const session = getSession();
+
+    if (!session) {
+      setError("Сессия истекла или токен недействителен. Войди заново.");
+      return;
+    }
+
+    const warning =
+      employeeCount > 0
+        ? `Удалить текущую организацию?\n\nБудут удалены организация, ${employeeCount} сотрудник(ов) и связанные с ними данные.`
+        : "Удалить текущую организацию?\n\nЭто действие нельзя отменить.";
+
+    if (!window.confirm(warning)) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      setError(null);
+      setMessage(null);
+
+      const result = await apiRequest<{
+        deleted: boolean;
+        deletedEmployeesCount: number;
+      }>("/org/setup", {
+        method: "DELETE",
+        token: session.accessToken,
+      });
+
+      setMessage(
+        result.deletedEmployeesCount > 0
+          ? `Организация удалена вместе с ${result.deletedEmployeesCount} сотрудниками.`
+          : "Организация удалена.",
+      );
+      await loadData();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Не удалось удалить организацию.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function shiftRadius(delta: number) {
+    const nextValue = normalizeRadius(draft.geofenceRadiusMeters + delta);
+    updateDraft("geofenceRadiusMeters", nextValue);
+    setRadiusInput(String(nextValue));
+  }
+
+  function handleRadiusInputChange(value: string) {
+    setRadiusInput(value);
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    updateDraft("geofenceRadiusMeters", normalizeRadius(parsed));
+  }
+
+  function handleRadiusInputBlur() {
+    const parsed = Number(radiusInput);
+    const normalized = normalizeRadius(parsed);
+    updateDraft("geofenceRadiusMeters", normalized);
+    setRadiusInput(String(normalized));
+  }
+
+  async function handleSetupSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const session = getSession();
+
+    if (!session) {
+      setError("Сессия истекла или токен недействителен. Войди заново.");
+      return;
+    }
+
+    if (!draft.companyName.trim()) {
+      setError("Укажи название организации.");
+      return;
+    }
+
+    if (!draft.address.trim()) {
+      setError("Укажи адрес организации.");
+      return;
+    }
+
+    if (!draft.latitude || !draft.longitude) {
+      setError("Поставь точку на карте или выбери адрес из подсказок.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError(null);
+      setMessage(null);
+
+      await apiRequest<OrganizationSetupResponse>("/org/setup", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({
+          mode: setupMode,
+          address: draft.address.trim(),
+          companyLogoUrl: draft.companyLogoUrl || undefined,
+          companyName: draft.companyName.trim(),
+          geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
+          googlePlaceId: draft.googlePlaceId || undefined,
+          latitude: Number(draft.latitude),
+          longitude: Number(draft.longitude),
+          timezone: draft.timezone.trim() || "UTC",
+        }),
+      });
+
+      setMessage(
+        setupMode === "create"
+          ? "Организация добавлена."
+          : "Организация сохранена.",
+      );
+      await loadData();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Не удалось сохранить организацию.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (!setup) {
+    return (
+      <AdminShell>
+        <main className="page-shell">
+          <section className="org-page">
+            <div className="inline-note">Загружаем настройки организации...</div>
+          </section>
+        </main>
+      </AdminShell>
+    );
+  }
+
+  const isConfigured = setup.configured;
+  const companyName = setup.company?.name || "";
+  const companyLogoUrl = setup.company?.logoUrl || "";
+  const companyAddress = setup.location?.address || "Адрес не указан.";
+  const geofenceRadius = normalizeRadius(setup.location?.geofenceRadiusMeters);
+  const companyLatitude =
+    typeof setup.location?.latitude === "number"
+      ? String(setup.location.latitude)
+      : draft.latitude;
+  const companyLongitude =
+    typeof setup.location?.longitude === "number"
+      ? String(setup.location.longitude)
+      : draft.longitude;
+
+  return (
+    <AdminShell>
+      <main className="page-shell">
+        <section className="org-page">
+          {!isConfigured && !isSetupOpen ? (
+            <section className="org-empty-screen">
+              <div className="org-empty-body">
+                <h1>Ваша организация не настроена</h1>
+                <p>
+                  Укажи название бизнеса, адрес, точку на карте, логотип и радиус
+                  допустимого входа. После сохранения рабочая точка появится в
+                  системе.
+                </p>
+                <div className="org-empty-actions">
+                  <Button onClick={openCreateSetup} size="lg">
+                    Настроить организацию
+                  </Button>
+                </div>
+                {message ? <div className="inline-note">{message}</div> : null}
+                {error ? (
+                  <div className="org-submit-error" role="alert">
+                    <strong>Не удалось открыть настройку</strong>
+                    <span>{error}</span>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {isSetupOpen ? (
+            <section className="org-configurator">
+              <div className="org-config-header">
+                <div>
+                  <h1>
+                    {setupMode === "create"
+                      ? "Добавление организации"
+                      : "Настройка организации"}
+                  </h1>
+                  <p>
+                    {setupMode === "create"
+                      ? "Укажи название, логотип, адрес, точку на карте и радиус геозоны."
+                      : "Измени название, логотип, адрес, точку на карте и радиус геозоны."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="org-config-shell">
+                <form
+                  className="org-form org-form-onboarding"
+                  onSubmit={(event) => void handleSetupSubmit(event)}
+                >
+                  <div className="org-brand-row">
+                    <div className="org-logo-stack">
+                      <span className="org-logo-label">Логотип</span>
+                      <Upload
+                        accept="image/*"
+                        className="org-logo-upload"
+                        onFilesChange={handleLogoChange}
+                        title=""
+                        visual={
+                          <span className="org-logo-preview">
+                            {draft.companyLogoUrl ? (
+                              <img
+                                alt={draft.companyName || "Organization logo"}
+                                src={draft.companyLogoUrl}
+                              />
+                            ) : (
+                              <ImagePlus className="size-5" />
+                            )}
+                          </span>
+                        }
+                      />
+                    </div>
+
+                    <label className="org-field org-brand-name">
+                      <span>Название организации</span>
+                      <Input
+                        onChange={(event) =>
+                          updateDraft("companyName", event.target.value)
+                        }
+                        placeholder="Beauty Life"
+                        required
+                        value={draft.companyName}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="org-setup-grid">
+                    <div className="org-setup-sidebar">
+                    <label className="org-field">
+                        <span>Радиус геозоны, метры</span>
+                        <div className="org-geofence-control">
+                          <div className="org-geofence-head">
+                            <label className="org-geofence-inline-value">
+                              <input
+                                max={MAX_GEOFENCE_RADIUS_METERS}
+                                min={MIN_GEOFENCE_RADIUS_METERS}
+                                onBlur={handleRadiusInputBlur}
+                                onChange={(event) =>
+                                  handleRadiusInputChange(event.target.value)
+                                }
+                                step={GEOFENCE_STEP_METERS}
+                                type="number"
+                                value={radiusInput}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="org-geofence-slider-row">
+                            <button
+                              className="org-stepper-button"
+                              onClick={() => shiftRadius(-GEOFENCE_STEP_METERS)}
+                              type="button"
+                            >
+                              -25
+                            </button>
+                            <input
+                              className="org-geofence-slider"
+                              max={MAX_GEOFENCE_RADIUS_METERS}
+                              min={MIN_GEOFENCE_RADIUS_METERS}
+                              onChange={(event) =>
+                                handleRadiusInputChange(event.target.value)
+                              }
+                              step={GEOFENCE_STEP_METERS}
+                              type="range"
+                              value={draft.geofenceRadiusMeters}
+                            />
+                            <button
+                              className="org-stepper-button"
+                              onClick={() => shiftRadius(GEOFENCE_STEP_METERS)}
+                              type="button"
+                            >
+                              +25
+                            </button>
+                          </div>
+                          <span className="org-geofence-minimum">
+                            Минимум 100 м
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className="org-field">
+                        <span>Часовой пояс</span>
+                        <Select
+                          onValueChange={(value) => updateDraft("timezone", value)}
+                          value={draft.timezone}
+                        >
+                          <SelectTrigger className="org-timezone-trigger">
+                            <SelectValue placeholder="Выбери часовой пояс" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeZoneOptions.map((option) => (
+                              <SelectItem key={option.timeZone} value={option.timeZone}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    </div>
+
+                    <div className="org-setup-main">
+                      <LocationMapPicker
+                        address={draft.address}
+                        apiKey={apiKey}
+                        geofenceRadiusMeters={draft.geofenceRadiusMeters}
+                        latitude={draft.latitude}
+                        longitude={draft.longitude}
+                        mode="setup"
+                        searchLabel="Адрес организации"
+                        searchPlaceholder="Красный проспект, 24, Новосибирск"
+                        showCopy={false}
+                        onSelect={handleMapSelect}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="org-form-footer">
+                    {message ? <div className="inline-note">{message}</div> : null}
+                    {error ? (
+                      <div className="org-submit-error" role="alert">
+                        <strong>
+                          {setupMode === "create"
+                            ? "Не удалось добавить организацию"
+                            : "Не удалось сохранить организацию"}
+                        </strong>
+                        <span>{error}</span>
+                      </div>
+                    ) : null}
+                    <Button disabled={isSaving} size="lg" type="submit">
+                      {isSaving
+                        ? "Сохраняем..."
+                        : setupMode === "create"
+                          ? "Добавить организацию"
+                          : "Сохранить изменения"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          ) : null}
+
+          {isConfigured ? (
+            <section className="org-company-view">
+              <div className="org-company-header">
+                <div className="org-company-primary">
+                  <Button onClick={openCreateSetup} size="lg">
+                    Добавить организацию
+                  </Button>
+                </div>
+
+                <div className="org-company-identity">
+                  {companyLogoUrl ? (
+                    <div className="org-company-logo">
+                      <img alt={companyName} src={companyLogoUrl} />
+                    </div>
+                  ) : null}
+                  <div className="org-company-heading">
+                    <h1>{companyName}</h1>
+                    <div className="org-company-actions">
+                      <Button onClick={openUpdateSetup} size="lg" variant="outline">
+                        Изменить
+                      </Button>
+                      <Button
+                        disabled={isDeleting}
+                        onClick={() => void handleDeleteOrganization()}
+                        size="lg"
+                        type="button"
+                        variant="destructive"
+                      >
+                        {isDeleting ? "Удаляем..." : "Удалить"}
+                      </Button>
+                      <Button asChild className="org-add-employees-button" size="lg">
+                        <Link href={toAdminHref("/employees")}>
+                          Добавить сотрудников
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <LocationMapPicker
+                address={companyAddress}
+                apiKey={apiKey}
+                geofenceRadiusMeters={geofenceRadius}
+                latitude={companyLatitude}
+                longitude={companyLongitude}
+                mode="preview"
+                onSelect={() => undefined}
+              />
+
+              <div className="org-company-meta">
+                <article className="org-company-meta-item">
+                  <span>Радиус геозоны</span>
+                  <strong>{geofenceRadius} м</strong>
+                </article>
+                <article className="org-company-meta-item">
+                  <span>Часовой пояс</span>
+                  <strong>{setup.location?.timezone || "UTC"}</strong>
+                </article>
+              </div>
+
+              <div className="org-company-address">
+                <span>Адрес компании</span>
+                <strong>{companyAddress}</strong>
+              </div>
+            </section>
+          ) : null}
+        </section>
+      </main>
+    </AdminShell>
+  );
+}
