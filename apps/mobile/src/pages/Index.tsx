@@ -8,6 +8,7 @@ import BottomNav from '../components/BottomNav';
 import AuthScreen from './AuthScreen';
 import CalendarScreen from './CalendarScreen';
 import ManagerScreen from './ManagerScreen';
+import PendingAccessScreen from './PendingAccessScreen';
 import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 
@@ -26,7 +27,7 @@ export type OverdueTask = {
 
 const Index = () => {
   const { t } = useI18n();
-  const { isAuthenticated, roleCodes } = useAuthFlowState();
+  const { isAuthenticated, roleCodes, workspaceAccessAllowed } = useAuthFlowState();
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const isManager = hasManagerAccess(roleCodes);
   const yesterday = new Date();
@@ -105,6 +106,10 @@ const Index = () => {
 
   if (!isAuthenticated) {
     return <AuthScreen />;
+  }
+
+  if (!workspaceAccessAllowed) {
+    return <PendingAccessScreen />;
   }
 
   return (

@@ -687,7 +687,7 @@ function buildAttendanceHistory(
           workedMinutes: 495 - employeeIndex * 8,
           breakMinutes: 45,
           paidBreakMinutes: 0,
-          lateMinutes: employeeIndex === 1 && dayOffset < 2 ? 12 : 0,
+          lateMinutes: employee.id === "emp-2" ? 0 : employeeIndex === 1 && dayOffset < 2 ? 12 : 0,
           earlyLeaveMinutes: employeeIndex === 3 && dayOffset === 2 ? 15 : 0,
           checkInEvent: {
             occurredAt: startedAt,
@@ -717,6 +717,60 @@ function buildAttendanceHistory(
             },
           ],
         });
+
+        if (employee.id === "emp-2" && dayOffset === 1) {
+          const extraStartedAt = createIsoAt(-dayOffset, 10, 12);
+          const extraEndedAt = createIsoAt(-dayOffset, 19, 2);
+          const extraDayKey = dateKey(new Date(extraStartedAt));
+
+          if (extraDayKey >= from && extraDayKey <= to) {
+            rows.push({
+              sessionId: `${employee.id}-history-extra-${dayOffset}`,
+              employeeId: employee.id,
+              employeeName: buildEmployeeFullName(employee),
+              employeeNumber: employee.employeeNumber,
+              department: employee.department?.name ?? "—",
+              location: employee.primaryLocation?.name ?? "—",
+              shiftLabel: "10:00-19:00",
+              status: "checked_out",
+              startedAt: extraStartedAt,
+              endedAt: extraEndedAt,
+              totalMinutes: 540,
+              workedMinutes: 465,
+              breakMinutes: 45,
+              paidBreakMinutes: 0,
+              lateMinutes: 12,
+              earlyLeaveMinutes: 0,
+              checkInEvent: {
+                occurredAt: extraStartedAt,
+                distanceMeters: 18,
+                notes: null,
+              },
+              checkOutEvent: {
+                occurredAt: extraEndedAt,
+                distanceMeters: 11,
+                notes: null,
+              },
+              breaks: [
+                {
+                  id: `${employee.id}-break-extra-${dayOffset}`,
+                  startedAt: createIsoAt(-dayOffset, 14, 0),
+                  endedAt: createIsoAt(-dayOffset, 14, 45),
+                  totalMinutes: 45,
+                  isPaid: false,
+                  startEvent: {
+                    occurredAt: createIsoAt(-dayOffset, 14, 0),
+                    distanceMeters: 7,
+                  },
+                  endEvent: {
+                    occurredAt: createIsoAt(-dayOffset, 14, 45),
+                    distanceMeters: 8,
+                  },
+                },
+              ],
+            });
+          }
+        }
       }
     });
 
@@ -1172,7 +1226,15 @@ function buildEmployeeSummary(state: DemoState, token?: string) {
   };
 }
 
-export function shouldUseDemoApi(token?: string) {
+function isRealBackendOnlyPath(path: string) {
+  return /^\/employees\/invitations\/public(?:\/|$)/.test(path);
+}
+
+export function shouldUseDemoApi(path: string, token?: string) {
+  if (isRealBackendOnlyPath(path)) {
+    return false;
+  }
+
   return shouldHandle(token);
 }
 
@@ -1547,6 +1609,9 @@ export async function demoApiRequest<T>(
         code: payload.code,
         startsAtLocal: payload.startsAtLocal,
         endsAtLocal: payload.endsAtLocal,
+        weekDaysJson: Array.isArray(payload.weekDays)
+          ? JSON.stringify(payload.weekDays)
+          : null,
         gracePeriodMinutes: Number(payload.gracePeriodMinutes ?? 10),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

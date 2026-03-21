@@ -180,6 +180,56 @@ export async function loadPublicInvitation(token: string): Promise<{
   return response.json();
 }
 
+export async function lookupCompanyByCode(code: string): Promise<{
+  companyName: string;
+  companyCode: string;
+  tenantName: string;
+  tenantSlug: string;
+}> {
+  const response = await fetch(`${API_URL}/api/v1/employees/public/join/code/lookup`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Unable to verify company code.'));
+  }
+
+  return response.json();
+}
+
+export async function submitCompanyJoinRequest(payload: {
+  code: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  birthDate: string;
+  avatarDataUrl: string;
+}): Promise<{
+  id: string;
+  status: 'PENDING_APPROVAL';
+  tenantName: string;
+  companyName: string;
+}> {
+  const response = await fetch(`${API_URL}/api/v1/employees/public/join/code/submit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Unable to submit join request.'));
+  }
+
+  return response.json();
+}
+
 export async function registerFromInvitation(
   token: string,
   payload: {
@@ -295,6 +345,29 @@ export async function bootstrapPushNotifications(): Promise<void> {
 
 export async function loadAttendanceStatus(): Promise<AttendanceStatusResponse> {
   return authRequest<AttendanceStatusResponse>('/attendance/me/status');
+}
+
+export async function loadMyShifts(): Promise<
+  Array<{
+    id: string;
+    shiftDate: string;
+    startsAt: string;
+    endsAt: string;
+    location: {
+      id: string;
+      name: string;
+    };
+    position: {
+      id: string;
+      name: string;
+    };
+    template: {
+      id: string;
+      name: string;
+    };
+  }>
+> {
+  return authRequest('/schedule/me');
 }
 
 export type AttendanceActionName = 'check-in' | 'check-out' | 'break/start' | 'break/end';

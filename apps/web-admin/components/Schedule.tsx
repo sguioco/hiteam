@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/api";
 import { getSession, isEmployeeOnlyRole } from "@/lib/auth";
+import { isDemoAccessToken } from "@/lib/demo-mode";
 import { useI18n } from "@/lib/i18n";
 import { createMockScheduleData } from "@/lib/mock-admin-data";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
@@ -75,6 +76,7 @@ type ShiftTemplateRecord = {
   code: string;
   startsAtLocal: string;
   endsAtLocal: string;
+  weekDaysJson?: string | null;
   gracePeriodMinutes: number;
   createdAt: string;
   updatedAt: string;
@@ -186,6 +188,7 @@ type CreateTemplateDraft = {
   positionId: string;
   startsAtLocal: string;
   endsAtLocal: string;
+  weekDays: number[];
   gracePeriodMinutes: string;
 };
 
@@ -324,6 +327,41 @@ function formatDateInput(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function parseTemplateWeekDays(weekDaysJson?: string | null) {
+  if (!weekDaysJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(weekDaysJson) as unknown;
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    const values = parsed
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item >= 1 && item <= 7);
+
+    return values.length > 0 ? values : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatTemplateWeekDaysSummary(weekDaysJson: string | null | undefined, dayHeaders: readonly string[], localeTag: string) {
+  const days = parseTemplateWeekDays(weekDaysJson);
+
+  if (!days) {
+    return localeTag === "ru-RU" ? "Каждый день" : "Every day";
+  }
+
+  if (days.length === 7) {
+    return localeTag === "ru-RU" ? "Каждый день" : "Every day";
+  }
+
+  return days.map((day) => dayHeaders[day - 1] ?? String(day)).join(", ");
+}
+
 function formatCalendarLabel(
   date: Date,
   mode: PeriodMode,
@@ -341,7 +379,8 @@ function formatCalendarLabel(
     }, locale)}`;
   }
 
-  return formatDateTime(date, { month: "long", year: "numeric" }, locale);
+  const monthLabel = formatDateTime(date, { month: "long", year: "numeric" }, locale);
+  return locale.startsWith("ru") ? monthLabel.replace(/\s*г\.$/, "") : monthLabel;
 }
 
 function buildCalendarDays(cursor: Date, period: PeriodMode) {
@@ -405,6 +444,7 @@ const initialTemplateDraft: CreateTemplateDraft = {
   positionId: "",
   startsAtLocal: "09:00",
   endsAtLocal: "18:00",
+  weekDays: [1, 2, 3, 4, 5],
   gracePeriodMinutes: "10",
 };
 
@@ -449,6 +489,7 @@ const scheduleCopy = {
     graceMinutes: "Льготные минуты",
     minutesShort: "мин",
     scheduleLoadedFromMock: "Показаны демонстрационные данные.",
+    scheduleLoadError: "Не удалось загрузить расписание.",
     requestApproved: "Запрос одобрен.",
     requestRejected: "Запрос отклонён.",
     requestTypeShiftChange: "Смена графика",
@@ -488,6 +529,8 @@ const scheduleCopy = {
     templateCode: "Код шаблона",
     chooseLocation: "Локация",
     chooseRole: "Роль",
+    templateDays: "Рабочие дни",
+    templateDaysHint: "Выберите, в какие дни работает этот шаблон.",
     createTemplateAction: "Создать шаблон",
     massAssignDialogTitle: "Массовое назначение",
     massAssignDialogDescription: "Назначает один шаблон всем подходящим сотрудникам в выбранном диапазоне дат.",
@@ -548,6 +591,7 @@ const scheduleCopy = {
     graceMinutes: "Grace minutes",
     minutesShort: "min",
     scheduleLoadedFromMock: "Showing demo data.",
+    scheduleLoadError: "Unable to load schedule.",
     requestApproved: "Request approved.",
     requestRejected: "Request rejected.",
     requestTypeShiftChange: "Shift change",
@@ -587,6 +631,8 @@ const scheduleCopy = {
     templateCode: "Template code",
     chooseLocation: "Location",
     chooseRole: "Role",
+    templateDays: "Workdays",
+    templateDaysHint: "Choose which weekdays this template should create shifts for.",
     createTemplateAction: "Create template",
     massAssignDialogTitle: "Bulk assignment",
     massAssignDialogDescription: "Assign one template to all matching employees in the selected date range.",
@@ -619,6 +665,9 @@ export default function Schedule({
   const ui = scheduleCopy[locale];
   const localeTag = locale === "ru" ? "ru-RU" : "en-US";
   const session = getSession();
+  const sessionAccessToken = session?.accessToken ?? null;
+  const sessionRoleKey = session?.user.roleCodes.join(",") ?? "";
+  const isDemoSession = isDemoAccessToken(sessionAccessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
   const today = useMemo(() => new Date(), []);
@@ -668,6 +717,19 @@ export default function Schedule({
     locationId: "all",
     roleId: "all",
   });
+
+  function toggleTemplateWeekDay(day: number) {
+    setTemplateDraft((current) => {
+      const nextDays = current.weekDays.includes(day)
+        ? current.weekDays.filter((value) => value !== day)
+        : [...current.weekDays, day].sort((left, right) => left - right);
+
+      return {
+        ...current,
+        weekDays: nextDays,
+      };
+    });
+  }
 
   const tabs: Array<{ key: TabKey; label: string; icon: typeof Calendar }> = [
     { key: "schedules", label: ui.tabs.schedules, icon: Calendar },
@@ -1217,24 +1279,41 @@ export default function Schedule({
         departmentsResult,
         positionsResult,
       ].find((result) => result.status === "rejected");
-      const mock = createMockScheduleData(new Date(), locale);
-      setTemplates(mock.templates);
-      setShifts(mock.shifts);
-      setEmployees(mock.employees);
-      setLocations(mock.locations);
-      setDepartments(mock.departments);
-      setPositions(mock.positions);
-      setRequests(mock.requests);
-      setTaskBoard({
-        tasks: [],
-        totals: { total: 0, overdue: 0, active: 0, done: 0 },
-      });
-      setIsMockMode(true);
-      setMessage(
-        firstError?.status === "rejected" && firstError.reason instanceof Error
-          ? `${firstError.reason.message} ${ui.scheduleLoadedFromMock}`
-          : ui.scheduleLoadedFromMock,
-      );
+      if (isDemoSession) {
+        const mock = createMockScheduleData(new Date(), locale);
+        setTemplates(mock.templates);
+        setShifts(mock.shifts);
+        setEmployees(mock.employees);
+        setLocations(mock.locations);
+        setDepartments(mock.departments);
+        setPositions(mock.positions);
+        setRequests(mock.requests);
+        setTaskBoard({
+          tasks: [],
+          totals: { total: 0, overdue: 0, active: 0, done: 0 },
+        });
+        setIsMockMode(true);
+        setMessage(
+          firstError?.status === "rejected" && firstError.reason instanceof Error
+            ? `${firstError.reason.message} ${ui.scheduleLoadedFromMock}`
+            : ui.scheduleLoadedFromMock,
+        );
+      } else {
+        setTemplates([]);
+        setShifts([]);
+        setEmployees([]);
+        setLocations([]);
+        setDepartments([]);
+        setPositions([]);
+        setRequests([]);
+        setTaskBoard(null);
+        setIsMockMode(false);
+        setMessage(
+          firstError?.status === "rejected" && firstError.reason instanceof Error
+            ? firstError.reason.message
+            : ui.scheduleLoadError,
+        );
+      }
       setLoading(false);
       return;
     }
@@ -1253,7 +1332,7 @@ export default function Schedule({
 
   useEffect(() => {
     void loadData();
-  }, [isEmployeeMode, locale, session, ui.scheduleLoadedFromMock]);
+  }, [isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
 
   useEffect(() => {
     const dateParam = searchParams.get("date");
@@ -1395,7 +1474,8 @@ export default function Schedule({
       !templateDraft.locationId ||
       !templateDraft.positionId ||
       !templateDraft.startsAtLocal ||
-      !templateDraft.endsAtLocal
+      !templateDraft.endsAtLocal ||
+      templateDraft.weekDays.length === 0
     ) {
       setMessage(ui.templateValidation);
       return;
@@ -1417,6 +1497,7 @@ export default function Schedule({
           code: templateDraft.code.trim(),
           startsAtLocal: templateDraft.startsAtLocal,
           endsAtLocal: templateDraft.endsAtLocal,
+          weekDaysJson: JSON.stringify(templateDraft.weekDays),
           gracePeriodMinutes: Number(templateDraft.gracePeriodMinutes || "10"),
           createdAt,
           updatedAt: createdAt,
@@ -1436,6 +1517,7 @@ export default function Schedule({
         token: session.accessToken,
         body: JSON.stringify({
           ...templateDraft,
+          weekDays: templateDraft.weekDays,
           gracePeriodMinutes: Number(templateDraft.gracePeriodMinutes || "10"),
         }),
       });
@@ -1983,7 +2065,13 @@ export default function Schedule({
                     </span>
                   </div>
 
-                  <div className="mt-auto space-y-0.5">
+                  <div
+                    className={`space-y-0.5 ${
+                      dayEntries.length === 0
+                        ? "flex flex-1 items-center justify-center"
+                        : "mt-auto"
+                    }`}
+                  >
                     {dayEntries.slice(0, 3).map((entry) => (
                       <div
                         className={`flex items-center gap-1.5 truncate text-[11px] font-semibold leading-snug ${
@@ -2021,7 +2109,7 @@ export default function Schedule({
                     ) : null}
 
                     {dayEntries.length === 0 ? (
-                      <p className="mt-2 text-center text-[9px] font-heading italic text-muted-foreground/50">
+                      <p className="text-center text-[9px] font-heading italic text-muted-foreground/50">
                         {ui.noCalendarItems}
                       </p>
                     ) : null}
@@ -2342,6 +2430,9 @@ export default function Schedule({
                         {template.position.name}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
+                        {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {template.location.name} · {ui.graceMinutes}{" "}
                         {template.gracePeriodMinutes} {ui.minutesShort}
                       </p>
@@ -2454,6 +2545,34 @@ export default function Schedule({
                   type="time"
                   value={templateDraft.endsAtLocal}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{ui.templateDays}</p>
+                  <p className="text-xs text-muted-foreground">{ui.templateDaysHint}</p>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {ui.dayHeaders.map((label, index) => {
+                    const day = index + 1;
+                    const active = templateDraft.weekDays.includes(day);
+
+                    return (
+                      <button
+                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                          active
+                            ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
+                            : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                        }`}
+                        key={label}
+                        onClick={() => toggleTemplateWeekDay(day)}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <Input

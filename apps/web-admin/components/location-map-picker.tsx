@@ -216,18 +216,9 @@ export function LocationMapPicker({
   );
   const isSetupMode = mode === "setup";
 
-  useEffect(() => {
-    onSelectRef.current = onSelect;
-  }, [onSelect]);
-
-  useEffect(() => {
-    skipAutocompleteRef.current = true;
-    setSearchValue(address);
-  }, [address]);
-
-  // Sync geofence circle on map
-  useEffect(() => {
+  function syncGeofenceCircle() {
     if (!mapRef.current || !window.google?.maps) return;
+
     const lat = parseCoordinate(latitude, DEFAULT_LATITUDE);
     const lng = parseCoordinate(longitude, DEFAULT_LONGITUDE);
     const hasCoords = hasCoordinateValue(latitude) && hasCoordinateValue(longitude);
@@ -244,19 +235,35 @@ export function LocationMapPicker({
     if (circleRef.current) {
       circleRef.current.setCenter({ lat, lng });
       circleRef.current.setRadius(radius);
-    } else {
-      circleRef.current = new window.google.maps.Circle({
-        map: mapRef.current,
-        center: { lat, lng },
-        radius,
-        fillColor: "#7c3aed",
-        fillOpacity: 0.10,
-        strokeColor: "#7c3aed",
-        strokeOpacity: 0.5,
-        strokeWeight: 2,
-        clickable: false,
-      });
+      circleRef.current.setMap(mapRef.current);
+      return;
     }
+
+    circleRef.current = new window.google.maps.Circle({
+      map: mapRef.current,
+      center: { lat, lng },
+      radius,
+      fillColor: "#7c3aed",
+      fillOpacity: 0.10,
+      strokeColor: "#7c3aed",
+      strokeOpacity: 0.5,
+      strokeWeight: 2,
+      clickable: false,
+    });
+  }
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  useEffect(() => {
+    skipAutocompleteRef.current = true;
+    setSearchValue(address);
+  }, [address]);
+
+  // Sync geofence circle on map
+  useEffect(() => {
+    syncGeofenceCircle();
   }, [latitude, longitude, geofenceRadiusMeters]);
 
   useEffect(() => {
@@ -353,6 +360,7 @@ export function LocationMapPicker({
         markerRef.current?.setDraggable(isSetupMode);
         markerRef.current?.setPosition(center);
         mapRef.current?.setCenter(center);
+        syncGeofenceCircle();
         focusMap(center, hasCoordinates ? 16 : 13);
         setStatus("ready");
 

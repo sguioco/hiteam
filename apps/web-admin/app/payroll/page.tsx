@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Separator } from '@/components/ui/separator';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -71,6 +70,13 @@ export default function PayrollPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'policy' | 'holidays' | 'exports'>('summary');
+
+  const payrollTabs: Array<{ value: typeof activeTab; label: string }> = [
+    { value: 'summary', label: locale === 'ru' ? 'Сводка' : 'Summary' },
+    { value: 'policy', label: locale === 'ru' ? 'Политика' : 'Policy' },
+    { value: 'holidays', label: locale === 'ru' ? 'Праздники' : 'Holidays' },
+    { value: 'exports', label: locale === 'ru' ? 'Экспорт' : 'Export' },
+  ];
 
   async function loadData() {
     const session = getSession();
@@ -463,12 +469,24 @@ export default function PayrollPage() {
 
             {/* Tabs */}
             <div className="w-full space-y-6">
-              <ToggleGroup type="single" variant="outline" value={activeTab} onValueChange={(v) => { if (v) setActiveTab(v as typeof activeTab); }}>
-                <ToggleGroupItem value="summary">{locale === 'ru' ? 'Сводка' : 'Summary'}</ToggleGroupItem>
-                <ToggleGroupItem value="policy">{locale === 'ru' ? 'Политика' : 'Policy'}</ToggleGroupItem>
-                <ToggleGroupItem value="holidays">{locale === 'ru' ? 'Праздники' : 'Holidays'}</ToggleGroupItem>
-                <ToggleGroupItem value="exports">{locale === 'ru' ? 'Экспорт' : 'Export'}</ToggleGroupItem>
-              </ToggleGroup>
+              <div className="flex w-full flex-wrap items-center gap-4">
+                <div className="flex overflow-hidden rounded-xl border border-border">
+                  {payrollTabs.map((tab) => (
+                    <button
+                      key={tab.value}
+                      className={`px-4 py-2 text-sm font-heading font-medium transition-colors ${
+                        activeTab === tab.value
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setActiveTab(tab.value)}
+                      type="button"
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {activeTab === 'summary' && renderSummaryTab()}
               {activeTab === 'policy' && renderPolicyTab()}

@@ -11,6 +11,7 @@ import {
   TeamBiometricJobsResponse,
 } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
+import { AppSelectField } from '../../components/ui/select';
 import { apiRequest } from '../../lib/api';
 import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
@@ -531,13 +532,18 @@ export default function DiagnosticsPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <input className={flatInputClass} onChange={(event) => { setExportSearch(event.target.value); setExportPage(1); }} placeholder={t('diagnostics.searchJobs')} value={exportSearch} />
-              <select className={flatSelectClass} onChange={(event) => { setExportStatusFilter(event.target.value as 'ALL' | ExportJobsResponse['items'][number]['status']); setExportPage(1); }} value={exportStatusFilter}>
-                <option value="ALL">{t('diagnostics.allStatuses')}</option>
-                <option value="FAILED">FAILED</option>
-                <option value="QUEUED">QUEUED</option>
-                <option value="PROCESSING">PROCESSING</option>
-                <option value="COMPLETED">COMPLETED</option>
-              </select>
+              <AppSelectField
+                className={flatSelectClass}
+                value={exportStatusFilter}
+                onValueChange={(value) => { setExportStatusFilter(value as 'ALL' | ExportJobsResponse['items'][number]['status']); setExportPage(1); }}
+                options={[
+                  { value: 'ALL', label: t('diagnostics.allStatuses') },
+                  { value: 'FAILED', label: 'FAILED' },
+                  { value: 'QUEUED', label: 'QUEUED' },
+                  { value: 'PROCESSING', label: 'PROCESSING' },
+                  { value: 'COMPLETED', label: 'COMPLETED' },
+                ]}
+              />
             </div>
             {canOperateQueues ? (
               <div className="flex flex-wrap items-center gap-4">
@@ -613,13 +619,18 @@ export default function DiagnosticsPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <input className={flatInputClass} onChange={(event) => { setBiometricSearch(event.target.value); setBiometricPage(1); }} placeholder={t('diagnostics.searchJobs')} value={biometricSearch} />
-              <select className={flatSelectClass} onChange={(event) => { setBiometricStatusFilter(event.target.value as 'ALL' | TeamBiometricJobsResponse['items'][number]['status']); setBiometricPage(1); }} value={biometricStatusFilter}>
-                <option value="ALL">{t('diagnostics.allStatuses')}</option>
-                <option value="FAILED">FAILED</option>
-                <option value="QUEUED">QUEUED</option>
-                <option value="PROCESSING">PROCESSING</option>
-                <option value="COMPLETED">COMPLETED</option>
-              </select>
+              <AppSelectField
+                className={flatSelectClass}
+                value={biometricStatusFilter}
+                onValueChange={(value) => { setBiometricStatusFilter(value as 'ALL' | TeamBiometricJobsResponse['items'][number]['status']); setBiometricPage(1); }}
+                options={[
+                  { value: 'ALL', label: t('diagnostics.allStatuses') },
+                  { value: 'FAILED', label: 'FAILED' },
+                  { value: 'QUEUED', label: 'QUEUED' },
+                  { value: 'PROCESSING', label: 'PROCESSING' },
+                  { value: 'COMPLETED', label: 'COMPLETED' },
+                ]}
+              />
             </div>
             {canOperateQueues ? (
               <div className="flex flex-wrap items-center gap-4">
@@ -692,19 +703,29 @@ export default function DiagnosticsPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <input className={flatInputClass} onChange={(event) => { setPushSearch(event.target.value); setPushPage(1); }} placeholder={t('diagnostics.searchDeliveries')} value={pushSearch} />
-              <select className={flatSelectClass} onChange={(event) => { setPushStatusFilter(event.target.value as 'ALL' | PushDeliveryItem['status']); setPushPage(1); }} value={pushStatusFilter}>
-                <option value="ALL">{t('diagnostics.allStatuses')}</option>
-                <option value="FAILED">FAILED</option>
-                <option value="QUEUED">QUEUED</option>
-                <option value="PROCESSING">PROCESSING</option>
-                <option value="DELIVERED">DELIVERED</option>
-              </select>
-              <select className={flatSelectClass} onChange={(event) => { setPushReceiptFilter(event.target.value as 'ALL' | NonNullable<PushDeliveryItem['receiptStatus']>); setPushPage(1); }} value={pushReceiptFilter}>
-                <option value="ALL">{t('diagnostics.allReceiptStatuses')}</option>
-                <option value="ERROR">ERROR</option>
-                <option value="PENDING">PENDING</option>
-                <option value="OK">OK</option>
-              </select>
+              <AppSelectField
+                className={flatSelectClass}
+                value={pushStatusFilter}
+                onValueChange={(value) => { setPushStatusFilter(value as 'ALL' | PushDeliveryItem['status']); setPushPage(1); }}
+                options={[
+                  { value: 'ALL', label: t('diagnostics.allStatuses') },
+                  { value: 'FAILED', label: 'FAILED' },
+                  { value: 'QUEUED', label: 'QUEUED' },
+                  { value: 'PROCESSING', label: 'PROCESSING' },
+                  { value: 'DELIVERED', label: 'DELIVERED' },
+                ]}
+              />
+              <AppSelectField
+                className={flatSelectClass}
+                value={pushReceiptFilter}
+                onValueChange={(value) => { setPushReceiptFilter(value as 'ALL' | NonNullable<PushDeliveryItem['receiptStatus']>); setPushPage(1); }}
+                options={[
+                  { value: 'ALL', label: t('diagnostics.allReceiptStatuses') },
+                  { value: 'ERROR', label: 'ERROR' },
+                  { value: 'PENDING', label: 'PENDING' },
+                  { value: 'OK', label: 'OK' },
+                ]}
+              />
             </div>
             {canOperateQueues ? (
               <div className="flex flex-wrap items-center gap-4">

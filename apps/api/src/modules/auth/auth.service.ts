@@ -2,10 +2,12 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterOrganizationDto } from './dto/register-organization.dto';
 import { RegisterOwnerDto } from './dto/register-owner.dto';
 import * as bcrypt from 'bcrypt';
-import { Prisma, UserStatus, EmployeeStatus } from '@prisma/client';
+import { Prisma, UserStatus, EmployeeStatus, EmployeeInvitationStatus } from '@prisma/client';
 import { SignOptions } from 'jsonwebtoken';
+import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -15,6 +17,58 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly auditService: AuditService,
   ) {}
+
+  private normalizeCompanyCode(value: string): string {
+    return value
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32);
+  }
+
+  private buildTenantSlug(value: string): string {
+    const normalized = value
+      .trim()
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+
+    return normalized || 'company';
+  }
+
+  private async buildUniqueTenantSlug(baseName: string): Promise<string> {
+    const baseSlug = this.buildTenantSlug(baseName);
+
+    const taken = await this.prisma.tenant.findMany({
+      where: {
+        slug: {
+          startsWith: baseSlug,
+        },
+      },
+      select: { slug: true },
+    });
+
+    const takenSlugs = new Set(taken.map((entry) => entry.slug));
+    if (!takenSlugs.has(baseSlug)) {
+      return baseSlug;
+    }
+
+    let index = 2;
+    while (takenSlugs.has(`${baseSlug}-${index}`)) {
+      index += 1;
+    }
+
+    return `${baseSlug}-${index}`;
+  }
+
+  private hashInvitationToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
 
   private async issueSessionTokens(user: {
     id: string;
@@ -363,6 +417,132 @@ export class AuthService {
     });
 
     return result;
+  }
+
+  async registerOrganization(dto: RegisterOrganizationDto): Promise<{
+    tenantId: string;
+    tenantSlug: string;
+    companyId: string;
+    companyCode: string;
+    managerEmail: string;
+    managerSetupUrl: string;
+    employeeJoinUrl: string;
+    employeeDeepLink: string;
+  }> {
+    const organizationName = dto.organizationName.trim();
+    const managerEmail = dto.managerEmail.trim().toLowerCase();
+    const companyCode = this.normalizeCompanyCode(dto.companyCode);
+
+    if (!organizationName) {
+      throw new ConflictException('Organization name is required.');
+    }
+
+    if (!companyCode) {
+      throw new ConflictException('Invite code is required.');
+    }
+
+    const existingCompanyCode = await this.prisma.company.findFirst({
+      where: { code: companyCode },
+      select: { id: true },
+    });
+    if (existingCompanyCode) {
+      throw new ConflictException('Invite code already exists.');
+    }
+
+    const tenantSlug = await this.buildUniqueTenantSlug(organizationName);
+    const timezone = dto.timezone?.trim() || 'UTC';
+    const token = randomBytes(24).toString('hex');
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name: organizationName,
+          slug: tenantSlug,
+          timezone,
+          locale: 'ru',
+        },
+      });
+
+      const company = await tx.company.create({
+        data: {
+          tenantId: tenant.id,
+          name: organizationName,
+          code: companyCode,
+        },
+      });
+
+      await tx.location.create({
+        data: {
+          tenantId: tenant.id,
+          companyId: company.id,
+          name: `${organizationName} HQ`,
+          code: `HQ-${companyCode}`,
+          address: 'Not set yet',
+          latitude: 0,
+          longitude: 0,
+          geofenceRadiusMeters: 100,
+          timezone,
+        },
+      });
+
+      const systemUser = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: `system+${tenant.id}@smart.local`,
+          passwordHash: await bcrypt.hash(randomBytes(16).toString('hex'), 10),
+          status: UserStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
+
+      await tx.employeeInvitation.create({
+        data: {
+          tenantId: tenant.id,
+          companyId: company.id,
+          email: managerEmail,
+          invitedByUserId: systemUser.id,
+          tokenHash: this.hashInvitationToken(token),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          status: EmployeeInvitationStatus.INVITED,
+        },
+      });
+
+      return {
+        tenantId: tenant.id,
+        companyId: company.id,
+      };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+
+    const webBaseUrl = (process.env.WEB_ADMIN_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    const managerSetupUrl = `${webBaseUrl}/join/manager/${token}`;
+    const employeeJoinUrl = `${webBaseUrl}/join/company/${encodeURIComponent(companyCode)}`;
+    const employeeDeepLink = `smart://auth/join/${encodeURIComponent(companyCode)}`;
+
+    await this.auditService.log({
+      tenantId: result.tenantId,
+      entityType: 'tenant',
+      entityId: result.tenantId,
+      action: 'auth.organization_registered',
+      metadata: {
+        organizationName,
+        tenantSlug,
+        companyCode,
+        managerEmail,
+      },
+    });
+
+    return {
+      tenantId: result.tenantId,
+      tenantSlug,
+      companyId: result.companyId,
+      companyCode,
+      managerEmail,
+      managerSetupUrl,
+      employeeJoinUrl,
+      employeeDeepLink,
+    };
   }
 
   async me(userId: string): Promise<{ id: string; email: string; tenantId: string; roleCodes: string[]; workspaceAccessAllowed: boolean }> {

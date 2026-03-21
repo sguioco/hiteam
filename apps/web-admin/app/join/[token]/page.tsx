@@ -4,6 +4,8 @@ import { ChangeEvent, FormEvent, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
+import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
+import { AppSelectField } from "@/components/ui/select";
 
 type InvitationPayload = {
   id: string;
@@ -32,6 +34,7 @@ export default function JoinInvitationPage({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  const requiredMark = <span className="ml-1 text-[color:var(--destructive)]">*</span>;
   const [form, setForm] = useState({
     password: "",
     firstName: "",
@@ -172,7 +175,7 @@ export default function JoinInvitationPage({
             <input disabled value={invitation.email} />
           </label>
           <label>
-            <span>Пароль</span>
+            <span>Пароль{requiredMark}</span>
             <input
               minLength={8}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
@@ -181,7 +184,7 @@ export default function JoinInvitationPage({
             />
           </label>
           <label>
-            <span>Имя</span>
+            <span>Имя{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
               required
@@ -189,7 +192,7 @@ export default function JoinInvitationPage({
             />
           </label>
           <label>
-            <span>Фамилия</span>
+            <span>Фамилия{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
               required
@@ -204,27 +207,29 @@ export default function JoinInvitationPage({
             />
           </label>
           <label>
-            <span>Дата рождения</span>
-            <input
-              onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))}
-              required
-              type="date"
+            <span>Дата рождения{requiredMark}</span>
+            <DateOfBirthField
               value={form.birthDate}
+              onChange={(nextValue) =>
+                setForm((current) => ({ ...current, birthDate: nextValue }))
+              }
+              triggerClassName="rounded-2xl px-4 py-3"
             />
           </label>
           <label>
-            <span>Пол</span>
-            <select
-              className="rounded-2xl border border-[color:var(--border)] bg-white px-4 py-3 text-sm"
-              onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
+            <span>Пол{requiredMark}</span>
+            <AppSelectField
               value={form.gender}
-            >
-              <option value="male">Мужской</option>
-              <option value="female">Женский</option>
-            </select>
+              onValueChange={(value) => setForm((current) => ({ ...current, gender: value }))}
+              options={[
+                { value: "male", label: "Мужской" },
+                { value: "female", label: "Женский" },
+              ]}
+              triggerClassName="rounded-2xl px-4 py-3"
+            />
           </label>
           <label>
-            <span>Телефон</span>
+            <span>Телефон{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
               required

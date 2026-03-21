@@ -76,6 +76,23 @@ export class EmployeesService {
     });
   }
 
+  getMe(user: JwtUser) {
+    return this.prisma.employee.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        userId: user.sub,
+      },
+      include: {
+        user: true,
+        company: true,
+        department: true,
+        primaryLocation: true,
+        position: true,
+        devices: true,
+      },
+    });
+  }
+
   async create(tenantId: string, dto: CreateEmployeeDto) {
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -187,6 +204,8 @@ export class EmployeesService {
       throw new ConflictException('Такой email уже зарегистрирован в компании.');
     }
 
+    const avatar = await this.uploadAvatar(company.tenantId, email, dto.avatarDataUrl);
+
     const inviterUserId = await this.ensureSystemInviter(company.tenantId);
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -200,6 +219,7 @@ export class EmployeesService {
       },
       create: {
         tenantId: company.tenantId,
+        companyId: company.id,
         email,
         invitedByUserId: inviterUserId,
         tokenHash: this.hashToken(token),
@@ -208,9 +228,13 @@ export class EmployeesService {
         submittedAt: new Date(),
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
+        birthDate: new Date(dto.birthDate),
         phone: dto.phone.trim(),
+        avatarStorageKey: avatar.key,
+        avatarUrl: avatar.url,
       },
       update: {
+        companyId: company.id,
         invitedByUserId: inviterUserId,
         tokenHash: this.hashToken(token),
         expiresAt,
@@ -225,11 +249,11 @@ export class EmployeesService {
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
         middleName: null,
-        birthDate: null,
+        birthDate: new Date(dto.birthDate),
         gender: null,
         phone: dto.phone.trim(),
-        avatarStorageKey: null,
-        avatarUrl: null,
+        avatarStorageKey: avatar.key,
+        avatarUrl: avatar.url,
       },
     });
 
@@ -259,6 +283,7 @@ export class EmployeesService {
         companyCode: company.code,
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
+        birthDate: dto.birthDate,
       },
     });
 
@@ -417,7 +442,15 @@ export class EmployeesService {
   async getInvitationByToken(token: string) {
     const invitation = await this.prisma.employeeInvitation.findUnique({
       where: { tokenHash: this.hashToken(token) },
-      include: { tenant: true },
+      include: {
+        tenant: true,
+        company: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+      },
     });
 
     if (!invitation) {
@@ -435,6 +468,8 @@ export class EmployeesService {
       status: invitation.status,
       tenantName: invitation.tenant.name,
       tenantSlug: invitation.tenant.slug,
+      companyName: invitation.company?.name ?? null,
+      companyCode: invitation.company?.code ?? null,
       expiresAt: invitation.expiresAt.toISOString(),
       submittedAt: invitation.submittedAt?.toISOString() ?? null,
       registrationCompleted: Boolean(invitation.userId),
@@ -457,7 +492,7 @@ export class EmployeesService {
       invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
 
     if (invitation.status !== EmployeeInvitationStatus.INVITED && !canRegisterApprovedInvitation) {
-      throw new BadRequestException('Invitation is no longer available for registration.');
+      throw new BadRequestException('Этот invite уже использован. Войдите в систему.');
     }
 
     if (invitation.expiresAt.getTime() <= Date.now()) {
@@ -525,10 +560,15 @@ export class EmployeesService {
         },
       });
 
-      const companyId = await this.resolveDefaultCompanyId(tx, invitation.tenantId);
+      const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
       const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
-      const primaryLocationId = await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
-      const positionId = await this.resolveDefaultPositionId(tx, invitation.tenantId);
+      const approvedShiftTemplate = invitation.approvedShiftTemplateId
+        ? await tx.shiftTemplate.findFirst({
+            where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
+          })
+        : null;
+      const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
+      const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, invitation.tenantId);
 
       const employee = await tx.employee.create({
         data: {
@@ -551,6 +591,14 @@ export class EmployeesService {
           hireDate: new Date(),
         },
       });
+
+      if (invitation.approvedGroupId) {
+        await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
+      }
+
+      if (invitation.approvedShiftTemplateId) {
+        await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
+      }
 
       const updatedInvitation = await tx.employeeInvitation.update({
         where: { id: invitation.id },
@@ -625,8 +673,38 @@ export class EmployeesService {
       throw new BadRequestException('Invitation is not waiting for review.');
     }
 
-    if (!invitation.userId) {
-      throw new BadRequestException('The employee has not completed registration yet.');
+    const requestedShiftTemplateId =
+      dto.decision === 'APPROVE'
+        ? dto.shiftTemplateId?.trim() || invitation.approvedShiftTemplateId || null
+        : invitation.approvedShiftTemplateId || null;
+    const approvedShiftTemplate =
+      requestedShiftTemplateId
+        ? await this.prisma.shiftTemplate.findFirst({
+            where: { tenantId, id: requestedShiftTemplateId },
+          })
+        : null;
+
+    if (dto.decision === 'APPROVE' && !approvedShiftTemplate) {
+      throw new BadRequestException('Shift assignment is required before approval.');
+    }
+
+    const rawGroupId = typeof dto.groupId === 'string' ? dto.groupId.trim() : undefined;
+    const requestedGroupId =
+      dto.decision === 'APPROVE'
+        ? rawGroupId === undefined
+          ? invitation.approvedGroupId || null
+          : rawGroupId || null
+        : invitation.approvedGroupId || null;
+
+    if (requestedGroupId) {
+      const approvedGroup = await this.prisma.workGroup.findFirst({
+        where: { tenantId, id: requestedGroupId },
+        select: { id: true },
+      });
+
+      if (!approvedGroup) {
+        throw new BadRequestException('Selected work group was not found.');
+      }
     }
 
     const avatar = dto.avatarDataUrl
@@ -642,6 +720,9 @@ export class EmployeesService {
       phone: dto.phone?.trim() ?? invitation.phone,
       avatarStorageKey: avatar?.key ?? invitation.avatarStorageKey,
       avatarUrl: avatar?.url ?? invitation.avatarUrl,
+      companyId: invitation.companyId ?? null,
+      approvedShiftTemplateId: approvedShiftTemplate?.id ?? null,
+      approvedGroupId: requestedGroupId,
     };
 
     if (!updatePayload.firstName || !updatePayload.lastName || !updatePayload.birthDate || !updatePayload.gender || !updatePayload.phone) {
@@ -711,15 +792,15 @@ export class EmployeesService {
     }
 
     if (!invitation.userId) {
-      const tenant = await this.prisma.tenant.findUniqueOrThrow({
-        where: { id: tenantId },
-        include: {
-          companies: {
-            take: 1,
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-      });
+      const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+      const companyName = updatePayload.companyId
+        ? (
+            await this.prisma.company.findFirst({
+              where: { tenantId, id: updatePayload.companyId },
+              select: { name: true },
+            })
+          )?.name ?? tenant.name
+        : tenant.name;
 
       const token = randomBytes(24).toString('hex');
       const approved = await this.prisma.employeeInvitation.update({
@@ -738,7 +819,7 @@ export class EmployeesService {
 
       await this.employeeInvitationsMailerService.sendInvitationEmail({
         email: invitation.email,
-        companyName: tenant.companies[0]?.name ?? tenant.name,
+        companyName,
         tenantName: tenant.name,
         token,
       });
@@ -749,7 +830,11 @@ export class EmployeesService {
         entityType: 'employee_invitation',
         entityId: invitation.id,
         action: 'employee.review_approved_invite_sent',
-        metadata: { email: invitation.email },
+        metadata: {
+          email: invitation.email,
+          shiftTemplateId: approvedShiftTemplate?.id ?? null,
+          groupId: requestedGroupId,
+        },
       });
 
       return { id: approved.id, status: approved.status, employeeId: approved.employeeId, inviteSent: true };
@@ -760,10 +845,10 @@ export class EmployeesService {
         where: { userId: invitation.userId! },
       });
 
-      const companyId = await this.resolveDefaultCompanyId(tx, tenantId);
+      const companyId = await this.resolveInvitationCompanyId(tx, tenantId, updatePayload.companyId);
       const departmentId = await this.resolveDefaultDepartmentId(tx, tenantId);
-      const primaryLocationId = await this.resolveDefaultLocationId(tx, tenantId, companyId);
-      const positionId = await this.resolveDefaultPositionId(tx, tenantId);
+      const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, tenantId, companyId);
+      const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, tenantId);
 
       const employee =
         existingEmployee
@@ -807,6 +892,12 @@ export class EmployeesService {
               },
             });
 
+      await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, requestedGroupId);
+
+      if (approvedShiftTemplate?.id) {
+        await this.createInitialShiftFromTemplate(tx, tenantId, employee.id, approvedShiftTemplate.id);
+      }
+
       await tx.user.update({
         where: { id: invitation.userId! },
         data: { workspaceAccessAllowed: true },
@@ -842,7 +933,11 @@ export class EmployeesService {
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: 'employee.review_approved',
-      metadata: { employeeId: approved.employeeId },
+      metadata: {
+        employeeId: approved.employeeId,
+        shiftTemplateId: approvedShiftTemplate?.id ?? null,
+        groupId: requestedGroupId,
+      },
     });
 
     return { id: approved.id, status: approved.status, employeeId: approved.employeeId };
@@ -872,6 +967,124 @@ export class EmployeesService {
       rejectedAt: invitation?.rejectedAt?.toISOString() ?? null,
       rejectedReason: invitation?.rejectedReason ?? null,
     };
+  }
+
+  private async syncEmployeeGroupMembership(
+    tx: PrismaTx,
+    tenantId: string,
+    employeeId: string,
+    groupId: string | null,
+  ) {
+    await tx.workGroupMembership.deleteMany({
+      where: { tenantId, employeeId },
+    });
+
+    if (!groupId) {
+      return;
+    }
+
+    await tx.workGroupMembership.create({
+      data: {
+        tenantId,
+        groupId,
+        employeeId,
+      },
+    });
+  }
+
+  private async createInitialShiftFromTemplate(
+    tx: PrismaTx,
+    tenantId: string,
+    employeeId: string,
+    templateId: string,
+  ) {
+    const template = await tx.shiftTemplate.findFirst({
+      where: { tenantId, id: templateId },
+      select: {
+        id: true,
+        locationId: true,
+        positionId: true,
+        startsAtLocal: true,
+        endsAtLocal: true,
+        weekDaysJson: true,
+      },
+    });
+
+    if (!template) {
+      throw new NotFoundException('Approved shift template not found.');
+    }
+
+    const now = new Date();
+    let shiftDate = new Date(now);
+    shiftDate.setHours(0, 0, 0, 0);
+
+    const todayEndsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
+    if (now > todayEndsAt) {
+      shiftDate.setDate(shiftDate.getDate() + 1);
+    }
+
+    const shiftHorizonDays = 30;
+    const horizonEnd = new Date(shiftDate);
+    horizonEnd.setDate(horizonEnd.getDate() + shiftHorizonDays - 1);
+    horizonEnd.setHours(0, 0, 0, 0);
+
+    const existingShifts = await tx.shift.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        templateId: template.id,
+        shiftDate: {
+          gte: shiftDate,
+          lte: horizonEnd,
+        },
+      },
+      select: { shiftDate: true },
+    });
+
+    const existingDayKeys = new Set(
+      existingShifts.map((item) => {
+        const day = new Date(item.shiftDate);
+        day.setHours(0, 0, 0, 0);
+        return day.toISOString();
+      }),
+    );
+    const allowedWeekDays = this.parseShiftTemplateWeekDays(template.weekDaysJson);
+
+    const newShifts: Prisma.ShiftCreateManyInput[] = [];
+
+    for (let dayOffset = 0; dayOffset < shiftHorizonDays; dayOffset += 1) {
+      const nextShiftDate = new Date(shiftDate);
+      nextShiftDate.setDate(nextShiftDate.getDate() + dayOffset);
+      nextShiftDate.setHours(0, 0, 0, 0);
+      const normalizedWeekDay = this.toTemplateWeekDay(nextShiftDate);
+
+      if (allowedWeekDays !== null && !allowedWeekDays.has(normalizedWeekDay)) {
+        continue;
+      }
+
+      if (existingDayKeys.has(nextShiftDate.toISOString())) {
+        continue;
+      }
+
+      newShifts.push({
+        tenantId,
+        templateId: template.id,
+        employeeId,
+        locationId: template.locationId,
+        positionId: template.positionId,
+        shiftDate: nextShiftDate,
+        startsAt: this.mergeDateAndTime(nextShiftDate, template.startsAtLocal),
+        endsAt: this.mergeShiftEnd(nextShiftDate, template.startsAtLocal, template.endsAtLocal),
+      });
+    }
+
+    if (newShifts.length === 0) {
+      return;
+    }
+
+    await tx.shift.createMany({
+      data: newShifts,
+    });
   }
 
   private hashToken(token: string) {
@@ -961,6 +1174,21 @@ export class EmployeesService {
   private async uploadAvatar(tenantId: string, email: string, dataUrl: string) {
     const storageKey = `employees/${tenantId}/avatars/${Date.now()}-${email.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
     return this.storageService.uploadDataUrl(storageKey, dataUrl);
+  }
+
+  private async resolveInvitationCompanyId(tx: PrismaTx, tenantId: string, companyId: string | null | undefined) {
+    if (companyId) {
+      const company = await tx.company.findFirst({
+        where: { tenantId, id: companyId },
+        select: { id: true },
+      });
+
+      if (company) {
+        return company.id;
+      }
+    }
+
+    return this.resolveDefaultCompanyId(tx, tenantId);
   }
 
   private async resolveDefaultCompanyId(tx: PrismaTx, tenantId: string) {
@@ -1068,5 +1296,53 @@ export class EmployeesService {
     }
 
     return `EMP-${Date.now()}`;
+  }
+
+  private mergeDateAndTime(baseDate: Date, localTime: string) {
+    const [hoursRaw, minutesRaw] = localTime.split(':');
+    const merged = new Date(baseDate);
+    merged.setHours(Number(hoursRaw), Number(minutesRaw), 0, 0);
+    return merged;
+  }
+
+  private mergeShiftEnd(baseDate: Date, startsAtLocal: string, endsAtLocal: string) {
+    const startsAt = this.mergeDateAndTime(baseDate, startsAtLocal);
+    const endsAt = this.mergeDateAndTime(baseDate, endsAtLocal);
+
+    if (endsAt <= startsAt) {
+      endsAt.setDate(endsAt.getDate() + 1);
+    }
+
+    return endsAt;
+  }
+
+  private parseShiftTemplateWeekDays(weekDaysJson: string | null | undefined) {
+    if (!weekDaysJson) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(weekDaysJson) as unknown;
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+
+      const values = parsed
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item >= 1 && item <= 7);
+
+      if (values.length === 0) {
+        return null;
+      }
+
+      return new Set(values);
+    } catch {
+      return null;
+    }
+  }
+
+  private toTemplateWeekDay(date: Date) {
+    const nativeDay = date.getDay();
+    return nativeDay === 0 ? 7 : nativeDay;
   }
 }

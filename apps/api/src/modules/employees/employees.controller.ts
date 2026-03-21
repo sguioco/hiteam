@@ -66,6 +66,12 @@ export class EmployeesController {
     return this.employeesService.getAccessStatus(user);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  me(@CurrentUser() user: JwtUser) {
+    return this.employeesService.getMe(user);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Patch('invitations/:invitationId/review')

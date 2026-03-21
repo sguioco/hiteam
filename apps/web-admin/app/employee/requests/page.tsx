@@ -9,6 +9,7 @@ import {
   TaskItem,
 } from "@smart/types";
 import { EmployeeShell } from "../../../components/employee-shell";
+import { AppSelectField } from "../../../components/ui/select";
 import { getSession } from "../../../lib/auth";
 import { apiRequest } from "../../../lib/api";
 import { useI18n } from "../../../lib/i18n";
@@ -107,6 +108,7 @@ export default function EmployeeRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedRequestType, setSelectedRequestType] =
     useState<RequestType>("LEAVE");
+  const [selectedRelatedRequestId, setSelectedRelatedRequestId] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedDayKey, setSelectedDayKey] = useState(() =>
     formatDateKey(new Date()),
@@ -193,6 +195,7 @@ export default function EmployeeRequestsPage() {
 
       form.reset();
       setSelectedRequestType("LEAVE");
+      setSelectedRelatedRequestId("");
       setMessage(t("employeePortal.requestCreated"));
       await loadData();
     } catch (submitError) {
@@ -378,32 +381,34 @@ export default function EmployeeRequestsPage() {
               className="form-grid"
               onSubmit={(event) => void handleSubmit(event)}
             >
-              <select
-                name="requestType"
-                onChange={(event) =>
-                  setSelectedRequestType(event.target.value as RequestType)
-                }
-                required
+              <AppSelectField
                 value={selectedRequestType}
-              >
-                {requestTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {formatRequestType(type, t)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) =>
+                  setSelectedRequestType(value as RequestType)
+                }
+                options={requestTypeOptions.map((type) => ({
+                  value: type,
+                  label: formatRequestType(type, t),
+                }))}
+              />
               {selectedRequestType === "VACATION_CHANGE" ? (
-                <select name="relatedRequestId" required>
-                  <option value="">
-                    {t("requests.selectOriginalVacation")}
-                  </option>
-                  {approvedVacations.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {new Date(item.startsOn).toLocaleDateString()} -{" "}
-                      {new Date(item.endsOn).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <input
+                    name="relatedRequestId"
+                    type="hidden"
+                    value={selectedRelatedRequestId}
+                  />
+                  <AppSelectField
+                    value={selectedRelatedRequestId}
+                    emptyLabel={t("requests.selectOriginalVacation")}
+                    onValueChange={setSelectedRelatedRequestId}
+                    options={approvedVacations.map((item) => ({
+                      value: item.id,
+                      label: `${new Date(item.startsOn).toLocaleDateString()} - ${new Date(item.endsOn).toLocaleDateString()}`,
+                    }))}
+                    triggerClassName="[&>span]:truncate"
+                  />
+                </>
               ) : null}
               <input
                 name="title"

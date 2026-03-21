@@ -27,6 +27,7 @@ type ShiftTemplateRecord = {
   code: string;
   startsAtLocal: string;
   endsAtLocal: string;
+  weekDaysJson?: string | null;
   gracePeriodMinutes: number;
   createdAt: string;
   updatedAt: string;
@@ -509,6 +510,7 @@ export function createMockScheduleData(
       code: copy.templates[0].code,
       startsAtLocal: "08:00",
       endsAtLocal: "17:00",
+      weekDaysJson: JSON.stringify([1, 2, 3, 4, 5]),
       gracePeriodMinutes: 10,
       createdAt,
       updatedAt: createdAt,
@@ -521,6 +523,7 @@ export function createMockScheduleData(
       code: "DAY",
       startsAtLocal: "09:00",
       endsAtLocal: "18:00",
+      weekDaysJson: JSON.stringify([1, 2, 3, 4, 5]),
       gracePeriodMinutes: 10,
       createdAt,
       updatedAt: createdAt,
@@ -533,6 +536,7 @@ export function createMockScheduleData(
       code: "SUP",
       startsAtLocal: "10:00",
       endsAtLocal: "19:00",
+      weekDaysJson: JSON.stringify([1, 2, 3, 4, 5, 6]),
       gracePeriodMinutes: 5,
       createdAt,
       updatedAt: createdAt,
@@ -545,6 +549,7 @@ export function createMockScheduleData(
       code: "NGT",
       startsAtLocal: "20:00",
       endsAtLocal: "08:00",
+      weekDaysJson: JSON.stringify([1, 2, 3, 4]),
       gracePeriodMinutes: 15,
       createdAt,
       updatedAt: createdAt,

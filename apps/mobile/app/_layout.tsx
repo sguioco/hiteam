@@ -32,7 +32,11 @@ export default function RootLayout() {
 
     const warmUpAssets = async () => {
       try {
-        await Asset.loadAsync(require('../bg.webp'));
+        await Asset.loadAsync([
+          require('../bg.webp'),
+          require('../timelapse-mobile.mp4'),
+          require('../timelapse-poster.jpg'),
+        ]);
       } finally {
         if (!cancelled) {
           setBannerReady(true);

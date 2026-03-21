@@ -743,21 +743,21 @@ export default function Attendance() {
 
         {viewMode === "today" ? (
           <>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-fit flex-wrap overflow-hidden rounded-xl border border-border">
               {todayFilters.map((filter) => (
                 <button
                   className={cn(
-                    "filter-chip",
+                    "flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors",
                     todayFilter === filter.key
-                      ? "bg-[color:var(--accent)] text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)]"
-                      : "filter-chip-inactive",
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                   key={filter.key}
                   onClick={() => setTodayFilter(filter.key)}
                   type="button"
                 >
                   {filter.label}
-                  <span className="ml-1 opacity-60">
+                  <span className={todayFilter === filter.key ? "text-white/80" : "opacity-70"}>
                     {todayCounts[filter.key]}
                   </span>
                 </button>
@@ -874,8 +874,8 @@ export default function Attendance() {
                 ) : null}
 
                 {!isLoading && !error && filteredTodayCards.length === 0 ? (
-                  <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] px-5 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
-                    Ничего не найдено по текущему фильтру.
+                  <div className="px-1 py-6 text-center text-sm text-[color:var(--muted-foreground)]">
+                    Ничего не найдено по текущему фильтру
                   </div>
                 ) : null}
               </div>
@@ -932,13 +932,12 @@ export default function Attendance() {
                       />
                       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[color:var(--muted-foreground)]">
                         <span>Отработано {formatMinutes(selectedCard.workedMinutes)}</span>
-                        <span>Перерыв {formatMinutes(selectedCard.breakMinutes)}</span>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between gap-4 py-1">
-                        <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-[20px] bg-[color:var(--panel-muted)] p-4">
+                        <div className="mb-2 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogIn className="h-3.5 w-3.5" />
                           Приход
                         </div>
@@ -946,9 +945,8 @@ export default function Attendance() {
                           {formatTime(selectedCard.arrival)}
                         </div>
                       </div>
-                      <Separator className="my-3 bg-[color:var(--border)]" />
-                      <div className="flex items-center justify-between gap-4 py-1">
-                        <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                      <div className="rounded-[20px] bg-[color:var(--panel-muted)] p-4">
+                        <div className="mb-2 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogOut className="h-3.5 w-3.5" />
                           Уход
                         </div>
@@ -1047,7 +1045,7 @@ export default function Attendance() {
               </div>
 
               {!audit?.items.length ? (
-                <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] px-5 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+                <div className="px-1 py-8 text-center text-sm text-[color:var(--muted-foreground)]">
                   Нет событий за выбранный период.
                 </div>
               ) : (
@@ -1246,14 +1244,14 @@ export default function Attendance() {
           </>
         ) : (
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex w-fit flex-wrap items-center overflow-hidden rounded-xl border border-border">
               {periodPresets.map((option) => (
                 <button
                   className={cn(
-                    "filter-chip",
+                    "px-4 py-2 text-sm font-heading font-medium transition-colors",
                     preset === option.key
-                      ? "filter-chip-active"
-                      : "filter-chip-inactive",
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                   key={option.key}
                   onClick={() => handlePresetChange(option.key)}
@@ -1363,22 +1361,22 @@ export default function Attendance() {
                           {row.total}
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-[color:var(--soft-success)] px-2 font-semibold text-[color:var(--success)]">
+                          <span className="font-semibold text-[color:var(--success)]">
                             {row.ontime}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-[color:var(--soft-warning)] px-2 font-semibold text-[color:var(--warning)]">
+                          <span className="font-semibold text-[color:var(--warning)]">
                             {row.late}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-[color:var(--soft-danger)] px-2 font-semibold text-[color:var(--danger)]">
+                          <span className="font-semibold text-[color:var(--danger)]">
                             {row.earlyLeave}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-[color:var(--soft-accent)] px-2 font-semibold text-[color:var(--accent-strong)]">
+                          <span className="font-semibold text-[color:var(--accent-strong)]">
                             {row.missed}
                           </span>
                         </td>

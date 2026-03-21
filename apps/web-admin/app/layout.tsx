@@ -1,17 +1,10 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
-import { Rubik } from 'next/font/google';
 import '@aws-amplify/ui-react-liveness/styles.css';
 import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
 import { Providers } from './providers';
 import { cn } from "@/lib/utils";
-
-const rubik = Rubik({
-  subsets: ['latin', 'cyrillic'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-sf-base',
-});
 
 const teodor = localFont({
   src: [
@@ -36,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn(rubik.variable, teodor.variable)}>
+    <html lang="en" className={cn(teodor.variable)}>
       <body>
         <Providers>{children}</Providers>
       </body>

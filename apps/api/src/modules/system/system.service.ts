@@ -3,10 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { AuthService } from '../auth/auth.service';
+import { RegisterOrganizationDto } from '../auth/dto/register-organization.dto';
 
 @Injectable()
 export class SystemService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
+  ) {}
 
   async createTenant(dto: CreateTenantDto) {
     const existingTenant = await this.prisma.tenant.findUnique({
@@ -56,5 +61,9 @@ export class SystemService {
       // Provide a generic URL that the frontend can use or map to
       setupUrl: `/join/manager/${token}`,
     };
+  }
+
+  async createOrganization(dto: RegisterOrganizationDto) {
+    return this.authService.registerOrganization(dto);
   }
 }

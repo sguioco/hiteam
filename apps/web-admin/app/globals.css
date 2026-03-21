@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-sf-base: "Inter", "Segoe UI", "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   --font-sf-stack: var(--font-sf-base);
   --font-brand-stack: var(--font-brand), var(--font-sf-base);
   --font-heading: var(--font-sf-stack);
@@ -1852,7 +1853,7 @@ textarea {
 
 .organization-studio-identity {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
+  grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.6fr);
   gap: 22px;
   align-items: end;
   padding-bottom: 18px;
@@ -1871,10 +1872,21 @@ textarea {
   align-content: start;
 }
 
+.organization-studio-logo-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .organization-studio-logo-preview {
   width: 92px;
   height: 92px;
   border-radius: 20px;
+}
+
+.organization-studio-logo-action {
+  min-height: 34px;
+  padding-inline: 14px;
 }
 
 .organization-studio-label,

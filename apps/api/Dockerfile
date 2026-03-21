@@ -26,4 +26,4 @@ COPY --from=build /prod/api ./
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 EXPOSE 4000
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-lc", "pnpm exec prisma db push && node dist/main.js"]

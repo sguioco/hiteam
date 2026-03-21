@@ -206,7 +206,7 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          "max-h-[min(364px,76vh)] overflow-y-auto px-2 pb-2",
+          "max-h-[min(364px,76vh)] overflow-y-auto px-2 py-2",
           position === "popper" &&
             "w-full min-w-[max(var(--radix-select-trigger-width),220px)]",
         )}
@@ -270,7 +270,68 @@ const SelectSeparator = React.forwardRef<
 ));
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
+type AppSelectOption = {
+  label: React.ReactNode;
+  value: string;
+};
+
+type AppSelectFieldProps = {
+  className?: string;
+  contentClassName?: string;
+  emptyLabel?: React.ReactNode;
+  onValueChange: (value: string) => void;
+  options: AppSelectOption[];
+  placeholder?: string;
+  triggerClassName?: string;
+  value?: string | null;
+};
+
+const APP_SELECT_EMPTY_VALUE = "__app_select_empty__";
+
+function AppSelectField({
+  className,
+  contentClassName,
+  emptyLabel,
+  onValueChange,
+  options,
+  placeholder,
+  triggerClassName,
+  value,
+}: AppSelectFieldProps) {
+  const hasEmptyOption = emptyLabel !== undefined;
+  const normalizedValue =
+    value && value.length > 0
+      ? value
+      : hasEmptyOption
+        ? APP_SELECT_EMPTY_VALUE
+        : undefined;
+
+  return (
+    <Select
+      value={normalizedValue}
+      onValueChange={(nextValue) =>
+        onValueChange(nextValue === APP_SELECT_EMPTY_VALUE ? "" : nextValue)
+      }
+    >
+      <SelectTrigger className={cn("w-full", triggerClassName, className)}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className={contentClassName}>
+        {hasEmptyOption ? (
+          <SelectItem value={APP_SELECT_EMPTY_VALUE}>{emptyLabel}</SelectItem>
+        ) : null}
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export {
+  AppSelectField,
   Select,
   SelectContent,
   SelectGroup,

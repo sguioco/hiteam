@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
+import { isDemoAccessToken } from "@/lib/demo-mode";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
@@ -82,20 +83,20 @@ const REQUEST_TYPE_FILTERS: FilterRequestType[] = [
 
 const requestsCopy = {
   ru: {
-    sessionMissing: "Сессия не найдена. Войдите заново.",
-    loadFailed: "Не удалось загрузить заявки.",
-    actionFailed: "Не удалось выполнить действие по заявке.",
-    commentFailed: "Не удалось добавить комментарий.",
-    demoData: "Показаны демонстрационные данные.",
+    sessionMissing: "Сессия не найдена. Войдите заново",
+    loadFailed: "Не удалось загрузить заявки",
+    actionFailed: "Не удалось выполнить действие по заявке",
+    commentFailed: "Не удалось добавить комментарий",
+    demoData: "Показаны демонстрационные данные",
     title: "Входящие согласования",
     approvalType: "Тип согласования",
     search: "Поиск по сотруднику, номеру или теме",
     loading: "Загружаем заявки...",
-    noInbox: "Во входящих пока нет заявок.",
-    noFiltered: "Нет заявок под выбранные фильтры.",
-    approveSuccess: "Решение отправлено. Заявка обновлена.",
+    noInbox: "Во входящих пока нет заявок",
+    noFiltered: "Нет заявок под выбранные фильтры",
+    approveSuccess: "Решение отправлено. Заявка обновлена",
     rejectSuccess: "Заявка отклонена.",
-    commentSuccess: "Комментарий добавлен.",
+    commentSuccess: "Комментарий добавлен",
     allTypes: "Все типы",
     requestFlowStatus: "Передано дальше",
     requestStatusLabel: "Запрос",
@@ -224,30 +225,6 @@ const statusConfig = {
     icon: X,
   },
 } as const;
-
-const statusFilterChipConfig: Record<
-  VisibleFilterStatus,
-  { activeClass: string; inactiveClass: string }
-> = {
-  PENDING: {
-    activeClass:
-      "border border-[rgba(214,145,17,0.24)] bg-[linear-gradient(135deg,rgba(255,206,102,0.28)_0%,rgba(255,170,44,0.14)_100%)] text-[#9f5e00] shadow-[0_10px_26px_rgba(255,184,61,0.16)]",
-    inactiveClass:
-      "border border-[rgba(214,145,17,0.12)] bg-[linear-gradient(135deg,rgba(255,249,236,0.98)_0%,rgba(255,242,216,0.94)_100%)] text-[#a26a12] hover:border-[rgba(214,145,17,0.2)] hover:shadow-[0_8px_20px_rgba(255,184,61,0.12)]",
-  },
-  APPROVED: {
-    activeClass:
-      "border border-[rgba(21,115,71,0.16)] bg-[linear-gradient(135deg,rgba(225,246,233,0.96)_0%,rgba(210,240,220,0.9)_100%)] text-[#23754b] shadow-[0_8px_18px_rgba(21,115,71,0.1)]",
-    inactiveClass:
-      "border border-[rgba(21,115,71,0.1)] bg-[linear-gradient(135deg,rgba(244,251,246,0.98)_0%,rgba(236,246,240,0.92)_100%)] text-[rgba(35,117,75,0.78)] hover:border-[rgba(21,115,71,0.16)]",
-  },
-  REJECTED: {
-    activeClass:
-      "border border-[rgba(193,68,68,0.16)] bg-[linear-gradient(135deg,rgba(255,236,236,0.96)_0%,rgba(251,226,226,0.9)_100%)] text-[#b64141] shadow-[0_8px_18px_rgba(193,68,68,0.1)]",
-    inactiveClass:
-      "border border-[rgba(193,68,68,0.1)] bg-[linear-gradient(135deg,rgba(255,247,247,0.98)_0%,rgba(252,240,240,0.92)_100%)] text-[rgba(182,65,65,0.78)] hover:border-[rgba(193,68,68,0.16)]",
-  },
-};
 
 const requestTypeConfig: Record<
   RequestType,
@@ -424,8 +401,10 @@ export default function Requests() {
     setError(null);
     setMessage(null);
 
+    const session = getSession();
+    const isDemoSession = isDemoAccessToken(session?.accessToken);
+
     try {
-      const session = getSession();
       if (!session) {
         setItems(createMockApprovalInboxItems(new Date(), locale));
         setIsMockMode(true);
@@ -439,13 +418,19 @@ export default function Requests() {
       setItems(data);
       setIsMockMode(false);
     } catch (loadError) {
-      setItems(createMockApprovalInboxItems(new Date(), locale));
-      setIsMockMode(true);
-      setError(
-        loadError instanceof Error
-          ? `${loadError.message} ${ui.demoData}`
-          : `${ui.loadFailed} ${ui.demoData}`,
-      );
+      if (isDemoSession) {
+        setItems(createMockApprovalInboxItems(new Date(), locale));
+        setIsMockMode(true);
+        setError(
+          loadError instanceof Error
+            ? `${loadError.message} ${ui.demoData}`
+            : `${ui.loadFailed} ${ui.demoData}`,
+        );
+      } else {
+        setItems([]);
+        setIsMockMode(false);
+        setError(loadError instanceof Error ? loadError.message : ui.loadFailed);
+      }
     } finally {
       setLoading(false);
     }
@@ -673,14 +658,14 @@ export default function Requests() {
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-fit flex-wrap overflow-hidden rounded-xl border border-border">
             {STATUS_FILTERS.map((filter) => (
               <button
                 className={cn(
-                  "filter-chip",
+                  "flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors",
                   statusFilter === filter
-                    ? statusFilterChipConfig[filter].activeClass
-                    : statusFilterChipConfig[filter].inactiveClass,
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 key={filter}
                 onClick={() =>
@@ -691,7 +676,9 @@ export default function Requests() {
                 type="button"
               >
                 {requestStatusLabels[filter]}
-                <span className="ml-1 opacity-65">({counts[filter]})</span>
+                <span className={statusFilter === filter ? "text-white/80" : "opacity-70"}>
+                  {counts[filter]}
+                </span>
               </button>
             ))}
           </div>
@@ -911,7 +898,7 @@ export default function Requests() {
               );
             })
           ) : (
-            <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] px-5 py-12 text-center text-sm text-[color:var(--muted-foreground)]">
+            <div className="px-1 py-8 text-center text-sm text-[color:var(--muted-foreground)]">
               {items.length === 0
                 ? ui.noInbox
                 : ui.noFiltered}

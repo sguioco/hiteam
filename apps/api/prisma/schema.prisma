@@ -431,6 +431,7 @@ model Company {
   tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employees Employee[]
   locations Location[]
+  employeeInvitations EmployeeInvitation[]
 
   @@unique([tenantId, code])
 }
@@ -572,11 +573,14 @@ model Employee {
 model EmployeeInvitation {
   id               String                   @id @default(uuid())
   tenantId         String
+  companyId        String?
   email            String
   invitedByUserId  String
   userId           String?                  @unique
   approvedByUserId String?
   employeeId       String?                  @unique
+  approvedShiftTemplateId String?
+  approvedGroupId  String?
   status           EmployeeInvitationStatus @default(INVITED)
   tokenHash        String                   @unique
   expiresAt        DateTime
@@ -599,10 +603,13 @@ model EmployeeInvitation {
   updatedAt        DateTime                 @updatedAt
 
   tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company          Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
   invitedByUser    User                     @relation("EmployeeInvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
   user             User?                    @relation("EmployeeInvitationRegistrant", fields: [userId], references: [id], onDelete: SetNull)
   approvedByUser   User?                    @relation("EmployeeInvitationApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   employee         Employee?                @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  approvedShiftTemplate ShiftTemplate?      @relation(fields: [approvedShiftTemplateId], references: [id], onDelete: SetNull)
+  approvedGroup    WorkGroup?               @relation(fields: [approvedGroupId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, email])
   @@index([tenantId, status, invitedAt])
@@ -677,6 +684,7 @@ model ShiftTemplate {
   positionId         String
   startsAtLocal      String
   endsAtLocal        String
+  weekDaysJson       String?
   gracePeriodMinutes Int      @default(10)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -685,6 +693,7 @@ model ShiftTemplate {
   location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   position Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
   shifts   Shift[]
+  approvedInvitations EmployeeInvitation[]
 
   @@unique([tenantId, code])
 }
@@ -1005,6 +1014,7 @@ model WorkGroup {
   announcementTemplates AnnouncementTemplate[]
   announcements     Announcement[]
   chatThreads       ChatThread[]
+  approvedInvitations EmployeeInvitation[]
 
   @@index([tenantId, managerEmployeeId, createdAt])
   @@unique([tenantId, name])

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ElementType } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   UserPlus,
   FileText,
@@ -298,23 +298,31 @@ const priorityLabel: Record<Priority, { text: string; cls: string }> = {
   low: { text: "Низкий", cls: "text-muted-foreground" },
 };
 
-export const ActionCenter = () => {
+export const ActionCenter = ({
+  useMockData = true,
+}: {
+  useMockData?: boolean;
+}) => {
   const [activeCategory, setActiveCategory] = useState<ActionCategory>("all");
   const [dismissed, setDismissed] = useState<number[]>([]);
   const [exiting, setExiting] = useState<Record<number, ExitAction>>({});
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
+  const availableActions = useMemo(
+    () => (useMockData ? actions : []),
+    [useMockData],
+  );
 
-  const filtered = actions.filter((a) => {
+  const filtered = availableActions.filter((a) => {
     if (dismissed.includes(a.id)) return false;
     if (activeCategory === "all") return true;
     if (activeCategory === "decisions") return a.priority === "urgent";
     return a.category === activeCategory;
   });
 
-  const urgentCount = actions.filter(
+  const urgentCount = availableActions.filter(
     (a) => a.priority === "urgent" && !dismissed.includes(a.id),
   ).length;
-  const totalPending = actions.filter((a) => !dismissed.includes(a.id)).length;
+  const totalPending = availableActions.filter((a) => !dismissed.includes(a.id)).length;
 
   const handleDismiss = (id: number, type: ExitAction) => {
     setExiting((current) => ({ ...current, [id]: type }));
@@ -360,7 +368,7 @@ export const ActionCenter = () => {
                 ? totalPending
                 : cat.key === "decisions"
                   ? urgentCount
-                  : actions.filter(
+                  : availableActions.filter(
                       (a) =>
                         a.category === cat.key && !dismissed.includes(a.id),
                     ).length;

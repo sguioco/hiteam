@@ -346,13 +346,14 @@ function DualBarShape({
     return null;
   }
 
-  const innerWidth = Math.max(width * 0.58, 16);
+  const innerWidth = width;
   const innerHeight = payload.totalShifts
     ? (payload.onTimeShifts / payload.totalShifts) * height
     : 0;
-  const innerX = x + (width - innerWidth) / 2;
+  const innerX = x;
   const innerY = y + (height - innerHeight);
   const isSelected = payload.key === selectedKey;
+  const outlineInset = 4;
 
   return (
     <g>
@@ -361,20 +362,27 @@ function DualBarShape({
         fill={fill ?? "var(--color-totalShifts)"}
         opacity={isSelected ? 1 : 0.92}
       />
-      {isSelected ? (
-        <path
-          d={roundedTopRectPath(x + 1, y + 1, Math.max(width - 2, 0), Math.max(height - 2, 0), 18)}
-          fill="none"
-          stroke="var(--color-onTimeShifts)"
-          strokeDasharray="4 6"
-          strokeLinecap="round"
-          strokeWidth={2}
-        />
-      ) : null}
       {innerHeight > 0 ? (
         <path
-          d={roundedTopRectPath(innerX, innerY, innerWidth, innerHeight, 14)}
+          d={roundedTopRectPath(innerX, innerY, innerWidth, innerHeight, 18)}
           fill="var(--color-onTimeShifts)"
+        />
+      ) : null}
+      {isSelected ? (
+        <path
+          d={roundedTopRectPath(
+            x - outlineInset,
+            y - outlineInset,
+            width + outlineInset * 2,
+            height + outlineInset * 2,
+            20,
+          )}
+          fill="none"
+          stroke="rgba(37, 99, 235, 0.95)"
+          strokeDasharray="6 5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2.5}
         />
       ) : null}
     </g>

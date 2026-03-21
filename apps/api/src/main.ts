@@ -1,5 +1,6 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
@@ -11,6 +12,8 @@ async function bootstrap(): Promise<void> {
   });
 
   app.setGlobalPrefix('api/v1');
+  app.use(json({ limit: '8mb' }));
+  app.use(urlencoded({ extended: true, limit: '8mb' }));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

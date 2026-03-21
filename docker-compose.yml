@@ -53,7 +53,7 @@ services:
       /bin/sh -c "
       until (/usr/bin/mc alias set local http://minio:9000 minio miniosecret) do echo 'waiting for minio' && sleep 1; done;
       /usr/bin/mc mb -p local/smart-local || true;
-      /usr/bin/mc anonymous set private local/smart-local || true;
+      /usr/bin/mc anonymous set download local/smart-local || true;
       exit 0;
       "
 
@@ -61,6 +61,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.local
     environment:
       PORT: 4000
       API_PUBLIC_URL: http://localhost:4000
@@ -103,10 +105,13 @@ services:
       dockerfile: apps/web-admin/Dockerfile
       args:
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+    env_file:
+      - .env.local
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4000
       NEXT_PUBLIC_GRAPHQL_URL: http://localhost:4000/graphql
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+      INTERNAL_API_URL: http://api:4000
     ports:
       - '3000:3000'
     depends_on:

@@ -36,5 +36,13 @@ export class ReviewEmployeeInvitationDto {
 
   @IsOptional()
   @IsString()
+  shiftTemplateId?: string;
+
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  @IsOptional()
+  @IsString()
   rejectedReason?: string;
 }

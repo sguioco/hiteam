@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ShiftStatus } from '@prisma/client';
+import { Prisma, ShiftStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
@@ -38,17 +38,24 @@ export class ScheduleService {
   }
 
   async createTemplate(tenantId: string, actorUserId: string, dto: CreateShiftTemplateDto) {
+    const normalizedWeekDays =
+      dto.weekDays && dto.weekDays.length > 0
+        ? [...new Set(dto.weekDays)].sort((left, right) => left - right)
+        : null;
+    const createInput: Prisma.ShiftTemplateUncheckedCreateInput = {
+      tenantId,
+      name: dto.name,
+      code: dto.code,
+      locationId: dto.locationId,
+      positionId: dto.positionId,
+      startsAtLocal: dto.startsAtLocal,
+      endsAtLocal: dto.endsAtLocal,
+      weekDaysJson: normalizedWeekDays ? JSON.stringify(normalizedWeekDays) : null,
+      gracePeriodMinutes: dto.gracePeriodMinutes,
+    };
+
     const template = await this.prisma.shiftTemplate.create({
-      data: {
-        tenantId,
-        name: dto.name,
-        code: dto.code,
-        locationId: dto.locationId,
-        positionId: dto.positionId,
-        startsAtLocal: dto.startsAtLocal,
-        endsAtLocal: dto.endsAtLocal,
-        gracePeriodMinutes: dto.gracePeriodMinutes,
-      },
+      data: createInput,
       include: {
         location: true,
         position: true,

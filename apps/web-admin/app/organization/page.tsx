@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useEffect, useState } from "react";
-import { ImagePlus, Users, Save } from "lucide-react";
+import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
+import { Check, ImagePlus, Users, Save } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
+import { ImageAdjustField } from "../../components/image-adjust-field";
 import {
   LocationAddressDetails,
   LocationMapPicker,
@@ -17,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import Upload from "../../components/ui/Upload";
 import { apiRequest } from "../../lib/api";
 import { getSession } from "../../lib/auth";
 
@@ -198,9 +198,10 @@ export default function OrganizationPage() {
   const [draft, setDraft] = useState<SetupDraft>(createEmptyDraft);
   const [radiusInput, setRadiusInput] = useState(String(DEFAULT_GEOFENCE_RADIUS_METERS));
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [setupMode, setSetupMode] = useState<SetupMode>("create");
+  const successTimeoutRef = useRef<number | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
@@ -227,6 +228,7 @@ export default function OrganizationPage() {
       setDraft(buildDraftFromSetup(nextSetup));
       setRadiusInput(String(normalizeRadius(nextSetup.location?.geofenceRadiusMeters ?? nextSetup.defaultGeofenceRadiusMeters)));
       setError(null);
+      setSaveSuccess(false);
       setSetupMode(nextSetup.configured ? "update" : "create");
     } catch (loadError) {
       setSetup(EMPTY_SETUP);
@@ -239,6 +241,24 @@ export default function OrganizationPage() {
   useEffect(() => { void loadData(); }, []);
 
   useEffect(() => {
+    if (!saveSuccess) {
+      return;
+    }
+
+    successTimeoutRef.current = window.setTimeout(() => {
+      setSaveSuccess(false);
+      successTimeoutRef.current = null;
+    }, 2200);
+
+    return () => {
+      if (successTimeoutRef.current !== null) {
+        window.clearTimeout(successTimeoutRef.current);
+        successTimeoutRef.current = null;
+      }
+    };
+  }, [saveSuccess]);
+
+  useEffect(() => {
     if (!timeZonePreset || draft.address.trim() || hasDraftCoordinates(draft)) return;
     setDraft((current) => ({
       ...current, address: timeZonePreset.address, latitude: timeZonePreset.latitude, longitude: timeZonePreset.longitude,
@@ -246,10 +266,16 @@ export default function OrganizationPage() {
   }, [draft, timeZonePreset]);
 
   function updateDraft<K extends keyof SetupDraft>(key: K, value: SetupDraft[K]) {
+    if (saveSuccess) {
+      setSaveSuccess(false);
+    }
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
   function handleMapSelect(next: LocationSelection) {
+    if (saveSuccess) {
+      setSaveSuccess(false);
+    }
     setDraft((current) => ({
       ...current,
       address: next.address ?? current.address,
@@ -259,14 +285,6 @@ export default function OrganizationPage() {
       latitude: next.latitude,
       longitude: next.longitude,
     }));
-  }
-
-  function handleLogoChange(files: File[]) {
-    const [file] = files;
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === "string") updateDraft("companyLogoUrl", reader.result); };
-    reader.readAsDataURL(file);
   }
 
   function shiftRadius(delta: number) {
@@ -300,7 +318,7 @@ export default function OrganizationPage() {
     if (!draft.latitude || !draft.longitude) { setError("Поставь точку на карте или выбери адрес из подсказок."); return; }
 
     try {
-      setIsSaving(true); setError(null); setMessage(null);
+      setIsSaving(true); setError(null); setSaveSuccess(false);
       const nextSetup = await apiRequest<OrganizationSetupResponse>("/org/setup", {
         method: "POST", token: session.accessToken,
         body: JSON.stringify({
@@ -322,7 +340,7 @@ export default function OrganizationPage() {
           },
         }),
       );
-      setMessage(setupMode === "create" ? "Организация добавлена." : "Организация сохранена.");
+      setSaveSuccess(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Не удалось сохранить организацию.");
     } finally { setIsSaving(false); }
@@ -344,18 +362,8 @@ export default function OrganizationPage() {
         <form className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
           <div className="organization-studio-hero">
             <h1>{setupMode === "create" ? "Добавление организации" : "Организация"}</h1>
-            <p>
-              {setupMode === "create"
-                ? "Укажи название, логотип, адрес, точку на карте и радиус геозоны."
-                : "Обнови название, логотип, адрес, точку на карте и радиус геозоны."}
-            </p>
           </div>
 
-          {message ? (
-            <div className="organization-studio-feedback organization-studio-feedback--success">
-              {message}
-            </div>
-          ) : null}
           {error ? (
             <div className="organization-studio-feedback organization-studio-feedback--error">
               {error}
@@ -365,23 +373,44 @@ export default function OrganizationPage() {
           <div className="organization-studio-identity">
             <div className="organization-studio-logo-field">
               <span className="organization-studio-label">Логотип</span>
-              <Upload
-                accept="image/*"
-                className="org-logo-upload"
-                onFilesChange={handleLogoChange}
-                visual={
-                  <div className="org-logo-preview organization-studio-logo-preview">
-                    {draft.companyLogoUrl ? (
-                      <img
-                        alt={draft.companyName || "Logo"}
-                        src={draft.companyLogoUrl}
-                      />
-                    ) : (
-                      <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
-                    )}
+              <ImageAdjustField
+                dialogDescription="Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
+                dialogTitle="Редактировать логотип"
+                onChange={(nextLogoDataUrl) => {
+                  updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
+                  setError(null);
+                }}
+                onError={setError}
+                previewAlt={draft.companyName || "Logo"}
+                renderTrigger={({ chooseFile, fileName, openEditor, previewSrc }) => (
+                  <div className="organization-studio-logo-trigger">
+                    <button
+                      className="org-logo-preview organization-studio-logo-preview"
+                      onClick={openEditor}
+                      type="button"
+                    >
+                      {previewSrc ? (
+                        <img
+                          alt={draft.companyName || "Logo"}
+                          src={previewSrc}
+                        />
+                      ) : (
+                        <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
+                      )}
+                    </button>
+
+                    <Button
+                      className="organization-studio-logo-action"
+                      onClick={chooseFile}
+                      title={fileName || "Выбрать логотип"}
+                      type="button"
+                      variant="outline"
+                    >
+                      Выбрать логотип
+                    </Button>
                   </div>
-                }
-                title=""
+                )}
+                value={draft.companyLogoUrl || null}
               />
             </div>
 
@@ -489,11 +518,27 @@ export default function OrganizationPage() {
             </div>
           </div>
 
-          <Button className="organization-studio-submit" disabled={isSaving} size="lg" type="submit">
+          <Button
+            className={`organization-studio-submit transition-all duration-300 ${
+              saveSuccess
+                ? "bg-emerald-600 text-white hover:bg-emerald-600"
+                : ""
+            }`}
+            disabled={isSaving}
+            size="lg"
+            type="submit"
+          >
             {isSaving ? (
               <span className="flex items-center gap-2">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground/20" />
                 Сохраняем организацию
+              </span>
+            ) : saveSuccess ? (
+              <span className="flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 animate-in zoom-in-50 duration-300">
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+                {setupMode === "create" ? "Организация добавлена" : "Организация сохранена"}
               </span>
             ) : (
               <span className="flex items-center gap-2">

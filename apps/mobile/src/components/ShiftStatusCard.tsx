@@ -1,24 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated as NativeAnimated, ImageBackground, Text, View } from 'react-native';
+import { ImageBackground, Text, View } from 'react-native';
+import type { AttendanceStatusResponse } from '@smart/types';
 import { useI18n } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
 type ShiftStatusCardProps = {
-  greeting: string;
-  name: string;
+  status: AttendanceStatusResponse | null;
+  loading?: boolean;
   topInset?: number;
+  onPrimaryAction?: () => void;
 };
 
-const ShiftStatusCard = ({ greeting, name, topInset = 0 }: ShiftStatusCardProps) => {
-  const lateStatusOutlineWidth = 1;
-  const [checkedIn, setCheckedIn] = useState(false);
+function formatDuration(totalMinutes: number, language: 'ru' | 'en') {
+  const safeMinutes = Math.max(Math.round(totalMinutes), 0);
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+  const hourLabel = language === 'ru' ? 'ч' : 'h';
+  const minuteLabel = language === 'ru' ? 'м' : 'm';
+
+  if (hours === 0) {
+    return `${minutes}${minuteLabel}`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}${hourLabel}`;
+  }
+
+  return `${hours}${hourLabel} ${minutes}${minuteLabel}`;
+}
+
+const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
-  const latePulse = useRef(new NativeAnimated.Value(1)).current;
+  const locale = language === 'ru' ? 'ru-RU' : 'en-US';
   const textGlow = {
-    textShadowColor: 'rgba(36, 5, 72, 0.34)',
+    textShadowColor: 'rgba(14, 20, 34, 0.42)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 15,
+    textShadowRadius: 14,
   } as const;
   const greetingStyle = {
     fontFamily: 'Manrope_700Bold',
@@ -35,134 +53,177 @@ const ShiftStatusCard = ({ greeting, name, topInset = 0 }: ShiftStatusCardProps)
   const statusTextStyle = {
     fontFamily: 'Manrope_600SemiBold',
     letterSpacing: -0.08,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 2,
   } as const;
   const buttonLabelStyle = {
     fontFamily: 'Manrope_600SemiBold',
     letterSpacing: -0.1,
   } as const;
-  const utcPlus7Now = new Date(Date.now() + (new Date().getTimezoneOffset() + 7 * 60) * 60 * 1000);
-  const nowMinutes = utcPlus7Now.getUTCHours() * 60 + utcPlus7Now.getUTCMinutes();
-  const shiftStartMinutes = 9 * 60;
-  const shiftEndMinutes = 18 * 60;
-  const hourLabel = language === 'ru' ? 'ч' : 'h';
-  const minuteLabel = language === 'ru' ? 'м' : 'm';
 
-  function formatDuration(totalMinutes: number) {
-    const safeMinutes = Math.max(totalMinutes, 0);
-    const hours = Math.floor(safeMinutes / 60);
-    const minutes = safeMinutes % 60;
-
-    if (hours === 0) {
-      return `${minutes}${minuteLabel}`;
-    }
-
-    if (minutes === 0) {
-      return `${hours}${hourLabel}`;
-    }
-
-    return `${hours}${hourLabel} ${minutes}${minuteLabel}`;
-  }
-
-  const shiftMeta = (() => {
-    if (checkedIn && nowMinutes < shiftEndMinutes) {
+  const shiftMeta = useMemo(() => {
+    if (loading) {
       return {
-        color: '#86efac',
-        icon: 'checkmark-circle' as const,
-        blinking: false,
-        textShadowColor: 'rgba(255,255,255,0.88)',
-        text: language === 'ru'
-          ? `На смене • осталось ${formatDuration(shiftEndMinutes - nowMinutes)}`
-          : `On shift • ${formatDuration(shiftEndMinutes - nowMinutes)} left`,
+        title: t('today.cardLoadingTitle'),
+        body: t('today.cardLoadingBody'),
+        timing: '...',
+        locationLabel: status?.location.name ?? '—',
+        statusText: t('common.loading'),
+        statusColor: '#dbeafe',
+        statusIcon: 'time-outline' as const,
+        buttonLabel: null,
+        buttonTone: 'neutral' as const,
       };
     }
 
-    if (nowMinutes < shiftStartMinutes) {
+    if (!status?.shift) {
       return {
-        color: '#86efac',
-        icon: 'time' as const,
-        blinking: false,
-        textShadowColor: 'rgba(255,255,255,0.88)',
-        text: language === 'ru'
-          ? `Начнётся через ${formatDuration(shiftStartMinutes - nowMinutes)}`
-          : `Starts in ${formatDuration(shiftStartMinutes - nowMinutes)}`,
+        title: t('today.shiftUnassignedTitle'),
+        body: t('today.shiftUnassignedBody'),
+        timing: '—',
+        locationLabel: status?.location.name ?? '—',
+        statusText: t('today.shiftUnassignedTitle'),
+        statusColor: '#fef3c7',
+        statusIcon: 'calendar-outline' as const,
+        buttonLabel: null,
+        buttonTone: 'neutral' as const,
       };
     }
 
-    if (nowMinutes <= shiftEndMinutes) {
+    const now = new Date();
+    const shiftStart = new Date(status.shift.startsAt);
+    const shiftEnd = new Date(status.shift.endsAt);
+    const timing = `${shiftStart.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${shiftEnd.toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+
+    if (status.attendanceState === 'checked_in') {
+      const endMinutes = Math.max(0, (shiftEnd.getTime() - now.getTime()) / 60000);
       return {
-        color: '#ff5b72',
-        icon: 'alert-circle' as const,
-        blinking: true,
-        textShadowColor: 'rgba(255,255,255,0.98)',
-        text: language === 'ru'
-          ? `Смена началась ${formatDuration(nowMinutes - shiftStartMinutes)} назад • Вы опаздываете`
-          : `Shift started ${formatDuration(nowMinutes - shiftStartMinutes)} ago • You are late`,
+        title: t('today.cardCheckedInTitle'),
+        body: t('today.cardCheckedInBody'),
+        timing,
+        locationLabel: status.location.name,
+        statusText: t('today.onShiftLeft', { duration: formatDuration(endMinutes, language) }),
+        statusColor: '#86efac',
+        statusIcon: 'checkmark-circle' as const,
+        buttonLabel: t('today.actionBye'),
+        buttonTone: 'danger' as const,
       };
     }
 
+    if (status.attendanceState === 'on_break') {
+      const breakStartedAt = status.activeSession?.activeBreak?.startedAt ? new Date(status.activeSession.activeBreak.startedAt) : now;
+      const breakMinutes = Math.max(0, (now.getTime() - breakStartedAt.getTime()) / 60000);
       return {
-        color: '#ddd6fe',
-        icon: 'moon' as const,
-        blinking: false,
-        textShadowColor: 'rgba(255,255,255,0.82)',
-        text: language === 'ru'
-          ? `Смена закончилась ${formatDuration(nowMinutes - shiftEndMinutes)} назад`
-          : `Shift ended ${formatDuration(nowMinutes - shiftEndMinutes)} ago`,
+        title: t('today.cardBreakTitle'),
+        body: t('today.cardBreakBody'),
+        timing,
+        locationLabel: status.location.name,
+        statusText: t('today.onBreakFor', { duration: formatDuration(breakMinutes, language) }),
+        statusColor: '#fde68a',
+        statusIcon: 'cafe-outline' as const,
+        buttonLabel: t('today.actionBye'),
+        buttonTone: 'danger' as const,
       };
-  })();
-  useEffect(() => {
-    if (!shiftMeta.blinking) {
-      latePulse.stopAnimation();
-      latePulse.setValue(1);
-      return;
     }
 
-    const pulseAnimation = NativeAnimated.loop(
-      NativeAnimated.sequence([
-        NativeAnimated.timing(latePulse, {
-          duration: 650,
-          toValue: 0.42,
-          useNativeDriver: true,
-        }),
-        NativeAnimated.timing(latePulse, {
-          duration: 650,
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
+    if (status.attendanceState === 'checked_out') {
+      return {
+        title: t('today.cardCheckedOutTitle'),
+        body: t('today.cardCheckedOutBody'),
+        timing,
+        locationLabel: status.location.name,
+        statusText: t('today.shiftComplete'),
+        statusColor: '#cbd5e1',
+        statusIcon: 'moon-outline' as const,
+        buttonLabel: null,
+        buttonTone: 'neutral' as const,
+      };
+    }
 
-    pulseAnimation.start();
+    if (now < shiftStart) {
+      const minutesBeforeStart = Math.max(0, (shiftStart.getTime() - now.getTime()) / 60000);
+      return {
+        title: t('today.cardReadyTitle'),
+        body: t('today.cardReadyBody'),
+        timing,
+        locationLabel: status.location.name,
+        statusText: t('today.startsIn', { duration: formatDuration(minutesBeforeStart, language) }),
+        statusColor: '#86efac',
+        statusIcon: 'time-outline' as const,
+        buttonLabel: t('today.actionHi'),
+        buttonTone: 'success' as const,
+      };
+    }
 
-    return () => {
-      pulseAnimation.stop();
-      latePulse.stopAnimation();
-      latePulse.setValue(1);
+    if (now <= shiftEnd) {
+      const lateMinutes = Math.max(0, (now.getTime() - shiftStart.getTime()) / 60000);
+      return {
+        title: t('today.cardLateTitle'),
+        body: t('today.cardLateBody'),
+        timing,
+        locationLabel: status.location.name,
+        statusText: t('today.lateBy', { duration: formatDuration(lateMinutes, language) }),
+        statusColor: '#fb7185',
+        statusIcon: 'alert-circle-outline' as const,
+        buttonLabel: t('today.actionHi'),
+        buttonTone: 'success' as const,
+      };
+    }
+
+    const endedMinutes = Math.max(0, (now.getTime() - shiftEnd.getTime()) / 60000);
+    return {
+      title: t('today.cardMissedTitle'),
+      body: t('today.cardMissedBody'),
+      timing,
+      locationLabel: status.location.name,
+      statusText: t('today.endedAgo', { duration: formatDuration(endedMinutes, language) }),
+      statusColor: '#cbd5e1',
+      statusIcon: 'moon-outline' as const,
+      buttonLabel: null,
+      buttonTone: 'neutral' as const,
     };
-  }, [latePulse, shiftMeta.blinking]);
+  }, [language, loading, locale, status, t]);
+
+  const buttonClasses =
+    shiftMeta.buttonTone === 'danger'
+      ? 'bg-[#546cf2]'
+      : shiftMeta.buttonTone === 'success'
+        ? 'bg-[#546cf2]'
+        : 'bg-[#dff8d8]';
+
+  const buttonInnerClasses =
+    shiftMeta.buttonTone === 'danger'
+      ? 'bg-[#6f84ff]'
+      : shiftMeta.buttonTone === 'success'
+        ? 'bg-[#6f84ff]'
+        : 'bg-[#f4fff1]';
+
+  const buttonOverlayClasses =
+    shiftMeta.buttonTone === 'danger'
+      ? 'bg-[#3144a8]/18'
+      : shiftMeta.buttonTone === 'success'
+        ? 'bg-[#3144a8]/18'
+        : 'bg-[#7ee787]/28';
+
+  const buttonTextColor = shiftMeta.buttonTone === 'neutral' ? 'text-[#11233d]' : 'text-white';
 
   return (
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">
       <View className="absolute inset-0">
-        <ImageBackground
-          className="h-full w-full"
-          resizeMode="cover"
-          source={require('../../bg.webp')}
-        />
+        <ImageBackground className="h-full w-full" resizeMode="cover" source={require('../../bg.webp')} />
       </View>
       <View className="absolute inset-0 bg-[#140d2f]/18" />
       <View className="absolute inset-x-0 bottom-0 h-44 bg-[#120a28]/24" />
       <View className="absolute inset-[1px] rounded-[33px] bg-white/4" />
 
-      <View
-        className="relative z-10 justify-between px-7 pb-6"
-        style={{ minHeight: 280 + topInset, paddingTop: topInset + 14 }}
-      >
-        <View>
+      <View className="relative z-10 justify-between px-7 pb-6" style={{ minHeight: 280 + topInset, paddingTop: topInset + 14 }}>
+        <View className="gap-2">
           <Text className="text-[34px] leading-[42px] text-white" style={[textGlow, greetingStyle]}>
-            {greeting}, {name}
+            {t('today.greetingCard')}
+          </Text>
+          <Text className="max-w-[280px] text-[15px] leading-6 text-white/88" style={textGlow}>
+            {shiftMeta.body}
           </Text>
         </View>
 
@@ -170,113 +231,42 @@ const ShiftStatusCard = ({ greeting, name, topInset = 0 }: ShiftStatusCardProps)
           <Text className="text-[18px] text-[#f3ecff]" style={[textGlow, shiftLabelStyle]}>
             {t('today.shiftTiming')}
           </Text>
-          <Text className="mt-1 text-[44px] leading-[48px] text-white" style={[textGlow, shiftTimeStyle]}>
-            09:00 - 18:00
+          <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
+            {shiftMeta.timing}
           </Text>
-          {shiftMeta.blinking ? (
-            <View className="mt-1 flex-row items-center gap-2 self-start">
-              <NativeAnimated.View style={{ opacity: latePulse }}>
-                <View className="h-2.5 w-2.5 rounded-full bg-[#ff5b72]" />
-              </NativeAnimated.View>
-              <View className="relative max-w-[300px] flex-1 self-start">
-                {[
-                  [-lateStatusOutlineWidth, 0],
-                  [lateStatusOutlineWidth, 0],
-                  [0, -lateStatusOutlineWidth],
-                  [0, lateStatusOutlineWidth],
-                  [-lateStatusOutlineWidth, -lateStatusOutlineWidth],
-                  [lateStatusOutlineWidth, -lateStatusOutlineWidth],
-                  [-lateStatusOutlineWidth, lateStatusOutlineWidth],
-                  [lateStatusOutlineWidth, lateStatusOutlineWidth],
-                ].map(([x, y]) => (
-                  <Text
-                    key={`${x}:${y}`}
-                    className="absolute left-0 top-0 text-[15px] leading-[20px]"
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    style={{
-                      ...statusTextStyle,
-                      color: '#ff5b72',
-                      textShadowColor: 'transparent',
-                      textShadowRadius: 0,
-                      transform: [{ translateX: x }, { translateY: y }],
-                    }}
-                  >
-                    {shiftMeta.text}
-                  </Text>
-                ))}
-                <NativeAnimated.Text
-                  className="absolute left-0 top-0 text-[15px] leading-[20px]"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  style={{
-                    ...statusTextStyle,
-                    color: 'rgba(255, 255, 255, 0.02)',
-                    opacity: latePulse,
-                    textShadowColor: 'rgba(255, 91, 114, 0.98)',
-                    textShadowRadius: 20,
-                  }}
-                >
-                  {shiftMeta.text}
-                </NativeAnimated.Text>
-                <Text
-                  className="text-[15px] leading-[20px]"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  style={{
-                    ...statusTextStyle,
-                    color: '#ffffff',
-                    textShadowColor: 'rgba(255, 91, 114, 0.9)',
-                    textShadowRadius: 12,
-                  }}
-                >
-                  {shiftMeta.text}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View className="mt-1 flex-row items-center gap-2">
-              <Ionicons color={shiftMeta.color} name={shiftMeta.icon} size={16} />
-              <Text
-                className="text-[16px] leading-[21px]"
-                style={[
-                  statusTextStyle,
-                  {
-                    color: shiftMeta.color,
-                    textShadowColor: shiftMeta.textShadowColor,
-                  },
-                ]}
-              >
-                {shiftMeta.text}
-              </Text>
-            </View>
-          )}
+          <Text className="mt-2 text-[15px] leading-[20px] text-white/84" style={[textGlow, statusTextStyle]}>
+            {t('today.shiftLocation')}: {shiftMeta.locationLabel}
+          </Text>
+          <View className="mt-2 flex-row items-center gap-2">
+            <Ionicons color={shiftMeta.statusColor} name={shiftMeta.statusIcon} size={16} />
+            <Text className="text-[16px] leading-[21px]" style={[statusTextStyle, { color: shiftMeta.statusColor }]}>
+              {shiftMeta.statusText}
+            </Text>
+          </View>
         </View>
 
-        <View className="mt-4">
-          <PressableScale
-            className={`w-full overflow-hidden rounded-[24px] shadow-lg ${
-              checkedIn ? 'bg-[#d92f45]' : 'bg-[#dff8d8]'
-            }`}
-            haptic={checkedIn ? 'warning' : 'success'}
-            onPress={() => setCheckedIn((value) => !value)}
-          >
-            <View className={checkedIn ? 'bg-[#ff5b6f]' : 'bg-[#f4fff1]'}>
-              <View
-                className={`px-4 py-4 ${
-                  checkedIn ? 'bg-[#c81f37]/35' : 'bg-[#7ee787]/28'
-                }`}
-              >
-                <View className="flex-row items-center justify-center gap-2">
-                  <Text className="text-base">{'\u{1F44B}'}</Text>
-                  <Text className={`text-base ${checkedIn ? 'text-white' : 'text-[#11233d]'}`} style={buttonLabelStyle}>
-                    {checkedIn ? 'Bye' : 'Hi'}
-                  </Text>
+        {shiftMeta.buttonLabel ? (
+          <View className="mt-4">
+            <PressableScale className={`w-full overflow-hidden rounded-[24px] shadow-lg ${buttonClasses}`} haptic="success" onPress={onPrimaryAction}>
+              <View className={buttonInnerClasses}>
+                <View className={`px-4 py-4 ${buttonOverlayClasses}`}>
+                  <View className="flex-row items-center justify-center gap-2">
+                    <Text className="text-base">{shiftMeta.buttonLabel === t('today.actionHi') ? '\u{1F44B}' : '\u{1F44B}'}</Text>
+                    <Text className={`text-base ${buttonTextColor}`} style={buttonLabelStyle}>
+                      {shiftMeta.buttonLabel}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          </PressableScale>
-        </View>
+            </PressableScale>
+          </View>
+        ) : null}
+
+        {shiftMeta.title ? (
+          <Text className="mt-4 text-[14px] leading-6 text-white/84" style={[textGlow, statusTextStyle]}>
+            {shiftMeta.title}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

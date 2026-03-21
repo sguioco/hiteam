@@ -39,7 +39,7 @@ export default function RegisterInvitationScreen() {
   useEffect(() => {
     if (params.biometricEnrollmentStatus === 'ENROLLED') {
       signInLocally();
-      router.replace('/' as never);
+      router.replace('/onboarding/workspace-ready' as never);
     }
   }, [params.biometricEnrollmentStatus, router]);
 

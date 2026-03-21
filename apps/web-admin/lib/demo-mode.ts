@@ -6,6 +6,10 @@ export const DEMO_ADMIN_ACCESS_TOKEN = "demo-admin-access-token";
 export const DEMO_ADMIN_REFRESH_TOKEN = "demo-admin-refresh-token";
 export const DEMO_EMPLOYEE_ACCESS_TOKEN = "demo-employee-access-token";
 export const DEMO_EMPLOYEE_REFRESH_TOKEN = "demo-employee-refresh-token";
+export const DEMO_ADMIN_EMAIL = "owner@demo.smart";
+export const DEMO_ADMIN_PASSWORD = "Admin12345!";
+export const DEMO_EMPLOYEE_EMAIL = "employee@demo.smart";
+export const DEMO_EMPLOYEE_PASSWORD = "Employee123!";
 
 function isLocalHost() {
   if (typeof window === "undefined") return false;
@@ -42,7 +46,7 @@ export function createDemoSession(role: "admin" | "employee"): AuthSession {
       refreshToken: DEMO_EMPLOYEE_REFRESH_TOKEN,
       user: {
         id: "emp-2",
-        email: "employee.demo@hiteam.app",
+        email: DEMO_EMPLOYEE_EMAIL,
         tenantId: "demo-tenant",
         roleCodes: ["employee"],
         workspaceAccessAllowed: true,
@@ -55,12 +59,23 @@ export function createDemoSession(role: "admin" | "employee"): AuthSession {
     refreshToken: DEMO_ADMIN_REFRESH_TOKEN,
     user: {
       id: "emp-1",
-      email: "admin.demo@hiteam.app",
+      email: DEMO_ADMIN_EMAIL,
       tenantId: "demo-tenant",
       roleCodes: ["tenant_owner"],
       workspaceAccessAllowed: true,
     },
   };
+}
+
+export function getDemoRoleByCredentials(identifier: string, password: string): "admin" | "employee" | null {
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  if (normalizedIdentifier === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
+    return "admin";
+  }
+  if (normalizedIdentifier === DEMO_EMPLOYEE_EMAIL && password === DEMO_EMPLOYEE_PASSWORD) {
+    return "employee";
+  }
+  return null;
 }
 
 export function isDemoAccessToken(token?: string | null) {

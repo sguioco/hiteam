@@ -283,8 +283,8 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
             );
           })
         ) : (
-          <div className="rounded-2xl border border-dashed border-[color:var(--border)] px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
-            {showOverdue ? "Просроченных задач нет." : "Задач на этот период нет"}
+          <div className="px-1 py-3 text-center text-xs text-[var(--muted-foreground)]">
+            {showOverdue ? "Просроченных задач нет" : "Задач на этот период нет"}
           </div>
         )}
       </div>

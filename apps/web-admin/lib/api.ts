@@ -5,13 +5,14 @@ import {
   shouldUseDemoApi,
 } from "./demo-api";
 import { isDemoAccessToken } from "./demo-mode";
+import { humanizeValidationError } from "./humanize-validation-error";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 let sessionRefreshPromise: Promise<AuthSession | null> | null = null;
 
 async function performApiFetch(
   path: string,
-  options?: RequestInit & { token?: string },
+  options?: RequestInit & { token?: string; realBackend?: boolean },
   overrideToken?: string,
 ) {
   const headers = new Headers(options?.headers ?? {});
@@ -32,7 +33,7 @@ async function performApiFetch(
 
 async function performApiDownloadFetch(
   path: string,
-  options?: RequestInit & { token?: string },
+  options?: RequestInit & { token?: string; realBackend?: boolean },
   overrideToken?: string,
 ) {
   const headers = new Headers(options?.headers ?? {});
@@ -96,11 +97,11 @@ async function getApiErrorMessage(response: Response): Promise<string> {
     try {
       const payload = JSON.parse(text) as { message?: string | string[] };
       if (Array.isArray(payload.message) && payload.message.length) {
-        return payload.message.join(", ");
+        return humanizeValidationError(payload.message);
       }
 
       if (typeof payload.message === "string" && payload.message.trim()) {
-        return payload.message;
+        return humanizeValidationError(payload.message);
       }
     } catch {
       return text;
@@ -112,9 +113,9 @@ async function getApiErrorMessage(response: Response): Promise<string> {
 
 export async function apiRequest<T>(
   path: string,
-  options?: RequestInit & { token?: string },
+  options?: RequestInit & { token?: string; realBackend?: boolean },
 ): Promise<T> {
-  if (shouldUseDemoApi(options?.token)) {
+  if (!options?.realBackend && shouldUseDemoApi(path, options?.token)) {
     return demoApiRequest<T>(path, options);
   }
 
@@ -145,9 +146,9 @@ export async function apiRequest<T>(
 
 export async function apiDownload(
   path: string,
-  options?: RequestInit & { token?: string },
+  options?: RequestInit & { token?: string; realBackend?: boolean },
 ): Promise<{ blob: Blob; fileName: string | null }> {
-  if (shouldUseDemoApi(options?.token)) {
+  if (!options?.realBackend && shouldUseDemoApi(path, options?.token)) {
     return demoApiDownload(path, options);
   }
 

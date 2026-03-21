@@ -41,6 +41,7 @@ import { Locale, useI18n } from "../lib/i18n";
 import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
+import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
 
 type NavItem = {
   href: string;
@@ -63,18 +64,16 @@ type OrganizationHeaderState = {
   configured: boolean;
 };
 
+type AccountProfile = {
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 
 function isActive(pathname: string, href: string) {
   if (href === toAdminHref("/")) return pathname === toAdminHref("/");
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function sessionLabel(email: string) {
-  return email
-    .split("@")[0]
-    .replace(/[._-]+/g, " ")
-    .trim();
 }
 
 function resolveSidebarRoleLabel(roleCodes: string[], locale: Locale) {
@@ -151,6 +150,7 @@ export function AdminShell({
   const [employeeCount, setEmployeeCount] = useState(0);
   const [organization, setOrganization] =
     useState<OrganizationHeaderState | null>(null);
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
     {},
@@ -207,6 +207,9 @@ export function AdminShell({
       apiRequest<OrganizationHeaderState>("/org/setup", {
         token: currentSession.accessToken,
       }),
+      apiRequest<AccountProfile | null>("/employees/me", {
+        token: currentSession.accessToken,
+      }),
     ]).then((results) => {
       setUnreadCount(
         results[0].status === "fulfilled" ? results[0].value.unreadCount : 0,
@@ -219,6 +222,9 @@ export function AdminShell({
       );
       setOrganization(
         results[3].status === "fulfilled" ? results[3].value : null,
+      );
+      setAccountProfile(
+        results[4].status === "fulfilled" ? results[4].value : null,
       );
     });
   }, [mode, router]);
@@ -444,7 +450,16 @@ export function AdminShell({
     setExpandedItems((current) => ({ ...nextExpanded, ...current }));
   }, [navItems, pathname]);
 
-  const profileName = session ? sessionLabel(session.user.email) : "";
+  const profileName = session
+    ? buildUserDisplayName(
+        accountProfile?.firstName,
+        accountProfile?.lastName,
+        session.user.email
+          .split("@")[0]
+          .replace(/[._-]+/g, " ")
+          .trim(),
+      )
+    : "";
   const profileRole = session
     ? resolveSidebarRoleLabel(session.user.roleCodes, locale)
     : "";
@@ -755,7 +770,7 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                {profileName.slice(0, 2).toUpperCase()}
+                {getDisplayInitials(profileName)}
               </div>
               <div className="sidebar-user-copy">
                 <strong>{profileName}</strong>

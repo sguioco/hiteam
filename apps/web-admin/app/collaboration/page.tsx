@@ -17,6 +17,7 @@ import {
   WorkGroupItem,
 } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
+import { AppSelectField } from '../../components/ui/select';
 import { getSession } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { createCollaborationSocket } from '../../lib/collaboration-socket';
@@ -982,54 +983,52 @@ export default function CollaborationPage() {
               placeholder={t('collaboration.taskSearch')}
               value={taskBoardFilters.search}
             />
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, status: event.target.value }))}
+            <AppSelectField
               value={taskBoardFilters.status}
-            >
-              <option value="">{t('collaboration.allStatuses')}</option>
-              <option value="TODO">TODO</option>
-              <option value="IN_PROGRESS">IN_PROGRESS</option>
-              <option value="DONE">DONE</option>
-              <option value="CANCELLED">CANCELLED</option>
-            </select>
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, priority: event.target.value }))}
+              emptyLabel={t('collaboration.allStatuses')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, status: value }))}
+              options={[
+                { value: 'TODO', label: 'TODO' },
+                { value: 'IN_PROGRESS', label: 'IN_PROGRESS' },
+                { value: 'DONE', label: 'DONE' },
+                { value: 'CANCELLED', label: 'CANCELLED' },
+              ]}
+            />
+            <AppSelectField
               value={taskBoardFilters.priority}
-            >
-              <option value="">{t('collaboration.allPriorities')}</option>
-              <option value="LOW">LOW</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="HIGH">HIGH</option>
-              <option value="URGENT">URGENT</option>
-            </select>
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, groupId: event.target.value }))}
+              emptyLabel={t('collaboration.allPriorities')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, priority: value }))}
+              options={[
+                { value: 'LOW', label: 'LOW' },
+                { value: 'MEDIUM', label: 'MEDIUM' },
+                { value: 'HIGH', label: 'HIGH' },
+                { value: 'URGENT', label: 'URGENT' },
+              ]}
+            />
+            <AppSelectField
               value={taskBoardFilters.groupId}
-            >
-              <option value="">{t('collaboration.assignToGroup')}</option>
-              {overview?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </select>
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, assigneeEmployeeId: event.target.value }))}
+              emptyLabel={t('collaboration.assignToGroup')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, groupId: value }))}
+              options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+            />
+            <AppSelectField
               value={taskBoardFilters.assigneeEmployeeId}
-            >
-              <option value="">{t('collaboration.assignToEmployee')}</option>
-              {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
-            </select>
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, departmentId: event.target.value }))}
+              emptyLabel={t('collaboration.assignToEmployee')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, assigneeEmployeeId: value }))}
+              options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+            />
+            <AppSelectField
               value={taskBoardFilters.departmentId}
-            >
-              <option value="">{t('organization.departments')}</option>
-              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-            </select>
-            <select
-              onChange={(event) => setTaskBoardFilters((current) => ({ ...current, locationId: event.target.value }))}
+              emptyLabel={t('organization.departments')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, departmentId: value }))}
+              options={departments.map((department) => ({ value: department.id, label: department.name }))}
+            />
+            <AppSelectField
               value={taskBoardFilters.locationId}
-            >
-              <option value="">{t('organization.locations')}</option>
-              {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
-            </select>
+              emptyLabel={t('organization.locations')}
+              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, locationId: value }))}
+              options={locations.map((location) => ({ value: location.id, label: location.name }))}
+            />
             <label className="action-row">
               <input
                 checked={taskBoardFilters.onlyOverdue}
@@ -1140,22 +1139,30 @@ export default function CollaborationPage() {
                 <button className={taskDraft.targetMode === 'employee' ? 'solid-button' : 'ghost-button'} onClick={() => setTaskDraft((current) => ({ ...current, targetMode: 'employee' }))} type="button">{t('collaboration.assignToEmployee')}</button>
               </div>
               {taskDraft.targetMode === 'group' ? (
-                <select onChange={(event) => setTaskDraft((current) => ({ ...current, groupId: event.target.value }))} required value={taskDraft.groupId}>
-                  <option value="">{t('collaboration.assignToGroup')}</option>
-                  {overview?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
+                <AppSelectField
+                  value={taskDraft.groupId}
+                  emptyLabel={t('collaboration.assignToGroup')}
+                  onValueChange={(value) => setTaskDraft((current) => ({ ...current, groupId: value }))}
+                  options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+                />
               ) : (
-                <select onChange={(event) => setTaskDraft((current) => ({ ...current, assigneeEmployeeId: event.target.value }))} required value={taskDraft.assigneeEmployeeId}>
-                  <option value="">{t('collaboration.assignToEmployee')}</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
-                </select>
+                <AppSelectField
+                  value={taskDraft.assigneeEmployeeId}
+                  emptyLabel={t('collaboration.assignToEmployee')}
+                  onValueChange={(value) => setTaskDraft((current) => ({ ...current, assigneeEmployeeId: value }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                />
               )}
-              <select onChange={(event) => setTaskDraft((current) => ({ ...current, priority: event.target.value }))} value={taskDraft.priority}>
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
-              </select>
+              <AppSelectField
+                value={taskDraft.priority}
+                onValueChange={(value) => setTaskDraft((current) => ({ ...current, priority: value }))}
+                options={[
+                  { value: 'LOW', label: 'LOW' },
+                  { value: 'MEDIUM', label: 'MEDIUM' },
+                  { value: 'HIGH', label: 'HIGH' },
+                  { value: 'URGENT', label: 'URGENT' },
+                ]}
+              />
               <input onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))} placeholder={t('collaboration.dueAt')} type="date" value={taskDraft.dueAt} />
               <div className="section-stack compact-stack">
                 <span className="section-kicker">{t('collaboration.checklist')}</span>
@@ -1224,67 +1231,53 @@ export default function CollaborationPage() {
                 </button>
               </div>
               {templateDraft.targetMode === 'group' ? (
-                <select
-                  onChange={(event) => setTemplateDraft((current) => ({ ...current, groupId: event.target.value }))}
-                  required
+                <AppSelectField
                   value={templateDraft.groupId}
-                >
-                  <option value="">{t('collaboration.assignToGroup')}</option>
-                  {overview?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
+                  emptyLabel={t('collaboration.assignToGroup')}
+                  onValueChange={(value) => setTemplateDraft((current) => ({ ...current, groupId: value }))}
+                  options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+                />
               ) : templateDraft.targetMode === 'employee' ? (
-                <select
-                  onChange={(event) => setTemplateDraft((current) => ({ ...current, assigneeEmployeeId: event.target.value }))}
-                  required
+                <AppSelectField
                   value={templateDraft.assigneeEmployeeId}
-                >
-                  <option value="">{t('collaboration.assignToEmployee')}</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
-                </select>
+                  emptyLabel={t('collaboration.assignToEmployee')}
+                  onValueChange={(value) => setTemplateDraft((current) => ({ ...current, assigneeEmployeeId: value }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                />
               ) : templateDraft.targetMode === 'department' ? (
-                <select
-                  onChange={(event) => setTemplateDraft((current) => ({ ...current, departmentId: event.target.value }))}
-                  required
+                <AppSelectField
                   value={templateDraft.departmentId}
-                >
-                  <option value="">{t('collaboration.assignToDepartment')}</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.assignToDepartment')}
+                  onValueChange={(value) => setTemplateDraft((current) => ({ ...current, departmentId: value }))}
+                  options={departments.map((department) => ({ value: department.id, label: department.name }))}
+                />
               ) : (
-                <select
-                  onChange={(event) => setTemplateDraft((current) => ({ ...current, locationId: event.target.value }))}
-                  required
+                <AppSelectField
                   value={templateDraft.locationId}
-                >
-                  <option value="">{t('collaboration.assignToLocation')}</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.assignToLocation')}
+                  onValueChange={(value) => setTemplateDraft((current) => ({ ...current, locationId: value }))}
+                  options={locations.map((location) => ({ value: location.id, label: location.name }))}
+                />
               )}
-              <select
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, priority: event.target.value }))}
+              <AppSelectField
                 value={templateDraft.priority}
-              >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
-              </select>
-              <select
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, frequency: event.target.value }))}
+                onValueChange={(value) => setTemplateDraft((current) => ({ ...current, priority: value }))}
+                options={[
+                  { value: 'LOW', label: 'LOW' },
+                  { value: 'MEDIUM', label: 'MEDIUM' },
+                  { value: 'HIGH', label: 'HIGH' },
+                  { value: 'URGENT', label: 'URGENT' },
+                ]}
+              />
+              <AppSelectField
                 value={templateDraft.frequency}
-              >
-                <option value="DAILY">{t('collaboration.daily')}</option>
-                <option value="WEEKLY">{t('collaboration.weekly')}</option>
-                <option value="MONTHLY">{t('collaboration.monthly')}</option>
-              </select>
+                onValueChange={(value) => setTemplateDraft((current) => ({ ...current, frequency: value }))}
+                options={[
+                  { value: 'DAILY', label: t('collaboration.daily') },
+                  { value: 'WEEKLY', label: t('collaboration.weekly') },
+                  { value: 'MONTHLY', label: t('collaboration.monthly') },
+                ]}
+              />
               {templateDraft.frequency === 'WEEKLY' ? (
                 <div className="section-stack compact-stack">
                   <span className="section-kicker">{t('collaboration.weekdays')}</span>
@@ -1449,36 +1442,48 @@ export default function CollaborationPage() {
               </div>
             </div>
             <form className="form-grid" onSubmit={(event) => void createAnnouncement(event)}>
-              <select onChange={(event) => setAnnouncementDraft((current) => ({ ...current, audience: event.target.value }))} value={announcementDraft.audience}>
-                <option value="ALL">{t('collaboration.allEmployees')}</option>
-                <option value="GROUP">{t('collaboration.assignToGroup')}</option>
-                <option value="EMPLOYEE">{t('collaboration.targetEmployee')}</option>
-                <option value="DEPARTMENT">{t('collaboration.targetDepartment')}</option>
-                <option value="LOCATION">{t('collaboration.targetLocation')}</option>
-              </select>
+              <AppSelectField
+                value={announcementDraft.audience}
+                onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, audience: value }))}
+                options={[
+                  { value: 'ALL', label: t('collaboration.allEmployees') },
+                  { value: 'GROUP', label: t('collaboration.assignToGroup') },
+                  { value: 'EMPLOYEE', label: t('collaboration.targetEmployee') },
+                  { value: 'DEPARTMENT', label: t('collaboration.targetDepartment') },
+                  { value: 'LOCATION', label: t('collaboration.targetLocation') },
+                ]}
+              />
               {announcementDraft.audience === 'GROUP' ? (
-                <select onChange={(event) => setAnnouncementDraft((current) => ({ ...current, groupId: event.target.value }))} value={announcementDraft.groupId}>
-                  <option value="">{t('collaboration.assignToGroup')}</option>
-                  {overview?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
+                <AppSelectField
+                  value={announcementDraft.groupId}
+                  emptyLabel={t('collaboration.assignToGroup')}
+                  onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, groupId: value }))}
+                  options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+                />
               ) : null}
               {announcementDraft.audience === 'EMPLOYEE' ? (
-                <select onChange={(event) => setAnnouncementDraft((current) => ({ ...current, targetEmployeeId: event.target.value }))} value={announcementDraft.targetEmployeeId}>
-                  <option value="">{t('collaboration.targetEmployee')}</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
-                </select>
+                <AppSelectField
+                  value={announcementDraft.targetEmployeeId}
+                  emptyLabel={t('collaboration.targetEmployee')}
+                  onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, targetEmployeeId: value }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                />
               ) : null}
               {announcementDraft.audience === 'DEPARTMENT' ? (
-                <select onChange={(event) => setAnnouncementDraft((current) => ({ ...current, departmentId: event.target.value }))} value={announcementDraft.departmentId}>
-                  <option value="">{t('collaboration.targetDepartment')}</option>
-                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </select>
+                <AppSelectField
+                  value={announcementDraft.departmentId}
+                  emptyLabel={t('collaboration.targetDepartment')}
+                  onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, departmentId: value }))}
+                  options={departments.map((department) => ({ value: department.id, label: department.name }))}
+                />
               ) : null}
               {announcementDraft.audience === 'LOCATION' ? (
-                <select onChange={(event) => setAnnouncementDraft((current) => ({ ...current, locationId: event.target.value }))} value={announcementDraft.locationId}>
-                  <option value="">{t('collaboration.targetLocation')}</option>
-                  {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
-                </select>
+                <AppSelectField
+                  value={announcementDraft.locationId}
+                  emptyLabel={t('collaboration.targetLocation')}
+                  onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, locationId: value }))}
+                  options={locations.map((location) => ({ value: location.id, label: location.name }))}
+                />
               ) : null}
               <input onChange={(event) => setAnnouncementDraft((current) => ({ ...current, title: event.target.value }))} placeholder={t('requests.titleField')} required value={announcementDraft.title} />
               <textarea onChange={(event) => setAnnouncementDraft((current) => ({ ...current, body: event.target.value }))} placeholder={t('collaboration.announcementsTitle')} rows={5} value={announcementDraft.body} />
@@ -1509,77 +1514,58 @@ export default function CollaborationPage() {
               </div>
             </div>
             <form className="form-grid" onSubmit={(event) => void createAnnouncementTemplate(event)}>
-              <select
-                onChange={(event) =>
-                  setAnnouncementTemplateDraft((current) => ({ ...current, audience: event.target.value }))
-                }
+              <AppSelectField
                 value={announcementTemplateDraft.audience}
-              >
-                <option value="ALL">{t('collaboration.allEmployees')}</option>
-                <option value="GROUP">{t('collaboration.assignToGroup')}</option>
-                <option value="EMPLOYEE">{t('collaboration.targetEmployee')}</option>
-                <option value="DEPARTMENT">{t('collaboration.targetDepartment')}</option>
-                <option value="LOCATION">{t('collaboration.targetLocation')}</option>
-              </select>
+                onValueChange={(value) =>
+                  setAnnouncementTemplateDraft((current) => ({ ...current, audience: value }))
+                }
+                options={[
+                  { value: 'ALL', label: t('collaboration.allEmployees') },
+                  { value: 'GROUP', label: t('collaboration.assignToGroup') },
+                  { value: 'EMPLOYEE', label: t('collaboration.targetEmployee') },
+                  { value: 'DEPARTMENT', label: t('collaboration.targetDepartment') },
+                  { value: 'LOCATION', label: t('collaboration.targetLocation') },
+                ]}
+              />
               {announcementTemplateDraft.audience === 'GROUP' ? (
-                <select
-                  onChange={(event) =>
-                    setAnnouncementTemplateDraft((current) => ({ ...current, groupId: event.target.value }))
-                  }
+                <AppSelectField
                   value={announcementTemplateDraft.groupId}
-                >
-                  <option value="">{t('collaboration.assignToGroup')}</option>
-                  {overview?.groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.assignToGroup')}
+                  onValueChange={(value) =>
+                    setAnnouncementTemplateDraft((current) => ({ ...current, groupId: value }))
+                  }
+                  options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+                />
               ) : null}
               {announcementTemplateDraft.audience === 'EMPLOYEE' ? (
-                <select
-                  onChange={(event) =>
-                    setAnnouncementTemplateDraft((current) => ({ ...current, targetEmployeeId: event.target.value }))
-                  }
+                <AppSelectField
                   value={announcementTemplateDraft.targetEmployeeId}
-                >
-                  <option value="">{t('collaboration.targetEmployee')}</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.firstName} {employee.lastName}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.targetEmployee')}
+                  onValueChange={(value) =>
+                    setAnnouncementTemplateDraft((current) => ({ ...current, targetEmployeeId: value }))
+                  }
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                />
               ) : null}
               {announcementTemplateDraft.audience === 'DEPARTMENT' ? (
-                <select
-                  onChange={(event) =>
-                    setAnnouncementTemplateDraft((current) => ({ ...current, departmentId: event.target.value }))
-                  }
+                <AppSelectField
                   value={announcementTemplateDraft.departmentId}
-                >
-                  <option value="">{t('collaboration.targetDepartment')}</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.targetDepartment')}
+                  onValueChange={(value) =>
+                    setAnnouncementTemplateDraft((current) => ({ ...current, departmentId: value }))
+                  }
+                  options={departments.map((department) => ({ value: department.id, label: department.name }))}
+                />
               ) : null}
               {announcementTemplateDraft.audience === 'LOCATION' ? (
-                <select
-                  onChange={(event) =>
-                    setAnnouncementTemplateDraft((current) => ({ ...current, locationId: event.target.value }))
-                  }
+                <AppSelectField
                   value={announcementTemplateDraft.locationId}
-                >
-                  <option value="">{t('collaboration.targetLocation')}</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
+                  emptyLabel={t('collaboration.targetLocation')}
+                  onValueChange={(value) =>
+                    setAnnouncementTemplateDraft((current) => ({ ...current, locationId: value }))
+                  }
+                  options={locations.map((location) => ({ value: location.id, label: location.name }))}
+                />
               ) : null}
               <input
                 onChange={(event) =>
@@ -1597,16 +1583,17 @@ export default function CollaborationPage() {
                 rows={4}
                 value={announcementTemplateDraft.body}
               />
-              <select
-                onChange={(event) =>
-                  setAnnouncementTemplateDraft((current) => ({ ...current, frequency: event.target.value }))
-                }
+              <AppSelectField
                 value={announcementTemplateDraft.frequency}
-              >
-                <option value="DAILY">{t('collaboration.daily')}</option>
-                <option value="WEEKLY">{t('collaboration.weekly')}</option>
-                <option value="MONTHLY">{t('collaboration.monthly')}</option>
-              </select>
+                onValueChange={(value) =>
+                  setAnnouncementTemplateDraft((current) => ({ ...current, frequency: value }))
+                }
+                options={[
+                  { value: 'DAILY', label: t('collaboration.daily') },
+                  { value: 'WEEKLY', label: t('collaboration.weekly') },
+                  { value: 'MONTHLY', label: t('collaboration.monthly') },
+                ]}
+              />
               {announcementTemplateDraft.frequency === 'WEEKLY' ? (
                 <div className="section-stack compact-stack">
                   <span className="section-kicker">{t('collaboration.weekdays')}</span>
@@ -1759,15 +1746,19 @@ export default function CollaborationPage() {
                 <button className={chatDraft.mode === 'group' ? 'solid-button' : 'ghost-button'} onClick={() => setChatDraft((current) => ({ ...current, mode: 'group' }))} type="button">{t('collaboration.groupChat')}</button>
               </div>
               {chatDraft.mode === 'direct' ? (
-                <select onChange={(event) => setChatDraft((current) => ({ ...current, employeeId: event.target.value }))} value={chatDraft.employeeId}>
-                  <option value="">{t('collaboration.assignToEmployee')}</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
-                </select>
+                <AppSelectField
+                  value={chatDraft.employeeId}
+                  emptyLabel={t('collaboration.assignToEmployee')}
+                  onValueChange={(value) => setChatDraft((current) => ({ ...current, employeeId: value }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                />
               ) : (
-                <select onChange={(event) => setChatDraft((current) => ({ ...current, groupId: event.target.value }))} value={chatDraft.groupId}>
-                  <option value="">{t('collaboration.assignToGroup')}</option>
-                  {overview?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
+                <AppSelectField
+                  value={chatDraft.groupId}
+                  emptyLabel={t('collaboration.assignToGroup')}
+                  onValueChange={(value) => setChatDraft((current) => ({ ...current, groupId: value }))}
+                  options={(overview?.groups ?? []).map((group) => ({ value: group.id, label: group.name }))}
+                />
               )}
               <input onChange={(event) => setChatDraft((current) => ({ ...current, title: event.target.value }))} placeholder={t('requests.titleField')} value={chatDraft.title} />
               <button className="solid-button" type="submit">{t('collaboration.createChat')}</button>

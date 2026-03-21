@@ -67,6 +67,7 @@ import {
   isManagerOnlyRole,
 } from "@/lib/auth";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
+import { isDemoAccessToken } from "@/lib/demo-mode";
 import {
   buildEmployeeWorkdayLookup,
   formatWorkdayDateLabel,
@@ -570,6 +571,7 @@ export default function DashboardHome({
 }) {
   const router = useRouter();
   const session = getSession();
+  const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
@@ -744,6 +746,10 @@ export default function DashboardHome({
   );
   const dashboardTasks = useMemo(() => {
     const apiTasks = taskBoard?.tasks ?? [];
+    if (!isDemoSession) {
+      return apiTasks;
+    }
+
     const mockTasks = createMockDashboardTasks(managerEmployee).map((task) => ({
       ...task,
       status: mockTaskStatuses[task.id] ?? task.status,
@@ -753,7 +759,7 @@ export default function DashboardHome({
           : null,
     }));
     return [...apiTasks, ...mockTasks];
-  }, [managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
+  }, [isDemoSession, managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
   const personalTasks = useMemo(() => {
     if (isEmployeeMode) {
       return dashboardTasks;
@@ -1676,7 +1682,7 @@ export default function DashboardHome({
                 />
               ) : (
                 <div className="dashboard-actions-center-shell">
-                  <ActionCenter />
+                  <ActionCenter useMockData={isDemoSession} />
                 </div>
               )}
             </div>

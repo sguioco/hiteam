@@ -1,16 +1,19 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
+  ExternalLink,
   FolderOpen,
   ListTodo,
   Mail,
   Search,
   Settings,
+  Smartphone,
   UserPlus,
   Users,
   X,
@@ -22,8 +25,11 @@ import {
 } from "@smart/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
+import { ImageAdjustField } from "@/components/image-adjust-field";
 import { Input } from "@/components/ui/input";
 import {
+  AppSelectField,
   Select,
   SelectContent,
   SelectItem,
@@ -94,6 +100,7 @@ type EmployeeDetails = EmployeeApiRecord & {
 
 type InvitationRecord = {
   id: string;
+  companyId?: string | null;
   email: string;
   status: "INVITED" | "PENDING_APPROVAL" | "REJECTED";
   expiresAt: string;
@@ -107,6 +114,31 @@ type InvitationRecord = {
   phone?: string | null;
   avatarUrl?: string | null;
   rejectedReason?: string | null;
+  approvedShiftTemplateId?: string | null;
+  approvedGroupId?: string | null;
+};
+
+type ShiftTemplateRecord = {
+  id: string;
+  name: string;
+  startsAtLocal: string;
+  endsAtLocal: string;
+  location: {
+    id: string;
+    name: string;
+  };
+  position: {
+    id: string;
+    name: string;
+  };
+};
+
+type OrganizationSetupResponse = {
+  company: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
 };
 
 type EmployeeStatus = "active" | "inactive" | "vacation" | "sick" | "dismissed";
@@ -195,14 +227,9 @@ const initialTaskDraft = {
   dueAt: "",
 };
 
-async function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
-    reader.readAsDataURL(file);
-  });
-}
+const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
+const reviewInfoBoxClassName =
+  "flex min-h-11 items-center rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted-foreground";
 
 function buildEmployeeName(employee: {
   firstName?: string | null;
@@ -304,7 +331,7 @@ const EmployeeRow = ({
         <span className="text-xs italic text-muted-foreground">—</span>
       )}
     </td>
-    <td className="px-3 py-2.5 font-heading font-semibold text-foreground">
+    <td className="px-3 py-2.5 text-center font-heading font-semibold text-foreground">
       {emp.activeTasks}
     </td>
     <td className="px-3 py-2.5">
@@ -351,7 +378,7 @@ const TableHead = () => (
       <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
         Группа
       </th>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
+      <th className="px-3 py-2.5 text-center text-xs font-heading font-medium text-muted-foreground">
         Задачи
       </th>
       <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
@@ -393,6 +420,11 @@ const Employees = () => {
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [copiedInviteField, setCopiedInviteField] = useState<
+    "code" | "link" | null
+  >(null);
+  const [organizationSetup, setOrganizationSetup] =
+    useState<OrganizationSetupResponse | null>(null);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
@@ -414,6 +446,8 @@ const Employees = () => {
     birthDate: "",
     gender: "male",
     phone: "",
+    shiftTemplateId: "",
+    groupId: "__none",
     rejectedReason: "",
     avatarDataUrl: "",
     avatarPreview: "",
@@ -433,6 +467,9 @@ const Employees = () => {
   const [scheduleShifts, setScheduleShifts] = useState<EmployeeScheduleShift[]>(
     [],
   );
+  const [scheduleTemplates, setScheduleTemplates] = useState<
+    ShiftTemplateRecord[]
+  >([]);
   const [canCheckWorkdays, setCanCheckWorkdays] = useState(false);
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
 
@@ -592,6 +629,12 @@ const Employees = () => {
     }
   }, [selectedEmployeeBiometric]);
 
+  const employeeJoinCode = organizationSetup?.company?.code ?? "";
+  const employeeJoinLink =
+    typeof window !== "undefined" && employeeJoinCode
+      ? `${window.location.origin}/join/company/${encodeURIComponent(employeeJoinCode)}`
+      : "";
+
   async function loadDirectory() {
     const session = getSession();
     if (!session) {
@@ -609,6 +652,8 @@ const Employees = () => {
         overviewData,
         invitationsData,
         shiftsData,
+        templatesData,
+        orgSetupData,
       ] = await Promise.all([
         apiRequest<EmployeeApiRecord[]>("/employees", {
           token: session.accessToken,
@@ -630,12 +675,20 @@ const Employees = () => {
             setCanCheckWorkdays(false);
             return [];
           }),
+        apiRequest<ShiftTemplateRecord[]>("/schedule/templates", {
+          token: session.accessToken,
+        }).catch(() => []),
+        apiRequest<OrganizationSetupResponse>("/org/setup", {
+          token: session.accessToken,
+        }).catch(() => ({ company: null })),
       ]);
 
       setEmployeeRecords(employeesData);
       setOverview(overviewData);
       setPendingInvitations(invitationsData);
       setScheduleShifts(shiftsData);
+      setScheduleTemplates(templatesData);
+      setOrganizationSetup(orgSetupData);
       setExpandedGroups(
         new Set([
           ...overviewData.groups.map((group) => group.id),
@@ -661,6 +714,8 @@ const Employees = () => {
       setOverview(null);
       setPendingInvitations([]);
       setScheduleShifts([]);
+      setScheduleTemplates([]);
+      setOrganizationSetup(null);
       setCanCheckWorkdays(false);
     } finally {
       setDirectoryLoading(false);
@@ -771,6 +826,22 @@ const Employees = () => {
     }
   }
 
+  async function copyInviteValue(value: string, field: "code" | "link") {
+    if (!value.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedInviteField(field);
+      window.setTimeout(() => {
+        setCopiedInviteField((current) => (current === field ? null : current));
+      }, 1800);
+    } catch {
+      setInviteError("Не удалось скопировать. Скопируйте значение вручную.");
+    }
+  }
+
   async function handleCreateGroup() {
     const session = getSession();
     if (!session || !createGroupName.trim()) return;
@@ -834,22 +905,21 @@ const Employees = () => {
       birthDate: invitation.birthDate ? invitation.birthDate.slice(0, 10) : "",
       gender: invitation.gender ?? "male",
       phone: invitation.phone ?? "",
+      shiftTemplateId: invitation.approvedShiftTemplateId ?? "",
+      groupId: invitation.approvedGroupId ?? "__none",
       rejectedReason: invitation.rejectedReason ?? "",
       avatarDataUrl: "",
       avatarPreview: invitation.avatarUrl ?? "",
     });
   }
 
-  async function handleReviewAvatar(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const dataUrl = await fileToDataUrl(file);
+  function handleReviewAvatar(nextAvatarDataUrl: string | null) {
     setReviewForm((current) => ({
       ...current,
-      avatarDataUrl: dataUrl,
-      avatarPreview: dataUrl,
+      avatarDataUrl: nextAvatarDataUrl ?? "",
+      avatarPreview: nextAvatarDataUrl ?? "",
     }));
+    setReviewError(null);
   }
 
   async function submitReview(decision: "APPROVE" | "REJECT") {
@@ -871,6 +941,16 @@ const Employees = () => {
           birthDate: reviewForm.birthDate,
           gender: reviewForm.gender,
           phone: reviewForm.phone,
+          shiftTemplateId:
+            decision === "APPROVE"
+              ? reviewForm.shiftTemplateId || undefined
+              : undefined,
+          groupId:
+            decision === "APPROVE"
+              ? reviewForm.groupId === "__none"
+                ? ""
+                : reviewForm.groupId || undefined
+              : undefined,
           rejectedReason:
             decision === "REJECT" ? reviewForm.rejectedReason : undefined,
           avatarDataUrl: reviewForm.avatarDataUrl || undefined,
@@ -1072,7 +1152,7 @@ const Employees = () => {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <div className="scrollbar-hide mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-y-auto space-y-5 p-6">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -1369,13 +1449,64 @@ const Employees = () => {
               Добавить сотрудника
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Введите email. Сотруднику придёт письмо с приглашением и ссылкой на
-              регистрацию.
+              Лучше выдать сотруднику код компании или mobile join link. Email
+              приглашение можно использовать как запасной вариант.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-3 rounded-2xl border border-border bg-secondary/20 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-heading font-semibold text-foreground">
+                  Код компании
+                </div>
+                <div className="flex gap-2">
+                  <Input readOnly value={employeeJoinCode || "Сначала настройте организацию"} />
+                  <Button
+                    disabled={!employeeJoinCode}
+                    onClick={() => void copyInviteValue(employeeJoinCode, "code")}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {copiedInviteField === "code" ? "Скопировано" : "Копировать"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-heading font-semibold text-foreground">
+                  <Smartphone className="h-4 w-4 text-muted-foreground" />
+                  Mobile join link
+                </div>
+                <div className="flex gap-2">
+                  <Input readOnly value={employeeJoinLink || "Ссылка появится после настройки организации"} />
+                  <Button
+                    disabled={!employeeJoinLink}
+                    onClick={() => void copyInviteValue(employeeJoinLink, "link")}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {copiedInviteField === "link" ? "Скопировано" : "Копировать"}
+                  </Button>
+                  {employeeJoinLink ? (
+                    <Button asChild type="button" variant="outline">
+                      <a href={employeeJoinLink} rel="noreferrer" target="_blank">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+              Если не хотите зависеть от email-сервиса, просто отправьте сотруднику код
+              компании. Он сможет сам зарегистрироваться в мобильном приложении.
+            </div>
+
             <label className="grid gap-2 text-sm font-heading">
-              <span>Email</span>
+              <span>Email для приглашения</span>
               <Input
                 onChange={(event) => setInviteEmail(event.target.value)}
                 placeholder="employee@company.ru"
@@ -1480,6 +1611,7 @@ const Employees = () => {
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Имя</span>
                   <Input
+                    className={reviewFieldClassName}
                     onChange={(event) =>
                       setReviewForm((current) => ({
                         ...current,
@@ -1492,6 +1624,7 @@ const Employees = () => {
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Фамилия</span>
                   <Input
+                    className={reviewFieldClassName}
                     onChange={(event) =>
                       setReviewForm((current) => ({
                         ...current,
@@ -1504,6 +1637,7 @@ const Employees = () => {
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Отчество</span>
                   <Input
+                    className={reviewFieldClassName}
                     onChange={(event) =>
                       setReviewForm((current) => ({
                         ...current,
@@ -1515,36 +1649,38 @@ const Employees = () => {
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Дата рождения</span>
-                  <Input
-                    onChange={(event) =>
+                  <DateOfBirthField
+                    value={reviewForm.birthDate}
+                    onChange={(nextValue) =>
                       setReviewForm((current) => ({
                         ...current,
-                        birthDate: event.target.value,
+                        birthDate: nextValue,
                       }))
                     }
-                    type="date"
-                    value={reviewForm.birthDate}
+                    triggerClassName={reviewFieldClassName}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Пол</span>
-                  <select
-                    className="rounded-xl border border-border bg-secondary/30 px-3 py-2 text-sm font-heading"
-                    onChange={(event) =>
+                  <AppSelectField
+                    value={reviewForm.gender}
+                    onValueChange={(value) =>
                       setReviewForm((current) => ({
                         ...current,
-                        gender: event.target.value,
+                        gender: value,
                       }))
                     }
-                    value={reviewForm.gender}
-                  >
-                    <option value="male">Мужской</option>
-                    <option value="female">Женский</option>
-                  </select>
+                    options={[
+                      { value: "male", label: "Мужской" },
+                      { value: "female", label: "Женский" },
+                    ]}
+                    triggerClassName={reviewFieldClassName}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Телефон</span>
                   <Input
+                    className={reviewFieldClassName}
                     onChange={(event) =>
                       setReviewForm((current) => ({
                         ...current,
@@ -1554,45 +1690,122 @@ const Employees = () => {
                     value={reviewForm.phone}
                   />
                 </label>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
-                <div className="rounded-2xl border border-border bg-secondary/20 p-3">
-                  {reviewForm.avatarPreview ? (
-                    <img
-                      alt="Аватар сотрудника"
-                      className="h-32 w-full rounded-xl object-cover"
-                      src={reviewForm.avatarPreview}
-                    />
-                  ) : (
-                    <div className="flex h-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
-                      Нет фото
-                    </div>
-                  )}
-                </div>
-                <div className="grid gap-2 text-sm font-heading">
-                  <span>Email</span>
-                  <Input disabled value={selectedInvitation.email} />
-                  <span className="mt-2">Фото</span>
-                  <Input
-                    accept="image/*"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      void handleReviewAvatar(event)
-                    }
-                    type="file"
-                  />
-                  <span className="mt-2">Причина отклонения</span>
-                  <Input
-                    onChange={(event) =>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Смена</span>
+                  <AppSelectField
+                    value={reviewForm.shiftTemplateId}
+                    onValueChange={(value) =>
                       setReviewForm((current) => ({
                         ...current,
-                        rejectedReason: event.target.value,
+                        shiftTemplateId: value,
                       }))
                     }
-                    placeholder="Заполните, если отклоняете заявку"
-                    value={reviewForm.rejectedReason}
+                    emptyLabel="Выберите смену"
+                    options={scheduleTemplates.map((template) => ({
+                      value: template.id,
+                      label: `${template.name} · ${template.startsAtLocal}-${template.endsAtLocal} · ${template.location.name}`,
+                    }))}
+                    triggerClassName={reviewFieldClassName}
                   />
-                </div>
+                </label>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Группа</span>
+                  <AppSelectField
+                    value={reviewForm.groupId === "__none" ? "" : reviewForm.groupId}
+                    onValueChange={(value) =>
+                      setReviewForm((current) => ({
+                        ...current,
+                        groupId: value || "__none",
+                      }))
+                    }
+                    emptyLabel="Без группы"
+                    options={groups.map((group) => ({
+                      value: group.id,
+                      label: group.name,
+                    }))}
+                    triggerClassName={reviewFieldClassName}
+                  />
+                </label>
               </div>
+              <ImageAdjustField
+                dialogDescription="Подгони фото сотрудника перед подтверждением анкеты."
+                dialogTitle="Редактировать фото сотрудника"
+                onChange={handleReviewAvatar}
+                onError={setReviewError}
+                previewAlt="Аватар сотрудника"
+                renderTrigger={({ chooseFile, hasValue, openEditor, previewSrc }) => (
+                  <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+                      {previewSrc ? (
+                        <img
+                          alt="Аватар сотрудника"
+                          className="h-32 w-full rounded-xl object-cover"
+                          src={previewSrc}
+                        />
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
+                          Нет фото
+                        </div>
+                      )}
+                      <Button
+                        className="mt-3 w-full rounded-xl font-heading"
+                        onClick={hasValue ? openEditor : chooseFile}
+                        type="button"
+                        variant="outline"
+                      >
+                        {hasValue ? "Отрегулировать фото" : "Выбрать фото"}
+                      </Button>
+                    </div>
+                    <div className="grid gap-2 text-sm font-heading">
+                      <span>Email</span>
+                      <Input
+                        className={reviewFieldClassName}
+                        disabled
+                        value={selectedInvitation.email}
+                      />
+                      <span className="mt-2">Фото</span>
+                      <div className={reviewInfoBoxClassName}>
+                        {hasValue
+                          ? "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб."
+                          : "Можно выбрать фото и сразу отрегулировать масштаб, X и Y."}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          className="rounded-xl font-heading"
+                          onClick={chooseFile}
+                          type="button"
+                          variant="outline"
+                        >
+                          Заменить файл
+                        </Button>
+                        {hasValue ? (
+                          <Button
+                            className="rounded-xl font-heading"
+                            onClick={openEditor}
+                            type="button"
+                            variant="outline"
+                          >
+                            Настроить
+                          </Button>
+                        ) : null}
+                      </div>
+                      <span className="mt-2">Причина отклонения</span>
+                      <Input
+                        className={reviewFieldClassName}
+                        onChange={(event) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            rejectedReason: event.target.value,
+                          }))
+                        }
+                        placeholder="Заполните, если отклоняете заявку"
+                        value={reviewForm.rejectedReason}
+                      />
+                    </div>
+                  </div>
+                )}
+                value={reviewForm.avatarPreview || null}
+              />
               {reviewError ? <div className="error-box">{reviewError}</div> : null}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -2011,25 +2224,20 @@ const Employees = () => {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-sm font-heading">
                 <span>Приоритет</span>
-                <div className="relative">
-                  <select
-                    className="h-11 w-full appearance-none rounded-xl border border-border bg-secondary/30 px-3 pr-12 py-2 text-sm font-heading"
-                    onChange={(event) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        priority: event.target.value as TaskItem["priority"],
-                      }))
-                    }
-                    value={taskDraft.priority}
-                  >
-                    {taskPriorityOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                </div>
+                <AppSelectField
+                  value={taskDraft.priority}
+                  onValueChange={(value) =>
+                    setTaskDraft((current) => ({
+                      ...current,
+                      priority: value as TaskItem["priority"],
+                    }))
+                  }
+                  options={taskPriorityOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  triggerClassName="h-11 rounded-xl bg-secondary/30"
+                />
               </label>
               <label className="grid gap-2 text-sm font-heading">
                 <span>Срок</span>
