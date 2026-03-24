@@ -266,6 +266,8 @@ model Tenant {
   workGroupMembers   WorkGroupMembership[]
   tasks              Task[]
   taskTemplates      TaskTemplate[]
+  taskCompletions    TaskCompletion[]
+  taskPhotoProofs    TaskPhotoProof[]
   announcementTemplates AnnouncementTemplate[]
   checklistItems     TaskChecklistItem[]
   taskActivities     TaskActivity[]
@@ -552,6 +554,8 @@ model Employee {
   createdTaskTemplates TaskTemplate[]            @relation("TaskTemplateManager")
   assignedTaskTemplates TaskTemplate[]           @relation("TaskTemplateAssignee")
   assignedTasks       Task[]                     @relation("TaskAssignee")
+  taskCompletions     TaskCompletion[]
+  uploadedTaskPhotoProofs TaskPhotoProof[]    @relation("TaskPhotoProofUploader")
   completedChecklistItems TaskChecklistItem[]    @relation("ChecklistCompletedBy")
   taskActivities      TaskActivity[]
   createdAnnouncements Announcement[]            @relation("AnnouncementAuthor")
@@ -1045,6 +1049,7 @@ model Task {
   description       String?
   status            TaskStatus   @default(TODO)
   priority          TaskPriority @default(MEDIUM)
+  requiresPhoto     Boolean      @default(false)
   dueAt             DateTime?
   completedAt       DateTime?
   lastReminderAt    DateTime?
@@ -1058,6 +1063,7 @@ model Task {
   group             WorkGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   checklistItems    TaskChecklistItem[]
   activities        TaskActivity[]
+  photoProofs       TaskPhotoProof[]
 
   @@index([tenantId, managerEmployeeId, createdAt])
   @@index([tenantId, assigneeEmployeeId, status, createdAt])
@@ -1075,6 +1081,8 @@ model TaskTemplate {
   title              String
   description        String?
   priority           TaskPriority          @default(MEDIUM)
+  requiresPhoto      Boolean               @default(false)
+  expandOnDemand     Boolean               @default(false)
   frequency          TaskTemplateFrequency
   weekDaysJson       String?
   dayOfMonth         Int?
@@ -1094,12 +1102,59 @@ model TaskTemplate {
   group              WorkGroup?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
   department         Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   location           Location?             @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  taskCompletions    TaskCompletion[]
 
   @@index([tenantId, managerEmployeeId, isActive, createdAt])
   @@index([tenantId, groupId, isActive, createdAt])
   @@index([tenantId, assigneeEmployeeId, isActive, createdAt])
   @@index([tenantId, departmentId, isActive, createdAt])
   @@index([tenantId, locationId, isActive, createdAt])
+}
+
+model TaskCompletion {
+  id                 String       @id @default(uuid())
+  tenantId           String
+  taskTemplateId     String
+  assigneeEmployeeId String
+  occurrenceDate     DateTime
+  status             TaskStatus   @default(TODO)
+  completedAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taskTemplate       TaskTemplate @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+  assigneeEmployee   Employee     @relation(fields: [assigneeEmployeeId], references: [id], onDelete: Cascade)
+  photoProofs        TaskPhotoProof[]
+
+  @@unique([taskTemplateId, assigneeEmployeeId, occurrenceDate])
+  @@index([tenantId, assigneeEmployeeId, occurrenceDate])
+  @@index([tenantId, taskTemplateId, occurrenceDate])
+}
+
+model TaskPhotoProof {
+  id                 String          @id @default(uuid())
+  tenantId           String
+  taskId             String?
+  taskCompletionId   String?
+  uploadedByEmployeeId String
+  fileName           String
+  storageKey         String
+  supersededByProofId String?
+  deletedAt          DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  task               Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskCompletion     TaskCompletion? @relation(fields: [taskCompletionId], references: [id], onDelete: Cascade)
+  uploadedByEmployee Employee        @relation("TaskPhotoProofUploader", fields: [uploadedByEmployeeId], references: [id], onDelete: Cascade)
+  supersededByProof  TaskPhotoProof? @relation("TaskPhotoProofReplacement", fields: [supersededByProofId], references: [id], onDelete: SetNull)
+  replacedProofs     TaskPhotoProof[] @relation("TaskPhotoProofReplacement")
+
+  @@index([tenantId, taskId, createdAt])
+  @@index([tenantId, taskCompletionId, createdAt])
+  @@index([tenantId, uploadedByEmployeeId, createdAt])
 }
 
 model TaskChecklistItem {

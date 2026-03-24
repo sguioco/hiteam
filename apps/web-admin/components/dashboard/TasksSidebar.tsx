@@ -45,6 +45,35 @@ function shouldShowCompletedTask(task: TaskItem, referenceDay: Date) {
   return isSameDay(startOfDay(completedDate), referenceDay);
 }
 
+function matchesTaskWindow(
+  task: TaskItem,
+  filter: TaskFilter,
+  today: Date,
+  tomorrow: Date,
+  weekEnd: Date,
+) {
+  const isDone = task.status === "DONE";
+  const showCompleted = shouldShowCompletedTask(task, today);
+
+  if (isDone && !showCompleted) return false;
+  if (!task.dueAt) return filter === "today";
+
+  const dueDate = new Date(task.dueAt);
+  if (Number.isNaN(dueDate.getTime())) return false;
+  const dueDay = startOfDay(dueDate);
+
+  switch (filter) {
+    case "today":
+      return isSameDay(dueDay, today);
+    case "tomorrow":
+      return isSameDay(dueDay, tomorrow);
+    case "week":
+      return dueDay >= today && dueDay < weekEnd;
+    default:
+      return true;
+  }
+}
+
 function formatDeadline(task: TaskItem) {
   if (!task.dueAt) return "Без срока";
   const dueDate = new Date(task.dueAt);
@@ -129,45 +158,22 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  taskWindowItems[0].value = tasks.filter((task) => {
-    if (task.status === "DONE" || !task.dueAt) return false;
-    return isSameDay(startOfDay(new Date(task.dueAt)), today);
-  }).length;
-  taskWindowItems[1].value = tasks.filter((task) => {
-    if (task.status === "DONE" || !task.dueAt) return false;
-    return isSameDay(startOfDay(new Date(task.dueAt)), tomorrow);
-  }).length;
-  taskWindowItems[2].value = tasks.filter((task) => {
-    if (task.status === "DONE" || !task.dueAt) return false;
-    const dueDay = startOfDay(new Date(task.dueAt));
-    return dueDay >= today && dueDay < weekEnd;
-  }).length;
+  taskWindowItems[0].value = tasks.filter((task) =>
+    matchesTaskWindow(task, "today", today, tomorrow, weekEnd),
+  ).length;
+  taskWindowItems[1].value = tasks.filter((task) =>
+    matchesTaskWindow(task, "tomorrow", today, tomorrow, weekEnd),
+  ).length;
+  taskWindowItems[2].value = tasks.filter((task) =>
+    matchesTaskWindow(task, "week", today, tomorrow, weekEnd),
+  ).length;
 
   const visibleTasks = useMemo(() => {
     const baseTasks = showOverdue
       ? overdueTasks
-      : tasks.filter((task) => {
-          const isDone = task.status === "DONE";
-          const showCompleted = shouldShowCompletedTask(task, today);
-
-          if (isDone && !showCompleted) return false;
-          if (!task.dueAt) return filter === "today";
-
-          const dueDate = new Date(task.dueAt);
-          if (Number.isNaN(dueDate.getTime())) return false;
-          const dueDay = startOfDay(dueDate);
-
-          switch (filter) {
-            case "today":
-              return isSameDay(dueDay, today);
-            case "tomorrow":
-              return isSameDay(dueDay, tomorrow);
-            case "week":
-              return dueDay >= today && dueDay < weekEnd;
-            default:
-              return true;
-          }
-        });
+      : tasks.filter((task) =>
+          matchesTaskWindow(task, filter, today, tomorrow, weekEnd),
+        );
 
     return sortTasks(
       baseTasks.filter((task) => {

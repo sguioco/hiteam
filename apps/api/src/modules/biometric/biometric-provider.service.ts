@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import {
@@ -14,9 +14,17 @@ export class BiometricProviderService {
   private readonly client: RekognitionClient;
   private readonly stsClient: STSClient;
   private readonly provider: string;
+  private readonly comprefaceBaseUrl: string | null;
+  private readonly comprefaceApiKey: string | null;
+  private readonly comprefaceSimilarityThreshold: number;
 
   constructor(private readonly configService: ConfigService) {
     this.provider = this.configService.get<string>('BIOMETRIC_PROVIDER', 'guided-web');
+    this.comprefaceBaseUrl = this.configService.get<string>('COMPRE_FACE_BASE_URL')?.replace(/\/$/, '') ?? null;
+    this.comprefaceApiKey = this.configService.get<string>('COMPRE_FACE_API_KEY') ?? null;
+    this.comprefaceSimilarityThreshold = Number(
+      this.configService.get<string>('COMPRE_FACE_SIMILARITY_THRESHOLD', '0.93'),
+    );
     this.client = new RekognitionClient({
       region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
       credentials: this.configService.get<string>('AWS_ACCESS_KEY_ID') && this.configService.get<string>('AWS_SECRET_ACCESS_KEY')
@@ -38,11 +46,63 @@ export class BiometricProviderService {
   }
 
   getProviderName() {
-    return this.isAwsRekognitionEnabled() ? 'aws-rekognition' : 'guided-web';
+    if (this.isAwsRekognitionEnabled()) {
+      return 'aws-rekognition';
+    }
+
+    if (this.isCompreFaceEnabled()) {
+      return 'compreface';
+    }
+
+    return 'guided-web';
   }
 
   isAwsRekognitionEnabled() {
     return this.provider === 'aws-rekognition';
+  }
+
+  isCompreFaceEnabled() {
+    return this.provider === 'compreface';
+  }
+
+  getCompreFaceSimilarityThreshold() {
+    return this.comprefaceSimilarityThreshold;
+  }
+
+  async compareCompreFaceFaces(sourceBytes: Buffer, targetBytes: Buffer, contentType = 'image/jpeg') {
+    if (!this.isCompreFaceEnabled()) {
+      return null;
+    }
+
+    this.assertCompreFaceConfigured();
+
+    const formData = new FormData();
+    formData.append(
+      'source_image',
+      new Blob([this.toArrayBufferView(sourceBytes)], { type: contentType }),
+      'source.jpg',
+    );
+    formData.append(
+      'target_image',
+      new Blob([this.toArrayBufferView(targetBytes)], { type: contentType }),
+      'target.jpg',
+    );
+
+    const response = await this.callCompreFace(
+      '/api/v1/verification/verify?limit=1',
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+
+    const firstResult = Array.isArray(response?.result) ? response.result[0] : null;
+    const match = Array.isArray(firstResult?.face_matches) ? firstResult.face_matches[0] : null;
+
+    return {
+      similarity: match && typeof match.similarity === 'number' ? match.similarity : 0,
+      rawResult: response ?? null,
+    };
   }
 
   async compareFaces(sourceBytes: Buffer, targetBytes: Buffer) {
@@ -147,4 +207,78 @@ export class BiometricProviderService {
       auditImageCount: response.AuditImages?.length ?? 0,
     };
   }
+
+  private assertCompreFaceConfigured() {
+    if (!this.comprefaceBaseUrl || !this.comprefaceApiKey) {
+      throw new Error('CompreFace is enabled but COMPRE_FACE_BASE_URL or COMPRE_FACE_API_KEY is missing.');
+    }
+  }
+
+  private async callCompreFace(path: string, init: RequestInit, throwOnNonOk = true) {
+    const headers = new Headers(init.headers ?? {});
+    headers.set('x-api-key', this.comprefaceApiKey ?? '');
+
+    if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const response = await fetch(`${this.comprefaceBaseUrl}${path}`, {
+      ...init,
+      headers,
+    });
+
+    if (!response.ok) {
+      if (!throwOnNonOk) {
+        return null;
+      }
+
+      const text = await response.text();
+      throw new BadRequestException(
+        this.normalizeCompreFaceErrorMessage(text) ||
+          `CompreFace request failed with status ${response.status}.`,
+      );
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      return null;
+    }
+
+    return response.json() as Promise<Record<string, any>>;
+  }
+
+  private toArrayBufferView(buffer: Buffer) {
+    const view = new Uint8Array(buffer.byteLength);
+    view.set(buffer);
+    return view;
+  }
+
+  private normalizeCompreFaceErrorMessage(raw: string) {
+    const normalized = raw.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(normalized) as { message?: string; code?: number; error?: string };
+      const message = parsed.message ?? parsed.error ?? normalized;
+      const code = parsed.code ?? null;
+      return this.mapCompreFaceMessage(message, code);
+    } catch {
+      return this.mapCompreFaceMessage(normalized, null);
+    }
+  }
+
+  private mapCompreFaceMessage(message: string, code: number | null) {
+    if (code === 28 || /No face is found in the given image/i.test(message)) {
+      return 'No face detected in the photo. Retake it in better light and keep your face centered in the frame.';
+    }
+
+    if (/more than one face/i.test(message)) {
+      return 'More than one face was detected in the photo. Keep only one person in the frame and try again.';
+    }
+
+    return message;
+  }
+
 }

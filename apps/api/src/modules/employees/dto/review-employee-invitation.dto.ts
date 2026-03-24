@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class ReviewEmployeeInvitationDto {
   @IsString()
@@ -45,4 +45,8 @@ export class ReviewEmployeeInvitationDto {
   @IsOptional()
   @IsString()
   rejectedReason?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  grantManagerAccess?: boolean;
 }

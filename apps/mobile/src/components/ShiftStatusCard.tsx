@@ -1,36 +1,102 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ImageBackground, Text, View } from 'react-native';
 import type { AttendanceStatusResponse } from '@smart/types';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { useI18n } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
 type ShiftStatusCardProps = {
+  greetingName?: string | null;
   status: AttendanceStatusResponse | null;
   loading?: boolean;
   topInset?: number;
   onPrimaryAction?: () => void;
 };
 
-function formatDuration(totalMinutes: number, language: 'ru' | 'en') {
-  const safeMinutes = Math.max(Math.round(totalMinutes), 0);
-  const hours = Math.floor(safeMinutes / 60);
-  const minutes = safeMinutes % 60;
-  const hourLabel = language === 'ru' ? 'ч' : 'h';
-  const minuteLabel = language === 'ru' ? 'м' : 'm';
-
-  if (hours === 0) {
-    return `${minutes}${minuteLabel}`;
+function pluralizeRu(value: number, forms: readonly [string, string, string]) {
+  const remainder100 = value % 100;
+  if (remainder100 >= 11 && remainder100 <= 19) {
+    return forms[2];
   }
 
-  if (minutes === 0) {
-    return `${hours}${hourLabel}`;
+  const remainder10 = value % 10;
+  if (remainder10 === 1) {
+    return forms[0];
   }
 
-  return `${hours}${hourLabel} ${minutes}${minuteLabel}`;
+  if (remainder10 >= 2 && remainder10 <= 4) {
+    return forms[1];
+  }
+
+  return forms[2];
 }
 
-const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
+function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: 'ru' | 'en') {
+  if (language === 'ru') {
+    const labels =
+      unit === 'day'
+        ? (['день', 'дня', 'дней'] as const)
+        : unit === 'hour'
+          ? (['час', 'часа', 'часов'] as const)
+          : (['минута', 'минуты', 'минут'] as const);
+
+    return `${value} ${pluralizeRu(value, labels)}`;
+  }
+
+  const label =
+    unit === 'day'
+      ? value === 1
+        ? 'day'
+        : 'days'
+      : unit === 'hour'
+        ? value === 1
+          ? 'hour'
+          : 'hours'
+        : value === 1
+          ? 'minute'
+          : 'minutes';
+
+  return `${value} ${label}`;
+}
+
+function formatDuration(totalMinutes: number, language: 'ru' | 'en') {
+  const safeMinutes = Math.max(Math.ceil(totalMinutes), 0);
+  if (safeMinutes === 0) {
+    return language === 'ru' ? 'меньше минуты' : 'less than a minute';
+  }
+
+  const days = Math.floor(safeMinutes / (24 * 60));
+  const hours = Math.floor((safeMinutes % (24 * 60)) / 60);
+  const minutes = safeMinutes % 60;
+  const parts: string[] = [];
+
+  if (days > 0) {
+    parts.push(formatDurationPart(days, 'day', language));
+  }
+
+  if (hours > 0) {
+    parts.push(formatDurationPart(hours, 'hour', language));
+  }
+
+  if (days === 0 && minutes > 0) {
+    parts.push(formatDurationPart(minutes, 'minute', language));
+  }
+
+  if (parts.length === 0) {
+    return formatDurationPart(minutes, 'minute', language);
+  }
+
+  return parts.slice(0, 2).join(' ');
+}
+
+const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
   const locale = language === 'ru' ? 'ru-RU' : 'en-US';
   const textGlow = {
@@ -58,8 +124,27 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
     fontFamily: 'Manrope_600SemiBold',
     letterSpacing: -0.1,
   } as const;
+  const pulse = useSharedValue(0.2);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, {
+        duration: 1200,
+        easing: Easing.out(Easing.quad),
+      }),
+      -1,
+      false,
+    );
+  }, [pulse]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: 0.28 * (1 - pulse.value),
+    transform: [{ scale: 1 + pulse.value * 1.7 }],
+  }));
 
   const shiftMeta = useMemo(() => {
+    const now = new Date();
+
     if (loading) {
       return {
         title: t('today.cardLoadingTitle'),
@@ -69,26 +154,49 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('common.loading'),
         statusColor: '#dbeafe',
         statusIcon: 'time-outline' as const,
+        statusVariant: 'default' as const,
         buttonLabel: null,
         buttonTone: 'neutral' as const,
       };
     }
 
     if (!status?.shift) {
+      if (status?.nextShift) {
+        const nextShiftStart = new Date(status.nextShift.startsAt);
+        const nextShiftEnd = new Date(status.nextShift.endsAt);
+        const minutesBeforeStart = Math.max(0, (nextShiftStart.getTime() - now.getTime()) / 60000);
+
+        return {
+          title: null,
+          body: '',
+          timing: `${nextShiftStart.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${nextShiftEnd.toLocaleTimeString(locale, {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`,
+          locationLabel: status.nextShift.locationName,
+          statusText: t('today.startsIn', { duration: formatDuration(minutesBeforeStart, language) }),
+          statusColor: '#86efac',
+          statusIcon: 'time-outline' as const,
+          statusVariant: 'default' as const,
+          buttonLabel: null,
+          buttonTone: 'neutral' as const,
+        };
+      }
+
       return {
-        title: t('today.shiftUnassignedTitle'),
-        body: t('today.shiftUnassignedBody'),
+        title: null,
+        body: '',
         timing: '—',
         locationLabel: status?.location.name ?? '—',
         statusText: t('today.shiftUnassignedTitle'),
         statusColor: '#fef3c7',
         statusIcon: 'calendar-outline' as const,
+        statusVariant: 'default' as const,
         buttonLabel: null,
         buttonTone: 'neutral' as const,
       };
     }
 
-    const now = new Date();
     const shiftStart = new Date(status.shift.startsAt);
     const shiftEnd = new Date(status.shift.endsAt);
     const timing = `${shiftStart.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${shiftEnd.toLocaleTimeString(locale, {
@@ -106,7 +214,8 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('today.onShiftLeft', { duration: formatDuration(endMinutes, language) }),
         statusColor: '#86efac',
         statusIcon: 'checkmark-circle' as const,
-        buttonLabel: t('today.actionBye'),
+        statusVariant: 'default' as const,
+        buttonLabel: t('workspace.checkOut'),
         buttonTone: 'danger' as const,
       };
     }
@@ -122,7 +231,8 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('today.onBreakFor', { duration: formatDuration(breakMinutes, language) }),
         statusColor: '#fde68a',
         statusIcon: 'cafe-outline' as const,
-        buttonLabel: t('today.actionBye'),
+        statusVariant: 'default' as const,
+        buttonLabel: t('workspace.checkOut'),
         buttonTone: 'danger' as const,
       };
     }
@@ -136,6 +246,7 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('today.shiftComplete'),
         statusColor: '#cbd5e1',
         statusIcon: 'moon-outline' as const,
+        statusVariant: 'default' as const,
         buttonLabel: null,
         buttonTone: 'neutral' as const,
       };
@@ -151,7 +262,8 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('today.startsIn', { duration: formatDuration(minutesBeforeStart, language) }),
         statusColor: '#86efac',
         statusIcon: 'time-outline' as const,
-        buttonLabel: t('today.actionHi'),
+        statusVariant: 'default' as const,
+        buttonLabel: t('workspace.checkIn'),
         buttonTone: 'success' as const,
       };
     }
@@ -166,7 +278,8 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
         statusText: t('today.lateBy', { duration: formatDuration(lateMinutes, language) }),
         statusColor: '#fb7185',
         statusIcon: 'alert-circle-outline' as const,
-        buttonLabel: t('today.actionHi'),
+        statusVariant: 'late' as const,
+        buttonLabel: t('workspace.checkIn'),
         buttonTone: 'success' as const,
       };
     }
@@ -180,6 +293,7 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
       statusText: t('today.endedAgo', { duration: formatDuration(endedMinutes, language) }),
       statusColor: '#cbd5e1',
       statusIcon: 'moon-outline' as const,
+      statusVariant: 'default' as const,
       buttonLabel: null,
       buttonTone: 'neutral' as const,
     };
@@ -189,24 +303,25 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
     shiftMeta.buttonTone === 'danger'
       ? 'bg-[#546cf2]'
       : shiftMeta.buttonTone === 'success'
-        ? 'bg-[#546cf2]'
+        ? 'bg-white/92'
         : 'bg-[#dff8d8]';
 
   const buttonInnerClasses =
     shiftMeta.buttonTone === 'danger'
       ? 'bg-[#6f84ff]'
       : shiftMeta.buttonTone === 'success'
-        ? 'bg-[#6f84ff]'
+        ? 'bg-white'
         : 'bg-[#f4fff1]';
 
   const buttonOverlayClasses =
     shiftMeta.buttonTone === 'danger'
       ? 'bg-[#3144a8]/18'
       : shiftMeta.buttonTone === 'success'
-        ? 'bg-[#3144a8]/18'
+        ? 'bg-[#f3f7ff]/96'
         : 'bg-[#7ee787]/28';
 
-  const buttonTextColor = shiftMeta.buttonTone === 'neutral' ? 'text-[#11233d]' : 'text-white';
+  const buttonTextColor = shiftMeta.buttonTone === 'danger' ? 'text-white' : 'text-[#1e3358]';
+  const greetingLabel = greetingName?.trim() ? `Hi, ${greetingName.trim()}` : t('today.greetingCard');
 
   return (
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">
@@ -220,10 +335,7 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
       <View className="relative z-10 justify-between px-7 pb-6" style={{ minHeight: 280 + topInset, paddingTop: topInset + 14 }}>
         <View className="gap-2">
           <Text className="text-[34px] leading-[42px] text-white" style={[textGlow, greetingStyle]}>
-            {t('today.greetingCard')}
-          </Text>
-          <Text className="max-w-[280px] text-[15px] leading-6 text-white/88" style={textGlow}>
-            {shiftMeta.body}
+            {greetingLabel}
           </Text>
         </View>
 
@@ -234,15 +346,24 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
           <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
             {shiftMeta.timing}
           </Text>
-          <Text className="mt-2 text-[15px] leading-[20px] text-white/84" style={[textGlow, statusTextStyle]}>
-            {t('today.shiftLocation')}: {shiftMeta.locationLabel}
-          </Text>
-          <View className="mt-2 flex-row items-center gap-2">
-            <Ionicons color={shiftMeta.statusColor} name={shiftMeta.statusIcon} size={16} />
-            <Text className="text-[16px] leading-[21px]" style={[statusTextStyle, { color: shiftMeta.statusColor }]}>
-              {shiftMeta.statusText}
-            </Text>
-          </View>
+          {shiftMeta.statusVariant === 'late' ? (
+            <View className="mt-2 flex-row items-center gap-2">
+              <View className="relative h-2.5 w-2.5 items-center justify-center">
+                <Animated.View className="absolute h-2.5 w-2.5 rounded-full bg-[#ff5b6d]" style={pulseStyle} />
+                <View className="h-2.5 w-2.5 rounded-full bg-[#ff4d63]" />
+              </View>
+              <Text className="text-[14px] leading-[18px] text-white" style={[textGlow, statusTextStyle]}>
+                {shiftMeta.statusText}
+              </Text>
+            </View>
+          ) : (
+            <View className="mt-2 flex-row items-center gap-2">
+              <Ionicons color={shiftMeta.statusColor} name={shiftMeta.statusIcon} size={16} />
+              <Text className="text-[16px] leading-[21px]" style={[statusTextStyle, { color: shiftMeta.statusColor }]}>
+                {shiftMeta.statusText}
+              </Text>
+            </View>
+          )}
         </View>
 
         {shiftMeta.buttonLabel ? (
@@ -251,7 +372,7 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
               <View className={buttonInnerClasses}>
                 <View className={`px-4 py-4 ${buttonOverlayClasses}`}>
                   <View className="flex-row items-center justify-center gap-2">
-                    <Text className="text-base">{shiftMeta.buttonLabel === t('today.actionHi') ? '\u{1F44B}' : '\u{1F44B}'}</Text>
+                    <Text className="text-base">{shiftMeta.buttonLabel === t('workspace.checkIn') ? '\u{1F44B}' : '\u{1F44B}'}</Text>
                     <Text className={`text-base ${buttonTextColor}`} style={buttonLabelStyle}>
                       {shiftMeta.buttonLabel}
                     </Text>
@@ -262,11 +383,6 @@ const ShiftStatusCard = ({ status, loading = false, onPrimaryAction, topInset = 
           </View>
         ) : null}
 
-        {shiftMeta.title ? (
-          <Text className="mt-4 text-[14px] leading-6 text-white/84" style={[textGlow, statusTextStyle]}>
-            {shiftMeta.title}
-          </Text>
-        ) : null}
       </View>
     </View>
   );

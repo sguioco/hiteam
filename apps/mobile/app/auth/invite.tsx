@@ -130,7 +130,7 @@ export default function InviteScreen() {
               {t('invite.invitationFoundBody', { companyName: invitationCompanyName ?? '—' })}
             </Text>
           </View>
-          <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-muted/80" haptic="selection" onPress={() => {
+          <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-[#eef4ff]/80" haptic="selection" onPress={() => {
             setInvitationCompanyName(null);
             setInvitationToken(null);
           }}>

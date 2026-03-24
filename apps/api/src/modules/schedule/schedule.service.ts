@@ -5,6 +5,18 @@ import { AuditService } from '../audit/audit.service';
 import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
 import { CreateShiftDto } from './dto/create-shift.dto';
 
+function buildTemplateCodeBase(value: string) {
+  const normalized = value
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/[\s_-]+/g, '-')
+    .toUpperCase()
+    .slice(0, 24);
+
+  return normalized || 'SHIFT';
+}
+
 @Injectable()
 export class ScheduleService {
   constructor(
@@ -42,16 +54,19 @@ export class ScheduleService {
       dto.weekDays && dto.weekDays.length > 0
         ? [...new Set(dto.weekDays)].sort((left, right) => left - right)
         : null;
+    const code = dto.code?.trim() || (await this.generateTemplateCode(tenantId, dto.name));
+    const locationId = dto.locationId || (await this.resolveDefaultLocationId(tenantId));
+    const positionId = dto.positionId || (await this.resolveDefaultPositionId(tenantId));
     const createInput: Prisma.ShiftTemplateUncheckedCreateInput = {
       tenantId,
       name: dto.name,
-      code: dto.code,
-      locationId: dto.locationId,
-      positionId: dto.positionId,
+      code,
+      locationId,
+      positionId,
       startsAtLocal: dto.startsAtLocal,
       endsAtLocal: dto.endsAtLocal,
       weekDaysJson: normalizedWeekDays ? JSON.stringify(normalizedWeekDays) : null,
-      gracePeriodMinutes: dto.gracePeriodMinutes,
+      gracePeriodMinutes: dto.gracePeriodMinutes ?? 10,
     };
 
     const template = await this.prisma.shiftTemplate.create({
@@ -68,7 +83,7 @@ export class ScheduleService {
       entityType: 'shift_template',
       entityId: template.id,
       action: 'schedule.template_created',
-      metadata: { code: dto.code },
+      metadata: { code },
     });
 
     return template;
@@ -149,6 +164,26 @@ export class ScheduleService {
     });
   }
 
+  async findNextShift(employeeId: string) {
+    const now = new Date();
+
+    return this.prisma.shift.findFirst({
+      where: {
+        employeeId,
+        status: ShiftStatus.PUBLISHED,
+        startsAt: {
+          gt: now,
+        },
+      },
+      include: {
+        location: true,
+        position: true,
+        template: true,
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+  }
+
   async findCurrentShift(employeeId: string) {
     const now = new Date();
     const startOfWindow = new Date(now);
@@ -204,5 +239,100 @@ export class ScheduleService {
     }
 
     return endsAt;
+  }
+
+  private async generateTemplateCode(tenantId: string, name: string) {
+    const baseCode = buildTemplateCodeBase(name);
+    const existingCodes = new Set(
+      (
+        await this.prisma.shiftTemplate.findMany({
+          where: { tenantId },
+          select: { code: true },
+        })
+      ).map((template) => template.code),
+    );
+
+    if (!existingCodes.has(baseCode)) {
+      return baseCode;
+    }
+
+    let index = 2;
+    while (true) {
+      const suffix = `-${index}`;
+      const candidate = `${baseCode.slice(0, Math.max(1, 24 - suffix.length))}${suffix}`;
+      if (!existingCodes.has(candidate)) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
+  private async resolveDefaultCompanyId(tenantId: string) {
+    const company = await this.prisma.company.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (company) {
+      return company.id;
+    }
+
+    const created = await this.prisma.company.create({
+      data: {
+        tenantId,
+        name: 'General Company',
+        code: 'GENERAL',
+      },
+    });
+
+    return created.id;
+  }
+
+  private async resolveDefaultLocationId(tenantId: string) {
+    const location = await this.prisma.location.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (location) {
+      return location.id;
+    }
+
+    const companyId = await this.resolveDefaultCompanyId(tenantId);
+    const created = await this.prisma.location.create({
+      data: {
+        tenantId,
+        companyId,
+        name: 'Default location',
+        code: `DEFAULT-${Date.now()}`,
+        address: 'Not set yet',
+        latitude: 0,
+        longitude: 0,
+        timezone: 'UTC',
+      },
+    });
+
+    return created.id;
+  }
+
+  private async resolveDefaultPositionId(tenantId: string) {
+    const position = await this.prisma.position.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (position) {
+      return position.id;
+    }
+
+    const created = await this.prisma.position.create({
+      data: {
+        tenantId,
+        name: 'Employee',
+        code: 'EMPLOYEE',
+      },
+    });
+
+    return created.id;
   }
 }

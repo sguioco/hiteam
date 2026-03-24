@@ -1,13 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Linking, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BiometricJobItem, BiometricPolicyResponse } from '@smart/types';
-import { Badge } from '../../components/ui/badge';
-import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { Screen } from '../../components/ui/screen';
+import { PressableScale } from '../../components/ui/pressable-scale';
+import { BrandWordmark } from '../../src/components/brand-wordmark';
 import {
   bootstrapDemoDevice,
   completeBiometricEnrollmentWithArtifacts,
@@ -17,17 +15,19 @@ import {
   startBiometricEnrollment,
 } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function BiometricPage() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const params = useLocalSearchParams<{
     mode?: string;
     intent?: string;
     returnTo?: string;
   }>();
   const cameraRef = useRef<CameraView | null>(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const permissionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [policy, setPolicy] = useState<BiometricPolicyResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,22 +60,153 @@ export default function BiometricPage() {
     void refresh();
   }, []);
 
-  const steps = useMemo(
-    () =>
-      mode === 'enroll'
-        ? [t('biometric.step.faceCentered'), t('biometric.step.turnLeft'), t('biometric.step.turnRight')]
-        : [t('biometric.step.faceCentered'), t('biometric.step.blinkOnce')],
-    [mode, t],
-  );
+  const copy =
+    language === 'ru'
+      ? {
+          titleEnroll: 'Подтвердите лицо',
+          titleVerify: 'Покажите лицо',
+          subtitleEnroll:
+            'Первый снимок сохранится как эталон для дальнейшей проверки сотрудника.',
+          subtitleVerify:
+            'Сделайте один снимок. Мы сравним его с сохраненным эталоном.',
+          modeEnroll: 'Настройка',
+          modeVerify: 'Проверка',
+          cameraPermission: 'Нужен доступ к фронтальной камере.',
+          cameraPermissionCta: 'Разрешить камеру',
+          cameraPermissionSettingsCta: 'Открыть настройки',
+          reset: 'Повторить',
+          capture: 'Сделать снимок',
+          submitEnroll: 'Next step',
+          submitVerify: 'Next step',
+          submitReady: 'Снимок готов',
+          faceInstruction: 'Смотрите прямо в камеру',
+        }
+        : {
+            titleEnroll: 'Setup your face',
+            titleVerify: 'Show your face',
+            subtitleEnroll:
+            'This photo will be saved as the reference for future attendance checks',
+          subtitleVerify:
+            'Capture one photo. We will compare it against your saved reference',
+          modeEnroll: 'Setup',
+          modeVerify: 'Verify',
+          cameraPermission: 'Camera access is required.',
+          cameraPermissionCta: 'Enable camera',
+          cameraPermissionSettingsCta: 'Open settings',
+          reset: 'Retake',
+          capture: 'Capture photo',
+          submitEnroll: 'Next step',
+          submitVerify: 'Next step',
+          submitReady: 'Photo ready',
+          faceInstruction: 'Look straight at the camera',
+        };
+
+  const steps = useMemo(() => [copy.faceInstruction], [copy.faceInstruction]);
 
   const currentStep = steps[artifacts.length] ?? null;
   const canSubmit = artifacts.length === steps.length;
+  const capturedArtifact = artifacts[0] ?? null;
+
+  const titleStyle = {
+    color: '#26334a',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 34,
+    includeFontPadding: false,
+    lineHeight: 38,
+  } as const;
+
+  const bodyStyle = {
+    color: '#6f7892',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 16,
+    includeFontPadding: false,
+    lineHeight: 24,
+  } as const;
+
+  const metaLabelStyle = {
+    color: '#7a8094',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 13,
+    includeFontPadding: false,
+    letterSpacing: 1.2,
+    lineHeight: 18,
+    textTransform: 'uppercase',
+  } as const;
+
+  const actionLabelStyle = {
+    color: '#f7f1e6',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 20,
+    includeFontPadding: false,
+    lineHeight: 24,
+  } as const;
+
+  const secondaryActionLabelStyle = {
+    color: '#24314b',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 18,
+    includeFontPadding: false,
+    lineHeight: 22,
+  } as const;
+
+  const errorStyle = {
+    color: '#b93b4a',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    includeFontPadding: false,
+    lineHeight: 22,
+  } as const;
 
   async function ensurePermission() {
     if (permission?.granted) return true;
+
+    if (permission && !permission.canAskAgain) {
+      await Linking.openSettings();
+      return false;
+    }
+
     const result = await requestPermission();
+
+    if (!result.granted && !result.canAskAgain) {
+      await Linking.openSettings();
+    }
+
     return result.granted;
   }
+
+  async function syncCameraPermission() {
+    try {
+      const nextPermission = await getPermission();
+      if (nextPermission.granted) {
+        setMessage(null);
+      }
+    } catch {
+      // Ignore background permission refresh errors and keep the current UI state.
+    }
+  }
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        return;
+      }
+
+      void syncCameraPermission();
+      if (permissionRefreshTimerRef.current) {
+        clearTimeout(permissionRefreshTimerRef.current);
+      }
+      permissionRefreshTimerRef.current = setTimeout(() => {
+        void syncCameraPermission();
+      }, 450);
+    });
+
+    return () => {
+      subscription.remove();
+      if (permissionRefreshTimerRef.current) {
+        clearTimeout(permissionRefreshTimerRef.current);
+      }
+    };
+  }, [getPermission]);
 
   async function captureStep() {
     const allowed = await ensurePermission();
@@ -90,11 +221,15 @@ export default function BiometricPage() {
     setMessage(null);
 
     try {
-      const picture = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.55 });
+      const picture = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.8,
+        skipProcessing: true,
+      });
       if (!picture.base64) {
         throw new Error(t('biometric.captureMissingData'));
       }
-      setArtifacts((current) => [...current, `data:image/jpeg;base64,${picture.base64}`]);
+      setArtifacts([`data:image/jpeg;base64,${picture.base64}`]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('biometric.captureFailed'));
     } finally {
@@ -178,89 +313,112 @@ export default function BiometricPage() {
     }
   }
 
+  const primaryActionLabel = !permission?.granted
+    ? permission && !permission.canAskAgain
+      ? copy.cameraPermissionSettingsCta
+      : copy.cameraPermissionCta
+    : canSubmit
+      ? mode === 'enroll'
+        ? copy.submitEnroll
+        : copy.submitVerify
+      : copy.capture;
+
+  const isPrimaryActionDisabled =
+    processing || capturing || (permission?.granted ? (!canSubmit && !currentStep) : false);
+
+  async function handlePrimaryAction() {
+    if (!permission?.granted) {
+      if (permission && !permission.canAskAgain) {
+        await Linking.openSettings();
+        return;
+      }
+
+      await ensurePermission();
+      return;
+    }
+
+    if (canSubmit) {
+      await submitCapture();
+      return;
+    }
+
+    await captureStep();
+  }
+
   return (
-    <Screen contentClassName="pb-10">
+    <SafeAreaView className="flex-1 bg-white" edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar style="dark" />
 
-      <Card className="gap-4">
-        <View className="gap-2">
-          <Badge label={t('biometric.eyebrow')} variant="brand" />
-          <Text className="text-[30px] font-extrabold text-foreground">{t('biometric.title')}</Text>
-          <Text className="text-[15px] leading-6 text-muted">
-            {loading
-              ? t('biometric.loadingPolicy')
-              : policy
-                ? t('biometric.policyStatus', { status: policy.enrollmentStatus, provider: policy.provider })
-                : t('biometric.policyUnavailable')}
-          </Text>
+      <View className="flex-1 px-6 pb-8 pt-6">
+        <View className="gap-4">
+          <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
         </View>
 
-        {forcedMode ? null : (
-          <View className="flex-row gap-2">
-            <Pressable
-              className={`flex-1 rounded-2xl border-2 p-4 ${mode === 'enroll' ? 'border-border bg-brand' : 'border-border bg-surface-muted'}`}
-              onPress={() => {
-                setMode('enroll');
-                setArtifacts([]);
-              }}
-            >
-              <Text className={`text-center text-[15px] font-extrabold ${mode === 'enroll' ? 'text-brand-foreground' : 'text-foreground'}`}>{t('biometric.enroll')}</Text>
-            </Pressable>
-            <Pressable
-              className={`flex-1 rounded-2xl border-2 p-4 ${mode === 'verify' ? 'border-border bg-brand' : 'border-border bg-surface-muted'}`}
-              onPress={() => {
-                setMode('verify');
-                setArtifacts([]);
-              }}
-            >
-              <Text className={`text-center text-[15px] font-extrabold ${mode === 'verify' ? 'text-brand-foreground' : 'text-foreground'}`}>{t('biometric.verify')}</Text>
-            </Pressable>
+        <View className="mt-10 flex-1">
+          <View className="items-center gap-2">
+            <Text style={[titleStyle, { textAlign: 'center' }]}>
+              <Text style={{ fontFamily: 'Manrope_700Bold' }}>
+                {mode === 'enroll'
+                  ? copy.titleEnroll.split(' ')[0]
+                  : copy.titleVerify.split(' ')[0]}
+              </Text>
+              <Text style={{ fontFamily: 'Manrope_700Bold' }}>
+                {' '}
+                {mode === 'enroll'
+                  ? copy.titleEnroll.split(' ').slice(1).join(' ')
+                  : copy.titleVerify.split(' ').slice(1).join(' ')}
+              </Text>
+            </Text>
+            <Text style={[bodyStyle, { maxWidth: 290, textAlign: 'center' }]}>
+              {mode === 'enroll' ? copy.subtitleEnroll : copy.subtitleVerify}
+            </Text>
+            {loading ? (
+              <Text style={[bodyStyle, { textAlign: 'center' }]}>{t('biometric.loadingPolicy')}</Text>
+            ) : policy ? null : (
+              <Text style={[errorStyle, { textAlign: 'center' }]}>{t('biometric.policyUnavailable')}</Text>
+            )}
           </View>
-        )}
 
-        <Button label={t('common.back')} onPress={() => router.back()} variant="ghost" />
-      </Card>
-
-      <View className="overflow-hidden rounded-2xl border-2 border-border bg-[#1c1711]" style={{ height: 380 }}>
-        {permission?.granted ? (
-          <CameraView facing="front" mode="picture" ref={cameraRef} style={StyleSheet.absoluteFillObject} />
-        ) : (
-          <View className="flex-1 items-center justify-center gap-4 bg-surface p-5">
-            <Text className="text-center text-[15px] leading-6 text-muted">{t('biometric.grantCamera')}</Text>
-            <Button label={t('common.enableCamera')} onPress={() => void ensurePermission()} />
+          <View className="mt-3">
+            <View className="overflow-hidden rounded-[26px] bg-[#0f1724] shadow-panel" style={{ height: 420 }}>
+              {permission?.granted ? (
+                capturedArtifact ? (
+                  <Image resizeMode="cover" source={{ uri: capturedArtifact }} style={StyleSheet.absoluteFillObject} />
+                ) : (
+                  <CameraView facing="front" mode="picture" ref={cameraRef} style={StyleSheet.absoluteFillObject} />
+                )
+              ) : (
+                <View className="flex-1 items-center justify-center gap-4 bg-[#f9fbff] px-6">
+                  <Text className="text-center" style={bodyStyle}>{copy.cameraPermission}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        )}
+        </View>
+
+        <View className="mt-6 gap-3">
+          {message ? (
+            <Text style={[errorStyle, { textAlign: 'center' }]}>{message}</Text>
+          ) : null}
+
+          <PressableScale
+            className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+              isPrimaryActionDisabled ? 'opacity-70' : ''
+            }`}
+            disabled={isPrimaryActionDisabled}
+            haptic="medium"
+            onPress={() => void handlePrimaryAction()}
+          >
+            <Text style={actionLabelStyle}>
+              {capturing
+                ? t('biometric.capturing')
+                : processing
+                  ? t('common.processing')
+                  : primaryActionLabel}
+            </Text>
+          </PressableScale>
+        </View>
       </View>
-
-      <Card className="gap-3">
-        <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">
-          {mode === 'enroll' ? t('biometric.enrollmentSequence') : t('biometric.verificationSequence')}
-        </Text>
-        <Text className="text-[24px] font-extrabold text-foreground">{currentStep ?? t('biometric.sequenceComplete')}</Text>
-        <Text className="text-[15px] leading-6 text-muted">
-          {currentStep ? t('biometric.captureStepProgress', { current: artifacts.length + 1, total: steps.length }) : t('biometric.reviewComplete')}
-        </Text>
-        <Text className="text-[15px] leading-6 text-muted">{t('biometric.capturedFrames', { count: artifacts.length })}</Text>
-      </Card>
-
-      <Button disabled={capturing || processing || !currentStep} fullWidth label={capturing ? t('biometric.capturing') : t('biometric.captureStep')} onPress={() => void captureStep()} size="lg" />
-
-      <View className="flex-row gap-3">
-        <Button className="flex-1" label={t('biometric.resetSequence')} onPress={() => setArtifacts([])} variant="secondary" />
-        <Button
-          className="flex-1"
-          disabled={!canSubmit || processing}
-          label={processing ? t('common.processing') : mode === 'enroll' ? t('biometric.submitEnrollment') : t('biometric.submitVerification')}
-          onPress={() => void submitCapture()}
-          variant="secondary"
-        />
-      </View>
-
-      {message ? (
-        <Card className="gap-2">
-          <Text className="text-[15px] leading-6 text-foreground">{message}</Text>
-        </Card>
-      ) : null}
-    </Screen>
+    </SafeAreaView>
   );
 }

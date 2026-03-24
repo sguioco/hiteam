@@ -16,6 +16,7 @@ import {
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
   TaskItem,
+  WorkGroupItem,
 } from "@smart/types";
 import {
   AlertCircle,
@@ -33,7 +34,6 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
-import type { CreateDialogAction } from "@/components/CreateDialog";
 import { Button } from "@/components/ui/button";
 import type { RadioItem } from "@/components/ui/Radio";
 import {
@@ -74,6 +74,7 @@ import {
   getEmployeeWorkdayStatus,
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { appendTaskMeta, parseTaskMeta } from "@/lib/task-meta";
 import { ActionCenter } from "@/components/ActionsCenter";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
@@ -85,6 +86,7 @@ type EmployeeDirectoryItem = {
   firstName: string;
   lastName: string;
   birthDate?: string | null;
+  avatarUrl?: string | null;
   user?: { id: string } | null;
   company?: { name: string } | null;
   department?: { name: string } | null;
@@ -94,9 +96,17 @@ type TaskDraft = {
   mode: "task" | "meeting";
   title: string;
   description: string;
+  targetMode: "employees" | "group";
   assigneeEmployeeIds: string[];
+  groupId: string;
   priority: TaskItem["priority"];
   dueAt: string;
+  requiresPhoto: boolean;
+  isRecurring: boolean;
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
+  weekDays: number[];
+  startDate: string;
+  endDate: string;
   meetingMode: "online" | "offline";
   meetingLink: string;
   meetingLocation: string;
@@ -135,9 +145,17 @@ const initialTaskDraft: TaskDraft = {
   mode: "task",
   title: "",
   description: "",
+  targetMode: "employees",
   assigneeEmployeeIds: [],
+  groupId: "",
   priority: "MEDIUM",
   dueAt: "",
+  requiresPhoto: false,
+  isRecurring: false,
+  frequency: "DAILY",
+  weekDays: [1, 2, 3, 4, 5],
+  startDate: new Date().toISOString().split("T")[0],
+  endDate: "",
   meetingMode: "online",
   meetingLink: "",
   meetingLocation: "",
@@ -415,6 +433,10 @@ function createMockDashboardTasks(
     description,
     status,
     priority,
+    requiresPhoto: false,
+    isRecurring: false,
+    taskTemplateId: null,
+    occurrenceDate: null,
     dueAt,
     completedAt: null,
     createdAt: createMockTaskDate(-2, 9, 0),
@@ -426,6 +448,7 @@ function createMockDashboardTasks(
     group: null,
     checklistItems: [],
     activities: [],
+    photoProofs: [],
   });
 
   return [
@@ -582,6 +605,7 @@ export default function DashboardHome({
   const [taskBoard, setTaskBoard] =
     useState<CollaborationTaskBoardResponse | null>(null);
   const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>([]);
+  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [taskDraft, setTaskDraft] = useState<TaskDraft>(initialTaskDraft);
@@ -657,6 +681,7 @@ export default function DashboardHome({
       requestResult,
       taskResult,
       employeeResult,
+      groupsResult,
       shiftsResult,
       personalHistoryResult,
     ] = await Promise.allSettled([
@@ -675,6 +700,9 @@ export default function DashboardHome({
       apiRequest<EmployeeDirectoryItem[]>("/employees", {
         token: currentSession.accessToken,
       }),
+      apiRequest<WorkGroupItem[]>("/collaboration/groups", {
+        token: currentSession.accessToken,
+      }).catch(() => []),
       apiRequest<EmployeeScheduleShift[]>("/schedule/shifts", {
         token: currentSession.accessToken,
       }),
@@ -694,6 +722,7 @@ export default function DashboardHome({
     setEmployees(
       employeeResult.status === "fulfilled" ? employeeResult.value : [],
     );
+    setGroups(groupsResult.status === "fulfilled" ? groupsResult.value : []);
     setScheduleShifts(shiftsResult.status === "fulfilled" ? shiftsResult.value : []);
     setCanCheckWorkdays(shiftsResult.status === "fulfilled");
     setPersonalHistory(
@@ -774,7 +803,11 @@ export default function DashboardHome({
     [scheduleShifts],
   );
   const selectedAssigneeDayStatuses = useMemo(() => {
-    if (!canCheckWorkdays || !taskDraft.dueAt) {
+    if (
+      !canCheckWorkdays ||
+      !taskDraft.dueAt ||
+      taskDraft.targetMode !== "employees"
+    ) {
       return [];
     }
 
@@ -815,6 +848,7 @@ export default function DashboardHome({
     employees,
     taskDraft.assigneeEmployeeIds,
     taskDraft.dueAt,
+    taskDraft.targetMode,
   ]);
   const hasDayOffAssignee = selectedAssigneeDayStatuses.some(
     (item) => !item.isWorkday,
@@ -843,6 +877,11 @@ export default function DashboardHome({
         day: "numeric",
         month: "long",
       }),
+      avatarUrl:
+        item.employee.avatarUrl ||
+        getMockAvatarDataUrl(
+          `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+        ),
     }));
   const today = startOfDay(new Date());
   const presentCount = liveSessions.length;
@@ -1087,10 +1126,19 @@ export default function DashboardHome({
     const assigneeEmployeeIds = Array.from(
       new Set(taskDraft.assigneeEmployeeIds.filter(Boolean)),
     );
+    const selectedGroupId = taskDraft.groupId.trim();
+    const isEmployeeTargetMode = taskDraft.targetMode === "employees";
+    const hasTargets = isEmployeeTargetMode
+      ? assigneeEmployeeIds.length > 0
+      : Boolean(selectedGroupId);
 
-    if (!assigneeEmployeeIds.length) {
+    if (!hasTargets) {
       setMessageAction(null);
-      setMessage("Выберите хотя бы одного сотрудника.");
+      setMessage(
+        isEmployeeTargetMode
+          ? "Выберите хотя бы одного сотрудника."
+          : "Выберите группу.",
+      );
       return;
     }
 
@@ -1107,7 +1155,12 @@ export default function DashboardHome({
       }
     }
 
-    if (!allowDayOff && canCheckWorkdays && hasDayOffAssignee) {
+    if (
+      !allowDayOff &&
+      canCheckWorkdays &&
+      isEmployeeTargetMode &&
+      hasDayOffAssignee
+    ) {
       setTaskDayOffConfirmOpen(true);
       return;
     }
@@ -1122,24 +1175,98 @@ export default function DashboardHome({
           })
         : taskDraft.description.trim() || undefined;
 
-    await Promise.all(
-      assigneeEmployeeIds.map((assigneeEmployeeId) =>
-        apiRequest("/collaboration/tasks", {
+    if (taskDraft.mode === "task" && taskDraft.isRecurring) {
+      if (isEmployeeTargetMode) {
+        await Promise.all(
+          assigneeEmployeeIds.map((assigneeEmployeeId) =>
+            apiRequest("/collaboration/task-templates", {
+              method: "POST",
+              token: session.accessToken,
+              body: JSON.stringify({
+                title: taskDraft.title,
+                description: taskDraft.description.trim() || undefined,
+                priority: taskDraft.priority,
+                requiresPhoto: taskDraft.requiresPhoto || undefined,
+                expandOnDemand: true,
+                frequency: taskDraft.frequency,
+                weekDays:
+                  taskDraft.frequency === "WEEKLY"
+                    ? taskDraft.weekDays
+                    : undefined,
+                startDate:
+                  taskDraft.startDate ||
+                  new Date().toISOString().split("T")[0],
+                endDate: taskDraft.endDate || undefined,
+                dueAfterDays: 0,
+                assigneeEmployeeId,
+              }),
+            }),
+          ),
+        );
+      } else {
+        await apiRequest("/collaboration/task-templates", {
           method: "POST",
           token: session.accessToken,
           body: JSON.stringify({
-            title:
-              taskDraft.mode === "meeting"
-                ? `Встреча: ${taskDraft.title}`
-                : taskDraft.title,
-            description: payloadDescription,
-            assigneeEmployeeId,
+            title: taskDraft.title,
+            description: taskDraft.description.trim() || undefined,
             priority: taskDraft.priority,
-            dueAt: taskDraft.dueAt || undefined,
+            requiresPhoto: taskDraft.requiresPhoto || undefined,
+            expandOnDemand: true,
+            frequency: taskDraft.frequency,
+            weekDays:
+              taskDraft.frequency === "WEEKLY" ? taskDraft.weekDays : undefined,
+            startDate:
+              taskDraft.startDate || new Date().toISOString().split("T")[0],
+            endDate: taskDraft.endDate || undefined,
+            dueAfterDays: 0,
+            groupId: selectedGroupId,
           }),
+        });
+      }
+    } else if (isEmployeeTargetMode) {
+      await Promise.all(
+        assigneeEmployeeIds.map((assigneeEmployeeId) =>
+          apiRequest("/collaboration/tasks", {
+            method: "POST",
+            token: session.accessToken,
+            body: JSON.stringify({
+              title:
+                taskDraft.mode === "meeting"
+                  ? `Встреча: ${taskDraft.title}`
+                  : taskDraft.title,
+              description: payloadDescription,
+              assigneeEmployeeId,
+              priority: taskDraft.priority,
+              dueAt: taskDraft.dueAt || undefined,
+              requiresPhoto:
+                taskDraft.mode === "task" && taskDraft.requiresPhoto
+                  ? true
+                  : undefined,
+            }),
+          }),
+        ),
+      );
+    } else {
+      await apiRequest("/collaboration/tasks", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({
+          title:
+            taskDraft.mode === "meeting"
+              ? `Встреча: ${taskDraft.title}`
+              : taskDraft.title,
+          description: payloadDescription,
+          groupId: selectedGroupId,
+          priority: taskDraft.priority,
+          dueAt: taskDraft.dueAt || undefined,
+          requiresPhoto:
+            taskDraft.mode === "task" && taskDraft.requiresPhoto
+              ? true
+              : undefined,
         }),
-      ),
-    );
+      });
+    }
 
     setTaskDraft(initialTaskDraft);
     setCreateTaskOpen(false);
@@ -1152,8 +1279,16 @@ export default function DashboardHome({
     });
     setMessage(
       taskDraft.mode === "meeting"
-        ? `Встреча создана для ${assigneeEmployeeIds.length} сотрудников.`
-        : `Задача создана для ${assigneeEmployeeIds.length} сотрудников.`,
+        ? isEmployeeTargetMode
+          ? `Встреча создана для ${assigneeEmployeeIds.length} сотрудников.`
+          : "Встреча создана для группы."
+        : taskDraft.isRecurring
+          ? isEmployeeTargetMode
+            ? `Шаблон задачи создан для ${assigneeEmployeeIds.length} сотрудников.`
+            : "Шаблон задачи создан для группы."
+          : isEmployeeTargetMode
+            ? `Задача создана для ${assigneeEmployeeIds.length} сотрудников.`
+            : "Задача создана для группы.",
     );
     await loadData();
   }
@@ -1165,7 +1300,9 @@ export default function DashboardHome({
 
   const canSubmitTaskDraft =
     taskDraft.title.trim().length > 0 &&
-    taskDraft.assigneeEmployeeIds.length > 0 &&
+    (taskDraft.targetMode === "employees"
+      ? taskDraft.assigneeEmployeeIds.length > 0
+      : Boolean(taskDraft.groupId.trim())) &&
     (taskDraft.mode === "task" ||
       (Boolean(taskDraft.dueAt) &&
         (taskDraft.meetingMode === "online"
@@ -1185,51 +1322,18 @@ export default function DashboardHome({
     }));
   }
 
-  const createDialogActions: CreateDialogAction[] = isEmployeeMode
-    ? []
-    : [
-    ...(canUseDesktopAdminTools
-      ? [
-          {
-            id: "employee",
-            href: "/app/employees",
-            title: "Сотрудник",
-            description: "Открыть кадровый раздел и добавить нового сотрудника.",
-            icon: Users,
-          },
-          {
-            id: "request",
-            href: "/app/requests",
-            title: "Запрос",
-            description: "Открыть раздел запросов и быстро оформить новый запрос.",
-            icon: FileSignature,
-          },
-        ]
-      : []),
-    {
-      id: "shift",
-      href: "/app/schedule",
-      title: "Смена",
-      description: "Перейти в расписание для создания смены или шаблона.",
-      icon: CalendarDays,
-    },
-    {
-      id: "task-or-meeting",
-      title: "Задача или встреча",
-      description: "Открыть быстрое создание задачи или встречи прямо на главной.",
-      icon: ListTodo,
-      onSelect: () => {
-        setTaskDraft(initialTaskDraft);
-        setTaskDayOffConfirmOpen(false);
-        setCreateTaskOpen(true);
-      },
-    },
-  ];
-
   return (
     <AdminShell
-      createDialogActions={createDialogActions.length ? createDialogActions : undefined}
       mode={mode}
+      onCreateAction={
+        isEmployeeMode
+          ? undefined
+          : () => {
+              setTaskDraft(initialTaskDraft);
+              setTaskDayOffConfirmOpen(false);
+              setCreateTaskOpen(true);
+            }
+      }
     >
       <main className="page-shell manager-page-shell">
         <section className="manager-home">
@@ -1252,7 +1356,7 @@ export default function DashboardHome({
                     <DialogDescription>
                       {taskDraft.mode === "meeting"
                         ? "Назначьте встречу сотрудникам, добавьте время, ссылку или место встречи."
-                        : "Создайте задачу сразу для одного или нескольких сотрудников."}
+                        : "Создайте задачу для сотрудников или сразу для целой группы."}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="manager-create-mode">
@@ -1296,42 +1400,145 @@ export default function DashboardHome({
                     />
                     <div className="manager-form-block">
                       <div className="manager-form-block-head">
-                        <strong>Сотрудники</strong>
+                        <strong>
+                          {taskDraft.targetMode === "employees"
+                            ? "Сотрудники"
+                            : "Группа"}
+                        </strong>
                         <span>
-                          Выбрано {taskDraft.assigneeEmployeeIds.length}
+                          {taskDraft.targetMode === "employees"
+                            ? `Выбрано ${taskDraft.assigneeEmployeeIds.length}`
+                            : taskDraft.groupId
+                              ? "Группа выбрана"
+                              : "Не выбрано"}
                         </span>
                       </div>
-                      <div className="manager-assignee-picker">
-                        {employees.map((employee) => {
-                          const isSelected =
-                            taskDraft.assigneeEmployeeIds.includes(employee.id);
-                          return (
-                            <label
-                              className={`manager-assignee-option${isSelected ? " is-selected" : ""}`}
-                              key={employee.id}
-                            >
-                              <Checkbox
-                                checked={isSelected}
-                                onCheckedChange={(checked) =>
-                                  toggleTaskAssignee(
-                                    employee.id,
-                                    checked === true,
-                                  )
-                                }
-                              />
-                              <span className="manager-assignee-copy">
-                                <strong>
-                                  {employee.firstName} {employee.lastName}
-                                </strong>
-                                <span>
-                                  {employee.department?.name ?? "Команда"}
-                                </span>
-                              </span>
-                            </label>
-                          );
-                        })}
+                      <div className="manager-create-mode manager-create-mode--compact">
+                        <button
+                          className={
+                            taskDraft.targetMode === "employees"
+                              ? "is-active"
+                              : undefined
+                          }
+                          onClick={() =>
+                            setTaskDraft((c) => ({
+                              ...c,
+                              targetMode: "employees",
+                              groupId: "",
+                            }))
+                          }
+                          type="button"
+                        >
+                          Сотрудники
+                        </button>
+                        <button
+                          className={
+                            taskDraft.targetMode === "group"
+                              ? "is-active"
+                              : undefined
+                          }
+                          onClick={() =>
+                            setTaskDraft((c) => ({
+                              ...c,
+                              targetMode: "group",
+                              assigneeEmployeeIds: [],
+                            }))
+                          }
+                          type="button"
+                        >
+                          Группа
+                        </button>
                       </div>
+                      {taskDraft.targetMode === "employees" ? (
+                        <div className="manager-assignee-picker">
+                          {employees.map((employee) => {
+                            const isSelected =
+                              taskDraft.assigneeEmployeeIds.includes(employee.id);
+                            const employeeName =
+                              `${employee.firstName} ${employee.lastName}`.trim();
+                            return (
+                              <label
+                                className={`manager-assignee-option${isSelected ? " is-selected" : ""}`}
+                                key={employee.id}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={(checked) =>
+                                    toggleTaskAssignee(
+                                      employee.id,
+                                      checked === true,
+                                    )
+                                  }
+                                />
+                                <img
+                                  alt={employeeName}
+                                  className="h-10 w-10 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+                                  src={
+                                    employee.avatarUrl ||
+                                    getMockAvatarDataUrl(employeeName)
+                                  }
+                                />
+                                <span className="manager-assignee-copy">
+                                  <strong>{employeeName}</strong>
+                                  <span>
+                                    {employee.department?.name ?? "Команда"}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : groups.length ? (
+                        <Select
+                          onValueChange={(value) =>
+                            setTaskDraft((c) => ({ ...c, groupId: value }))
+                          }
+                          value={taskDraft.groupId}
+                        >
+                          <SelectTrigger>
+                            <SelectTriggerLabel>
+                              <SelectValue placeholder="Выберите группу" />
+                            </SelectTriggerLabel>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {groups.map((group) => (
+                              <SelectItem key={group.id} value={group.id}>
+                                <SelectOptionContent>
+                                  <SelectOptionText>
+                                    <SelectOptionTitle>
+                                      {group.name}
+                                    </SelectOptionTitle>
+                                    <SelectOptionDescription data-select-description>
+                                      {group.memberships.length
+                                        ? `${group.memberships.length} участников`
+                                        : "Без участников"}
+                                    </SelectOptionDescription>
+                                  </SelectOptionText>
+                                </SelectOptionContent>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="rounded-[20px] border border-dashed border-[color:var(--border)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted-foreground)]">
+                          Группы ещё не созданы.
+                        </div>
+                      )}
                     </div>
+                    <Textarea
+                      onChange={(e) =>
+                        setTaskDraft((c) => ({
+                          ...c,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        taskDraft.mode === "meeting"
+                          ? "Что обсудить и что нужно подготовить"
+                          : "Короткое описание задачи"
+                      }
+                      value={taskDraft.description}
+                    />
                     <div className="manager-task-form-grid">
                       <Select
                         onValueChange={(v) =>
@@ -1399,6 +1606,142 @@ export default function DashboardHome({
                         value={taskDraft.dueAt}
                       />
                     </div>
+                    {taskDraft.mode === "task" ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                            <Checkbox
+                              checked={taskDraft.isRecurring}
+                              onCheckedChange={(checked) =>
+                                setTaskDraft((current) => ({
+                                  ...current,
+                                  isRecurring: checked === true,
+                                }))
+                              }
+                            />
+                            <span className="whitespace-nowrap text-sm font-heading leading-none">
+                              Сделать регулярной задачей
+                            </span>
+                          </label>
+                          <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                            <Checkbox
+                              checked={taskDraft.requiresPhoto}
+                              onCheckedChange={(checked) =>
+                                setTaskDraft((current) => ({
+                                  ...current,
+                                  requiresPhoto: checked === true,
+                                }))
+                              }
+                            />
+                            <span className="whitespace-nowrap text-sm font-heading leading-none">
+                              Требуется фото-подтверждение
+                            </span>
+                          </label>
+                        </div>
+                        {taskDraft.isRecurring ? (
+                          <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4 sm:grid-cols-2">
+                            <label className="grid gap-2 text-sm font-heading">
+                              <span>Периодичность</span>
+                              <Select
+                                onValueChange={(value) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    frequency: value as "DAILY" | "WEEKLY" | "MONTHLY",
+                                  }))
+                                }
+                                value={taskDraft.frequency}
+                              >
+                                <SelectTrigger>
+                                  <SelectTriggerLabel>
+                                    <SelectValue placeholder="Выберите периодичность" />
+                                  </SelectTriggerLabel>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="DAILY">Ежедневно</SelectItem>
+                                  <SelectItem value="WEEKLY">Еженедельно</SelectItem>
+                                  <SelectItem value="MONTHLY">Ежемесячно</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </label>
+                            <label className="grid gap-2 text-sm font-heading">
+                              <span>Начало</span>
+                              <Input
+                                className="h-11"
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    startDate: event.target.value,
+                                  }))
+                                }
+                                type="date"
+                                value={taskDraft.startDate}
+                              />
+                            </label>
+                            {taskDraft.frequency === "WEEKLY" ? (
+                              <label className="col-span-full grid gap-2 text-sm font-heading">
+                                <span>Дни недели</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                                    const label =
+                                      day === 0
+                                        ? "Вс"
+                                        : day === 1
+                                          ? "Пн"
+                                          : day === 2
+                                            ? "Вт"
+                                            : day === 3
+                                              ? "Ср"
+                                              : day === 4
+                                                ? "Чт"
+                                                : day === 5
+                                                  ? "Пт"
+                                                  : "Сб";
+                                    const isSelected =
+                                      taskDraft.weekDays.includes(day);
+
+                                    return (
+                                      <button
+                                        className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
+                                          isSelected
+                                            ? "bg-[color:var(--primary)] text-white"
+                                            : "bg-secondary text-foreground hover:bg-secondary/80"
+                                        }`}
+                                        key={day}
+                                        onClick={() =>
+                                          setTaskDraft((current) => ({
+                                            ...current,
+                                            weekDays: isSelected
+                                              ? current.weekDays.filter((d) => d !== day)
+                                              : [...current.weekDays, day].sort(),
+                                          }))
+                                        }
+                                        type="button"
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </label>
+                            ) : null}
+                            <label className="col-span-full grid gap-2 text-sm font-heading">
+                              <span>Дата окончания (необязательно)</span>
+                              <Input
+                                className="h-11"
+                                onChange={(event) =>
+                                  setTaskDraft((current) => ({
+                                    ...current,
+                                    endDate: event.target.value,
+                                  }))
+                                }
+                                type="date"
+                                value={taskDraft.endDate || ""}
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
                     {canCheckWorkdays &&
                     taskDraft.dueAt &&
                     selectedAssigneeDayStatuses.length ? (
@@ -1491,20 +1834,6 @@ export default function DashboardHome({
                         )}
                       </>
                     ) : null}
-                    <Textarea
-                      onChange={(e) =>
-                        setTaskDraft((c) => ({
-                          ...c,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder={
-                        taskDraft.mode === "meeting"
-                          ? "Что обсудить и что нужно подготовить"
-                          : "Короткое описание задачи"
-                      }
-                      value={taskDraft.description}
-                    />
                     <div className="manager-task-form-actions">
                       <span className="manager-form-hint">
                         {taskDraft.mode === "meeting"

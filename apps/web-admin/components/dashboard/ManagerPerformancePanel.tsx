@@ -157,7 +157,7 @@ function buildBucketTask(task: TaskItem): BucketTaskItem {
   return {
     dayNumber: hasDueDate
       ? dueDate.toLocaleDateString("ru-RU", { day: "2-digit" })
-      : "—",
+      : "∞",
     id: task.id,
     subtitle: formatTaskSubtitle(task),
     title: task.title.replace(/^Встреча:\s*/i, "").trim(),
@@ -165,7 +165,7 @@ function buildBucketTask(task: TaskItem): BucketTaskItem {
       ? dueDate
           .toLocaleDateString("ru-RU", { weekday: "short" })
           .replace(/\.$/, "")
-      : "—",
+      : "",
   };
 }
 
@@ -619,7 +619,7 @@ export function ManagerPerformancePanel({
                           <article className="manager-performance-task-item">
                             <div className="manager-performance-task-date">
                               <strong>{task.dayNumber}</strong>
-                              <span>{task.weekdayShort}</span>
+                              {task.weekdayShort ? <span>{task.weekdayShort}</span> : null}
                             </div>
                             <div className="manager-performance-task-copy">
                               <strong>{task.title}</strong>

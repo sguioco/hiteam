@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class CreateEmployeeDto {
   @IsEmail()
@@ -34,4 +34,8 @@ export class CreateEmployeeDto {
 
   @IsDateString()
   hireDate!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  grantManagerAccess?: boolean;
 }

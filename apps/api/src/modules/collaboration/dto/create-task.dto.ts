@@ -1,5 +1,5 @@
 import type { TaskPriority } from '@prisma/client';
-import { IsArray, IsDateString, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { TASK_PRIORITIES } from '../../../common/constants/prisma-enum-values';
 
 export class CreateTaskDto {
@@ -15,6 +15,10 @@ export class CreateTaskDto {
   @IsOptional()
   @IsIn(TASK_PRIORITIES)
   priority?: TaskPriority;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresPhoto?: boolean;
 
   @IsOptional()
   @IsDateString()

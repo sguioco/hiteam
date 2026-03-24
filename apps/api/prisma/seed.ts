@@ -10,6 +10,7 @@ import {
   PrismaClient,
   TaskPriority,
   TaskStatus,
+  TaskTemplateFrequency,
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -45,6 +46,18 @@ function endOfDayAtUtcOffset(offsetHours: number) {
 
 function dateAtUtcOffset(offsetHours: number, hour: number, minute: number) {
   const shiftedNow = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+  return new Date(Date.UTC(shiftedNow.getUTCFullYear(), shiftedNow.getUTCMonth(), shiftedNow.getUTCDate(), hour - offsetHours, minute, 0, 0));
+}
+
+function startOfDayAtUtcOffsetDaysFromNow(offsetHours: number, offsetDays: number) {
+  const shiftedNow = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+  shiftedNow.setUTCDate(shiftedNow.getUTCDate() + offsetDays);
+  return new Date(Date.UTC(shiftedNow.getUTCFullYear(), shiftedNow.getUTCMonth(), shiftedNow.getUTCDate(), -offsetHours, 0, 0, 0));
+}
+
+function dateAtUtcOffsetDaysFromNow(offsetHours: number, offsetDays: number, hour: number, minute: number) {
+  const shiftedNow = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+  shiftedNow.setUTCDate(shiftedNow.getUTCDate() + offsetDays);
   return new Date(Date.UTC(shiftedNow.getUTCFullYear(), shiftedNow.getUTCMonth(), shiftedNow.getUTCDate(), hour - offsetHours, minute, 0, 0));
 }
 
@@ -190,6 +203,11 @@ async function main(): Promise<void> {
     'Employee',
     'Standard employee access',
   );
+  const managerRole = await ensureRole(
+    'manager',
+    'Manager',
+    'Manager access for team operations',
+  );
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: 'demo' },
@@ -253,6 +271,15 @@ async function main(): Promise<void> {
       code: 'SPEC',
     },
   });
+  const managerPosition = await prisma.position.upsert({
+    where: { tenantId_code: { tenantId: tenant.id, code: 'MANAGER' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: 'Manager',
+      code: 'MANAGER',
+    },
+  });
 
   const location = await prisma.location.upsert({
     where: { tenantId_code: { tenantId: tenant.id, code: 'HQ' } },
@@ -310,6 +337,26 @@ async function main(): Promise<void> {
     hireDate: new Date('2026-01-05T00:00:00.000Z'),
     deviceFingerprint: 'demo-device-alex',
     deviceName: 'Alex Browser',
+  });
+
+  await ensureEmployee({
+    tenantId: tenant.id,
+    companyId: company.id,
+    departmentId: operationsDepartment.id,
+    locationId: location.id,
+    positionId: managerPosition.id,
+    email: 'manager@demo.smart',
+    passwordHash: employeePasswordHash,
+    roleId: managerRole.id,
+    roleScopeId: tenant.id,
+    employeeNumber: 'EMP-0006',
+    firstName: 'Anna',
+    lastName: 'Manager',
+    managerEmployeeId: owner.employee.id,
+    birthDate: dateDaysFromNow(12, 1992),
+    hireDate: new Date('2026-01-09T00:00:00.000Z'),
+    deviceFingerprint: 'demo-device-manager',
+    deviceName: 'Manager Browser',
   });
 
   const julia = await ensureEmployee({
@@ -463,6 +510,60 @@ async function main(): Promise<void> {
     },
   });
 
+  const futureEmployeeTemplate = await prisma.shiftTemplate.upsert({
+    where: {
+      tenantId_code: {
+        tenantId: tenant.id,
+        code: 'DEMO-FUTURE-EMP',
+      },
+    },
+    update: {
+      name: 'Demo Future Employee Shift',
+      locationId: location.id,
+      positionId: staffPosition.id,
+      startsAtLocal: '11:00',
+      endsAtLocal: '20:00',
+      gracePeriodMinutes: 10,
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'Demo Future Employee Shift',
+      code: 'DEMO-FUTURE-EMP',
+      locationId: location.id,
+      positionId: staffPosition.id,
+      startsAtLocal: '11:00',
+      endsAtLocal: '20:00',
+      gracePeriodMinutes: 10,
+    },
+  });
+
+  const futureOwnerTemplate = await prisma.shiftTemplate.upsert({
+    where: {
+      tenantId_code: {
+        tenantId: tenant.id,
+        code: 'DEMO-FUTURE-OWNER',
+      },
+    },
+    update: {
+      name: 'Demo Future Owner Shift',
+      locationId: location.id,
+      positionId: ownerPosition.id,
+      startsAtLocal: '10:00',
+      endsAtLocal: '19:00',
+      gracePeriodMinutes: 10,
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'Demo Future Owner Shift',
+      code: 'DEMO-FUTURE-OWNER',
+      locationId: location.id,
+      positionId: ownerPosition.id,
+      startsAtLocal: '10:00',
+      endsAtLocal: '19:00',
+      gracePeriodMinutes: 10,
+    },
+  });
+
   const allEmployees = [owner, alex, julia, sergey, maria];
   const allEmployeeIds = allEmployees.map((item) => item.employee.id);
   const todayStart = startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS);
@@ -510,6 +611,21 @@ async function main(): Promise<void> {
       shiftDate: {
         gte: todayStart,
         lte: todayEnd,
+      },
+    },
+  });
+  await prisma.shift.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      employeeId: {
+        in: [owner.employee.id, alex.employee.id],
+      },
+      templateId: {
+        in: [futureEmployeeTemplate.id, futureOwnerTemplate.id],
+      },
+      shiftDate: {
+        gte: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1),
+        lt: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 8),
       },
     },
   });
@@ -564,6 +680,81 @@ async function main(): Promise<void> {
       },
     }),
   };
+
+  await prisma.shift.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        templateId: futureOwnerTemplate.id,
+        employeeId: owner.employee.id,
+        locationId: location.id,
+        positionId: ownerPosition.id,
+        shiftDate: todayStart,
+        startsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 0),
+        endsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 18, 0),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureEmployeeTemplate.id,
+        employeeId: alex.employee.id,
+        locationId: location.id,
+        positionId: staffPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1, 11, 0),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1, 20, 0),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureEmployeeTemplate.id,
+        employeeId: alex.employee.id,
+        locationId: location.id,
+        positionId: staffPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3, 12, 0),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3, 21, 0),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureEmployeeTemplate.id,
+        employeeId: alex.employee.id,
+        locationId: location.id,
+        positionId: staffPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 6),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 6, 9, 30),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 6, 18, 30),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureOwnerTemplate.id,
+        employeeId: owner.employee.id,
+        locationId: location.id,
+        positionId: ownerPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 2),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 2, 10, 0),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 2, 19, 0),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureOwnerTemplate.id,
+        employeeId: owner.employee.id,
+        locationId: location.id,
+        positionId: ownerPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 4),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 4, 9, 0),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 4, 17, 30),
+      },
+      {
+        tenantId: tenant.id,
+        templateId: futureOwnerTemplate.id,
+        employeeId: owner.employee.id,
+        locationId: location.id,
+        positionId: ownerPosition.id,
+        shiftDate: startOfDayAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 7),
+        startsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 7, 11, 0),
+        endsAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 7, 19, 0),
+      },
+    ],
+  });
 
   const mariaCheckIn = await prisma.attendanceEvent.create({
     data: {
@@ -707,12 +898,50 @@ async function main(): Promise<void> {
     'Take before-service photos',
     'Meeting: front desk briefing',
     'Finish laundry cycle',
+    'Owner: review next week staffing',
+    'Owner: approve studio supply budget',
+    'Owner: 1:1 with Alexander',
+    'Owner: lobby walkthrough',
+    'Owner: approve photo report from stock room',
+    'Owner: quick sync with reception',
+    'Owner: audit storage room photo report',
+    'Owner: sign contractor extension',
+    'Owner: weekly planning board review',
+    'Owner: online finance sync',
+    'Owner: approve weekend promo setup',
+    'Employee: prep VIP room for tomorrow',
+    'Employee: confirm weekend inventory count',
+    'Employee: training check-in with owner',
+    'Employee: reception zone photo report',
+    'Employee: deep clean coffee point',
+    'Employee: prepare retail shelf photos',
+    'Employee: online product training',
+    'Employee: post-shift towel count',
+    'Employee: overdue dust check in studio A',
+  ];
+
+  const demoTaskTemplateTitles = [
+    'Owner recurring: weekly floor walk',
+    'Owner recurring: monthly vendor approvals',
+    'Employee recurring: opening photo report',
+    'Employee recurring: weekly consumables count',
+    'Weekly floor walk',
+    'Monthly vendor approvals',
+    'Opening photo report',
+    'Weekly consumables count',
   ];
 
   await prisma.task.deleteMany({
     where: {
       tenantId: tenant.id,
       title: { in: demoTaskTitles },
+    },
+  });
+
+  await prisma.taskTemplate.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      title: { in: demoTaskTemplateTitles },
     },
   });
 
@@ -770,6 +999,7 @@ async function main(): Promise<void> {
       description: 'Take two photos of the prepared rooms before the first service block starts.',
       priority: TaskPriority.MEDIUM,
       status: TaskStatus.TODO,
+      requiresPhoto: true,
       dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 13, 40),
     },
   });
@@ -799,6 +1029,288 @@ async function main(): Promise<void> {
       status: TaskStatus.DONE,
       dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 0),
     },
+  });
+
+  await prisma.task.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: lobby walkthrough',
+        description: 'Check the reception area, promo stand and entrance before the midday traffic starts.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 15),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: approve photo report from stock room',
+        description: 'Review the latest stock room cleanup and attach your own confirming photo after the walkthrough.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        requiresPhoto: true,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 13, 10),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: quick sync with reception',
+        description:
+          'Five-minute alignment on the guest flow before the afternoon block.\n\n[smart-task-meta] {"kind":"meeting","meetingMode":"offline","meetingLocation":"Reception desk"}',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 15, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: review next week staffing',
+        description: 'Review open coverage for the next week and lock the Friday evening handoff.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1, 16, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: approve studio supply budget',
+        description: 'Check forecasted расходники and approve the replenishment budget before the weekend.',
+        priority: TaskPriority.URGENT,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3, 13, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: 1:1 with Alexander',
+        description:
+          'Short sync on workload, upcoming shifts and room readiness.\n\n[smart-task-meta] {"kind":"meeting","meetingMode":"offline","meetingLocation":"Owner office"}',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 4, 15, 30),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: prep VIP room for tomorrow',
+        description: 'Prepare the VIP room in advance and check oils, towels and lighting before close.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1, 18, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: confirm weekend inventory count',
+        description: 'Count remaining consumables and leave a short note if anything will run out by Sunday.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3, 17, 15),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: training check-in with owner',
+        description:
+          '15-minute sync to confirm the upcoming service flow updates.\n\n[smart-task-meta] {"kind":"meeting","meetingMode":"offline","meetingLocation":"Reception desk"}',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 6, 14, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: audit storage room photo report',
+        description: 'Walk through the stock room, compare actual shelves with the expected layout and attach fresh photos for the weekly archive.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        requiresPhoto: true,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 2, 17, 45),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: sign contractor extension',
+        description: 'Review the renewal packet and finish the remaining notes before sending the final confirmation.',
+        priority: TaskPriority.URGENT,
+        status: TaskStatus.IN_PROGRESS,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, -1, 16, 30),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: weekly planning board review',
+        description: 'Update the staffing board and flag any open evening coverage for the next seven days.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 5, 11, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: online finance sync',
+        description:
+          'Review payroll timing and upcoming supplier payments with finance.\n\n[smart-task-meta] {"kind":"meeting","meetingMode":"online","meetingLink":"https://meet.google.com/demo-owner-finance"}',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 2, 12, 30),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Owner: approve weekend promo setup',
+        description: 'Check the lobby merchandising draft and confirm the final promo placement before Friday.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 7, 15, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: reception zone photo report',
+        description: 'Before opening, capture the reception zone, promo stand and waiting area for the manager review.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        requiresPhoto: true,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 1, 9, 20),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: deep clean coffee point',
+        description: 'Wipe the machine, replace water, sort cups and leave the station guest-ready.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.IN_PROGRESS,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, -1, 13, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: prepare retail shelf photos',
+        description: 'Refresh the travel-size product shelf and upload two clean photos after rearranging the display.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        requiresPhoto: true,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 3, 19, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: online product training',
+        description:
+          'Join the short vendor walkthrough and note the new product talking points.\n\n[smart-task-meta] {"kind":"meeting","meetingMode":"online","meetingLink":"https://zoom.us/j/555000222"}',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 4, 10, 30),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: post-shift towel count',
+        description: 'Count remaining clean towels after the evening shift and leave the result in the notes.',
+        priority: TaskPriority.LOW,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, 5, 20, 15),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Employee: overdue dust check in studio A',
+        description: 'This task intentionally stays overdue in the demo so the dashboard shows an attention case.',
+        priority: TaskPriority.URGENT,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffsetDaysFromNow(DEMO_SHIFT_UTC_OFFSET_HOURS, -2, 11, 30),
+      },
+    ],
+  });
+
+  await prisma.taskTemplate.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Weekly floor walk',
+        description: 'Walk the floor, verify opening standards and record any issues that need follow-up.',
+        priority: TaskPriority.MEDIUM,
+        requiresPhoto: true,
+        expandOnDemand: true,
+        frequency: TaskTemplateFrequency.WEEKLY,
+        weekDaysJson: JSON.stringify([1, 4]),
+        startDate: startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS),
+        dueAfterDays: 0,
+        dueTimeLocal: '11:00',
+        isActive: true,
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: owner.employee.id,
+        title: 'Monthly vendor approvals',
+        description: 'Approve monthly supplier invoices and confirm replenishment windows.',
+        priority: TaskPriority.HIGH,
+        requiresPhoto: false,
+        expandOnDemand: true,
+        frequency: TaskTemplateFrequency.MONTHLY,
+        dayOfMonth: 25,
+        startDate: startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS),
+        dueAfterDays: 0,
+        dueTimeLocal: '13:00',
+        isActive: true,
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Opening photo report',
+        description: 'Upload fresh photos of the reception and first treatment room after opening prep.',
+        priority: TaskPriority.HIGH,
+        requiresPhoto: true,
+        expandOnDemand: true,
+        frequency: TaskTemplateFrequency.DAILY,
+        startDate: startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS),
+        dueAfterDays: 0,
+        dueTimeLocal: '09:30',
+        isActive: true,
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        title: 'Weekly consumables count',
+        description: 'Count gloves, wipes, towels and report anything that will run out before the weekend.',
+        priority: TaskPriority.MEDIUM,
+        requiresPhoto: false,
+        expandOnDemand: true,
+        frequency: TaskTemplateFrequency.WEEKLY,
+        weekDaysJson: JSON.stringify([2, 5]),
+        startDate: startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS),
+        dueAfterDays: 0,
+        dueTimeLocal: '18:00',
+        isActive: true,
+      },
+    ],
   });
 
   const demoRequestTitles = [

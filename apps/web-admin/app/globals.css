@@ -675,12 +675,45 @@
   flex: 1;
 }
 .birthdays-sidebar-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
   padding: 12px 18px;
   border-top: 1px solid var(--border);
+}
+
+.birthdays-sidebar-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  align-content: center;
+}
+
+.birthdays-sidebar-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.96rem;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+
+.birthdays-sidebar-department {
+  margin: 0;
+  font-size: 0.64rem;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+
+.birthdays-sidebar-date {
+  justify-self: end;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent);
 }
 .birthdays-sidebar-empty {
   display: grid;
@@ -1931,6 +1964,24 @@ textarea {
   color: var(--muted-foreground);
   font-size: 0.92rem;
   font-weight: 500;
+}
+
+.organization-studio-meta-stack {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.organization-studio-code {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.organization-studio-code strong {
+  color: var(--foreground);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .organization-studio-grid {
@@ -8032,7 +8083,19 @@ body {
 
 .manager-create-mode--compact {
   width: fit-content;
-  min-width: min(100%, 280px);
+  min-width: min(100%, 236px);
+  padding: 4px;
+  gap: 4px;
+  border-radius: 18px;
+}
+
+.manager-create-mode--compact button {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  gap: 6px;
 }
 
 .manager-form-block {
@@ -8653,18 +8716,7 @@ body {
 }
 
 .manager-performance-chart-column::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 26px;
-  height: 26px;
-  border-bottom-left-radius: 26px;
-  background:
-    radial-gradient(circle at top left, rgba(92, 134, 255, 0.08), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 243, 0.98));
-  pointer-events: none;
-  z-index: 1;
+  content: none;
 }
 
 .manager-performance-divider {

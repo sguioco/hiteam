@@ -1,8 +1,10 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Device, DevicePlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { AuditService } from '../audit/audit.service';
+
+const MAX_DEVICES_PER_PLATFORM = 5;
 
 @Injectable()
 export class DevicesService {
@@ -51,12 +53,12 @@ export class DevicesService {
     const existingMobileDevices = existingDevices.filter((device) => device.platform !== DevicePlatform.WEB);
     const existingWebDevices = existingDevices.filter((device) => device.platform === DevicePlatform.WEB);
 
-    if (dto.platform === DevicePlatform.WEB && existingWebDevices.length >= 2) {
-      throw new ConflictException('Maximum of 2 web or desktop devices is allowed for this employee.');
+    if (dto.platform === DevicePlatform.WEB && existingWebDevices.length >= MAX_DEVICES_PER_PLATFORM) {
+      throw new ConflictException(`Maximum of ${MAX_DEVICES_PER_PLATFORM} web or desktop devices is allowed for this employee.`);
     }
 
-    if (dto.platform !== DevicePlatform.WEB && existingMobileDevices.length >= 1) {
-      throw new ConflictException('A mobile device is already registered for this employee.');
+    if (dto.platform !== DevicePlatform.WEB && existingMobileDevices.length >= MAX_DEVICES_PER_PLATFORM) {
+      throw new ConflictException(`Maximum of ${MAX_DEVICES_PER_PLATFORM} mobile devices is allowed for this employee.`);
     }
 
     if (dto.platform !== DevicePlatform.WEB) {
@@ -98,6 +100,91 @@ export class DevicesService {
       where: { employeeId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async detachForEmployee(tenantId: string, actorUserId: string, employeeId: string, deviceId: string) {
+    const device = await this.prisma.device.findFirst({
+      where: {
+        id: deviceId,
+        employeeId,
+        employee: {
+          tenantId,
+        },
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!device) {
+      throw new NotFoundException('Device not found for this employee.');
+    }
+
+    let replacementPrimaryDeviceId: string | null = null;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.device.delete({
+        where: { id: device.id },
+      });
+
+      if (!device.isPrimary) {
+        return;
+      }
+
+      const replacement =
+        (await tx.device.findFirst({
+          where: {
+            employeeId,
+            platform: {
+              not: DevicePlatform.WEB,
+            },
+          },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        })) ??
+        (await tx.device.findFirst({
+          where: { employeeId },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        }));
+
+      if (!replacement) {
+        return;
+      }
+
+      await tx.device.update({
+        where: { id: replacement.id },
+        data: {
+          isPrimary: true,
+        },
+      });
+
+      replacementPrimaryDeviceId = replacement.id;
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'device',
+      entityId: device.id,
+      action: 'device.removed',
+      metadata: {
+        employeeId,
+        deviceName: device.deviceName,
+        platform: device.platform,
+        wasPrimary: device.isPrimary,
+        replacementPrimaryDeviceId,
+      },
+    });
+
+    return {
+      success: true,
+      removedDeviceId: device.id,
+      replacementPrimaryDeviceId,
+    };
   }
 
   async resolveActiveDevice(employeeId: string, fingerprint: string): Promise<Device | null> {

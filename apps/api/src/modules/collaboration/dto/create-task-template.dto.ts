@@ -27,6 +27,14 @@ export class CreateTaskTemplateDto {
   @IsIn(TASK_PRIORITIES)
   priority?: TaskPriority;
 
+  @IsOptional()
+  @IsBoolean()
+  requiresPhoto?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  expandOnDemand?: boolean;
+
   @IsIn(TASK_TEMPLATE_FREQUENCIES)
   frequency!: TaskTemplateFrequency;
 

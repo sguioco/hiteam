@@ -46,6 +46,26 @@ function buildUniqueCode(
   return `${baseCode}-${index}`;
 }
 
+function buildUniqueCompanyCode(
+  existingCodes: string[],
+  value: string,
+  fallback: string,
+): string {
+  const baseCode = buildInternalCode(value, fallback).slice(0, 21);
+
+  let nextCode = "";
+  do {
+    const suffix = String(Math.floor(Math.random() * 900) + 100);
+    nextCode = `${baseCode}${suffix}`;
+  } while (existingCodes.includes(nextCode));
+
+  return nextCode;
+}
+
+function isLegacyGeneratedCompanyCode(code: string, value: string, fallback: string) {
+  return code === buildInternalCode(value, fallback);
+}
+
 @Injectable()
 export class OrgService {
   constructor(private readonly prisma: PrismaService) {}
@@ -156,18 +176,29 @@ export class OrgService {
           ) ?? null)
         : null;
 
-      const companyCode = existingCompany?.code
-        ? existingCompany.code
-        : buildUniqueCode(
-            existingCompanies.map((company) => company.code),
-            dto.companyName,
-            "ORG",
-          );
+      const shouldRefreshLegacyCompanyCode = Boolean(
+        existingCompany?.code &&
+          !/\d{3}$/.test(existingCompany.code) &&
+          (isLegacyGeneratedCompanyCode(existingCompany.code, existingCompany.name, "ORG") ||
+            isLegacyGeneratedCompanyCode(existingCompany.code, dto.companyName, "ORG")),
+      );
+
+      const companyCode =
+        existingCompany?.code && !shouldRefreshLegacyCompanyCode
+          ? existingCompany.code
+          : buildUniqueCompanyCode(
+              existingCompanies
+                .filter((company) => company.id !== existingCompany?.id)
+                .map((company) => company.code),
+              dto.companyName,
+              "ORG",
+            );
 
       const company = existingCompany
         ? await tx.company.update({
             where: { id: existingCompany.id },
             data: {
+              code: companyCode,
               name: dto.companyName,
               logoUrl: dto.companyLogoUrl ?? null,
               googlePlaceId: dto.googlePlaceId ?? null,

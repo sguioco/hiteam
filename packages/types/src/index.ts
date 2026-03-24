@@ -14,11 +14,22 @@ export type AttendanceStatusResponse = {
     id: string;
     name: string;
     radiusMeters: number;
+    latitude: number;
+    longitude: number;
   };
   shift: {
+    id: string;
     label: string;
     startsAt: string;
     endsAt: string;
+    locationName: string;
+  } | null;
+  nextShift: {
+    id: string;
+    label: string;
+    startsAt: string;
+    endsAt: string;
+    locationName: string;
   } | null;
   verification: {
     locationRequired: boolean;
@@ -215,12 +226,31 @@ export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type TaskActivityKind = 'CREATED' | 'COMMENT' | 'STATUS_CHANGED' | 'CHECKLIST_TOGGLED';
 
+export type TaskPhotoProofItem = {
+  id: string;
+  fileName: string;
+  storageKey: string;
+  url: string | null;
+  deletedAt: string | null;
+  supersededByProofId: string | null;
+  createdAt: string;
+  uploadedByEmployee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+};
+
 export type TaskItem = {
   id: string;
   title: string;
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  requiresPhoto: boolean;
+  isRecurring: boolean;
+  taskTemplateId: string | null;
+  occurrenceDate: string | null;
   dueAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -273,6 +303,7 @@ export type TaskItem = {
       lastName: string;
     };
   }>;
+  photoProofs: TaskPhotoProofItem[];
 };
 
 export type CollaborationTaskBoardResponse = {
@@ -292,6 +323,8 @@ export type TaskTemplateItem = {
   title: string;
   description: string | null;
   priority: TaskPriority;
+  requiresPhoto: boolean;
+  expandOnDemand: boolean;
   frequency: TaskTemplateFrequency;
   weekDaysJson: string | null;
   dayOfMonth: number | null;

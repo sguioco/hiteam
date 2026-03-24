@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { Button } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
+import { PressableScale } from '../../../components/ui/pressable-scale';
 import { hapticError, hapticSelection, hapticSuccess } from '../../../lib/haptics';
 import { lookupCompanyByCode, submitCompanyJoinRequest } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
@@ -50,9 +50,7 @@ export default function CompanyJoinScreen() {
             unavailableTitle: 'Код компании недоступен',
             backHome: 'На главный экран',
             title: 'Join with code',
-            subtitle: 'Заполните анкету сотрудника. После проверки менеджером мы отправим вам письмо для завершения доступа.',
             company: 'Компания',
-            code: 'Код',
             firstName: 'Имя',
             lastName: 'Фамилия',
             email: 'Email',
@@ -62,7 +60,8 @@ export default function CompanyJoinScreen() {
             photoTitle: 'Фото',
             pickPhoto: 'Выбрать фото',
             takePhoto: 'Сделать фото',
-            photoRequired: 'Добавьте фото сотрудника.',
+            cancel: 'Отмена',
+            photoRequired: 'Добавить фото сотрудника*',
             submit: 'Отправить анкету',
             submitting: 'Отправляем...',
             requiredFields: 'Заполните все поля.',
@@ -81,10 +80,7 @@ export default function CompanyJoinScreen() {
             unavailableTitle: 'Company code unavailable',
             backHome: 'Back to start',
             title: 'Join with code',
-            subtitle:
-              'Fill in the employee profile. After manager approval we will send you an email to finish access setup.',
             company: 'Company',
-            code: 'Code',
             firstName: 'First name',
             lastName: 'Last name',
             email: 'Email',
@@ -94,7 +90,8 @@ export default function CompanyJoinScreen() {
             photoTitle: 'Photo',
             pickPhoto: 'Choose photo',
             takePhoto: 'Take photo',
-            photoRequired: 'Add an employee photo.',
+            cancel: 'Cancel',
+            photoRequired: 'Add your photo',
             submit: 'Submit profile',
             submitting: 'Submitting...',
             requiredFields: 'Complete all fields.',
@@ -102,14 +99,79 @@ export default function CompanyJoinScreen() {
             invalidBirthDate: 'Birth date must use YYYY-MM-DD.',
             successTitle: 'Information sent',
             successBody:
-              'Your profile has been sent to the manager. After approval we will send you an email with the next sign-in step.',
+              'Your profile has been sent to the manager. After approval we will send you an email with the next sign-in step',
             successCompany: 'Company: {companyName}',
             successCode: 'Code: {companyCode}',
             done: 'Done',
-            addPhotoHint: 'A photo is required for employee approval.',
+            addPhotoHint: 'A photo is required for employee approval',
           },
     [language],
   );
+
+  const titleStyle = {
+    color: '#26334a',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 34,
+    includeFontPadding: false,
+    lineHeight: 38,
+  } as const;
+
+  const headingStyle = {
+    color: '#26334a',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 28,
+    includeFontPadding: false,
+    lineHeight: 32,
+  } as const;
+
+  const bodyStyle = {
+    color: '#6f7892',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 16,
+    includeFontPadding: false,
+    lineHeight: 24,
+  } as const;
+
+  const metaLabelStyle = {
+    color: '#7a8094',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 13,
+    includeFontPadding: false,
+    letterSpacing: 1.2,
+    lineHeight: 18,
+    textTransform: 'uppercase',
+  } as const;
+
+  const fieldLabelStyle = {
+    color: '#24314b',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 15,
+    includeFontPadding: false,
+    lineHeight: 20,
+  } as const;
+
+  const inputStyle = {
+    color: '#24314b',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 16,
+    includeFontPadding: false,
+  } as const;
+
+  const actionLabelStyle = {
+    color: '#f7f1e6',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 20,
+    includeFontPadding: false,
+    lineHeight: 24,
+  } as const;
+
+  const errorStyle = {
+    color: '#b93b4a',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    includeFontPadding: false,
+    lineHeight: 22,
+  } as const;
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +257,27 @@ export default function CompanyJoinScreen() {
     }
   }
 
+  function openPhotoChooser() {
+    Alert.alert(copy.photoTitle, undefined, [
+      {
+        text: copy.pickPhoto,
+        onPress: () => {
+          void pickPhoto('library');
+        },
+      },
+      {
+        text: copy.takePhoto,
+        onPress: () => {
+          void pickPhoto('camera');
+        },
+      },
+      {
+        text: copy.cancel,
+        style: 'cancel',
+      },
+    ]);
+  }
+
   async function handleSubmit() {
     if (!company) {
       return;
@@ -258,7 +341,7 @@ export default function CompanyJoinScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-white px-6">
         <StatusBar style="dark" />
-        <Text className="text-[16px] font-semibold text-[#26334a]">{copy.loading}</Text>
+        <Text style={bodyStyle}>{copy.loading}</Text>
       </SafeAreaView>
     );
   }
@@ -268,9 +351,15 @@ export default function CompanyJoinScreen() {
       <SafeAreaView className="flex-1 bg-white px-6 py-8">
         <StatusBar style="dark" />
         <Card className="mt-auto gap-4 rounded-[30px] bg-white">
-          <Text className="text-[28px] font-extrabold text-[#26334a]">{copy.unavailableTitle}</Text>
-          {error ? <Text className="text-[16px] leading-7 text-[#6f7892]">{error}</Text> : null}
-          <Button fullWidth label={copy.backHome} onPress={() => router.replace('/' as never)} />
+          <Text style={headingStyle}>{copy.unavailableTitle}</Text>
+          {error ? <Text style={bodyStyle}>{error}</Text> : null}
+          <PressableScale
+            className="min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
+            haptic="medium"
+            onPress={() => router.replace('/' as never)}
+          >
+            <Text style={actionLabelStyle}>{copy.backHome}</Text>
+          </PressableScale>
         </Card>
       </SafeAreaView>
     );
@@ -281,15 +370,21 @@ export default function CompanyJoinScreen() {
       <SafeAreaView className="flex-1 bg-white px-6 py-8">
         <StatusBar style="dark" />
         <Card className="mt-auto gap-4 rounded-[30px] bg-white">
-          <Text className="text-[28px] font-extrabold text-[#26334a]">{copy.successTitle}</Text>
-          <Text className="text-[16px] leading-7 text-[#6f7892]">{copy.successBody}</Text>
-          <Text className="text-[14px] leading-6 text-[#6f7892]">
+          <Text style={headingStyle}>{copy.successTitle}</Text>
+          <Text style={bodyStyle}>{copy.successBody}</Text>
+          <Text style={bodyStyle}>
             {copy.successCompany.replace('{companyName}', company.companyName)}
           </Text>
-          <Text className="text-[14px] leading-6 text-[#6f7892]">
+          <Text style={bodyStyle}>
             {copy.successCode.replace('{companyCode}', company.companyCode)}
           </Text>
-          <Button fullWidth label={copy.done} onPress={() => router.replace('/' as never)} />
+          <PressableScale
+            className="min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
+            haptic="medium"
+            onPress={() => router.replace('/' as never)}
+          >
+            <Text style={actionLabelStyle}>{copy.done}</Text>
+          </PressableScale>
         </Card>
       </SafeAreaView>
     );
@@ -310,62 +405,73 @@ export default function CompanyJoinScreen() {
         </Pressable>
 
         <View className="gap-3">
-          <Text className="text-[32px] font-extrabold leading-[38px] text-[#26334a]">{copy.title}</Text>
-          <Text className="text-[16px] leading-7 text-[#6f7892]">{copy.subtitle}</Text>
+          <Text style={titleStyle}>
+            <Text style={{ fontFamily: 'Manrope_700Bold' }}>Join</Text>
+            <Text style={{ fontFamily: 'Manrope_700Bold' }}> with code</Text>
+          </Text>
         </View>
 
         <Card className="mt-6 gap-4 rounded-[30px] bg-white">
           <View className="gap-2">
-            <Text className="text-[13px] font-bold uppercase tracking-[1.8px] text-[#7a8094]">{copy.company}</Text>
-            <Text className="text-[18px] font-semibold text-[#24314b]">{company.companyName}</Text>
-            <Text className="text-[14px] text-[#7a8094]">
-              {copy.code}: {company.companyCode}
-            </Text>
+            <Text style={metaLabelStyle}>{copy.company}</Text>
+            <Text style={headingStyle}>{company.companyName}</Text>
           </View>
 
+          <Text style={fieldLabelStyle}>{copy.firstName}*</Text>
           <TextInput
             className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
             onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
-            placeholder={copy.firstName}
+            placeholder={`${copy.firstName}*`}
             placeholderTextColor="#8a92ab"
+            style={inputStyle}
             value={form.firstName}
           />
+          <Text style={fieldLabelStyle}>{copy.lastName}*</Text>
           <TextInput
             className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
             onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
-            placeholder={copy.lastName}
+            placeholder={`${copy.lastName}*`}
             placeholderTextColor="#8a92ab"
+            style={inputStyle}
             value={form.lastName}
           />
+          <Text style={fieldLabelStyle}>{copy.email}*</Text>
           <TextInput
             autoCapitalize="none"
             className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
             keyboardType="email-address"
             onChangeText={(value) => setForm((current) => ({ ...current, email: value }))}
-            placeholder={copy.email}
+            placeholder={`${copy.email}*`}
             placeholderTextColor="#8a92ab"
+            style={inputStyle}
             value={form.email}
           />
+          <Text style={fieldLabelStyle}>{copy.phone}*</Text>
           <TextInput
             className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
             keyboardType="phone-pad"
             onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
-            placeholder={copy.phone}
+            placeholder={`${copy.phone}*`}
             placeholderTextColor="#8a92ab"
+            style={inputStyle}
             value={form.phone}
           />
+          <Text style={fieldLabelStyle}>{copy.birthDate}*</Text>
           <TextInput
             className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
             onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
-            placeholder={copy.birthDateHint}
+            placeholder={`${copy.birthDateHint}*`}
             placeholderTextColor="#8a92ab"
+            style={inputStyle}
             value={form.birthDate}
           />
 
           <View className="gap-3 rounded-[22px] border border-[#d6dceb] bg-[#f9fbff] p-4">
-            <Text className="text-[16px] font-semibold text-[#24314b]">{copy.photoTitle}</Text>
-            <Text className="text-[14px] leading-6 text-[#7a8094]">{copy.addPhotoHint}</Text>
-            <View className="items-center justify-center">
+            <Text style={fieldLabelStyle}>{copy.photoTitle}</Text>
+            <Pressable
+              className="items-center justify-center rounded-[26px]"
+              onPress={openPhotoChooser}
+            >
               {form.avatarPreviewUri ? (
                 <Image
                   className="h-32 w-32 rounded-[26px]"
@@ -373,36 +479,25 @@ export default function CompanyJoinScreen() {
                   source={{ uri: form.avatarPreviewUri }}
                 />
               ) : (
-                <View className="h-32 w-32 items-center justify-center rounded-[26px] border border-dashed border-[#c6d1e4] bg-white">
-                  <Text className="text-center text-[13px] leading-5 text-[#7a8094]">{copy.photoRequired}</Text>
+                <View className="h-32 w-32 items-center justify-center rounded-[26px] border border-dashed border-[#c6d1e4] bg-white px-4">
+                  <Text className="text-center" style={bodyStyle}>{copy.photoRequired}</Text>
                 </View>
               )}
-            </View>
-            <View className="flex-row gap-3">
-              <Button
-                className="flex-1"
-                fullWidth
-                label={copy.pickPhoto}
-                onPress={() => void pickPhoto('library')}
-                variant="secondary"
-              />
-              <Button
-                className="flex-1"
-                fullWidth
-                label={copy.takePhoto}
-                onPress={() => void pickPhoto('camera')}
-                variant="secondary"
-              />
-            </View>
+            </Pressable>
           </View>
 
-          {error ? <Text className="text-[14px] leading-6 text-[#b93b4a]">{error}</Text> : null}
+          {error ? <Text style={errorStyle}>{error}</Text> : null}
 
-          <Button
-            fullWidth
-            label={submitting ? copy.submitting : copy.submit}
+          <PressableScale
+            className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+              submitting ? 'opacity-70' : ''
+            }`}
+            disabled={submitting}
+            haptic="medium"
             onPress={() => void handleSubmit()}
-          />
+          >
+            <Text style={actionLabelStyle}>{submitting ? copy.submitting : copy.submit}</Text>
+          </PressableScale>
         </Card>
       </ScrollView>
     </SafeAreaView>

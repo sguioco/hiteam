@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../lib/i18n';
@@ -16,6 +15,8 @@ interface BottomNavProps {
 const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }: BottomNavProps) => {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
+  const navShellOffset = 75;
+  const navContentOffset = 0;
 
   function NavItem({
     tab,
@@ -34,7 +35,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
 
     return (
       <Pressable
-        className="flex flex-col items-center gap-0.5"
+        className="flex min-w-[56px] flex-col items-center gap-1"
         onPress={() => {
           hapticSelection();
           onNavigate(tab);
@@ -46,7 +47,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           scale.value = withSpring(1, { damping: 22, stiffness: 320 });
         }}
       >
-        <Animated.View className="items-center gap-0.5" style={animatedStyle}>
+        <Animated.View className="items-center gap-1" style={animatedStyle}>
           <Ionicons color={isActive ? '#6d73ff' : '#6b7a90'} name={icon} size={22} />
           <Text className={`text-[11px] font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>{label}</Text>
         </Animated.View>
@@ -62,7 +63,14 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
   function TodayButton({ floating = false }: { floating?: boolean }) {
     return (
       <Pressable
-        className={floating ? 'absolute left-1 -top-6 items-center' : 'relative -mt-5 flex flex-col items-center'}
+        className={floating ? 'absolute z-10 items-center' : 'relative -mt-4 flex flex-col items-center'}
+        style={
+          floating
+            ? showManage
+              ? { left: 28, top: -18 }
+              : { left: '50%', top: -28, transform: [{ translateX: -31 }] }
+            : undefined
+        }
         onPress={() => {
           hapticSelection();
           onNavigate('today');
@@ -79,13 +87,13 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
       >
         <Animated.View style={centerAnimatedStyle}>
           <View
-            className={`h-16 w-16 items-center justify-center rounded-full shadow-lg shadow-[#6d73ff]/25 ${
+            className={`h-[62px] w-[62px] items-center justify-center rounded-full shadow-lg shadow-[#6d73ff]/25 ${
               active === 'today' ? 'bg-primary' : 'bg-primary/90'
             }`}
           >
-            <Ionicons color="#ffffff" name="list-outline" size={28} />
+            <Ionicons color="#ffffff" name="list-outline" size={27} />
             {hasBadge ? (
-              <View className="absolute right-0 top-0 h-4 w-4 rounded-full border-2 border-card bg-warning" />
+              <View className="absolute right-[1px] top-[1px] h-4 w-4 rounded-full border-2 border-card bg-warning" />
             ) : null}
           </View>
         </Animated.View>
@@ -97,21 +105,38 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
   }
 
   return (
-    <View className="absolute bottom-0 left-0 right-0 z-50">
-      <View
-        className="overflow-visible border-t border-white/90 shadow-lg shadow-[#1f2687]/12"
-        style={{ paddingBottom: Math.max(insets.bottom, 8) }}
-      >
-        <BlurView className="absolute inset-0" intensity={24} tint="light" />
-        <View className="absolute inset-0 bg-[#f7faff]" />
-        <View className="px-6 pb-0.5 pt-4">
-          <View className={`flex-row items-end ${showManage ? 'justify-between pl-32' : 'justify-around'}`}>
-            {showManage ? <NavItem icon="eye-outline" label={t('nav.manage')} tab="manage" /> : null}
-            <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
-            {showManage ? <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" /> : <TodayButton />}
-            {showManage ? <TodayButton floating /> : <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />}
+    <View className="absolute left-0 right-0 z-50" style={{ bottom: -navShellOffset }}>
+      <View className="overflow-visible" style={{ paddingBottom: Math.max(insets.bottom - 28, 16) }}>
+        <View
+          className="overflow-hidden border-t border-[#edf1f7] bg-white shadow-lg shadow-[#1f2687]/10"
+          style={{ minHeight: 106 + insets.bottom }}
+        >
+          <View className="px-8 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
+            {showManage ? (
+              <View className="flex-row items-end gap-10 pl-[50px]" style={{ marginLeft: 40 }}>
+                <View className="w-[64px] items-center">
+                  <NavItem icon="eye-outline" label={t('nav.manage')} tab="manage" />
+                </View>
+                <View className="w-[64px] items-center">
+                  <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
+                </View>
+                <View className="w-[64px] items-center">
+                  <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
+                </View>
+              </View>
+            ) : (
+              <View className="flex-row items-end justify-between px-3">
+                <View className="items-center">
+                  <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
+                </View>
+                <View className="items-center">
+                  <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
+                </View>
+              </View>
+            )}
           </View>
         </View>
+        <TodayButton floating />
       </View>
     </View>
   );

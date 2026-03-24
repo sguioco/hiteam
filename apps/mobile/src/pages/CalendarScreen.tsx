@@ -1,310 +1,452 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { StatusBar } from 'expo-status-bar';
-import { ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import Animated, {
-  FadeInDown,
   FadeInLeft,
   FadeInRight,
-  FadeInUp,
   FadeOutLeft,
   FadeOutRight,
-  LinearTransition,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getDateLocale, useI18n } from '../../lib/i18n';
-import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { PressableScale } from '../../components/ui/pressable-scale';
+import type { TaskItem } from '@smart/types';
 import BottomSheetModal from '../components/BottomSheetModal';
-import type { OverdueTask } from './Index';
+import { TimeWheelPicker, type TimeValue } from '../components/TimeWheelPicker';
+import { loadMyShifts, loadMyTasks, rescheduleMyTask, updateMyTaskStatus } from '../../lib/api';
+import { getDateLocale, useI18n } from '../../lib/i18n';
+import { hapticSelection } from '../../lib/haptics';
+import { parseTaskMeta } from '../../lib/task-meta';
+import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
+import { PressableScale } from '../../components/ui/pressable-scale';
+import { Button } from '../../components/ui/button';
 
-const SHIFT_TIME = '09:00 - 18:00';
-
-type DayItem = {
+type CalendarDayItem = {
   id: string;
+  task: TaskItem;
   title: string;
   kind: 'task' | 'meeting';
-  status: 'completed' | 'scheduled' | 'overdue' | 'deleted';
   note: string;
-};
-
-type FlashMessage = {
-  accent: string;
-  background: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  text: string;
-  durationMs: number;
+  status: 'done' | 'planned' | 'cancelled' | 'overdue';
 };
 
 type CalendarScreenProps = {
-  selectedDay: number;
-  onSelectDay: (day: number) => void;
-  overdueTask: OverdueTask;
-  onMarkOverdueDone: () => void;
-  onDeleteOverdue: () => void;
-  onRescheduleOverdue: (resolutionDateLabel: string, resolutionTime: string, selectedDay: number) => void;
+  overdueSheetSignal?: number;
 };
 
-const CalendarScreen = ({
-  onDeleteOverdue,
-  onMarkOverdueDone,
-  onRescheduleOverdue,
-  onSelectDay,
-  overdueTask,
-  selectedDay,
-}: CalendarScreenProps) => {
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function combineDateAndTime(date: Date, time: TimeValue) {
+  const next = new Date(date);
+  next.setHours(time.hour, time.minute, 0, 0);
+  return next;
+}
+
+function isOverdueTask(task: TaskItem, referenceDate: Date) {
+  if (!isTaskOpen(task.status)) {
+    return false;
+  }
+
+  const dueAt = parseTaskDueAt(task);
+  return Boolean(dueAt && startOfDay(dueAt).getTime() < startOfDay(referenceDate).getTime());
+}
+
+export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
-  const [currentDate, setCurrentDate] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const [notDoneModalVisible, setNotDoneModalVisible] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'options' | 'schedule'>('options');
-  const [flashMessage, setFlashMessage] = useState<FlashMessage | null>(null);
+  const today = new Date();
+  const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [monthAnimationDirection, setMonthAnimationDirection] = useState<'next' | 'prev'>('next');
-  const now = new Date();
-  const today = now.getDate();
-  const month = currentDate.toLocaleString(locale, { month: 'long', year: 'numeric' });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [shifts, setShifts] = useState<Awaited<ReturnType<typeof loadMyShifts>>>([]);
+  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>([]);
+  const [overdueSheetVisible, setOverdueSheetVisible] = useState(false);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [pendingTaskAction, setPendingTaskAction] = useState<'done' | 'delete' | 'reschedule' | null>(null);
+  const [rescheduleTaskItem, setRescheduleTaskItem] = useState<TaskItem | null>(null);
+  const [rescheduleSheetVisible, setRescheduleSheetVisible] = useState(false);
+  const [rescheduleDatePickerVisible, setRescheduleDatePickerVisible] = useState(false);
+  const [rescheduleDateValue, setRescheduleDateValue] = useState(() => startOfDay(today));
+  const [rescheduleTimeValue, setRescheduleTimeValue] = useState<TimeValue>(() => ({
+    hour: today.getHours(),
+    minute: today.getMinutes(),
+  }));
+  const [rescheduleTimePickerVisible, setRescheduleTimePickerVisible] = useState(false);
 
   const year = currentDate.getFullYear();
   const monthIndex = currentDate.getMonth();
   const monthKey = `${year}-${monthIndex}`;
   const firstDay = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const isCurrentMonth =
-    year === now.getFullYear() && monthIndex === now.getMonth();
+  const month = currentDate.toLocaleString(locale, { month: 'long', year: 'numeric' });
+  const isCurrentMonth = year === today.getFullYear() && monthIndex === today.getMonth();
+  const selectedDate = new Date(year, monthIndex, selectedDay);
+  const selectedDayKey = formatDateKey(selectedDate);
+  const todayStart = useMemo(() => startOfDay(today), [today]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const rangeStart = new Date(year, monthIndex - 1, 1);
+        const rangeEnd = new Date(year, monthIndex + 1, 0);
+        const [nextShifts, nextTasks] = await Promise.all([
+          loadMyShifts(),
+          loadMyTasks({
+            dateFrom: formatDateKey(rangeStart),
+            dateTo: formatDateKey(rangeEnd),
+          }),
+        ]);
+
+        if (!cancelled) {
+          setShifts(nextShifts);
+          setTasks(nextTasks);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError instanceof Error ? nextError.message : t('today.loadError'));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [monthIndex, t, year]);
+
+  useEffect(() => {
+    if (selectedDay > daysInMonth) {
+      setSelectedDay(daysInMonth);
+    }
+  }, [daysInMonth, selectedDay]);
+
+  useEffect(() => {
+    if (overdueSheetSignal > 0) {
+      setOverdueSheetVisible(true);
+    }
+  }, [overdueSheetSignal]);
 
   const cells: Array<number | null> = [];
   for (let index = 0; index < firstDay; index += 1) cells.push(null);
   for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
 
-  const shifts = [10, 11, 12, 13, 14, 17, 18, 19, 20, 21];
-  const yesterdayDay = new Date(year, monthIndex, today - 1).getDate();
-  const tomorrowDay = new Date(year, monthIndex, today + 1).getDate();
   const weekdayLabels = Array.from({ length: 7 }, (_, index) => {
     const weekday = new Date(2026, 0, 5 + index);
     return weekday.toLocaleString(locale, { weekday: 'short' });
   });
-  const scheduleDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(year, monthIndex, today + index);
-    return {
-      day: date.getDate(),
-      label: date.toLocaleString(locale, { month: 'short', day: 'numeric' }),
-      shortDay: date.toLocaleString(locale, { weekday: 'short' }),
-    };
-  });
-  const timeSlots = ['08:00', '09:00', '10:00', '11:00', '12:00', '14:00', '16:00', '18:00'];
-  const [selectedRescheduleDay, setSelectedRescheduleDay] = useState<number>(scheduleDays[1]?.day ?? today);
-  const [selectedRescheduleLabel, setSelectedRescheduleLabel] = useState<string>(scheduleDays[1]?.label ?? month);
-  const [selectedRescheduleTime, setSelectedRescheduleTime] = useState<string>('10:00');
-  const selectedDate = new Date(year, monthIndex, selectedDay);
-  const selectedDateStart = new Date(year, monthIndex, selectedDay);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const shiftByDateKey = useMemo(() => {
+    const map = new Map<string, Awaited<ReturnType<typeof loadMyShifts>>[number]>();
+
+    shifts.forEach((shift) => {
+      const shiftDate = new Date(shift.shiftDate);
+      map.set(formatDateKey(shiftDate), shift);
+    });
+
+    return map;
+  }, [shifts]);
+
+  const itemsByDateKey = useMemo(() => {
+    const map = new Map<string, CalendarDayItem[]>();
+
+    tasks.forEach((task) => {
+      const meta = parseTaskMeta(task.description);
+      const dateSource = meta.meeting?.scheduledAt ?? task.dueAt ?? null;
+      if (!dateSource) {
+        return;
+      }
+
+      const dueAt = new Date(dateSource);
+      if (Number.isNaN(dueAt.getTime())) {
+        return;
+      }
+
+      const key = formatDateKey(dueAt);
+      const nextItems = map.get(key) ?? [];
+      const overdue = isOverdueTask(task, today);
+      nextItems.push({
+        id: task.id,
+        task,
+        title: task.title,
+        kind: isTaskMeeting(task) ? 'meeting' : 'task',
+        note:
+          meta.meeting?.meetingLocation ||
+          meta.meeting?.meetingLink ||
+          meta.body ||
+          dueAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
+        status: task.status === 'DONE' ? 'done' : task.status === 'CANCELLED' ? 'cancelled' : overdue ? 'overdue' : 'planned',
+      });
+      map.set(key, nextItems);
+    });
+
+    return map;
+  }, [locale, tasks, today]);
+
+  const eventDays = useMemo(() => {
+    const days = new Set<number>();
+
+    Array.from(shiftByDateKey.keys()).forEach((key) => {
+      const [itemYear, itemMonth, itemDay] = key.split('-').map(Number);
+      if (itemYear === year && itemMonth === monthIndex + 1) {
+        days.add(itemDay);
+      }
+    });
+
+    Array.from(itemsByDateKey.keys()).forEach((key) => {
+      const [itemYear, itemMonth, itemDay] = key.split('-').map(Number);
+      if (itemYear === year && itemMonth === monthIndex + 1) {
+        days.add(itemDay);
+      }
+    });
+
+    return days;
+  }, [itemsByDateKey, monthIndex, shiftByDateKey, year]);
+
+  const overdueTasks = useMemo(() => {
+    return tasks
+      .filter((task) => isOverdueTask(task, today))
+      .sort((left, right) => {
+        const leftDueAt = parseTaskDueAt(left)?.getTime() ?? Infinity;
+        const rightDueAt = parseTaskDueAt(right)?.getTime() ?? Infinity;
+        return leftDueAt - rightDueAt;
+      });
+  }, [tasks, today]);
+
+  const selectedShift = shiftByDateKey.get(selectedDayKey) ?? null;
+  const selectedItems = itemsByDateKey.get(selectedDayKey) ?? [];
+  const selectedTaskCount = selectedItems.filter((item) => item.kind === 'task').length;
+  const selectedMeetingCount = selectedItems.filter((item) => item.kind === 'meeting').length;
+  const selectedSummaryText =
+    selectedTaskCount > 0 && selectedMeetingCount > 0
+      ? t('calendar.countSummary', { tasks: selectedTaskCount, meetings: selectedMeetingCount })
+      : selectedTaskCount > 0
+        ? `${selectedTaskCount} ${selectedTaskCount === 1 ? 'task' : 'tasks'}`
+        : selectedMeetingCount > 0
+          ? `${selectedMeetingCount} ${selectedMeetingCount === 1 ? 'meeting' : 'meetings'}`
+          : null;
+
+  const selectedDayRelation =
+    startOfDay(selectedDate).getTime() < todayStart.getTime()
+      ? 'past'
+      : startOfDay(selectedDate).getTime() > todayStart.getTime()
+        ? 'future'
+        : 'today';
+
   const selectedDayLabel = selectedDate.toLocaleString(locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
-  const selectedDayRelation =
-    selectedDateStart < todayStart
-      ? 'past'
-      : selectedDateStart > todayStart
-        ? 'future'
-        : 'today';
-
-  const dayItemsByDay = useMemo<Record<number, DayItem[]>>(
-    () => ({
-      [yesterdayDay]: [
-        {
-          id: 'yesterday-completed-1',
-          kind: 'task',
-          note: `${t('calendar.statusDone')} • 13:20`,
-          status: 'completed',
-          title: 'Clean front desk glass',
-        },
-      ],
-      [today]: [
-        {
-          id: 'today-task-1',
-          kind: 'task',
-          note: language === 'ru' ? 'Нужно сделать до обеда' : 'Required before lunch',
-          status: 'scheduled',
-          title: 'Restock guest towels',
-        },
-        {
-          id: 'today-meeting-1',
-          kind: 'meeting',
-          note: language === 'ru' ? '15 мин в 10:00' : '15 min at 10:00',
-          status: 'scheduled',
-          title: 'Standup with manager',
-        },
-      ],
-      [tomorrowDay]: [
-        {
-          id: 'tomorrow-task-1',
-          kind: 'task',
-          note: t('today.photoProofRequired'),
-          status: 'scheduled',
-          title: 'Prepare supply room photos',
-        },
-        {
-          id: 'tomorrow-meeting-1',
-          kind: 'meeting',
-          note: language === 'ru' ? '30 мин в 14:00' : '30 min at 14:00',
-          status: 'scheduled',
-          title: 'Safety review',
-        },
-      ],
-    }),
-    [language, t, today, tomorrowDay, yesterdayDay],
-  );
-
-  const selectedDayItems = useMemo(() => {
-    const baseItems = [...(dayItemsByDay[selectedDay] ?? [])];
-
-    if (selectedDay === yesterdayDay && overdueTask.status === 'active') {
-        baseItems.unshift({
-          id: overdueTask.id,
-          kind: 'task',
-          note: t('calendar.waitingForAction'),
-          status: 'overdue',
-          title: overdueTask.title,
-        });
-    }
-
-    if (overdueTask.status === 'rescheduled' && overdueTask.resolutionDateLabel) {
-      const targetDate = new Date(`${overdueTask.resolutionDateLabel}, ${year}`);
-      if (!Number.isNaN(targetDate.getTime()) && targetDate.getDate() === selectedDay) {
-        baseItems.unshift({
-          id: `${overdueTask.id}-moved`,
-          kind: 'task',
-          note: t('calendar.movedFromOverdue', { time: overdueTask.resolutionTime ?? t('calendar.noTimeSelected') }),
-          status: 'scheduled',
-          title: overdueTask.title,
-        });
-      }
-    }
-
-    return baseItems;
-  }, [dayItemsByDay, overdueTask, selectedDay, t, year, yesterdayDay]);
-  const selectedTaskCount = selectedDayItems.filter((item) => item.kind === 'task').length;
-  const selectedMeetingCount = selectedDayItems.filter((item) => item.kind === 'meeting').length;
-  const selectedSummaryText =
-    selectedTaskCount > 0 && selectedMeetingCount > 0
-      ? t('calendar.countSummary', { tasks: selectedTaskCount, meetings: selectedMeetingCount })
-      : selectedTaskCount > 0
-        ? t('calendar.tasksOnlySummary', { tasks: selectedTaskCount })
-        : selectedMeetingCount > 0
-          ? t('calendar.meetingsOnlySummary', { meetings: selectedMeetingCount })
-          : null;
-
-  const eventDays = useMemo(() => {
-    const baseEventDays = new Set<number>(Object.entries(dayItemsByDay).flatMap(([day, items]) => (items.length > 0 ? [Number(day)] : [])));
-    if (overdueTask.status === 'active') {
-      baseEventDays.add(yesterdayDay);
-    }
-    if (overdueTask.status === 'rescheduled' && overdueTask.resolutionDateLabel) {
-      const targetDate = new Date(`${overdueTask.resolutionDateLabel}, ${year}`);
-      if (!Number.isNaN(targetDate.getTime())) {
-        baseEventDays.add(targetDate.getDate());
-      }
-    }
-    return baseEventDays;
-  }, [dayItemsByDay, overdueTask, year, yesterdayDay]);
-
-  useEffect(() => {
-    if (!flashMessage) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      setFlashMessage(null);
-    }, flashMessage.durationMs);
-
-    return () => clearTimeout(timeout);
-  }, [flashMessage]);
-
-  useEffect(() => {
-    if (selectedDay > daysInMonth) {
-      onSelectDay(daysInMonth);
-    }
-  }, [daysInMonth, onSelectDay, selectedDay]);
+  const rescheduleActionsOffset = 15;
 
   function changeMonth(offset: number) {
     hapticSelection();
     setMonthAnimationDirection(offset > 0 ? 'next' : 'prev');
-    setCurrentDate((current) => {
-      const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
-      const nextDaysInMonth = new Date(
-        next.getFullYear(),
-        next.getMonth() + 1,
-        0,
-      ).getDate();
-      onSelectDay(Math.min(selectedDay, nextDaysInMonth));
-      return next;
-    });
+    setCurrentDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
-  function openNotDoneModal() {
+  function openTaskDay(task: TaskItem) {
+    const dueAt = parseTaskDueAt(task);
+    if (!dueAt) {
+      return;
+    }
+
     hapticSelection();
-    setPickerMode('options');
-    setNotDoneModalVisible(true);
+    setCurrentDate(new Date(dueAt.getFullYear(), dueAt.getMonth(), 1));
+    setSelectedDay(dueAt.getDate());
+    setOverdueSheetVisible(false);
   }
 
-  function closeNotDoneModal() {
-    hapticSelection();
-    setNotDoneModalVisible(false);
-    setPickerMode('options');
-  }
+  function openRescheduleSheet(task: TaskItem) {
+    const sourceDueAt = parseTaskDueAt(task) ?? today;
+    const nextDay = new Date(today);
+    nextDay.setDate(today.getDate() + 1);
 
-  function moveToSchedulePicker() {
-    hapticSelection();
-    setPickerMode('schedule');
-  }
+    const initialDate = new Date(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
+    const initialDateTime = new Date(initialDate);
+    initialDateTime.setHours(sourceDueAt.getHours(), sourceDueAt.getMinutes(), 0, 0);
 
-  function saveReschedule() {
-    hapticSuccess();
-    onRescheduleOverdue(selectedRescheduleLabel, selectedRescheduleTime, selectedRescheduleDay);
-    setFlashMessage({
-      accent: '#4f6df5',
-      background: '#eef4ff',
-      durationMs: 2000,
-      icon: 'calendar-outline',
-      text: t('calendar.movedTo', { dateLabel: selectedRescheduleLabel, time: selectedRescheduleTime }),
+    setRescheduleTaskItem(task);
+    setRescheduleDateValue(initialDate);
+    setRescheduleTimeValue({
+      hour: initialDateTime.getHours(),
+      minute: initialDateTime.getMinutes(),
     });
-    closeNotDoneModal();
+    setRescheduleDatePickerVisible(false);
+    setOverdueSheetVisible(false);
+    setRescheduleSheetVisible(true);
   }
 
-  function deleteTask() {
-    hapticError();
-    onDeleteOverdue();
-    setFlashMessage({
-      accent: '#ef4444',
-      background: '#fff1f3',
-      durationMs: 1200,
-      icon: 'trash-outline',
-      text: t('calendar.deletedReported'),
-    });
-    closeNotDoneModal();
+  function handleRescheduleDateChange(event: DateTimePickerEvent, pickedDate?: Date) {
+    if (Platform.OS === 'android') {
+      setRescheduleDatePickerVisible(false);
+    }
+
+    if (event.type === 'dismissed' || !pickedDate) {
+      return;
+    }
+
+    setRescheduleDateValue(startOfDay(pickedDate));
   }
 
-  function markDone() {
-    hapticSuccess();
-    onMarkOverdueDone();
-    setFlashMessage({
-      accent: '#10b981',
-      background: '#f0fff7',
-      durationMs: 2000,
-      icon: 'checkmark-circle',
-      text: t('calendar.doneOn', { dateLabel: overdueTask.dateLabel }),
+  function syncTaskInState(updatedTask: TaskItem, replacedTaskId?: string | null) {
+    setTasks((current) => {
+      const next = replacedTaskId ? current.filter((task) => task.id !== replacedTaskId) : [...current];
+      const existingIndex = next.findIndex((task) => task.id === updatedTask.id);
+
+      if (existingIndex >= 0) {
+        next[existingIndex] = updatedTask;
+        return next;
+      }
+
+      return [updatedTask, ...next];
     });
+  }
+
+  async function markTaskDone(taskId: string) {
+    setPendingTaskId(taskId);
+    setPendingTaskAction('done');
+    setError(null);
+
+    try {
+      const updatedTask = await updateMyTaskStatus(taskId, 'DONE');
+      syncTaskInState(updatedTask);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('today.taskUpdateError'));
+    } finally {
+      setPendingTaskId(null);
+      setPendingTaskAction(null);
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    setPendingTaskId(taskId);
+    setPendingTaskAction('delete');
+    setError(null);
+
+    try {
+      const updatedTask = await updateMyTaskStatus(taskId, 'CANCELLED');
+      syncTaskInState(updatedTask);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('today.taskUpdateError'));
+    } finally {
+      setPendingTaskId(null);
+      setPendingTaskAction(null);
+    }
+  }
+
+  async function submitTaskReschedule() {
+    if (!rescheduleTaskItem) {
+      return;
+    }
+
+    const nextDueAt = combineDateAndTime(rescheduleDateValue, rescheduleTimeValue);
+    if (nextDueAt.getTime() <= Date.now()) {
+      setError(t('calendar.moveToAnotherDayHint'));
+      return;
+    }
+
+    setPendingTaskId(rescheduleTaskItem.id);
+    setPendingTaskAction('reschedule');
+    setError(null);
+
+    try {
+      const result = await rescheduleMyTask(rescheduleTaskItem.id, nextDueAt.toISOString());
+      syncTaskInState(result.task, result.replacedTaskId);
+      setRescheduleSheetVisible(false);
+      setRescheduleDatePickerVisible(false);
+      setRescheduleTimePickerVisible(false);
+      setRescheduleTaskItem(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('today.taskUpdateError'));
+    } finally {
+      setPendingTaskId(null);
+      setPendingTaskAction(null);
+    }
+  }
+
+  function renderOverdueTaskActions(task: TaskItem, includeOpenTaskDay = false) {
+    const isPendingForTask = pendingTaskId === task.id;
+
+    return (
+      <View className="mt-4 gap-2">
+        <View className="flex-row gap-2">
+          <Button
+            className="min-h-11 flex-1 border-[#dce4f2] bg-white"
+            disabled={isPendingForTask}
+            label={isPendingForTask && pendingTaskAction === 'reschedule' ? t('common.processing') : t('calendar.rescheduleTask')}
+            onPress={() => openRescheduleSheet(task)}
+            textClassName="text-[13px] text-foreground"
+            variant="secondary"
+          />
+          {includeOpenTaskDay ? (
+            <Button
+              className="min-h-11 flex-1 border-[#dce4f2] bg-white"
+              disabled={isPendingForTask}
+              label={t('calendar.openTaskDay')}
+              onPress={() => openTaskDay(task)}
+              textClassName="text-[13px] text-foreground"
+              variant="secondary"
+            />
+          ) : null}
+          <PressableScale
+            className={`min-h-11 min-w-11 items-center justify-center rounded-2xl border px-3 ${
+              isPendingForTask && pendingTaskAction === 'delete'
+                ? 'border-[#fecdd3] bg-[#fff1f2] opacity-60'
+                : 'border-[#fecdd3] bg-[#fff1f2]'
+            }`}
+            disabled={isPendingForTask}
+            haptic="selection"
+            onPress={() => {
+              void deleteTask(task.id);
+            }}
+          >
+            <Ionicons color="#dc2626" name="trash-outline" size={18} />
+          </PressableScale>
+          <PressableScale
+            className={`min-h-11 min-w-11 items-center justify-center rounded-2xl border px-3 ${
+              isPendingForTask && pendingTaskAction === 'done'
+                ? 'border-[#bbf7d0] bg-[#ecfdf3] opacity-60'
+                : 'border-[#bbf7d0] bg-[#ecfdf3]'
+            }`}
+            disabled={isPendingForTask}
+            haptic="selection"
+            onPress={() => {
+              void markTaskDone(task.id);
+            }}
+          >
+            <Ionicons color="#169c56" name="checkmark" size={20} />
+          </PressableScale>
+        </View>
+      </View>
+    );
   }
 
   return (
     <>
-      <View className="flex-1 bg-[#41e4f6]">
+      <View className="flex-1 bg-transparent">
         <StatusBar backgroundColor="transparent" style="dark" translucent />
         <ScrollView
           className="flex-1 bg-transparent"
@@ -312,396 +454,399 @@ const CalendarScreen = ({
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-6">
-          <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
-            <View className="mb-5 flex-row items-center justify-between">
-              <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(-1)}>
-                <Ionicons color="#27364b" name="chevron-back" size={20} />
-              </PressableScale>
-              <View className="min-w-[140px] overflow-hidden">
-                <Animated.Text
+            <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
+              <View className="mb-5 flex-row items-center justify-between">
+                <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(-1)}>
+                  <Ionicons color="#27364b" name="chevron-back" size={20} />
+                </PressableScale>
+                <View className="min-w-[140px] overflow-hidden">
+                  <Animated.Text
+                    entering={
+                      monthAnimationDirection === 'next'
+                        ? FadeInRight.duration(190).withInitialValues({
+                            opacity: 0,
+                            transform: [{ translateX: 10 }],
+                          })
+                        : FadeInLeft.duration(190).withInitialValues({
+                            opacity: 0,
+                            transform: [{ translateX: -10 }],
+                          })
+                    }
+                    exiting={monthAnimationDirection === 'next' ? FadeOutLeft.duration(170) : FadeOutRight.duration(170)}
+                    key={monthKey}
+                    className="text-center font-display text-base font-semibold text-foreground"
+                  >
+                    {month}
+                  </Animated.Text>
+                </View>
+                <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(1)}>
+                  <Ionicons color="#27364b" name="chevron-forward" size={20} />
+                </PressableScale>
+              </View>
+
+              <View className="overflow-hidden">
+                <Animated.View
                   entering={
                     monthAnimationDirection === 'next'
                       ? FadeInRight.duration(190).withInitialValues({
                           opacity: 0,
-                          transform: [{ translateX: 10 }],
+                          transform: [{ translateX: 14 }],
                         })
                       : FadeInLeft.duration(190).withInitialValues({
                           opacity: 0,
-                          transform: [{ translateX: -10 }],
+                          transform: [{ translateX: -14 }],
                         })
                   }
-                  exiting={
-                    monthAnimationDirection === 'next'
-                      ? FadeOutLeft.duration(170)
-                      : FadeOutRight.duration(170)
-                  }
+                  exiting={monthAnimationDirection === 'next' ? FadeOutLeft.duration(170) : FadeOutRight.duration(170)}
                   key={monthKey}
-                  className="text-center font-display text-base font-semibold text-foreground"
                 >
-                  {month}
-                </Animated.Text>
-              </View>
-              <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(1)}>
-                <Ionicons color="#27364b" name="chevron-forward" size={20} />
-              </PressableScale>
-            </View>
+                  <View className="mb-2 flex-row flex-wrap">
+                    {weekdayLabels.map((day) => (
+                      <View key={day} className="mb-2 items-center justify-center" style={{ width: '14.28%' }}>
+                        <Text className="py-1 text-center font-body text-xs font-medium text-muted-foreground">{day}</Text>
+                      </View>
+                    ))}
+                  </View>
 
-            <View className="overflow-hidden">
-              <Animated.View
-                entering={
-                  monthAnimationDirection === 'next'
-                    ? FadeInRight.duration(190).withInitialValues({
-                        opacity: 0,
-                        transform: [{ translateX: 14 }],
-                      })
-                    : FadeInLeft.duration(190).withInitialValues({
-                        opacity: 0,
-                        transform: [{ translateX: -14 }],
-                      })
-                }
-                exiting={
-                  monthAnimationDirection === 'next'
-                    ? FadeOutLeft.duration(170)
-                    : FadeOutRight.duration(170)
-                }
-                key={monthKey}
-              >
-                <View className="mb-2 flex-row flex-wrap">
-                  {weekdayLabels.map((day) => (
-                    <View
-                      key={day}
-                      className="mb-2 items-center justify-center"
-                      style={{ width: '14.28%' }}
-                    >
-                      <Text className="py-1 text-center font-body text-xs font-medium text-muted-foreground">{day}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <View className="flex-row flex-wrap">
-                  {cells.map((day, index) => (
-                    <View
-                      key={`${day}-${index}`}
-                      className="mb-2 items-center justify-center"
-                      style={{ width: '14.28%' }}
-                    >
-                      {day !== null ? (
-                        <PressableScale
-                          className="h-10 w-10 items-center justify-center rounded-full"
-                          contentStyle={[
-                            day === selectedDay
-                              ? { backgroundColor: '#6d73ff', borderRadius: 999, shadowColor: '#6d73ff', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }
-                              : null,
-                            day !== selectedDay && isCurrentMonth && day === today ? { backgroundColor: 'rgba(109, 115, 255, 0.15)', borderRadius: 999 } : null,
-                          ]}
-                          haptic="selection"
-                          onPress={() => onSelectDay(day)}
-                        >
-                          <Text
-                            className="font-body text-sm font-medium"
-                            style={{ color: day === selectedDay ? '#ffffff' : shifts.includes(day) ? '#16a34a' : '#111827' }}
+                  <View className="flex-row flex-wrap">
+                    {cells.map((day, index) => (
+                      <View key={`${day}-${index}`} className="mb-2 items-center justify-center" style={{ width: '14.28%' }}>
+                        {day !== null ? (
+                          <PressableScale
+                            className="h-10 w-10 items-center justify-center rounded-full"
+                            contentStyle={[
+                              day === selectedDay
+                                ? {
+                                    backgroundColor: '#6d73ff',
+                                    borderRadius: 999,
+                                    shadowColor: '#6d73ff',
+                                    shadowOpacity: 0.2,
+                                    shadowRadius: 8,
+                                    shadowOffset: { width: 0, height: 4 },
+                                    elevation: 3,
+                                  }
+                                : null,
+                              day !== selectedDay && isCurrentMonth && day === today.getDate()
+                                ? { backgroundColor: 'rgba(109, 115, 255, 0.15)', borderRadius: 999 }
+                                : null,
+                            ]}
+                            haptic="selection"
+                            onPress={() => setSelectedDay(day)}
                           >
-                            {day}
-                          </Text>
-                          <View
-                            className="mt-0.5 h-1 w-1 rounded-full bg-primary"
-                            style={{ opacity: eventDays.has(day) ? 1 : 0 }}
-                          />
-                        </PressableScale>
-                      ) : (
-                        <View className="h-10 w-10" />
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </Animated.View>
+                            <Text className="font-body text-sm font-medium" style={{ color: day === selectedDay ? '#ffffff' : '#111827' }}>
+                              {day}
+                            </Text>
+                            <View className="mt-0.5 h-1 w-1 rounded-full bg-primary" style={{ opacity: eventDays.has(day) ? 1 : 0 }} />
+                          </PressableScale>
+                        ) : (
+                          <View className="h-10 w-10" />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </Animated.View>
+              </View>
             </View>
-          </View>
 
-          {flashMessage ? (
-            <Animated.View
-              entering={FadeInDown.duration(180).withInitialValues({
-                opacity: 0,
-                transform: [{ translateY: 8 }],
-              })}
-              className="rounded-3xl p-5 shadow-sm shadow-[#1f2687]/10"
-              style={{ backgroundColor: flashMessage.background, borderColor: flashMessage.accent, borderWidth: 1 }}
-            >
-              <View className="flex-row items-center gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-white/80">
-                  <Ionicons color={flashMessage.accent} name={flashMessage.icon} size={20} />
-                </View>
-                <Text className="flex-1 font-display text-base font-semibold" style={{ color: flashMessage.accent }}>
-                  {flashMessage.text}
-                </Text>
+            {error ? (
+              <View className="rounded-3xl border border-danger/20 bg-danger/10 p-5 shadow-sm shadow-[#1f2687]/10">
+                <Text className="font-body text-[14px] leading-6 text-danger">{error}</Text>
               </View>
-            </Animated.View>
-          ) : null}
+            ) : null}
 
-          <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
-            <View className="flex-row items-start justify-between gap-4">
-              <View className="flex-1">
-                <Text className="font-display text-xl font-bold text-foreground">{selectedDayLabel}</Text>
-                <Text className="mt-1 font-body text-sm text-muted-foreground">
-                  {shifts.includes(selectedDay)
-                    ? t('today.shiftCard', { time: SHIFT_TIME })
-                    : selectedDayRelation === 'past'
-                      ? t('calendar.noShiftRecorded')
-                      : t('calendar.dayOff')}
-                </Text>
-              </View>
-              <Text
-                className="font-body text-xs font-semibold"
-                style={{ color: shifts.includes(selectedDay) ? '#169c56' : '#6b7280' }}
+            {overdueTasks.length > 0 ? (
+              <PressableScale
+                className="rounded-3xl border border-warning/25 bg-white/78 p-5 shadow-sm shadow-[#1f2687]/10"
+                haptic="selection"
+                onPress={() => setOverdueSheetVisible(true)}
               >
-                {shifts.includes(selectedDay) ? t('calendar.workDay') : t('calendar.dayOff')}
-              </Text>
-            </View>
-          </View>
-
-          {selectedDay === yesterdayDay && overdueTask.status === 'active' ? (
-            <View className="rounded-3xl border border-[#ffd4a8] bg-[#fffaf2] p-5 shadow-sm shadow-[#1f2687]/10">
-              <View className="mb-3 flex-row items-start gap-3">
-                <View className="mt-0.5 h-10 w-10 items-center justify-center rounded-full bg-[#fff0da]">
-                  <Ionicons color="#f59e0b" name="warning-outline" size={20} />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-display text-lg font-semibold text-foreground">{t('calendar.overdueFrom', { dateLabel: overdueTask.dateLabel })}</Text>
-                  <Text className="mt-1 font-body text-[15px] font-semibold text-foreground">{overdueTask.title}</Text>
-                  <Text className="mt-2 font-body text-sm leading-6 text-muted-foreground">
-                    {overdueTask.description ?? t('calendar.waitingForAction')}
-                  </Text>
-                </View>
-              </View>
-
-              <View className="flex-row gap-3">
-                <PressableScale
-                  className="flex-1 rounded-[22px] bg-[#eef5ff] px-4 py-3.5"
-                  containerClassName="flex-1"
-                  haptic="warning"
-                  onPress={openNotDoneModal}
-                >
-                  <Text className="text-center font-display text-[15px] font-semibold text-[#234067]">{t('calendar.notDone')}</Text>
-                </PressableScale>
-                <PressableScale
-                  className="flex-1 rounded-[22px] bg-success px-4 py-3.5"
-                  containerClassName="flex-1"
-                  haptic="success"
-                  onPress={markDone}
-                >
-                  <Text className="text-center font-display text-[15px] font-semibold text-white">{t('today.taskMarkDone')}</Text>
-                </PressableScale>
-              </View>
-            </View>
-          ) : null}
-
-          <View>
-            <View className="mb-3 flex-row items-center justify-between gap-3 px-5">
-              <Text className="font-display text-lg font-semibold text-foreground">
-                {selectedDayRelation === 'past' ? t('calendar.activityOnDay') : t('calendar.planForDay')}
-              </Text>
-              {selectedSummaryText ? (
-                <View className="rounded-full bg-[#eef4ff] px-3 py-1.5">
-                  <Text className="font-body text-xs font-semibold text-[#4f6df5]">
-                    {selectedSummaryText}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            {selectedDayItems.length > 0 ? (
-              selectedDayItems.map((item, index) => (
-                <Animated.View
-                  entering={FadeInUp.delay(index * 25).duration(170).withInitialValues({
-                    opacity: 0,
-                    transform: [{ translateY: 8 }],
-                  })}
-                  key={item.id}
-                  layout={LinearTransition.duration(180)}
-                  className="mb-2 flex-row items-center justify-between rounded-2xl border border-white/30 bg-white/70 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-                >
-                  <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-[#eef4ff]">
-                    <Ionicons
-                      color={
-                        item.status === 'overdue'
-                          ? '#f59e0b'
-                          : item.status === 'deleted'
-                            ? '#ef4444'
-                            : item.kind === 'meeting'
-                              ? '#6d73ff'
-                              : '#10b981'
-                      }
-                      name={
-                        item.kind === 'meeting'
-                          ? 'videocam-outline'
-                          : item.status === 'completed'
-                            ? 'checkmark-circle'
-                            : item.status === 'deleted'
-                              ? 'trash-outline'
-                              : item.status === 'overdue'
-                                ? 'warning-outline'
-                                : 'clipboard-outline'
-                      }
-                      size={20}
-                    />
+                <View className="flex-row items-start gap-4">
+                  <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4dd]">
+                    <Ionicons color="#f59e0b" name="warning-outline" size={22} />
                   </View>
                   <View className="flex-1">
-                    <Text className="font-body text-[15px] font-medium text-foreground">{item.title}</Text>
-                    <Text className="mt-1 font-body text-sm text-muted-foreground">{item.note}</Text>
+                    <Text className="font-display text-lg font-bold text-foreground">{t('calendar.overdueManagerTitle', { count: overdueTasks.length })}</Text>
+                    <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{t('calendar.overdueManagerBody')}</Text>
                   </View>
-                  <Text
-                    className="font-body text-xs font-semibold"
-                    style={{
-                      color:
-                        item.status === 'completed'
-                          ? '#169c56'
-                          : item.status === 'deleted'
-                            ? '#ef4444'
-                            : item.status === 'overdue'
-                              ? '#f59e0b'
-                              : '#4f6df5',
-                    }}
-                  >
-                    {item.status === 'completed'
-                      ? t('calendar.statusDone')
-                      : item.status === 'deleted'
-                        ? t('calendar.statusDeleted')
-                        : item.status === 'overdue'
-                          ? t('calendar.statusOverdue')
-                          : item.kind === 'meeting'
-                            ? t('calendar.statusMeeting')
-                            : t('calendar.statusPlanned')}
+                  <Ionicons color="#f59e0b" name="chevron-forward" size={18} />
+                </View>
+              </PressableScale>
+            ) : null}
+
+            <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
+              <View className="flex-row items-start justify-between gap-4">
+                <View className="flex-1">
+                  <Text className="font-display text-xl font-bold text-foreground">{selectedDayLabel}</Text>
+                  <Text className="mt-1 font-body text-sm text-muted-foreground">
+                    {loading
+                      ? t('common.loading')
+                      : selectedShift
+                        ? `${selectedShift.template.name} · ${new Date(selectedShift.startsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${new Date(selectedShift.endsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`
+                        : selectedDayRelation === 'past'
+                          ? t('calendar.noShiftRecorded')
+                          : t('calendar.dayOff')}
                   </Text>
-                </Animated.View>
-              ))
-            ) : (
-              <View className="min-h-[120px] items-center justify-start px-6 pt-12">
-                <Text className="text-center font-body text-[15px] font-medium text-[#9aa6b2]">
-                  {t('calendar.noItemsForDay')}
+                  {selectedShift ? (
+                    <Text className="mt-1 font-body text-sm text-muted-foreground">{selectedShift.location.name}</Text>
+                  ) : null}
+                </View>
+                <Text className="font-body text-xs font-semibold" style={{ color: selectedShift ? '#169c56' : '#6b7280' }}>
+                  {selectedShift ? t('calendar.workDay') : t('calendar.dayOff')}
                 </Text>
               </View>
-            )}
-          </View>
+            </View>
+
+            <View>
+              <View className="mb-3 flex-row items-center justify-between gap-3 px-5">
+                <Text className="font-display text-lg font-semibold text-foreground">
+                  {selectedDayRelation === 'past' ? t('calendar.activityOnDay') : t('calendar.planForDay')}
+                </Text>
+                {selectedSummaryText ? (
+                  <View className="rounded-full bg-[#eef4ff] px-3 py-1.5">
+                    <Text className="font-body text-xs font-semibold text-[#4f6df5]">{selectedSummaryText}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {loading ? (
+                <View className="rounded-2xl border border-white/30 bg-white/70 px-5 py-5 shadow-sm shadow-[#1f2687]/10">
+                  <Text className="font-body text-sm text-muted-foreground">{t('common.loading')}</Text>
+                </View>
+              ) : selectedItems.length > 0 ? (
+                selectedItems.map((item) => (
+                  <View
+                    key={item.id}
+                    className="mb-2 rounded-2xl border border-white/30 bg-white/70 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-[#eef4ff]">
+                        <Ionicons
+                          color={
+                            item.kind === 'meeting'
+                              ? '#6d73ff'
+                              : item.status === 'done'
+                                ? '#10b981'
+                                : item.status === 'cancelled'
+                                  ? '#ef4444'
+                                  : item.status === 'overdue'
+                                    ? '#ef4444'
+                                    : '#10b981'
+                          }
+                          name={
+                            item.kind === 'meeting'
+                              ? 'videocam-outline'
+                              : item.status === 'done'
+                                ? 'checkmark-circle'
+                                : item.status === 'cancelled'
+                                  ? 'close-circle-outline'
+                                  : item.status === 'overdue'
+                                    ? 'alert-circle-outline'
+                                    : 'clipboard-outline'
+                          }
+                          size={20}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="font-body text-[15px] font-medium text-foreground">{item.title}</Text>
+                        <Text className="mt-1 font-body text-sm text-muted-foreground">{item.note}</Text>
+                      </View>
+                      <Text
+                        className="font-body text-xs font-semibold"
+                        style={{
+                          color:
+                            item.status === 'done'
+                              ? '#169c56'
+                              : item.status === 'cancelled'
+                                ? '#ef4444'
+                                : item.status === 'overdue'
+                                  ? '#ef4444'
+                                  : '#4f6df5',
+                        }}
+                      >
+                        {item.status === 'done'
+                          ? t('calendar.statusDone')
+                          : item.status === 'cancelled'
+                            ? t('calendar.statusDeleted')
+                            : item.status === 'overdue'
+                              ? t('calendar.statusOverdue')
+                              : item.kind === 'meeting'
+                                ? t('calendar.statusMeeting')
+                                : t('calendar.statusPlanned')}
+                      </Text>
+                    </View>
+                    {item.kind === 'task' && item.status === 'overdue' ? renderOverdueTaskActions(item.task) : null}
+                  </View>
+                ))
+              ) : (
+                <View className="min-h-[120px] items-center justify-start px-6 pt-12">
+                  <Text className="text-center font-body text-[15px] font-medium text-[#9aa6b2]">{t('calendar.noItemsForDay')}</Text>
+                </View>
+              )}
+            </View>
           </View>
         </ScrollView>
       </View>
 
       <BottomSheetModal
-        onClose={closeNotDoneModal}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
-        visible={notDoneModalVisible}
+        onClose={() => setOverdueSheetVisible(false)}
+        sheetClassName="rounded-t-[32px]"
+        solidBackground
+        visible={overdueSheetVisible}
       >
-              <View className="mb-4 flex-row items-start justify-between gap-4">
-              <View className="flex-1">
-                <Text className="font-display text-[24px] font-bold text-foreground">
-                  {pickerMode === 'options' ? t('calendar.taskNotDoneYet') : t('calendar.rescheduleTask')}
-                </Text>
-                <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
-                  {pickerMode === 'options'
-                    ? t('calendar.notDoneDescription')
-                  : t('calendar.rescheduleDescription')}
-                </Text>
-              </View>
-              <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-muted/80" haptic="selection" onPress={closeNotDoneModal}>
-                <Ionicons color="#111827" name="close" size={18} />
-              </PressableScale>
+        <View className="max-h-[72vh] gap-4 px-5 pt-8" style={{ paddingBottom: insets.bottom + 20 }}>
+          <Text className="text-center text-[26px] font-extrabold text-foreground">{t('calendar.overdueSheetTitle')}</Text>
+          <Text className="text-center text-[15px] leading-6 text-muted-foreground">{t('calendar.overdueSheetBody')}</Text>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View className="gap-3 pb-2">
+              {overdueTasks.length > 0 ? (
+                overdueTasks.map((task) => {
+                  const dueAt = parseTaskDueAt(task);
+                  const meta = parseTaskMeta(task.description);
+                  const subtitle = meta.body || task.description || t('calendar.waitingForAction');
+                  const dateLabel = dueAt
+                    ? dueAt.toLocaleDateString(locale, { month: 'long', day: 'numeric' })
+                    : t('calendar.noTimeSelected');
+
+                  return (
+                    <View key={task.id} className="rounded-[24px] border border-[#e7edf7] bg-white/88 px-4 py-4">
+                      <View className="flex-row items-start gap-3">
+                        <View className="mt-0.5 h-10 w-10 items-center justify-center rounded-2xl bg-[#fff4dd]">
+                          <Ionicons color="#f59e0b" name="warning-outline" size={20} />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="font-body text-[16px] font-semibold text-foreground">{task.title}</Text>
+                          <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{subtitle}</Text>
+                          <Text className="mt-2 font-body text-xs font-semibold text-[#c17b07]">
+                            {t('calendar.overdueFrom', { dateLabel })}
+                          </Text>
+                        </View>
+                      </View>
+                      {renderOverdueTaskActions(task, true)}
+                    </View>
+                  );
+                })
+              ) : (
+                <View className="rounded-[24px] border border-[#e7edf7] bg-white/88 px-4 py-6">
+                  <Text className="text-center font-body text-sm text-muted-foreground">{t('calendar.noOverdueTasks')}</Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        onClose={() => {
+          setRescheduleSheetVisible(false);
+          setRescheduleDatePickerVisible(false);
+          setRescheduleTimePickerVisible(false);
+          setRescheduleTaskItem(null);
+        }}
+        sheetClassName="rounded-t-[32px]"
+        solidBackground
+        visible={rescheduleSheetVisible}
+      >
+        <View
+          className="gap-4 px-5 pt-8"
+          style={{ paddingBottom: Math.max(insets.bottom + 20 - rescheduleActionsOffset, 4) }}
+        >
+          <View>
+            <Text className="text-center text-[24px] font-extrabold text-foreground">{t('calendar.rescheduleTask')}</Text>
+            <Text className="mt-2 text-center text-[15px] leading-6 text-muted-foreground">{t('calendar.rescheduleDescription')}</Text>
+          </View>
+
+          {rescheduleTaskItem ? (
+            <View className="items-center px-2">
+              <Text className="text-center font-body text-[16px] font-semibold text-foreground">{rescheduleTaskItem.title}</Text>
+              <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
+                {t('calendar.moveToAnotherDayHint')}
+              </Text>
+            </View>
+          ) : null}
+
+          <View className="gap-3">
+            <View className="items-center">
+              <Text className="font-body text-xs font-semibold uppercase tracking-[1.2px] text-muted-foreground">{t('calendar.date')}</Text>
+              {Platform.OS === 'ios' ? (
+                <View className="mt-2 self-stretch">
+                  <DateTimePicker
+                    display="spinner"
+                    minimumDate={todayStart}
+                    mode="date"
+                    onChange={handleRescheduleDateChange}
+                    textColor="#000000"
+                    value={rescheduleDateValue}
+                  />
+                </View>
+              ) : (
+                <PressableScale className="mt-2 min-w-[220px] rounded-[20px] border border-[#dce4f2] bg-[#f8fbff] px-5 py-4" haptic="selection" onPress={() => setRescheduleDatePickerVisible(true)}>
+                  <Text className="text-center font-body text-[15px] font-semibold text-foreground">
+                    {rescheduleDateValue.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                </PressableScale>
+              )}
             </View>
 
-            {pickerMode === 'options' ? (
-              <View className="gap-3">
-                <PressableScale className="rounded-[26px] border border-white bg-[#edf4ff] px-5 py-5" haptic="selection" onPress={moveToSchedulePicker}>
-                  <View className="flex-row items-center gap-3">
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
-                      <Ionicons color="#4f6df5" name="calendar-outline" size={22} />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="font-display text-[17px] font-semibold text-foreground">{t('calendar.moveToAnotherDay')}</Text>
-                      <Text className="mt-1 font-body text-sm text-muted-foreground">{t('calendar.moveToAnotherDayHint')}</Text>
-                    </View>
-                    <Ionicons color="#4f6df5" name="chevron-forward" size={18} />
-                  </View>
-                </PressableScale>
+            <View className="items-center">
+              <Text className="font-body text-xs font-semibold uppercase tracking-[1.2px] text-muted-foreground">{t('calendar.time')}</Text>
+              <PressableScale className="mt-2 min-w-[220px] rounded-[20px] border border-[#dce4f2] bg-[#f8fbff] px-5 py-4" haptic="selection" onPress={() => setRescheduleTimePickerVisible(true)}>
+                <Text className="text-center font-body text-[15px] font-semibold text-foreground">
+                  {combineDateAndTime(rescheduleDateValue, rescheduleTimeValue).toLocaleTimeString(locale, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </PressableScale>
+            </View>
+          </View>
 
-                <PressableScale className="rounded-[26px] border border-[#ffd7dc] bg-[#fff1f3] px-5 py-5" haptic="error" onPress={deleteTask}>
-                  <View className="flex-row items-center gap-3">
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
-                      <Ionicons color="#ef4444" name="trash-outline" size={22} />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="font-display text-[17px] font-semibold text-foreground">{t('calendar.deleteTask')}</Text>
-                      <Text className="mt-1 font-body text-sm text-muted-foreground">{t('calendar.deleteTaskHint')}</Text>
-                    </View>
-                  </View>
-                </PressableScale>
-              </View>
-            ) : (
-              <View className="gap-5">
-                <View>
-                  <Text className="mb-3 font-display text-base font-semibold text-foreground">{t('calendar.date')}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View className="flex-row gap-3">
-                      {scheduleDays.map((dayOption) => {
-                        const isSelected = selectedRescheduleDay === dayOption.day;
-                        return (
-                          <PressableScale
-                            key={`${dayOption.label}-${dayOption.day}`}
-                            className={`min-w-[88px] rounded-[22px] border px-4 py-3 ${
-                              isSelected ? 'border-primary bg-primary' : 'border-white bg-white'
-                            }`}
-                            haptic="selection"
-                            onPress={() => {
-                              setSelectedRescheduleDay(dayOption.day);
-                              setSelectedRescheduleLabel(dayOption.label);
-                            }}
-                          >
-                            <Text className={`text-center font-body text-xs ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                              {dayOption.shortDay}
-                            </Text>
-                            <Text className={`mt-1 text-center font-display text-[15px] font-semibold ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                              {dayOption.label}
-                            </Text>
-                          </PressableScale>
-                        );
-                      })}
-                    </View>
-                  </ScrollView>
-                </View>
-
-                <View>
-                  <Text className="mb-3 font-display text-base font-semibold text-foreground">{t('calendar.time')}</Text>
-                  <View className="flex-row flex-wrap gap-3">
-                    {timeSlots.map((time) => {
-                      const isSelected = selectedRescheduleTime === time;
-                      return (
-                        <PressableScale
-                          key={time}
-                          className={`rounded-full border px-4 py-2.5 ${
-                            isSelected ? 'border-primary bg-primary' : 'border-white bg-white'
-                          }`}
-                          haptic="selection"
-                          onPress={() => setSelectedRescheduleTime(time)}
-                        >
-                          <Text className={`font-display text-[14px] font-semibold ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                            {time}
-                          </Text>
-                        </PressableScale>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View className="flex-row gap-3">
-                  <PressableScale className="flex-1 rounded-[24px] bg-[#eef5ff] px-4 py-4" containerClassName="flex-1" haptic="selection" onPress={() => setPickerMode('options')}>
-                    <Text className="text-center font-display text-[16px] font-semibold text-[#234067]">{t('calendar.back')}</Text>
-                  </PressableScale>
-                  <PressableScale className="flex-1 rounded-[24px] bg-primary px-4 py-4" containerClassName="flex-1" haptic="success" onPress={saveReschedule}>
-                    <Text className="text-center font-display text-[16px] font-semibold text-white">{t('calendar.saveNewDate')}</Text>
-                  </PressableScale>
-                </View>
-              </View>
-            )}
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1">
+              <Button
+                className="min-h-12 rounded-2xl border-[#fecdd3] bg-[#fff1f2]"
+                fullWidth
+                label={t('profile.cancel')}
+                onPress={() => {
+                  setRescheduleSheetVisible(false);
+                  setRescheduleDatePickerVisible(false);
+                  setRescheduleTimePickerVisible(false);
+                  setRescheduleTaskItem(null);
+                }}
+                textClassName="text-[#dc2626]"
+                variant="secondary"
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                className="min-h-12 rounded-2xl border-[#dce4f2] bg-white"
+                fullWidth
+                label={pendingTaskAction === 'reschedule' ? t('common.processing') : t('calendar.saveNewDate')}
+                onPress={() => {
+                  void submitTaskReschedule();
+                }}
+                textClassName="text-foreground"
+                variant="secondary"
+              />
+            </View>
+          </View>
+        </View>
       </BottomSheetModal>
+
+      {Platform.OS === 'android' && rescheduleDatePickerVisible ? (
+        <DateTimePicker minimumDate={todayStart} mode="date" onChange={handleRescheduleDateChange} value={rescheduleDateValue} />
+      ) : null}
+
+      <TimeWheelPicker
+        initialValue={rescheduleTimeValue}
+        onApply={(value) => {
+          setRescheduleTimeValue(value);
+          setRescheduleTimePickerVisible(false);
+        }}
+        onClose={() => setRescheduleTimePickerVisible(false)}
+        title={t('calendar.time')}
+        visible={rescheduleTimePickerVisible}
+      />
     </>
   );
-};
-
-export default CalendarScreen;
+}

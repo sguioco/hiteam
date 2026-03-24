@@ -3,6 +3,7 @@
 import { Cake } from "lucide-react";
 
 type BirthdayItem = {
+  avatarUrl?: string | null;
   dateLabel: string;
   department: string;
   name: string;
@@ -18,7 +19,6 @@ export const BirthdaysSidebar = ({
       <Cake className="w-4 h-4 text-[var(--accent)]" />
       <div>
         <h2 className="font-semibold text-sm">Дни рождения</h2>
-        <p className="birthdays-sidebar-caption">Ближайшие сотрудники</p>
       </div>
     </div>
     <div className="birthdays-sidebar-list">
@@ -29,13 +29,18 @@ export const BirthdaysSidebar = ({
             className="birthdays-sidebar-item animate-fade-in"
             style={{ animationDelay: `${index * 60}ms` }}
           >
-            <div>
-              <p className="text-sm font-medium leading-tight">{item.name}</p>
-              <p className="text-[10px] text-[var(--muted-foreground)]">
+            <img
+              alt={item.name}
+              className="h-11 w-11 shrink-0 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+              src={item.avatarUrl ?? undefined}
+            />
+            <div className="birthdays-sidebar-copy">
+              <p className="birthdays-sidebar-name">{item.name}</p>
+              <p className="birthdays-sidebar-department">
                 {item.department}
               </p>
             </div>
-            <span className="text-xs text-[var(--accent)] font-medium whitespace-nowrap">
+            <span className="birthdays-sidebar-date">
               {item.dateLabel}
             </span>
           </div>

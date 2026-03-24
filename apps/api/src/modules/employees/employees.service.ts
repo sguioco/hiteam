@@ -108,15 +108,8 @@ export class EmployeesService {
     const passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
 
     return this.prisma.$transaction(async (tx) => {
-      const employeeRole = await tx.role.upsert({
-        where: { code: 'employee' },
-        update: {},
-        create: {
-          code: 'employee',
-          name: 'Employee',
-          description: 'Standard employee access',
-        },
-      });
+      const employeeRole = await this.ensureEmployeeRole(tx);
+      const managerRole = dto.grantManagerAccess ? await this.ensureManagerRole(tx) : null;
 
       const user = await tx.user.create({
         data: {
@@ -127,13 +120,25 @@ export class EmployeesService {
         },
       });
 
-      await tx.userRole.create({
-        data: {
-          userId: user.id,
-          roleId: employeeRole.id,
-          scopeType: 'tenant',
-          scopeId: tenantId,
-        },
+      await tx.userRole.createMany({
+        data: [
+          {
+            userId: user.id,
+            roleId: employeeRole.id,
+            scopeType: 'tenant',
+            scopeId: tenantId,
+          },
+          ...(managerRole
+            ? [
+                {
+                  userId: user.id,
+                  roleId: managerRole.id,
+                  scopeType: 'tenant',
+                  scopeId: tenantId,
+                },
+              ]
+            : []),
+        ],
       });
 
       return tx.employee.create({
@@ -673,6 +678,7 @@ export class EmployeesService {
       throw new BadRequestException('Invitation is not waiting for review.');
     }
 
+    const grantManagerAccess = dto.decision === 'APPROVE' && dto.grantManagerAccess === true;
     const requestedShiftTemplateId =
       dto.decision === 'APPROVE'
         ? dto.shiftTemplateId?.trim() || invitation.approvedShiftTemplateId || null
@@ -685,7 +691,7 @@ export class EmployeesService {
         : null;
 
     if (dto.decision === 'APPROVE' && !approvedShiftTemplate) {
-      throw new BadRequestException('Shift assignment is required before approval.');
+      throw new BadRequestException('Пожалуйста, выберите смену перед подтверждением анкеты.');
     }
 
     const rawGroupId = typeof dto.groupId === 'string' ? dto.groupId.trim() : undefined;
@@ -792,36 +798,102 @@ export class EmployeesService {
     }
 
     if (!invitation.userId) {
-      const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
-      const companyName = updatePayload.companyId
-        ? (
-            await this.prisma.company.findFirst({
-              where: { tenantId, id: updatePayload.companyId },
-              select: { name: true },
-            })
-          )?.name ?? tenant.name
-        : tenant.name;
+      const generatedPassword = this.generateTemporaryPassword();
+      const passwordHash = await bcrypt.hash(generatedPassword, 10);
 
-      const token = randomBytes(24).toString('hex');
-      const approved = await this.prisma.employeeInvitation.update({
-        where: { id: invitation.id },
-        data: {
-          ...updatePayload,
-          status: EmployeeInvitationStatus.APPROVED,
-          approvedAt: new Date(),
-          approvedByUserId: actorUserId,
-          rejectedAt: null,
-          rejectedReason: null,
-          tokenHash: this.hashToken(token),
-          expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-        },
-      });
+      const approved = await this.prisma.$transaction(async (tx) => {
+        const existingUser = await tx.user.findFirst({
+          where: {
+            tenantId,
+            email: invitation.email,
+          },
+          select: { id: true },
+        });
 
-      await this.employeeInvitationsMailerService.sendInvitationEmail({
-        email: invitation.email,
-        companyName,
-        tenantName: tenant.name,
-        token,
+        if (existingUser) {
+          throw new ConflictException('Такой email уже зарегистрирован в компании.');
+        }
+
+        const employeeRole = await this.ensureEmployeeRole(tx);
+        const managerRole = grantManagerAccess ? await this.ensureManagerRole(tx) : null;
+        const companyId = await this.resolveInvitationCompanyId(tx, tenantId, updatePayload.companyId);
+        const departmentId = await this.resolveDefaultDepartmentId(tx, tenantId);
+        const primaryLocationId =
+          approvedShiftTemplate?.locationId ?? (await this.resolveDefaultLocationId(tx, tenantId, companyId));
+        const positionId = approvedShiftTemplate?.positionId ?? (await this.resolveDefaultPositionId(tx, tenantId));
+
+        const user = await tx.user.create({
+          data: {
+            tenantId,
+            email: invitation.email,
+            passwordHash,
+            status: UserStatus.ACTIVE,
+            workspaceAccessAllowed: true,
+          },
+        });
+
+        await tx.userRole.createMany({
+          data: [
+            {
+              userId: user.id,
+              roleId: employeeRole.id,
+              scopeType: 'tenant',
+              scopeId: tenantId,
+            },
+            ...(managerRole
+              ? [
+                  {
+                    userId: user.id,
+                    roleId: managerRole.id,
+                    scopeType: 'tenant',
+                    scopeId: tenantId,
+                  },
+                ]
+              : []),
+          ],
+        });
+
+        const employee = await tx.employee.create({
+          data: {
+            tenantId,
+            userId: user.id,
+            companyId,
+            departmentId,
+            primaryLocationId,
+            positionId,
+            employeeNumber: await this.generateEmployeeNumber(tx, tenantId),
+            firstName: updatePayload.firstName!,
+            lastName: updatePayload.lastName!,
+            middleName: updatePayload.middleName ?? null,
+            birthDate: updatePayload.birthDate!,
+            gender: updatePayload.gender!,
+            phone: updatePayload.phone!,
+            avatarStorageKey: updatePayload.avatarStorageKey ?? null,
+            avatarUrl: updatePayload.avatarUrl ?? null,
+            status: EmployeeStatus.ACTIVE,
+            hireDate: new Date(),
+          },
+        });
+
+        await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, requestedGroupId);
+
+        if (approvedShiftTemplate?.id) {
+          await this.createInitialShiftFromTemplate(tx, tenantId, employee.id, approvedShiftTemplate.id);
+        }
+
+        return tx.employeeInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            ...updatePayload,
+            userId: user.id,
+            employeeId: employee.id,
+            status: EmployeeInvitationStatus.APPROVED,
+            approvedAt: new Date(),
+            approvedByUserId: actorUserId,
+            rejectedAt: null,
+            rejectedReason: null,
+          },
+        });
       });
 
       await this.auditService.log({
@@ -829,15 +901,23 @@ export class EmployeesService {
         actorUserId,
         entityType: 'employee_invitation',
         entityId: invitation.id,
-        action: 'employee.review_approved_invite_sent',
+        action: 'employee.review_approved_credentials_generated',
         metadata: {
           email: invitation.email,
+          employeeId: approved.employeeId,
           shiftTemplateId: approvedShiftTemplate?.id ?? null,
           groupId: requestedGroupId,
+          grantManagerAccess,
         },
       });
 
-      return { id: approved.id, status: approved.status, employeeId: approved.employeeId, inviteSent: true };
+      return {
+        id: approved.id,
+        status: approved.status,
+        employeeId: approved.employeeId,
+        email: invitation.email,
+        generatedPassword,
+      };
     }
 
     const approved = await this.prisma.$transaction(async (tx) => {
@@ -903,6 +983,8 @@ export class EmployeesService {
         data: { workspaceAccessAllowed: true },
       });
 
+      await this.syncManagerRole(tx, invitation.userId!, tenantId, grantManagerAccess);
+
       return tx.employeeInvitation.update({
         where: { id: invitation.id },
         data: {
@@ -937,6 +1019,7 @@ export class EmployeesService {
         employeeId: approved.employeeId,
         shiftTemplateId: approvedShiftTemplate?.id ?? null,
         groupId: requestedGroupId,
+        grantManagerAccess,
       },
     });
 
@@ -1139,6 +1222,69 @@ export class EmployeesService {
     });
 
     return created.id;
+  }
+
+  private async ensureEmployeeRole(tx: PrismaTx) {
+    return tx.role.upsert({
+      where: { code: 'employee' },
+      update: {},
+      create: {
+        code: 'employee',
+        name: 'Employee',
+        description: 'Standard employee access',
+      },
+    });
+  }
+
+  private async ensureManagerRole(tx: PrismaTx) {
+    return tx.role.upsert({
+      where: { code: 'manager' },
+      update: {},
+      create: {
+        code: 'manager',
+        name: 'Manager',
+        description: 'Can manage team attendance, approvals, and tasks',
+      },
+    });
+  }
+
+  private async syncManagerRole(tx: PrismaTx, userId: string, tenantId: string, grantManagerAccess: boolean) {
+    const managerRole = await this.ensureManagerRole(tx);
+    const existingAssignment = await tx.userRole.findFirst({
+      where: {
+        userId,
+        roleId: managerRole.id,
+        scopeType: 'tenant',
+        scopeId: tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (grantManagerAccess) {
+      if (!existingAssignment) {
+        await tx.userRole.create({
+          data: {
+            userId,
+            roleId: managerRole.id,
+            scopeType: 'tenant',
+            scopeId: tenantId,
+          },
+        });
+      }
+
+      return;
+    }
+
+    if (existingAssignment) {
+      await tx.userRole.delete({
+        where: { id: existingAssignment.id },
+      });
+    }
+  }
+
+  private generateTemporaryPassword(length = 10) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    return Array.from(randomBytes(length), (byte) => alphabet[byte % alphabet.length]).join('');
   }
 
   private async listApprovalRecipientIds(tenantId: string) {

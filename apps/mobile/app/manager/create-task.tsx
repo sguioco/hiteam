@@ -1,22 +1,20 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../../components/ui/button';
 import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import { createManagerTask, loadManagerEmployees, loadManagerGroups } from '../../lib/api';
+import { createManagerTask, createManagerTaskTemplate, loadManagerEmployees } from '../../lib/api';
+import { hapticSelection } from '../../lib/haptics';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import {
   buildDepartmentFallbackGroups,
   type EmployeeOption,
   type GroupMemberOption,
   type GroupOption,
-  mapApiGroups,
   mergeGroupOptions,
 } from '../../lib/manager-group-options';
-import { getMockManagerEmployees, getMockManagerGroups } from '../../lib/manager-mocks';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
 
@@ -63,6 +61,36 @@ function formatFullGroupLabel(groupName: string) {
   return `All ${groupName}`;
 }
 
+type TaskOptionCheckboxProps = {
+  checked: boolean;
+  label: string;
+  onPress: () => void;
+};
+
+function TaskOptionCheckbox({ checked, label, onPress }: TaskOptionCheckboxProps) {
+  return (
+    <Pressable
+      style={styles.taskOptionPressable}
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+    >
+      <View style={styles.taskOptionRow}>
+        <View
+          style={[
+            styles.taskOptionBox,
+            checked ? styles.taskOptionBoxChecked : styles.taskOptionBoxUnchecked,
+          ]}
+        >
+          {checked ? <Ionicons color="#ffffff" name="checkmark" size={13} /> : null}
+        </View>
+        <Text style={styles.taskOptionLabel}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function CreateTaskScreen() {
   const router = useRouter();
   const { language, t } = useI18n();
@@ -79,6 +107,8 @@ export default function CreateTaskScreen() {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [description, setDescription] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [requiresPhoto, setRequiresPhoto] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(preselectedEmployeeId ? [preselectedEmployeeId] : []);
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
@@ -87,27 +117,15 @@ export default function CreateTaskScreen() {
 
   useEffect(() => {
     async function init() {
-      const [employeesResult, groupsResult] = await Promise.allSettled([loadManagerEmployees(), loadManagerGroups()]);
-      const employeeList =
-        employeesResult.status === 'fulfilled' && employeesResult.value.length
-          ? employeesResult.value
-          : getMockManagerEmployees();
-      const usingMockEmployees = !(employeesResult.status === 'fulfilled' && employeesResult.value.length);
-      const resolvedGroups = groupsResult.status === 'fulfilled' ? mapApiGroups(groupsResult.value) : [];
+      const [employeesResult] = await Promise.allSettled([loadManagerEmployees()]);
+      const employeeList = employeesResult.status === 'fulfilled' ? employeesResult.value : [];
+      const resolvedGroups: GroupOption[] = [];
       const fallbackGroups = buildDepartmentFallbackGroups(employeeList);
-      const mockGroups = mapApiGroups(getMockManagerGroups(employeeList));
-      const groupList =
-        groupsResult.status === 'fulfilled'
-          ? (resolvedGroups.length ? mergeGroupOptions(resolvedGroups, fallbackGroups) : [])
-          : mergeGroupOptions(mockGroups, fallbackGroups);
+      const groupList = mergeGroupOptions(resolvedGroups, fallbackGroups);
 
       setEmployees(employeeList);
       setGroups(groupList);
       setExpandedGroupIds(groupList.map((group) => group.id));
-
-      if (usingMockEmployees) {
-        setSelectedEmployeeIds((current) => (current.length ? current : employeeList.slice(0, 3).map((employee) => employee.id)));
-      }
 
       setLoading(false);
     }
@@ -179,6 +197,7 @@ export default function CreateTaskScreen() {
   const selectedAssigneeIds = useMemo(() => selectedAssignees.map((employee) => employee.id), [selectedAssignees]);
   const priorityIndex = PRIORITY_OPTIONS.findIndex((option) => option.value === priority);
   const activePriorityColor = PRIORITY_COLORS[priority];
+  const createTaskButtonOffset = selectedAssigneeIds.length === 0 ? 85 : 25;
 
   const individuallySelectedEmployees = useMemo(
     () => selectedAssignees.filter((employee) => !selectedGroupMemberIdSet.has(employee.id)),
@@ -307,19 +326,39 @@ export default function CreateTaskScreen() {
 
     setSubmitting(true);
     try {
-      await Promise.all(
-        selectedAssigneeIds.map((assigneeEmployeeId) =>
-          createManagerTask({
-            assigneeEmployeeId,
-            description: description.trim() || undefined,
-            dueAt: buildDateTime(selectedDate, dueTime).toISOString(),
-            priority,
-            title: title.trim(),
-          }),
-        ),
-      );
+      if (isRecurring) {
+        await Promise.all(
+          selectedAssigneeIds.map((assigneeEmployeeId) =>
+            createManagerTaskTemplate({
+              assigneeEmployeeId,
+              description: description.trim() || undefined,
+              dueAfterDays: 0,
+              dueTimeLocal: formatTime(dueTime.hour, dueTime.minute),
+              frequency: 'DAILY',
+              isActive: true,
+              priority,
+              requiresPhoto,
+              startDate: selectedDateKey,
+              title: title.trim(),
+            }),
+          ),
+        );
+      } else {
+        await Promise.all(
+          selectedAssigneeIds.map((assigneeEmployeeId) =>
+            createManagerTask({
+              assigneeEmployeeId,
+              description: description.trim() || undefined,
+              dueAt: buildDateTime(selectedDate, dueTime).toISOString(),
+              priority,
+              requiresPhoto,
+              title: title.trim(),
+            }),
+          ),
+        );
+      }
 
-      Alert.alert('Success', 'Tasks created successfully.');
+      Alert.alert('Success', isRecurring ? 'Recurring tasks created successfully.' : 'Tasks created successfully.');
       router.back();
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create tasks.');
@@ -337,14 +376,14 @@ export default function CreateTaskScreen() {
           <PressableScale className="h-8 w-8 items-center justify-center" haptic="selection" onPress={() => router.back()}>
             <Ionicons color="#1f2937" name="arrow-back" size={22} />
           </PressableScale>
-          <Text className="flex-1 text-[24px] font-extrabold text-foreground">Create task</Text>
+          <Text className="flex-1 text-[24px] font-extrabold text-foreground">{t('manager.createTaskTitle')}</Text>
         </View>
 
         <View className="gap-4">
           <TextInput
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             onChangeText={setTitle}
-            placeholder="Task title"
+            placeholder={t('manager.createTaskTitlePlaceholder')}
             style={{ paddingHorizontal: 18, paddingVertical: 16 }}
             value={title}
           />
@@ -384,7 +423,7 @@ export default function CreateTaskScreen() {
             haptic="selection"
             onPress={() => setTimePickerOpen(true)}
           >
-            <Text className="text-[13px] font-bold uppercase tracking-[1px] text-muted-foreground">Due time</Text>
+            <Text className="text-[13px] font-bold uppercase tracking-[1px] text-muted-foreground">{t('manager.createTaskDueTime')}</Text>
             <Text className="mt-2 text-[24px] font-extrabold text-foreground">{formatTime(dueTime.hour, dueTime.minute)}</Text>
           </PressableScale>
 
@@ -426,14 +465,19 @@ export default function CreateTaskScreen() {
 
           <View>
             <TextInput
-              className="min-h-[120px] w-full rounded-2xl border-2 border-border bg-surface px-4 py-4 text-[16px] text-foreground"
+              className="min-h-[120px] w-full rounded-2xl border-2 border-[#8f99ab] bg-surface px-4 py-4 text-[16px] text-foreground"
               multiline
               numberOfLines={5}
               onChangeText={setDescription}
-              placeholder="Add task description"
+              placeholder={t('manager.createTaskDescriptionPlaceholder')}
               textAlignVertical="top"
               value={description}
             />
+          </View>
+
+          <View className="flex-row gap-6 px-1">
+            <TaskOptionCheckbox checked={isRecurring} label={t('manager.createTaskRecurring')} onPress={() => setIsRecurring((current) => !current)} />
+            <TaskOptionCheckbox checked={requiresPhoto} label={t('manager.createTaskPhotoProof')} onPress={() => setRequiresPhoto((current) => !current)} />
           </View>
 
           <View className="gap-3">
@@ -442,14 +486,14 @@ export default function CreateTaskScreen() {
             ) : (
               <View className="rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
                 <View className="flex-row items-center justify-between gap-3">
-                  <Text className="text-[13px] font-semibold text-muted-foreground">Selected assignees: {selectedAssigneeIds.length}</Text>
-                  <Button
-                    className="min-h-10 rounded-full border border-[#d8e2f0] bg-white px-4"
-                    label={`+ ${t('common.add')}`}
+                  <Text className="text-[13px] font-semibold text-muted-foreground">{t('manager.createTaskSelectedAssignees', { count: selectedAssigneeIds.length })}</Text>
+                  <PressableScale
+                    className="min-h-10 min-w-[92px] items-center justify-center rounded-full border border-[#d8e2f0] bg-white px-4"
+                    haptic="selection"
                     onPress={() => setAssigneeSheetOpen(true)}
-                    textClassName="text-[14px] text-foreground"
-                    variant="secondary"
-                  />
+                  >
+                    <Text className="text-[14px] font-semibold text-foreground">{`+ ${t('common.add')}`}</Text>
+                  </PressableScale>
                 </View>
 
                 <View className="mt-3 flex-row flex-wrap gap-2">
@@ -495,7 +539,7 @@ export default function CreateTaskScreen() {
                   ))}
 
                   {selectedAssigneeIds.length === 0 ? (
-                    <Text className="text-[14px] leading-6 text-muted-foreground">Select at least one assignee.</Text>
+                    <Text className="text-[14px] leading-6 text-muted-foreground">{t('manager.createTaskAssigneeRequired')}</Text>
                   ) : null}
                 </View>
               </View>
@@ -503,11 +547,14 @@ export default function CreateTaskScreen() {
           </View>
 
           <PressableScale
-            className="mt-2 rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
+            className="rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
             haptic="selection"
             onPress={() => void handleSubmit()}
+            style={{ marginTop: createTaskButtonOffset }}
           >
-            <Text className="text-center font-display text-[16px] font-semibold text-white">{submitting ? 'Creating...' : 'Create task'}</Text>
+            <Text className="text-center font-display text-[16px] font-semibold text-white">
+              {submitting ? t('manager.createTaskCreating') : isRecurring ? t('manager.createTaskRecurringSubmit') : t('manager.createTaskSubmit')}
+            </Text>
           </PressableScale>
         </View>
       </Screen>
@@ -519,9 +566,11 @@ export default function CreateTaskScreen() {
       >
         <View className="mb-4 flex-row items-start justify-between gap-4">
           <View className="flex-1">
-            <Text className="font-display text-[24px] font-bold text-foreground">Select assignees</Text>
+            <Text className="font-display text-[24px] font-bold text-foreground">{t('manager.createTaskAssigneePickerTitle')}</Text>
           </View>
-          <Button label={t('common.done')} onPress={() => setAssigneeSheetOpen(false)} variant="ghost" />
+          <PressableScale className="h-10 min-w-[72px] items-center justify-center rounded-full px-3" haptic="selection" onPress={() => setAssigneeSheetOpen(false)}>
+            <Text className="text-[15px] font-semibold text-foreground">{t('common.done')}</Text>
+          </PressableScale>
         </View>
 
         {loading ? (
@@ -594,9 +643,45 @@ export default function CreateTaskScreen() {
           setTimePickerOpen(false);
         }}
         onClose={() => setTimePickerOpen(false)}
-        title="Due time"
+        title={t('manager.createTaskDueTime')}
         visible={timePickerOpen}
       />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  taskOptionPressable: {
+    flex: 1,
+    minHeight: 28,
+    justifyContent: 'center',
+  },
+  taskOptionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  taskOptionBox: {
+    alignItems: 'center',
+    borderRadius: 6,
+    borderWidth: 1.5,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+  taskOptionBoxChecked: {
+    backgroundColor: '#6d73ff',
+    borderColor: '#6d73ff',
+  },
+  taskOptionBoxUnchecked: {
+    backgroundColor: '#ffffff',
+    borderColor: '#bcc8da',
+  },
+  taskOptionLabel: {
+    color: '#243042',
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+});

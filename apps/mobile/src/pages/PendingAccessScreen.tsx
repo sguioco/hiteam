@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { AppGradientBackground } from '../../components/ui/screen';
 import { loadMyAccessStatus } from '../../lib/api';
 import { signOutLocally } from '../../lib/auth-flow';
 import { useI18n } from '../../lib/i18n';
@@ -36,16 +37,17 @@ export default function PendingAccessScreen() {
   const body = isRejected ? t('pending.rejectedBody') : t('pending.body');
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas px-6 py-8">
+    <SafeAreaView className="flex-1 bg-transparent px-6 py-8">
+      <AppGradientBackground />
       <StatusBar style="dark" />
 
       <View className="flex-1 justify-center gap-5">
         <Card className="gap-4 rounded-[32px] bg-white">
           <Text className="text-[28px] font-extrabold text-foreground">{title}</Text>
-          <Text className="text-[16px] leading-7 text-muted">{body}</Text>
+          <Text className="text-[16px] leading-7 text-muted-foreground">{body}</Text>
 
           {status?.submittedAt ? (
-            <Text className="text-[14px] leading-6 text-muted">
+            <Text className="text-[14px] leading-6 text-muted-foreground">
               {t('pending.submittedAt', {
                 date: new Date(status.submittedAt).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US'),
               })}

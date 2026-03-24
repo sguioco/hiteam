@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Smartphone,
+  Trash2,
   UserPlus,
   Users,
   X,
@@ -118,6 +119,14 @@ type InvitationRecord = {
   approvedGroupId?: string | null;
 };
 
+type ReviewInvitationResponse = {
+  id: string;
+  status: string;
+  employeeId?: string | null;
+  email?: string;
+  generatedPassword?: string;
+};
+
 type ShiftTemplateRecord = {
   id: string;
   name: string;
@@ -210,6 +219,8 @@ const invitationStyles: Record<InvitationRecord["status"], string> = {
   REJECTED: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
 };
 
+const CREATE_SHIFT_TEMPLATE_OPTION = "__create_shift_template__";
+
 const taskPriorityOptions: Array<{
   value: TaskItem["priority"];
   label: string;
@@ -225,6 +236,12 @@ const initialTaskDraft = {
   description: "",
   priority: "MEDIUM" as TaskItem["priority"],
   dueAt: "",
+  requiresPhoto: false,
+  isRecurring: false,
+  frequency: "DAILY" as "DAILY" | "WEEKLY" | "MONTHLY",
+  weekDays: [1, 2, 3, 4, 5],
+  startDate: new Date().toISOString().split("T")[0],
+  endDate: "",
 };
 
 const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
@@ -396,10 +413,11 @@ const Employees = () => {
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState<string | null>(null);
 
-  const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>([]);
-  const [overview, setOverview] = useState<CollaborationOverviewResponse | null>(
-    null,
+  const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>(
+    [],
   );
+  const [overview, setOverview] =
+    useState<CollaborationOverviewResponse | null>(null);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null,
@@ -421,7 +439,7 @@ const Employees = () => {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [copiedInviteField, setCopiedInviteField] = useState<
-    "code" | "link" | null
+    "code" | "link" | "email" | "password" | null
   >(null);
   const [organizationSetup, setOrganizationSetup] =
     useState<OrganizationSetupResponse | null>(null);
@@ -439,6 +457,10 @@ const Employees = () => {
     useState<InvitationRecord | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [approvalCredentials, setApprovalCredentials] = useState<{
+    email: string;
+    password: string;
+  } | null>(null);
   const [reviewForm, setReviewForm] = useState({
     firstName: "",
     lastName: "",
@@ -451,6 +473,7 @@ const Employees = () => {
     rejectedReason: "",
     avatarDataUrl: "",
     avatarPreview: "",
+    grantManagerAccess: false,
   });
 
   const [moveDialogEmployeeId, setMoveDialogEmployeeId] = useState<
@@ -470,12 +493,147 @@ const Employees = () => {
   const [scheduleTemplates, setScheduleTemplates] = useState<
     ShiftTemplateRecord[]
   >([]);
+
+  const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState({
+    name: "",
+    startsAtLocal: "09:00",
+    endsAtLocal: "18:00",
+    weekDays: [1, 2, 3, 4, 5],
+  });
+  const [createTemplateSubmitting, setCreateTemplateSubmitting] =
+    useState(false);
+  const [createTemplateError, setCreateTemplateError] = useState<string | null>(
+    null,
+  );
+
+  function toggleTemplateWeekDay(day: number) {
+    setTemplateDraft((current) => ({
+      ...current,
+      weekDays: current.weekDays.includes(day)
+        ? current.weekDays.filter((d) => d !== day)
+        : [...current.weekDays, day],
+    }));
+  }
+
+  async function handleCreateTemplate() {
+    if (
+      !templateDraft.name.trim() ||
+      !templateDraft.startsAtLocal ||
+      !templateDraft.endsAtLocal ||
+      templateDraft.weekDays.length === 0
+    ) {
+      setCreateTemplateError("Заполните все поля шаблона смены");
+      return;
+    }
+
+    setCreateTemplateSubmitting(true);
+    setCreateTemplateError(null);
+
+    const session = getSession();
+    if (!session) {
+      const location = scheduleTemplates[0]?.location || {
+        id: "mock-loc",
+        name: "Офис",
+      };
+      const position = scheduleTemplates[0]?.position || {
+        id: "mock-pos",
+        name: "Сотрудник",
+      };
+
+      const newTemplate: ShiftTemplateRecord = {
+        id: `mock-template-${Date.now()}`,
+        name: templateDraft.name.trim(),
+        startsAtLocal: templateDraft.startsAtLocal,
+        endsAtLocal: templateDraft.endsAtLocal,
+        location,
+        position,
+      };
+
+      setScheduleTemplates((current) => [newTemplate, ...current]);
+      setReviewForm((current) => ({
+        ...current,
+        shiftTemplateId: newTemplate.id,
+      }));
+      setCreateTemplateOpen(false);
+      setTemplateDraft({
+        name: "",
+        startsAtLocal: "09:00",
+        endsAtLocal: "18:00",
+        weekDays: [1, 2, 3, 4, 5],
+      });
+      setCreateTemplateSubmitting(false);
+      return;
+    }
+
+    try {
+      const locationId = scheduleTemplates[0]?.location?.id;
+      const positionId = scheduleTemplates[0]?.position?.id;
+
+      if (!locationId || !positionId) {
+        throw new Error(
+          "Не удалось определить локацию или должность. Сначала создайте хотя бы один шаблон в настройках расписания.",
+        );
+      }
+
+      await apiRequest("/schedule/templates", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({
+          name: templateDraft.name.trim(),
+          code: templateDraft.name.trim().toLowerCase().replace(/\s+/g, "-"),
+          locationId,
+          positionId,
+          startsAtLocal: templateDraft.startsAtLocal,
+          endsAtLocal: templateDraft.endsAtLocal,
+          weekDays: templateDraft.weekDays,
+          gracePeriodMinutes: 10,
+        }),
+      });
+
+      const res = await apiRequest<ShiftTemplateRecord[]>(
+        "/schedule/templates",
+        {
+          token: session.accessToken,
+        },
+      );
+
+      if (res && res.length > 0) {
+        setScheduleTemplates(res);
+        const created = res.find((t) => t.name === templateDraft.name.trim());
+        if (created) {
+          setReviewForm((current) => ({
+            ...current,
+            shiftTemplateId: created.id,
+          }));
+        }
+      }
+
+      setCreateTemplateOpen(false);
+      setTemplateDraft({
+        name: "",
+        startsAtLocal: "09:00",
+        endsAtLocal: "18:00",
+        weekDays: [1, 2, 3, 4, 5],
+      });
+    } catch (error) {
+      setCreateTemplateError(
+        error instanceof Error ? error.message : "Ошибка создания шаблона",
+      );
+    } finally {
+      setCreateTemplateSubmitting(false);
+    }
+  }
   const [canCheckWorkdays, setCanCheckWorkdays] = useState(false);
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
 
   const [groupEditorId, setGroupEditorId] = useState<string | null>(null);
   const [groupEditorMembers, setGroupEditorMembers] = useState<string[]>([]);
+  const [groupEditorName, setGroupEditorName] = useState("");
+  const [groupEditorDescription, setGroupEditorDescription] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
+  const [groupDeleting, setGroupDeleting] = useState(false);
+  const [groupDeleteConfirmOpen, setGroupDeleteConfirmOpen] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
 
   const groups = overview?.groups ?? [];
@@ -575,7 +733,8 @@ const Employees = () => {
   }, [expandedGroups, groups, ungroupedEmployees.length]);
 
   const selectedEmployee = useMemo(
-    () => employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
+    () =>
+      employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
   );
 
@@ -826,7 +985,10 @@ const Employees = () => {
     }
   }
 
-  async function copyInviteValue(value: string, field: "code" | "link") {
+  async function copyInviteValue(
+    value: string,
+    field: "code" | "link" | "email" | "password",
+  ) {
     if (!value.trim()) {
       return;
     }
@@ -910,6 +1072,7 @@ const Employees = () => {
       rejectedReason: invitation.rejectedReason ?? "",
       avatarDataUrl: "",
       avatarPreview: invitation.avatarUrl ?? "",
+      grantManagerAccess: false,
     });
   }
 
@@ -930,33 +1093,50 @@ const Employees = () => {
     setReviewError(null);
 
     try {
-      await apiRequest(`/employees/invitations/${selectedInvitation.id}/review`, {
-        method: "PATCH",
-        token: session.accessToken,
-        body: JSON.stringify({
-          decision,
-          firstName: reviewForm.firstName,
-          lastName: reviewForm.lastName,
-          middleName: reviewForm.middleName || undefined,
-          birthDate: reviewForm.birthDate,
-          gender: reviewForm.gender,
-          phone: reviewForm.phone,
-          shiftTemplateId:
-            decision === "APPROVE"
-              ? reviewForm.shiftTemplateId || undefined
-              : undefined,
-          groupId:
-            decision === "APPROVE"
-              ? reviewForm.groupId === "__none"
-                ? ""
-                : reviewForm.groupId || undefined
-              : undefined,
-          rejectedReason:
-            decision === "REJECT" ? reviewForm.rejectedReason : undefined,
-          avatarDataUrl: reviewForm.avatarDataUrl || undefined,
-        }),
-      });
+      const response = await apiRequest<ReviewInvitationResponse>(
+        `/employees/invitations/${selectedInvitation.id}/review`,
+        {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({
+            decision,
+            firstName: reviewForm.firstName,
+            lastName: reviewForm.lastName,
+            middleName: reviewForm.middleName || undefined,
+            birthDate: reviewForm.birthDate,
+            gender: reviewForm.gender,
+            phone: reviewForm.phone,
+            shiftTemplateId:
+              decision === "APPROVE"
+                ? reviewForm.shiftTemplateId || undefined
+                : undefined,
+            groupId:
+              decision === "APPROVE"
+                ? reviewForm.groupId === "__none"
+                  ? ""
+                  : reviewForm.groupId || undefined
+                : undefined,
+            rejectedReason:
+              decision === "REJECT" ? reviewForm.rejectedReason : undefined,
+            avatarDataUrl: reviewForm.avatarDataUrl || undefined,
+            grantManagerAccess:
+              decision === "APPROVE"
+                ? reviewForm.grantManagerAccess
+                : undefined,
+          }),
+        },
+      );
       setSelectedInvitation(null);
+      if (
+        decision === "APPROVE" &&
+        response.generatedPassword &&
+        response.email
+      ) {
+        setApprovalCredentials({
+          email: response.email,
+          password: response.generatedPassword,
+        });
+      }
       setPageMessage(
         decision === "APPROVE"
           ? "Анкета сотрудника подтверждена."
@@ -988,6 +1168,20 @@ const Employees = () => {
       method: "POST",
       token: session.accessToken,
       body: JSON.stringify({ employeeIds }),
+    });
+  }
+
+  async function updateGroup(
+    groupId: string,
+    payload: { name: string; description: string },
+  ) {
+    const session = getSession();
+    if (!session) return;
+
+    await apiRequest(`/collaboration/groups/${groupId}`, {
+      method: "PATCH",
+      token: session.accessToken,
+      body: JSON.stringify(payload),
     });
   }
 
@@ -1084,19 +1278,46 @@ const Employees = () => {
     setTaskSubmitting(true);
 
     try {
-      await apiRequest<TaskItem[]>("/collaboration/tasks", {
-        method: "POST",
-        token: session.accessToken,
-        body: JSON.stringify({
-          title: taskDraft.title,
-          description: taskDraft.description || undefined,
-          priority: taskDraft.priority,
-          dueAt: taskDraft.dueAt || undefined,
-          assigneeEmployeeId:
-            taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
-          groupId: taskDialog.mode === "group" ? taskDialog.targetId : undefined,
-        }),
-      });
+      if (taskDraft.isRecurring) {
+        await apiRequest("/collaboration/task-templates", {
+          method: "POST",
+          token: session.accessToken,
+          body: JSON.stringify({
+            title: taskDraft.title,
+            description: taskDraft.description || undefined,
+            priority: taskDraft.priority,
+            requiresPhoto: taskDraft.requiresPhoto || undefined,
+            expandOnDemand: true,
+            frequency: taskDraft.frequency,
+            weekDays:
+              taskDraft.frequency === "WEEKLY" ? taskDraft.weekDays : undefined,
+            startDate:
+              taskDraft.startDate || new Date().toISOString().split("T")[0],
+            endDate: taskDraft.endDate || undefined,
+            dueAfterDays: 0,
+            assigneeEmployeeId:
+              taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
+            groupId:
+              taskDialog.mode === "group" ? taskDialog.targetId : undefined,
+          }),
+        });
+      } else {
+        await apiRequest<TaskItem[]>("/collaboration/tasks", {
+          method: "POST",
+          token: session.accessToken,
+          body: JSON.stringify({
+            title: taskDraft.title,
+            description: taskDraft.description || undefined,
+            priority: taskDraft.priority,
+            requiresPhoto: taskDraft.requiresPhoto || undefined,
+            dueAt: taskDraft.dueAt || undefined,
+            assigneeEmployeeId:
+              taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
+            groupId:
+              taskDialog.mode === "group" ? taskDialog.targetId : undefined,
+          }),
+        });
+      }
 
       setTaskDialog(null);
       setTaskDraft(initialTaskDraft);
@@ -1123,31 +1344,92 @@ const Employees = () => {
     if (!group) return;
 
     setGroupError(null);
+    setGroupDeleteConfirmOpen(false);
     setGroupEditorId(groupId);
+    setGroupEditorName(group.name);
+    setGroupEditorDescription(group.description ?? "");
     setGroupEditorMembers(
       group.memberships.map((membership) => membership.employeeId),
     );
   }
 
-  async function handleSaveGroupMembers() {
-    if (!groupEditorId) return;
+  async function handleSaveGroup() {
+    if (!groupEditorId || !groupEditor) return;
+
+    const normalizedName = groupEditorName.trim();
+    const normalizedDescription = groupEditorDescription.trim();
+
+    if (!normalizedName) {
+      setGroupError("Укажите название группы.");
+      return;
+    }
 
     setGroupSaving(true);
     setGroupError(null);
 
     try {
-      await updateGroupMembers(groupEditorId, groupEditorMembers);
+      const uniqueMembers = Array.from(new Set(groupEditorMembers));
+      const currentMemberIds = groupEditor.memberships.map(
+        (membership) => membership.employeeId,
+      );
+      const detailsChanged =
+        groupEditor.name !== normalizedName ||
+        (groupEditor.description ?? "") !== normalizedDescription;
+      const membersChanged =
+        currentMemberIds.length !== uniqueMembers.length ||
+        currentMemberIds.some((id) => !uniqueMembers.includes(id)) ||
+        uniqueMembers.some((id) => !currentMemberIds.includes(id));
+
+      if (detailsChanged) {
+        await updateGroup(groupEditorId, {
+          name: normalizedName,
+          description: normalizedDescription,
+        });
+      }
+
+      if (membersChanged) {
+        await updateGroupMembers(groupEditorId, uniqueMembers);
+      }
+
       setGroupEditorId(null);
-      setPageMessage("Состав группы обновлён.");
+      setGroupDeleteConfirmOpen(false);
+      setPageMessage("Группа обновлена.");
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось обновить состав группы.",
+          : "Не удалось обновить группу.",
       );
     } finally {
       setGroupSaving(false);
+    }
+  }
+
+  async function handleDeleteGroup() {
+    const session = getSession();
+    if (!session || !groupEditor) return;
+
+    setGroupDeleting(true);
+    setGroupError(null);
+
+    try {
+      await apiRequest(`/collaboration/groups/${groupEditor.id}`, {
+        method: "DELETE",
+        token: session.accessToken,
+      });
+      setGroupDeleteConfirmOpen(false);
+      setGroupEditorId(null);
+      setPageMessage("Группа удалена.");
+      await loadDirectory();
+    } catch (requestError) {
+      setGroupError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось удалить группу.",
+      );
+    } finally {
+      setGroupDeleting(false);
     }
   }
 
@@ -1246,8 +1528,12 @@ const Employees = () => {
             ) : null}
           </div>
 
-          {pageMessage ? <div className="success-box mb-4">{pageMessage}</div> : null}
-          {directoryError ? <div className="error-box mb-4">{directoryError}</div> : null}
+          {pageMessage ? (
+            <div className="success-box mb-4">{pageMessage}</div>
+          ) : null}
+          {directoryError ? (
+            <div className="error-box mb-4">{directoryError}</div>
+          ) : null}
 
           {!invitationsLoading && pendingInvitations.length > 0 ? (
             <div className="mb-4 space-y-2">
@@ -1333,11 +1619,12 @@ const Employees = () => {
                     className="overflow-hidden rounded-xl border border-border"
                     key={group.id}
                   >
-                    <button
-                      className="flex w-full items-center justify-between bg-secondary/30 p-3 transition-colors hover:bg-secondary/50"
-                      onClick={() => toggleGroup(group.id)}
-                    >
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between bg-secondary/30 p-3 transition-colors hover:bg-secondary/50">
+                      <button
+                        className="flex flex-1 items-center gap-3 text-left"
+                        onClick={() => toggleGroup(group.id)}
+                        type="button"
+                      >
                         {isOpen ? (
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         ) : (
@@ -1350,11 +1637,8 @@ const Employees = () => {
                           <Users className="h-3.5 w-3.5" />
                           {members.length}
                         </span>
-                      </div>
-                      <div
-                        className="flex items-center gap-1.5"
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                      </button>
+                      <div className="flex items-center gap-1.5">
                         <Button
                           className="h-7 rounded-lg px-2 text-xs font-heading"
                           onClick={() => openGroupEditor(group.id)}
@@ -1365,14 +1649,16 @@ const Employees = () => {
                         </Button>
                         <Button
                           className="h-7 rounded-lg px-2 text-xs font-heading"
-                          onClick={() => openTaskDialogForGroup(group.id, group.name)}
+                          onClick={() =>
+                            openTaskDialogForGroup(group.id, group.name)
+                          }
                           size="sm"
                           variant="ghost"
                         >
                           <ListTodo className="h-3 w-3" /> Задача группе
                         </Button>
                       </div>
-                    </button>
+                    </div>
                     {isOpen && members.length > 0 ? (
                       <table className="w-full text-sm">
                         <TableHead />
@@ -1460,15 +1746,22 @@ const Employees = () => {
                   Код компании
                 </div>
                 <div className="flex gap-2">
-                  <Input readOnly value={employeeJoinCode || "Сначала настройте организацию"} />
+                  <Input
+                    readOnly
+                    value={employeeJoinCode || "Сначала настройте организацию"}
+                  />
                   <Button
                     disabled={!employeeJoinCode}
-                    onClick={() => void copyInviteValue(employeeJoinCode, "code")}
+                    onClick={() =>
+                      void copyInviteValue(employeeJoinCode, "code")
+                    }
                     type="button"
                     variant="outline"
                   >
                     <Copy className="mr-2 h-4 w-4" />
-                    {copiedInviteField === "code" ? "Скопировано" : "Копировать"}
+                    {copiedInviteField === "code"
+                      ? "Скопировано"
+                      : "Копировать"}
                   </Button>
                 </div>
               </div>
@@ -1479,19 +1772,33 @@ const Employees = () => {
                   Mobile join link
                 </div>
                 <div className="flex gap-2">
-                  <Input readOnly value={employeeJoinLink || "Ссылка появится после настройки организации"} />
+                  <Input
+                    readOnly
+                    value={
+                      employeeJoinLink ||
+                      "Ссылка появится после настройки организации"
+                    }
+                  />
                   <Button
                     disabled={!employeeJoinLink}
-                    onClick={() => void copyInviteValue(employeeJoinLink, "link")}
+                    onClick={() =>
+                      void copyInviteValue(employeeJoinLink, "link")
+                    }
                     type="button"
                     variant="outline"
                   >
                     <Copy className="mr-2 h-4 w-4" />
-                    {copiedInviteField === "link" ? "Скопировано" : "Копировать"}
+                    {copiedInviteField === "link"
+                      ? "Скопировано"
+                      : "Копировать"}
                   </Button>
                   {employeeJoinLink ? (
                     <Button asChild type="button" variant="outline">
-                      <a href={employeeJoinLink} rel="noreferrer" target="_blank">
+                      <a
+                        href={employeeJoinLink}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     </Button>
@@ -1501,8 +1808,10 @@ const Employees = () => {
             </div>
 
             <div className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-              Если не хотите зависеть от email-сервиса, просто отправьте сотруднику код
-              компании. Он сможет сам зарегистрироваться в мобильном приложении.
+              Если не хотите зависеть от email-сервиса, просто отправьте
+              сотруднику код компании. Он сможет сам зарегистрироваться в
+              мобильном приложении. Менеджерский доступ задаётся на этапе
+              подтверждения анкеты.
             </div>
 
             <label className="grid gap-2 text-sm font-heading">
@@ -1513,7 +1822,9 @@ const Employees = () => {
                 value={inviteEmail}
               />
             </label>
-            {inviteError ? <div className="error-box">{inviteError}</div> : null}
+            {inviteError ? (
+              <div className="error-box">{inviteError}</div>
+            ) : null}
             {inviteSuccess ? (
               <div className="success-box">{inviteSuccess}</div>
             ) : null}
@@ -1528,6 +1839,94 @@ const Employees = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setApprovalCredentials(null);
+          }
+        }}
+        open={!!approvalCredentials}
+      >
+        <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-2xl">
+              Доступ сотрудника создан
+            </DialogTitle>
+            <DialogDescription className="font-heading">
+              Отправьте сотруднику эти данные для первого входа. Пароль
+              показывается только один раз.
+            </DialogDescription>
+          </DialogHeader>
+
+          {approvalCredentials ? (
+            <div className="grid gap-4">
+              <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
+                <div className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
+                  Email
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0 break-all text-base font-medium text-foreground">
+                    {approvalCredentials.email}
+                  </div>
+                  <Button
+                    className="shrink-0 rounded-full"
+                    onClick={() =>
+                      void copyInviteValue(approvalCredentials.email, "email")
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {copiedInviteField === "email"
+                      ? "Скопировано"
+                      : "Копировать"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
+                <div className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
+                  Временный пароль
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0 break-all font-mono text-base text-foreground">
+                    {approvalCredentials.password}
+                  </div>
+                  <Button
+                    className="shrink-0 rounded-full"
+                    onClick={() =>
+                      void copyInviteValue(
+                        approvalCredentials.password,
+                        "password",
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {copiedInviteField === "password"
+                      ? "Скопировано"
+                      : "Копировать"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              className="rounded-full"
+              onClick={() => setApprovalCredentials(null)}
+              type="button"
+            >
+              Готово
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1609,7 +2008,7 @@ const Employees = () => {
               </DialogHeader>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Имя</span>
+                  <span>Имя*</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -1622,7 +2021,7 @@ const Employees = () => {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Фамилия</span>
+                  <span>Фамилия*</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -1648,8 +2047,9 @@ const Employees = () => {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Дата рождения</span>
+                  <span>Дата рождения*</span>
                   <DateOfBirthField
+                    className="grid-cols-[72px_84px_84px]"
                     value={reviewForm.birthDate}
                     onChange={(nextValue) =>
                       setReviewForm((current) => ({
@@ -1661,7 +2061,7 @@ const Employees = () => {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Пол</span>
+                  <span>Пол*</span>
                   <AppSelectField
                     value={reviewForm.gender}
                     onValueChange={(value) =>
@@ -1678,7 +2078,7 @@ const Employees = () => {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Телефон</span>
+                  <span>Телефон*</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -1691,27 +2091,39 @@ const Employees = () => {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Смена</span>
+                  <span>Смена*</span>
                   <AppSelectField
                     value={reviewForm.shiftTemplateId}
-                    onValueChange={(value) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        shiftTemplateId: value,
-                      }))
-                    }
+                    onValueChange={(value) => {
+                      if (value === CREATE_SHIFT_TEMPLATE_OPTION) {
+                        setCreateTemplateOpen(true);
+                      } else {
+                        setReviewForm((current) => ({
+                          ...current,
+                          shiftTemplateId: value,
+                        }));
+                      }
+                    }}
                     emptyLabel="Выберите смену"
-                    options={scheduleTemplates.map((template) => ({
-                      value: template.id,
-                      label: `${template.name} · ${template.startsAtLocal}-${template.endsAtLocal} · ${template.location.name}`,
-                    }))}
+                    options={[
+                      ...scheduleTemplates.map((template) => ({
+                        value: template.id,
+                        label: `${template.name} · ${template.startsAtLocal}-${template.endsAtLocal} · ${template.location.name}`,
+                      })),
+                      {
+                        value: CREATE_SHIFT_TEMPLATE_OPTION,
+                        label: "+ Добавить смену",
+                      },
+                    ]}
                     triggerClassName={reviewFieldClassName}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>Группа</span>
                   <AppSelectField
-                    value={reviewForm.groupId === "__none" ? "" : reviewForm.groupId}
+                    value={
+                      reviewForm.groupId === "__none" ? "" : reviewForm.groupId
+                    }
                     onValueChange={(value) =>
                       setReviewForm((current) => ({
                         ...current,
@@ -1726,6 +2138,20 @@ const Employees = () => {
                     triggerClassName={reviewFieldClassName}
                   />
                 </label>
+                <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-heading sm:col-span-2">
+                  <Checkbox
+                    checked={reviewForm.grantManagerAccess}
+                    onCheckedChange={(value) =>
+                      setReviewForm((current) => ({
+                        ...current,
+                        grantManagerAccess: value === true,
+                      }))
+                    }
+                  />
+                  <span className="font-semibold text-foreground">
+                    Выдать менеджерский доступ
+                  </span>
+                </label>
               </div>
               <ImageAdjustField
                 dialogDescription="Подгони фото сотрудника перед подтверждением анкеты."
@@ -1733,37 +2159,28 @@ const Employees = () => {
                 onChange={handleReviewAvatar}
                 onError={setReviewError}
                 previewAlt="Аватар сотрудника"
-                renderTrigger={({ chooseFile, hasValue, openEditor, previewSrc }) => (
+                renderTrigger={({
+                  chooseFile,
+                  hasValue,
+                  openEditor,
+                  previewSrc,
+                }) => (
                   <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
-                    <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+                    <div className="flex flex-col items-center gap-3">
                       {previewSrc ? (
                         <img
                           alt="Аватар сотрудника"
-                          className="h-32 w-full rounded-xl object-cover"
+                          className="h-32 w-32 rounded-xl object-cover"
                           src={previewSrc}
                         />
                       ) : (
-                        <div className="flex h-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
+                        <div className="flex h-32 w-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
                           Нет фото
                         </div>
                       )}
-                      <Button
-                        className="mt-3 w-full rounded-xl font-heading"
-                        onClick={hasValue ? openEditor : chooseFile}
-                        type="button"
-                        variant="outline"
-                      >
-                        {hasValue ? "Отрегулировать фото" : "Выбрать фото"}
-                      </Button>
                     </div>
                     <div className="grid gap-2 text-sm font-heading">
-                      <span>Email</span>
-                      <Input
-                        className={reviewFieldClassName}
-                        disabled
-                        value={selectedInvitation.email}
-                      />
-                      <span className="mt-2">Фото</span>
+                      <span>Фото</span>
                       <div className={reviewInfoBoxClassName}>
                         {hasValue
                           ? "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб."
@@ -1789,6 +2206,12 @@ const Employees = () => {
                           </Button>
                         ) : null}
                       </div>
+                      <span className="mt-2">Email</span>
+                      <Input
+                        className={reviewFieldClassName}
+                        disabled
+                        value={selectedInvitation.email}
+                      />
                       <span className="mt-2">Причина отклонения</span>
                       <Input
                         className={reviewFieldClassName}
@@ -1806,10 +2229,12 @@ const Employees = () => {
                 )}
                 value={reviewForm.avatarPreview || null}
               />
-              {reviewError ? <div className="error-box">{reviewError}</div> : null}
+              {reviewError ? (
+                <div className="error-box">{reviewError}</div>
+              ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
-                  className="rounded-xl font-heading"
+                  className="rounded-xl font-heading text-[color:var(--danger)] hover:text-[color:var(--danger)]"
                   disabled={reviewSubmitting}
                   onClick={() => void submitReview("REJECT")}
                   variant="outline"
@@ -1827,6 +2252,116 @@ const Employees = () => {
               </div>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          setCreateTemplateOpen(open);
+          if (!open) setCreateTemplateError(null);
+        }}
+        open={createTemplateOpen}
+      >
+        <DialogContent className="w-[min(480px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-2xl">
+              Создать шаблон смены
+            </DialogTitle>
+            <DialogDescription className="font-heading">
+              Новый шаблон появится в списке и будет автоматически выбран для
+              этого сотрудника.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[11px] font-heading font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]/75">
+                Название шаблона
+              </label>
+              <Input
+                className="h-12 rounded-2xl border-[color:var(--accent)]/15 bg-[color:var(--soft-accent)]/35 px-4 font-heading text-lg placeholder:font-heading placeholder:text-muted-foreground/65 focus-visible:ring-[color:var(--accent)]/20"
+                onChange={(event) =>
+                  setTemplateDraft((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="Например: Утренняя смена"
+                value={templateDraft.name}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                onChange={(event) =>
+                  setTemplateDraft((current) => ({
+                    ...current,
+                    startsAtLocal: event.target.value,
+                  }))
+                }
+                type="time"
+                value={templateDraft.startsAtLocal}
+              />
+              <Input
+                onChange={(event) =>
+                  setTemplateDraft((current) => ({
+                    ...current,
+                    endsAtLocal: event.target.value,
+                  }))
+                }
+                type="time"
+                value={templateDraft.endsAtLocal}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Рабочие дни
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Выберите дни недели, по которым проходит смена
+                </p>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(
+                  (label, index) => {
+                    const day = index + 1;
+                    const active = templateDraft.weekDays.includes(day);
+
+                    return (
+                      <button
+                        className={`h-10 rounded-xl border text-sm font-medium transition-colors ${
+                          active
+                            ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
+                            : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                        }`}
+                        key={label}
+                        onClick={() => toggleTemplateWeekDay(day)}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+
+            {createTemplateError ? (
+              <div className="error-box">{createTemplateError}</div>
+            ) : null}
+
+            <div className="flex justify-end pt-2">
+              <Button
+                className="rounded-xl font-heading"
+                disabled={createTemplateSubmitting}
+                onClick={() => void handleCreateTemplate()}
+                type="button"
+              >
+                {createTemplateSubmitting ? "Создаём..." : "Создать шаблон"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -2009,7 +2544,8 @@ const Employees = () => {
                             Провайдер
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
-                            {selectedEmployeeBiometric?.profile?.provider || "—"}
+                            {selectedEmployeeBiometric?.profile?.provider ||
+                              "—"}
                           </p>
                         </div>
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
@@ -2042,7 +2578,8 @@ const Employees = () => {
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeBiometric?.profile?.lastVerifiedAt
                             ? new Date(
-                                selectedEmployeeBiometric.profile.lastVerifiedAt,
+                                selectedEmployeeBiometric.profile
+                                  .lastVerifiedAt,
                               ).toLocaleString("ru-RU")
                             : "—"}
                         </p>
@@ -2072,7 +2609,8 @@ const Employees = () => {
                           Версия согласия
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
-                          {selectedEmployeeBiometric?.profile?.consentVersion || "—"}
+                          {selectedEmployeeBiometric?.profile?.consentVersion ||
+                            "—"}
                         </p>
                       </div>
                     </div>
@@ -2094,7 +2632,10 @@ const Employees = () => {
                     className="flex-1 rounded-xl border-border font-heading"
                     onClick={() => {
                       setSelectedEmployeeId(null);
-                      window.setTimeout(() => openMoveDialog(selectedEmployee), 0);
+                      window.setTimeout(
+                        () => openMoveDialog(selectedEmployee),
+                        0,
+                      );
                     }}
                     variant="outline"
                   >
@@ -2185,7 +2726,9 @@ const Employees = () => {
         <DialogContent className="w-[min(620px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {taskDialog?.mode === "group" ? "Задача группе" : "Назначить задачу"}
+              {taskDialog?.mode === "group"
+                ? "Задача группе"
+                : "Назначить задачу"}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {taskDialog
@@ -2239,33 +2782,160 @@ const Employees = () => {
                   triggerClassName="h-11 rounded-xl bg-secondary/30"
                 />
               </label>
-              <label className="grid gap-2 text-sm font-heading">
-                <span>Срок</span>
-                <Input
-                  className="h-11"
-                  onChange={(event) =>
+              {!taskDraft.isRecurring ? (
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Срок</span>
+                  <Input
+                    className="h-11"
+                    onChange={(event) =>
+                      setTaskDraft((current) => ({
+                        ...current,
+                        dueAt: event.target.value,
+                      }))
+                    }
+                    type="datetime-local"
+                    value={taskDraft.dueAt}
+                  />
+                  {taskDialog?.mode === "employee" &&
+                  canCheckWorkdays &&
+                  taskDayStatus ? (
+                    <span
+                      className={`rounded-2xl px-3 py-2 text-xs font-heading ${
+                        taskDayStatus.isWorkday
+                          ? "bg-[color:var(--soft-success)] text-[color:var(--success)]"
+                          : "bg-[color:var(--soft-warning)] text-[color:var(--warning)]"
+                      }`}
+                    >
+                      {formatWorkdayDateLabel(taskDayStatus.dayKey)}:{" "}
+                      {taskDayStatus.isWorkday
+                        ? "рабочий день"
+                        : "выходной день"}
+                    </span>
+                  ) : null}
+                </label>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                <Checkbox
+                  checked={taskDraft.isRecurring}
+                  onCheckedChange={(checked) =>
                     setTaskDraft((current) => ({
                       ...current,
-                      dueAt: event.target.value,
+                      isRecurring: checked === true,
                     }))
                   }
-                  type="datetime-local"
-                  value={taskDraft.dueAt}
                 />
-                {taskDialog?.mode === "employee" && canCheckWorkdays && taskDayStatus ? (
-                  <span
-                    className={`rounded-2xl px-3 py-2 text-xs font-heading ${
-                      taskDayStatus.isWorkday
-                        ? "bg-[color:var(--soft-success)] text-[color:var(--success)]"
-                        : "bg-[color:var(--soft-warning)] text-[color:var(--warning)]"
-                    }`}
-                  >
-                    {formatWorkdayDateLabel(taskDayStatus.dayKey)}:{" "}
-                    {taskDayStatus.isWorkday ? "рабочий день" : "выходной день"}
-                  </span>
-                ) : null}
+                <span className="whitespace-nowrap text-sm font-heading leading-none">
+                  Сделать регулярной задачей
+                </span>
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                <Checkbox
+                  checked={taskDraft.requiresPhoto}
+                  onCheckedChange={(checked) =>
+                    setTaskDraft((current) => ({
+                      ...current,
+                      requiresPhoto: checked === true,
+                    }))
+                  }
+                />
+                <span className="whitespace-nowrap text-sm font-heading leading-none">
+                  Требуется фото-подтверждение
+                </span>
               </label>
             </div>
+            {taskDraft.isRecurring ? (
+              <div className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-dashed border-border p-4 bg-secondary/10">
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Периодичность</span>
+                  <AppSelectField
+                    value={taskDraft.frequency}
+                    onValueChange={(value) =>
+                      setTaskDraft((current) => ({
+                        ...current,
+                        frequency: value as "DAILY" | "WEEKLY" | "MONTHLY",
+                      }))
+                    }
+                    options={[
+                      { value: "DAILY", label: "Ежедневно" },
+                      { value: "WEEKLY", label: "Еженедельно" },
+                      { value: "MONTHLY", label: "Ежемесячно" },
+                    ]}
+                    triggerClassName="h-11 rounded-xl bg-secondary/30"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Начало</span>
+                  <Input
+                    className="h-11"
+                    onChange={(event) =>
+                      setTaskDraft((current) => ({
+                        ...current,
+                        startDate: event.target.value,
+                      }))
+                    }
+                    type="date"
+                    value={taskDraft.startDate}
+                  />
+                </label>
+                {taskDraft.frequency === "WEEKLY" ? (
+                  <label className="col-span-full grid gap-2 text-sm font-heading">
+                    <span>Дни недели</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                        const label =
+                          day === 0
+                            ? "Вс"
+                            : day === 1
+                              ? "Пн"
+                              : day === 2
+                                ? "Вт"
+                                : day === 3
+                                  ? "Ср"
+                                  : day === 4
+                                    ? "Чт"
+                                    : day === 5
+                                      ? "Пт"
+                                      : "Сб";
+                        const isSelected = taskDraft.weekDays.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${isSelected ? "bg-[color:var(--primary)] text-white" : "bg-secondary text-foreground hover:bg-secondary/80"}`}
+                            onClick={() => {
+                              setTaskDraft((current) => ({
+                                ...current,
+                                weekDays: isSelected
+                                  ? current.weekDays.filter((d) => d !== day)
+                                  : [...current.weekDays, day].sort(),
+                              }));
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                ) : null}
+                <label className="col-span-full grid gap-2 text-sm font-heading">
+                  <span>Дата окончания (необязательно)</span>
+                  <Input
+                    className="h-11"
+                    onChange={(event) =>
+                      setTaskDraft((current) => ({
+                        ...current,
+                        endDate: event.target.value,
+                      }))
+                    }
+                    type="date"
+                    value={taskDraft.endDate || ""}
+                  />
+                </label>
+              </div>
+            ) : null}
             {taskError ? <div className="error-box">{taskError}</div> : null}
             <div className="flex justify-end gap-2">
               <Button
@@ -2324,7 +2994,13 @@ const Employees = () => {
       </Dialog>
 
       <Dialog
-        onOpenChange={(open) => !open && setGroupEditorId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGroupEditorId(null);
+            setGroupDeleteConfirmOpen(false);
+            setGroupError(null);
+          }
+        }}
         open={!!groupEditorId}
       >
         <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
@@ -2335,10 +3011,35 @@ const Employees = () => {
                   Изменить группу
                 </DialogTitle>
                 <DialogDescription className="font-heading">
-                  Управление составом группы «{groupEditor.name}».
+                  Измените название, описание и состав группы «
+                  {groupEditor.name}».
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Название группы</span>
+                  <Input
+                    maxLength={120}
+                    onChange={(event) => setGroupEditorName(event.target.value)}
+                    placeholder="Например, Администраторы"
+                    value={groupEditorName}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>Описание</span>
+                  <Textarea
+                    className="min-h-[96px]"
+                    maxLength={500}
+                    onChange={(event) =>
+                      setGroupEditorDescription(event.target.value)
+                    }
+                    placeholder="Короткое описание группы"
+                    value={groupEditorDescription}
+                  />
+                </label>
+                <div className="text-xs font-heading text-muted-foreground">
+                  Состав группы
+                </div>
                 <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
                   {employees.map((employee) => (
                     <label
@@ -2349,7 +3050,10 @@ const Employees = () => {
                         <img
                           alt={employee.name}
                           className="h-10 w-10 rounded-full object-cover"
-                          src={employee.avatarUrl || getMockAvatarDataUrl(employee.name)}
+                          src={
+                            employee.avatarUrl ||
+                            getMockAvatarDataUrl(employee.name)
+                          }
                         />
                         <div className="min-w-0">
                           <p className="truncate font-heading font-medium text-foreground">
@@ -2373,24 +3077,85 @@ const Employees = () => {
                     </label>
                   ))}
                 </div>
-                {groupError ? <div className="error-box">{groupError}</div> : null}
-                <div className="flex justify-end gap-2">
+                {groupError ? (
+                  <div className="error-box">{groupError}</div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button
                     className="rounded-xl font-heading"
-                    onClick={() => setGroupEditorId(null)}
-                    variant="outline"
+                    disabled={groupSaving || groupDeleting}
+                    onClick={() => setGroupDeleteConfirmOpen(true)}
+                    variant="destructive"
                   >
-                    Отмена
+                    <Trash2 className="h-4 w-4" />
+                    Удалить группу
                   </Button>
-                  <Button
-                    className="rounded-xl font-heading"
-                    disabled={groupSaving}
-                    onClick={() => void handleSaveGroupMembers()}
-                  >
-                    {groupSaving ? "Сохраняем..." : "Сохранить состав"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="rounded-xl font-heading"
+                      onClick={() => setGroupEditorId(null)}
+                      variant="outline"
+                    >
+                      Отмена
+                    </Button>
+                    <Button
+                      className="rounded-xl font-heading"
+                      disabled={groupSaving || groupDeleting}
+                      onClick={() => void handleSaveGroup()}
+                    >
+                      {groupSaving ? "Сохраняем..." : "Сохранить"}
+                    </Button>
+                  </div>
                 </div>
               </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={setGroupDeleteConfirmOpen}
+        open={groupDeleteConfirmOpen}
+      >
+        <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          {groupEditor ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-heading text-2xl">
+                  Удалить группу
+                </DialogTitle>
+                <DialogDescription className="font-heading">
+                  Группа «{groupEditor.name}» будет удалена. Сотрудники
+                  останутся в системе без группы, а привязка у задач к этой
+                  группе будет снята.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading text-muted-foreground">
+                В группе: {groupEditor.memberships.length} сотрудник(ов), задач:{" "}
+                {groupEditor._count?.tasks ?? 0}.
+              </div>
+              {groupError ? (
+                <div className="error-box">{groupError}</div>
+              ) : null}
+              <DialogFooter>
+                <Button
+                  className="rounded-xl font-heading"
+                  disabled={groupDeleting}
+                  onClick={() => setGroupDeleteConfirmOpen(false)}
+                  variant="outline"
+                >
+                  Отмена
+                </Button>
+                <Button
+                  className="rounded-xl font-heading"
+                  disabled={groupDeleting}
+                  onClick={() => void handleDeleteGroup()}
+                  variant="destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {groupDeleting ? "Удаляем..." : "Удалить группу"}
+                </Button>
+              </DialogFooter>
             </>
           ) : null}
         </DialogContent>

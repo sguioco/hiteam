@@ -67,6 +67,7 @@ export default function CollaborationPage() {
     locationId: '',
     priority: 'MEDIUM',
     dueAt: '',
+    requiresPhoto: false,
     checklist: [''],
   });
   const [announcementDraft, setAnnouncementDraft] = useState({
@@ -110,6 +111,8 @@ export default function CollaborationPage() {
     departmentId: '',
     locationId: '',
     priority: 'MEDIUM',
+    requiresPhoto: false,
+    expandOnDemand: false,
     frequency: 'DAILY',
     weekDays: [1, 2, 3, 4, 5] as number[],
     dayOfMonth: '1',
@@ -236,6 +239,35 @@ export default function CollaborationPage() {
                 <strong>{task.dueAt ? new Date(task.dueAt).toLocaleDateString() : '—'}</strong>
               </div>
             </div>
+            {task.photoProofs.length ? (
+              <div className="mt-4 flex flex-wrap gap-3">
+                {task.photoProofs.map((proof) => {
+                  const isActive = !proof.deletedAt && !proof.supersededByProofId;
+                  return (
+                    <a
+                      className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--panel)]"
+                      href={proof.url ?? '#'}
+                      key={proof.id}
+                      rel="noreferrer"
+                      style={{ opacity: isActive ? 1 : 0.56 }}
+                      target="_blank"
+                    >
+                      {proof.url ? (
+                        <img
+                          alt={proof.fileName}
+                          className="block h-20 w-20 object-cover"
+                          src={proof.url}
+                        />
+                      ) : (
+                        <div className="flex h-20 w-20 items-center justify-center text-xs text-[color:var(--muted-foreground)]">
+                          No preview
+                        </div>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
@@ -276,6 +308,8 @@ export default function CollaborationPage() {
       departmentId: '',
       locationId: '',
       priority: 'MEDIUM',
+      requiresPhoto: false,
+      expandOnDemand: false,
       frequency: 'DAILY',
       weekDays: [1, 2, 3, 4, 5],
       dayOfMonth: '1',
@@ -304,6 +338,8 @@ export default function CollaborationPage() {
       departmentId: template.department?.id ?? '',
       locationId: template.location?.id ?? '',
       priority: template.priority,
+      requiresPhoto: template.requiresPhoto,
+      expandOnDemand: template.expandOnDemand,
       frequency: template.frequency,
       weekDays: template.weekDaysJson ? (JSON.parse(template.weekDaysJson) as number[]) : [1, 2, 3, 4, 5],
       dayOfMonth: String(template.dayOfMonth ?? 1),
@@ -401,6 +437,7 @@ export default function CollaborationPage() {
         departmentId: taskDraft.targetMode === 'department' ? taskDraft.departmentId || undefined : undefined,
         locationId: taskDraft.targetMode === 'location' ? taskDraft.locationId || undefined : undefined,
         priority: taskDraft.priority,
+        requiresPhoto: taskDraft.requiresPhoto || undefined,
         dueAt: taskDraft.dueAt || undefined,
         checklist: taskDraft.checklist.map((item) => item.trim()).filter((item) => item.length > 0),
       }),
@@ -416,6 +453,7 @@ export default function CollaborationPage() {
       locationId: '',
       priority: 'MEDIUM',
       dueAt: '',
+      requiresPhoto: false,
       checklist: [''],
     });
     setMessage(t('collaboration.taskCreated'));
@@ -438,6 +476,8 @@ export default function CollaborationPage() {
         title: templateDraft.title,
         description: templateDraft.description || undefined,
         priority: templateDraft.priority,
+        requiresPhoto: templateDraft.requiresPhoto || undefined,
+        expandOnDemand: templateDraft.expandOnDemand || undefined,
         frequency: templateDraft.frequency,
         weekDays: templateDraft.frequency === 'WEEKLY' ? templateDraft.weekDays : undefined,
         dayOfMonth: templateDraft.frequency === 'MONTHLY' ? Number(templateDraft.dayOfMonth) : undefined,
@@ -1164,6 +1204,14 @@ export default function CollaborationPage() {
                 ]}
               />
               <input onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))} placeholder={t('collaboration.dueAt')} type="date" value={taskDraft.dueAt} />
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
+                <input
+                  checked={taskDraft.requiresPhoto}
+                  onChange={(event) => setTaskDraft((current) => ({ ...current, requiresPhoto: event.target.checked }))}
+                  type="checkbox"
+                />
+                <span>Требуется фото-подтверждение</span>
+              </label>
               <div className="section-stack compact-stack">
                 <span className="section-kicker">{t('collaboration.checklist')}</span>
                 {taskDraft.checklist.map((item, index) => (
@@ -1269,6 +1317,26 @@ export default function CollaborationPage() {
                   { value: 'URGENT', label: 'URGENT' },
                 ]}
               />
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
+                <input
+                  checked={templateDraft.requiresPhoto}
+                  onChange={(event) =>
+                    setTemplateDraft((current) => ({ ...current, requiresPhoto: event.target.checked }))
+                  }
+                  type="checkbox"
+                />
+                <span>Требуется фото-подтверждение</span>
+              </label>
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
+                <input
+                  checked={templateDraft.expandOnDemand}
+                  onChange={(event) =>
+                    setTemplateDraft((current) => ({ ...current, expandOnDemand: event.target.checked }))
+                  }
+                  type="checkbox"
+                />
+                <span>Разворачивать по дням без создания копий</span>
+              </label>
               <AppSelectField
                 value={templateDraft.frequency}
                 onValueChange={(value) => setTemplateDraft((current) => ({ ...current, frequency: value }))}

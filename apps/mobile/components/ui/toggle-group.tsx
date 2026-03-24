@@ -1,6 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { cn } from '../../lib/cn';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 type ToggleGroupType = 'single';
 
@@ -14,7 +13,6 @@ const ToggleGroupContext = createContext<ToggleGroupContextValue | null>(null);
 
 type ToggleGroupProps = {
   children: ReactNode;
-  className?: string;
   onValueChange?: (value: string) => void;
   type?: ToggleGroupType;
   value?: string;
@@ -22,29 +20,24 @@ type ToggleGroupProps = {
 
 type ToggleGroupItemProps = {
   children: ReactNode;
-  className?: string;
-  textClassName?: string;
   value: string;
 };
 
 export function ToggleGroup({
   children,
-  className,
   onValueChange,
   type = 'single',
   value,
 }: ToggleGroupProps) {
   return (
     <ToggleGroupContext.Provider value={{ onValueChange, type, value }}>
-      <View className={cn('flex-row rounded-[18px] border border-border bg-[#f3f5f9] p-1', className)}>{children}</View>
+      <View style={styles.group}>{children}</View>
     </ToggleGroupContext.Provider>
   );
 }
 
 export function ToggleGroupItem({
   children,
-  className,
-  textClassName,
   value,
 }: ToggleGroupItemProps) {
   const context = useContext(ToggleGroupContext);
@@ -60,17 +53,11 @@ export function ToggleGroupItem({
       accessibilityRole="radio"
       accessibilityState={{ selected: isSelected }}
       onPress={() => context.onValueChange?.(value)}
-      style={{ flex: 1 }}
+      style={styles.pressable}
     >
-      <View
-        className={cn(
-          'flex-1 items-center justify-center rounded-[14px] px-4 py-3',
-          isSelected ? 'bg-white shadow-sm shadow-[#1f2937]/8' : 'bg-transparent',
-          className,
-        )}
-      >
+      <View style={[styles.item, isSelected ? styles.itemSelected : styles.itemIdle]}>
         {typeof children === 'string' ? (
-          <Text className={cn('text-[14px] font-bold', isSelected ? 'text-foreground' : 'text-muted-foreground', textClassName)}>{children}</Text>
+          <Text style={[styles.label, isSelected ? styles.labelSelected : styles.labelIdle]}>{children}</Text>
         ) : (
           children
         )}
@@ -78,3 +65,47 @@ export function ToggleGroupItem({
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  group: {
+    width: '100%',
+    flexDirection: 'row',
+    borderRadius: 999,
+    backgroundColor: '#eef2fb',
+    padding: 4,
+  },
+  pressable: {
+    flex: 1,
+    flexBasis: 0,
+  },
+  item: {
+    minHeight: 40,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  itemIdle: {
+    backgroundColor: 'transparent',
+  },
+  itemSelected: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  labelIdle: {
+    color: '#7a869a',
+  },
+  labelSelected: {
+    color: '#24314b',
+  },
+});

@@ -61,6 +61,29 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString([], {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatDevicePlatform(platform: string, locale: string) {
+  switch (platform) {
+    case 'IOS':
+      return locale === 'ru' ? 'iPhone / iPad' : 'iPhone / iPad';
+    case 'ANDROID':
+      return 'Android';
+    case 'WEB':
+      return locale === 'ru' ? 'Веб / десктоп' : 'Web / desktop';
+    default:
+      return platform;
+  }
+}
+
 export default function EmployeeCardPage() {
   const { locale } = useI18n();
   const params = useParams<{ employeeId: string }>();
@@ -70,23 +93,48 @@ export default function EmployeeCardPage() {
   const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(null);
   const [biometricHistory, setBiometricHistory] = useState<EmployeeBiometricHistoryResponse | null>(null);
   const [tab, setTab] = useState<Tab>('attendance');
+  const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  async function loadEmployeePageData(targetEmployeeId: string) {
+    const session = getSession();
+    if (!session || !targetEmployeeId) return;
+
+    const [employeeData, historyData, anomaliesData, biometricData] = await Promise.all([
+      apiRequest<EmployeeDetails>(`/employees/${targetEmployeeId}`, { token: session.accessToken }),
+      apiRequest<AttendanceHistoryResponse>(`/attendance/employees/${targetEmployeeId}/history`, { token: session.accessToken }),
+      apiRequest<AttendanceAnomalyResponse>(`/attendance/team/anomalies?employeeId=${targetEmployeeId}`, {
+        token: session.accessToken,
+      }),
+      apiRequest<EmployeeBiometricHistoryResponse>(`/biometric/employees/${targetEmployeeId}/history`, { token: session.accessToken }),
+    ]);
+
+    setEmployee(employeeData);
+    setHistory(historyData);
+    setAnomalies(anomaliesData);
+    setBiometricHistory(biometricData);
+  }
 
   useEffect(() => {
-    const session = getSession();
-    if (!session || !employeeId) return;
+    if (!employeeId) return;
 
-    void Promise.all([
-      apiRequest<EmployeeDetails>(`/employees/${employeeId}`, { token: session.accessToken }),
-      apiRequest<AttendanceHistoryResponse>(`/attendance/employees/${employeeId}/history`, { token: session.accessToken }),
-      apiRequest<AttendanceAnomalyResponse>(`/attendance/team/anomalies?employeeId=${employeeId}`, { token: session.accessToken }),
-      apiRequest<EmployeeBiometricHistoryResponse>(`/biometric/employees/${employeeId}/history`, { token: session.accessToken }),
-    ]).then(([employeeData, historyData, anomaliesData, biometricData]) => {
-      setEmployee(employeeData);
-      setHistory(historyData);
-      setAnomalies(anomaliesData);
-      setBiometricHistory(biometricData);
+    void loadEmployeePageData(employeeId).catch(() => {
+      setEmployee(null);
+      setHistory(null);
+      setAnomalies(null);
+      setBiometricHistory(null);
+      setNotice({
+        kind: 'error',
+        text: locale === 'ru' ? 'Не удалось загрузить карточку сотрудника.' : 'Failed to load employee card.',
+      });
     });
   }, [employeeId]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   const tabs: { key: Tab; label: string; icon: typeof User; count?: number }[] = useMemo(
     () => [
@@ -118,6 +166,58 @@ export default function EmployeeCardPage() {
   );
 
   const fullName = employee ? `${employee.firstName} ${employee.lastName}` : '...';
+  const primaryBiometricUrl = useMemo(() => {
+    if (biometricHistory?.profile?.templateUrl) {
+      return biometricHistory.profile.templateUrl;
+    }
+
+    for (const verification of biometricHistory?.verifications ?? []) {
+      const previewArtifact = verification.artifacts.find((artifact) => artifact.url);
+      if (previewArtifact?.url) {
+        return previewArtifact.url;
+      }
+    }
+
+    return null;
+  }, [biometricHistory]);
+
+  async function handleDetachDevice(deviceId: string, deviceLabel: string) {
+    const session = getSession();
+    if (!session || !employeeId) return;
+
+    const confirmed =
+      typeof window === 'undefined' ||
+      window.confirm(
+        locale === 'ru'
+          ? `Отвязать устройство "${deviceLabel}" от сотрудника?`
+          : `Detach "${deviceLabel}" from this employee?`,
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeviceActionId(deviceId);
+
+    try {
+      await apiRequest(`/devices/employees/${employeeId}/${deviceId}`, {
+        method: 'DELETE',
+        token: session.accessToken,
+      });
+      await loadEmployeePageData(employeeId);
+      setNotice({
+        kind: 'success',
+        text: locale === 'ru' ? 'Устройство отвязано.' : 'Device detached.',
+      });
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        text: error instanceof Error ? error.message : locale === 'ru' ? 'Не удалось отвязать устройство.' : 'Failed to detach device.',
+      });
+    } finally {
+      setDeviceActionId(null);
+    }
+  }
 
   return (
     <AdminShell>
@@ -178,6 +278,18 @@ export default function EmployeeCardPage() {
             );
           })}
         </div>
+
+        {notice && (
+          <div
+            className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+              notice.kind === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            {notice.text}
+          </div>
+        )}
 
         {/* Tab Content */}
         <div className="space-y-3">
@@ -274,28 +386,74 @@ export default function EmployeeCardPage() {
           {tab === 'biometric' && (
             <>
               {biometricHistory?.profile && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                   <div className="rounded-2xl border border-border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</p>
-                    <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrollmentStatus}</p>
+                    <div className="mb-3 flex items-center gap-2">
+                      <ScanFace className="size-4 text-accent" />
+                      <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                        {locale === 'ru' ? 'Основная биометрия' : 'Primary biometric'}
+                      </h3>
+                    </div>
+                    {primaryBiometricUrl ? (
+                      <img
+                        alt={locale === 'ru' ? 'Основное лицо сотрудника' : 'Primary employee face'}
+                        className="h-72 w-full rounded-2xl object-cover"
+                        src={primaryBiometricUrl}
+                      />
+                    ) : (
+                      <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+                        {locale === 'ru' ? 'Основное лицо ещё не загружено в хранилище.' : 'Primary face is not available in storage yet.'}
+                      </div>
+                    )}
+                    <div className="mt-4 space-y-2 text-sm">
+                      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2">
+                        <span className="text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</span>
+                        <span className="font-medium text-foreground">{biometricHistory.profile.enrollmentStatus}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2">
+                        <span className="text-muted-foreground">{locale === 'ru' ? 'Провайдер' : 'Provider'}</span>
+                        <span className="font-medium text-foreground">{biometricHistory.profile.provider}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Провайдер' : 'Provider'}</p>
-                    <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.provider}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Зарегистрирован' : 'Enrolled at'}</p>
-                    <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrolledAt ? formatDate(biometricHistory.profile.enrolledAt) : '—'}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Последняя проверка' : 'Last verified'}</p>
-                    <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.lastVerifiedAt ? formatDate(biometricHistory.profile.lastVerifiedAt) : '—'}</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-2xl border border-border bg-card p-4">
+                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</p>
+                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrollmentStatus}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-card p-4">
+                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Провайдер' : 'Provider'}</p>
+                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.provider}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-card p-4">
+                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Зарегистрирован' : 'Enrolled at'}</p>
+                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrolledAt ? formatDate(biometricHistory.profile.enrolledAt) : '—'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-card p-4">
+                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Последняя проверка' : 'Last verified'}</p>
+                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.lastVerifiedAt ? formatDate(biometricHistory.profile.lastVerifiedAt) : '—'}</p>
+                    </div>
                   </div>
                 </div>
               )}
 
               {biometricHistory && biometricHistory.verifications.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
+                    <div>
+                      <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-foreground">
+                        {locale === 'ru' ? 'История верификаций' : 'Verification history'}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {locale === 'ru'
+                          ? 'Все проверки лица сотрудника и связанные события посещаемости.'
+                          : 'All face verification attempts and linked attendance events.'}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent">
+                      {biometricHistory.verifications.length}
+                    </span>
+                  </div>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/30 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -310,7 +468,11 @@ export default function EmployeeCardPage() {
                     <tbody className="divide-y divide-border">
                       {biometricHistory.verifications.map((v) => (
                         <tr className="transition-colors hover:bg-muted/20" key={v.id}>
-                          <td className="px-4 py-3 font-medium">{formatDate(v.capturedAt)}<br /><span className="text-xs text-muted-foreground">{formatTime(v.capturedAt)}</span></td>
+                          <td className="px-4 py-3 font-medium">
+                            {formatDate(v.capturedAt)}
+                            <br />
+                            <span className="text-xs text-muted-foreground">{formatTime(v.capturedAt)}</span>
+                          </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                               v.result === 'PASSED' ? 'bg-green-50 text-green-700' :
@@ -323,7 +485,9 @@ export default function EmployeeCardPage() {
                           </td>
                           <td className="px-4 py-3">{v.livenessScore !== null ? `${Math.round(v.livenessScore * 100)}%` : '—'}</td>
                           <td className="px-4 py-3">{v.matchScore !== null ? `${Math.round(v.matchScore * 100)}%` : '—'}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{v.attendanceEvent ? `${v.attendanceEvent.eventType} ${formatTime(v.attendanceEvent.occurredAt)}` : '—'}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {v.attendanceEvent ? `${v.attendanceEvent.eventType} ${formatDateTime(v.attendanceEvent.occurredAt)}` : '—'}
+                          </td>
                           <td className="px-4 py-3 text-xs">{v.manualReviewStatus ?? '—'}</td>
                         </tr>
                       ))}
@@ -395,11 +559,37 @@ export default function EmployeeCardPage() {
                 {employee.devices.length > 0 ? (
                   <div className="space-y-2">
                     {employee.devices.map((device) => (
-                      <div className="flex items-center justify-between rounded-xl bg-muted/30 px-4 py-2.5 text-sm" key={device.id}>
-                        <span className="font-medium">{device.deviceName ?? device.platform}</span>
-                        {device.isPrimary && (
-                          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">Primary</span>
-                        )}
+                      <div className="flex flex-col gap-3 rounded-xl bg-muted/30 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between" key={device.id}>
+                        <div>
+                          <p className="font-medium text-foreground">{device.deviceName ?? formatDevicePlatform(device.platform, locale)}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{formatDevicePlatform(device.platform, locale)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {device.isPrimary && (
+                            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                              {locale === 'ru' ? 'Основное' : 'Primary'}
+                            </span>
+                          )}
+                          <button
+                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={deviceActionId === device.id}
+                            onClick={() =>
+                              void handleDetachDevice(
+                                device.id,
+                                device.deviceName ?? formatDevicePlatform(device.platform, locale),
+                              )
+                            }
+                            type="button"
+                          >
+                            {deviceActionId === device.id
+                              ? locale === 'ru'
+                                ? 'Отвязываем...'
+                                : 'Detaching...'
+                              : locale === 'ru'
+                                ? 'Отвязать устройство'
+                                : 'Detach device'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

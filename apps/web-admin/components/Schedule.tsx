@@ -183,13 +183,9 @@ type CreateShiftDraft = {
 
 type CreateTemplateDraft = {
   name: string;
-  code: string;
-  locationId: string;
-  positionId: string;
   startsAtLocal: string;
   endsAtLocal: string;
   weekDays: number[];
-  gracePeriodMinutes: string;
 };
 
 type MassAssignDraft = {
@@ -303,6 +299,18 @@ function isTodayLocal(value: Date) {
 
 function parseIsoDate(value: string) {
   return new Date(value);
+}
+
+function buildTemplateCode(value: string) {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, "-")
+    .toUpperCase()
+    .slice(0, 24);
+
+  return normalized || "SHIFT";
 }
 
 function formatDateTime(
@@ -439,13 +447,9 @@ function buildRangeDays(dateFrom: string, dateTo: string) {
 
 const initialTemplateDraft: CreateTemplateDraft = {
   name: "",
-  code: "",
-  locationId: "",
-  positionId: "",
   startsAtLocal: "09:00",
   endsAtLocal: "18:00",
   weekDays: [1, 2, 3, 4, 5],
-  gracePeriodMinutes: "10",
 };
 
 const scheduleCopy = {
@@ -501,10 +505,11 @@ const scheduleCopy = {
     },
     createShiftValidation: "Выберите сотрудника, шаблон и дату.",
     shiftCreated: "Смена создана.",
-    templateValidation: "Заполните название, код, локацию, роль и время смены.",
+    templateValidation: "Укажите название, время смены и рабочие дни.",
     templateCreated: "Шаблон смены создан.",
     massAssignValidation: "Выберите шаблон и диапазон дат.",
     templateNotFound: "Шаблон не найден.",
+    templateDefaultsMissing: "Сначала настройте хотя бы одну локацию и должность.",
     invalidRange: "Проверьте диапазон дат для массового назначения.",
     noEligibleEmployees: "Под выбранный шаблон не найдено подходящих сотрудников.",
     massAssignCreated: (count: number) => `Создано ${count} назначений по шаблону.`,
@@ -603,10 +608,11 @@ const scheduleCopy = {
     },
     createShiftValidation: "Select an employee, template, and date.",
     shiftCreated: "Shift created.",
-    templateValidation: "Fill in name, code, location, role, and time.",
+    templateValidation: "Fill in the name, shift time, and workdays.",
     templateCreated: "Shift template created.",
     massAssignValidation: "Select a template and date range.",
     templateNotFound: "Template not found.",
+    templateDefaultsMissing: "Set up at least one location and one role first.",
     invalidRange: "Check the date range for bulk assignment.",
     noEligibleEmployees: "No matching employees were found for this template.",
     massAssignCreated: (count: number) => `Created ${count} assignments from the template.`,
@@ -1470,9 +1476,6 @@ export default function Schedule({
     const session = getSession();
     if (
       !templateDraft.name.trim() ||
-      !templateDraft.code.trim() ||
-      !templateDraft.locationId ||
-      !templateDraft.positionId ||
       !templateDraft.startsAtLocal ||
       !templateDraft.endsAtLocal ||
       templateDraft.weekDays.length === 0
@@ -1482,23 +1485,26 @@ export default function Schedule({
     }
 
     if (!session || isMockMode) {
-      const location = locations.find((item) => item.id === templateDraft.locationId);
-      const position = positions.find((item) => item.id === templateDraft.positionId);
+      const location = locations[0];
+      const position = positions[0];
       if (!location || !position) {
-        setMessage(ui.templateNotFound);
+        setMessage(ui.templateDefaultsMissing);
         return;
       }
+      const generatedCode = buildTemplateCode(templateDraft.name.trim());
 
       const createdAt = new Date().toISOString();
       setTemplates((current) => [
         {
           id: `mock-template-${current.length + 1}`,
           name: templateDraft.name.trim(),
-          code: templateDraft.code.trim(),
+          code: current.some((item) => item.code === generatedCode)
+            ? `${generatedCode}-${current.length + 1}`
+            : generatedCode,
           startsAtLocal: templateDraft.startsAtLocal,
           endsAtLocal: templateDraft.endsAtLocal,
           weekDaysJson: JSON.stringify(templateDraft.weekDays),
-          gracePeriodMinutes: Number(templateDraft.gracePeriodMinutes || "10"),
+          gracePeriodMinutes: 10,
           createdAt,
           updatedAt: createdAt,
           location,
@@ -1512,13 +1518,25 @@ export default function Schedule({
     }
 
     try {
+      const location = locations[0];
+      const position = positions[0];
+      if (!location || !position) {
+        setMessage(ui.templateDefaultsMissing);
+        return;
+      }
+
       await apiRequest("/schedule/templates", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
-          ...templateDraft,
+          name: templateDraft.name.trim(),
+          code: buildTemplateCode(templateDraft.name.trim()),
+          locationId: location.id,
+          positionId: position.id,
+          startsAtLocal: templateDraft.startsAtLocal,
+          endsAtLocal: templateDraft.endsAtLocal,
           weekDays: templateDraft.weekDays,
-          gracePeriodMinutes: Number(templateDraft.gracePeriodMinutes || "10"),
+          gracePeriodMinutes: 10,
         }),
       });
 
@@ -2426,20 +2444,12 @@ export default function Schedule({
                         {template.name}
                       </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
-                        {template.position.name}
+                        {template.startsAtLocal}-{template.endsAtLocal}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {template.location.name} · {ui.graceMinutes}{" "}
-                        {template.gracePeriodMinutes} {ui.minutesShort}
-                      </p>
                     </div>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                      {template.code}
-                    </span>
                   </div>
                 </article>
               ))}
@@ -2449,80 +2459,22 @@ export default function Schedule({
               <h2 className="font-heading text-lg font-bold text-foreground">
                 {ui.newTemplate}
               </h2>
-              <Input
-                onChange={(event) =>
-                  setTemplateDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                placeholder={ui.templateName}
-                value={templateDraft.name}
-              />
-              <Input
-                onChange={(event) =>
-                  setTemplateDraft((current) => ({
-                    ...current,
-                    code: event.target.value,
-                  }))
-                }
-                placeholder={ui.templateCode}
-                value={templateDraft.code}
-              />
-
-              <Select
-                onValueChange={(value) =>
-                  setTemplateDraft((current) => ({
-                    ...current,
-                    locationId: value,
-                  }))
-                }
-                value={templateDraft.locationId}
-              >
-                <SelectTrigger>
-                  <SelectTriggerLabel>
-                    {templateDraft.locationId
-                      ? locations.find(
-                          (location) => location.id === templateDraft.locationId,
-                        )?.name
-                      : ui.chooseLocation}
-                  </SelectTriggerLabel>
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                onValueChange={(value) =>
-                  setTemplateDraft((current) => ({
-                    ...current,
-                    positionId: value,
-                  }))
-                }
-                value={templateDraft.positionId}
-              >
-                <SelectTrigger>
-                  <SelectTriggerLabel>
-                    {templateDraft.positionId
-                      ? positions.find(
-                          (position) => position.id === templateDraft.positionId,
-                        )?.name
-                      : ui.chooseRole}
-                  </SelectTriggerLabel>
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map((position) => (
-                    <SelectItem key={position.id} value={position.id}>
-                      {position.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]/75">
+                  {ui.templateName}
+                </p>
+                <Input
+                  className="h-12 rounded-2xl border-[color:var(--accent)]/15 bg-[color:var(--soft-accent)]/35 px-4 font-heading text-lg placeholder:font-heading placeholder:text-muted-foreground/65 focus-visible:ring-[color:var(--accent)]/20"
+                  onChange={(event) =>
+                    setTemplateDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder={ui.templateName}
+                  value={templateDraft.name}
+                />
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Input
@@ -2574,19 +2526,6 @@ export default function Schedule({
                   })}
                 </div>
               </div>
-
-              <Input
-                min="0"
-                onChange={(event) =>
-                  setTemplateDraft((current) => ({
-                    ...current,
-                    gracePeriodMinutes: event.target.value,
-                  }))
-                }
-                placeholder={ui.graceMinutes}
-                type="number"
-                value={templateDraft.gracePeriodMinutes}
-              />
 
               <Button onClick={() => void handleCreateTemplate()} type="button">
                 {ui.createTemplateAction}

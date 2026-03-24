@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, Text, View } from 'react-native';
 import { Screen } from '../../components/ui/screen';
@@ -17,14 +18,18 @@ export default function LanguageScreen() {
     <Screen safeAreaClassName="bg-[#f4f5f9]" contentClassName="px-6 pb-8 pt-4" withGradient>
       <StatusBar backgroundColor="transparent" style="dark" translucent />
 
-      <Pressable
-        className="mb-5 h-9 w-9 items-center justify-center"
-        onPress={() => router.back()}
-      >
-        <Text className="text-[34px] leading-[34px] text-[#24314b]">‹</Text>
-      </Pressable>
+      <View className="mb-7 flex-row items-center">
+        <Pressable
+          className="h-10 w-10 items-center justify-center"
+          onPress={() => router.back()}
+        >
+          <Ionicons color="#24314b" name="chevron-back" size={20} />
+        </Pressable>
 
-      <Text className="mb-6 text-[24px] font-extrabold text-[#24314b]">{t('language.title')}</Text>
+        <Text className="flex-1 pr-10 text-center text-[26px] font-extrabold tracking-[-0.5px] text-[#24314b]">
+          {t('language.title')}
+        </Text>
+      </View>
 
       <View className="gap-3">
         {languageOptions.map((option) => {
@@ -42,7 +47,9 @@ export default function LanguageScreen() {
                 <Text className="text-[24px]">{option.flag}</Text>
                 <Text className="text-[18px] font-semibold text-[#24314b]">{option.label}</Text>
               </View>
-              {isActive ? <Text className="text-[28px] font-extrabold text-[#546cf2]">✓</Text> : null}
+              {isActive ? (
+                <Ionicons color="#3f5ae0" name="checkmark-sharp" size={20} />
+              ) : null}
             </Pressable>
           );
         })}

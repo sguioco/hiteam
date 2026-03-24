@@ -101,7 +101,7 @@ export default function ChatsScreen() {
       ) : null}
 
       <Card className="gap-3">
-        <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('chats.threads')}</Text>
+        <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('chats.threads')}</Text>
         {threads.length ? (
           threads.map((thread) => {
             const isActive = thread.id === selectedThreadId;
@@ -124,12 +124,12 @@ export default function ChatsScreen() {
             );
           })
         ) : (
-          <Text className="text-[15px] leading-6 text-muted">{t('chats.emptyThreads')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{t('chats.emptyThreads')}</Text>
         )}
       </Card>
 
       <Card className="gap-3">
-        <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('chats.messages')}</Text>
+        <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('chats.messages')}</Text>
         {selected ? (
           <>
             {selected.messages.map((message) => (
@@ -144,7 +144,7 @@ export default function ChatsScreen() {
             <Button label={t('chats.send')} onPress={() => void sendMessage()} />
           </>
         ) : (
-          <Text className="text-[15px] leading-6 text-muted">{t('chats.emptySelection')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{t('chats.emptySelection')}</Text>
         )}
       </Card>
     </Screen>

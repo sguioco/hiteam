@@ -133,7 +133,10 @@ export default function RequestsScreen() {
         loadMyTimeOffBalances(),
         loadMyRequests(),
         loadMyRequestCalendar(dateFrom.toISOString(), dateTo.toISOString()),
-        loadMyTasks(),
+        loadMyTasks({
+          dateFrom: dateFrom.toISOString().slice(0, 10),
+          dateTo: dateTo.toISOString().slice(0, 10),
+        }),
       ]);
       setBalances(nextBalances);
       setItems(nextItems);
@@ -313,16 +316,16 @@ export default function RequestsScreen() {
         <View className="gap-2">
           <Badge label={t('requests.eyebrow')} variant="brand" />
           <Text className="text-[30px] font-extrabold text-foreground">{t('requests.title')}</Text>
-          <Text className="text-[15px] leading-6 text-muted">{t('requests.attachmentsHint')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{t('requests.attachmentsHint')}</Text>
         </View>
 
         <View className="flex-row gap-3">
           <Card className="flex-1 gap-1 bg-surface-muted" inset="compact">
-            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.vacationAvailable')}</Text>
+            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.vacationAvailable')}</Text>
             <Text className="text-[28px] font-extrabold text-foreground">{vacationBalance?.availableDays ?? 0}</Text>
           </Card>
           <Card className="flex-1 gap-1 bg-surface-muted" inset="compact">
-            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.personalDayAvailable')}</Text>
+            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.personalDayAvailable')}</Text>
             <Text className="text-[28px] font-extrabold text-foreground">{personalBalance?.availableDays ?? 0}</Text>
           </Card>
         </View>
@@ -344,7 +347,7 @@ export default function RequestsScreen() {
 
       <Card className="gap-4">
         <View className="gap-2">
-          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.newRequest')}</Text>
+          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.newRequest')}</Text>
           <Text className="text-[24px] font-extrabold text-foreground">{t('requests.createAbsenceRequest')}</Text>
         </View>
 
@@ -369,7 +372,7 @@ export default function RequestsScreen() {
 
         {draft.requestType === 'VACATION_CHANGE' ? (
           <View className="gap-2">
-            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.approvedVacationToMove')}</Text>
+            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.approvedVacationToMove')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View className="flex-row gap-2">
                 {approvedVacations.map((item) => {
@@ -405,22 +408,22 @@ export default function RequestsScreen() {
 
         <View className="gap-3">
           <View className="flex-row items-center justify-between gap-3">
-            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.attachments')}</Text>
+            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.attachments')}</Text>
             <Button disabled={attachments.length >= 5} label={t('requests.pickAttachments')} onPress={() => void pickAttachments()} variant="secondary" />
           </View>
-          <Text className="text-[14px] leading-5 text-muted">{t('requests.attachmentTypesHint')}</Text>
+          <Text className="text-[14px] leading-5 text-muted-foreground">{t('requests.attachmentTypesHint')}</Text>
           {attachments.length ? (
             attachments.map((item, index) => (
               <View key={`${item.fileName}-${index}`} className="flex-row items-center justify-between gap-3 rounded-2xl border-2 border-border bg-surface-muted p-3">
                 <View className="flex-1">
                   <Text className="text-[15px] font-semibold text-foreground">{item.fileName}</Text>
-                  <Text className="text-[13px] text-muted">{item.mimeType}</Text>
+                  <Text className="text-[13px] text-muted-foreground">{item.mimeType}</Text>
                 </View>
                 <Button label={t('common.remove')} onPress={() => removeAttachment(index)} variant="ghost" />
               </View>
             ))
           ) : (
-            <Text className="text-[14px] leading-5 text-muted">{t('requests.noAttachments')}</Text>
+            <Text className="text-[14px] leading-5 text-muted-foreground">{t('requests.noAttachments')}</Text>
           )}
         </View>
 
@@ -430,11 +433,11 @@ export default function RequestsScreen() {
       <Card className="gap-4">
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1 gap-1">
-            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.unifiedCalendar')}</Text>
+            <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.unifiedCalendar')}</Text>
             <Text className="text-[24px] font-extrabold text-foreground">
               {calendarMonth.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
             </Text>
-            <Text className="text-[14px] leading-5 text-muted">{t('requests.unifiedCalendarHint')}</Text>
+            <Text className="text-[14px] leading-5 text-muted-foreground">{t('requests.unifiedCalendarHint')}</Text>
           </View>
           <View className="gap-2">
             <Button label={t('tasks.prev')} onPress={() => shiftCalendarMonth(-1)} variant="secondary" />
@@ -444,7 +447,7 @@ export default function RequestsScreen() {
 
         <View className="flex-row justify-between gap-1">
           {Array.from({ length: 7 }, (_, index) => new Date(2026, 0, 5 + index).toLocaleDateString(locale, { weekday: 'short' })).map((label) => (
-            <Text key={label} className="w-[13%] text-center text-[11px] font-bold uppercase tracking-[1px] text-muted">
+            <Text key={label} className="w-[13%] text-center text-[11px] font-bold uppercase tracking-[1px] text-muted-foreground">
               {label}
             </Text>
           ))}
@@ -466,10 +469,10 @@ export default function RequestsScreen() {
                   onPress={() => setSelectedDayKey(dayKey)}
                 >
                   <Text className={`text-[16px] font-extrabold ${isSelected ? 'text-brand-foreground' : 'text-foreground'}`}>{day.getDate()}</Text>
-                  <Text className={`text-[10px] leading-3 ${isSelected ? 'text-brand-foreground' : 'text-muted'}`}>
+                  <Text className={`text-[10px] leading-3 ${isSelected ? 'text-brand-foreground' : 'text-muted-foreground'}`}>
                     {requestCount} {t('requests.absShort')}
                   </Text>
-                  <Text className={`text-[10px] leading-3 ${isSelected ? 'text-brand-foreground' : 'text-muted'}`}>
+                  <Text className={`text-[10px] leading-3 ${isSelected ? 'text-brand-foreground' : 'text-muted-foreground'}`}>
                     {taskCount} {t('requests.tasksShort')}
                   </Text>
                 </Pressable>
@@ -481,7 +484,7 @@ export default function RequestsScreen() {
 
       <Card className="gap-4">
         <View className="gap-1">
-          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.selectedDay')}</Text>
+          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.selectedDay')}</Text>
           <Text className="text-[24px] font-extrabold text-foreground">
             {new Date(`${selectedDayKey}T00:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
           </Text>
@@ -495,7 +498,7 @@ export default function RequestsScreen() {
                 <Text className="text-[14px] leading-5 text-foreground">
                   {formatRequestType(event.request.requestType, t)} • {event.request.status}
                 </Text>
-                <Text className="text-[13px] leading-5 text-muted">
+                <Text className="text-[13px] leading-5 text-muted-foreground">
                   {new Date(event.request.startsOn).toLocaleDateString(locale)} - {new Date(event.request.endsOn).toLocaleDateString(locale)}
                 </Text>
               </Card>
@@ -505,20 +508,20 @@ export default function RequestsScreen() {
                 <Text className="text-[14px] leading-5 text-foreground">
                   {event.task.priority} • {event.task.status}
                 </Text>
-                <Text className="text-[13px] leading-5 text-muted">
+                <Text className="text-[13px] leading-5 text-muted-foreground">
                   {t('requests.due', { dueAt: event.task.dueAt ? new Date(event.task.dueAt).toLocaleString(locale) : '—' })}
                 </Text>
               </Card>
             ),
           )
         ) : (
-          <Text className="text-[15px] leading-6 text-muted">{t('requests.noDayEvents')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{t('requests.noDayEvents')}</Text>
         )}
       </Card>
 
       <Card className="gap-4">
         <View className="gap-1">
-          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.history')}</Text>
+          <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.history')}</Text>
           <Text className="text-[24px] font-extrabold text-foreground">{t('requests.myRequests')}</Text>
         </View>
 
@@ -528,7 +531,7 @@ export default function RequestsScreen() {
               <View className="flex-row items-start justify-between gap-3">
                 <View className="flex-1 gap-1">
                   <Text className="text-[16px] font-extrabold text-foreground">{item.title}</Text>
-                  <Text className="text-[13px] text-muted">{formatRequestType(item.requestType, t)}</Text>
+                  <Text className="text-[13px] text-muted-foreground">{formatRequestType(item.requestType, t)}</Text>
                 </View>
                 <Badge label={item.status} variant="muted" />
               </View>
@@ -538,7 +541,7 @@ export default function RequestsScreen() {
               </Text>
 
               {item.relatedRequest ? (
-                <Text className="text-[13px] leading-5 text-muted">
+                <Text className="text-[13px] leading-5 text-muted-foreground">
                   {t('requests.originalVacation', {
                     range: `${new Date(item.relatedRequest.startsOn).toLocaleDateString(locale)} - ${new Date(item.relatedRequest.endsOn).toLocaleDateString(locale)}`,
                   })}
@@ -547,7 +550,7 @@ export default function RequestsScreen() {
 
               {item.attachments.length ? (
                 <View className="gap-2">
-                  <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.attachments')}</Text>
+                  <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.attachments')}</Text>
                   {item.attachments.map((attachment) => (
                     <Button
                       key={attachment.id}
@@ -560,14 +563,14 @@ export default function RequestsScreen() {
               ) : null}
 
               <View className="gap-2">
-                <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted">{t('requests.approvalTimeline')}</Text>
+                <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.approvalTimeline')}</Text>
                 {item.approvalSteps.map((step) => (
                   <Text key={step.id} className="text-[14px] leading-5 text-foreground">
                     #{step.sequence} {step.approverEmployee.firstName} {step.approverEmployee.lastName} • {step.status}
                   </Text>
                 ))}
                 {item.comments.map((comment) => (
-                  <Text key={comment.id} className="text-[13px] leading-5 text-muted">
+                  <Text key={comment.id} className="text-[13px] leading-5 text-muted-foreground">
                     {comment.authorEmployee.firstName} {comment.authorEmployee.lastName}: {comment.body}
                   </Text>
                 ))}
@@ -582,7 +585,7 @@ export default function RequestsScreen() {
             </Card>
           ))
         ) : (
-          <Text className="text-[15px] leading-6 text-muted">{loading ? t('requests.loading') : t('requests.empty')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{loading ? t('requests.loading') : t('requests.empty')}</Text>
         )}
       </Card>
     </Screen>

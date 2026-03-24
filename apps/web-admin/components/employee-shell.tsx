@@ -25,6 +25,7 @@ import { toAdminHref } from "../lib/admin-routes";
 import { createCollaborationSocket } from "../lib/collaboration-socket";
 import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
+import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { SessionLoader } from "./session-loader";
 
 type NavItem = {
@@ -57,6 +58,11 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
     pinnedAnnouncements: 0,
     totalAttention: 0,
   });
+  const [profile, setProfile] = useState<{
+    firstName?: string | null;
+    lastName?: string | null;
+    avatarUrl?: string | null;
+  } | null>(null);
   const [ready, setReady] = useState(false);
 
   async function loadSummary(currentSession: AuthSession) {
@@ -83,21 +89,34 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
 
     setSession(currentSession);
     setReady(true);
-    void apiRequest<{
-      workspaceAccessAllowed: boolean;
-      invitationStatus: string;
-      submittedAt?: string | null;
-      rejectedReason?: string | null;
-    }>("/employees/me/access-status", {
-      token: currentSession.accessToken,
-    })
-      .then((status) => {
-        setAccessStatus(status);
-        if (!status.workspaceAccessAllowed) {
+    void Promise.allSettled([
+      apiRequest<{
+        workspaceAccessAllowed: boolean;
+        invitationStatus: string;
+        submittedAt?: string | null;
+        rejectedReason?: string | null;
+      }>("/employees/me/access-status", {
+        token: currentSession.accessToken,
+      }),
+      apiRequest<{
+        firstName?: string | null;
+        lastName?: string | null;
+        avatarUrl?: string | null;
+      } | null>("/employees/me", {
+        token: currentSession.accessToken,
+      }),
+    ]).then(([statusResult, profileResult]) => {
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+      }
+
+      if (statusResult.status === "fulfilled") {
+        setAccessStatus(statusResult.value);
+        if (!statusResult.value.workspaceAccessAllowed) {
           return;
         }
 
-        return loadSummary(currentSession).catch(() =>
+        void loadSummary(currentSession).catch(() =>
           setSummary({
             unreadNotifications: 0,
             unreadChats: 0,
@@ -106,15 +125,16 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
             totalAttention: 0,
           }),
         );
-      })
-      .catch(() =>
-        setAccessStatus({
-          workspaceAccessAllowed: currentSession.user.workspaceAccessAllowed,
-          invitationStatus: currentSession.user.workspaceAccessAllowed
-            ? "APPROVED"
-            : "PENDING_APPROVAL",
-        }),
-      );
+        return;
+      }
+
+      setAccessStatus({
+        workspaceAccessAllowed: currentSession.user.workspaceAccessAllowed,
+        invitationStatus: currentSession.user.workspaceAccessAllowed
+          ? "APPROVED"
+          : "PENDING_APPROVAL",
+      });
+    });
   }, [router]);
 
   useEffect(() => {
@@ -285,7 +305,17 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
         <div className="grid gap-2">
           <Link className="sidebar-user-card" href="/employee/profile">
             <div className="sidebar-user-avatar">
-              {session.user.email.slice(0, 2).toUpperCase()}
+              <img
+                alt={profile?.firstName || session.user.email}
+                className="h-full w-full rounded-full object-cover"
+                src={
+                  profile?.avatarUrl ||
+                  getMockAvatarDataUrl(
+                    `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() ||
+                      session.user.email,
+                  )
+                }
+              />
             </div>
             <div className="sidebar-user-copy">
               <strong>Профиль</strong>

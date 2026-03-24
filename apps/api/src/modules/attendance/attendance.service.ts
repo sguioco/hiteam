@@ -43,8 +43,9 @@ export class AttendanceService {
       include: { primaryLocation: true },
     });
 
-    const [shift, policy] = await Promise.all([
+    const [shift, nextShift, policy] = await Promise.all([
       this.scheduleService.findCurrentShift(employee.id),
+      this.scheduleService.findNextShift(employee.id),
       this.prisma.payrollPolicy.findUnique({ where: { tenantId: employee.tenantId } }),
     ]);
 
@@ -86,6 +87,8 @@ export class AttendanceService {
         id: shift?.location.id ?? employee.primaryLocation.id,
         name: shift?.location.name ?? employee.primaryLocation.name,
         radiusMeters: shift?.location.geofenceRadiusMeters ?? employee.primaryLocation.geofenceRadiusMeters,
+        latitude: shift?.location.latitude ?? employee.primaryLocation.latitude,
+        longitude: shift?.location.longitude ?? employee.primaryLocation.longitude,
       },
       shift: shift
         ? {
@@ -93,8 +96,19 @@ export class AttendanceService {
             label: shift.template.name,
             startsAt: shift.startsAt.toISOString(),
             endsAt: shift.endsAt.toISOString(),
+            locationName: shift.location.name,
           }
         : null,
+      nextShift:
+        !shift && nextShift
+          ? {
+              id: nextShift.id,
+              label: nextShift.template.name,
+              startsAt: nextShift.startsAt.toISOString(),
+              endsAt: nextShift.endsAt.toISOString(),
+              locationName: nextShift.location.name,
+            }
+          : null,
       verification: {
         locationRequired: true,
         selfieRequired: true,

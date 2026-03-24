@@ -1,9 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   AnnouncementAudience,
   AnnouncementTemplateFrequency,
@@ -13,28 +14,34 @@ import {
   TaskActivityKind,
   TaskPriority,
   TaskStatus,
-} from '@prisma/client';
-import { AuditService } from '../audit/audit.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { AddTaskCommentDto } from './dto/add-task-comment.dto';
-import { BulkRemindTasksDto } from './dto/bulk-remind-tasks.dto';
-import { CollaborationGateway } from './collaboration.gateway';
-import { CreateAnnouncementDto } from './dto/create-announcement.dto';
-import { CreateAnnouncementTemplateDto } from './dto/create-announcement-template.dto';
-import { CreateChatThreadDto } from './dto/create-chat-thread.dto';
-import { CreateGroupDto } from './dto/create-group.dto';
-import { CreateTaskDto } from './dto/create-task.dto';
-import { CreateTaskTemplateDto } from './dto/create-task-template.dto';
-import { ListManagerTasksQueryDto } from './dto/list-manager-tasks-query.dto';
-import { SendChatMessageDto } from './dto/send-chat-message.dto';
-import { SetGroupMembersDto } from './dto/set-group-members.dto';
-import { SetTaskStatusDto } from './dto/set-task-status.dto';
-import { ToggleAnnouncementTemplateDto } from './dto/toggle-announcement-template.dto';
-import { ToggleTaskTemplateDto } from './dto/toggle-task-template.dto';
-import { UpdateAnnouncementTemplateDto } from './dto/update-announcement-template.dto';
-import { UpdateTaskTemplateDto } from './dto/update-task-template.dto';
-import { UpdateTaskAutomationPolicyDto } from './dto/update-task-automation-policy.dto';
+} from "@prisma/client";
+import { AuditService } from "../audit/audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { AddTaskCommentDto } from "./dto/add-task-comment.dto";
+import { BulkRemindTasksDto } from "./dto/bulk-remind-tasks.dto";
+import { CollaborationGateway } from "./collaboration.gateway";
+import { CreateAnnouncementDto } from "./dto/create-announcement.dto";
+import { CreateAnnouncementTemplateDto } from "./dto/create-announcement-template.dto";
+import { CreateChatThreadDto } from "./dto/create-chat-thread.dto";
+import { CreateGroupDto } from "./dto/create-group.dto";
+import { CreateTaskDto } from "./dto/create-task.dto";
+import { CreateTaskPhotoProofDto } from "./dto/create-task-photo-proof.dto";
+import { CreateTaskTemplateDto } from "./dto/create-task-template.dto";
+import { ListManagerTasksQueryDto } from "./dto/list-manager-tasks-query.dto";
+import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
+import { SendChatMessageDto } from "./dto/send-chat-message.dto";
+import { SetGroupMembersDto } from "./dto/set-group-members.dto";
+import { SetTaskStatusDto } from "./dto/set-task-status.dto";
+import { ToggleAnnouncementTemplateDto } from "./dto/toggle-announcement-template.dto";
+import { ToggleTaskTemplateDto } from "./dto/toggle-task-template.dto";
+import { UpdateAnnouncementTemplateDto } from "./dto/update-announcement-template.dto";
+import { UpdateGroupDto } from "./dto/update-group.dto";
+import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
+import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
+
+const TASK_PHOTO_PROOF_LIMIT = 7;
 
 @Injectable()
 export class CollaborationService {
@@ -43,10 +50,13 @@ export class CollaborationService {
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
     private readonly collaborationGateway: CollaborationGateway,
+    private readonly storageService: StorageService,
   ) {}
 
   async listGroups(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.prisma.workGroup.findMany({
       where: {
@@ -59,7 +69,7 @@ export class CollaborationService {
             employee: true,
           },
           orderBy: {
-            createdAt: 'asc',
+            createdAt: "asc",
           },
         },
         _count: {
@@ -68,13 +78,21 @@ export class CollaborationService {
           },
         },
       },
-      orderBy: [{ name: 'asc' }],
+      orderBy: [{ name: "asc" }],
     });
   }
 
   async createGroup(userId: string, dto: CreateGroupDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const memberEmployeeIds = Array.from(new Set(dto.memberEmployeeIds ?? []));
+    const name = dto.name.trim();
+    const description = dto.description?.trim() || null;
+
+    if (!name) {
+      throw new BadRequestException("Group name is required.");
+    }
 
     if (memberEmployeeIds.length > 0) {
       const members = await this.prisma.employee.count({
@@ -85,37 +103,50 @@ export class CollaborationService {
       });
 
       if (members !== memberEmployeeIds.length) {
-        throw new BadRequestException('Group contains employees outside the current tenant.');
+        throw new BadRequestException(
+          "Group contains employees outside the current tenant.",
+        );
       }
     }
 
-    const group = await this.prisma.workGroup.create({
-      data: {
-        tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
-        name: dto.name,
-        description: dto.description,
-        memberships: {
-          create: memberEmployeeIds.map((employeeId) => ({
-            tenantId: manager.tenantId,
-            employeeId,
-          })),
+    let group;
+    try {
+      group = await this.prisma.workGroup.create({
+        data: {
+          tenantId: manager.tenantId,
+          managerEmployeeId: manager.id,
+          name,
+          description,
+          memberships: {
+            create: memberEmployeeIds.map((employeeId) => ({
+              tenantId: manager.tenantId,
+              employeeId,
+            })),
+          },
         },
-      },
-      include: {
-        memberships: {
-          include: { employee: true },
-          orderBy: { createdAt: 'asc' },
+        include: {
+          memberships: {
+            include: { employee: true },
+            orderBy: { createdAt: "asc" },
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictException("Group with this name already exists.");
+      }
+      throw error;
+    }
 
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'work_group',
+      entityType: "work_group",
       entityId: group.id,
-      action: 'work_group.created',
+      action: "work_group.created",
       metadata: {
         memberEmployeeIds,
       },
@@ -124,17 +155,144 @@ export class CollaborationService {
     return group;
   }
 
-  async setGroupMembers(userId: string, groupId: string, dto: SetGroupMembersDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async updateGroup(userId: string, groupId: string, dto: UpdateGroupDto) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const group = await this.prisma.workGroup.findFirst({
       where: {
         id: groupId,
         tenantId: manager.tenantId,
+        managerEmployeeId: manager.id,
       },
     });
 
     if (!group) {
-      throw new NotFoundException('Group not found.');
+      throw new NotFoundException("Group not found.");
+    }
+
+    const name = dto.name?.trim();
+    const description =
+      dto.description === undefined
+        ? undefined
+        : dto.description.trim() || null;
+
+    if (name !== undefined && !name) {
+      throw new BadRequestException("Group name is required.");
+    }
+
+    let updated;
+    try {
+      updated = await this.prisma.workGroup.update({
+        where: { id: group.id },
+        data: {
+          name,
+          description,
+        },
+        include: {
+          memberships: {
+            include: { employee: true },
+            orderBy: { createdAt: "asc" },
+          },
+          _count: {
+            select: { tasks: true },
+          },
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictException("Group with this name already exists.");
+      }
+      throw error;
+    }
+
+    await this.auditService.log({
+      tenantId: manager.tenantId,
+      actorUserId: userId,
+      entityType: "work_group",
+      entityId: group.id,
+      action: "work_group.updated",
+      metadata: {
+        previousName: group.name,
+        nextName: updated.name,
+        descriptionUpdated: description !== undefined,
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteGroup(userId: string, groupId: string) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+    const group = await this.prisma.workGroup.findFirst({
+      where: {
+        id: groupId,
+        tenantId: manager.tenantId,
+        managerEmployeeId: manager.id,
+      },
+      include: {
+        memberships: {
+          select: {
+            employeeId: true,
+          },
+        },
+        _count: {
+          select: {
+            tasks: true,
+          },
+        },
+      },
+    });
+
+    if (!group) {
+      throw new NotFoundException("Group not found.");
+    }
+
+    await this.prisma.workGroup.delete({
+      where: { id: group.id },
+    });
+
+    await this.auditService.log({
+      tenantId: manager.tenantId,
+      actorUserId: userId,
+      entityType: "work_group",
+      entityId: group.id,
+      action: "work_group.deleted",
+      metadata: {
+        name: group.name,
+        memberEmployeeIds: group.memberships.map(
+          (membership) => membership.employeeId,
+        ),
+        tasksCount: group._count.tasks,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async setGroupMembers(
+    userId: string,
+    groupId: string,
+    dto: SetGroupMembersDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+    const group = await this.prisma.workGroup.findFirst({
+      where: {
+        id: groupId,
+        tenantId: manager.tenantId,
+        managerEmployeeId: manager.id,
+      },
+    });
+
+    if (!group) {
+      throw new NotFoundException("Group not found.");
     }
 
     const employeeIds = Array.from(new Set(dto.employeeIds));
@@ -147,7 +305,9 @@ export class CollaborationService {
       });
 
       if (members !== employeeIds.length) {
-        throw new BadRequestException('Group contains employees outside the current tenant.');
+        throw new BadRequestException(
+          "Group contains employees outside the current tenant.",
+        );
       }
     }
 
@@ -171,7 +331,7 @@ export class CollaborationService {
         include: {
           memberships: {
             include: { employee: true },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: "asc" },
           },
           _count: {
             select: { tasks: true },
@@ -183,9 +343,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'work_group',
+      entityType: "work_group",
       entityId: group.id,
-      action: 'work_group.members_updated',
+      action: "work_group.members_updated",
       metadata: { employeeIds },
     });
 
@@ -193,7 +353,9 @@ export class CollaborationService {
   }
 
   async managerOverview(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     const [groups, tasks, stats] = await Promise.all([
       this.prisma.workGroup.findMany({
@@ -204,13 +366,13 @@ export class CollaborationService {
         include: {
           memberships: {
             include: { employee: true },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: "asc" },
           },
           _count: {
             select: { tasks: true },
           },
         },
-        orderBy: [{ name: 'asc' }],
+        orderBy: [{ name: "asc" }],
       }),
       this.prisma.task.findMany({
         where: {
@@ -218,11 +380,11 @@ export class CollaborationService {
           managerEmployeeId: manager.id,
         },
         include: this.taskInclude(),
-        orderBy: [{ createdAt: 'desc' }],
+        orderBy: [{ createdAt: "desc" }],
         take: 24,
       }),
       this.prisma.task.groupBy({
-        by: ['assigneeEmployeeId', 'status'],
+        by: ["assigneeEmployeeId", "status"],
         where: {
           tenantId: manager.tenantId,
           managerEmployeeId: manager.id,
@@ -233,19 +395,36 @@ export class CollaborationService {
     ]);
 
     const employeeIds = Array.from(
-      new Set(stats.map((item) => item.assigneeEmployeeId).filter((value): value is string => Boolean(value))),
+      new Set(
+        stats
+          .map((item) => item.assigneeEmployeeId)
+          .filter((value): value is string => Boolean(value)),
+      ),
     );
     const employees = employeeIds.length
       ? await this.prisma.employee.findMany({
           where: { id: { in: employeeIds } },
-          select: { id: true, firstName: true, lastName: true, employeeNumber: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
         })
       : [];
-    const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeMap = new Map(
+      employees.map((employee) => [employee.id, employee]),
+    );
 
     const statsMap = new Map<
       string,
-      { total: number; todo: number; inProgress: number; done: number; cancelled: number }
+      {
+        total: number;
+        todo: number;
+        inProgress: number;
+        done: number;
+        cancelled: number;
+      }
     >();
 
     for (const item of stats) {
@@ -261,25 +440,33 @@ export class CollaborationService {
 
       current.total += item._count._all;
       if (item.status === TaskStatus.TODO) current.todo += item._count._all;
-      if (item.status === TaskStatus.IN_PROGRESS) current.inProgress += item._count._all;
+      if (item.status === TaskStatus.IN_PROGRESS)
+        current.inProgress += item._count._all;
       if (item.status === TaskStatus.DONE) current.done += item._count._all;
-      if (item.status === TaskStatus.CANCELLED) current.cancelled += item._count._all;
+      if (item.status === TaskStatus.CANCELLED)
+        current.cancelled += item._count._all;
       statsMap.set(item.assigneeEmployeeId, current);
     }
 
     return {
       groups,
       recentTasks: tasks,
-      employeeStats: Array.from(statsMap.entries()).map(([employeeId, value]) => ({
-        employee: employeeMap.get(employeeId) ?? null,
-        ...value,
-      })),
+      employeeStats: Array.from(statsMap.entries()).map(
+        ([employeeId, value]) => ({
+          employee: employeeMap.get(employeeId) ?? null,
+          ...value,
+        }),
+      ),
     };
   }
 
   async managerAnalytics(userId: string, days = 30) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
-    const windowDays = Number.isFinite(days) ? Math.min(Math.max(days, 1), 365) : 30;
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+    const windowDays = Number.isFinite(days)
+      ? Math.min(Math.max(days, 1), 365)
+      : 30;
     const rangeStart = new Date();
     rangeStart.setDate(rangeStart.getDate() - windowDays);
     const now = new Date();
@@ -288,72 +475,93 @@ export class CollaborationService {
     const dueSoonBoundary = new Date();
     dueSoonBoundary.setDate(dueSoonBoundary.getDate() + 7);
 
-    const [groups, tasks, activeChats, announcementsPublished] = await Promise.all([
-      this.prisma.workGroup.findMany({
-        where: {
-          tenantId: manager.tenantId,
-          managerEmployeeId: manager.id,
-        },
-        include: {
-          memberships: {
-            include: {
-              employee: true,
+    const [groups, tasks, activeChats, announcementsPublished] =
+      await Promise.all([
+        this.prisma.workGroup.findMany({
+          where: {
+            tenantId: manager.tenantId,
+            managerEmployeeId: manager.id,
+          },
+          include: {
+            memberships: {
+              include: {
+                employee: true,
+              },
+              orderBy: {
+                createdAt: "asc",
+              },
             },
-            orderBy: {
-              createdAt: 'asc',
+          },
+          orderBy: [{ name: "asc" }],
+        }),
+        this.prisma.task.findMany({
+          where: {
+            tenantId: manager.tenantId,
+            managerEmployeeId: manager.id,
+            createdAt: {
+              gte: rangeStart,
             },
           },
-        },
-        orderBy: [{ name: 'asc' }],
-      }),
-      this.prisma.task.findMany({
-        where: {
-          tenantId: manager.tenantId,
-          managerEmployeeId: manager.id,
-          createdAt: {
-            gte: rangeStart,
+          include: this.taskInclude(),
+          orderBy: [{ createdAt: "desc" }],
+        }),
+        this.prisma.chatThread.count({
+          where: {
+            tenantId: manager.tenantId,
+            createdByEmployeeId: manager.id,
+            updatedAt: {
+              gte: rangeStart,
+            },
           },
-        },
-        include: this.taskInclude(),
-        orderBy: [{ createdAt: 'desc' }],
-      }),
-      this.prisma.chatThread.count({
-        where: {
-          tenantId: manager.tenantId,
-          createdByEmployeeId: manager.id,
-          updatedAt: {
-            gte: rangeStart,
+        }),
+        this.prisma.announcement.count({
+          where: {
+            tenantId: manager.tenantId,
+            authorEmployeeId: manager.id,
+            createdAt: {
+              gte: rangeStart,
+            },
           },
-        },
-      }),
-      this.prisma.announcement.count({
-        where: {
-          tenantId: manager.tenantId,
-          authorEmployeeId: manager.id,
-          createdAt: {
-            gte: rangeStart,
-          },
-        },
-      }),
-    ]);
+        }),
+      ]);
 
-    const completedTasks = tasks.filter((task) => task.status === TaskStatus.DONE);
-    const activeTasks = tasks.filter((task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED);
-    const overdueTasks = activeTasks.filter((task) => task.dueAt && new Date(task.dueAt) < now);
-    const slaRiskTasks = activeTasks.filter(
-      (task) => task.dueAt && new Date(task.dueAt) >= now && new Date(task.dueAt) <= slaRiskBoundary,
+    const completedTasks = tasks.filter(
+      (task) => task.status === TaskStatus.DONE,
     );
-    const urgentOpenTasks = activeTasks.filter((task) => task.priority === TaskPriority.URGENT);
+    const activeTasks = tasks.filter(
+      (task) =>
+        task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED,
+    );
+    const overdueTasks = activeTasks.filter(
+      (task) => task.dueAt && new Date(task.dueAt) < now,
+    );
+    const slaRiskTasks = activeTasks.filter(
+      (task) =>
+        task.dueAt &&
+        new Date(task.dueAt) >= now &&
+        new Date(task.dueAt) <= slaRiskBoundary,
+    );
+    const urgentOpenTasks = activeTasks.filter(
+      (task) => task.priority === TaskPriority.URGENT,
+    );
     const completedTaskHours = completedTasks
       .map((task) => this.taskCompletionHours(task.createdAt, task.completedAt))
       .filter((value): value is number => value !== null);
-    const totalChecklistItems = tasks.reduce((total, task) => total + task.checklistItems.length, 0);
+    const totalChecklistItems = tasks.reduce(
+      (total, task) => total + task.checklistItems.length,
+      0,
+    );
     const completedChecklistItems = tasks.reduce(
-      (total, task) => total + task.checklistItems.filter((item) => item.isCompleted).length,
+      (total, task) =>
+        total + task.checklistItems.filter((item) => item.isCompleted).length,
       0,
     );
     const assigneeIds = Array.from(
-      new Set(tasks.map((task) => task.assigneeEmployee?.id).filter((value): value is string => Boolean(value))),
+      new Set(
+        tasks
+          .map((task) => task.assigneeEmployee?.id)
+          .filter((value): value is string => Boolean(value)),
+      ),
     );
     const assigneeDepartments = assigneeIds.length
       ? await this.prisma.employee.findMany({
@@ -443,7 +651,9 @@ export class CollaborationService {
 
       current.totalTasks += 1;
       current.checklistTotalCount += task.checklistItems.length;
-      current.checklistDoneCount += task.checklistItems.filter((item) => item.isCompleted).length;
+      current.checklistDoneCount += task.checklistItems.filter(
+        (item) => item.isCompleted,
+      ).length;
 
       if (task.status === TaskStatus.DONE) {
         current.completedTasks += 1;
@@ -451,11 +661,19 @@ export class CollaborationService {
         current.activeTasks += 1;
       }
 
-      if (task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED && task.dueAt && new Date(task.dueAt) < now) {
+      if (
+        task.status !== TaskStatus.DONE &&
+        task.status !== TaskStatus.CANCELLED &&
+        task.dueAt &&
+        new Date(task.dueAt) < now
+      ) {
         current.overdueTasks += 1;
       }
 
-      const completionHours = this.taskCompletionHours(task.createdAt, task.completedAt);
+      const completionHours = this.taskCompletionHours(
+        task.createdAt,
+        task.completedAt,
+      );
       if (completionHours !== null) {
         current.completionHoursTotal += completionHours;
         current.completionHoursCount += 1;
@@ -484,11 +702,19 @@ export class CollaborationService {
           departmentCurrent.activeTasks += 1;
         }
 
-        if (task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED && task.dueAt && new Date(task.dueAt) < now) {
+        if (
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED &&
+          task.dueAt &&
+          new Date(task.dueAt) < now
+        ) {
           departmentCurrent.overdueTasks += 1;
         }
 
-        const departmentCompletionHours = this.taskCompletionHours(task.createdAt, task.completedAt);
+        const departmentCompletionHours = this.taskCompletionHours(
+          task.createdAt,
+          task.completedAt,
+        );
         if (departmentCompletionHours !== null) {
           departmentCurrent.completionHoursTotal += departmentCompletionHours;
           departmentCurrent.completionHoursCount += 1;
@@ -505,11 +731,27 @@ export class CollaborationService {
         completedTasks: item.completedTasks,
         activeTasks: item.activeTasks,
         overdueTasks: item.overdueTasks,
-        completionRate: item.totalTasks > 0 ? Number(((item.completedTasks / item.totalTasks) * 100).toFixed(1)) : 0,
+        completionRate:
+          item.totalTasks > 0
+            ? Number(((item.completedTasks / item.totalTasks) * 100).toFixed(1))
+            : 0,
         averageCompletionHours:
-          item.completionHoursCount > 0 ? Number((item.completionHoursTotal / item.completionHoursCount).toFixed(1)) : null,
+          item.completionHoursCount > 0
+            ? Number(
+                (item.completionHoursTotal / item.completionHoursCount).toFixed(
+                  1,
+                ),
+              )
+            : null,
         checklistCompletionRate:
-          item.checklistTotalCount > 0 ? Number(((item.checklistDoneCount / item.checklistTotalCount) * 100).toFixed(1)) : 0,
+          item.checklistTotalCount > 0
+            ? Number(
+                (
+                  (item.checklistDoneCount / item.checklistTotalCount) *
+                  100
+                ).toFixed(1),
+              )
+            : 0,
       }))
       .sort((left, right) => {
         if (right.completionRate !== left.completionRate) {
@@ -521,21 +763,35 @@ export class CollaborationService {
 
     const groupPerformance = groups.map((group) => {
       const groupTasks = tasks.filter((task) => task.groupId === group.id);
-      const groupCompletedTasks = groupTasks.filter((task) => task.status === TaskStatus.DONE);
-      const groupActiveTasks = groupTasks.filter(
-        (task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED,
+      const groupCompletedTasks = groupTasks.filter(
+        (task) => task.status === TaskStatus.DONE,
       );
-      const groupOverdueTasks = groupActiveTasks.filter((task) => task.dueAt && new Date(task.dueAt) < now);
+      const groupActiveTasks = groupTasks.filter(
+        (task) =>
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED,
+      );
+      const groupOverdueTasks = groupActiveTasks.filter(
+        (task) => task.dueAt && new Date(task.dueAt) < now,
+      );
       const groupCompletionHours = groupCompletedTasks
-        .map((task) => this.taskCompletionHours(task.createdAt, task.completedAt))
+        .map((task) =>
+          this.taskCompletionHours(task.createdAt, task.completedAt),
+        )
         .filter((value): value is number => value !== null);
 
       const members = group.memberships
         .map((membership) => {
-          const memberTasks = groupTasks.filter((task) => task.assigneeEmployeeId === membership.employeeId);
-          const memberCompletedTasks = memberTasks.filter((task) => task.status === TaskStatus.DONE);
+          const memberTasks = groupTasks.filter(
+            (task) => task.assigneeEmployeeId === membership.employeeId,
+          );
+          const memberCompletedTasks = memberTasks.filter(
+            (task) => task.status === TaskStatus.DONE,
+          );
           const memberActiveTasks = memberTasks.filter(
-            (task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED,
+            (task) =>
+              task.status !== TaskStatus.DONE &&
+              task.status !== TaskStatus.CANCELLED,
           );
           const memberOverdueTasks = memberActiveTasks.filter(
             (task) => task.dueAt && new Date(task.dueAt) < now,
@@ -553,7 +809,14 @@ export class CollaborationService {
             activeTasks: memberActiveTasks.length,
             overdueTasks: memberOverdueTasks.length,
             completionRate:
-              memberTasks.length > 0 ? Number(((memberCompletedTasks.length / memberTasks.length) * 100).toFixed(1)) : 0,
+              memberTasks.length > 0
+                ? Number(
+                    (
+                      (memberCompletedTasks.length / memberTasks.length) *
+                      100
+                    ).toFixed(1),
+                  )
+                : 0,
           };
         })
         .sort((left, right) => {
@@ -576,10 +839,24 @@ export class CollaborationService {
         activeTasks: groupActiveTasks.length,
         overdueTasks: groupOverdueTasks.length,
         completionRate:
-          groupTasks.length > 0 ? Number(((groupCompletedTasks.length / groupTasks.length) * 100).toFixed(1)) : 0,
+          groupTasks.length > 0
+            ? Number(
+                (
+                  (groupCompletedTasks.length / groupTasks.length) *
+                  100
+                ).toFixed(1),
+              )
+            : 0,
         averageCompletionHours:
           groupCompletionHours.length > 0
-            ? Number((groupCompletionHours.reduce((total, value) => total + value, 0) / groupCompletionHours.length).toFixed(1))
+            ? Number(
+                (
+                  groupCompletionHours.reduce(
+                    (total, value) => total + value,
+                    0,
+                  ) / groupCompletionHours.length
+                ).toFixed(1),
+              )
             : null,
         members,
       };
@@ -592,9 +869,18 @@ export class CollaborationService {
         completedTasks: item.completedTasks,
         activeTasks: item.activeTasks,
         overdueTasks: item.overdueTasks,
-        completionRate: item.totalTasks > 0 ? Number(((item.completedTasks / item.totalTasks) * 100).toFixed(1)) : 0,
+        completionRate:
+          item.totalTasks > 0
+            ? Number(((item.completedTasks / item.totalTasks) * 100).toFixed(1))
+            : 0,
         averageCompletionHours:
-          item.completionHoursCount > 0 ? Number((item.completionHoursTotal / item.completionHoursCount).toFixed(1)) : null,
+          item.completionHoursCount > 0
+            ? Number(
+                (item.completionHoursTotal / item.completionHoursCount).toFixed(
+                  1,
+                ),
+              )
+            : null,
       }))
       .sort((left, right) => {
         if (right.overdueTasks !== left.overdueTasks) {
@@ -613,13 +899,29 @@ export class CollaborationService {
         activeTasks: activeTasks.length,
         overdueTasks: overdueTasks.length,
         urgentOpenTasks: urgentOpenTasks.length,
-        completionRate: tasks.length > 0 ? Number(((completedTasks.length / tasks.length) * 100).toFixed(1)) : 0,
+        completionRate:
+          tasks.length > 0
+            ? Number(((completedTasks.length / tasks.length) * 100).toFixed(1))
+            : 0,
         averageCompletionHours:
           completedTaskHours.length > 0
-            ? Number((completedTaskHours.reduce((total, value) => total + value, 0) / completedTaskHours.length).toFixed(1))
+            ? Number(
+                (
+                  completedTaskHours.reduce(
+                    (total, value) => total + value,
+                    0,
+                  ) / completedTaskHours.length
+                ).toFixed(1),
+              )
             : null,
         averageChecklistCompletionRate:
-          totalChecklistItems > 0 ? Number(((completedChecklistItems / totalChecklistItems) * 100).toFixed(1)) : 0,
+          totalChecklistItems > 0
+            ? Number(
+                ((completedChecklistItems / totalChecklistItems) * 100).toFixed(
+                  1,
+                ),
+              )
+            : 0,
         groupsCount: groups.length,
         activeChats,
         announcementsPublished,
@@ -635,15 +937,26 @@ export class CollaborationService {
       groupPerformance,
       departmentPerformance,
       deadlineBoard: {
-        overdue: overdueTasks.sort((left, right) => {
-          if (!left.dueAt || !right.dueAt) return 0;
-          return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
-        }).slice(0, 8),
-        dueSoon: activeTasks
-          .filter((task) => task.dueAt && new Date(task.dueAt) >= now && new Date(task.dueAt) <= dueSoonBoundary)
+        overdue: overdueTasks
           .sort((left, right) => {
             if (!left.dueAt || !right.dueAt) return 0;
-            return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
+            return (
+              new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()
+            );
+          })
+          .slice(0, 8),
+        dueSoon: activeTasks
+          .filter(
+            (task) =>
+              task.dueAt &&
+              new Date(task.dueAt) >= now &&
+              new Date(task.dueAt) <= dueSoonBoundary,
+          )
+          .sort((left, right) => {
+            if (!left.dueAt || !right.dueAt) return 0;
+            return (
+              new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()
+            );
           })
           .slice(0, 8),
         urgentOpen: urgentOpenTasks
@@ -651,7 +964,9 @@ export class CollaborationService {
             if (!left.dueAt && !right.dueAt) return 0;
             if (!left.dueAt) return 1;
             if (!right.dueAt) return -1;
-            return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
+            return (
+              new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()
+            );
           })
           .slice(0, 8),
       },
@@ -659,7 +974,9 @@ export class CollaborationService {
   }
 
   async listAnnouncementsForManager(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.prisma.announcement.findMany({
       where: {
@@ -672,13 +989,15 @@ export class CollaborationService {
         location: true,
         targetEmployee: true,
       },
-      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
     });
   }
 
   async listMyAnnouncements(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const memberships = await this.prisma.workGroupMembership.findMany({
       where: {
         employeeId: employee.id,
@@ -694,9 +1013,18 @@ export class CollaborationService {
         tenantId: employee.tenantId,
         OR: [
           { audience: AnnouncementAudience.ALL },
-          { audience: AnnouncementAudience.EMPLOYEE, targetEmployeeId: employee.id },
-          { audience: AnnouncementAudience.DEPARTMENT, departmentId: employee.departmentId },
-          { audience: AnnouncementAudience.LOCATION, locationId: employee.primaryLocationId },
+          {
+            audience: AnnouncementAudience.EMPLOYEE,
+            targetEmployeeId: employee.id,
+          },
+          {
+            audience: AnnouncementAudience.DEPARTMENT,
+            departmentId: employee.departmentId,
+          },
+          {
+            audience: AnnouncementAudience.LOCATION,
+            locationId: employee.primaryLocationId,
+          },
           {
             audience: AnnouncementAudience.GROUP,
             groupId: groupIds.length > 0 ? { in: groupIds } : undefined,
@@ -710,13 +1038,15 @@ export class CollaborationService {
         location: true,
         targetEmployee: true,
       },
-      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
     });
   }
 
   async createAnnouncement(userId: string, dto: CreateAnnouncementDto) {
-    const author = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const author = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     await this.validateAnnouncementTarget(
       author.tenantId,
       dto.audience,
@@ -739,7 +1069,9 @@ export class CollaborationService {
   }
 
   async listAnnouncementTemplates(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.prisma.announcementTemplate.findMany({
       where: {
@@ -752,12 +1084,17 @@ export class CollaborationService {
         location: true,
         targetEmployee: true,
       },
-      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
     });
   }
 
-  async createAnnouncementTemplate(userId: string, dto: CreateAnnouncementTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async createAnnouncementTemplate(
+    userId: string,
+    dto: CreateAnnouncementTemplateDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     await this.validateAnnouncementTarget(
       manager.tenantId,
       dto.audience,
@@ -780,7 +1117,9 @@ export class CollaborationService {
         body: dto.body,
         isPinned: dto.isPinned ?? false,
         frequency: dto.frequency,
-        weekDaysJson: dto.weekDays?.length ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort()) : null,
+        weekDaysJson: dto.weekDays?.length
+          ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort())
+          : null,
         dayOfMonth: dto.dayOfMonth ?? null,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
@@ -798,9 +1137,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'announcement_template',
+      entityType: "announcement_template",
       entityId: template.id,
-      action: 'announcement_template.created',
+      action: "announcement_template.created",
       metadata: {
         frequency: template.frequency,
         audience: template.audience,
@@ -812,8 +1151,14 @@ export class CollaborationService {
     return template;
   }
 
-  async updateAnnouncementTemplate(userId: string, templateId: string, dto: UpdateAnnouncementTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async updateAnnouncementTemplate(
+    userId: string,
+    templateId: string,
+    dto: UpdateAnnouncementTemplateDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.announcementTemplate.findFirst({
       where: {
         id: templateId,
@@ -823,7 +1168,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Announcement template not found.');
+      throw new NotFoundException("Announcement template not found.");
     }
 
     await this.validateAnnouncementTarget(
@@ -847,7 +1192,9 @@ export class CollaborationService {
         body: dto.body,
         isPinned: dto.isPinned ?? false,
         frequency: dto.frequency,
-        weekDaysJson: dto.weekDays?.length ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort()) : null,
+        weekDaysJson: dto.weekDays?.length
+          ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort())
+          : null,
         dayOfMonth: dto.dayOfMonth ?? null,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
@@ -865,9 +1212,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'announcement_template',
+      entityType: "announcement_template",
       entityId: template.id,
-      action: 'announcement_template.updated',
+      action: "announcement_template.updated",
       metadata: {
         frequency: updated.frequency,
         audience: updated.audience,
@@ -879,8 +1226,14 @@ export class CollaborationService {
     return updated;
   }
 
-  async toggleAnnouncementTemplate(userId: string, templateId: string, dto: ToggleAnnouncementTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async toggleAnnouncementTemplate(
+    userId: string,
+    templateId: string,
+    dto: ToggleAnnouncementTemplateDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.announcementTemplate.findFirst({
       where: {
         id: templateId,
@@ -890,7 +1243,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Announcement template not found.');
+      throw new NotFoundException("Announcement template not found.");
     }
 
     const updated = await this.prisma.announcementTemplate.update({
@@ -907,16 +1260,20 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'announcement_template',
+      entityType: "announcement_template",
       entityId: template.id,
-      action: dto.isActive ? 'announcement_template.activated' : 'announcement_template.paused',
+      action: dto.isActive
+        ? "announcement_template.activated"
+        : "announcement_template.paused",
     });
 
     return updated;
   }
 
   async deleteAnnouncementTemplate(userId: string, templateId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.announcementTemplate.findFirst({
       where: {
         id: templateId,
@@ -926,7 +1283,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Announcement template not found.');
+      throw new NotFoundException("Announcement template not found.");
     }
 
     await this.prisma.announcementTemplate.delete({
@@ -936,9 +1293,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'announcement_template',
+      entityType: "announcement_template",
       entityId: template.id,
-      action: 'announcement_template.deleted',
+      action: "announcement_template.deleted",
     });
 
     return { success: true };
@@ -951,10 +1308,13 @@ export class CollaborationService {
     });
 
     if (!manager) {
-      throw new NotFoundException('Manager employee not found.');
+      throw new NotFoundException("Manager employee not found.");
     }
 
-    const generatedTemplateIds = await this.runDueAnnouncementTemplatesForScope(manager, userId);
+    const generatedTemplateIds = await this.runDueAnnouncementTemplatesForScope(
+      manager,
+      userId,
+    );
     return {
       success: true,
       generatedCount: generatedTemplateIds.length,
@@ -976,7 +1336,8 @@ export class CollaborationService {
 
     let generatedCount = 0;
     for (const manager of managers) {
-      const generatedTemplateIds = await this.runDueAnnouncementTemplatesForScope(manager);
+      const generatedTemplateIds =
+        await this.runDueAnnouncementTemplatesForScope(manager);
       generatedCount += generatedTemplateIds.length;
     }
 
@@ -984,37 +1345,53 @@ export class CollaborationService {
   }
 
   async createTask(userId: string, dto: CreateTaskDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     if (!dto.assigneeEmployeeId && !dto.groupId) {
-      throw new BadRequestException('Task must target either an employee or a group.');
+      throw new BadRequestException(
+        "Task must target either an employee or a group.",
+      );
     }
 
     if (dto.assigneeEmployeeId && dto.groupId) {
-      throw new BadRequestException('Task cannot target both an employee and a group at the same time.');
+      throw new BadRequestException(
+        "Task cannot target both an employee and a group at the same time.",
+      );
     }
 
     const dueAt = dto.dueAt ? new Date(dto.dueAt) : null;
 
     if (dueAt && (Number.isNaN(dueAt.getTime()) || dueAt < new Date())) {
-      throw new BadRequestException('Task due date cannot be in the past.');
+      throw new BadRequestException("Task due date cannot be in the past.");
     }
 
-    const checklist = (dto.checklist ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
+    const checklist = (dto.checklist ?? [])
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
 
     const assignees = dto.groupId
       ? await this.resolveGroupAssignees(manager.tenantId, dto.groupId)
-      : await this.resolveDirectAssignee(manager.tenantId, dto.assigneeEmployeeId!);
+      : await this.resolveDirectAssignee(
+          manager.tenantId,
+          dto.assigneeEmployeeId!,
+        );
 
     if (assignees.length === 0) {
-      throw new BadRequestException('Task has no assignees.');
+      throw new BadRequestException("Task has no assignees.");
     }
 
     const tasks = await this.prisma.$transaction(async (tx) => {
       const createdTasks = [];
       const groupThread =
         dto.groupId && assignees.length > 0
-          ? await this.ensureGroupChatThread(tx, manager.tenantId, manager.id, dto.groupId)
+          ? await this.ensureGroupChatThread(
+              tx,
+              manager.tenantId,
+              manager.id,
+              dto.groupId,
+            )
           : null;
 
       for (const assignee of assignees) {
@@ -1027,6 +1404,7 @@ export class CollaborationService {
             title: dto.title,
             description: dto.description,
             priority: dto.priority ?? TaskPriority.MEDIUM,
+            requiresPhoto: dto.requiresPhoto ?? false,
             dueAt,
             checklistItems: {
               create: checklist.map((title, index) => ({
@@ -1040,7 +1418,9 @@ export class CollaborationService {
                 tenantId: manager.tenantId,
                 actorEmployeeId: manager.id,
                 kind: TaskActivityKind.CREATED,
-                body: dto.groupId ? `Assigned via group ${dto.groupId}.` : 'Assigned directly.',
+                body: dto.groupId
+                  ? `Assigned via group ${dto.groupId}.`
+                  : "Assigned directly.",
               },
             },
           },
@@ -1051,7 +1431,12 @@ export class CollaborationService {
 
         const chatThread = dto.groupId
           ? groupThread!
-          : await this.ensureDirectChatThread(tx, manager.tenantId, manager.id, assignee.id);
+          : await this.ensureDirectChatThread(
+              tx,
+              manager.tenantId,
+              manager.id,
+              assignee.id,
+            );
 
         await tx.chatMessage.create({
           data: {
@@ -1074,9 +1459,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_batch',
-      entityId: dto.groupId ?? dto.assigneeEmployeeId ?? tasks[0]?.id ?? 'task',
-      action: 'task.created',
+      entityType: "task_batch",
+      entityId: dto.groupId ?? dto.assigneeEmployeeId ?? tasks[0]?.id ?? "task",
+      action: "task.created",
       metadata: {
         taskCount: tasks.length,
         groupId: dto.groupId ?? null,
@@ -1092,23 +1477,28 @@ export class CollaborationService {
           type: NotificationType.OPERATIONS_ALERT,
           title: `New task: ${task.title}`,
           body: `${manager.firstName} ${manager.lastName} assigned you a task.`,
-          actionUrl: '/employee/tasks',
+          actionUrl: "/employee/tasks",
           metadata: {
             taskId: task.id,
             groupId: task.groupId,
           },
         });
-        this.collaborationGateway.emitThreadUpdated(task.assigneeEmployee.userId, {
-          taskId: task.id,
-        });
+        this.collaborationGateway.emitThreadUpdated(
+          task.assigneeEmployee.userId,
+          {
+            taskId: task.id,
+          },
+        );
       }
     }
 
-    return tasks;
+    return tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
   }
 
   async listTaskTemplates(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.prisma.taskTemplate.findMany({
       where: {
@@ -1121,12 +1511,14 @@ export class CollaborationService {
         location: true,
         assigneeEmployee: true,
       },
-      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
     });
   }
 
   async createTaskTemplate(userId: string, dto: CreateTaskTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     await this.validateTaskTemplateTarget(manager.tenantId, dto);
     const checklist = this.normalizeChecklist(dto.checklist);
 
@@ -1141,8 +1533,12 @@ export class CollaborationService {
         title: dto.title,
         description: dto.description,
         priority: dto.priority ?? TaskPriority.MEDIUM,
+        requiresPhoto: dto.requiresPhoto ?? false,
+        expandOnDemand: dto.expandOnDemand ?? false,
         frequency: dto.frequency,
-        weekDaysJson: dto.weekDays?.length ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort()) : null,
+        weekDaysJson: dto.weekDays?.length
+          ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort())
+          : null,
         dayOfMonth: dto.dayOfMonth ?? null,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
@@ -1162,11 +1558,13 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_template',
+      entityType: "task_template",
       entityId: template.id,
-      action: 'task_template.created',
+      action: "task_template.created",
       metadata: {
         frequency: template.frequency,
+        requiresPhoto: template.requiresPhoto,
+        expandOnDemand: template.expandOnDemand,
         groupId: template.groupId,
         assigneeEmployeeId: template.assigneeEmployeeId,
         departmentId: template.departmentId,
@@ -1177,8 +1575,14 @@ export class CollaborationService {
     return template;
   }
 
-  async updateTaskTemplate(userId: string, templateId: string, dto: UpdateTaskTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async updateTaskTemplate(
+    userId: string,
+    templateId: string,
+    dto: UpdateTaskTemplateDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.taskTemplate.findFirst({
       where: {
         id: templateId,
@@ -1188,7 +1592,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Task template not found.');
+      throw new NotFoundException("Task template not found.");
     }
 
     await this.validateTaskTemplateTarget(manager.tenantId, dto);
@@ -1204,8 +1608,12 @@ export class CollaborationService {
         title: dto.title,
         description: dto.description,
         priority: dto.priority ?? TaskPriority.MEDIUM,
+        requiresPhoto: dto.requiresPhoto ?? template.requiresPhoto,
+        expandOnDemand: dto.expandOnDemand ?? template.expandOnDemand,
         frequency: dto.frequency,
-        weekDaysJson: dto.weekDays?.length ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort()) : null,
+        weekDaysJson: dto.weekDays?.length
+          ? JSON.stringify(Array.from(new Set(dto.weekDays)).sort())
+          : null,
         dayOfMonth: dto.dayOfMonth ?? null,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
@@ -1225,11 +1633,13 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_template',
+      entityType: "task_template",
       entityId: template.id,
-      action: 'task_template.updated',
+      action: "task_template.updated",
       metadata: {
         frequency: updated.frequency,
+        requiresPhoto: updated.requiresPhoto,
+        expandOnDemand: updated.expandOnDemand,
         groupId: updated.groupId,
         assigneeEmployeeId: updated.assigneeEmployeeId,
         departmentId: updated.departmentId,
@@ -1240,8 +1650,14 @@ export class CollaborationService {
     return updated;
   }
 
-  async toggleTaskTemplate(userId: string, templateId: string, dto: ToggleTaskTemplateDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async toggleTaskTemplate(
+    userId: string,
+    templateId: string,
+    dto: ToggleTaskTemplateDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.taskTemplate.findFirst({
       where: {
         id: templateId,
@@ -1251,7 +1667,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Task template not found.');
+      throw new NotFoundException("Task template not found.");
     }
 
     const updated = await this.prisma.taskTemplate.update({
@@ -1270,16 +1686,18 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_template',
+      entityType: "task_template",
       entityId: template.id,
-      action: dto.isActive ? 'task_template.activated' : 'task_template.paused',
+      action: dto.isActive ? "task_template.activated" : "task_template.paused",
     });
 
     return updated;
   }
 
   async runDueTaskTemplates(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.runDueTaskTemplatesForScope({
       tenantId: manager.tenantId,
@@ -1289,7 +1707,9 @@ export class CollaborationService {
   }
 
   async deleteTaskTemplate(userId: string, templateId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const template = await this.prisma.taskTemplate.findFirst({
       where: {
         id: templateId,
@@ -1299,7 +1719,7 @@ export class CollaborationService {
     });
 
     if (!template) {
-      throw new NotFoundException('Task template not found.');
+      throw new NotFoundException("Task template not found.");
     }
 
     await this.prisma.taskTemplate.delete({
@@ -1309,9 +1729,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_template',
+      entityType: "task_template",
       entityId: template.id,
-      action: 'task_template.deleted',
+      action: "task_template.deleted",
     });
 
     return { success: true };
@@ -1326,7 +1746,7 @@ export class CollaborationService {
         tenantId: true,
         managerEmployeeId: true,
       },
-      distinct: ['tenantId', 'managerEmployeeId'],
+      distinct: ["tenantId", "managerEmployeeId"],
     });
 
     for (const scope of templates) {
@@ -1338,7 +1758,9 @@ export class CollaborationService {
   }
 
   async listManagerTasks(userId: string, query: ListManagerTasksQueryDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const now = new Date();
 
     const tasks = await this.prisma.task.findMany({
@@ -1348,44 +1770,64 @@ export class CollaborationService {
         title: query.search
           ? {
               contains: query.search,
-              mode: 'insensitive',
+              mode: "insensitive",
             }
           : undefined,
         status: query.status,
         priority: query.priority,
         groupId: query.groupId,
         assigneeEmployeeId: query.assigneeEmployeeId,
-        assigneeEmployee: query.departmentId || query.locationId
-          ? {
-              departmentId: query.departmentId,
-              primaryLocationId: query.locationId,
-            }
-          : undefined,
+        assigneeEmployee:
+          query.departmentId || query.locationId
+            ? {
+                departmentId: query.departmentId,
+                primaryLocationId: query.locationId,
+              }
+            : undefined,
       },
       include: this.taskInclude(),
-      orderBy: [{ status: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     });
 
     const filteredTasks =
-      query.onlyOverdue === 'true'
-        ? tasks.filter((task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED && task.dueAt && new Date(task.dueAt) < now)
+      query.onlyOverdue === "true"
+        ? tasks.filter(
+            (task) =>
+              task.status !== TaskStatus.DONE &&
+              task.status !== TaskStatus.CANCELLED &&
+              task.dueAt &&
+              new Date(task.dueAt) < now,
+          )
         : tasks;
 
     return {
       totals: {
         total: filteredTasks.length,
         overdue: filteredTasks.filter(
-          (task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED && task.dueAt && new Date(task.dueAt) < now,
+          (task) =>
+            task.status !== TaskStatus.DONE &&
+            task.status !== TaskStatus.CANCELLED &&
+            task.dueAt &&
+            new Date(task.dueAt) < now,
         ).length,
-        active: filteredTasks.filter((task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED).length,
-        done: filteredTasks.filter((task) => task.status === TaskStatus.DONE).length,
+        active: filteredTasks.filter(
+          (task) =>
+            task.status !== TaskStatus.DONE &&
+            task.status !== TaskStatus.CANCELLED,
+        ).length,
+        done: filteredTasks.filter((task) => task.status === TaskStatus.DONE)
+          .length,
       },
-      tasks: filteredTasks,
+      tasks: filteredTasks.map((task) =>
+        this.serializeTaskWithPhotoProofUrls(task),
+      ),
     };
   }
 
   async getTaskAutomationPolicy(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     return this.prisma.taskAutomationPolicy.upsert({
       where: { tenantId: manager.tenantId },
@@ -1396,8 +1838,13 @@ export class CollaborationService {
     });
   }
 
-  async updateTaskAutomationPolicy(userId: string, dto: UpdateTaskAutomationPolicyDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async updateTaskAutomationPolicy(
+    userId: string,
+    dto: UpdateTaskAutomationPolicyDto,
+  ) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const policy = await this.prisma.taskAutomationPolicy.upsert({
       where: { tenantId: manager.tenantId },
       update: dto,
@@ -1410,9 +1857,9 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: manager.tenantId,
       actorUserId: userId,
-      entityType: 'task_automation_policy',
+      entityType: "task_automation_policy",
       entityId: policy.id,
-      action: 'task_automation_policy.updated',
+      action: "task_automation_policy.updated",
       metadata: { ...dto },
     });
 
@@ -1420,7 +1867,9 @@ export class CollaborationService {
   }
 
   async runTaskAutomation(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const policy = await this.getTaskAutomationPolicy(userId);
     return this.runTaskAutomationForManager(manager, policy, userId);
   }
@@ -1436,7 +1885,7 @@ export class CollaborationService {
         tenantId: true,
         managerEmployeeId: true,
       },
-      distinct: ['tenantId', 'managerEmployeeId'],
+      distinct: ["tenantId", "managerEmployeeId"],
     });
 
     for (const scope of scopes) {
@@ -1475,10 +1924,16 @@ export class CollaborationService {
   ) {
     const now = new Date();
     const reminderBoundary = new Date(now);
-    reminderBoundary.setDate(reminderBoundary.getDate() + policy.reminderLeadDays);
+    reminderBoundary.setDate(
+      reminderBoundary.getDate() + policy.reminderLeadDays,
+    );
     const escalationBoundary = new Date(now);
-    escalationBoundary.setDate(escalationBoundary.getDate() - policy.escalationDelayDays);
-    const repeatBoundary = new Date(now.getTime() - policy.reminderRepeatHours * 60 * 60 * 1000);
+    escalationBoundary.setDate(
+      escalationBoundary.getDate() - policy.escalationDelayDays,
+    );
+    const repeatBoundary = new Date(
+      now.getTime() - policy.reminderRepeatHours * 60 * 60 * 1000,
+    );
 
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -1499,13 +1954,15 @@ export class CollaborationService {
         task.dueAt &&
         new Date(task.dueAt) >= now &&
         new Date(task.dueAt) <= reminderBoundary &&
-        (!task.lastReminderAt || new Date(task.lastReminderAt) <= repeatBoundary),
+        (!task.lastReminderAt ||
+          new Date(task.lastReminderAt) <= repeatBoundary),
     );
     const escalationTasks = tasks.filter(
       (task) =>
         task.dueAt &&
         new Date(task.dueAt) <= escalationBoundary &&
-        (!task.lastEscalatedAt || new Date(task.lastEscalatedAt) <= repeatBoundary),
+        (!task.lastEscalatedAt ||
+          new Date(task.lastEscalatedAt) <= repeatBoundary),
     );
 
     const remindedTaskIds: string[] = [];
@@ -1532,19 +1989,19 @@ export class CollaborationService {
       escalatedTaskIds.push(task.id);
     }
 
-      if (actorUserId) {
-        await this.auditService.log({
-          tenantId: manager.tenantId,
-          actorUserId,
-          entityType: 'task_automation',
-          entityId: manager.id,
-          action: 'task_automation.run',
-          metadata: {
-            reminderCount: remindedTaskIds.length,
-            escalationCount: escalatedTaskIds.length,
-          },
-        });
-      }
+    if (actorUserId) {
+      await this.auditService.log({
+        tenantId: manager.tenantId,
+        actorUserId,
+        entityType: "task_automation",
+        entityId: manager.id,
+        action: "task_automation.run",
+        metadata: {
+          reminderCount: remindedTaskIds.length,
+          escalationCount: escalatedTaskIds.length,
+        },
+      });
+    }
 
     return {
       success: true,
@@ -1559,7 +2016,13 @@ export class CollaborationService {
     tenantId: string,
     dto: Pick<
       CreateTaskTemplateDto,
-      'assigneeEmployeeId' | 'groupId' | 'departmentId' | 'locationId' | 'frequency' | 'weekDays' | 'dayOfMonth'
+      | "assigneeEmployeeId"
+      | "groupId"
+      | "departmentId"
+      | "locationId"
+      | "frequency"
+      | "weekDays"
+      | "dayOfMonth"
     >,
   ) {
     const selectedTargets = [
@@ -1570,19 +2033,28 @@ export class CollaborationService {
     ].filter((value) => Boolean(value));
 
     if (selectedTargets.length === 0) {
-      throw new BadRequestException('Template must target an employee, group, department, or location.');
+      throw new BadRequestException(
+        "Template must target an employee, group, department, or location.",
+      );
     }
 
     if (selectedTargets.length > 1) {
-      throw new BadRequestException('Template cannot target more than one scope at the same time.');
+      throw new BadRequestException(
+        "Template cannot target more than one scope at the same time.",
+      );
     }
 
-    if (dto.frequency === 'WEEKLY' && (!dto.weekDays || dto.weekDays.length === 0)) {
-      throw new BadRequestException('Weekly template requires at least one weekday.');
+    if (
+      dto.frequency === "WEEKLY" &&
+      (!dto.weekDays || dto.weekDays.length === 0)
+    ) {
+      throw new BadRequestException(
+        "Weekly template requires at least one weekday.",
+      );
     }
 
-    if (dto.frequency === 'MONTHLY' && !dto.dayOfMonth) {
-      throw new BadRequestException('Monthly template requires dayOfMonth.');
+    if (dto.frequency === "MONTHLY" && !dto.dayOfMonth) {
+      throw new BadRequestException("Monthly template requires dayOfMonth.");
     }
 
     if (dto.groupId) {
@@ -1594,7 +2066,7 @@ export class CollaborationService {
       });
 
       if (!group) {
-        throw new NotFoundException('Group not found.');
+        throw new NotFoundException("Group not found.");
       }
     }
 
@@ -1607,7 +2079,7 @@ export class CollaborationService {
       });
 
       if (!employee) {
-        throw new NotFoundException('Assignee not found.');
+        throw new NotFoundException("Assignee not found.");
       }
     }
 
@@ -1620,7 +2092,7 @@ export class CollaborationService {
       });
 
       if (!department) {
-        throw new NotFoundException('Department not found.');
+        throw new NotFoundException("Department not found.");
       }
     }
 
@@ -1633,17 +2105,21 @@ export class CollaborationService {
       });
 
       if (!location) {
-        throw new NotFoundException('Location not found.');
+        throw new NotFoundException("Location not found.");
       }
     }
   }
 
   private normalizeChecklist(checklist?: string[]) {
-    return (checklist ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
+    return (checklist ?? [])
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
   }
 
   async remindTask(userId: string, taskId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const task = await this.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -1654,7 +2130,7 @@ export class CollaborationService {
     });
 
     if (!task || !task.assigneeEmployee) {
-      throw new NotFoundException('Task not found.');
+      throw new NotFoundException("Task not found.");
     }
 
     await this.triggerTaskReminder(manager, task, {
@@ -1668,7 +2144,9 @@ export class CollaborationService {
   }
 
   async remindOverdueTasks(userId: string, dto: BulkRemindTasksDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const manager = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const now = new Date();
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -1681,12 +2159,13 @@ export class CollaborationService {
         dueAt: {
           lt: now,
         },
-        assigneeEmployee: dto.departmentId || dto.locationId
-          ? {
-              departmentId: dto.departmentId,
-              primaryLocationId: dto.locationId,
-            }
-          : undefined,
+        assigneeEmployee:
+          dto.departmentId || dto.locationId
+            ? {
+                departmentId: dto.departmentId,
+                primaryLocationId: dto.locationId,
+              }
+            : undefined,
       },
       include: this.taskInclude(),
     });
@@ -1701,28 +2180,87 @@ export class CollaborationService {
     };
   }
 
-  async listMyTasks(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async listMyTasks(
+    userId: string,
+    query?: { date?: string; dateFrom?: string; dateTo?: string },
+  ) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+    const taskWindow = this.resolveTaskWindow(query);
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where: {
         tenantId: employee.tenantId,
         assigneeEmployeeId: employee.id,
+        ...this.buildTaskDateWhere(taskWindow),
       },
       include: this.taskInclude(),
-      orderBy: [{ status: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+    });
+
+    if (!taskWindow) {
+      return tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
+    }
+
+    const recurringTasks = await this.buildRecurringTasksForEmployee(
+      employee,
+      taskWindow.start,
+      taskWindow.end,
+    );
+    return [
+      ...tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task)),
+      ...recurringTasks,
+    ].sort((left, right) => {
+      const leftDone =
+        left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+          ? 1
+          : 0;
+      const rightDone =
+        right.status === TaskStatus.DONE ||
+        right.status === TaskStatus.CANCELLED
+          ? 1
+          : 0;
+      if (leftDone !== rightDone) {
+        return leftDone - rightDone;
+      }
+
+      const leftDueAt = left.dueAt
+        ? new Date(left.dueAt).getTime()
+        : Number.POSITIVE_INFINITY;
+      const rightDueAt = right.dueAt
+        ? new Date(right.dueAt).getTime()
+        : Number.POSITIVE_INFINITY;
+      if (leftDueAt !== rightDueAt) {
+        return leftDueAt - rightDueAt;
+      }
+
+      return (
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
     });
   }
 
   async getEmployeeInbox(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     const [notifications, tasks, chats, announcements] = await Promise.all([
       this.prisma.notification.findMany({
         where: {
           userId,
         },
-        orderBy: [{ isRead: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
         take: 40,
       }),
       this.prisma.task.findMany({
@@ -1731,7 +2269,7 @@ export class CollaborationService {
           assigneeEmployeeId: employee.id,
         },
         include: this.taskInclude(),
-        orderBy: [{ updatedAt: 'desc' }],
+        orderBy: [{ updatedAt: "desc" }],
         take: 20,
       }),
       this.listChats(userId),
@@ -1740,25 +2278,31 @@ export class CollaborationService {
 
     const summary = {
       unreadNotifications: notifications.filter((item) => !item.isRead).length,
-      unreadChats: chats.reduce((total, thread) => total + (thread.unreadCount ?? 0), 0),
+      unreadChats: chats.reduce(
+        (total, thread) => total + (thread.unreadCount ?? 0),
+        0,
+      ),
       pendingTasks: tasks.filter(
-        (task) => task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED,
+        (task) =>
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED,
       ).length,
       pinnedAnnouncements: announcements.filter((item) => item.isPinned).length,
       totalAttention: 0,
     };
 
-    summary.totalAttention = summary.unreadNotifications + summary.unreadChats + summary.pendingTasks;
+    summary.totalAttention =
+      summary.unreadNotifications + summary.unreadChats + summary.pendingTasks;
 
     const items = [
       ...notifications.map((notification) => ({
         id: `notification:${notification.id}`,
-        kind: 'NOTIFICATION' as const,
+        kind: "NOTIFICATION" as const,
         entityId: notification.id,
         title: notification.title,
         preview: notification.body,
         createdAt: notification.createdAt.toISOString(),
-        actionUrl: notification.actionUrl ?? '/employee/notifications',
+        actionUrl: notification.actionUrl ?? "/employee/notifications",
         isUnread: !notification.isRead,
         isActionRequired: !notification.isRead,
         badge: notification.type,
@@ -1766,14 +2310,18 @@ export class CollaborationService {
       })),
       ...tasks.map((task) => ({
         id: `task:${task.id}`,
-        kind: 'TASK' as const,
+        kind: "TASK" as const,
         entityId: task.id,
         title: task.title,
-        preview: task.description ?? (task.group ? `Group: ${task.group.name}` : 'Task assignment'),
+        preview:
+          task.description ??
+          (task.group ? `Group: ${task.group.name}` : "Task assignment"),
         createdAt: task.updatedAt.toISOString(),
         actionUrl: `/employee/tasks?taskId=${task.id}`,
         isUnread: task.status === TaskStatus.TODO,
-        isActionRequired: task.status !== TaskStatus.DONE && task.status !== TaskStatus.CANCELLED,
+        isActionRequired:
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED,
         badge: task.status,
         actor: {
           id: task.managerEmployee.id,
@@ -1785,14 +2333,17 @@ export class CollaborationService {
         const lastMessage = thread.messages[thread.messages.length - 1] ?? null;
         return {
           id: `chat:${thread.id}`,
-          kind: 'CHAT' as const,
+          kind: "CHAT" as const,
           entityId: thread.id,
           title:
             thread.title ??
             thread.group?.name ??
             thread.participants
-              .map((participant) => `${participant.employee.firstName} ${participant.employee.lastName}`)
-              .join(', '),
+              .map(
+                (participant) =>
+                  `${participant.employee.firstName} ${participant.employee.lastName}`,
+              )
+              .join(", "),
           preview: lastMessage?.body ?? null,
           createdAt: lastMessage?.createdAt ?? thread.updatedAt.toISOString(),
           actionUrl: `/employee/chats?threadId=${thread.id}`,
@@ -1810,22 +2361,26 @@ export class CollaborationService {
       }),
       ...announcements.map((announcement) => ({
         id: `announcement:${announcement.id}`,
-        kind: 'ANNOUNCEMENT' as const,
+        kind: "ANNOUNCEMENT" as const,
         entityId: announcement.id,
         title: announcement.title,
         preview: announcement.body,
         createdAt: announcement.createdAt.toISOString(),
-        actionUrl: '/employee/announcements',
+        actionUrl: "/employee/announcements",
         isUnread: false,
         isActionRequired: false,
-        badge: announcement.isPinned ? 'PINNED' : announcement.audience,
+        badge: announcement.isPinned ? "PINNED" : announcement.audience,
         actor: {
           id: announcement.authorEmployee.id,
           firstName: announcement.authorEmployee.firstName,
           lastName: announcement.authorEmployee.lastName,
         },
       })),
-    ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+    ].sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
+    );
 
     return {
       summary,
@@ -1839,7 +2394,9 @@ export class CollaborationService {
   }
 
   async listChats(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     const participations = await this.prisma.chatParticipant.findMany({
       where: {
@@ -1852,7 +2409,7 @@ export class CollaborationService {
       },
       orderBy: {
         thread: {
-          updatedAt: 'desc',
+          updatedAt: "desc",
         },
       },
     });
@@ -1862,23 +2419,30 @@ export class CollaborationService {
       unreadCount: participant.lastReadAt
         ? participant.thread.messages.filter(
             (message) =>
-              new Date(message.createdAt) > new Date(participant.lastReadAt as Date) &&
+              new Date(message.createdAt) >
+                new Date(participant.lastReadAt as Date) &&
               message.authorEmployeeId !== employee.id,
           ).length
-        : participant.thread.messages.filter((message) => message.authorEmployeeId !== employee.id).length,
+        : participant.thread.messages.filter(
+            (message) => message.authorEmployeeId !== employee.id,
+          ).length,
       lastReadAt: participant.lastReadAt,
     }));
   }
 
   async createChat(userId: string, dto: CreateChatThreadDto) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     if (!dto.employeeId && !dto.groupId) {
-      throw new BadRequestException('Chat must target an employee or a group.');
+      throw new BadRequestException("Chat must target an employee or a group.");
     }
 
     if (dto.employeeId && dto.groupId) {
-      throw new BadRequestException('Chat cannot target both an employee and a group.');
+      throw new BadRequestException(
+        "Chat cannot target both an employee and a group.",
+      );
     }
 
     if (dto.employeeId) {
@@ -1890,7 +2454,7 @@ export class CollaborationService {
       });
 
       if (!target) {
-        throw new NotFoundException('Employee not found.');
+        throw new NotFoundException("Employee not found.");
       }
 
       const existing = await this.prisma.chatThread.findFirst({
@@ -1902,7 +2466,11 @@ export class CollaborationService {
           },
           AND: [
             { participants: { some: { employeeId: target.id } } },
-            { participants: { every: { employeeId: { in: [employee.id, target.id] } } } },
+            {
+              participants: {
+                every: { employeeId: { in: [employee.id, target.id] } },
+              },
+            },
           ],
         },
         include: this.chatInclude(),
@@ -1940,7 +2508,7 @@ export class CollaborationService {
     });
 
     if (!group) {
-      throw new NotFoundException('Group not found.');
+      throw new NotFoundException("Group not found.");
     }
 
     const existing = await this.prisma.chatThread.findFirst({
@@ -1956,7 +2524,12 @@ export class CollaborationService {
       return existing;
     }
 
-    const participantIds = Array.from(new Set([employee.id, ...group.memberships.map((item) => item.employeeId)]));
+    const participantIds = Array.from(
+      new Set([
+        employee.id,
+        ...group.memberships.map((item) => item.employeeId),
+      ]),
+    );
 
     return this.prisma.chatThread.create({
       data: {
@@ -1977,7 +2550,9 @@ export class CollaborationService {
   }
 
   async getChat(userId: string, threadId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const participation = await this.prisma.chatParticipant.findFirst({
       where: {
         tenantId: employee.tenantId,
@@ -1987,7 +2562,7 @@ export class CollaborationService {
     });
 
     if (!participation) {
-      throw new ForbiddenException('Current user cannot access this chat.');
+      throw new ForbiddenException("Current user cannot access this chat.");
     }
 
     return this.prisma.chatThread.findUniqueOrThrow({
@@ -1996,8 +2571,14 @@ export class CollaborationService {
     });
   }
 
-  async sendChatMessage(userId: string, threadId: string, dto: SendChatMessageDto) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+  async sendChatMessage(
+    userId: string,
+    threadId: string,
+    dto: SendChatMessageDto,
+  ) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const thread = await this.prisma.chatThread.findFirst({
       where: {
         id: threadId,
@@ -2012,7 +2593,9 @@ export class CollaborationService {
     });
 
     if (!thread) {
-      throw new ForbiddenException('Current user cannot send messages to this chat.');
+      throw new ForbiddenException(
+        "Current user cannot send messages to this chat.",
+      );
     }
 
     const message = await this.prisma.$transaction(async (tx) => {
@@ -2047,14 +2630,17 @@ export class CollaborationService {
     });
 
     for (const participant of thread.participants) {
-      if (participant.employee.userId && participant.employeeId !== employee.id) {
+      if (
+        participant.employee.userId &&
+        participant.employeeId !== employee.id
+      ) {
         await this.notificationsService.createForUser({
           tenantId: employee.tenantId,
           userId: participant.employee.userId,
           type: NotificationType.OPERATIONS_ALERT,
           title: `${employee.firstName} ${employee.lastName} sent a message`,
           body: dto.body,
-          actionUrl: '/employee/chats',
+          actionUrl: "/employee/chats",
           metadata: {
             threadId: thread.id,
             messageId: message.id,
@@ -2070,10 +2656,13 @@ export class CollaborationService {
 
     for (const participant of thread.participants) {
       if (participant.employee.userId) {
-        this.collaborationGateway.emitThreadUpdated(participant.employee.userId, {
-          threadId: thread.id,
-          updatedAt: new Date().toISOString(),
-        });
+        this.collaborationGateway.emitThreadUpdated(
+          participant.employee.userId,
+          {
+            threadId: thread.id,
+            updatedAt: new Date().toISOString(),
+          },
+        );
       }
     }
 
@@ -2081,7 +2670,9 @@ export class CollaborationService {
   }
 
   async markChatRead(userId: string, threadId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
 
     await this.prisma.chatParticipant.updateMany({
       where: {
@@ -2104,7 +2695,28 @@ export class CollaborationService {
   }
 
   async setTaskStatus(userId: string, taskId: string, dto: SetTaskStatusDto) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+    const recurringTaskRef = this.parseRecurringTaskId(taskId);
+    if (recurringTaskRef) {
+      return this.setRecurringTaskStatus(
+        userId,
+        employee,
+        recurringTaskRef,
+        dto,
+      );
+    }
+
     const task = await this.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2114,11 +2726,23 @@ export class CollaborationService {
     });
 
     if (!task) {
-      throw new NotFoundException('Task not found.');
+      throw new NotFoundException("Task not found.");
     }
 
     if (!this.canAccessTask(employee.id, task)) {
-      throw new ForbiddenException('Current user cannot update this task.');
+      throw new ForbiddenException("Current user cannot update this task.");
+    }
+
+    if (
+      dto.status === TaskStatus.DONE &&
+      task.requiresPhoto &&
+      task.photoProofs.filter(
+        (proof) => !proof.deletedAt && !proof.supersededByProofId,
+      ).length === 0
+    ) {
+      throw new BadRequestException(
+        "Photo proof is required before completing this task.",
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -2149,19 +2773,120 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: employee.tenantId,
       actorUserId: userId,
-      entityType: 'task',
+      entityType: "task",
       entityId: task.id,
-      action: 'task.status_updated',
+      action: "task.status_updated",
       metadata: {
         status: dto.status,
       },
     });
 
-    return updated;
+    return this.serializeTaskWithPhotoProofUrls(updated);
+  }
+
+  async rescheduleTask(userId: string, taskId: string, dto: RescheduleTaskDto) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+    const nextDueAt = new Date(dto.dueAt);
+
+    if (Number.isNaN(nextDueAt.getTime()) || nextDueAt < new Date()) {
+      throw new BadRequestException("Task due date cannot be in the past.");
+    }
+
+    const recurringTaskRef = this.parseRecurringTaskId(taskId);
+    if (recurringTaskRef) {
+      return this.rescheduleRecurringTask(
+        userId,
+        employee,
+        recurringTaskRef,
+        nextDueAt,
+        dto,
+      );
+    }
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        tenantId: employee.tenantId,
+      },
+      include: this.taskInclude(),
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    if (!this.canAccessTask(employee.id, task)) {
+      throw new ForbiddenException("Current user cannot reschedule this task.");
+    }
+
+    if (
+      task.status === TaskStatus.DONE ||
+      task.status === TaskStatus.CANCELLED
+    ) {
+      throw new BadRequestException("Only open tasks can be rescheduled.");
+    }
+
+    const previousDueAt = task.dueAt?.toISOString() ?? null;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.taskActivity.create({
+        data: {
+          tenantId: employee.tenantId,
+          taskId: task.id,
+          actorEmployeeId: employee.id,
+          kind: TaskActivityKind.COMMENT,
+          body:
+            dto.comment ??
+            `Task moved from ${previousDueAt ?? "unscheduled"} to ${nextDueAt.toISOString()}.`,
+        },
+      });
+
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          dueAt: nextDueAt,
+        },
+      });
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: task.id,
+      action: "task.rescheduled",
+      metadata: {
+        from: previousDueAt,
+        to: nextDueAt.toISOString(),
+      },
+    });
+
+    return {
+      task: this.serializeTaskWithPhotoProofUrls(updated),
+      replacedTaskId: null,
+    };
   }
 
   async toggleChecklistItem(userId: string, taskId: string, itemId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const item = await this.prisma.taskChecklistItem.findFirst({
       where: {
         id: itemId,
@@ -2176,11 +2901,13 @@ export class CollaborationService {
     });
 
     if (!item) {
-      throw new NotFoundException('Checklist item not found.');
+      throw new NotFoundException("Checklist item not found.");
     }
 
     if (!this.canAccessTask(employee.id, item.task)) {
-      throw new ForbiddenException('Current user cannot update this checklist item.');
+      throw new ForbiddenException(
+        "Current user cannot update this checklist item.",
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -2199,20 +2926,24 @@ export class CollaborationService {
           taskId: taskId,
           actorEmployeeId: employee.id,
           kind: TaskActivityKind.CHECKLIST_TOGGLED,
-          body: `${item.title}: ${item.isCompleted ? 'unchecked' : 'completed'}.`,
+          body: `${item.title}: ${item.isCompleted ? "unchecked" : "completed"}.`,
         },
       });
     });
 
-    return this.prisma.task.findUniqueOrThrow({
-      where: { id: taskId },
-      include: this.taskInclude(),
-    });
+    return this.serializeTaskWithPhotoProofUrls(
+      await this.prisma.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: this.taskInclude(),
+      }),
+    );
   }
 
   async addTaskComment(userId: string, taskId: string, body: string) {
     const dto: AddTaskCommentDto = { body };
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
     const task = await this.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2222,11 +2953,11 @@ export class CollaborationService {
     });
 
     if (!task) {
-      throw new NotFoundException('Task not found.');
+      throw new NotFoundException("Task not found.");
     }
 
     if (!this.canAccessTask(employee.id, task)) {
-      throw new ForbiddenException('Current user cannot comment on this task.');
+      throw new ForbiddenException("Current user cannot comment on this task.");
     }
 
     await this.prisma.taskActivity.create({
@@ -2239,10 +2970,240 @@ export class CollaborationService {
       },
     });
 
-    return this.prisma.task.findUniqueOrThrow({
-      where: { id: task.id },
+    return this.serializeTaskWithPhotoProofUrls(
+      await this.prisma.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      }),
+    );
+  }
+
+  async addTaskPhotoProof(
+    userId: string,
+    taskId: string,
+    dto: CreateTaskPhotoProofDto,
+  ) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+    const recurringTaskRef = this.parseRecurringTaskId(taskId);
+
+    if (recurringTaskRef) {
+      return this.addRecurringTaskPhotoProof(
+        userId,
+        employee,
+        recurringTaskRef,
+        dto,
+      );
+    }
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        tenantId: employee.tenantId,
+      },
       include: this.taskInclude(),
     });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    if (!this.canAccessTask(employee.id, task)) {
+      throw new ForbiddenException("Current user cannot update this task.");
+    }
+
+    if (!task.requiresPhoto) {
+      throw new BadRequestException("This task does not require photo proof.");
+    }
+
+    const activeProofs = task.photoProofs.filter(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId,
+    );
+    if (dto.action === "add" && activeProofs.length >= TASK_PHOTO_PROOF_LIMIT) {
+      throw new BadRequestException(
+        `Task photo proof limit is ${TASK_PHOTO_PROOF_LIMIT}.`,
+      );
+    }
+
+    const targetProof =
+      dto.action === "replace"
+        ? activeProofs.find((proof) => proof.id === dto.targetProofId)
+        : null;
+
+    if (dto.action === "replace" && !targetProof) {
+      throw new BadRequestException("Photo proof to replace was not found.");
+    }
+
+    const fileName = dto.fileName.trim() || "task-photo.jpg";
+    const uploaded = await this.uploadTaskPhotoProof(
+      employee.tenantId,
+      task.id,
+      employee.id,
+      fileName,
+      dto.dataUrl,
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const createdProof = await tx.taskPhotoProof.create({
+        data: {
+          tenantId: employee.tenantId,
+          taskId: task.id,
+          uploadedByEmployeeId: employee.id,
+          fileName,
+          storageKey: uploaded.key,
+        },
+      });
+
+      if (targetProof) {
+        await tx.taskPhotoProof.update({
+          where: { id: targetProof.id },
+          data: {
+            supersededByProofId: createdProof.id,
+          },
+        });
+      }
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: task.id,
+      action:
+        dto.action === "replace"
+          ? "task.photo_proof_replaced"
+          : "task.photo_proof_added",
+      metadata: {
+        proofStorageKey: uploaded.key,
+        targetProofId: targetProof?.id ?? null,
+      },
+    });
+
+    return this.serializeTaskWithPhotoProofUrls(updated);
+  }
+
+  async deleteTaskPhotoProof(userId: string, taskId: string, proofId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+    const recurringTaskRef = this.parseRecurringTaskId(taskId);
+
+    if (recurringTaskRef) {
+      return this.deleteRecurringTaskPhotoProof(
+        userId,
+        employee,
+        recurringTaskRef,
+        proofId,
+      );
+    }
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        tenantId: employee.tenantId,
+      },
+      include: this.taskInclude(),
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    if (!this.canAccessTask(employee.id, task)) {
+      throw new ForbiddenException("Current user cannot update this task.");
+    }
+
+    const targetProof = task.photoProofs.find(
+      (proof) =>
+        proof.id === proofId && !proof.deletedAt && !proof.supersededByProofId,
+    );
+
+    if (!targetProof) {
+      throw new NotFoundException("Photo proof not found.");
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.taskPhotoProof.update({
+        where: { id: targetProof.id },
+        data: {
+          deletedAt: new Date(),
+        },
+      });
+
+      const nextTask = await tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      });
+      const remainingActive = nextTask.photoProofs.filter(
+        (proof) => !proof.deletedAt && !proof.supersededByProofId,
+      ).length;
+
+      if (
+        task.requiresPhoto &&
+        task.status === TaskStatus.DONE &&
+        remainingActive === 0
+      ) {
+        await tx.taskActivity.create({
+          data: {
+            tenantId: employee.tenantId,
+            taskId: task.id,
+            actorEmployeeId: employee.id,
+            kind: TaskActivityKind.STATUS_CHANGED,
+            body: "Status changed to TODO after removing the last photo proof.",
+          },
+        });
+
+        await tx.task.update({
+          where: { id: task.id },
+          data: {
+            status: TaskStatus.TODO,
+            completedAt: null,
+          },
+        });
+      }
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: task.id,
+      action: "task.photo_proof_deleted",
+      metadata: {
+        proofId,
+      },
+    });
+
+    return this.serializeTaskWithPhotoProofUrls(updated);
   }
 
   private async resolveGroupAssignees(tenantId: string, groupId: string) {
@@ -2265,13 +3226,16 @@ export class CollaborationService {
     });
 
     if (!group) {
-      throw new NotFoundException('Group not found.');
+      throw new NotFoundException("Group not found.");
     }
 
     return group.memberships.map((membership) => membership.employee);
   }
 
-  private async resolveDirectAssignee(tenantId: string, assigneeEmployeeId: string) {
+  private async resolveDirectAssignee(
+    tenantId: string,
+    assigneeEmployeeId: string,
+  ) {
     const employee = await this.prisma.employee.findFirst({
       where: {
         id: assigneeEmployeeId,
@@ -2283,13 +3247,16 @@ export class CollaborationService {
     });
 
     if (!employee) {
-      throw new NotFoundException('Assignee not found.');
+      throw new NotFoundException("Assignee not found.");
     }
 
     return [employee];
   }
 
-  private async resolveDepartmentAssignees(tenantId: string, departmentId: string) {
+  private async resolveDepartmentAssignees(
+    tenantId: string,
+    departmentId: string,
+  ) {
     const employees = await this.prisma.employee.findMany({
       where: {
         tenantId,
@@ -2301,7 +3268,7 @@ export class CollaborationService {
     });
 
     if (employees.length === 0) {
-      throw new NotFoundException('Department has no employees.');
+      throw new NotFoundException("Department has no employees.");
     }
 
     return employees;
@@ -2319,7 +3286,7 @@ export class CollaborationService {
     });
 
     if (employees.length === 0) {
-      throw new NotFoundException('Location has no employees.');
+      throw new NotFoundException("Location has no employees.");
     }
 
     return employees;
@@ -2458,7 +3425,7 @@ export class CollaborationService {
         type: NotificationType.OPERATIONS_ALERT,
         title: `Announcement: ${announcement.title}`,
         body: announcement.body,
-        actionUrl: '/employee/announcements',
+        actionUrl: "/employee/announcements",
         metadata: {
           announcementId: announcement.id,
           ...metadata,
@@ -2469,9 +3436,11 @@ export class CollaborationService {
     await this.auditService.log({
       tenantId: author.tenantId,
       actorUserId,
-      entityType: 'announcement',
+      entityType: "announcement",
       entityId: announcement.id,
-      action: metadata?.templateId ? 'announcement.generated' : 'announcement.created',
+      action: metadata?.templateId
+        ? "announcement.generated"
+        : "announcement.created",
       metadata: {
         audience: announcement.audience,
         groupId: announcement.groupId,
@@ -2493,31 +3462,45 @@ export class CollaborationService {
     departmentId?: string | null,
     locationId?: string | null,
   ) {
-    const selectedTargetCount = [groupId, targetEmployeeId, departmentId, locationId].filter((value) => Boolean(value))
-      .length;
+    const selectedTargetCount = [
+      groupId,
+      targetEmployeeId,
+      departmentId,
+      locationId,
+    ].filter((value) => Boolean(value)).length;
 
     if (audience === AnnouncementAudience.ALL) {
       if (selectedTargetCount > 0) {
-        throw new BadRequestException('All-company announcement cannot include a scoped target.');
+        throw new BadRequestException(
+          "All-company announcement cannot include a scoped target.",
+        );
       }
     } else if (selectedTargetCount !== 1) {
-      throw new BadRequestException('Announcement must include exactly one matching target scope.');
+      throw new BadRequestException(
+        "Announcement must include exactly one matching target scope.",
+      );
     }
 
     if (audience === AnnouncementAudience.GROUP && !groupId) {
-      throw new BadRequestException('Group announcement requires groupId.');
+      throw new BadRequestException("Group announcement requires groupId.");
     }
 
     if (audience === AnnouncementAudience.EMPLOYEE && !targetEmployeeId) {
-      throw new BadRequestException('Employee announcement requires targetEmployeeId.');
+      throw new BadRequestException(
+        "Employee announcement requires targetEmployeeId.",
+      );
     }
 
     if (audience === AnnouncementAudience.DEPARTMENT && !departmentId) {
-      throw new BadRequestException('Department announcement requires departmentId.');
+      throw new BadRequestException(
+        "Department announcement requires departmentId.",
+      );
     }
 
     if (audience === AnnouncementAudience.LOCATION && !locationId) {
-      throw new BadRequestException('Location announcement requires locationId.');
+      throw new BadRequestException(
+        "Location announcement requires locationId.",
+      );
     }
 
     if (groupId) {
@@ -2529,7 +3512,7 @@ export class CollaborationService {
       });
 
       if (!group) {
-        throw new NotFoundException('Target group not found.');
+        throw new NotFoundException("Target group not found.");
       }
     }
 
@@ -2542,7 +3525,7 @@ export class CollaborationService {
       });
 
       if (!employee) {
-        throw new NotFoundException('Target employee not found.');
+        throw new NotFoundException("Target employee not found.");
       }
     }
 
@@ -2555,7 +3538,7 @@ export class CollaborationService {
       });
 
       if (!department) {
-        throw new NotFoundException('Target department not found.');
+        throw new NotFoundException("Target department not found.");
       }
     }
 
@@ -2568,7 +3551,7 @@ export class CollaborationService {
       });
 
       if (!location) {
-        throw new NotFoundException('Target location not found.');
+        throw new NotFoundException("Target location not found.");
       }
     }
   }
@@ -2588,7 +3571,13 @@ export class CollaborationService {
         },
         AND: [
           { participants: { some: { employeeId: assigneeEmployeeId } } },
-          { participants: { every: { employeeId: { in: [managerEmployeeId, assigneeEmployeeId] } } } },
+          {
+            participants: {
+              every: {
+                employeeId: { in: [managerEmployeeId, assigneeEmployeeId] },
+              },
+            },
+          },
         ],
       },
     });
@@ -2640,7 +3629,12 @@ export class CollaborationService {
       },
     });
 
-    const participantIds = Array.from(new Set([managerEmployeeId, ...memberships.map((item) => item.employeeId)]));
+    const participantIds = Array.from(
+      new Set([
+        managerEmployeeId,
+        ...memberships.map((item) => item.employeeId),
+      ]),
+    );
 
     return tx.chatThread.create({
       data: {
@@ -2707,7 +3701,8 @@ export class CollaborationService {
       }
 
       const alreadyGeneratedToday =
-        template.lastGeneratedAt && this.toDateKey(template.lastGeneratedAt) === this.toDateKey(now);
+        template.lastGeneratedAt &&
+        this.toDateKey(template.lastGeneratedAt) === this.toDateKey(now);
       if (alreadyGeneratedToday) {
         continue;
       }
@@ -2759,12 +3754,17 @@ export class CollaborationService {
       }
 
       const alreadyPublishedToday =
-        template.lastPublishedAt && this.toDateKey(template.lastPublishedAt) === this.toDateKey(now);
+        template.lastPublishedAt &&
+        this.toDateKey(template.lastPublishedAt) === this.toDateKey(now);
       if (alreadyPublishedToday) {
         continue;
       }
 
-      await this.instantiateAnnouncementTemplate(manager, template, actorUserId);
+      await this.instantiateAnnouncementTemplate(
+        manager,
+        template,
+        actorUserId,
+      );
       generatedTemplateIds.push(template.id);
     }
 
@@ -2773,7 +3773,7 @@ export class CollaborationService {
 
   private isTemplateDueNow(
     template: {
-      frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+      frequency: "DAILY" | "WEEKLY" | "MONTHLY";
       weekDaysJson: string | null;
       dayOfMonth: number | null;
       dueTimeLocal: string | null;
@@ -2791,9 +3791,9 @@ export class CollaborationService {
     }
 
     if (template.dueTimeLocal) {
-      const [hoursRaw, minutesRaw] = template.dueTimeLocal.split(':');
+      const [hoursRaw, minutesRaw] = template.dueTimeLocal.split(":");
       const hours = Number(hoursRaw);
-      const minutes = Number(minutesRaw ?? '0');
+      const minutes = Number(minutesRaw ?? "0");
       if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         const templateMinutes = hours * 60 + minutes;
@@ -2803,17 +3803,23 @@ export class CollaborationService {
       }
     }
 
-    if (template.frequency === 'DAILY') {
+    if (template.frequency === "DAILY") {
       return true;
     }
 
-    if (template.frequency === 'WEEKLY') {
-      const weekdays = template.weekDaysJson ? (JSON.parse(template.weekDaysJson) as number[]) : [];
+    if (template.frequency === "WEEKLY") {
+      const weekdays = template.weekDaysJson
+        ? (JSON.parse(template.weekDaysJson) as number[])
+        : [];
       return weekdays.includes(now.getDay());
     }
 
     const targetDay = template.dayOfMonth ?? 1;
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const lastDayOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+    ).getDate();
     return now.getDate() === Math.min(targetDay, lastDayOfMonth);
   }
 
@@ -2837,9 +3843,9 @@ export class CollaborationService {
     }
 
     if (template.publishTimeLocal) {
-      const [hoursRaw, minutesRaw] = template.publishTimeLocal.split(':');
+      const [hoursRaw, minutesRaw] = template.publishTimeLocal.split(":");
       const hours = Number(hoursRaw);
-      const minutes = Number(minutesRaw ?? '0');
+      const minutes = Number(minutesRaw ?? "0");
       if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         const templateMinutes = hours * 60 + minutes;
@@ -2854,12 +3860,18 @@ export class CollaborationService {
     }
 
     if (template.frequency === AnnouncementTemplateFrequency.WEEKLY) {
-      const weekdays = template.weekDaysJson ? (JSON.parse(template.weekDaysJson) as number[]) : [];
+      const weekdays = template.weekDaysJson
+        ? (JSON.parse(template.weekDaysJson) as number[])
+        : [];
       return weekdays.includes(now.getDay());
     }
 
     const targetDay = template.dayOfMonth ?? 1;
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const lastDayOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+    ).getDate();
     return now.getDate() === Math.min(targetDay, lastDayOfMonth);
   }
 
@@ -2882,6 +3894,7 @@ export class CollaborationService {
       title: string;
       description: string | null;
       priority: TaskPriority;
+      requiresPhoto: boolean;
       dueAfterDays: number;
       checklistJson: string | null;
     },
@@ -2890,11 +3903,20 @@ export class CollaborationService {
     const assignees = template.groupId
       ? await this.resolveGroupAssignees(manager.tenantId, template.groupId)
       : template.assigneeEmployeeId
-        ? await this.resolveDirectAssignee(manager.tenantId, template.assigneeEmployeeId)
+        ? await this.resolveDirectAssignee(
+            manager.tenantId,
+            template.assigneeEmployeeId,
+          )
         : template.departmentId
-          ? await this.resolveDepartmentAssignees(manager.tenantId, template.departmentId)
+          ? await this.resolveDepartmentAssignees(
+              manager.tenantId,
+              template.departmentId,
+            )
           : template.locationId
-            ? await this.resolveLocationAssignees(manager.tenantId, template.locationId)
+            ? await this.resolveLocationAssignees(
+                manager.tenantId,
+                template.locationId,
+              )
             : [];
 
     if (assignees.length === 0) {
@@ -2903,13 +3925,20 @@ export class CollaborationService {
 
     const dueAt = new Date();
     dueAt.setDate(dueAt.getDate() + template.dueAfterDays);
-    const checklist = template.checklistJson ? (JSON.parse(template.checklistJson) as string[]) : [];
+    const checklist = template.checklistJson
+      ? (JSON.parse(template.checklistJson) as string[])
+      : [];
 
     const tasks = await this.prisma.$transaction(async (tx) => {
       const createdTasks = [];
       const groupThread =
         template.groupId && assignees.length > 0
-          ? await this.ensureGroupChatThread(tx, manager.tenantId, manager.id, template.groupId)
+          ? await this.ensureGroupChatThread(
+              tx,
+              manager.tenantId,
+              manager.id,
+              template.groupId,
+            )
           : null;
 
       for (const assignee of assignees) {
@@ -2922,6 +3951,7 @@ export class CollaborationService {
             title: template.title,
             description: template.description,
             priority: template.priority,
+            requiresPhoto: template.requiresPhoto,
             dueAt,
             checklistItems: {
               create: checklist.map((title, index) => ({
@@ -2946,7 +3976,12 @@ export class CollaborationService {
 
         const chatThread = template.groupId
           ? groupThread!
-          : await this.ensureDirectChatThread(tx, manager.tenantId, manager.id, assignee.id);
+          : await this.ensureDirectChatThread(
+              tx,
+              manager.tenantId,
+              manager.id,
+              assignee.id,
+            );
 
         await tx.chatMessage.create({
           data: {
@@ -2981,18 +4016,21 @@ export class CollaborationService {
           type: NotificationType.OPERATIONS_ALERT,
           title: `New recurring task: ${task.title}`,
           body: `${manager.firstName} ${manager.lastName} assigned a recurring workflow task.`,
-          actionUrl: '/employee/tasks',
+          actionUrl: "/employee/tasks",
           metadata: {
             taskId: task.id,
             templateId: template.id,
             recurring: true,
           },
         });
-        this.collaborationGateway.emitThreadUpdated(task.assigneeEmployee.userId, {
-          taskId: task.id,
-          templateId: template.id,
-          recurring: true,
-        });
+        this.collaborationGateway.emitThreadUpdated(
+          task.assigneeEmployee.userId,
+          {
+            taskId: task.id,
+            templateId: template.id,
+            recurring: true,
+          },
+        );
       }
     }
 
@@ -3000,9 +4038,9 @@ export class CollaborationService {
       await this.auditService.log({
         tenantId: manager.tenantId,
         actorUserId,
-        entityType: 'task_template',
+        entityType: "task_template",
         entityId: template.id,
-        action: 'task_template.generated',
+        action: "task_template.generated",
         metadata: {
           generatedCount: tasks.length,
         },
@@ -3064,9 +4102,9 @@ export class CollaborationService {
       await this.auditService.log({
         tenantId: manager.tenantId,
         actorUserId,
-        entityType: 'announcement_template',
+        entityType: "announcement_template",
         entityId: template.id,
-        action: 'announcement_template.generated',
+        action: "announcement_template.generated",
         metadata: {
           announcementId: announcement.id,
         },
@@ -3077,7 +4115,7 @@ export class CollaborationService {
   }
 
   private toDateKey(date: Date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   private async triggerTaskReminder(
@@ -3088,7 +4126,16 @@ export class CollaborationService {
       lastName: string;
       userId: string | null;
     },
-    task: Awaited<ReturnType<CollaborationService['listManagerTasks']>>['tasks'][number],
+    task: {
+      id: string;
+      title: string;
+      assigneeEmployee: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        userId: string | null;
+      } | null;
+    },
     options: {
       notifyAssignee: boolean;
       sendChatMessages: boolean;
@@ -3132,22 +4179,25 @@ export class CollaborationService {
         tenantId: manager.tenantId,
         userId: task.assigneeEmployee.userId,
         type: NotificationType.OPERATIONS_ALERT,
-        title: `${options.escalation ? 'Escalation' : 'Reminder'}: ${task.title}`,
+        title: `${options.escalation ? "Escalation" : "Reminder"}: ${task.title}`,
         body: options.escalation
           ? `${manager.firstName} ${manager.lastName} escalated this overdue task.`
           : `${manager.firstName} ${manager.lastName} asked for an update.`,
-        actionUrl: '/employee/tasks',
+        actionUrl: "/employee/tasks",
         metadata: {
           taskId: task.id,
           reminder: !options.escalation,
           escalation: options.escalation,
         },
       });
-      this.collaborationGateway.emitThreadUpdated(task.assigneeEmployee.userId, {
-        taskId: task.id,
-        reminder: !options.escalation,
-        escalation: options.escalation,
-      });
+      this.collaborationGateway.emitThreadUpdated(
+        task.assigneeEmployee.userId,
+        {
+          taskId: task.id,
+          reminder: !options.escalation,
+          escalation: options.escalation,
+        },
+      );
     }
 
     if (options.escalateToManager && manager.userId) {
@@ -3157,7 +4207,7 @@ export class CollaborationService {
         type: NotificationType.OPERATIONS_ALERT,
         title: `Escalated overdue task: ${task.title}`,
         body: `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName} still has an overdue task.`,
-        actionUrl: '/collaboration',
+        actionUrl: "/collaboration",
         metadata: {
           taskId: task.id,
           escalation: true,
@@ -3228,7 +4278,11 @@ export class CollaborationService {
       return null;
     }
 
-    return Number((((completedAt.getTime() - createdAt.getTime()) / 1000 / 60 / 60)).toFixed(1));
+    return Number(
+      ((completedAt.getTime() - createdAt.getTime()) / 1000 / 60 / 60).toFixed(
+        1,
+      ),
+    );
   }
 
   private canAccessTask(
@@ -3238,7 +4292,1087 @@ export class CollaborationService {
       assigneeEmployeeId: string | null;
     },
   ) {
-    return task.managerEmployeeId === employeeId || task.assigneeEmployeeId === employeeId;
+    return (
+      task.managerEmployeeId === employeeId ||
+      task.assigneeEmployeeId === employeeId
+    );
+  }
+
+  private resolveTaskWindow(query?: {
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) {
+    if (!query?.date && !query?.dateFrom && !query?.dateTo) {
+      return null;
+    }
+
+    if (query?.date) {
+      const occurrenceDate = this.parseOccurrenceDate(query.date);
+      if (!occurrenceDate) {
+        throw new BadRequestException("Task date must use YYYY-MM-DD format.");
+      }
+
+      return {
+        start: occurrenceDate,
+        end: occurrenceDate,
+      };
+    }
+
+    const start = this.parseOccurrenceDate(
+      query?.dateFrom ?? query?.dateTo ?? "",
+    );
+    const end = this.parseOccurrenceDate(
+      query?.dateTo ?? query?.dateFrom ?? "",
+    );
+
+    if (!start || !end) {
+      throw new BadRequestException(
+        "Task date range must use YYYY-MM-DD format.",
+      );
+    }
+
+    if (this.utcDayNumber(start) > this.utcDayNumber(end)) {
+      throw new BadRequestException("Task date range is invalid.");
+    }
+
+    return { start, end };
+  }
+
+  private buildTaskDateWhere(taskWindow: { start: Date; end: Date } | null) {
+    if (!taskWindow) {
+      return {};
+    }
+
+    return {
+      dueAt: {
+        gte: this.utcDayStart(taskWindow.start),
+        lte: this.utcDayEnd(taskWindow.end),
+      },
+    };
+  }
+
+  private async buildRecurringTasksForEmployee(
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    start: Date,
+    end: Date,
+  ) {
+    const groupIds = employee.groupMemberships.map(
+      (membership) => membership.groupId,
+    );
+    const targetConditions: Prisma.TaskTemplateWhereInput[] = [
+      { assigneeEmployeeId: employee.id },
+    ];
+
+    if (groupIds.length > 0) {
+      targetConditions.push({ groupId: { in: groupIds } });
+    }
+
+    if (employee.departmentId) {
+      targetConditions.push({ departmentId: employee.departmentId });
+    }
+
+    if (employee.primaryLocationId) {
+      targetConditions.push({ locationId: employee.primaryLocationId });
+    }
+
+    const templates = await this.prisma.taskTemplate.findMany({
+      where: {
+        tenantId: employee.tenantId,
+        isActive: true,
+        expandOnDemand: true,
+        startDate: {
+          lte: this.utcDayEnd(end),
+        },
+        AND: [
+          {
+            OR: [
+              { endDate: null },
+              { endDate: { gte: this.utcDayStart(start) } },
+            ],
+          },
+          {
+            OR: targetConditions,
+          },
+        ],
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    if (templates.length === 0) {
+      return [];
+    }
+
+    const completions = await this.prisma.taskCompletion.findMany({
+      where: {
+        tenantId: employee.tenantId,
+        assigneeEmployeeId: employee.id,
+        taskTemplateId: {
+          in: templates.map((template) => template.id),
+        },
+        occurrenceDate: {
+          gte: this.utcDayStart(start),
+          lte: this.utcDayEnd(end),
+        },
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    const completionByKey = new Map(
+      completions.map((completion) => [
+        `${completion.taskTemplateId}:${this.formatDateKey(completion.occurrenceDate)}`,
+        completion,
+      ]),
+    );
+
+    const items = [];
+
+    for (
+      let cursor = new Date(start);
+      this.utcDayNumber(cursor) <= this.utcDayNumber(end);
+      cursor = this.addUtcDays(cursor, 1)
+    ) {
+      for (const template of templates) {
+        if (!this.isTemplateDueOnOccurrence(template, cursor)) {
+          continue;
+        }
+
+        const completion =
+          completionByKey.get(`${template.id}:${this.formatDateKey(cursor)}`) ??
+          null;
+        items.push(
+          this.buildRecurringTaskItem(template, employee, completion, cursor),
+        );
+      }
+    }
+
+    return items;
+  }
+
+  private async setRecurringTaskStatus(
+    userId: string,
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    recurringTaskRef: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      dateKey: string;
+    },
+    dto: SetTaskStatusDto,
+  ) {
+    if (recurringTaskRef.assigneeEmployeeId !== employee.id) {
+      throw new ForbiddenException(
+        "Current user cannot update this recurring task.",
+      );
+    }
+
+    const occurrenceDate = this.parseOccurrenceDate(recurringTaskRef.dateKey);
+    if (!occurrenceDate) {
+      throw new BadRequestException("Recurring task date is invalid.");
+    }
+
+    const template = await this.prisma.taskTemplate.findFirst({
+      where: {
+        id: recurringTaskRef.taskTemplateId,
+        tenantId: employee.tenantId,
+        isActive: true,
+        expandOnDemand: true,
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+    });
+
+    if (
+      !template ||
+      !this.isTemplateDueOnOccurrence(template, occurrenceDate)
+    ) {
+      throw new NotFoundException("Recurring task not found.");
+    }
+
+    const existingCompletion = await this.prisma.taskCompletion.findUnique({
+      where: {
+        taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+          taskTemplateId: template.id,
+          assigneeEmployeeId: employee.id,
+          occurrenceDate,
+        },
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (
+      dto.status === TaskStatus.DONE &&
+      template.requiresPhoto &&
+      (existingCompletion?.photoProofs.filter(
+        (proof) => !proof.deletedAt && !proof.supersededByProofId,
+      ).length ?? 0) === 0
+    ) {
+      throw new BadRequestException(
+        "Photo proof is required before completing this task.",
+      );
+    }
+
+    const updatedCompletion = await this.prisma.taskCompletion.upsert({
+      where: {
+        taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+          taskTemplateId: template.id,
+          assigneeEmployeeId: employee.id,
+          occurrenceDate,
+        },
+      },
+      update: {
+        status: dto.status,
+        completedAt: dto.status === TaskStatus.DONE ? new Date() : null,
+      },
+      create: {
+        tenantId: employee.tenantId,
+        taskTemplateId: template.id,
+        assigneeEmployeeId: employee.id,
+        occurrenceDate,
+        status: dto.status,
+        completedAt: dto.status === TaskStatus.DONE ? new Date() : null,
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task_completion",
+      entityId: updatedCompletion.id,
+      action: "task_completion.status_updated",
+      metadata: {
+        taskTemplateId: template.id,
+        occurrenceDate: occurrenceDate.toISOString(),
+        status: dto.status,
+      },
+    });
+
+    return this.buildRecurringTaskItem(
+      template,
+      employee,
+      updatedCompletion,
+      occurrenceDate,
+    );
+  }
+
+  private async rescheduleRecurringTask(
+    userId: string,
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    recurringTaskRef: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      dateKey: string;
+    },
+    nextDueAt: Date,
+    dto: RescheduleTaskDto,
+  ) {
+    if (recurringTaskRef.assigneeEmployeeId !== employee.id) {
+      throw new ForbiddenException(
+        "Current user cannot reschedule this recurring task.",
+      );
+    }
+
+    const occurrenceDate = this.parseOccurrenceDate(recurringTaskRef.dateKey);
+    if (!occurrenceDate) {
+      throw new BadRequestException("Recurring task date is invalid.");
+    }
+
+    const template = await this.prisma.taskTemplate.findFirst({
+      where: {
+        id: recurringTaskRef.taskTemplateId,
+        tenantId: employee.tenantId,
+        isActive: true,
+        expandOnDemand: true,
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+    });
+
+    if (
+      !template ||
+      !this.isTemplateDueOnOccurrence(template, occurrenceDate)
+    ) {
+      throw new NotFoundException("Recurring task not found.");
+    }
+
+    const originalRecurringTaskId = this.composeRecurringTaskId(
+      template.id,
+      employee.id,
+      recurringTaskRef.dateKey,
+    );
+    const movedTask = await this.prisma.$transaction(async (tx) => {
+      await tx.taskCompletion.upsert({
+        where: {
+          taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+            taskTemplateId: template.id,
+            assigneeEmployeeId: employee.id,
+            occurrenceDate,
+          },
+        },
+        update: {
+          status: TaskStatus.CANCELLED,
+          completedAt: null,
+        },
+        create: {
+          tenantId: employee.tenantId,
+          taskTemplateId: template.id,
+          assigneeEmployeeId: employee.id,
+          occurrenceDate,
+          status: TaskStatus.CANCELLED,
+          completedAt: null,
+        },
+      });
+
+      const task = await tx.task.create({
+        data: {
+          tenantId: employee.tenantId,
+          managerEmployeeId: template.managerEmployee.id,
+          assigneeEmployeeId: employee.id,
+          groupId: template.group?.id ?? null,
+          title: template.title,
+          description: template.description,
+          priority: template.priority,
+          requiresPhoto: template.requiresPhoto,
+          dueAt: nextDueAt,
+          activities: {
+            create: {
+              tenantId: employee.tenantId,
+              actorEmployeeId: employee.id,
+              kind: TaskActivityKind.CREATED,
+              body: `Created from recurring overdue task ${originalRecurringTaskId}.`,
+            },
+          },
+        },
+        include: this.taskInclude(),
+      });
+
+      await tx.taskActivity.create({
+        data: {
+          tenantId: employee.tenantId,
+          taskId: task.id,
+          actorEmployeeId: employee.id,
+          kind: TaskActivityKind.COMMENT,
+          body:
+            dto.comment ??
+            `Recurring overdue task moved to ${nextDueAt.toISOString()}.`,
+        },
+      });
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: this.taskInclude(),
+      });
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: movedTask.id,
+      action: "task.rescheduled_from_recurring",
+      metadata: {
+        taskTemplateId: template.id,
+        fromOccurrenceDate: occurrenceDate.toISOString(),
+        toDueAt: nextDueAt.toISOString(),
+      },
+    });
+
+    return {
+      task: this.serializeTaskWithPhotoProofUrls(movedTask),
+      replacedTaskId: originalRecurringTaskId,
+    };
+  }
+
+  private buildRecurringTaskItem(
+    template: {
+      id: string;
+      title: string;
+      description: string | null;
+      priority: TaskPriority;
+      requiresPhoto: boolean;
+      dueTimeLocal: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      managerEmployee: {
+        id: string;
+        firstName: string;
+        lastName: string;
+      };
+      group: {
+        id: string;
+        name: string;
+      } | null;
+    },
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+    },
+    completion: {
+      status: TaskStatus;
+      completedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+      photoProofs: Array<{
+        id: string;
+        fileName: string;
+        storageKey: string;
+        deletedAt: Date | null;
+        supersededByProofId: string | null;
+        createdAt: Date;
+        uploadedByEmployee: {
+          id: string;
+          firstName: string;
+          lastName: string;
+        };
+      }>;
+    } | null,
+    occurrenceDate: Date,
+  ) {
+    return {
+      id: this.composeRecurringTaskId(
+        template.id,
+        employee.id,
+        this.formatDateKey(occurrenceDate),
+      ),
+      title: template.title,
+      description: template.description,
+      status: completion?.status ?? TaskStatus.TODO,
+      priority: template.priority,
+      requiresPhoto: template.requiresPhoto,
+      isRecurring: true,
+      taskTemplateId: template.id,
+      occurrenceDate: occurrenceDate.toISOString(),
+      dueAt: this.buildOccurrenceDueAt(occurrenceDate, template.dueTimeLocal),
+      completedAt: completion?.completedAt?.toISOString() ?? null,
+      createdAt: (completion?.createdAt ?? template.createdAt).toISOString(),
+      updatedAt: (completion?.updatedAt ?? template.updatedAt).toISOString(),
+      groupId: template.group?.id ?? null,
+      assigneeEmployeeId: employee.id,
+      managerEmployee: {
+        id: template.managerEmployee.id,
+        firstName: template.managerEmployee.firstName,
+        lastName: template.managerEmployee.lastName,
+      },
+      assigneeEmployee: {
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        employeeNumber: employee.employeeNumber,
+        department: employee.department
+          ? {
+              id: employee.department.id,
+              name: employee.department.name,
+            }
+          : null,
+        primaryLocation: employee.primaryLocation
+          ? {
+              id: employee.primaryLocation.id,
+              name: employee.primaryLocation.name,
+            }
+          : null,
+      },
+      group: template.group
+        ? {
+            id: template.group.id,
+            name: template.group.name,
+          }
+        : null,
+      checklistItems: [],
+      activities: [],
+      photoProofs: (completion?.photoProofs ?? []).map((proof) => ({
+        id: proof.id,
+        fileName: proof.fileName,
+        storageKey: proof.storageKey,
+        url: this.storageService.getObjectUrl(proof.storageKey),
+        deletedAt: proof.deletedAt?.toISOString() ?? null,
+        supersededByProofId: proof.supersededByProofId ?? null,
+        createdAt: proof.createdAt.toISOString(),
+        uploadedByEmployee: {
+          id: proof.uploadedByEmployee.id,
+          firstName: proof.uploadedByEmployee.firstName,
+          lastName: proof.uploadedByEmployee.lastName,
+        },
+      })),
+    };
+  }
+
+  private parseRecurringTaskId(taskId: string) {
+    const match = /^recurring:([^:]+):([^:]+):(\d{4}-\d{2}-\d{2})$/.exec(
+      taskId,
+    );
+    if (!match) {
+      return null;
+    }
+
+    return {
+      taskTemplateId: match[1],
+      assigneeEmployeeId: match[2],
+      dateKey: match[3],
+    };
+  }
+
+  private composeRecurringTaskId(
+    taskTemplateId: string,
+    assigneeEmployeeId: string,
+    dateKey: string,
+  ) {
+    return `recurring:${taskTemplateId}:${assigneeEmployeeId}:${dateKey}`;
+  }
+
+  private parseOccurrenceDate(value: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return null;
+    }
+
+    const parsed = new Date(`${value}T12:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private isTemplateDueOnOccurrence(
+    template: {
+      frequency: "DAILY" | "WEEKLY" | "MONTHLY";
+      weekDaysJson: string | null;
+      dayOfMonth: number | null;
+      startDate: Date;
+      endDate: Date | null;
+    },
+    occurrenceDate: Date,
+  ) {
+    const occurrenceDay = this.utcDayNumber(occurrenceDate);
+
+    if (this.utcDayNumber(template.startDate) > occurrenceDay) {
+      return false;
+    }
+
+    if (
+      template.endDate &&
+      this.utcDayNumber(template.endDate) < occurrenceDay
+    ) {
+      return false;
+    }
+
+    if (template.frequency === "DAILY") {
+      return true;
+    }
+
+    if (template.frequency === "WEEKLY") {
+      const weekdays = template.weekDaysJson
+        ? (JSON.parse(template.weekDaysJson) as number[])
+        : [];
+      return weekdays.includes(occurrenceDate.getUTCDay());
+    }
+
+    const targetDay = template.dayOfMonth ?? 1;
+    const lastDayOfMonth = new Date(
+      Date.UTC(
+        occurrenceDate.getUTCFullYear(),
+        occurrenceDate.getUTCMonth() + 1,
+        0,
+      ),
+    ).getUTCDate();
+    return occurrenceDate.getUTCDate() === Math.min(targetDay, lastDayOfMonth);
+  }
+
+  private buildOccurrenceDueAt(
+    occurrenceDate: Date,
+    dueTimeLocal: string | null,
+  ) {
+    const result = new Date(occurrenceDate);
+
+    if (dueTimeLocal) {
+      const [hoursRaw, minutesRaw] = dueTimeLocal.split(":");
+      const hours = Number(hoursRaw);
+      const minutes = Number(minutesRaw ?? "0");
+
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+        result.setUTCHours(hours, minutes, 0, 0);
+        return result.toISOString();
+      }
+    }
+
+    result.setUTCHours(12, 0, 0, 0);
+    return result.toISOString();
+  }
+
+  private formatDateKey(date: Date) {
+    const year = date.getUTCFullYear();
+    const month = `${date.getUTCMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getUTCDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  private addUtcDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+  }
+
+  private utcDayNumber(date: Date) {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+    );
+  }
+
+  private utcDayStart(date: Date) {
+    return new Date(
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
+    );
+  }
+
+  private utcDayEnd(date: Date) {
+    return new Date(
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    );
+  }
+
+  private serializeTaskWithPhotoProofUrls<
+    T extends {
+      photoProofs: Array<{
+        id: string;
+        fileName: string;
+        storageKey: string;
+        deletedAt: Date | null;
+        supersededByProofId: string | null;
+        createdAt: Date;
+        uploadedByEmployee: {
+          id: string;
+          firstName: string;
+          lastName: string;
+        };
+      }>;
+    },
+  >(task: T) {
+    return {
+      ...task,
+      photoProofs: task.photoProofs.map((proof) => ({
+        id: proof.id,
+        fileName: proof.fileName,
+        storageKey: proof.storageKey,
+        url: this.storageService.getObjectUrl(proof.storageKey),
+        deletedAt: proof.deletedAt?.toISOString() ?? null,
+        supersededByProofId: proof.supersededByProofId ?? null,
+        createdAt: proof.createdAt.toISOString(),
+        uploadedByEmployee: proof.uploadedByEmployee,
+      })),
+    };
+  }
+
+  private async uploadTaskPhotoProof(
+    tenantId: string,
+    taskKey: string,
+    employeeId: string,
+    fileName: string,
+    dataUrl: string,
+  ) {
+    const sanitizedFileName =
+      fileName
+        .replace(/[^a-z0-9.\-_]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase() || "photo.jpg";
+    const storageKey = `tenants/${tenantId}/tasks/${taskKey.replace(/[^a-z0-9.\-_]+/gi, "-").toLowerCase()}/${employeeId}/${Date.now()}-${sanitizedFileName}`;
+    return this.storageService.uploadDataUrl(storageKey, dataUrl);
+  }
+
+  private async addRecurringTaskPhotoProof(
+    userId: string,
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    recurringTaskRef: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      dateKey: string;
+    },
+    dto: CreateTaskPhotoProofDto,
+  ) {
+    if (recurringTaskRef.assigneeEmployeeId !== employee.id) {
+      throw new ForbiddenException(
+        "Current user cannot update this recurring task.",
+      );
+    }
+
+    const occurrenceDate = this.parseOccurrenceDate(recurringTaskRef.dateKey);
+    if (!occurrenceDate) {
+      throw new BadRequestException("Recurring task date is invalid.");
+    }
+
+    const template = await this.prisma.taskTemplate.findFirst({
+      where: {
+        id: recurringTaskRef.taskTemplateId,
+        tenantId: employee.tenantId,
+        isActive: true,
+        expandOnDemand: true,
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+    });
+
+    if (
+      !template ||
+      !this.isTemplateDueOnOccurrence(template, occurrenceDate)
+    ) {
+      throw new NotFoundException("Recurring task not found.");
+    }
+
+    if (!template.requiresPhoto) {
+      throw new BadRequestException("This task does not require photo proof.");
+    }
+
+    const completion = await this.prisma.taskCompletion.upsert({
+      where: {
+        taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+          taskTemplateId: template.id,
+          assigneeEmployeeId: employee.id,
+          occurrenceDate,
+        },
+      },
+      update: {},
+      create: {
+        tenantId: employee.tenantId,
+        taskTemplateId: template.id,
+        assigneeEmployeeId: employee.id,
+        occurrenceDate,
+        status: TaskStatus.TODO,
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    const activeProofs = completion.photoProofs.filter(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId,
+    );
+    if (dto.action === "add" && activeProofs.length >= TASK_PHOTO_PROOF_LIMIT) {
+      throw new BadRequestException(
+        `Task photo proof limit is ${TASK_PHOTO_PROOF_LIMIT}.`,
+      );
+    }
+
+    const targetProof =
+      dto.action === "replace"
+        ? activeProofs.find((proof) => proof.id === dto.targetProofId)
+        : null;
+
+    if (dto.action === "replace" && !targetProof) {
+      throw new BadRequestException("Photo proof to replace was not found.");
+    }
+
+    const fileName = dto.fileName.trim() || "task-photo.jpg";
+    const uploaded = await this.uploadTaskPhotoProof(
+      employee.tenantId,
+      `recurring-${template.id}-${recurringTaskRef.dateKey}`,
+      employee.id,
+      fileName,
+      dto.dataUrl,
+    );
+
+    const updatedCompletion = await this.prisma.$transaction(async (tx) => {
+      const createdProof = await tx.taskPhotoProof.create({
+        data: {
+          tenantId: employee.tenantId,
+          taskCompletionId: completion.id,
+          uploadedByEmployeeId: employee.id,
+          fileName,
+          storageKey: uploaded.key,
+        },
+      });
+
+      if (targetProof) {
+        await tx.taskPhotoProof.update({
+          where: { id: targetProof.id },
+          data: {
+            supersededByProofId: createdProof.id,
+          },
+        });
+      }
+
+      return tx.taskCompletion.findUniqueOrThrow({
+        where: { id: completion.id },
+        include: {
+          photoProofs: {
+            include: {
+              uploadedByEmployee: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task_completion",
+      entityId: updatedCompletion.id,
+      action:
+        dto.action === "replace"
+          ? "task_completion.photo_proof_replaced"
+          : "task_completion.photo_proof_added",
+      metadata: {
+        taskTemplateId: template.id,
+        occurrenceDate: occurrenceDate.toISOString(),
+        proofStorageKey: uploaded.key,
+        targetProofId: targetProof?.id ?? null,
+      },
+    });
+
+    return this.buildRecurringTaskItem(
+      template,
+      employee,
+      updatedCompletion,
+      occurrenceDate,
+    );
+  }
+
+  private async deleteRecurringTaskPhotoProof(
+    userId: string,
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    recurringTaskRef: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      dateKey: string;
+    },
+    proofId: string,
+  ) {
+    if (recurringTaskRef.assigneeEmployeeId !== employee.id) {
+      throw new ForbiddenException(
+        "Current user cannot update this recurring task.",
+      );
+    }
+
+    const occurrenceDate = this.parseOccurrenceDate(recurringTaskRef.dateKey);
+    if (!occurrenceDate) {
+      throw new BadRequestException("Recurring task date is invalid.");
+    }
+
+    const template = await this.prisma.taskTemplate.findFirst({
+      where: {
+        id: recurringTaskRef.taskTemplateId,
+        tenantId: employee.tenantId,
+        isActive: true,
+        expandOnDemand: true,
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+    });
+
+    if (
+      !template ||
+      !this.isTemplateDueOnOccurrence(template, occurrenceDate)
+    ) {
+      throw new NotFoundException("Recurring task not found.");
+    }
+
+    const completion = await this.prisma.taskCompletion.findUnique({
+      where: {
+        taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+          taskTemplateId: template.id,
+          assigneeEmployeeId: employee.id,
+          occurrenceDate,
+        },
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!completion) {
+      throw new NotFoundException("Photo proof not found.");
+    }
+
+    const targetProof = completion.photoProofs.find(
+      (proof) =>
+        proof.id === proofId && !proof.deletedAt && !proof.supersededByProofId,
+    );
+
+    if (!targetProof) {
+      throw new NotFoundException("Photo proof not found.");
+    }
+
+    const updatedCompletion = await this.prisma.$transaction(async (tx) => {
+      await tx.taskPhotoProof.update({
+        where: { id: targetProof.id },
+        data: {
+          deletedAt: new Date(),
+        },
+      });
+
+      const nextCompletion = await tx.taskCompletion.findUniqueOrThrow({
+        where: { id: completion.id },
+        include: {
+          photoProofs: {
+            include: {
+              uploadedByEmployee: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+      const remainingActive = nextCompletion.photoProofs.filter(
+        (proof) => !proof.deletedAt && !proof.supersededByProofId,
+      ).length;
+
+      if (
+        template.requiresPhoto &&
+        nextCompletion.status === TaskStatus.DONE &&
+        remainingActive === 0
+      ) {
+        return tx.taskCompletion.update({
+          where: { id: completion.id },
+          data: {
+            status: TaskStatus.TODO,
+            completedAt: null,
+          },
+          include: {
+            photoProofs: {
+              include: {
+                uploadedByEmployee: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        });
+      }
+
+      return nextCompletion;
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "task_completion",
+      entityId: updatedCompletion.id,
+      action: "task_completion.photo_proof_deleted",
+      metadata: {
+        taskTemplateId: template.id,
+        occurrenceDate: occurrenceDate.toISOString(),
+        proofId,
+      },
+    });
+
+    return this.buildRecurringTaskItem(
+      template,
+      employee,
+      updatedCompletion,
+      occurrenceDate,
+    );
   }
 
   private taskInclude() {
@@ -3255,13 +5389,19 @@ export class CollaborationService {
         include: {
           completedByEmployee: true,
         },
-        orderBy: { sortOrder: 'asc' as const },
+        orderBy: { sortOrder: "asc" as const },
       },
       activities: {
         include: {
           actorEmployee: true,
         },
-        orderBy: { createdAt: 'desc' as const },
+        orderBy: { createdAt: "desc" as const },
+      },
+      photoProofs: {
+        include: {
+          uploadedByEmployee: true,
+        },
+        orderBy: { createdAt: "asc" as const },
       },
     } satisfies Prisma.TaskInclude;
   }
@@ -3278,13 +5418,13 @@ export class CollaborationService {
             },
           },
         },
-        orderBy: { createdAt: 'asc' as const },
+        orderBy: { createdAt: "asc" as const },
       },
       messages: {
         include: {
           authorEmployee: true,
         },
-        orderBy: { createdAt: 'asc' as const },
+        orderBy: { createdAt: "asc" as const },
       },
     } satisfies Prisma.ChatThreadInclude;
   }

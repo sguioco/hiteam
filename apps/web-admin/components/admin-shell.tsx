@@ -42,6 +42,7 @@ import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
 import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
+import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 
 type NavItem = {
   href: string;
@@ -67,6 +68,7 @@ type OrganizationHeaderState = {
 type AccountProfile = {
   firstName?: string | null;
   lastName?: string | null;
+  avatarUrl?: string | null;
 };
 
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
@@ -111,31 +113,19 @@ function formatNotificationTimestamp(value: string, locale: Locale) {
 }
 
 function hasStudioBackground(pathname: string) {
-  const studioRoutes = [
-    toAdminHref("/"),
-    toAdminHref("/employees"),
-    toAdminHref("/attendance"),
-    toAdminHref("/biometric"),
-    toAdminHref("/payroll"),
-    toAdminHref("/schedule"),
-    toAdminHref("/requests"),
-    toAdminHref("/analytics"),
-    toAdminHref("/profile"),
-  ];
-
-  return studioRoutes.some((route) =>
-    pathname === route || pathname.startsWith(`${route}/`),
-  );
+  return Boolean(pathname);
 }
 
 export function AdminShell({
   createDialogActions,
   children,
+  onCreateAction,
   showTopbar = true,
   mode = "admin",
 }: {
   createDialogActions?: CreateDialogAction[];
   children: ReactNode;
+  onCreateAction?: () => void;
   showTopbar?: boolean;
   mode?: "admin" | "employee";
 }) {
@@ -770,7 +760,19 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                {getDisplayInitials(profileName)}
+                {accountProfile?.avatarUrl ? (
+                  <img
+                    alt={profileName}
+                    className="h-full w-full rounded-full object-cover"
+                    src={accountProfile.avatarUrl}
+                  />
+                ) : (
+                  <img
+                    alt={profileName}
+                    className="h-full w-full rounded-full object-cover"
+                    src={getMockAvatarDataUrl(profileName)}
+                  />
+                )}
               </div>
               <div className="sidebar-user-copy">
                 <strong>{profileName}</strong>
@@ -980,10 +982,16 @@ export function AdminShell({
                     </div>
                   ) : null}
                 </div>
-                {createDialogActions?.length ? (
+                {createDialogActions?.length || onCreateAction ? (
                   <Button
                     className="rounded-2xl px-5"
-                    onClick={() => setCreateOpen(true)}
+                    onClick={() => {
+                      if (onCreateAction) {
+                        onCreateAction();
+                        return;
+                      }
+                      setCreateOpen(true);
+                    }}
                     type="button"
                   >
                     <Plus className="size-4" />

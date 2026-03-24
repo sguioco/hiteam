@@ -9,12 +9,22 @@
     "ios": {
       "bundleIdentifier": "com.smart.mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
+        "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.smart.mobile",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -25,8 +35,24 @@
         }
       ]
     ],
+    "androidNavigationBar": {
+      "backgroundColor": "#ffffff",
+      "barStyle": "dark-content"
+    },
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/35bb3b6c-af5d-410a-b463-0d3da3c0de78"
     }
   }
 }

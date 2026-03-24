@@ -159,31 +159,35 @@ function createInitialState(): DemoState {
     googlePlaceId: "demo-place-id",
   };
 
-  const employees: DemoEmployee[] = scheduleData.employees.map((employee, index) => ({
-    ...employee,
-    department: employee.department ?? null,
-    primaryLocation: employee.primaryLocation ?? null,
-    position: employee.position ?? null,
-    middleName: index % 2 === 0 ? "Александрович" : "Игоревна",
-    birthDate: `199${index}-0${(index % 8) + 1}-1${index}`,
-    gender: index % 2 === 0 ? "male" : "female",
-    phone: `+7 999 000 0${index}${index}`,
-    avatarUrl: getMockAvatarDataUrl(`${employee.firstName} ${employee.lastName}`),
-    status: index < 4 ? "ACTIVE" : "INACTIVE",
-    user: {
-      id: `user-${employee.id}`,
-      email: `employee${index + 1}@hiteam.demo`,
-    },
-    company,
-    devices: [
-      {
-        id: `device-${employee.id}`,
-        platform: index % 2 === 0 ? "IOS" : "ANDROID",
-        deviceName: index % 2 === 0 ? "iPhone 15" : "Galaxy S25",
-        isPrimary: true,
+  const employees: DemoEmployee[] = scheduleData.employees.map(
+    (employee, index) => ({
+      ...employee,
+      department: employee.department ?? null,
+      primaryLocation: employee.primaryLocation ?? null,
+      position: employee.position ?? null,
+      middleName: index % 2 === 0 ? "Александрович" : "Игоревна",
+      birthDate: `199${index}-0${(index % 8) + 1}-1${index}`,
+      gender: index % 2 === 0 ? "male" : "female",
+      phone: `+7 999 000 0${index}${index}`,
+      avatarUrl: getMockAvatarDataUrl(
+        `${employee.firstName} ${employee.lastName}`,
+      ),
+      status: index < 4 ? "ACTIVE" : "INACTIVE",
+      user: {
+        id: `user-${employee.id}`,
+        email: `employee${index + 1}@hiteam.demo`,
       },
-    ],
-  }));
+      company,
+      devices: [
+        {
+          id: `device-${employee.id}`,
+          platform: index % 2 === 0 ? "IOS" : "ANDROID",
+          deviceName: index % 2 === 0 ? "iPhone 15" : "Galaxy S25",
+          isPrimary: true,
+        },
+      ],
+    }),
+  );
 
   const managerEmployee = employees[0];
   const groups = [
@@ -245,9 +249,12 @@ function createInitialState(): DemoState {
     checklistItems?: any[];
   }) => {
     const assignee = assigneeEmployeeId
-      ? employees.find((employee) => employee.id === assigneeEmployeeId) ?? null
+      ? (employees.find((employee) => employee.id === assigneeEmployeeId) ??
+        null)
       : null;
-    const group = groupId ? groups.find((item) => item.id === groupId) ?? null : null;
+    const group = groupId
+      ? (groups.find((item) => item.id === groupId) ?? null)
+      : null;
     const completedAt = status === "DONE" ? createIsoAt(0, 18, 15) : null;
 
     return {
@@ -297,6 +304,7 @@ function createInitialState(): DemoState {
           },
         },
       ],
+      photoProofs: [],
     };
   };
 
@@ -334,11 +342,12 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-demo-2",
       title: "Встреча: Ежедневный синк по сменам",
-      description: appendTaskMeta("Обсуждение покрытия вечерних смен.", {
-        kind: "meeting",
-        meetingMode: "offline",
-        meetingLocation: "Переговорная B",
-      }) ?? null,
+      description:
+        appendTaskMeta("Обсуждение покрытия вечерних смен.", {
+          kind: "meeting",
+          meetingMode: "offline",
+          meetingLocation: "Переговорная B",
+        }) ?? null,
       dueAt: createIsoAt(0, 15, 0),
       priority: "MEDIUM",
       status: "IN_PROGRESS",
@@ -380,19 +389,21 @@ function createInitialState(): DemoState {
     }),
   ];
 
-  const requests = createMockApprovalInboxItems(new Date(), "ru").map((item, index) => ({
-    ...item,
-    status: index === 0 ? "PENDING" : item.status,
-    request: {
-      ...item.request,
-      employee: {
-        id: employees[index % employees.length].id,
-        firstName: employees[index % employees.length].firstName,
-        lastName: employees[index % employees.length].lastName,
-        employeeNumber: employees[index % employees.length].employeeNumber,
+  const requests = createMockApprovalInboxItems(new Date(), "ru").map(
+    (item, index) => ({
+      ...item,
+      status: index === 0 ? "PENDING" : item.status,
+      request: {
+        ...item.request,
+        employee: {
+          id: employees[index % employees.length].id,
+          firstName: employees[index % employees.length].firstName,
+          lastName: employees[index % employees.length].lastName,
+          employeeNumber: employees[index % employees.length].employeeNumber,
+        },
       },
-    },
-  }));
+    }),
+  );
 
   const notifications = [
     {
@@ -505,7 +516,11 @@ function createInitialState(): DemoState {
   const biometricEmployees = employees.map((employee, index) => {
     const result = index === 1 ? "REVIEW" : index === 4 ? "FAILED" : "PASSED";
     const manualReviewStatus =
-      result === "REVIEW" ? "PENDING" : result === "FAILED" ? "REJECTED" : "APPROVED";
+      result === "REVIEW"
+        ? "PENDING"
+        : result === "FAILED"
+          ? "REJECTED"
+          : "APPROVED";
 
     return {
       employeeId: employee.id,
@@ -546,7 +561,9 @@ function createInitialState(): DemoState {
                 result === "REVIEW" ? "Face mismatch confidence is low." : null,
               capturedAt: createIsoAt(-(index + 1), 9, 30),
               artifactCount: 2,
-              artifactPreviewUrls: employee.avatarUrl ? [employee.avatarUrl] : [],
+              artifactPreviewUrls: employee.avatarUrl
+                ? [employee.avatarUrl]
+                : [],
             },
     };
   });
@@ -628,7 +645,10 @@ function currentEmployeeId(token?: string) {
 }
 
 function shouldHandle(token?: string) {
-  return isDemoModeEnabled() && isDemoAccessToken(token ?? getSession()?.accessToken ?? null);
+  return (
+    isDemoModeEnabled() &&
+    isDemoAccessToken(token ?? getSession()?.accessToken ?? null)
+  );
 }
 
 function buildAttendanceLive(state: DemoState) {
@@ -680,14 +700,20 @@ function buildAttendanceHistory(
           department: employee.department?.name ?? "—",
           location: employee.primaryLocation?.name ?? "—",
           shiftLabel: "09:00-18:00",
-          status: dayOffset === 0 && employeeIndex === 0 ? "on_break" : "checked_out",
+          status:
+            dayOffset === 0 && employeeIndex === 0 ? "on_break" : "checked_out",
           startedAt,
           endedAt,
           totalMinutes: 540,
           workedMinutes: 495 - employeeIndex * 8,
           breakMinutes: 45,
           paidBreakMinutes: 0,
-          lateMinutes: employee.id === "emp-2" ? 0 : employeeIndex === 1 && dayOffset < 2 ? 12 : 0,
+          lateMinutes:
+            employee.id === "emp-2"
+              ? 0
+              : employeeIndex === 1 && dayOffset < 2
+                ? 12
+                : 0,
           earlyLeaveMinutes: employeeIndex === 3 && dayOffset === 2 ? 15 : 0,
           checkInEvent: {
             occurredAt: startedAt,
@@ -953,9 +979,12 @@ function buildCollaborationOverview(state: DemoState) {
         },
         total: employeeTasks.length,
         todo: employeeTasks.filter((task) => task.status === "TODO").length,
-        inProgress: employeeTasks.filter((task) => task.status === "IN_PROGRESS").length,
+        inProgress: employeeTasks.filter(
+          (task) => task.status === "IN_PROGRESS",
+        ).length,
         done: employeeTasks.filter((task) => task.status === "DONE").length,
-        cancelled: employeeTasks.filter((task) => task.status === "CANCELLED").length,
+        cancelled: employeeTasks.filter((task) => task.status === "CANCELLED")
+          .length,
       };
     }),
   };
@@ -1006,8 +1035,9 @@ function buildBiometricReviewResponse(
       enrolled: state.biometricEmployees.filter(
         (item) => item.enrollmentStatus === "ENROLLED",
       ).length,
-      reviewRequired: state.biometricEmployees.filter((item) => item.pendingReview)
-        .length,
+      reviewRequired: state.biometricEmployees.filter(
+        (item) => item.pendingReview,
+      ).length,
       notEnrolled: state.biometricEmployees.filter(
         (item) => item.enrollmentStatus === "NOT_STARTED",
       ).length,
@@ -1182,9 +1212,15 @@ function buildPayrollSummary(state: DemoState) {
     },
     totals: {
       employees: rows.length,
-      scheduledMinutes: rows.reduce((sum, row) => sum + row.scheduledMinutes, 0),
+      scheduledMinutes: rows.reduce(
+        (sum, row) => sum + row.scheduledMinutes,
+        0,
+      ),
       workedMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0),
-      rawWorkedMinutes: rows.reduce((sum, row) => sum + row.rawWorkedMinutes, 0),
+      rawWorkedMinutes: rows.reduce(
+        (sum, row) => sum + row.rawWorkedMinutes,
+        0,
+      ),
       breakMinutes: rows.reduce((sum, row) => sum + row.breakMinutes, 0),
       weekendMinutes: rows.reduce((sum, row) => sum + row.weekendMinutes, 0),
       holidayMinutes: rows.reduce((sum, row) => sum + row.holidayMinutes, 0),
@@ -1200,7 +1236,10 @@ function buildPayrollSummary(state: DemoState) {
       nightMinutes: rows.reduce((sum, row) => sum + row.nightMinutes, 0),
       leaveDays: rows.reduce((sum, row) => sum + row.leaveDays, 0),
       sickDays: rows.reduce((sum, row) => sum + row.sickDays, 0),
-      estimatedGrossPay: rows.reduce((sum, row) => sum + row.estimatedGrossPay, 0),
+      estimatedGrossPay: rows.reduce(
+        (sum, row) => sum + row.estimatedGrossPay,
+        0,
+      ),
     },
     rows,
   };
@@ -1208,8 +1247,9 @@ function buildPayrollSummary(state: DemoState) {
 
 function buildEmployeeSummary(state: DemoState, token?: string) {
   const employeeId = currentEmployeeId(token);
-  const unreadNotifications = state.notifications.filter((item) => !item.isRead)
-    .length;
+  const unreadNotifications = state.notifications.filter(
+    (item) => !item.isRead,
+  ).length;
   const pendingTasks = state.tasks.filter(
     (task) =>
       task.assigneeEmployee?.id === employeeId &&
@@ -1255,7 +1295,8 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/notifications/me/unread-count" && method === "GET") {
     return {
-      unreadCount: currentState.notifications.filter((item) => !item.isRead).length,
+      unreadCount: currentState.notifications.filter((item) => !item.isRead)
+        .length,
     } as T;
   }
 
@@ -1265,11 +1306,15 @@ export async function demoApiRequest<T>(
     ) as T;
   }
 
-  const readNotificationMatch = pathname.match(/^\/notifications\/([^/]+)\/read$/);
+  const readNotificationMatch = pathname.match(
+    /^\/notifications\/([^/]+)\/read$/,
+  );
   if (readNotificationMatch && method === "POST") {
     const notificationId = readNotificationMatch[1];
     updateState((state) => {
-      const item = state.notifications.find((entry) => entry.id === notificationId);
+      const item = state.notifications.find(
+        (entry) => entry.id === notificationId,
+      );
       if (item && !item.isRead) {
         item.isRead = true;
         item.readAt = new Date().toISOString();
@@ -1442,10 +1487,11 @@ export async function demoApiRequest<T>(
     const payload = parseBody<any>(options?.body);
     updateState((state) => {
       const assignee =
-        state.employees.find((employee) => employee.id === payload.assigneeEmployeeId) ??
-        state.employees[0];
+        state.employees.find(
+          (employee) => employee.id === payload.assigneeEmployeeId,
+        ) ?? state.employees[0];
       const group = payload.groupId
-        ? state.groups.find((entry) => entry.id === payload.groupId) ?? null
+        ? (state.groups.find((entry) => entry.id === payload.groupId) ?? null)
         : null;
       state.tasks.unshift({
         id: buildTaskId("task"),
@@ -1453,6 +1499,10 @@ export async function demoApiRequest<T>(
         description: payload.description ?? null,
         status: "TODO",
         priority: payload.priority ?? "MEDIUM",
+        requiresPhoto: Boolean(payload.requiresPhoto),
+        isRecurring: false,
+        taskTemplateId: null,
+        occurrenceDate: null,
         dueAt: payload.dueAt ?? null,
         completedAt: null,
         createdAt: new Date().toISOString(),
@@ -1477,12 +1527,15 @@ export async function demoApiRequest<T>(
         group: group ? { id: group.id, name: group.name } : null,
         checklistItems: [],
         activities: [],
+        photoProofs: [],
       });
     });
     return undefined as T;
   }
 
-  const taskStatusMatch = pathname.match(/^\/collaboration\/tasks\/([^/]+)\/status$/);
+  const taskStatusMatch = pathname.match(
+    /^\/collaboration\/tasks\/([^/]+)\/status$/,
+  );
   if (taskStatusMatch && method === "POST") {
     const payload = parseBody<{ status: string }>(options?.body);
     updateState((state) => {
@@ -1502,7 +1555,9 @@ export async function demoApiRequest<T>(
   );
   if (checklistToggleMatch && method === "POST") {
     updateState((state) => {
-      const task = state.tasks.find((entry) => entry.id === checklistToggleMatch[1]);
+      const task = state.tasks.find(
+        (entry) => entry.id === checklistToggleMatch[1],
+      );
       const checklistItem = task?.checklistItems.find(
         (entry: any) => entry.id === checklistToggleMatch[2],
       );
@@ -1539,10 +1594,16 @@ export async function demoApiRequest<T>(
   if (requestActionMatch && method === "POST") {
     const [, requestId, action] = requestActionMatch;
     updateState((state) => {
-      const item = state.requests.find((entry) => entry.request.id === requestId);
+      const item = state.requests.find(
+        (entry) => entry.request.id === requestId,
+      );
       if (!item) return;
       const nextStatus =
-        action === "approve" ? "APPROVED" : action === "reject" ? "REJECTED" : "PENDING";
+        action === "approve"
+          ? "APPROVED"
+          : action === "reject"
+            ? "REJECTED"
+            : "PENDING";
       item.status = nextStatus;
       item.request.status = nextStatus;
       const currentStep = item.request.approvalSteps.find(
@@ -1585,7 +1646,10 @@ export async function demoApiRequest<T>(
             )?.lastName ?? "User",
         },
       };
-      item.request.comments = [...(item.request.comments ?? []), createdComment];
+      item.request.comments = [
+        ...(item.request.comments ?? []),
+        createdComment,
+      ];
     });
     return createdComment as T;
   }
@@ -1712,7 +1776,10 @@ export async function demoApiRequest<T>(
     /^\/biometric\/employees\/([^/]+)\/history$/,
   );
   if (biometricHistoryMatch && method === "GET") {
-    return buildEmployeeBiometricHistory(currentState, biometricHistoryMatch[1]) as T;
+    return buildEmployeeBiometricHistory(
+      currentState,
+      biometricHistoryMatch[1],
+    ) as T;
   }
 
   const biometricReviewMatch = pathname.match(
@@ -1836,17 +1903,63 @@ export async function demoApiRequest<T>(
     return undefined as T;
   }
 
+  const groupMatch = pathname.match(/^\/collaboration\/groups\/([^/]+)$/);
+  if (groupMatch && method === "PATCH") {
+    const payload = parseBody<{ name?: string; description?: string }>(
+      options?.body,
+    );
+    updateState((state) => {
+      const group = state.groups.find((entry) => entry.id === groupMatch[1]);
+      if (!group) return;
+
+      if (typeof payload.name === "string") {
+        group.name = payload.name;
+      }
+
+      if (typeof payload.description === "string") {
+        group.description = payload.description || null;
+      }
+
+      state.tasks.forEach((task) => {
+        if (task.groupId === group.id && task.group) {
+          task.group = {
+            id: group.id,
+            name: group.name,
+          };
+        }
+      });
+    });
+    return undefined as T;
+  }
+
+  if (groupMatch && method === "DELETE") {
+    updateState((state) => {
+      state.groups = state.groups.filter((entry) => entry.id !== groupMatch[1]);
+      state.tasks.forEach((task) => {
+        if (task.groupId === groupMatch[1]) {
+          task.groupId = null;
+          task.group = null;
+        }
+      });
+    });
+    return undefined as T;
+  }
+
   const groupMembersMatch = pathname.match(
     /^\/collaboration\/groups\/([^/]+)\/members$/,
   );
   if (groupMembersMatch && method === "POST") {
     const payload = parseBody<{ employeeIds: string[] }>(options?.body);
     updateState((state) => {
-      const group = state.groups.find((entry) => entry.id === groupMembersMatch[1]);
+      const group = state.groups.find(
+        (entry) => entry.id === groupMembersMatch[1],
+      );
       if (!group) return;
       group.memberships = payload.employeeIds
         .map((employeeId, index) => {
-          const employee = state.employees.find((entry) => entry.id === employeeId);
+          const employee = state.employees.find(
+            (entry) => entry.id === employeeId,
+          );
           if (!employee) return null;
           return {
             id: `membership-${group.id}-${employee.id}-${index}`,

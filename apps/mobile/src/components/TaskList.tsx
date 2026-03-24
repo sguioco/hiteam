@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, Alert, Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
+import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
+import { addMyTaskPhotoProof, deleteMyTaskPhotoProof } from '../../lib/api';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from './BottomSheetModal';
+
+type TaskListProps = {
+  loading?: boolean;
+  tasks: TaskItem[];
+  updatingTaskIds?: string[];
+  onToggleTask?: (taskId: string, nextStatus: 'TODO' | 'DONE') => void;
+  onTaskUpdate?: (task: TaskItem) => void;
+};
 
 type TaskPhoto = {
   id: string;
@@ -15,20 +26,16 @@ type TaskPhoto = {
   uri: string;
 };
 
-interface Task {
-  id: string;
-  title: string;
-  completed: boolean;
-  requiresPhoto?: boolean;
-  photoDescription?: string;
-  photos?: TaskPhoto[];
-}
-
 type PhotoSourceAction = 'add' | 'edit';
 
 const taskTitleStyle = {
   fontFamily: 'Manrope_700Bold',
-  letterSpacing: -0.35,
+  letterSpacing: -0.28,
+} as const;
+
+const completedTitleStyle = {
+  fontFamily: 'Manrope_600SemiBold',
+  letterSpacing: -0.18,
 } as const;
 
 const sectionMetaStyle = {
@@ -36,176 +43,206 @@ const sectionMetaStyle = {
   letterSpacing: 1,
 } as const;
 
-const initialTasks: Task[] = [
-  { id: '1', title: 'Create a presentation in Keynote', completed: false },
-  {
-    id: '2',
-    title: 'Give feedback to the team',
-    completed: false,
-    requiresPhoto: true,
-    photoDescription: 'Take a clear photo of the printed feedback form after you leave it on the manager desk.',
-    photos: [],
+const PHOTO_REPORT_LAYOUT = {
+  withoutPhotos: {
+    shellClassName: 'min-h-[420px] relative',
+    footerClassName: 'absolute inset-x-0 bottom-0 gap-3',
+    addButtonClassName:
+      'rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4',
   },
-  { id: '3', title: 'Book the return tickets', completed: true },
-  {
-    id: '4',
-    title: 'Check some guided tours',
-    completed: true,
-    requiresPhoto: true,
-    photoDescription: 'Photograph the final list of approved tours and the brochure wall after the update.',
-    photos: [],
+  withPhotos: {
+    shellClassName: 'min-h-[610px] relative',
+    footerClassName: 'absolute inset-x-0 bottom-2 gap-6',
+    actionRowClassName: 'flex-row gap-3',
   },
-];
+} as const;
 
-function buildPhoto(taskId: string, count: number, locale: string, uri: string): TaskPhoto {
-  const capturedAt = new Date().toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+const PHOTO_REPORT_LIMIT = 7;
 
-  return {
-    id: `${taskId}-${Date.now()}-${count}`,
-    label: `Photo ${count}`,
-    capturedAt,
-    uri,
-  };
+function normalizeTaskTitle(title: string) {
+  const normalized = title
+    .replace(/^Employee recurring:\s*/i, '')
+    .replace(/^Owner recurring:\s*/i, '')
+    .trim();
+
+  if (!normalized) {
+    return normalized;
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-const TaskList = () => {
+function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
+  return task.photoProofs
+    .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
+    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+    .map((proof, index) => ({
+      id: proof.id,
+      label: `Photo ${index + 1}`,
+      capturedAt: new Date(proof.createdAt).toLocaleTimeString(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+      uri: proof.url ?? '',
+    }));
+}
+
+export default function TaskList({
+  loading = false,
+  tasks,
+  updatingTaskIds = [],
+  onToggleTask,
+  onTaskUpdate,
+}: TaskListProps) {
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [showCompleted, setShowCompleted] = useState(true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
-  const [photoSourceSheetOpen, setPhotoSourceSheetOpen] = useState(false);
   const [photoSourceAction, setPhotoSourceAction] = useState<PhotoSourceAction>('add');
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
-  const [dirtyCompletedTaskIds, setDirtyCompletedTaskIds] = useState<string[]>([]);
 
-  const pending = tasks.filter((task) => !task.completed);
-  const completed = tasks.filter((task) => task.completed);
+  const activeTasks = tasks.filter((task) => task.status !== 'DONE' && task.status !== 'CANCELLED');
+  const completedTasks = tasks.filter((task) => task.status === 'DONE');
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? null;
-  const activeTaskHasPhotos = (activeTask?.photos?.length ?? 0) > 0;
-  const selectedPhoto =
-    activeTask?.photos?.find((photo) => photo.id === selectedPhotoId) ??
-    activeTask?.photos?.[0] ??
-    null;
-  const activeTaskDescription = activeTask?.photoDescription ?? t('today.photoDefaultHint');
-  const activeTaskIsDirty = activeTask ? dirtyCompletedTaskIds.includes(activeTask.id) : false;
+  const taskPhotos = useMemo(
+    () =>
+      Object.fromEntries(tasks.map((task) => [task.id, buildTaskPhotos(task, locale)])) as Record<
+        string,
+        TaskPhoto[]
+      >,
+    [locale, tasks],
+  );
+  const activeTaskPhotos = activeTask ? taskPhotos[activeTask.id] ?? [] : [];
+  const selectedPhoto = activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ?? activeTaskPhotos[0] ?? null;
+  const activeTaskHasPhotos = activeTaskPhotos.length > 0;
+  const photoReportLayout = activeTaskHasPhotos
+    ? PHOTO_REPORT_LAYOUT.withPhotos
+    : PHOTO_REPORT_LAYOUT.withoutPhotos;
 
   useEffect(() => {
-    if (!activeTask?.photos?.length) {
+    if (!activeTaskPhotos.length) {
       setSelectedPhotoId(null);
       return;
     }
 
     setSelectedPhotoId((current) => {
-      if (current && activeTask.photos?.some((photo) => photo.id === current)) {
+      if (current && activeTaskPhotos.some((photo) => photo.id === current)) {
         return current;
       }
 
-      return activeTask.photos?.[0]?.id ?? null;
+      return activeTaskPhotos[0]?.id ?? null;
     });
-  }, [activeTask]);
+  }, [activeTaskPhotos]);
 
-  const completionText = useMemo(() => `${completed.length}/${tasks.length}`, [completed.length, tasks.length]);
+  const totalCountLabel = useMemo(() => `${tasks.length}`, [tasks.length]);
 
-  function markCompletedTaskDirty(taskId: string) {
-    setDirtyCompletedTaskIds((current) => (current.includes(taskId) ? current : [...current, taskId]));
-  }
-
-  function clearCompletedTaskDirty(taskId: string) {
-    setDirtyCompletedTaskIds((current) => current.filter((id) => id !== taskId));
+  function photoLimitErrorMessage() {
+    return language === 'ru'
+      ? 'Можно добавить максимум 7 фото.'
+      : 'You can add up to 7 photos.';
   }
 
   function closeTaskModal() {
     hapticSelection();
-    setPhotoSourceSheetOpen(false);
     setMediaError(null);
     setActiveTaskId(null);
-  }
-
-  function toggleTask(id: string) {
-    const nextCompleted = !tasks.find((task) => task.id === id)?.completed;
-    if (nextCompleted) {
-      hapticSuccess();
-    } else {
-      hapticSelection();
-    }
-
-    setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
-    clearCompletedTaskDirty(id);
   }
 
   function openTask(taskId: string) {
     hapticSelection();
     setActiveTaskId(taskId);
-    setPhotoSourceSheetOpen(false);
     setMediaError(null);
   }
 
-  function openPhotoSourceSheet(taskId: string, action: PhotoSourceAction) {
+  function openPhotoSourceChooser(taskId: string, action: PhotoSourceAction) {
     hapticSelection();
     setActiveTaskId(taskId);
     setPhotoSourceAction(action);
-    setPhotoSourceSheetOpen(true);
     setMediaError(null);
-  }
 
-  function closePhotoSourceSheet() {
-    hapticSelection();
-    setPhotoSourceSheetOpen(false);
-  }
-
-  function applyPhoto(uri: string, action: PhotoSourceAction) {
-    if (!activeTask) {
+    if (action === 'add' && (taskPhotos[taskId]?.length ?? 0) >= PHOTO_REPORT_LIMIT) {
+      hapticError();
+      setMediaError(photoLimitErrorMessage());
       return;
     }
 
-    const nextCount = (activeTask.photos?.length ?? 0) + 1;
-    const nextPhoto = buildPhoto(activeTask.id, nextCount, locale, uri);
+    const options = [
+      {
+        label: t('today.chooseFromLibrary'),
+        run: () => {
+          void pickFromLibrary();
+        },
+      },
+      {
+        label: t('today.takePhotoNow'),
+        run: () => {
+          void pickFromCamera();
+        },
+      },
+    ];
 
-    setTasks((prev) =>
-      prev.map((task) => {
-        if (task.id !== activeTask.id) {
-          return task;
-        }
-
-        const currentPhotos = task.photos ?? [];
-        const nextPhotos =
-          action === 'edit' && currentPhotos.length > 0
-            ? currentPhotos.map((photo) =>
-                photo.id === (selectedPhotoId ?? currentPhotos[0]?.id)
-                  ? {
-                      ...nextPhoto,
-                      id: photo.id,
-                      label: photo.label,
-                    }
-                  : photo,
-              )
-            : [...currentPhotos, nextPhoto];
-
-        return {
-          ...task,
-          photos: nextPhotos,
-        };
-      }),
-    );
-
-    if (action === 'edit' && selectedPhotoId) {
-      setSelectedPhotoId(selectedPhotoId);
-    } else {
-      setSelectedPhotoId(nextPhoto.id);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [t('common.cancel'), ...options.map((option) => option.label)],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          const actionOption = options[buttonIndex - 1];
+          actionOption?.run();
+        },
+      );
+      return;
     }
 
-    if (activeTask.completed) {
-      markCompletedTaskDirty(activeTask.id);
+    Alert.alert(t('today.addPhoto'), undefined, [
+      ...options.map((option) => ({
+        text: option.label,
+        onPress: option.run,
+      })),
+      {
+        text: t('common.cancel'),
+        style: 'cancel' as const,
+      },
+    ]);
+  }
+
+  async function uploadPhotoAsset(asset: ImagePicker.ImagePickerAsset, action: PhotoSourceAction) {
+    if (!activeTask?.id) {
+      return;
     }
 
-    setPhotoSourceSheetOpen(false);
+    const currentPhotos = taskPhotos[activeTask.id] ?? [];
+    if (action === 'add' && currentPhotos.length >= PHOTO_REPORT_LIMIT) {
+      hapticError();
+      setMediaError(photoLimitErrorMessage());
+      return;
+    }
+
+    const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+    const fileExtension = mimeType.split('/')[1] ?? 'jpg';
+    const fileName = asset.fileName?.trim() || `task-photo-${Date.now()}.${fileExtension}`;
+    const updatedTask = await addMyTaskPhotoProof(activeTask.id, {
+      action: action === 'edit' ? 'replace' : 'add',
+      fileName,
+      dataUrl: `data:${mimeType};base64,${base64}`,
+      ...(action === 'edit' && selectedPhotoId ? { targetProofId: selectedPhotoId } : {}),
+    });
+
+    onTaskUpdate?.(updatedTask);
+
+    const nextPhotos = buildTaskPhotos(updatedTask, locale);
+    const nextSelected =
+      action === 'edit'
+        ? nextPhotos[nextPhotos.length - 1] ?? null
+        : nextPhotos[nextPhotos.length - 1] ?? null;
+
+    setSelectedPhotoId(nextSelected?.id ?? null);
     hapticSuccess();
   }
 
@@ -228,7 +265,7 @@ const TaskList = () => {
         return;
       }
 
-      applyPhoto(result.assets[0].uri, photoSourceAction);
+      await uploadPhotoAsset(result.assets[0], photoSourceAction);
     } catch (error) {
       hapticError();
       setMediaError(error instanceof Error ? error.message : t('today.photoCaptureFailed'));
@@ -257,7 +294,7 @@ const TaskList = () => {
         return;
       }
 
-      applyPhoto(result.assets[0].uri, photoSourceAction);
+      await uploadPhotoAsset(result.assets[0], photoSourceAction);
     } catch (error) {
       hapticError();
       setMediaError(error instanceof Error ? error.message : t('today.photoSelectionFailed'));
@@ -266,62 +303,130 @@ const TaskList = () => {
     }
   }
 
-  function markTaskDone(taskId: string) {
+  async function completePhotoTask(taskId: string) {
+    if (!activeTaskHasPhotos) {
+      return;
+    }
+
     hapticSuccess();
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, completed: true } : task)));
-    clearCompletedTaskDirty(taskId);
-    setPhotoSourceSheetOpen(false);
+    await onToggleTask?.(taskId, 'DONE');
     setActiveTaskId(null);
   }
 
-  function saveCompletedTask(taskId: string) {
-    hapticSuccess();
-    clearCompletedTaskDirty(taskId);
-    setPhotoSourceSheetOpen(false);
-    setActiveTaskId(null);
-  }
+  async function deleteSelectedPhoto() {
+    if (!activeTask || !selectedPhoto) {
+      return;
+    }
 
-  function reopenTask(taskId: string) {
     hapticSelection();
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, completed: false } : task)));
-    clearCompletedTaskDirty(taskId);
+    setMediaError(null);
+
+    try {
+      setMediaBusy(true);
+      const currentPhotos = taskPhotos[activeTask.id] ?? [];
+      const currentIndex = currentPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
+      const updatedTask = await deleteMyTaskPhotoProof(activeTask.id, selectedPhoto.id);
+      onTaskUpdate?.(updatedTask);
+
+      const nextPhotos = buildTaskPhotos(updatedTask, locale);
+      const nextSelected =
+        nextPhotos[currentIndex] ?? nextPhotos[currentIndex - 1] ?? nextPhotos[0] ?? null;
+      setSelectedPhotoId(nextSelected?.id ?? null);
+    } catch (error) {
+      hapticError();
+      setMediaError(error instanceof Error ? error.message : t('today.photoSelectionFailed'));
+    } finally {
+      setMediaBusy(false);
+    }
   }
 
-  function handleTaskRowPress(task: Task) {
+  function reopenRegularTask(taskId: string) {
+    hapticSelection();
+    void onToggleTask?.(taskId, 'TODO');
+  }
+
+  function handleTaskRowPress(task: TaskItem) {
     if (task.requiresPhoto) {
       openTask(task.id);
       return;
     }
 
-    if (task.completed) {
-      reopenTask(task.id);
-      return;
-    }
-
-    toggleTask(task.id);
+    void onToggleTask?.(task.id, task.status === 'DONE' ? 'TODO' : 'DONE');
   }
 
-  function renderLeading(task: Task) {
+  function renderLeading(task: TaskItem) {
+    const completed = task.status === 'DONE';
+    const hasPhotos = (taskPhotos[task.id]?.length ?? 0) > 0;
+
     if (task.requiresPhoto) {
-      const hasPhotos = (task.photos?.length ?? 0) > 0;
-      const iconColor = task.completed ? '#10b981' : hasPhotos ? '#6d73ff' : '#6b7a90';
+      const iconColor = completed ? '#22a55b' : hasPhotos ? '#6d73ff' : '#6b7a90';
 
       return (
-        <PressableScale className="h-9 w-9 items-center justify-center" haptic="selection" onPress={() => openTask(task.id)}>
-          <Ionicons color={iconColor} name="camera-outline" size={24} />
-        </PressableScale>
+        <View
+          className={`h-8 w-8 items-center justify-center rounded-full ${
+            completed ? 'bg-[#dcfce7]' : 'bg-white'
+          }`}
+          style={{ borderWidth: 1.5, borderColor: completed ? '#7fd59b' : '#d6def5' }}
+        >
+          <Ionicons color={iconColor} name="camera-outline" size={15} />
+        </View>
       );
     }
 
-    if (task.completed) {
+    if (completed) {
       return (
-        <PressableScale className="h-9 w-9 items-center justify-center rounded-full bg-success/12" haptic="success" onPress={() => toggleTask(task.id)}>
-          <Ionicons color="#10b981" name="checkmark" size={20} />
-        </PressableScale>
+        <View className="h-8 w-8 items-center justify-center rounded-full bg-[#e8fbef]">
+          <Ionicons color="#1fa160" name="checkmark" size={18} />
+        </View>
       );
     }
 
-    return <PressableScale className="h-9 w-9 rounded-full border-2 border-[#d8dee8]" haptic="selection" onPress={() => toggleTask(task.id)} />;
+    return <View className="h-6 w-6 rounded-full border border-[#cfd7eb] bg-white" />;
+  }
+
+  function renderTaskRow(task: TaskItem, index: number, completed = false) {
+    const title = normalizeTaskTitle(task.title);
+    const isUpdating = updatingTaskIds.includes(task.id);
+    const photoCount = taskPhotos[task.id]?.length ?? 0;
+
+    return (
+      <Animated.View
+        entering={FadeInUp.delay(index * 28).duration(170).withInitialValues({
+          opacity: 0,
+          transform: [{ translateY: 8 }],
+        })}
+        key={task.id}
+        layout={LinearTransition.duration(180)}
+      >
+        <PressableScale
+          className={`min-h-[78px] flex-row items-center gap-3 px-5 py-3.5 ${isUpdating ? 'opacity-60' : ''}`}
+          disabled={isUpdating}
+          haptic={task.requiresPhoto ? 'selection' : completed ? 'selection' : 'success'}
+          onPress={() => handleTaskRowPress(task)}
+        >
+          {renderLeading(task)}
+          <View className="flex-1 justify-center">
+            <Text
+              className={`text-[18px] leading-[23px] ${
+                completed ? 'text-[#7f8ba3] line-through' : 'text-[#172033]'
+              }`}
+              style={completed ? completedTitleStyle : taskTitleStyle}
+            >
+              {title}
+            </Text>
+            {task.requiresPhoto ? (
+              <Text className={`mt-1 text-[11px] ${completed ? 'text-[#8fa1bb]' : 'text-[#94a3b8]'}`}>
+                {completed && photoCount > 0
+                  ? t('today.photosSaved', { count: photoCount })
+                  : photoCount > 0
+                    ? t('today.photosAttached', { count: photoCount })
+                    : t('today.photoProofRequired')}
+              </Text>
+            ) : null}
+          </View>
+        </PressableScale>
+      </Animated.View>
+    );
   }
 
   return (
@@ -331,178 +436,172 @@ const TaskList = () => {
           <Text className="text-[13px] uppercase text-foreground" style={sectionMetaStyle}>
             {t('today.taskList')}
           </Text>
-          <Text className="text-sm text-muted-foreground" style={sectionMetaStyle}>{completionText}</Text>
+          <Text className="text-sm text-muted-foreground" style={sectionMetaStyle}>
+            {loading ? '...' : totalCountLabel}
+          </Text>
         </View>
 
-        <View className="overflow-hidden rounded-[28px] bg-white">
-          {pending.map((task, index) => (
-            <Animated.View
-              entering={FadeInUp.delay(index * 28).duration(170).withInitialValues({
-                opacity: 0,
-                transform: [{ translateY: 8 }],
-              })}
-              key={task.id}
-              layout={LinearTransition.duration(180)}
-            >
-              <PressableScale
-                className="flex-row items-center gap-4 px-1 py-4"
-                haptic={task.requiresPhoto ? 'selection' : task.completed ? 'selection' : 'success'}
-                onPress={() => handleTaskRowPress(task)}
-              >
-                {renderLeading(task)}
-                <View className="flex-1">
-                  <Text className="text-[19px] text-[#172033]" style={taskTitleStyle}>
-                    {task.title}
-                  </Text>
-                  {task.requiresPhoto ? (
-                    <Text className="mt-1 font-body text-sm text-muted-foreground">
-                      {(task.photos?.length ?? 0) > 0
-                        ? t('today.photosAttached', { count: task.photos?.length ?? 0 })
-                        : t('today.photoProofRequired')}
-                    </Text>
-                  ) : null}
-                </View>
-              </PressableScale>
-              {index < pending.length - 1 ? <View className="ml-13 h-px bg-[#edf1f7]" /> : null}
-            </Animated.View>
-          ))}
-        </View>
-
-        {completed.length > 0 ? (
-          <View className="pt-2">
-            <PressableScale
-              className="mb-2 flex-row items-center gap-2"
-              haptic="selection"
-              onPress={() => setShowCompleted((value) => !value)}
-            >
-              <Text className="text-[13px] uppercase text-muted-foreground" style={sectionMetaStyle}>{t('today.completedSection')} ({completed.length})</Text>
-              <Ionicons color="#6b7a90" name={showCompleted ? 'chevron-up' : 'chevron-down'} size={14} />
-            </PressableScale>
-
-            {showCompleted ? (
-              <View className="overflow-hidden rounded-[28px] bg-white/72">
-                {completed.map((task, index) => (
-                  <Animated.View
-                    entering={FadeInUp.delay(index * 24).duration(160).withInitialValues({
-                      opacity: 0,
-                      transform: [{ translateY: 6 }],
-                    })}
-                    key={task.id}
-                    layout={LinearTransition.duration(180)}
-                  >
-                    <PressableScale
-                      className="flex-row items-center gap-4 px-1 py-4 opacity-85"
-                      haptic="selection"
-                      onPress={() => handleTaskRowPress(task)}
-                    >
-                      {renderLeading(task)}
-                      <View className="flex-1">
-                        <Text className="text-[18px] text-foreground/55 line-through" style={taskTitleStyle}>
-                          {task.title}
-                        </Text>
-                        {task.requiresPhoto ? (
-                          <Text className="mt-1 font-body text-sm text-muted-foreground">
-                            {t('today.photosSaved', { count: task.photos?.length ?? 0 })}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </PressableScale>
-                    {index < completed.length - 1 ? <View className="ml-13 h-px bg-[#edf1f7]" /> : null}
-                  </Animated.View>
-                ))}
+        {loading ? (
+          <View className="overflow-hidden rounded-[28px] bg-white/72 px-5 py-5">
+            <Text className="font-body text-sm text-muted-foreground">{t('common.loading')}</Text>
+          </View>
+        ) : tasks.length > 0 ? (
+          <View className="overflow-hidden rounded-[28px] bg-white">
+            {activeTasks.map((task, index) => (
+              <View key={task.id}>
+                {renderTaskRow(task, index)}
+                {index < activeTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
               </View>
+            ))}
+
+            {completedTasks.length > 0 ? (
+              <>
+                {activeTasks.length > 0 ? <View className="mx-5 mt-1 h-px bg-[#edf1f7]" /> : null}
+                <View className="px-5 pb-2 pt-4">
+                  <Text className="text-[12px] uppercase text-[#8a96ab]" style={sectionMetaStyle}>
+                    {t('today.completedSection')} ({completedTasks.length})
+                  </Text>
+                </View>
+                {completedTasks.map((task, index) => (
+                  <View key={task.id}>
+                    {renderTaskRow(task, index, true)}
+                    {index < completedTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
+                  </View>
+                ))}
+              </>
             ) : null}
           </View>
-        ) : null}
+        ) : (
+          <View className="overflow-hidden rounded-[28px] bg-white/72 px-5 py-5">
+            <Text className="font-body text-sm text-muted-foreground">{t('calendar.noTasksForDay')}</Text>
+          </View>
+        )}
       </View>
 
       <BottomSheetModal
         onClose={closeTaskModal}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
         visible={activeTask !== null}
       >
         {activeTask ? (
-          <View>
-            <View className="mb-4 flex-row items-start justify-between gap-4">
-              <View className="flex-1">
-                <Text className="font-display text-[24px] font-bold text-foreground">{activeTask.title}</Text>
-                <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
-                  {activeTaskDescription}
-                </Text>
+          <View className={photoReportLayout.shellClassName}>
+            <View className={activeTaskHasPhotos ? 'pb-24' : 'pb-24'}>
+              <View className="mb-4 flex-row items-start justify-between gap-4">
+                <View className="w-10" />
+                <View className="flex-1 items-center">
+                  <Text className="text-center font-display text-[24px] font-bold text-foreground">
+                    Photo Report
+                  </Text>
+                  <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
+                    {t('today.photoDefaultHint')}
+                  </Text>
+                </View>
+                <PressableScale
+                  className="h-8 w-8 items-center justify-center"
+                  haptic="selection"
+                  onPress={closeTaskModal}
+                >
+                  <Ionicons color="#111827" name="close" size={18} />
+                </PressableScale>
               </View>
-              <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-muted/80" haptic="selection" onPress={closeTaskModal}>
-                <Ionicons color="#111827" name="close" size={18} />
-              </PressableScale>
-            </View>
 
-            <View className="mb-4 self-start rounded-full border border-white bg-primary/10 px-3 py-1.5">
-              <Text className="font-body text-xs font-semibold text-primary">{t('today.photoProofTask')}</Text>
-            </View>
-
-            {mediaError ? (
-              <View className="mb-4 rounded-[22px] border border-[#ffd7dc] bg-[#fff1f3] px-4 py-3">
-                <Text className="font-body text-sm leading-6 text-[#9f1239]">{mediaError}</Text>
-              </View>
-            ) : null}
-
-            <View className="rounded-[28px] border border-white bg-[#f4f7ff] p-4">
-              {activeTaskHasPhotos ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className="mb-4 flex-row gap-2">
-                    {activeTask.photos?.map((photo, index) => {
-                      const isSelected = selectedPhoto?.id === photo.id;
-
-                      return (
-                        <PressableScale
-                          key={photo.id}
-                          className={`h-9 w-9 items-center justify-center rounded-full border ${
-                            isSelected ? 'border-primary bg-primary' : 'border-[#d7def5] bg-white'
-                          }`}
-                          haptic="selection"
-                          onPress={() => setSelectedPhotoId(photo.id)}
-                        >
-                          <Text className={`font-display text-sm font-bold ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                            {index + 1}
-                          </Text>
-                        </PressableScale>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
+              {mediaError ? (
+                <View className="mb-4 rounded-[22px] border border-[#ffd7dc] bg-[#fff1f3] px-4 py-3">
+                  <Text className="font-body text-sm leading-6 text-[#9f1239]">{mediaError}</Text>
+                </View>
               ) : null}
 
-              {selectedPhoto ? (
-                <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
-                  <Image source={{ uri: selectedPhoto.uri }} style={StyleSheet.absoluteFillObject} />
-                  <View className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6" style={{ backgroundColor: 'rgba(15, 23, 42, 0.38)' }}>
-                    <Text className="font-display text-[28px] font-bold text-white">{selectedPhoto.label}</Text>
-                    <Text className="mt-2 font-body text-sm text-white/90">{t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}</Text>
+              <View>
+                {activeTaskHasPhotos ? (
+                  <View className="mb-4 h-9">
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View className="flex-row gap-2">
+                        {activeTaskPhotos.map((photo, index) => {
+                          const isSelected = selectedPhoto?.id === photo.id;
+
+                          return (
+                            <PressableScale
+                              key={photo.id}
+                              className={`h-9 w-9 items-center justify-center rounded-full border ${
+                                isSelected ? 'border-primary bg-primary' : 'border-[#d7def5] bg-white'
+                              }`}
+                              haptic="selection"
+                              onPress={() => setSelectedPhotoId(photo.id)}
+                            >
+                              <Text
+                                className={`font-display text-sm font-bold ${
+                                  isSelected ? 'text-white' : 'text-foreground'
+                                }`}
+                              >
+                                {index + 1}
+                              </Text>
+                            </PressableScale>
+                          );
+                        })}
+                        <PressableScale
+                          className="h-9 w-9 items-center justify-center rounded-full border border-[#d7def5] bg-white"
+                          haptic="selection"
+                          onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
+                        >
+                          <Ionicons color="#6d73ff" name="add" size={18} />
+                        </PressableScale>
+                      </View>
+                    </ScrollView>
                   </View>
-                </View>
-              ) : (
-                <PressableScale
-                  className="mb-4 items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10"
-                  haptic="selection"
-                  onPress={() => openPhotoSourceSheet(activeTask.id, 'add')}
-                >
-                  <View className="h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                    <Ionicons color="#6d73ff" name="camera-outline" size={24} />
+                ) : null}
+
+                {selectedPhoto ? (
+                  <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
+                    <Image source={{ uri: selectedPhoto.uri }} style={StyleSheet.absoluteFillObject} />
+                    <PressableScale
+                      className="absolute right-4 top-4 h-8 w-8 items-center justify-center"
+                      disabled={mediaBusy}
+                      haptic="selection"
+                      onPress={() => {
+                        void deleteSelectedPhoto();
+                      }}
+                    >
+                      <Ionicons color="#ffffff" name="close" size={16} />
+                    </PressableScale>
+                    <View
+                      className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
+                      style={{ backgroundColor: 'rgba(15, 23, 42, 0.38)' }}
+                    >
+                      <Text className="font-display text-[28px] font-bold text-white">
+                        {selectedPhoto.label}
+                      </Text>
+                      <Text className="mt-2 font-body text-sm text-white/90">
+                        {t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
+                      </Text>
+                    </View>
                   </View>
-                  <Text className="mt-4 font-display text-[20px] font-bold text-foreground">{t('today.noPhotosYet')}</Text>
-                  <Text className="mt-2 text-center font-body text-sm leading-6 text-muted-foreground">
-                    {t('today.addPhotoBeforeDone')}
-                  </Text>
-                </PressableScale>
-              )}
+                ) : (
+                  <PressableScale
+                    className="mb-4 items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10"
+                    haptic="selection"
+                    onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
+                  >
+                    <View className="h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                      <Ionicons color="#6d73ff" name="camera-outline" size={24} />
+                    </View>
+                    <Text className="mt-4 font-display text-[20px] font-bold text-foreground">
+                      {t('today.noPhotosYet')}
+                    </Text>
+                    <Text className="mt-2 text-center font-body text-sm leading-6 text-muted-foreground">
+                      {t('today.addPhotoBeforeDone')}
+                    </Text>
+                  </PressableScale>
+                )}
+              </View>
             </View>
 
-            <View className="mt-5 gap-3">
+            <View className={photoReportLayout.footerClassName}>
               {!activeTaskHasPhotos ? (
                 <PressableScale
-                  className="rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4"
+                  className={PHOTO_REPORT_LAYOUT.withoutPhotos.addButtonClassName}
                   disabled={mediaBusy}
                   haptic="selection"
-                  onPress={() => openPhotoSourceSheet(activeTask.id, 'add')}
+                  onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
                 >
                   <View className="flex-row items-center justify-center gap-2">
                     <Ionicons color="#2563eb" name="camera-outline" size={18} />
@@ -511,35 +610,45 @@ const TaskList = () => {
                     </Text>
                   </View>
                 </PressableScale>
-              ) : activeTask.completed ? (
-                <PressableScale
-                  className={`rounded-[24px] px-4 py-4 ${activeTaskIsDirty ? 'bg-primary' : 'border border-white bg-[#ebf6ff]'}`}
-                  disabled={mediaBusy}
-                  haptic={activeTaskIsDirty ? 'success' : 'selection'}
-                  onPress={() => {
-                    if (activeTaskIsDirty) {
-                      saveCompletedTask(activeTask.id);
-                      return;
-                    }
-
-                    openPhotoSourceSheet(activeTask.id, 'edit');
-                  }}
-                >
-                  <View className="flex-row items-center justify-center gap-2">
-                    <Ionicons color={activeTaskIsDirty ? '#ffffff' : '#2563eb'} name={activeTaskIsDirty ? 'checkmark' : 'create-outline'} size={18} />
-                    <Text className={`font-display text-[16px] font-semibold ${activeTaskIsDirty ? 'text-white' : 'text-[#11233d]'}`}>
-                      {activeTaskIsDirty ? t('common.save') : t('today.editPhotos')}
-                    </Text>
-                  </View>
-                </PressableScale>
-              ) : (
-                <View className="flex-row gap-3">
+              ) : activeTask.status === 'DONE' ? (
+                <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
                   <PressableScale
-                    className="flex-1 rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4"
+                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="selection"
-                    onPress={() => openPhotoSourceSheet(activeTask.id, 'edit')}
+                    onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
+                  >
+                    <View className="flex-row items-center justify-center gap-2">
+                      <Ionicons color="#2563eb" name="create-outline" size={18} />
+                      <Text className="font-display text-[16px] font-semibold text-[#11233d]">
+                        {t('today.editPhotos')}
+                      </Text>
+                    </View>
+                  </PressableScale>
+                  <PressableScale
+                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8deea] bg-white px-4 py-4"
+                    containerClassName="flex-1"
+                    disabled={mediaBusy}
+                    haptic="selection"
+                    onPress={() => {
+                      reopenRegularTask(activeTask.id);
+                      setActiveTaskId(null);
+                    }}
+                  >
+                    <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
+                      {t('today.taskReopen')}
+                    </Text>
+                  </PressableScale>
+                </View>
+              ) : (
+                <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
+                  <PressableScale
+                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
+                    containerClassName="flex-1"
+                    disabled={mediaBusy}
+                    haptic="selection"
+                    onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
                   >
                     <View className="flex-row items-center justify-center gap-2">
                       <Ionicons color="#2563eb" name="create-outline" size={18} />
@@ -550,11 +659,11 @@ const TaskList = () => {
                   </PressableScale>
 
                   <PressableScale
-                    className="flex-1 rounded-[24px] bg-primary px-4 py-4"
+                    className="flex-1 min-h-[56px] rounded-[24px] bg-primary px-4 py-4"
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="success"
-                    onPress={() => markTaskDone(activeTask.id)}
+                    onPress={() => void completePhotoTask(activeTask.id)}
                   >
                     <Text className="text-center font-display text-[16px] font-semibold text-white">
                       {t('today.taskDone')}
@@ -567,48 +676,6 @@ const TaskList = () => {
         ) : null}
       </BottomSheetModal>
 
-      <BottomSheetModal
-        backdropOpacity={0.28}
-        onClose={closePhotoSourceSheet}
-        sheetClassName="rounded-t-[28px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
-        visible={photoSourceSheetOpen}
-      >
-        <View className="gap-3">
-          <PressableScale
-            className="rounded-[22px] border border-white bg-white px-4 py-4"
-            disabled={mediaBusy}
-            haptic="selection"
-            onPress={() => {
-              void pickFromCamera();
-            }}
-          >
-            <View className="flex-row items-center justify-center gap-2">
-              <Ionicons color="#2563eb" name="camera-outline" size={18} />
-              <Text className="font-display text-[16px] font-semibold text-[#11233d]">
-                {t('today.takePhotoNow')}
-              </Text>
-            </View>
-          </PressableScale>
-
-          <PressableScale
-            className="rounded-[22px] border border-white bg-white px-4 py-4"
-            disabled={mediaBusy}
-            haptic="selection"
-            onPress={() => {
-              void pickFromLibrary();
-            }}
-          >
-            <View className="flex-row items-center justify-center gap-2">
-              <Ionicons color="#2563eb" name="images-outline" size={18} />
-              <Text className="font-display text-[16px] font-semibold text-[#11233d]">
-                {t('today.chooseFromLibrary')}
-              </Text>
-            </View>
-          </PressableScale>
-        </View>
-      </BottomSheetModal>
     </>
   );
-};
-
-export default TaskList;
+}

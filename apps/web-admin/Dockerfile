@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile --filter @smart/web-admin...
 FROM base AS build
 ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 ENV NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/ ./
 COPY . .
 RUN pnpm --filter @smart/web-admin build
 

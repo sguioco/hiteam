@@ -22,6 +22,7 @@ import { apiRequest } from "../../lib/api";
 import { getSession } from "../../lib/auth";
 
 type Company = {
+  code?: string;
   id: string;
   googlePlaceId?: string | null;
   logoUrl?: string | null;
@@ -423,10 +424,17 @@ export default function OrganizationPage() {
                 required
                 value={draft.companyName}
               />
-              <span className="organization-studio-meta">
-                <Users className="h-4 w-4" />
-                {employeeCount} сотрудников
-              </span>
+              <div className="organization-studio-meta-stack">
+                <span className="organization-studio-meta">
+                  <Users className="h-4 w-4" />
+                  {employeeCount} сотрудников
+                </span>
+                {setup.company?.code ? (
+                  <span className="organization-studio-code">
+                    Код компании: <strong>{setup.company.code}</strong>
+                  </span>
+                ) : null}
+              </div>
             </label>
           </div>
 

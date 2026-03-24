@@ -2,18 +2,52 @@ import '../global.css';
 import { useEffect, useState } from 'react';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
-import { Slot, SplashScreen } from 'expo-router';
+import { Slot, SplashScreen, usePathname, useRouter } from 'expo-router';
 import { LogBox, View } from 'react-native';
 import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { HeroUINativeProvider } from 'heroui-native';
+import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
+import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
 import { I18nProvider } from '../lib/i18n';
-import { AppGradientBackground } from '../components/ui/app-gradient-background';
 
 void SplashScreen.preventAutoHideAsync();
 
 LogBox.ignoreLogs([
+  'SafeAreaView has been deprecated',
   "SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead.",
 ]);
+
+function AppRouterSlot() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { isAuthenticated } = useAuthFlowState();
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      updateAuthFlowState({ isAuthenticated: false, roleCodes: [], workspaceAccessAllowed: false });
+    });
+
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, []);
+
+  useEffect(() => {
+    const isPublicRoute = pathname === '/' || pathname.startsWith('/auth');
+
+    if (!isAuthenticated && !isPublicRoute) {
+      router.replace('/');
+    }
+  }, [isAuthenticated, pathname, router]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+      <Slot />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -26,6 +60,7 @@ export default function RootLayout() {
     'TeodorTRIAL-RegularItalic': require('../assets/fonts/TeodorTRIAL-RegularItalic.otf'),
   });
   const [bannerReady, setBannerReady] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,23 +87,53 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!fontsLoaded || !bannerReady) {
+    let cancelled = false;
+
+    const hydrateAuth = async () => {
+      try {
+        const session = await restorePersistedSession();
+        if (cancelled) {
+          return;
+        }
+
+        updateAuthFlowState({
+          isAuthenticated: Boolean(session),
+          roleCodes: session?.user.roleCodes ?? [],
+          workspaceAccessAllowed: session?.user.workspaceAccessAllowed ?? false,
+        });
+      } finally {
+        if (!cancelled) {
+          setAuthReady(true);
+        }
+      }
+    };
+
+    void hydrateAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!fontsLoaded || !bannerReady || !authReady) {
       return;
     }
 
     void SplashScreen.hideAsync();
-  }, [bannerReady, fontsLoaded]);
+  }, [authReady, bannerReady, fontsLoaded]);
 
-  if (!fontsLoaded || !bannerReady) {
+  if (!fontsLoaded || !bannerReady || !authReady) {
     return null;
   }
 
   return (
-    <I18nProvider>
-      <View style={{ flex: 1 }}>
-        <AppGradientBackground />
-        <Slot />
-      </View>
-    </I18nProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <I18nProvider>
+        <HeroUINativeProvider config={{ toast: false, devInfo: { stylingPrinciples: false } }}>
+          <AppRouterSlot />
+        </HeroUINativeProvider>
+      </I18nProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -5,21 +5,18 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import Animated from 'react-native-reanimated';
 import { Badge } from '../../components/ui/badge';
-import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import { createManagerTask, loadManagerEmployees, loadManagerGroups } from '../../lib/api';
+import { createManagerTask, loadManagerEmployees } from '../../lib/api';
 import {
   buildDepartmentFallbackGroups,
   type EmployeeOption,
   type GroupMemberOption,
   type GroupOption,
-  mapApiGroups,
   mergeGroupOptions,
 } from '../../lib/manager-group-options';
 import { getDateLocale, useI18n } from '../../lib/i18n';
-import { getMockManagerEmployees, getMockManagerGroups } from '../../lib/manager-mocks';
 import { SmartMeetingMeta, appendTaskMeta } from '../../lib/task-meta';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
@@ -99,26 +96,15 @@ export default function CreateMeetingScreen() {
 
   useEffect(() => {
     async function init() {
-      const [employeesResult, groupsResult] = await Promise.allSettled([loadManagerEmployees(), loadManagerGroups()]);
-      const employeeList =
-        employeesResult.status === 'fulfilled' && employeesResult.value.length
-          ? employeesResult.value
-          : getMockManagerEmployees();
-      const usingMockEmployees = !(employeesResult.status === 'fulfilled' && employeesResult.value.length);
-      const resolvedGroups = groupsResult.status === 'fulfilled' ? mapApiGroups(groupsResult.value) : [];
+      const [employeesResult] = await Promise.allSettled([loadManagerEmployees()]);
+      const employeeList = employeesResult.status === 'fulfilled' ? employeesResult.value : [];
+      const resolvedGroups: GroupOption[] = [];
       const fallbackGroups = buildDepartmentFallbackGroups(employeeList);
-      const mockGroups = mapApiGroups(getMockManagerGroups(employeeList));
-      const groupList =
-        groupsResult.status === 'fulfilled'
-          ? (resolvedGroups.length ? mergeGroupOptions(resolvedGroups, fallbackGroups) : [])
-          : mergeGroupOptions(mockGroups, fallbackGroups);
+      const groupList = mergeGroupOptions(resolvedGroups, fallbackGroups);
 
       setEmployees(employeeList);
       setGroups(groupList);
       setExpandedGroupIds(groupList.map((group) => group.id));
-      if (usingMockEmployees) {
-        setSelectedEmployeeIds((current) => (current.length ? current : employeeList.slice(0, 3).map((employee) => employee.id)));
-      }
 
       setLoading(false);
     }
@@ -198,6 +184,7 @@ export default function CreateMeetingScreen() {
   const hasEndTime = endTime !== null;
   const participantSheetItemCount = groups.length + orderedEmployees.length;
   const shouldScrollParticipantSheet = participantSheetItemCount > 5;
+  const nextButtonOffset = invitedEmployeeIds.length === 0 ? 80 : 20;
   const timeCardGap = 12;
   const collapsedStartWidth = timeRowWidth > 0 ? Math.max((timeRowWidth - timeCardGap) / 2, 0) : undefined;
   const expandedStartWidth = timeRowWidth > 0 ? timeRowWidth : undefined;
@@ -538,7 +525,13 @@ export default function CreateMeetingScreen() {
               <View className="gap-3">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-[14px] font-bold text-foreground">{t('manager.meetingParticipants')}</Text>
-                  <Button className="min-h-10 rounded-full border border-[#d8e2f0] bg-white px-4" label={`+ ${t('common.add')}`} onPress={() => setParticipantSheetOpen(true)} textClassName="text-[14px] text-foreground" variant="secondary" />
+                  <PressableScale
+                    className="min-h-10 min-w-[92px] items-center justify-center rounded-full border border-[#d8e2f0] bg-white px-4"
+                    haptic="selection"
+                    onPress={() => setParticipantSheetOpen(true)}
+                  >
+                    <Text className="text-[14px] font-semibold text-foreground">{`+ ${t('common.add')}`}</Text>
+                  </PressableScale>
                 </View>
 
                 {loading ? (
@@ -595,7 +588,12 @@ export default function CreateMeetingScreen() {
                 )}
               </View>
 
-              <PressableScale className="mt-2 rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30" haptic="selection" onPress={handleNext}>
+              <PressableScale
+                className="rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
+                haptic="selection"
+                onPress={handleNext}
+                style={{ marginTop: nextButtonOffset }}
+              >
                 <Text className="text-center font-display text-[16px] font-semibold text-white">{t('manager.meetingNext')}</Text>
               </PressableScale>
             </View>
@@ -679,10 +677,19 @@ export default function CreateMeetingScreen() {
 
               <View className="pt-2 flex-row gap-3 px-1">
                 <View className="flex-1">
-                  <Button className="min-h-14 rounded-full border-[#d8e2f0] bg-white" fullWidth label={t('manager.meetingEditDetails')} onPress={() => setStep('details')} textClassName="text-foreground" variant="secondary" />
+                  <PressableScale className="min-h-14 items-center justify-center rounded-full border border-[#d8e2f0] bg-white" haptic="selection" onPress={() => setStep('details')}>
+                    <Text className="text-[15px] font-extrabold text-foreground">{t('manager.meetingEditDetails')}</Text>
+                  </PressableScale>
                 </View>
                 <View className="flex-1">
-                  <Button className="min-h-14 rounded-full border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25" disabled={submitting} fullWidth label={submitting ? t('common.processing') : t('manager.meetingCreateTask')} onPress={() => void handleCreateMeeting()} textClassName="text-white" variant="primary" />
+                  <PressableScale
+                    className={`min-h-14 items-center justify-center rounded-full border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25 ${submitting ? 'opacity-60' : ''}`}
+                    disabled={submitting}
+                    haptic="selection"
+                    onPress={() => void handleCreateMeeting()}
+                  >
+                    <Text className="text-[15px] font-extrabold text-white">{submitting ? t('common.processing') : t('manager.meetingCreateTask')}</Text>
+                  </PressableScale>
                 </View>
               </View>
             </View>
@@ -719,7 +726,9 @@ export default function CreateMeetingScreen() {
           <View className="flex-1">
             <Text className="font-display text-[24px] font-bold text-foreground">{t('manager.meetingParticipantPickerTitle')}</Text>
           </View>
-          <Button label={t('common.done')} onPress={() => setParticipantSheetOpen(false)} variant="ghost" />
+          <PressableScale className="h-10 min-w-[72px] items-center justify-center rounded-full px-3" haptic="selection" onPress={() => setParticipantSheetOpen(false)}>
+            <Text className="text-[15px] font-semibold text-foreground">{t('common.done')}</Text>
+          </PressableScale>
         </View>
 
         {loading ? (

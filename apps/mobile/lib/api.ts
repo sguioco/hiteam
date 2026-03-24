@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
@@ -16,15 +17,15 @@ import {
   AttendanceLiveSession,
   ChatThreadItem,
   TaskItem,
+  TaskTemplateItem,
   WorkGroupItem,
 } from '@smart/types';
 import { getCurrentDeviceFingerprint, getCurrentDeviceName, getCurrentDevicePlatform } from './device';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
-const DEFAULT_TENANT_SLUG = 'demo';
 
-type DemoSession = {
+type AppSession = {
   accessToken: string;
   refreshToken: string;
   user: {
@@ -36,7 +37,57 @@ type DemoSession = {
   };
 };
 
-let cachedSession: DemoSession | null = null;
+let cachedSession: AppSession | null = null;
+const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ''}smart-auth-session.json`;
+let unauthorizedHandler: (() => void) | null = null;
+
+async function readPersistedSession(): Promise<AppSession | null> {
+  if (!FileSystem.documentDirectory) {
+    return null;
+  }
+
+  try {
+    const info = await FileSystem.getInfoAsync(SESSION_STORAGE_PATH);
+    if (!info.exists) {
+      return null;
+    }
+
+    const raw = await FileSystem.readAsStringAsync(SESSION_STORAGE_PATH);
+    if (!raw.trim()) {
+      return null;
+    }
+
+    return JSON.parse(raw) as AppSession;
+  } catch {
+    return null;
+  }
+}
+
+async function persistSession(session: AppSession) {
+  if (!FileSystem.documentDirectory) {
+    return;
+  }
+
+  await FileSystem.writeAsStringAsync(SESSION_STORAGE_PATH, JSON.stringify(session));
+}
+
+async function clearPersistedSession() {
+  if (!FileSystem.documentDirectory) {
+    return;
+  }
+
+  try {
+    await FileSystem.deleteAsync(SESSION_STORAGE_PATH, { idempotent: true });
+  } catch {
+    // Ignore cleanup errors.
+  }
+}
+
+function handleUnauthorized() {
+  cachedSession = null;
+  void clearPersistedSession();
+  unauthorizedHandler?.();
+}
 
 export function getCachedDemoSession() {
   return cachedSession;
@@ -73,20 +124,25 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
   return text;
 }
 
-async function authenticateSession(payload: { tenantSlug: string; email: string; password: string }) {
+async function authenticateSession(payload: { tenantSlug?: string; email: string; password: string }) {
   const response = await fetch(`${API_URL}/api/v1/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      email: payload.email,
+      password: payload.password,
+      ...(payload.tenantSlug ? { tenantSlug: payload.tenantSlug } : {}),
+    }),
   });
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, 'Unable to sign in.'));
   }
 
-  cachedSession = (await response.json()) as DemoSession;
+  cachedSession = (await response.json()) as AppSession;
+  await persistSession(cachedSession);
   return cachedSession;
 }
 
@@ -105,6 +161,11 @@ async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
     headers,
   });
 
+  if (response.status === 401) {
+    handleUnauthorized();
+    throw new Error('Unauthorized');
+  }
+
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, `Request failed with status ${response.status}`));
   }
@@ -116,28 +177,40 @@ async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function getDemoSession(): Promise<DemoSession> {
+export async function getDemoSession(): Promise<AppSession> {
   if (cachedSession) {
     return cachedSession;
   }
 
-  try {
-    return await authenticateSession({
-      tenantSlug: DEFAULT_TENANT_SLUG,
-      email: 'employee@demo.smart',
-      password: 'Employee123!',
-    });
-  } catch {
-    throw new Error('Demo login failed. Make sure the API, database, and seed data are ready.');
+  const restoredSession = await readPersistedSession();
+  if (restoredSession) {
+    cachedSession = restoredSession;
+    return restoredSession;
   }
+
+  throw new Error('Not authenticated. Sign in again.');
 }
 
 export function resetDemoSession() {
   cachedSession = null;
+  void clearPersistedSession();
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
 }
 
 export function hasCachedDemoSession() {
   return cachedSession !== null;
+}
+
+export async function restorePersistedSession() {
+  if (cachedSession) {
+    return cachedSession;
+  }
+
+  cachedSession = await readPersistedSession();
+  return cachedSession;
 }
 
 export async function getDemoAccessToken(): Promise<string> {
@@ -145,12 +218,54 @@ export async function getDemoAccessToken(): Promise<string> {
   return session.accessToken;
 }
 
-export async function signInWithEmail(email: string, password: string, tenantSlug = DEFAULT_TENANT_SLUG) {
+export async function signInWithEmail(email: string, password: string, tenantSlug?: string) {
   return authenticateSession({
     tenantSlug,
     email,
     password,
   });
+}
+
+export async function loadMyProfile(): Promise<{
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  phone: string | null;
+  employeeNumber: string;
+  status: string;
+  avatarUrl: string | null;
+  company: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+  department: {
+    id: string;
+    name: string;
+  } | null;
+  primaryLocation: {
+    id: string;
+    name: string;
+  } | null;
+  position: {
+    id: string;
+    name: string;
+  } | null;
+  user: {
+    id: string;
+    email: string;
+  };
+  devices: Array<{
+    id: string;
+    deviceName: string;
+    platform: 'IOS' | 'ANDROID' | 'WEB';
+    isPrimary: boolean;
+  }>;
+}> {
+  return authRequest('/employees/me');
 }
 
 export async function loadPublicInvitation(token: string): Promise<{
@@ -425,7 +540,7 @@ export async function startBiometricEnrollment() {
   });
 
   if (!response.ok) {
-    throw new Error('Unable to start biometric enrollment.');
+    throw new Error(await readErrorMessage(response, 'Unable to start biometric enrollment.'));
   }
 
   return response.json();
@@ -447,15 +562,13 @@ export async function completeBiometricEnrollmentWithArtifacts(
       Authorization: `Bearer ${session.accessToken}`,
     },
     body: JSON.stringify({
-      templateRef: artifacts.length === 0 ? 'demo-template-ref' : undefined,
-      livenessScore: artifacts.length === 0 ? 0.97 : undefined,
       artifacts,
       captureMetadata,
     }),
   });
 
   if (!response.ok) {
-    throw new Error('Unable to complete biometric enrollment.');
+    throw new Error(await readErrorMessage(response, 'Unable to complete biometric enrollment.'));
   }
 
   return response.json();
@@ -485,7 +598,7 @@ export async function queueVerifyBiometricWithArtifacts(
   });
 
   if (!response.ok) {
-    throw new Error('Unable to verify biometric identity.');
+    throw new Error(await readErrorMessage(response, 'Unable to verify biometric identity.'));
   }
 
   return response.json();
@@ -536,14 +649,69 @@ export async function addRequestComment(requestId: string, body: string) {
   });
 }
 
-export async function loadMyTasks(): Promise<TaskItem[]> {
-  return authRequest<TaskItem[]>('/collaboration/tasks/me');
+export async function loadMyTasks(query?: {
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<TaskItem[]> {
+  const searchParams = new URLSearchParams();
+
+  if (query?.date) {
+    searchParams.set('date', query.date);
+  }
+
+  if (query?.dateFrom) {
+    searchParams.set('dateFrom', query.dateFrom);
+  }
+
+  if (query?.dateTo) {
+    searchParams.set('dateTo', query.dateTo);
+  }
+
+  const suffix = searchParams.toString();
+  return authRequest<TaskItem[]>(`/collaboration/tasks/me${suffix ? `?${suffix}` : ''}`);
 }
 
 export async function updateMyTaskStatus(taskId: string, status: TaskItem['status']) {
   return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/status`, {
     method: 'POST',
     body: JSON.stringify({ status }),
+  });
+}
+
+export async function addMyTaskPhotoProof(
+  taskId: string,
+  payload: {
+    action: 'add' | 'replace';
+    fileName: string;
+    dataUrl: string;
+    targetProofId?: string;
+  },
+) {
+  return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/photo-proofs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMyTaskPhotoProof(taskId: string, proofId: string) {
+  return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/photo-proofs/${proofId}`, {
+    method: 'DELETE',
+  });
+}
+
+export type RescheduleMyTaskResponse = {
+  task: TaskItem;
+  replacedTaskId: string | null;
+};
+
+export async function rescheduleMyTask(taskId: string, dueAt: string, comment?: string) {
+  return authRequest<RescheduleMyTaskResponse>(`/collaboration/tasks/${taskId}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({
+      dueAt,
+      ...(comment ? { comment } : {}),
+    }),
   });
 }
 
@@ -691,11 +859,38 @@ export async function createManagerTask(payload: {
   title: string;
   description?: string;
   priority?: TaskItem['priority'];
+  requiresPhoto?: boolean;
   dueAt?: string;
   assigneeEmployeeId?: string;
   groupId?: string;
 }) {
   return authRequest<TaskItem>('/collaboration/tasks', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createManagerTaskTemplate(payload: {
+  title: string;
+  description?: string;
+  priority?: TaskItem['priority'];
+  requiresPhoto?: boolean;
+  expandOnDemand?: boolean;
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  weekDays?: number[];
+  dayOfMonth?: number;
+  startDate: string;
+  endDate?: string;
+  dueAfterDays?: number;
+  dueTimeLocal?: string;
+  assigneeEmployeeId?: string;
+  groupId?: string;
+  departmentId?: string;
+  locationId?: string;
+  checklist?: string[];
+  isActive?: boolean;
+}) {
+  return authRequest<TaskTemplateItem>('/collaboration/task-templates', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

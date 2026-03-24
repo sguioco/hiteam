@@ -135,7 +135,7 @@ export function TimeWheelPicker({
           <Text className="font-display text-[24px] font-bold text-foreground">{title}</Text>
           <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{t('manager.meetingChooseTime')}</Text>
         </View>
-        <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-muted/80" haptic="selection" onPress={onClose}>
+        <PressableScale className="h-10 w-10 items-center justify-center rounded-full bg-[#eef4ff]/80" haptic="selection" onPress={onClose}>
           <Ionicons color="#111827" name="close" size={18} />
         </PressableScale>
       </View>

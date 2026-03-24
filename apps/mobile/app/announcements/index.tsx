@@ -81,14 +81,14 @@ export default function AnnouncementsScreen() {
               {item.isPinned ? <Badge label={t('announcements.pinned')} variant="brand" /> : null}
             </View>
             <Text className="text-[15px] leading-6 text-foreground">{item.body}</Text>
-            <Text className="text-[13px] leading-5 text-muted">
+            <Text className="text-[13px] leading-5 text-muted-foreground">
               {item.authorEmployee.firstName} {item.authorEmployee.lastName}
             </Text>
           </Card>
         ))
       ) : (
         <Card>
-          <Text className="text-[15px] leading-6 text-muted">{t('announcements.empty')}</Text>
+          <Text className="text-[15px] leading-6 text-muted-foreground">{t('announcements.empty')}</Text>
         </Card>
       )}
     </Screen>

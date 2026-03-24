@@ -1,5 +1,5 @@
-import ManagerScreen from '../src/pages/ManagerScreen';
+import { Redirect } from 'expo-router';
 
 export default function ManagerRoute() {
-  return <ManagerScreen standalone />;
+  return <Redirect href={'/?tab=manage' as never} />;
 }

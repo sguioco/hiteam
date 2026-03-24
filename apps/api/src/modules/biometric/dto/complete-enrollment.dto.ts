@@ -1,8 +1,9 @@
 import { IsArray, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CompleteEnrollmentDto {
+  @IsOptional()
   @IsString()
-  templateRef!: string;
+  templateRef?: string;
 
   @IsOptional()
   @IsNumber()

@@ -4,14 +4,17 @@ export class CreateShiftTemplateDto {
   @IsString()
   name!: string;
 
+  @IsOptional()
   @IsString()
-  code!: string;
+  code?: string;
 
+  @IsOptional()
   @IsString()
-  locationId!: string;
+  locationId?: string;
 
+  @IsOptional()
   @IsString()
-  positionId!: string;
+  positionId?: string;
 
   @IsString()
   startsAtLocal!: string;
@@ -28,8 +31,9 @@ export class CreateShiftTemplateDto {
   @Max(7, { each: true })
   weekDays?: number[];
 
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(180)
-  gracePeriodMinutes!: number;
+  gracePeriodMinutes?: number;
 }

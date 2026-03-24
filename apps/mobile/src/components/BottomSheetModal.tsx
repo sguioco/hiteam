@@ -15,6 +15,7 @@ type BottomSheetModalProps = {
   children: ReactNode;
   sheetClassName?: string;
   backdropOpacity?: number;
+  solidBackground?: boolean;
 };
 
 const HIDDEN_TRANSLATE_Y = 560;
@@ -24,6 +25,7 @@ const BottomSheetModal = ({
   children,
   onClose,
   sheetClassName = '',
+  solidBackground = false,
   visible,
 }: BottomSheetModalProps) => {
   const [mounted, setMounted] = useState(visible);
@@ -111,8 +113,14 @@ const BottomSheetModal = ({
           className={`overflow-hidden ${sheetClassName}`}
           style={sheetStyle}
         >
-          <BlurView className="absolute inset-0" intensity={30} tint="light" />
-          <View className="absolute inset-0 bg-[#f7faff]/82" />
+          {solidBackground ? (
+            <View className="absolute inset-0 bg-white" />
+          ) : (
+            <>
+              <BlurView className="absolute inset-0" intensity={30} tint="light" />
+              <View className="absolute inset-0 bg-[#f7faff]/82" />
+            </>
+          )}
           <View className="absolute inset-x-0 top-3 items-center">
             <View className="h-1.5 w-14 rounded-full bg-[#cfd8ea]" />
           </View>

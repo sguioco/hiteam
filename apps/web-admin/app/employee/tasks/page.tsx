@@ -50,15 +50,33 @@ export default function EmployeeTasksPage() {
     const session = getSession();
     if (!session) return;
 
-    const data = await apiRequest<TaskItem[]>("/collaboration/tasks/me", {
-      token: session.accessToken,
+    const monthStart = new Date(
+      calendarCursor.getFullYear(),
+      calendarCursor.getMonth(),
+      1,
+    );
+    const monthEnd = new Date(
+      calendarCursor.getFullYear(),
+      calendarCursor.getMonth() + 1,
+      0,
+    );
+    const search = new URLSearchParams({
+      dateFrom: formatDateKey(monthStart),
+      dateTo: formatDateKey(monthEnd),
     });
+
+    const data = await apiRequest<TaskItem[]>(
+      `/collaboration/tasks/me?${search.toString()}`,
+      {
+      token: session.accessToken,
+      },
+    );
     setItems(data);
   }
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [calendarCursor]);
 
   async function updateStatus(taskId: string, status: TaskItem["status"]) {
     const session = getSession();
