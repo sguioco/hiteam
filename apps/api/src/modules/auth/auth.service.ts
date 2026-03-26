@@ -70,6 +70,45 @@ export class AuthService {
     }
   }
 
+  private async assertWorkspaceEmailAvailability(email: string): Promise<void> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new ConflictException('Manager email is required.');
+    }
+
+    const [existingUser, existingInvitation] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+        },
+        select: { id: true },
+      }),
+      this.prisma.employeeInvitation.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+          status: {
+            in: [
+              EmployeeInvitationStatus.INVITED,
+              EmployeeInvitationStatus.PENDING_APPROVAL,
+              EmployeeInvitationStatus.APPROVED,
+            ],
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingUser || existingInvitation) {
+      throw new ConflictException('Manager email is already used in another workspace.');
+    }
+  }
+
   private buildTenantSlug(value: string): string {
     const normalized = value
       .trim()
@@ -359,6 +398,7 @@ export class AuthService {
     const tenantName = this.normalizeOrganizationName(dto.tenantName);
     const companyName = this.normalizeOrganizationName(dto.companyName);
     const companyCode = this.normalizeCompanyCode(dto.companyCode);
+    const ownerEmail = dto.email.trim().toLowerCase();
 
     const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (existingTenant) {
@@ -378,6 +418,7 @@ export class AuthService {
       companyName,
       companyCode,
     });
+    await this.assertWorkspaceEmailAvailability(ownerEmail);
 
     const existingRole = await this.prisma.role.upsert({
       where: { code: 'tenant_owner' },
@@ -441,7 +482,7 @@ export class AuthService {
       const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
-          email: dto.email.toLowerCase(),
+          email: ownerEmail,
           passwordHash,
           status: UserStatus.ACTIVE,
         },
@@ -483,7 +524,7 @@ export class AuthService {
       entityType: 'tenant',
       entityId: result.tenantId,
       action: 'auth.owner_registered',
-      metadata: { email: dto.email.toLowerCase(), tenantSlug },
+      metadata: { email: ownerEmail, tenantSlug },
     });
 
     return result;
@@ -516,6 +557,7 @@ export class AuthService {
       companyName: organizationName,
       companyCode,
     });
+    await this.assertWorkspaceEmailAvailability(managerEmail);
 
     const tenantSlug = await this.buildUniqueTenantSlug(organizationName);
     const timezone = dto.timezone?.trim() || 'UTC';
