@@ -86,10 +86,32 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   return sessionRefreshPromise;
 }
 
-async function getApiErrorMessage(response: Response): Promise<string> {
+function humanizeAuthErrorMessage(message: string): string {
+  switch (message) {
+    case "Account with this email is not registered.":
+      return "Аккаунт с таким email не зарегистрирован.";
+    case "Account with this phone is not registered.":
+      return "Аккаунт с таким телефоном не зарегистрирован.";
+    case "Invalid password.":
+      return "Неверный пароль.";
+    case "This account is inactive.":
+      return "Аккаунт неактивен. Обратись к администратору.";
+    case "Account identifier is required.":
+      return "Укажи email или телефон.";
+    case "Multiple workspaces found for this account. Contact support or use a direct invite link.":
+      return "Для этого аккаунта найдено несколько рабочих пространств. Открой прямую ссылку-приглашение или обратись к администратору.";
+    default:
+      return humanizeValidationError(message);
+  }
+}
+
+async function getApiErrorMessage(
+  response: Response,
+  options?: { hasAuthenticatedSession?: boolean },
+): Promise<string> {
   const text = await response.text();
 
-  if (response.status === 401) {
+  if (response.status === 401 && options?.hasAuthenticatedSession) {
     return "Ошибка 401. Сессия истекла или токен недействителен. Войди заново.";
   }
 
@@ -101,7 +123,7 @@ async function getApiErrorMessage(response: Response): Promise<string> {
       }
 
       if (typeof payload.message === "string" && payload.message.trim()) {
-        return humanizeValidationError(payload.message);
+        return humanizeAuthErrorMessage(payload.message);
       }
     } catch {
       return text;
@@ -134,7 +156,7 @@ export async function apiRequest<T>(
       expireSession();
     }
 
-    throw new Error(await getApiErrorMessage(response));
+    throw new Error(await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }));
   }
 
   if (response.status === 204) {
@@ -166,7 +188,7 @@ export async function apiDownload(
     if (response.status === 401 && options?.token && typeof window !== "undefined") {
       expireSession();
     }
-    throw new Error(await getApiErrorMessage(response));
+    throw new Error(await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }));
   }
 
   const contentDisposition = response.headers.get("content-disposition");

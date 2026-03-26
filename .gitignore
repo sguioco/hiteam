@@ -13,5 +13,9 @@ apps/mobile/dist
 apps/mobile/web-build
 apps/api/dist
 apps/web-admin/.next
+*.tsbuildinfo
 *.log
 .DS_Store
+
+.vercel
+.env*.local

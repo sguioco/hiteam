@@ -164,7 +164,7 @@ export class AuthService {
   }> {
     const identifier = (dto.identifier ?? dto.email ?? '').trim();
     if (!identifier) {
-      throw new UnauthorizedException('Invalid tenant or credentials.');
+      throw new UnauthorizedException('Account identifier is required.');
     }
 
     const normalizedTenantSlug = dto.tenantSlug?.trim().toLowerCase();
@@ -207,19 +207,27 @@ export class AuthService {
       take: 2,
     });
 
-    if (matches.length !== 1) {
-      throw new UnauthorizedException('Invalid tenant or credentials.');
+    if (matches.length === 0) {
+      throw new UnauthorizedException(
+        isEmailIdentifier
+          ? 'Account with this email is not registered.'
+          : 'Account with this phone is not registered.',
+      );
+    }
+
+    if (matches.length > 1) {
+      throw new UnauthorizedException('Multiple workspaces found for this account. Contact support or use a direct invite link.');
     }
 
     const user = matches[0];
 
     if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException('Invalid tenant or credentials.');
+      throw new UnauthorizedException('This account is inactive.');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid tenant or credentials.');
+      throw new UnauthorizedException('Invalid password.');
     }
 
     const {
