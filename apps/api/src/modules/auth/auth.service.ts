@@ -27,6 +27,49 @@ export class AuthService {
       .slice(0, 32);
   }
 
+  private normalizeOrganizationName(value: string): string {
+    return value.trim();
+  }
+
+  private async assertOrganizationAvailability(args: {
+    tenantName: string;
+    companyName: string;
+    companyCode: string;
+  }): Promise<void> {
+    const [existingTenantName, existingCompanyCode, existingCompanyName] = await Promise.all([
+      this.prisma.tenant.findFirst({
+        where: {
+          name: {
+            equals: args.tenantName,
+            mode: 'insensitive',
+          },
+        },
+        select: { id: true },
+      }),
+      this.prisma.company.findFirst({
+        where: { code: args.companyCode },
+        select: { id: true },
+      }),
+      this.prisma.company.findFirst({
+        where: {
+          name: {
+            equals: args.companyName,
+            mode: 'insensitive',
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingTenantName || existingCompanyName) {
+      throw new ConflictException('Organization with this name already exists.');
+    }
+
+    if (existingCompanyCode) {
+      throw new ConflictException('Invite code already exists.');
+    }
+  }
+
   private buildTenantSlug(value: string): string {
     const normalized = value
       .trim()
@@ -304,10 +347,29 @@ export class AuthService {
   }
 
   async registerOwner(dto: RegisterOwnerDto): Promise<{ tenantId: string; userId: string }> {
-    const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: dto.tenantSlug } });
+    const tenantSlug = dto.tenantSlug.trim().toLowerCase();
+    const tenantName = this.normalizeOrganizationName(dto.tenantName);
+    const companyName = this.normalizeOrganizationName(dto.companyName);
+    const companyCode = this.normalizeCompanyCode(dto.companyCode);
+
+    const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (existingTenant) {
       throw new ConflictException('Tenant slug already exists.');
     }
+
+    if (!tenantName || !companyName) {
+      throw new ConflictException('Organization name is required.');
+    }
+
+    if (!companyCode) {
+      throw new ConflictException('Invite code is required.');
+    }
+
+    await this.assertOrganizationAvailability({
+      tenantName,
+      companyName,
+      companyCode,
+    });
 
     const existingRole = await this.prisma.role.upsert({
       where: { code: 'tenant_owner' },
@@ -324,8 +386,8 @@ export class AuthService {
     const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
-          name: dto.tenantName,
-          slug: dto.tenantSlug,
+          name: tenantName,
+          slug: tenantSlug,
           timezone: dto.timezone ?? 'UTC',
           locale: 'ru',
         },
@@ -334,8 +396,8 @@ export class AuthService {
       const company = await tx.company.create({
         data: {
           tenantId: tenant.id,
-          name: dto.companyName,
-          code: dto.companyCode,
+          name: companyName,
+          code: companyCode,
         },
       });
 
@@ -413,7 +475,7 @@ export class AuthService {
       entityType: 'tenant',
       entityId: result.tenantId,
       action: 'auth.owner_registered',
-      metadata: { email: dto.email.toLowerCase(), tenantSlug: dto.tenantSlug },
+      metadata: { email: dto.email.toLowerCase(), tenantSlug },
     });
 
     return result;
@@ -429,7 +491,7 @@ export class AuthService {
     employeeJoinUrl: string;
     employeeDeepLink: string;
   }> {
-    const organizationName = dto.organizationName.trim();
+    const organizationName = this.normalizeOrganizationName(dto.organizationName);
     const managerEmail = dto.managerEmail.trim().toLowerCase();
     const companyCode = this.normalizeCompanyCode(dto.companyCode);
 
@@ -441,13 +503,11 @@ export class AuthService {
       throw new ConflictException('Invite code is required.');
     }
 
-    const existingCompanyCode = await this.prisma.company.findFirst({
-      where: { code: companyCode },
-      select: { id: true },
+    await this.assertOrganizationAvailability({
+      tenantName: organizationName,
+      companyName: organizationName,
+      companyCode,
     });
-    if (existingCompanyCode) {
-      throw new ConflictException('Invite code already exists.');
-    }
 
     const tenantSlug = await this.buildUniqueTenantSlug(organizationName);
     const timezone = dto.timezone?.trim() || 'UTC';

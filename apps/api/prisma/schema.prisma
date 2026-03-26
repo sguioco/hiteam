@@ -424,7 +424,7 @@ model Company {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  code      String
+  code      String   @unique
   logoUrl   String?
   googlePlaceId String?
   createdAt DateTime @default(now())
@@ -435,7 +435,6 @@ model Company {
   locations Location[]
   employeeInvitations EmployeeInvitation[]
 
-  @@unique([tenantId, code])
 }
 
 model Department {

@@ -155,7 +155,7 @@ export class OrgService {
 
   async upsertSetup(tenantId: string, dto: UpsertOrgSetupDto) {
     return this.prisma.$transaction(async (tx) => {
-      const [existingCompanies, existingLocations] = await Promise.all([
+      const [existingCompanies, existingLocations, globalCompanies] = await Promise.all([
         tx.company.findMany({
           where: { tenantId },
           orderBy: { createdAt: "desc" },
@@ -164,10 +164,12 @@ export class OrgService {
           where: { tenantId },
           orderBy: { createdAt: "desc" },
         }),
+        tx.company.findMany({
+          select: { id: true, code: true },
+        }),
       ]);
 
-      const shouldCreateNew =
-        dto.mode === "create" || existingCompanies.length === 0;
+      const shouldCreateNew = existingCompanies.length === 0;
 
       const existingCompany = shouldCreateNew ? null : existingCompanies[0];
       const existingLocation = existingCompany
@@ -187,7 +189,7 @@ export class OrgService {
         existingCompany?.code && !shouldRefreshLegacyCompanyCode
           ? existingCompany.code
           : buildUniqueCompanyCode(
-              existingCompanies
+              globalCompanies
                 .filter((company) => company.id !== existingCompany?.id)
                 .map((company) => company.code),
               dto.companyName,

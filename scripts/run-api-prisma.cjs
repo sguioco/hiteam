@@ -59,8 +59,8 @@ function buildEnv() {
   }
 
   return {
-    ...process.env,
     ...loadApiEnv(),
+    ...process.env,
     ...overrides,
   };
 }

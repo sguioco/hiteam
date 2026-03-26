@@ -1,5 +1,6 @@
 services:
   postgres:
+    profiles: ['local-backend']
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: smart
@@ -16,6 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   redis:
+    profiles: ['local-backend']
     image: redis:7-alpine
     ports:
       - '6379:6379'
@@ -28,6 +30,7 @@ services:
       - redis_data:/data
 
   minio:
+    profiles: ['local-backend']
     image: minio/minio:latest
     command: server /data --console-address ':9001'
     environment:
@@ -45,6 +48,7 @@ services:
       - minio_data:/data
 
   createbuckets:
+    profiles: ['local-backend']
     image: minio/mc:latest
     depends_on:
       minio:
@@ -58,6 +62,7 @@ services:
       "
 
   api:
+    profiles: ['local-backend']
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -111,14 +116,13 @@ services:
     env_file:
       - .env.local
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_GRAPHQL_URL: http://localhost:4000/graphql
+      NEXT_PUBLIC_API_URL: https://hiteam-api.onrender.com
+      NEXT_PUBLIC_GRAPHQL_URL: https://hiteam-api.onrender.com/graphql
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-      INTERNAL_API_URL: http://api:4000
+      INTERNAL_API_URL: https://hiteam-api.onrender.com
+      WEB_ADMIN_BASE_URL: http://localhost:3000
     ports:
       - '3000:3000'
-    depends_on:
-      - api
 
 volumes:
   postgres_data:

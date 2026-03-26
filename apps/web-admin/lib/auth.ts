@@ -1,4 +1,5 @@
 import { toAdminHref } from './admin-routes';
+import { isDemoAccessToken, isDemoModeEnabled } from './demo-mode';
 
 export const DESKTOP_ADMIN_ROLES = [
   'tenant_owner',
@@ -65,7 +66,14 @@ export function getSession(): AuthSession | null {
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as AuthSession;
+    const session = JSON.parse(raw) as AuthSession;
+
+    if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled()) {
+      window.localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    return session;
   } catch {
     window.localStorage.removeItem(SESSION_KEY);
     return null;

@@ -14,6 +14,7 @@ type RegisterOrganizationResponse = {
   companyCode: string;
   managerEmail: string;
   managerSetupUrl: string;
+  managerTemporaryPassword?: string;
   employeeJoinUrl: string;
   employeeDeepLink: string;
 };
@@ -110,7 +111,7 @@ export default function InternalCreateOrganizationPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      Manager setup link
+                      Manager login
                     </div>
                     <div className="flex gap-2">
                       <Input readOnly value={result.managerSetupUrl} />
@@ -125,6 +126,19 @@ export default function InternalCreateOrganizationPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {result.managerTemporaryPassword ? (
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Manager temporary password</div>
+                      <div className="flex gap-2">
+                        <Input readOnly value={result.managerTemporaryPassword} />
+                        <Button type="button" variant="outline" onClick={() => void copyValue(result.managerTemporaryPassword ?? "", "manager")}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          {copiedField === "manager" ? "Copied" : "Copy"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="space-y-1">
                     <div className="text-sm font-medium">Employee company code</div>

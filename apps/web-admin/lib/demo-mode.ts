@@ -17,7 +17,7 @@ function isLocalHost() {
 }
 
 export function isDemoModeAvailable() {
-  return process.env.NEXT_PUBLIC_DEMO_MODE === "true" || isLocalHost();
+  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 }
 
 export function isDemoModeEnabled() {
