@@ -567,23 +567,12 @@ const Employees = () => {
     }
 
     try {
-      const locationId = scheduleTemplates[0]?.location?.id;
-      const positionId = scheduleTemplates[0]?.position?.id;
-
-      if (!locationId || !positionId) {
-        throw new Error(
-          "Не удалось определить локацию или должность. Сначала создайте хотя бы один шаблон в настройках расписания.",
-        );
-      }
-
       await apiRequest("/schedule/templates", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
           name: templateDraft.name.trim(),
           code: templateDraft.name.trim().toLowerCase().replace(/\s+/g, "-"),
-          locationId,
-          positionId,
           startsAtLocal: templateDraft.startsAtLocal,
           endsAtLocal: templateDraft.endsAtLocal,
           weekDays: templateDraft.weekDays,
