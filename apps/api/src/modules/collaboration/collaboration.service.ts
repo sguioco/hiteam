@@ -36,12 +36,14 @@ import { SetGroupMembersDto } from "./dto/set-group-members.dto";
 import { SetTaskStatusDto } from "./dto/set-task-status.dto";
 import { ToggleAnnouncementTemplateDto } from "./dto/toggle-announcement-template.dto";
 import { ToggleTaskTemplateDto } from "./dto/toggle-task-template.dto";
+import { UpdateAnnouncementDto } from "./dto/update-announcement.dto";
 import { UpdateAnnouncementTemplateDto } from "./dto/update-announcement-template.dto";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
 import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
 
 const TASK_PHOTO_PROOF_LIMIT = 7;
+const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
 
 @Injectable()
 export class CollaborationService {
@@ -973,12 +975,137 @@ export class CollaborationService {
     };
   }
 
+  private parseNotificationMetadata(
+    metadataJson: string | null,
+  ): Record<string, unknown> | null {
+    if (!metadataJson) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(metadataJson) as Record<string, unknown>;
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadAnnouncementNotifications(
+    tenantId: string,
+    announcementIds: string[],
+    createdAfter?: Date,
+    userId?: string,
+  ) {
+    if (!announcementIds.length) {
+      return [];
+    }
+
+    const announcementIdSet = new Set(announcementIds);
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        tenantId,
+        type: NotificationType.OPERATIONS_ALERT,
+        ...(createdAfter ? { createdAt: { gte: createdAfter } } : {}),
+        ...(userId ? { userId } : {}),
+      },
+      select: {
+        id: true,
+        userId: true,
+        isRead: true,
+        readAt: true,
+        metadataJson: true,
+        user: {
+          select: {
+            employee: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                employeeNumber: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return notifications.filter((notification) => {
+      const metadata = this.parseNotificationMetadata(notification.metadataJson);
+      const announcementId =
+        typeof metadata?.announcementId === "string"
+          ? metadata.announcementId
+          : null;
+
+      return announcementId ? announcementIdSet.has(announcementId) : false;
+    });
+  }
+
+  private attachManagerAnnouncementStats<
+    T extends {
+      id: string;
+      tenantId: string;
+      createdAt: Date;
+    },
+  >(
+    announcements: T[],
+    notifications: Awaited<
+      ReturnType<CollaborationService["loadAnnouncementNotifications"]>
+    >,
+  ) {
+    return announcements.map((announcement) => {
+      const relatedNotifications = notifications.filter((notification) => {
+        const metadata = this.parseNotificationMetadata(notification.metadataJson);
+        return metadata?.announcementId === announcement.id;
+      });
+
+      const readRecipients = relatedNotifications.filter(
+        (notification) => notification.isRead,
+      ).length;
+
+      return {
+        ...this.serializeAnnouncementWithImage(announcement),
+        totalRecipients: relatedNotifications.length,
+        readRecipients,
+        unreadRecipients: Math.max(0, relatedNotifications.length - readRecipients),
+      };
+    });
+  }
+
+  private serializeAnnouncementWithImage<
+    T extends {
+      imageStorageKey?: string | null;
+    },
+  >(announcement: T) {
+    return {
+      ...announcement,
+      imageUrl: announcement.imageStorageKey
+        ? this.storageService.getObjectUrl(announcement.imageStorageKey)
+        : null,
+    };
+  }
+
+  private parseAnnouncementAuditMetadata(raw: string | null) {
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
   async listAnnouncementsForManager(userId: string) {
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
     });
 
-    return this.prisma.announcement.findMany({
+    const announcements = await this.prisma.announcement.findMany({
       where: {
         tenantId: employee.tenantId,
       },
@@ -991,6 +1118,80 @@ export class CollaborationService {
       },
       orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
+    });
+
+    const notifications = await this.loadAnnouncementNotifications(
+      employee.tenantId,
+      announcements.map((announcement) => announcement.id),
+      announcements[announcements.length - 1]?.createdAt,
+    );
+
+    return this.attachManagerAnnouncementStats(announcements, notifications);
+  }
+
+  async listAnnouncementArchive(userId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        tenantId: employee.tenantId,
+        entityType: "announcement",
+        action: {
+          in: [
+            "announcement.created",
+            "announcement.generated",
+            "announcement.updated",
+            "announcement.deleted",
+          ],
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 120,
+    });
+
+    const actorUserIds = Array.from(
+      new Set(
+        logs
+          .map((log) => log.actorUserId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const actors = actorUserIds.length
+      ? await this.prisma.employee.findMany({
+          where: {
+            tenantId: employee.tenantId,
+            userId: { in: actorUserIds },
+          },
+        })
+      : [];
+    const actorMap = new Map(actors.map((actor) => [actor.userId, actor]));
+
+    return logs.map((log) => {
+      const metadata = this.parseAnnouncementAuditMetadata(log.metadataJson);
+      const actor = log.actorUserId ? actorMap.get(log.actorUserId) : null;
+
+      return {
+        id: log.id,
+        announcementId: log.entityId,
+        action: log.action,
+        createdAt: log.createdAt.toISOString(),
+        title:
+          typeof metadata.title === "string" && metadata.title.trim()
+            ? metadata.title
+            : null,
+        isPinned:
+          typeof metadata.isPinned === "boolean" ? metadata.isPinned : null,
+        actorEmployee: actor
+          ? {
+              id: actor.id,
+              firstName: actor.firstName,
+              lastName: actor.lastName,
+            }
+          : null,
+      };
     });
   }
 
@@ -1008,7 +1209,7 @@ export class CollaborationService {
     });
     const groupIds = memberships.map((item) => item.groupId);
 
-    return this.prisma.announcement.findMany({
+    const announcements = await this.prisma.announcement.findMany({
       where: {
         tenantId: employee.tenantId,
         OR: [
@@ -1041,6 +1242,262 @@ export class CollaborationService {
       orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
     });
+
+    const notifications = await this.loadAnnouncementNotifications(
+      employee.tenantId,
+      announcements.map((announcement) => announcement.id),
+      announcements[announcements.length - 1]?.createdAt,
+      userId,
+    );
+
+    return announcements.map((announcement) => {
+      const notification = notifications.find((item) => {
+        const metadata = this.parseNotificationMetadata(item.metadataJson);
+        return metadata?.announcementId === announcement.id;
+      });
+
+      return {
+        ...this.serializeAnnouncementWithImage(announcement),
+        notificationId: notification?.id ?? null,
+        isRead: notification?.isRead ?? false,
+        readAt: notification?.readAt?.toISOString() ?? null,
+      };
+    });
+  }
+
+  async markAnnouncementRead(userId: string, announcementId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+
+    const announcement = await this.prisma.announcement.findFirst({
+      where: {
+        id: announcementId,
+        tenantId: employee.tenantId,
+      },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException("Announcement not found.");
+    }
+
+    const notification = await this.prisma.notification.findFirst({
+      where: {
+        userId,
+        tenantId: employee.tenantId,
+        type: NotificationType.OPERATIONS_ALERT,
+        metadataJson: {
+          contains: `"announcementId":"${announcementId}"`,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!notification) {
+      return {
+        success: true,
+        notificationId: null,
+      };
+    }
+
+    const updated = await this.notificationsService.markRead(userId, notification.id);
+
+    return {
+      success: true,
+      notificationId: updated.id,
+      readAt: updated.readAt?.toISOString() ?? null,
+    };
+  }
+
+  async listAnnouncementReaders(userId: string, announcementId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+
+    const announcement = await this.prisma.announcement.findFirst({
+      where: {
+        id: announcementId,
+        tenantId: employee.tenantId,
+      },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException("Announcement not found.");
+    }
+
+    const notifications = await this.loadAnnouncementNotifications(
+      employee.tenantId,
+      [announcementId],
+      announcement.createdAt,
+    );
+
+    return notifications
+      .map((notification) => ({
+        notificationId: notification.id,
+        userId: notification.userId,
+        employeeId: notification.user.employee?.id ?? null,
+        firstName: notification.user.employee?.firstName ?? "",
+        lastName: notification.user.employee?.lastName ?? "",
+        employeeNumber: notification.user.employee?.employeeNumber ?? null,
+        avatarUrl: notification.user.employee?.avatarUrl ?? null,
+        isRead: notification.isRead,
+        readAt: notification.readAt?.toISOString() ?? null,
+      }))
+      .sort((left, right) => {
+        if (left.isRead !== right.isRead) {
+          return left.isRead ? 1 : -1;
+        }
+
+        const leftName = `${left.lastName} ${left.firstName}`.trim();
+        const rightName = `${right.lastName} ${right.firstName}`.trim();
+        return leftName.localeCompare(rightName, "ru");
+      });
+  }
+
+  async updateAnnouncement(
+    userId: string,
+    announcementId: string,
+    dto: UpdateAnnouncementDto,
+  ) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+
+    const current = await this.prisma.announcement.findFirst({
+      where: {
+        id: announcementId,
+        tenantId: employee.tenantId,
+      },
+    });
+
+    if (!current) {
+      throw new NotFoundException("Announcement not found.");
+    }
+
+    if (
+      (dto.imageDataUrl && !dto.imageAspectRatio) ||
+      (!dto.imageDataUrl && dto.imageAspectRatio && !dto.removeImage)
+    ) {
+      throw new BadRequestException(
+        "Announcement image update requires both imageDataUrl and imageAspectRatio.",
+      );
+    }
+
+    let imageUpdateData: Prisma.AnnouncementUpdateInput = {};
+
+    if (dto.removeImage) {
+      imageUpdateData = {
+        imageStorageKey: null,
+        imageAspectRatio: null,
+      };
+    } else if (dto.imageDataUrl && dto.imageAspectRatio) {
+      const uploaded = await this.uploadAnnouncementImage(
+        employee.tenantId,
+        announcementId,
+        dto.imageDataUrl,
+      );
+
+      imageUpdateData = {
+        imageStorageKey: uploaded.key,
+        imageAspectRatio: dto.imageAspectRatio,
+      };
+    }
+
+    const updated = await this.prisma.announcement.update({
+      where: { id: announcementId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.body !== undefined ? { body: dto.body.trim() } : {}),
+        ...(dto.isPinned !== undefined ? { isPinned: dto.isPinned } : {}),
+        ...imageUpdateData,
+      },
+      include: {
+        authorEmployee: true,
+        group: true,
+        department: true,
+        location: true,
+        targetEmployee: true,
+      },
+    });
+
+    await this.prisma.notification.updateMany({
+      where: {
+        tenantId: employee.tenantId,
+        type: NotificationType.OPERATIONS_ALERT,
+        metadataJson: {
+          contains: `"announcementId":"${announcementId}"`,
+        },
+      },
+      data: {
+        title: `Announcement: ${updated.title}`,
+        body: updated.body,
+      },
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "announcement",
+      entityId: announcementId,
+      action: "announcement.updated",
+      metadata: {
+        title: updated.title,
+        isPinned: updated.isPinned,
+      },
+    });
+
+    const notifications = await this.loadAnnouncementNotifications(
+      employee.tenantId,
+      [announcementId],
+      current.createdAt,
+    );
+
+    return this.attachManagerAnnouncementStats([updated], notifications)[0];
+  }
+
+  async deleteAnnouncement(userId: string, announcementId: string) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+    });
+
+    const current = await this.prisma.announcement.findFirst({
+      where: {
+        id: announcementId,
+        tenantId: employee.tenantId,
+      },
+    });
+
+    if (!current) {
+      throw new NotFoundException("Announcement not found.");
+    }
+
+    await this.prisma.notification.deleteMany({
+      where: {
+        tenantId: employee.tenantId,
+        type: NotificationType.OPERATIONS_ALERT,
+        metadataJson: {
+          contains: `"announcementId":"${announcementId}"`,
+        },
+      },
+    });
+
+    await this.prisma.announcement.delete({
+      where: { id: announcementId },
+    });
+
+    await this.auditService.log({
+      tenantId: employee.tenantId,
+      actorUserId: userId,
+      entityType: "announcement",
+      entityId: announcementId,
+      action: "announcement.deleted",
+      metadata: {
+        title: current.title,
+        isPinned: current.isPinned,
+      },
+    });
+
+    return { success: true };
   }
 
   async createAnnouncement(userId: string, dto: CreateAnnouncementDto) {
@@ -3380,11 +3837,29 @@ export class CollaborationService {
       title: string;
       body: string;
       isPinned?: boolean;
+      imageDataUrl?: string;
+      imageAspectRatio?: string;
     },
     actorUserId?: string,
     metadata?: Record<string, unknown>,
   ) {
-    const announcement = await this.prisma.announcement.create({
+    if (
+      (dto.imageDataUrl && !dto.imageAspectRatio) ||
+      (!dto.imageDataUrl && dto.imageAspectRatio)
+    ) {
+      throw new BadRequestException(
+        "Announcement image requires both imageDataUrl and imageAspectRatio.",
+      );
+    }
+
+    if (
+      dto.imageAspectRatio &&
+      !ANNOUNCEMENT_IMAGE_ASPECT_RATIOS.has(dto.imageAspectRatio)
+    ) {
+      throw new BadRequestException("Unsupported announcement image aspect ratio.");
+    }
+
+    let announcement = await this.prisma.announcement.create({
       data: {
         tenantId: author.tenantId,
         authorEmployeeId: author.id,
@@ -3405,6 +3880,29 @@ export class CollaborationService {
         targetEmployee: true,
       },
     });
+
+    if (dto.imageDataUrl && dto.imageAspectRatio) {
+      const uploaded = await this.uploadAnnouncementImage(
+        author.tenantId,
+        announcement.id,
+        dto.imageDataUrl,
+      );
+
+      announcement = await this.prisma.announcement.update({
+        where: { id: announcement.id },
+        data: {
+          imageStorageKey: uploaded.key,
+          imageAspectRatio: dto.imageAspectRatio,
+        },
+        include: {
+          authorEmployee: true,
+          group: true,
+          department: true,
+          location: true,
+          targetEmployee: true,
+        },
+      });
+    }
 
     const recipients = await this.resolveAnnouncementRecipients(
       author.tenantId,
@@ -3442,6 +3940,8 @@ export class CollaborationService {
         ? "announcement.generated"
         : "announcement.created",
       metadata: {
+        title: announcement.title,
+        isPinned: announcement.isPinned,
         audience: announcement.audience,
         groupId: announcement.groupId,
         targetEmployeeId: announcement.targetEmployeeId,
@@ -3451,7 +3951,26 @@ export class CollaborationService {
       },
     });
 
-    return announcement;
+    return this.serializeAnnouncementWithImage(announcement);
+  }
+
+  private async uploadAnnouncementImage(
+    tenantId: string,
+    announcementId: string,
+    dataUrl: string,
+  ) {
+    const extension = this.getDataUrlImageExtension(dataUrl);
+    const storageKey = `tenants/${tenantId}/announcements/${announcementId}/${Date.now()}-cover.${extension}`;
+    return this.storageService.uploadDataUrl(storageKey, dataUrl);
+  }
+
+  private getDataUrlImageExtension(dataUrl: string) {
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+    const mimeType = match?.[1]?.toLowerCase() ?? "image/jpeg";
+
+    if (mimeType.includes("png")) return "png";
+    if (mimeType.includes("webp")) return "webp";
+    return "jpg";
   }
 
   private async validateAnnouncementTarget(

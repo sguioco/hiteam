@@ -150,6 +150,10 @@ export function hasDesktopAdminAccess(roleCodes: string[]): boolean {
   );
 }
 
+export function hasManagerAccess(roleCodes: string[]): boolean {
+  return roleCodes.includes('manager') || hasDesktopAdminAccess(roleCodes);
+}
+
 export function isManagerOnlyRole(roleCodes: string[]): boolean {
   return roleCodes.includes('manager') && !hasDesktopAdminAccess(roleCodes);
 }

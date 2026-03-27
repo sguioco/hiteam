@@ -7,6 +7,7 @@ export const ADMIN_ROUTE_PREFIXES = [
   '/collaboration',
   '/diagnostics',
   '/employees',
+  '/news',
   '/notifications',
   '/observability',
   '/organization',
@@ -14,6 +15,7 @@ export const ADMIN_ROUTE_PREFIXES = [
   '/profile',
   '/requests',
   '/schedule',
+  '/tasks',
 ] as const;
 
 export function toAdminHref(path = '/'): string {

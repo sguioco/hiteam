@@ -30,6 +30,7 @@ import { SetGroupMembersDto } from "./dto/set-group-members.dto";
 import { ToggleAnnouncementTemplateDto } from "./dto/toggle-announcement-template.dto";
 import { SetTaskStatusDto } from "./dto/set-task-status.dto";
 import { ToggleTaskTemplateDto } from "./dto/toggle-task-template.dto";
+import { UpdateAnnouncementDto } from "./dto/update-announcement.dto";
 import { UpdateAnnouncementTemplateDto } from "./dto/update-announcement-template.dto";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
@@ -100,10 +101,25 @@ export class CollaborationController {
     return this.collaborationService.listAnnouncementsForManager(user.sub);
   }
 
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Get("announcements/archive")
+  announcementArchive(@CurrentUser() user: JwtUser) {
+    return this.collaborationService.listAnnouncementArchive(user.sub);
+  }
+
   @Roles("employee", "tenant_owner", "hr_admin", "operations_admin", "manager")
   @Get("announcements/me")
   myAnnouncements(@CurrentUser() user: JwtUser) {
     return this.collaborationService.listMyAnnouncements(user.sub);
+  }
+
+  @Roles("employee", "tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Post("announcements/:announcementId/read")
+  markAnnouncementRead(
+    @CurrentUser() user: JwtUser,
+    @Param("announcementId") announcementId: string,
+  ) {
+    return this.collaborationService.markAnnouncementRead(user.sub, announcementId);
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
@@ -113,6 +129,38 @@ export class CollaborationController {
     @Body() dto: CreateAnnouncementDto,
   ) {
     return this.collaborationService.createAnnouncement(user.sub, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Get("announcements/:announcementId/readers")
+  announcementReaders(
+    @CurrentUser() user: JwtUser,
+    @Param("announcementId") announcementId: string,
+  ) {
+    return this.collaborationService.listAnnouncementReaders(user.sub, announcementId);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Patch("announcements/:announcementId")
+  updateAnnouncement(
+    @CurrentUser() user: JwtUser,
+    @Param("announcementId") announcementId: string,
+    @Body() dto: UpdateAnnouncementDto,
+  ) {
+    return this.collaborationService.updateAnnouncement(
+      user.sub,
+      announcementId,
+      dto,
+    );
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Delete("announcements/:announcementId")
+  deleteAnnouncement(
+    @CurrentUser() user: JwtUser,
+    @Param("announcementId") announcementId: string,
+  ) {
+    return this.collaborationService.deleteAnnouncement(user.sub, announcementId);
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")

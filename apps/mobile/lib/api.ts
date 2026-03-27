@@ -6,6 +6,8 @@ import {
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
   ApprovalInboxItem,
+  AnnouncementAudience,
+  AnnouncementImageAspectRatio,
   BiometricJobItem,
   BiometricPolicyResponse,
   EmployeeInboxResponse,
@@ -730,6 +732,66 @@ export async function addMyTaskComment(taskId: string, body: string) {
 
 export async function loadMyAnnouncements(): Promise<AnnouncementItem[]> {
   return authRequest<AnnouncementItem[]>('/collaboration/announcements/me');
+}
+
+export async function loadManagerAnnouncements(): Promise<AnnouncementItem[]> {
+  return authRequest<AnnouncementItem[]>('/collaboration/announcements');
+}
+
+export async function createManagerAnnouncement(input: {
+  audience?: AnnouncementAudience;
+  title: string;
+  body: string;
+  isPinned?: boolean;
+  imageDataUrl?: string;
+  imageAspectRatio?: AnnouncementImageAspectRatio;
+}) {
+  return authRequest<AnnouncementItem>('/collaboration/announcements', {
+    method: 'POST',
+    body: JSON.stringify({
+      audience: input.audience ?? 'ALL',
+      title: input.title,
+      body: input.body,
+      isPinned: input.isPinned ?? false,
+      ...(input.imageDataUrl ? { imageDataUrl: input.imageDataUrl } : {}),
+      ...(input.imageAspectRatio ? { imageAspectRatio: input.imageAspectRatio } : {}),
+    }),
+  });
+}
+
+export async function updateManagerAnnouncement(
+  announcementId: string,
+  input: {
+    title?: string;
+    body?: string;
+    isPinned?: boolean;
+    imageDataUrl?: string;
+    imageAspectRatio?: AnnouncementImageAspectRatio;
+    removeImage?: boolean;
+  },
+) {
+  return authRequest<AnnouncementItem>(`/collaboration/announcements/${announcementId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteManagerAnnouncement(announcementId: string) {
+  return authRequest<{ success: boolean }>(`/collaboration/announcements/${announcementId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function markMyAnnouncementRead(
+  announcementId: string,
+): Promise<{
+  success: boolean;
+  notificationId?: string | null;
+  readAt?: string | null;
+}> {
+  return authRequest(`/collaboration/announcements/${announcementId}/read`, {
+    method: 'POST',
+  });
 }
 
 export async function loadMyInbox(): Promise<EmployeeInboxResponse> {

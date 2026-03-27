@@ -486,6 +486,7 @@ export type CollaborationAnalyticsResponse = {
 
 export type AnnouncementAudience = 'ALL' | 'GROUP' | 'EMPLOYEE' | 'DEPARTMENT' | 'LOCATION';
 export type AnnouncementTemplateFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type AnnouncementImageAspectRatio = '1:1' | '16:9' | '4:3';
 
 export type AnnouncementItem = {
   id: string;
@@ -493,8 +494,16 @@ export type AnnouncementItem = {
   title: string;
   body: string;
   isPinned: boolean;
+  imageUrl?: string | null;
+  imageAspectRatio?: AnnouncementImageAspectRatio | null;
   createdAt: string;
   updatedAt: string;
+  notificationId?: string | null;
+  isRead?: boolean;
+  readAt?: string | null;
+  totalRecipients?: number;
+  readRecipients?: number;
+  unreadRecipients?: number;
   authorEmployee: {
     id: string;
     firstName: string;
@@ -517,6 +526,32 @@ export type AnnouncementItem = {
     firstName: string;
     lastName: string;
     employeeNumber: string;
+  } | null;
+};
+
+export type AnnouncementReadReceipt = {
+  notificationId: string;
+  userId: string;
+  employeeId: string | null;
+  firstName: string;
+  lastName: string;
+  employeeNumber: string | null;
+  avatarUrl: string | null;
+  isRead: boolean;
+  readAt: string | null;
+};
+
+export type AnnouncementArchiveEntry = {
+  id: string;
+  announcementId: string;
+  action: 'announcement.created' | 'announcement.updated' | 'announcement.deleted' | 'announcement.generated';
+  createdAt: string;
+  title: string | null;
+  isPinned: boolean | null;
+  actorEmployee: {
+    id: string | null;
+    firstName: string;
+    lastName: string;
   } | null;
 };
 

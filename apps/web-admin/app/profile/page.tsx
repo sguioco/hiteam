@@ -9,8 +9,7 @@ import { AuthSession, clearSession, getSession, redirectToLogin } from '../../li
 import { apiRequest } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { buildUserDisplayName, getDisplayInitials } from '../../lib/profile-display';
-
-const PROFILE_AVATAR_STORAGE_KEY = 'smart-admin-profile-avatar';
+import { readStoredProfileAvatar, writeStoredProfileAvatar } from '../../lib/profile-avatar';
 
 type ProfileEmployee = {
   avatarUrl?: string | null;
@@ -43,22 +42,14 @@ export default function ProfilePage() {
 
         if (employee?.avatarUrl) {
           setAvatarPreview(employee.avatarUrl);
-          window.localStorage.setItem(PROFILE_AVATAR_STORAGE_KEY, employee.avatarUrl);
+          writeStoredProfileAvatar(employee.avatarUrl);
           return;
         }
 
-        const savedAvatar =
-          typeof window !== 'undefined'
-            ? window.localStorage.getItem(PROFILE_AVATAR_STORAGE_KEY)
-            : null;
-        setAvatarPreview(savedAvatar || null);
+        setAvatarPreview(readStoredProfileAvatar());
       })
       .catch(() => {
-        const savedAvatar =
-          typeof window !== 'undefined'
-            ? window.localStorage.getItem(PROFILE_AVATAR_STORAGE_KEY)
-            : null;
-        setAvatarPreview(savedAvatar || null);
+        setAvatarPreview(readStoredProfileAvatar());
       });
   }, []);
 
@@ -69,13 +60,7 @@ export default function ProfilePage() {
 
   function handleAvatarChange(nextAvatarDataUrl: string | null) {
     setAvatarPreview(nextAvatarDataUrl);
-
-    if (!nextAvatarDataUrl) {
-      window.localStorage.removeItem(PROFILE_AVATAR_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(PROFILE_AVATAR_STORAGE_KEY, nextAvatarDataUrl);
+    writeStoredProfileAvatar(nextAvatarDataUrl);
   }
 
   if (!session) {

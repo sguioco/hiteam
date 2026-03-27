@@ -13,12 +13,13 @@ import { PressableScale } from '../../components/ui/pressable-scale';
 import AuthScreen from './AuthScreen';
 import CalendarScreen from './CalendarScreen';
 import ManagerScreen from './ManagerScreen';
+import NewsScreen from './NewsScreen';
 import PendingAccessScreen from './PendingAccessScreen';
 import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 import { useI18n } from '../../lib/i18n';
 
-type Tab = 'calendar' | 'today' | 'manage' | 'profile';
+type Tab = 'calendar' | 'today' | 'manage' | 'news' | 'profile';
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
 type StartShiftPromptState = {
   minutesUntilStart: number;
@@ -27,7 +28,7 @@ type StartShiftPromptState = {
 function normalizeTab(value: string | string[] | undefined): Tab {
   const nextValue = Array.isArray(value) ? value[0] : value;
 
-  if (nextValue === 'calendar' || nextValue === 'today' || nextValue === 'manage' || nextValue === 'profile') {
+  if (nextValue === 'calendar' || nextValue === 'today' || nextValue === 'manage' || nextValue === 'news' || nextValue === 'profile') {
     return nextValue;
   }
 
@@ -253,6 +254,7 @@ const Index = () => {
         ) : null}
         {activeTab === 'calendar' ? <CalendarScreen overdueSheetSignal={overdueSheetSignal} /> : null}
         {activeTab === 'manage' && isManager ? <ManagerScreen /> : null}
+        {activeTab === 'news' ? <NewsScreen /> : null}
         {activeTab === 'profile' ? <ProfileScreen /> : null}
         <BottomNav active={activeTab} hasBadge onNavigate={navigateToTab} showManage={isManager} />
       </View>

@@ -33,4 +33,13 @@ export class CreateAnnouncementDto {
   @IsOptional()
   @IsBoolean()
   isPinned?: boolean;
+
+  @IsOptional()
+  @IsString()
+  imageDataUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["1:1", "16:9", "4:3"])
+  imageAspectRatio?: string;
 }

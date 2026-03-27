@@ -6,8 +6,8 @@ import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 
 interface BottomNavProps {
-  active: 'calendar' | 'today' | 'manage' | 'profile';
-  onNavigate: (tab: 'calendar' | 'today' | 'manage' | 'profile') => void;
+  active: 'calendar' | 'today' | 'manage' | 'news' | 'profile';
+  onNavigate: (tab: 'calendar' | 'today' | 'manage' | 'news' | 'profile') => void;
   hasBadge?: boolean;
   showManage?: boolean;
 }
@@ -23,7 +23,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
     icon,
     label,
   }: {
-    tab: 'calendar' | 'manage' | 'profile';
+    tab: 'calendar' | 'manage' | 'news' | 'profile';
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
   }) {
@@ -66,9 +66,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
         className={floating ? 'absolute z-10 items-center' : 'relative -mt-4 flex flex-col items-center'}
         style={
           floating
-            ? showManage
-              ? { left: 28, top: -18 }
-              : { left: '50%', top: -28, transform: [{ translateX: -31 }] }
+            ? { left: 28, top: -18 }
             : undefined
         }
         onPress={() => {
@@ -87,9 +85,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
       >
         <Animated.View style={centerAnimatedStyle}>
           <View
-            className={`h-[62px] w-[62px] items-center justify-center rounded-full shadow-lg shadow-[#6d73ff]/25 ${
-              active === 'today' ? 'bg-primary' : 'bg-primary/90'
-            }`}
+            className="h-[62px] w-[62px] items-center justify-center rounded-full bg-primary shadow-lg shadow-[#6d73ff]/25"
           >
             <Ionicons color="#ffffff" name="list-outline" size={27} />
             {hasBadge ? (
@@ -112,28 +108,21 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           style={{ minHeight: 106 + insets.bottom }}
         >
           <View className="px-8 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
-            {showManage ? (
-              <View className="flex-row items-end gap-10 pl-[50px]" style={{ marginLeft: 40 }}>
-                <View className="w-[64px] items-center">
-                  <NavItem icon="eye-outline" label={t('nav.manage')} tab="manage" />
-                </View>
-                <View className="w-[64px] items-center">
-                  <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
-                </View>
-                <View className="w-[64px] items-center">
-                  <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
-                </View>
+            <View className="flex-row items-end gap-10 pl-[50px]" style={{ marginLeft: 40 }}>
+              <View className="w-[64px] items-center">
+                <NavItem
+                  icon={showManage ? 'eye-outline' : 'newspaper-outline'}
+                  label={showManage ? t('nav.manage') : t('nav.news')}
+                  tab={showManage ? 'manage' : 'news'}
+                />
               </View>
-            ) : (
-              <View className="flex-row items-end justify-between px-3">
-                <View className="items-center">
-                  <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
-                </View>
-                <View className="items-center">
-                  <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
-                </View>
+              <View className="w-[64px] items-center">
+                <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
               </View>
-            )}
+              <View className="w-[64px] items-center">
+                <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
+              </View>
+            </View>
           </View>
         </View>
         <TodayButton floating />

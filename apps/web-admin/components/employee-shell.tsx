@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  FileText,
   Home,
   UserRound,
 } from "lucide-react";
@@ -26,6 +27,10 @@ import { createCollaborationSocket } from "../lib/collaboration-socket";
 import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
+import {
+  PROFILE_AVATAR_UPDATED_EVENT,
+  readStoredProfileAvatar,
+} from "../lib/profile-avatar";
 import { SessionLoader } from "./session-loader";
 
 type NavItem = {
@@ -63,6 +68,7 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
     lastName?: string | null;
     avatarUrl?: string | null;
   } | null>(null);
+  const [storedAvatarUrl, setStoredAvatarUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   async function loadSummary(currentSession: AuthSession) {
@@ -104,11 +110,13 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
         avatarUrl?: string | null;
       } | null>("/employees/me", {
         token: currentSession.accessToken,
+        realBackend: true,
       }),
     ]).then(([statusResult, profileResult]) => {
       if (profileResult.status === "fulfilled") {
         setProfile(profileResult.value);
       }
+      setStoredAvatarUrl(readStoredProfileAvatar());
 
       if (statusResult.status === "fulfilled") {
         setAccessStatus(statusResult.value);
@@ -136,6 +144,35 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
       });
     });
   }, [router]);
+
+  useEffect(() => {
+    setStoredAvatarUrl(readStoredProfileAvatar());
+
+    function handleAvatarUpdated(event: Event) {
+      const customEvent = event as CustomEvent<string | null>;
+      setStoredAvatarUrl(customEvent.detail ?? readStoredProfileAvatar());
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === null || event.key === "smart-admin-profile-avatar") {
+        setStoredAvatarUrl(readStoredProfileAvatar());
+      }
+    }
+
+    window.addEventListener(
+      PROFILE_AVATAR_UPDATED_EVENT,
+      handleAvatarUpdated as EventListener,
+    );
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        PROFILE_AVATAR_UPDATED_EVENT,
+        handleAvatarUpdated as EventListener,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     function handleSessionUpdated(event: Event) {
@@ -185,10 +222,17 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
   const hasAdminRole = session?.user.roleCodes.some((role) =>
     ["tenant_owner", "hr_admin", "operations_admin", "manager"].includes(role),
   );
+  const resolvedAvatarUrl = profile?.avatarUrl || storedAvatarUrl;
 
   const navItems = useMemo<NavItem[]>(
     () => [
       { href: "/employee", label: t("nav.dashboard"), icon: Home },
+      {
+        href: "/employee/news",
+        label: "Новости",
+        icon: FileText,
+        count: summary.pinnedAnnouncements,
+      },
       {
         href: "/employee/calendar",
         label: "Календарь",
@@ -295,10 +339,10 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-meta">
           <span className="section-kicker">Веб-версия</span>
-          <strong>Главная и календарь</strong>
+          <strong>Главная, новости и календарь</strong>
           <p>
-            В браузере оставлен короткий сценарий сотрудника: главная,
-            календарь задач и профиль внизу меню.
+            В браузере сотруднику доступны главная, новости, календарь задач и
+            профиль внизу меню.
           </p>
         </div>
 
@@ -309,7 +353,7 @@ export function EmployeeShell({ children }: { children: ReactNode }) {
                 alt={profile?.firstName || session.user.email}
                 className="h-full w-full rounded-full object-cover"
                 src={
-                  profile?.avatarUrl ||
+                  resolvedAvatarUrl ||
                   getMockAvatarDataUrl(
                     `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() ||
                       session.user.email,

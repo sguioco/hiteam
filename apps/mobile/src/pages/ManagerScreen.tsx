@@ -363,6 +363,11 @@ export default function ManagerScreen({
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
+  const newsActionTitle = language === "ru" ? "Новости" : "News";
+  const newsActionHint =
+    language === "ru"
+      ? "Откройте список новостей компании и общий статус прочтения."
+      : "Open company news and overall readership status.";
   const [employees, setEmployees] = useState<ManagerEmployee[]>([]);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -481,13 +486,13 @@ export default function ManagerScreen({
   }, [employeeCards]);
 
   function buildManagerCreateHref(
-    path: "/manager/create-task" | "/manager/create-meeting",
+    path: "/manager/create-task" | "/manager/create-meeting" | "/manager/create-news",
   ) {
     return path as never;
   }
 
   function openCreateScreen(
-    path: "/manager/create-task" | "/manager/create-meeting",
+    path: "/manager/create-task" | "/manager/create-meeting" | "/manager/create-news",
   ) {
     setActionMenuOpen(false);
     requestAnimationFrame(() => {
@@ -606,16 +611,29 @@ export default function ManagerScreen({
                 </View>
               </View>
 
-              <Button
-                className="rounded-full border-white/80 bg-white/80 px-5"
-                label={t("manager.createAction")}
-                onPress={() => setActionMenuOpen(true)}
-                textClassName="text-[13px] tracking-[1.2px]"
-                variant="secondary"
-              />
+              <View className="flex-row items-center gap-2">
+                <PressableScale
+                  className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
+                  haptic="selection"
+                  onPress={() => router.push("/?tab=news" as never)}
+                >
+                  <Ionicons color="#1f2937" name="newspaper-outline" size={16} />
+                  <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
+                    {newsActionTitle}
+                  </Text>
+                </PressableScale>
+
+                <Button
+                  className="rounded-full border-white/80 bg-white/80 px-5"
+                  label={`+ ${t("manager.createAction")}`}
+                  onPress={() => setActionMenuOpen(true)}
+                  textClassName="text-[13px] tracking-[1.2px]"
+                  variant="secondary"
+                />
+              </View>
             </Animated.View>
 
-            <View className="flex-row items-center justify-between">
+            <View className="flex-row items-baseline gap-2">
               <Text className="text-[15px] font-semibold text-[#42526b]">
                 {t("manager.lateShort")}
               </Text>
@@ -631,132 +649,137 @@ export default function ManagerScreen({
                 </Text>
               </View>
             ) : employeeCards.length ? (
-              employeeCards.map((item, index) => {
-                const tone = attendanceTone(item.liveSession);
-                const isExpanded = expandedEmployeeId === item.employee.id;
-                const showAvatar =
-                  item.employee.avatar &&
-                  !failedAvatarEmployeeIds.has(item.employee.id);
-                const checkInTime = item.liveSession
-                  ? new Date(item.liveSession.startedAt).toLocaleTimeString(
-                      locale,
-                      {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      },
-                    )
-                  : "—";
+              <View className="overflow-hidden rounded-[30px] border border-white/30 bg-white/70 shadow-sm shadow-[#1f2687]/10">
+                {employeeCards.map((item, index) => {
+                  const tone = attendanceTone(item.liveSession);
+                  const isExpanded = expandedEmployeeId === item.employee.id;
+                  const showAvatar =
+                    item.employee.avatar &&
+                    !failedAvatarEmployeeIds.has(item.employee.id);
+                  const checkInTime = item.liveSession
+                    ? new Date(item.liveSession.startedAt).toLocaleTimeString(
+                        locale,
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        },
+                      )
+                    : "—";
+                  const isLast = index === employeeCards.length - 1;
 
-                return (
-                  <Animated.View
-                    entering={FadeInUp.delay(index * 24)
-                      .duration(170)
-                      .withInitialValues({
-                        opacity: 0,
-                        transform: [{ translateY: 8 }],
-                      })}
-                    key={item.employee.id}
-                  >
-                    <PressableScale
-                      className="rounded-[30px] border border-white/30 bg-white/70 px-5 py-5 shadow-sm shadow-[#1f2687]/10"
-                      haptic="selection"
-                      onPress={() => toggleEmployeeExpanded(item.employee.id)}
+                  return (
+                    <Animated.View
+                      entering={FadeInUp.delay(index * 24)
+                        .duration(170)
+                        .withInitialValues({
+                          opacity: 0,
+                          transform: [{ translateY: 8 }],
+                        })}
+                      key={item.employee.id}
                     >
-                      <View className="flex-row items-center gap-4">
-                        {showAvatar ? (
-                          <Image
-                            source={item.employee.avatar}
-                            className="h-14 w-14 rounded-2xl"
-                            onError={() => markAvatarFailed(item.employee.id)}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">
-                            <Text className="text-[16px] font-extrabold text-foreground">
-                              {item.employee.firstName.charAt(0)}
-                              {item.employee.lastName.charAt(0)}
+                      <PressableScale
+                        className="px-5 py-5"
+                        haptic="selection"
+                        onPress={() => toggleEmployeeExpanded(item.employee.id)}
+                      >
+                        <View className="flex-row items-center gap-4">
+                          {showAvatar ? (
+                            <Image
+                              source={item.employee.avatar}
+                              className="h-14 w-14 rounded-2xl"
+                              onError={() => markAvatarFailed(item.employee.id)}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">
+                              <Text className="text-[16px] font-extrabold text-foreground">
+                                {item.employee.firstName.charAt(0)}
+                                {item.employee.lastName.charAt(0)}
+                              </Text>
+                            </View>
+                          )}
+                          <View className="flex-1">
+                            <Text className="font-display text-[20px] font-bold text-foreground">
+                              {item.employee.firstName} {item.employee.lastName}
+                            </Text>
+                            <Text className="mt-1 text-[14px] leading-5 text-[#7b8798]">
+                              {item.employee.position?.name ??
+                                item.employee.department?.name ??
+                                item.employee.email}
                             </Text>
                           </View>
-                        )}
-                        <View className="flex-1">
-                          <Text className="font-display text-[20px] font-bold text-foreground">
-                            {item.employee.firstName} {item.employee.lastName}
-                          </Text>
-                          <Text className="mt-1 text-[14px] leading-5 text-[#7b8798]">
-                            {item.employee.position?.name ??
-                              item.employee.department?.name ??
-                              item.employee.email}
-                          </Text>
-                        </View>
 
-                        <View className="items-end gap-2">
-                          <Ionicons
-                            color="#6b7a90"
-                            name={isExpanded ? "chevron-up" : "chevron-down"}
-                            size={20}
-                          />
-                        </View>
-                      </View>
-
-                      {isExpanded ? (
-                        <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
-                          {item.liveSession ? (
-                            <Text className="text-[13px] font-semibold text-[#4f6df5]">
-                              {t("manager.checkedInAt", { time: checkInTime })}
-                            </Text>
-                          ) : null}
-
-                          <View className="flex-row items-center justify-between">
-                            <Text className="text-[14px] font-semibold text-[#42526b]">
-                              {t("manager.tasksToday")}
-                            </Text>
-                            <Badge
-                              label={`${item.doneTasks.length}/${item.assignedTasks.length}`}
-                              variant="muted"
+                          <View className="items-end gap-2">
+                            <Ionicons
+                              color="#6b7a90"
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={20}
                             />
                           </View>
-
-                          {item.assignedTasks.length ? (
-                            <View className="gap-1">
-                              {[...item.assignedTasks]
-                                .sort((a, b) => {
-                                  const aDone = a.status === "DONE" ? 1 : 0;
-                                  const bDone = b.status === "DONE" ? 1 : 0;
-                                  return aDone - bDone;
-                                })
-                                .slice(0, 5)
-                                .map((task) => {
-                                  const isDone = task.status === "DONE";
-                                  return (
-                                    <Text
-                                      key={task.id}
-                                      className={`text-[16px] leading-7 ${isDone ? "line-through" : "text-foreground"}`}
-                                      style={
-                                        isDone
-                                          ? { color: "#22c55e" }
-                                          : undefined
-                                      }
-                                    >
-                                      {task.title}
-                                    </Text>
-                                  );
-                                })}
-                            </View>
-                          ) : (
-                            <Text className="text-[13px] leading-5 text-[#6b7280]">
-                              {t("manager.noEmployeeTasks")}
-                            </Text>
-                          )}
                         </View>
-                      ) : item.liveSession ? (
-                        <Text className="mt-4 text-[13px] font-semibold text-[#42526b]">
-                          {tone.note}
-                        </Text>
-                      ) : null}
-                    </PressableScale>
-                  </Animated.View>
-                );
-              })
+
+                        {isExpanded ? (
+                          <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
+                            {item.liveSession ? (
+                              <Text className="text-[13px] font-semibold text-[#4f6df5]">
+                                {t("manager.checkedInAt", { time: checkInTime })}
+                              </Text>
+                            ) : null}
+
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-[14px] font-semibold text-[#42526b]">
+                                {t("manager.tasksToday")}
+                              </Text>
+                              <Badge
+                                label={`${item.doneTasks.length}/${item.assignedTasks.length}`}
+                                variant="muted"
+                              />
+                            </View>
+
+                            {item.assignedTasks.length ? (
+                              <View className="gap-1">
+                                {[...item.assignedTasks]
+                                  .sort((a, b) => {
+                                    const aDone = a.status === "DONE" ? 1 : 0;
+                                    const bDone = b.status === "DONE" ? 1 : 0;
+                                    return aDone - bDone;
+                                  })
+                                  .slice(0, 5)
+                                  .map((task) => {
+                                    const isDone = task.status === "DONE";
+                                    return (
+                                      <Text
+                                        key={task.id}
+                                        className={`text-[16px] leading-7 ${isDone ? "line-through" : "text-foreground"}`}
+                                        style={
+                                          isDone
+                                            ? { color: "#22c55e" }
+                                            : undefined
+                                        }
+                                      >
+                                        {task.title}
+                                      </Text>
+                                    );
+                                  })}
+                              </View>
+                            ) : (
+                              <Text className="text-[13px] leading-5 text-[#6b7280]">
+                                {t("manager.noEmployeeTasks")}
+                              </Text>
+                            )}
+                          </View>
+                        ) : item.liveSession ? (
+                          <Text className="mt-4 text-[13px] font-semibold text-[#42526b]">
+                            {tone.note}
+                          </Text>
+                        ) : null}
+                      </PressableScale>
+
+                      {!isLast ? <View className="h-px bg-[#edf1f7]" /> : null}
+                    </Animated.View>
+                  );
+                })}
+              </View>
             ) : (
               <View className="rounded-3xl border border-white/30 bg-white/70 px-4 py-5 shadow-sm shadow-[#1f2687]/10">
                 <Text className="text-[15px] leading-6 text-[#6b7280]">
@@ -793,7 +816,7 @@ export default function ManagerScreen({
 
         <View className="gap-3">
           <PressableScale
-            className="rounded-[26px] border border-white bg-[#edf4ff] px-5 py-5"
+            className="rounded-[26px] border border-black/15 bg-[#edf4ff] px-5 py-5"
             haptic="selection"
             onPress={() => openCreateScreen("/manager/create-task")}
           >
@@ -813,7 +836,7 @@ export default function ManagerScreen({
           </PressableScale>
 
           <PressableScale
-            className="rounded-[26px] border border-white bg-[#f4f7ff] px-5 py-5"
+            className="rounded-[26px] border border-black/15 bg-[#f4f7ff] px-5 py-5"
             haptic="selection"
             onPress={() => openCreateScreen("/manager/create-meeting")}
           >
@@ -827,6 +850,26 @@ export default function ManagerScreen({
                 </Text>
                 <Text className="mt-1 font-body text-sm text-muted-foreground">
                   {t("manager.addMeetingHint")}
+                </Text>
+              </View>
+            </View>
+          </PressableScale>
+
+          <PressableScale
+            className="rounded-[26px] border border-black/15 bg-[#f5f8ff] px-5 py-5"
+            haptic="selection"
+            onPress={() => openCreateScreen("/manager/create-news")}
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
+                <Ionicons color="#4f6df5" name="create-outline" size={22} />
+              </View>
+              <View className="flex-1">
+                <Text className="font-display text-[17px] font-semibold text-foreground">
+                  {t("manager.addNews")}
+                </Text>
+                <Text className="mt-1 font-body text-sm text-muted-foreground">
+                  {t("manager.addNewsHint")}
                 </Text>
               </View>
             </View>

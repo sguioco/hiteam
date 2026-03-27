@@ -12,7 +12,9 @@ import {
   CalendarRange,
   ChevronDown,
   ChevronRight,
+  FileText,
   Home,
+  ListTodo,
   ScanFace,
   Settings2,
   Sparkles,
@@ -25,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   AuthSession,
   clearSession,
+  hasManagerAccess,
   hasDesktopAdminAccess,
   isEmployeeOnlyRole,
   isManagerOnlyRole,
@@ -43,6 +46,10 @@ import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
 import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
+import {
+  PROFILE_AVATAR_UPDATED_EVENT,
+  readStoredProfileAvatar,
+} from "../lib/profile-avatar";
 
 type NavItem = {
   href: string;
@@ -141,6 +148,7 @@ export function AdminShell({
   const [organization, setOrganization] =
     useState<OrganizationHeaderState | null>(null);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [storedAvatarUrl, setStoredAvatarUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
     {},
@@ -199,6 +207,7 @@ export function AdminShell({
       }),
       apiRequest<AccountProfile | null>("/employees/me", {
         token: currentSession.accessToken,
+        realBackend: true,
       }),
     ]).then((results) => {
       setUnreadCount(
@@ -216,8 +225,38 @@ export function AdminShell({
       setAccountProfile(
         results[4].status === "fulfilled" ? results[4].value : null,
       );
+      setStoredAvatarUrl(readStoredProfileAvatar());
     });
   }, [mode, router]);
+
+  useEffect(() => {
+    setStoredAvatarUrl(readStoredProfileAvatar());
+
+    function handleAvatarUpdated(event: Event) {
+      const customEvent = event as CustomEvent<string | null>;
+      setStoredAvatarUrl(customEvent.detail ?? readStoredProfileAvatar());
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === null || event.key === "smart-admin-profile-avatar") {
+        setStoredAvatarUrl(readStoredProfileAvatar());
+      }
+    }
+
+    window.addEventListener(
+      PROFILE_AVATAR_UPDATED_EVENT,
+      handleAvatarUpdated as EventListener,
+    );
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        PROFILE_AVATAR_UPDATED_EVENT,
+        handleAvatarUpdated as EventListener,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -350,6 +389,8 @@ export function AdminShell({
     : false;
   const homeHref = toAdminHref("/");
   const scheduleHref = toAdminHref("/schedule");
+  const tasksHref = toAdminHref("/tasks");
+  const newsHref = toAdminHref("/news");
   const profileHref = toAdminHref("/profile");
   const notificationsHref = toAdminHref("/notifications");
   const contentHasStudioBackground = hasStudioBackground(pathname);
@@ -361,6 +402,11 @@ export function AdminShell({
           href: homeHref,
           label: locale === "ru" ? "Главная" : "Home",
           icon: Home,
+        },
+        {
+          href: newsHref,
+          label: locale === "ru" ? "Новости" : "News",
+          icon: FileText,
         },
         {
           href: scheduleHref,
@@ -376,20 +422,24 @@ export function AdminShell({
         label: locale === "ru" ? "Главная" : "Home",
         icon: Home,
       },
-      {
-        href: scheduleHref,
-        label: locale === "ru" ? "Календарь" : "Calendar",
-        icon: BriefcaseBusiness,
-      },
     ];
 
-    if (!managerOnly) {
-      items.splice(1, 0, {
-        href: toAdminHref("/organization"),
-        label: locale === "ru" ? "Организация" : "Organization",
-        icon: Building2,
+    if (hasManagerAccess(session?.user.roleCodes ?? [])) {
+      items.push({
+        href: tasksHref,
+        label: locale === "ru" ? "Задачи" : "Tasks",
+        icon: ListTodo,
       });
-      items.splice(2, 0, {
+    }
+
+    items.push({
+      href: newsHref,
+      label: locale === "ru" ? "Новости" : "News",
+      icon: FileText,
+    });
+
+    if (!managerOnly) {
+      items.push({
         href: toAdminHref("/employees"),
         label: t("nav.employees"),
         icon: UsersRound,
@@ -411,6 +461,15 @@ export function AdminShell({
           },
         ],
       });
+    }
+
+    items.push({
+      href: scheduleHref,
+      label: locale === "ru" ? "Календарь" : "Calendar",
+      icon: BriefcaseBusiness,
+    });
+
+    if (!managerOnly) {
       items.push(
         {
           href: toAdminHref("/requests"),
@@ -426,7 +485,7 @@ export function AdminShell({
     }
 
     return items;
-  }, [employeeOnly, homeHref, locale, managerOnly, scheduleHref, t]);
+  }, [employeeOnly, homeHref, locale, managerOnly, newsHref, scheduleHref, session?.user.roleCodes, t, tasksHref]);
 
   useEffect(() => {
     const nextExpanded = Object.fromEntries(
@@ -457,6 +516,7 @@ export function AdminShell({
     organization?.company?.name?.trim() ||
     (locale === "ru" ? "Организация" : "Organization");
   const companyLogoUrl = organization?.company?.logoUrl ?? null;
+  const resolvedProfileAvatarUrl = accountProfile?.avatarUrl || storedAvatarUrl;
   const unreadNotifications = notificationItems.filter((item) => !item.isRead);
   const readNotifications = notificationItems.filter((item) => item.isRead);
   const accountMenuItems = employeeOnly
@@ -467,6 +527,10 @@ export function AdminShell({
       },
     ]
     : [
+        {
+          href: toAdminHref("/organization"),
+          label: locale === "ru" ? "Организация" : "Organization",
+        },
         {
           href: profileHref,
           label: locale === "ru" ? "Профиль" : "Profile",
@@ -760,11 +824,11 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                {accountProfile?.avatarUrl ? (
+                {resolvedProfileAvatarUrl ? (
                   <img
                     alt={profileName}
                     className="h-full w-full rounded-full object-cover"
-                    src={accountProfile.avatarUrl}
+                    src={resolvedProfileAvatarUrl}
                   />
                 ) : (
                   <img
