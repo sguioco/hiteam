@@ -1046,6 +1046,7 @@ export class CollaborationService {
       id: string;
       tenantId: string;
       createdAt: Date;
+      imageStorageKey?: string | null;
     },
   >(
     announcements: T[],
@@ -1076,13 +1077,13 @@ export class CollaborationService {
     T extends {
       imageStorageKey?: string | null;
     },
-  >(announcement: T) {
+  >(announcement: T): T & { imageUrl: string | null } {
     return {
       ...announcement,
       imageUrl: announcement.imageStorageKey
         ? this.storageService.getObjectUrl(announcement.imageStorageKey)
         : null,
-    };
+    } as T & { imageUrl: string | null };
   }
 
   private parseAnnouncementAuditMetadata(raw: string | null) {
