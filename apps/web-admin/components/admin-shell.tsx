@@ -50,6 +50,7 @@ import {
   PROFILE_AVATAR_UPDATED_EVENT,
   readStoredProfileAvatar,
 } from "../lib/profile-avatar";
+import { readClientCache, writeClientCache } from "../lib/client-cache";
 
 type NavItem = {
   href: string;
@@ -76,9 +77,37 @@ type AccountProfile = {
   firstName?: string | null;
   lastName?: string | null;
   avatarUrl?: string | null;
+  company?: {
+    name?: string | null;
+    logoUrl?: string | null;
+  } | null;
 };
 
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
+const SHELL_HEADER_CACHE_TTL_MS = 10 * 60 * 1000;
+const SHELL_NOTIFICATIONS_CACHE_TTL_MS = 45 * 1000;
+
+type ShellHeaderCachePayload = {
+  employeeCount: number;
+  organization: OrganizationHeaderState | null;
+  accountProfile: AccountProfile | null;
+};
+
+type ShellNotificationsCachePayload = {
+  unreadCount: number;
+  notificationItems: NotificationItem[];
+};
+
+function buildShellHeaderCacheKey(
+  session: AuthSession,
+  mode: "admin" | "employee",
+) {
+  return `shell:header:${mode}:${session.user.tenantId}:${session.user.id}`;
+}
+
+function buildShellNotificationsCacheKey(session: AuthSession) {
+  return `shell:notifications:${session.user.tenantId}:${session.user.id}`;
+}
 
 function isActive(pathname: string, href: string) {
   if (href === toAdminHref("/")) return pathname === toAdminHref("/");
@@ -159,6 +188,14 @@ export function AdminShell({
   const [routeLoading, setRouteLoading] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const shellHeaderCacheKey = useMemo(
+    () => (session ? buildShellHeaderCacheKey(session, mode) : null),
+    [mode, session],
+  );
+  const shellNotificationsCacheKey = useMemo(
+    () => (session ? buildShellNotificationsCacheKey(session) : null),
+    [session],
+  );
   const languageOptions: Array<{
     value: Locale;
     label: string;
@@ -168,11 +205,37 @@ export function AdminShell({
     { value: "en", label: "English", icon: "/en.png" },
   ];
 
+  function applyHeaderSnapshot(
+    snapshot: ShellHeaderCachePayload,
+    cacheKey?: string | null,
+  ) {
+    setEmployeeCount(snapshot.employeeCount);
+    setOrganization(snapshot.organization);
+    setAccountProfile(snapshot.accountProfile);
+
+    if (cacheKey) {
+      writeClientCache(cacheKey, snapshot);
+    }
+  }
+
+  function applyNotificationsSnapshot(
+    snapshot: ShellNotificationsCachePayload,
+    cacheKey?: string | null,
+  ) {
+    setUnreadCount(snapshot.unreadCount);
+    setNotificationItems(snapshot.notificationItems);
+
+    if (cacheKey) {
+      writeClientCache(cacheKey, snapshot);
+    }
+  }
+
   async function loadNotificationItems(accessToken: string) {
     const items = await apiRequest<NotificationItem[]>("/notifications/me", {
       token: accessToken,
     });
     setNotificationItems(items);
+    return items;
   }
 
   useEffect(() => {
@@ -184,49 +247,168 @@ export function AdminShell({
     }
 
     const resolvedHomeRoute = resolveHomeRoute(currentSession.user.roleCodes);
+    const employeeOnlySession = isEmployeeOnlyRole(currentSession.user.roleCodes);
+    const headerCacheKey = buildShellHeaderCacheKey(currentSession, mode);
+    const notificationsCacheKey =
+      buildShellNotificationsCacheKey(currentSession);
+    const cachedHeader = readClientCache<ShellHeaderCachePayload>(
+      headerCacheKey,
+      SHELL_HEADER_CACHE_TTL_MS,
+    );
+    const cachedNotifications =
+      readClientCache<ShellNotificationsCachePayload>(
+        notificationsCacheKey,
+        SHELL_NOTIFICATIONS_CACHE_TTL_MS,
+      );
+
+    if (cachedHeader) {
+      applyHeaderSnapshot(cachedHeader.value);
+    }
+
+    if (cachedNotifications) {
+      applyNotificationsSnapshot(cachedNotifications.value);
+    }
+
+    setStoredAvatarUrl(readStoredProfileAvatar());
 
     if (mode === "employee") {
+      if (!employeeOnlySession) {
+        router.replace(resolvedHomeRoute);
+        return;
+      }
+
+      setSession(currentSession);
+      setReady(true);
+
+      if (!cachedNotifications || cachedNotifications.isStale) {
+        void Promise.allSettled([
+          apiRequest<NotificationUnreadResponse>("/notifications/me/unread-count", {
+            token: currentSession.accessToken,
+          }),
+          apiRequest<NotificationItem[]>("/notifications/me", {
+            token: currentSession.accessToken,
+          }),
+        ]).then((results) => {
+          applyNotificationsSnapshot(
+            {
+              unreadCount:
+                results[0].status === "fulfilled"
+                  ? results[0].value.unreadCount
+                  : cachedNotifications?.value.unreadCount ?? 0,
+              notificationItems:
+                results[1].status === "fulfilled"
+                  ? results[1].value
+                  : cachedNotifications?.value.notificationItems ?? [],
+            },
+            notificationsCacheKey,
+          );
+        });
+      }
+
+      if (!cachedHeader || cachedHeader.isStale) {
+        void apiRequest<AccountProfile | null>("/employees/me", {
+          token: currentSession.accessToken,
+          realBackend: true,
+        })
+          .then((profile) => {
+            applyHeaderSnapshot(
+              {
+                employeeCount: 0,
+                organization: profile?.company?.name
+                  ? {
+                      company: {
+                        name: profile.company.name,
+                        logoUrl: profile.company.logoUrl ?? null,
+                      },
+                      configured: true,
+                    }
+                  : null,
+                accountProfile: profile,
+              },
+              headerCacheKey,
+            );
+          })
+          .catch(() => undefined);
+      }
+      return;
+    }
+
+    if (employeeOnlySession) {
       router.replace(resolvedHomeRoute);
       return;
     }
 
     setSession(currentSession);
     setReady(true);
-    void Promise.allSettled([
-      apiRequest<NotificationUnreadResponse>("/notifications/me/unread-count", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<NotificationItem[]>("/notifications/me", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<Array<{ id: string }>>("/employees", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<OrganizationHeaderState>("/org/setup", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<AccountProfile | null>("/employees/me", {
-        token: currentSession.accessToken,
-        realBackend: true,
-      }),
-    ]).then((results) => {
-      setUnreadCount(
-        results[0].status === "fulfilled" ? results[0].value.unreadCount : 0,
-      );
-      setNotificationItems(
-        results[1].status === "fulfilled" ? results[1].value : [],
-      );
-      setEmployeeCount(
-        results[2].status === "fulfilled" ? results[2].value.length : 0,
-      );
-      setOrganization(
-        results[3].status === "fulfilled" ? results[3].value : null,
-      );
-      setAccountProfile(
-        results[4].status === "fulfilled" ? results[4].value : null,
-      );
-      setStoredAvatarUrl(readStoredProfileAvatar());
-    });
+
+    if (!cachedNotifications || cachedNotifications.isStale) {
+      void Promise.allSettled([
+        apiRequest<NotificationUnreadResponse>("/notifications/me/unread-count", {
+          token: currentSession.accessToken,
+        }),
+        apiRequest<NotificationItem[]>("/notifications/me", {
+          token: currentSession.accessToken,
+        }),
+      ]).then((results) => {
+        applyNotificationsSnapshot(
+          {
+            unreadCount:
+              results[0].status === "fulfilled"
+                ? results[0].value.unreadCount
+                : cachedNotifications?.value.unreadCount ?? 0,
+            notificationItems:
+              results[1].status === "fulfilled"
+                ? results[1].value
+                : cachedNotifications?.value.notificationItems ?? [],
+          },
+          notificationsCacheKey,
+        );
+      });
+    }
+
+    if (!cachedHeader || cachedHeader.isStale) {
+      void Promise.allSettled([
+        apiRequest<Array<{ id: string }>>("/employees", {
+          token: currentSession.accessToken,
+        }),
+        apiRequest<OrganizationHeaderState>("/org/setup", {
+          token: currentSession.accessToken,
+        }),
+        apiRequest<AccountProfile | null>("/employees/me", {
+          token: currentSession.accessToken,
+          realBackend: true,
+        }),
+      ]).then((results) => {
+        const nextAccountProfile =
+          results[2].status === "fulfilled"
+            ? results[2].value
+            : cachedHeader?.value.accountProfile ?? null;
+        const nextOrganization =
+          results[1].status === "fulfilled"
+            ? results[1].value
+            : nextAccountProfile?.company?.name
+              ? {
+                  company: {
+                    name: nextAccountProfile.company.name,
+                    logoUrl: nextAccountProfile.company.logoUrl ?? null,
+                  },
+                  configured: true,
+                }
+              : cachedHeader?.value.organization ?? null;
+
+        applyHeaderSnapshot(
+          {
+            employeeCount:
+              results[0].status === "fulfilled"
+                ? results[0].value.length
+                : cachedHeader?.value.employeeCount ?? 0,
+            organization: nextOrganization,
+            accountProfile: nextAccountProfile,
+          },
+          headerCacheKey,
+        );
+      });
+    }
   }, [mode, router]);
 
   useEffect(() => {
@@ -263,19 +445,34 @@ export function AdminShell({
 
     const socket = createNotificationsSocket(session.accessToken);
     socket.on("notifications:new", (payload: NotificationItem) => {
-      setNotificationItems((current) => [
-        payload,
-        ...current.filter((item) => item.id !== payload.id),
-      ]);
-      if (!payload.isRead) {
-        setUnreadCount((current) => current + 1);
-      }
+      setNotificationItems((current) => {
+        const nextItems = [
+          payload,
+          ...current.filter((item) => item.id !== payload.id),
+        ];
+        setUnreadCount((currentUnread) => {
+          const nextUnread = payload.isRead ? currentUnread : currentUnread + 1;
+          writeClientCache(buildShellNotificationsCacheKey(session), {
+            unreadCount: nextUnread,
+            notificationItems: nextItems,
+          });
+          return nextUnread;
+        });
+        return nextItems;
+      });
     });
     socket.on(
       "notifications:unread-count",
       (payload: NotificationUnreadResponse) => {
-        setUnreadCount(payload.unreadCount);
-        void loadNotificationItems(session.accessToken);
+        void loadNotificationItems(session.accessToken).then((items) => {
+          applyNotificationsSnapshot(
+            {
+              unreadCount: payload.unreadCount,
+              notificationItems: items,
+            },
+            buildShellNotificationsCacheKey(session),
+          );
+        });
       },
     );
 
@@ -285,7 +482,7 @@ export function AdminShell({
   }, [session]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || isEmployeeOnlyRole(session.user.roleCodes)) return;
     const currentSession = session;
 
     function handleOrganizationUpdated(event: Event) {
@@ -293,14 +490,30 @@ export function AdminShell({
       const detail = customEvent.detail;
 
       if (detail) {
-        setOrganization(detail);
+        applyHeaderSnapshot(
+          {
+            employeeCount,
+            organization: detail,
+            accountProfile,
+          },
+          shellHeaderCacheKey,
+        );
         return;
       }
 
       void apiRequest<OrganizationHeaderState>("/org/setup", {
         token: currentSession.accessToken,
       })
-        .then(setOrganization)
+        .then((nextOrganization) => {
+          applyHeaderSnapshot(
+            {
+              employeeCount,
+              organization: nextOrganization,
+              accountProfile,
+            },
+            shellHeaderCacheKey,
+          );
+        })
         .catch(() => undefined);
     }
 
@@ -315,7 +528,7 @@ export function AdminShell({
         handleOrganizationUpdated as EventListener,
       );
     };
-  }, [session]);
+  }, [accountProfile, employeeCount, session, shellHeaderCacheKey]);
 
   useEffect(() => {
     setNotificationsOpen(false);
@@ -517,6 +730,7 @@ export function AdminShell({
     (locale === "ru" ? "Организация" : "Organization");
   const companyLogoUrl = organization?.company?.logoUrl ?? null;
   const resolvedProfileAvatarUrl = accountProfile?.avatarUrl || storedAvatarUrl;
+  const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
   const unreadNotifications = notificationItems.filter((item) => !item.isRead);
   const readNotifications = notificationItems.filter((item) => item.isRead);
   const accountMenuItems = employeeOnly
@@ -549,6 +763,15 @@ export function AdminShell({
           : []),
       ];
 
+  useEffect(() => {
+    setProfileAvatarFailed(false);
+  }, [resolvedProfileAvatarUrl]);
+
+  const sidebarAvatarSrc =
+    resolvedProfileAvatarUrl && !profileAvatarFailed
+      ? resolvedProfileAvatarUrl
+      : getMockAvatarDataUrl(profileName);
+
   function resolveNotificationHref(actionUrl: string | null) {
     if (!actionUrl) return notificationsHref;
     if (
@@ -578,6 +801,16 @@ export function AdminShell({
     if (!session) return;
 
     const notification = notificationItems.find((item) => item.id === notificationId);
+    const nextReadAt = new Date().toISOString();
+    const nextItems = notificationItems.map((item) =>
+      item.id === notificationId
+        ? {
+            ...item,
+            isRead: true,
+            readAt: nextReadAt,
+          }
+        : item,
+    );
 
     await apiRequest(`/notifications/${notificationId}/read`, {
       method: "POST",
@@ -585,20 +818,25 @@ export function AdminShell({
       body: JSON.stringify({}),
     });
 
-    setNotificationItems((current) =>
-      current.map((item) =>
-        item.id === notificationId
-          ? {
-              ...item,
-              isRead: true,
-              readAt: new Date().toISOString(),
-            }
-          : item,
-      ),
-    );
+    setNotificationItems(nextItems);
 
     if (notification && !notification.isRead) {
-      setUnreadCount((current) => Math.max(0, current - 1));
+      const nextUnread = Math.max(0, unreadCount - 1);
+      setUnreadCount(nextUnread);
+      if (shellNotificationsCacheKey) {
+        writeClientCache(shellNotificationsCacheKey, {
+          unreadCount: nextUnread,
+          notificationItems: nextItems,
+        });
+      }
+      return;
+    }
+
+    if (shellNotificationsCacheKey) {
+      writeClientCache(shellNotificationsCacheKey, {
+        unreadCount,
+        notificationItems: nextItems,
+      });
     }
   }
 
@@ -606,6 +844,16 @@ export function AdminShell({
     if (!session || !unreadNotifications.length) return;
 
     const unreadIds = unreadNotifications.map((item) => item.id);
+    const nextReadAt = new Date().toISOString();
+    const nextItems = notificationItems.map((item) =>
+      unreadIds.includes(item.id)
+        ? {
+            ...item,
+            isRead: true,
+            readAt: nextReadAt,
+          }
+        : item,
+    );
 
     await Promise.allSettled(
       unreadIds.map((notificationId) =>
@@ -617,18 +865,14 @@ export function AdminShell({
       ),
     );
 
-    setNotificationItems((current) =>
-      current.map((item) =>
-        unreadIds.includes(item.id)
-          ? {
-              ...item,
-              isRead: true,
-              readAt: new Date().toISOString(),
-            }
-          : item,
-      ),
-    );
+    setNotificationItems(nextItems);
     setUnreadCount(0);
+    if (shellNotificationsCacheKey) {
+      writeClientCache(shellNotificationsCacheKey, {
+        unreadCount: 0,
+        notificationItems: nextItems,
+      });
+    }
   }
 
   if (!ready || !session) {
@@ -824,19 +1068,12 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                {resolvedProfileAvatarUrl ? (
-                  <img
-                    alt={profileName}
-                    className="h-full w-full rounded-full object-cover"
-                    src={resolvedProfileAvatarUrl}
-                  />
-                ) : (
-                  <img
-                    alt={profileName}
-                    className="h-full w-full rounded-full object-cover"
-                    src={getMockAvatarDataUrl(profileName)}
-                  />
-                )}
+                <img
+                  alt={profileName}
+                  className="h-full w-full rounded-full object-cover"
+                  onError={() => setProfileAvatarFailed(true)}
+                  src={sidebarAvatarSrc}
+                />
               </div>
               <div className="sidebar-user-copy">
                 <strong>{profileName}</strong>
@@ -870,13 +1107,15 @@ export function AdminShell({
                 </div>
                 <div className="shell-topbar-copy">
                   <strong>{companyName}</strong>
-                  <div className="shell-topbar-meta">
-                    <span className="shell-topbar-meta-item">
-                      <UsersRound className="size-3.5" />
-                      {employeeCount}{" "}
-                      {locale === "ru" ? "сотрудников" : "employees"}
-                    </span>
-                  </div>
+                  {!employeeOnly ? (
+                    <div className="shell-topbar-meta">
+                      <span className="shell-topbar-meta-item">
+                        <UsersRound className="size-3.5" />
+                        {employeeCount}{" "}
+                        {locale === "ru" ? "сотрудников" : "employees"}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

@@ -23,7 +23,7 @@ import {
 } from '@smart/types';
 import { AdminShell } from '../../../components/admin-shell';
 import { apiRequest } from '../../../lib/api';
-import { getSession } from '../../../lib/auth';
+import { getSession, hasDesktopAdminAccess } from '../../../lib/auth';
 import { useI18n } from '../../../lib/i18n';
 
 type EmployeeDetails = {
@@ -46,6 +46,14 @@ type EmployeeDetails = {
 };
 
 type Tab = 'info' | 'attendance' | 'biometric' | 'anomalies';
+
+type EmployeeManagerAccess = {
+  employeeId: string;
+  roleCodes: string[];
+  hasAdminRole: boolean;
+  hasManagerAccess: boolean;
+  canToggleManagerAccess: boolean;
+};
 
 function formatHours(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -92,27 +100,37 @@ export default function EmployeeCardPage() {
   const [history, setHistory] = useState<AttendanceHistoryResponse | null>(null);
   const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(null);
   const [biometricHistory, setBiometricHistory] = useState<EmployeeBiometricHistoryResponse | null>(null);
+  const [managerAccess, setManagerAccess] = useState<EmployeeManagerAccess | null>(null);
   const [tab, setTab] = useState<Tab>('attendance');
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
+  const [roleActionPending, setRoleActionPending] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const session = getSession();
+  const canManageRoles = hasDesktopAdminAccess(session?.user.roleCodes ?? []);
 
   async function loadEmployeePageData(targetEmployeeId: string) {
     const session = getSession();
     if (!session || !targetEmployeeId) return;
 
-    const [employeeData, historyData, anomaliesData, biometricData] = await Promise.all([
+    const [employeeData, historyData, anomaliesData, biometricData, managerAccessData] = await Promise.all([
       apiRequest<EmployeeDetails>(`/employees/${targetEmployeeId}`, { token: session.accessToken }),
       apiRequest<AttendanceHistoryResponse>(`/attendance/employees/${targetEmployeeId}/history`, { token: session.accessToken }),
       apiRequest<AttendanceAnomalyResponse>(`/attendance/team/anomalies?employeeId=${targetEmployeeId}`, {
         token: session.accessToken,
       }),
       apiRequest<EmployeeBiometricHistoryResponse>(`/biometric/employees/${targetEmployeeId}/history`, { token: session.accessToken }),
+      canManageRoles
+        ? apiRequest<EmployeeManagerAccess>(`/employees/${targetEmployeeId}/manager-access`, {
+            token: session.accessToken,
+          })
+        : Promise.resolve(null),
     ]);
 
     setEmployee(employeeData);
     setHistory(historyData);
     setAnomalies(anomaliesData);
     setBiometricHistory(biometricData);
+    setManagerAccess(managerAccessData);
   }
 
   useEffect(() => {
@@ -123,12 +141,13 @@ export default function EmployeeCardPage() {
       setHistory(null);
       setAnomalies(null);
       setBiometricHistory(null);
+      setManagerAccess(null);
       setNotice({
         kind: 'error',
         text: locale === 'ru' ? 'Не удалось загрузить карточку сотрудника.' : 'Failed to load employee card.',
       });
     });
-  }, [employeeId]);
+  }, [employeeId, canManageRoles]);
 
   useEffect(() => {
     if (!notice) return;
@@ -219,6 +238,68 @@ export default function EmployeeCardPage() {
     }
   }
 
+  async function handleToggleManagerAccess() {
+    const session = getSession();
+    if (!session || !employeeId || !managerAccess || !managerAccess.canToggleManagerAccess) {
+      return;
+    }
+
+    const nextValue = !managerAccess.hasManagerAccess;
+    const confirmed =
+      typeof window === 'undefined' ||
+      window.confirm(
+        nextValue
+          ? locale === 'ru'
+            ? 'Выдать сотруднику доступ менеджера?'
+            : 'Grant manager access to this employee?'
+          : locale === 'ru'
+            ? 'Снять с сотрудника доступ менеджера и вернуть роль обычного работника?'
+            : 'Remove manager access and turn this user back into a regular employee?',
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRoleActionPending(true);
+
+    try {
+      const nextAccess = await apiRequest<EmployeeManagerAccess>(
+        `/employees/${employeeId}/manager-access`,
+        {
+          method: 'PATCH',
+          token: session.accessToken,
+          body: JSON.stringify({
+            grantManagerAccess: nextValue,
+          }),
+        },
+      );
+      setManagerAccess(nextAccess);
+      setNotice({
+        kind: 'success',
+        text: nextValue
+          ? locale === 'ru'
+            ? 'Сотрудник переведён в менеджеры.'
+            : 'Employee promoted to manager.'
+          : locale === 'ru'
+            ? 'Сотрудник переведён в обычные работники.'
+            : 'Employee moved back to regular staff.',
+      });
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === 'ru'
+              ? 'Не удалось изменить роль сотрудника.'
+              : 'Failed to update employee role.',
+      });
+    } finally {
+      setRoleActionPending(false);
+    }
+  }
+
   return (
     <AdminShell>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -246,7 +327,52 @@ export default function EmployeeCardPage() {
                   <span className="font-mono text-xs opacity-60">#{employee.employeeNumber}</span>
                 </p>
               )}
+              {managerAccess ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      managerAccess.hasAdminRole
+                        ? 'bg-violet-50 text-violet-700'
+                        : managerAccess.hasManagerAccess
+                          ? 'bg-sky-50 text-sky-700'
+                          : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {managerAccess.hasAdminRole
+                      ? locale === 'ru'
+                        ? 'Админ'
+                        : 'Admin'
+                      : managerAccess.hasManagerAccess
+                        ? locale === 'ru'
+                          ? 'Менеджер'
+                          : 'Manager'
+                        : locale === 'ru'
+                          ? 'Сотрудник'
+                          : 'Employee'}
+                  </span>
+                </div>
+              ) : null}
             </div>
+            {canManageRoles && managerAccess?.canToggleManagerAccess ? (
+              <button
+                className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={roleActionPending}
+                onClick={() => void handleToggleManagerAccess()}
+                type="button"
+              >
+                {roleActionPending
+                  ? locale === 'ru'
+                    ? 'Обновляем...'
+                    : 'Updating...'
+                  : managerAccess.hasManagerAccess
+                    ? locale === 'ru'
+                      ? 'Сделать обычным сотрудником'
+                      : 'Make employee'
+                    : locale === 'ru'
+                      ? 'Сделать менеджером'
+                      : 'Make manager'}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -446,8 +572,8 @@ export default function EmployeeCardPage() {
                       </h3>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {locale === 'ru'
-                          ? 'Все проверки лица сотрудника и связанные события посещаемости.'
-                          : 'All face verification attempts and linked attendance events.'}
+                          ? 'Автоматические сканы лица за последние 7 дней и связанные события посещаемости.'
+                          : 'Automatic face scans from the last 7 days and linked attendance events.'}
                       </p>
                     </div>
                     <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent">
@@ -462,7 +588,7 @@ export default function EmployeeCardPage() {
                         <th className="px-4 py-3">Liveness</th>
                         <th className="px-4 py-3">Match</th>
                         <th className="px-4 py-3">{locale === 'ru' ? 'Событие' : 'Event'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Ручной ревью' : 'Manual review'}</th>
+                        <th className="px-4 py-3">{locale === 'ru' ? 'Примечание' : 'Note'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -488,7 +614,7 @@ export default function EmployeeCardPage() {
                           <td className="px-4 py-3 text-xs text-muted-foreground">
                             {v.attendanceEvent ? `${v.attendanceEvent.eventType} ${formatDateTime(v.attendanceEvent.occurredAt)}` : '—'}
                           </td>
-                          <td className="px-4 py-3 text-xs">{v.manualReviewStatus ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs">{v.reviewReason ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -550,6 +676,24 @@ export default function EmployeeCardPage() {
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Отдел' : 'Department'}</dt><dd className="font-medium">{employee.department.name}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Должность' : 'Position'}</dt><dd className="font-medium">{employee.position.name}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Локация' : 'Location'}</dt><dd className="font-medium">{employee.primaryLocation.name}</dd></div>
+                  {managerAccess ? (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">{locale === 'ru' ? 'Роль доступа' : 'Access role'}</dt>
+                      <dd className="font-medium">
+                        {managerAccess.hasAdminRole
+                          ? locale === 'ru'
+                            ? 'Администратор'
+                            : 'Administrator'
+                          : managerAccess.hasManagerAccess
+                            ? locale === 'ru'
+                              ? 'Менеджер'
+                              : 'Manager'
+                            : locale === 'ru'
+                              ? 'Сотрудник'
+                              : 'Employee'}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
               <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">

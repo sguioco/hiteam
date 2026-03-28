@@ -23,6 +23,12 @@ type ImageAdjustFieldProps = {
   value?: string | null;
   onChange: (nextValue: string | null) => void;
   onError?: (message: string | null) => void;
+  onSourceReady?: (payload: {
+    dataUrl: string;
+    fileName: string;
+    height: number;
+    width: number;
+  }) => void;
   renderTrigger: (props: {
     chooseFile: () => void;
     fileName: string;
@@ -41,14 +47,17 @@ type ImageAdjustFieldProps = {
   sourceMaxSide?: number;
   sourceQuality?: number;
   outputSize?: number;
+  outputHeight?: number;
   outputQuality?: number;
+  outputWidth?: number;
+  viewportAspectRatio?: number;
   viewportSize?: number;
 };
 
 async function compressImageToDataUrl(
   file: File,
   options?: { maxSide?: number; quality?: number },
-): Promise<string> {
+): Promise<{ dataUrl: string; height: number; width: number }> {
   const sourceDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -85,17 +94,64 @@ async function compressImageToDataUrl(
     throw new Error("Фото слишком большое. Выбери изображение поменьше.");
   }
 
-  return compressed;
+  return {
+    dataUrl: compressed,
+    height,
+    width,
+  };
+}
+
+function getViewportDimensions(viewportSize: number, aspectRatio: number) {
+  if (aspectRatio >= 1) {
+    return {
+      height: Math.round(viewportSize / aspectRatio),
+      width: viewportSize,
+    };
+  }
+
+  return {
+    height: viewportSize,
+    width: Math.round(viewportSize * aspectRatio),
+  };
+}
+
+function getOutputDimensions(options: {
+  aspectRatio: number;
+  outputHeight?: number;
+  outputSize: number;
+  outputWidth?: number;
+}) {
+  if (options.outputWidth && options.outputHeight) {
+    return {
+      height: options.outputHeight,
+      width: options.outputWidth,
+    };
+  }
+
+  if (options.aspectRatio >= 1) {
+    return {
+      height: Math.max(1, Math.round(options.outputSize / options.aspectRatio)),
+      width: options.outputSize,
+    };
+  }
+
+  return {
+    height: options.outputSize,
+    width: Math.max(1, Math.round(options.outputSize * options.aspectRatio)),
+  };
 }
 
 async function renderAdjustedImagePreviewDataUrl(
   sourceDataUrl: string,
   options: {
-    zoom: number;
+    canvasHeight: number;
+    canvasWidth: number;
     offsetX: number;
     offsetY: number;
-    canvasSize?: number;
     quality?: number;
+    viewportHeight: number;
+    viewportWidth: number;
+    zoom: number;
   },
 ): Promise<string> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -105,10 +161,9 @@ async function renderAdjustedImagePreviewDataUrl(
     nextImage.src = sourceDataUrl;
   });
 
-  const canvasSize = options.canvasSize ?? 300;
   const canvas = document.createElement("canvas");
-  canvas.width = canvasSize;
-  canvas.height = canvasSize;
+  canvas.width = options.canvasWidth;
+  canvas.height = options.canvasHeight;
   const context = canvas.getContext("2d");
 
   if (!context) {
@@ -116,15 +171,16 @@ async function renderAdjustedImagePreviewDataUrl(
   }
 
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvasSize, canvasSize);
+  context.fillRect(0, 0, options.canvasWidth, options.canvasHeight);
 
   const coverScale =
-    Math.max(canvasSize / image.width, canvasSize / image.height) * options.zoom;
+    Math.max(options.canvasWidth / image.width, options.canvasHeight / image.height) * options.zoom;
   const drawWidth = image.width * coverScale;
   const drawHeight = image.height * coverScale;
-  const translateFactor = canvasSize / 360;
-  const drawX = (canvasSize - drawWidth) / 2 + options.offsetX * translateFactor;
-  const drawY = (canvasSize - drawHeight) / 2 + options.offsetY * translateFactor;
+  const translateFactorX = options.canvasWidth / options.viewportWidth;
+  const translateFactorY = options.canvasHeight / options.viewportHeight;
+  const drawX = (options.canvasWidth - drawWidth) / 2 + options.offsetX * translateFactorX;
+  const drawY = (options.canvasHeight - drawHeight) / 2 + options.offsetY * translateFactorY;
 
   context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 
@@ -135,6 +191,7 @@ export function ImageAdjustField({
   value = null,
   onChange,
   onError,
+  onSourceReady,
   renderTrigger,
   previewAlt,
   dialogTitle,
@@ -147,7 +204,10 @@ export function ImageAdjustField({
   sourceMaxSide = 420,
   sourceQuality = 0.78,
   outputSize = 300,
+  outputHeight,
   outputQuality = 0.82,
+  outputWidth,
+  viewportAspectRatio = 1,
   viewportSize = 360,
 }: ImageAdjustFieldProps) {
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(value);
@@ -166,6 +226,13 @@ export function ImageAdjustField({
   const zoomRangeRef = useRef<HTMLInputElement | null>(null);
   const offsetXRangeRef = useRef<HTMLInputElement | null>(null);
   const offsetYRangeRef = useRef<HTMLInputElement | null>(null);
+  const viewportFrame = getViewportDimensions(viewportSize, viewportAspectRatio);
+  const outputFrame = getOutputDimensions({
+    aspectRatio: viewportAspectRatio,
+    outputHeight,
+    outputSize,
+    outputWidth,
+  });
 
   useEffect(() => {
     setPreviewDataUrl(value);
@@ -200,16 +267,22 @@ export function ImageAdjustField({
     }
 
     try {
-      const nextDataUrl = await compressImageToDataUrl(file, {
+      const prepared = await compressImageToDataUrl(file, {
         maxSide: sourceMaxSide,
         quality: sourceQuality,
       });
-      setPreviewDataUrl(nextDataUrl);
-      setSourceDataUrl(nextDataUrl);
+      setPreviewDataUrl(prepared.dataUrl);
+      setSourceDataUrl(prepared.dataUrl);
       setFileName(file.name);
       editorValuesRef.current = { zoom: 1, offsetX: 0, offsetY: 0 };
       dragPendingOffsetRef.current = { x: 0, y: 0 };
       setEditorOpen(true);
+      onSourceReady?.({
+        dataUrl: prepared.dataUrl,
+        fileName: file.name,
+        height: prepared.height,
+        width: prepared.width,
+      });
       onError?.(null);
     } catch (error) {
       onError?.(
@@ -223,11 +296,14 @@ export function ImageAdjustField({
 
     try {
       const nextPreview = await renderAdjustedImagePreviewDataUrl(sourceDataUrl, {
+        canvasHeight: outputFrame.height,
+        canvasWidth: outputFrame.width,
         zoom: editorValuesRef.current.zoom,
         offsetX: editorValuesRef.current.offsetX,
         offsetY: editorValuesRef.current.offsetY,
-        canvasSize: outputSize,
         quality: outputQuality,
+        viewportHeight: viewportFrame.height,
+        viewportWidth: viewportFrame.width,
       });
       setPreviewDataUrl(nextPreview);
       onChange(nextPreview);
@@ -357,8 +433,8 @@ export function ImageAdjustField({
                 onPointerUp={handlePointerEnd}
                 style={{
                   cursor: sourceDataUrl ? (dragging ? "grabbing" : "grab") : "default",
-                  height: viewportSize,
-                  width: viewportSize,
+                  height: viewportFrame.height,
+                  width: viewportFrame.width,
                 }}
               >
                 {sourceDataUrl ? (

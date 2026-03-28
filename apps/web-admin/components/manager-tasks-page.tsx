@@ -1,13 +1,16 @@
 "use client";
 
+import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
+  AttendanceLiveSession,
   CollaborationTaskBoardResponse,
   TaskItem,
   TaskPriority,
   TaskStatus,
+  WorkGroupItem,
 } from "@smart/types";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CalendarDays,
@@ -16,15 +19,23 @@ import {
   Circle,
   CircleX,
   ExternalLink,
+  Filter,
+  UsersRound,
 } from "lucide-react";
+import type { SortDescriptor } from "react-aria-components";
 import { AdminShell } from "@/components/admin-shell";
+import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
+import { Table } from "@/components/application/table/table";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Badge } from "@/components/base/badges/badges";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AppSelectField } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/api";
 import { getSession, hasManagerAccess } from "@/lib/auth";
@@ -69,6 +80,41 @@ type EmployeeTaskEntry = {
   tasks: TaskItem[];
   stats: EmployeeTaskStats;
 };
+
+type TaskTableRow = {
+  id: string;
+  employeeName: string;
+  employeeSubtitle: string | null;
+  employeeInitials: string;
+  employeeAvatarUrl: string;
+  statusLabel: string;
+  statusActive: boolean;
+  statusTone: "success" | "gray" | "error";
+  statusSort: number;
+  teams: string[];
+  teamsSort: string;
+  tasksSort: number;
+  tasksProgressLabel: string;
+  isComplete: boolean;
+  entry: EmployeeTaskEntry;
+};
+
+type TaskSortColumn = "employeeName" | "status" | "teams" | "tasks";
+
+type TaskRenderRow =
+  | (TaskTableRow & {
+      kind: "summary";
+      renderKey: string;
+    })
+  | {
+      kind: "details";
+      renderKey: string;
+      row: TaskTableRow;
+    }
+  | {
+      kind: "empty";
+      renderKey: string;
+    };
 
 function localize(locale: string, ru: string, en: string) {
   return locale === "ru" ? ru : en;
@@ -124,6 +170,27 @@ function parseDateInput(value: string, boundary: "start" | "end") {
   return boundary === "start" ? startOfDay(parsed) : endOfDay(parsed);
 }
 
+function parseCalendarDateRangeInput(startValue: string, endValue: string) {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(startValue) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(endValue)
+  ) {
+    return null;
+  }
+
+  try {
+    const start = parseDate(startValue);
+    const end = parseDate(endValue);
+
+    return {
+      start: start.compare(end) <= 0 ? start : end,
+      end: start.compare(end) <= 0 ? end : start,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(
     2,
@@ -153,6 +220,13 @@ function normalizeTaskTitle(title: string) {
   }
 
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function isMeetingTask(
+  task: TaskItem,
+  taskMeta?: ReturnType<typeof parseTaskMeta>,
+) {
+  return Boolean(taskMeta?.meeting) || /^(встреча|meeting):/i.test(task.title);
 }
 
 function getTaskAnchorDate(task: TaskItem) {
@@ -238,6 +312,52 @@ function formatResolvedRangeLabel(start: Date, end: Date, locale: string) {
   return `${formatDateLabel(start, locale)} - ${formatDateLabel(end, locale)}`;
 }
 
+function formatHeadlineDateParts(value: Date, locale: string) {
+  const dateLocale = locale === "ru" ? "ru-RU" : "en-US";
+
+  return {
+    weekday: value.toLocaleDateString(dateLocale, {
+      weekday: "long",
+    }),
+    primary: value.toLocaleDateString(dateLocale, {
+      day: "numeric",
+      month: "long",
+    }),
+    year: value.toLocaleDateString(dateLocale, {
+      year: "numeric",
+    }),
+  };
+}
+
+function formatHeadlineDateWithoutYear(value: Date, locale: string) {
+  return formatHeadlineDateParts(value, locale).primary;
+}
+
+function formatResolvedRangeHeading(
+  start: Date,
+  end: Date,
+  locale: string,
+  preset: DatePreset,
+) {
+  if (formatDateKey(start) === formatDateKey(end)) {
+    const parts = formatHeadlineDateParts(start, locale);
+
+    return {
+      weekday: preset === "custom" ? null : parts.weekday,
+      primary: parts.primary,
+      year: null,
+      separateYear: false,
+    };
+  }
+
+  return {
+    weekday: null,
+    primary: `${formatHeadlineDateWithoutYear(start, locale)} - ${formatHeadlineDateWithoutYear(end, locale)}`,
+    year: null,
+    separateYear: false,
+  };
+}
+
 function priorityLabel(priority: TaskPriority, _locale: string) {
   switch (priority) {
     case "LOW":
@@ -280,9 +400,37 @@ function compareTasksForDisplay(left: TaskItem, right: TaskItem) {
   return leftTime - rightTime;
 }
 
-function getPresetSummaryLabel(_preset: DatePreset, locale: string) {
-  return localize(locale, "Задачи", "Tasks");
+function getCompletionRatio(stats: EmployeeTaskStats) {
+  if (stats.total <= 0) {
+    return -1;
+  }
+
+  return stats.done / stats.total;
 }
+
+function getTaskAttentionRank(stats: EmployeeTaskStats) {
+  if (stats.total <= 0) {
+    return 3;
+  }
+
+  if (stats.done >= stats.total) {
+    return 2;
+  }
+
+  return getCompletionRatio(stats);
+}
+
+function getEmployeeInitials(employee: Pick<EmployeeDirectoryItem, "firstName" | "lastName">) {
+  return `${employee.firstName.charAt(0)}${employee.lastName.charAt(0)}`.trim().toUpperCase();
+}
+
+function getEmployeeSubtitle(
+  employee: Pick<EmployeeDirectoryItem, "department" | "position" | "primaryLocation">,
+) {
+  return employee.position?.name ?? employee.department?.name ?? employee.primaryLocation?.name ?? null;
+}
+
+const teamBadgeColors = ["blue", "indigo", "purple", "sky", "gray"] as const;
 
 export function ManagerTasksPage() {
   const router = useRouter();
@@ -292,11 +440,26 @@ export function ManagerTasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>([]);
+  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
   const [preset, setPreset] = useState<DatePreset>("today");
   const [dateFrom, setDateFrom] = useState(() => formatDateInput(new Date()));
   const [dateTo, setDateTo] = useState(() => formatDateInput(new Date()));
   const [expandedEmployeeIds, setExpandedEmployeeIds] = useState<string[]>([]);
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [photoProofDialogTask, setPhotoProofDialogTask] = useState<{
+    title: string;
+    proofs: { id: string; url: string }[];
+  } | null>(null);
+  const [groupFilter, setGroupFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [taskPresenceFilter, setTaskPresenceFilter] = useState("all");
+  const [taskCountFilter, setTaskCountFilter] = useState("0");
+  const [showFilters, setShowFilters] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
+    column: "tasks",
+    direction: "ascending",
+  });
 
   useEffect(() => {
     const session = getSession();
@@ -360,6 +523,30 @@ export function ManagerTasksPage() {
         if (!cancelled) {
           setLoading(false);
         }
+      });
+
+    void apiRequest<WorkGroupItem[] | { groups: WorkGroupItem[] }>("/collaboration/groups", {
+      token: session.accessToken,
+    })
+      .then((groupResponse) => {
+        if (cancelled) return;
+        setGroups(Array.isArray(groupResponse) ? groupResponse : groupResponse.groups ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setGroups([]);
+      });
+
+    void apiRequest<AttendanceLiveSession[]>("/attendance/team/live", {
+      token: session.accessToken,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        setLiveSessions(response);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLiveSessions([]);
       });
 
     return () => {
@@ -488,69 +675,289 @@ export function ManagerTasksPage() {
           tasks: employeeTasks,
           stats,
         };
-      })
-      .sort((left, right) => {
-        if (right.stats.total !== left.stats.total) {
-          return right.stats.total - left.stats.total;
-        }
+      });
+  }, [employees, today, visibleTasks]);
 
-        if (right.stats.done !== left.stats.done) {
-          return right.stats.done - left.stats.done;
-        }
+  const teamsByEmployeeId = useMemo(() => {
+    const map = new Map<string, string[]>();
 
-        return getEmployeeName(left.employee, locale).localeCompare(
-          getEmployeeName(right.employee, locale),
+    for (const group of groups) {
+      for (const membership of group.memberships) {
+        const current = map.get(membership.employeeId) ?? [];
+        current.push(group.name);
+        map.set(membership.employeeId, current);
+      }
+    }
+
+    for (const [employeeId, teamNames] of map.entries()) {
+      map.set(employeeId, Array.from(new Set(teamNames)).sort((left, right) => left.localeCompare(right)));
+    }
+
+    return map;
+  }, [groups]);
+
+  const liveSessionsByEmployeeId = useMemo(() => {
+    return new Map(liveSessions.map((session) => [session.employeeId, session]));
+  }, [liveSessions]);
+
+  const tableRows = useMemo<TaskTableRow[]>(() => {
+    return employeeTaskEntries.map((entry) => {
+      const employeeName = getEmployeeName(entry.employee, locale);
+      const teams = teamsByEmployeeId.get(entry.employee.id) ?? [];
+      const liveSession = liveSessionsByEmployeeId.get(entry.employee.id);
+      const isCheckedIn =
+        liveSession?.status === "on_shift" || liveSession?.status === "on_break";
+      const isLate = Boolean(
+        liveSession &&
+          (liveSession.status === "on_shift" || liveSession.status === "on_break") &&
+          liveSession.lateMinutes > 0,
+      );
+      const isComplete =
+        entry.stats.total > 0 && entry.stats.done >= entry.stats.total;
+
+      return {
+        id: entry.employee.id,
+        employeeName,
+        employeeSubtitle: getEmployeeSubtitle(entry.employee),
+        employeeInitials: getEmployeeInitials(entry.employee),
+        employeeAvatarUrl:
+          entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName),
+        statusLabel:
+          isLate
+            ? localize(locale, "Опаздывает", "Late")
+            : liveSession?.status === "on_break"
+            ? localize(locale, "На перерыве", "On break")
+            : isCheckedIn
+              ? localize(locale, "На смене", "On shift")
+              : localize(locale, "Не на смене", "Off shift"),
+        statusActive: isCheckedIn,
+        statusTone: isLate ? "error" : isCheckedIn ? "success" : "gray",
+        statusSort: isLate ? -1 : isCheckedIn ? 0 : 1,
+        teams,
+        teamsSort: teams.join(" "),
+        tasksSort: getTaskAttentionRank(entry.stats),
+        tasksProgressLabel: `${entry.stats.done}/${entry.stats.total}`,
+        isComplete,
+        entry,
+      };
+    });
+  }, [employeeTaskEntries, liveSessionsByEmployeeId, locale, teamsByEmployeeId]);
+
+  const groupOptions = useMemo(
+    () =>
+      groups
+        .slice()
+        .sort((left, right) =>
+          left.name.localeCompare(right.name, locale === "ru" ? "ru" : "en"),
+        )
+        .map((group) => ({
+          value: group.id,
+          label: group.name,
+        })),
+    [groups, locale],
+  );
+
+  const filteredRows = useMemo(() => {
+    const minTasks = Number(taskCountFilter) || 0;
+    const selectedGroupName = groupFilter
+      ? groups.find((group) => group.id === groupFilter)?.name ?? null
+      : null;
+
+    return tableRows.filter((row) => {
+      if (selectedGroupName && !row.teams.includes(selectedGroupName)) {
+        return false;
+      }
+
+      if (statusFilter === "on_shift" && !row.statusActive) {
+        return false;
+      }
+
+      if (statusFilter === "late" && row.statusTone !== "error") {
+        return false;
+      }
+
+      if (statusFilter === "off_shift" && row.statusActive) {
+        return false;
+      }
+
+      if (taskPresenceFilter === "with_tasks" && row.entry.stats.total <= 0) {
+        return false;
+      }
+
+      if (taskPresenceFilter === "without_tasks" && row.entry.stats.total > 0) {
+        return false;
+      }
+
+      if (row.entry.stats.total < minTasks) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [groupFilter, groups, statusFilter, tableRows, taskCountFilter, taskPresenceFilter]);
+
+  const teamSummary = useMemo(() => {
+    return filteredRows.reduce(
+      (summary, row) => {
+        summary.total += row.entry.stats.total;
+        summary.completed += row.entry.stats.done;
+        return summary;
+      },
+      { total: 0, completed: 0 },
+    );
+  }, [filteredRows]);
+
+  const hasActiveFilters = useMemo(
+    () =>
+      Boolean(groupFilter) ||
+      statusFilter !== "all" ||
+      taskPresenceFilter !== "all" ||
+      taskCountFilter !== "0",
+    [groupFilter, statusFilter, taskPresenceFilter, taskCountFilter],
+  );
+
+  const activeFilterCount = useMemo(
+    () =>
+      Number(Boolean(groupFilter)) +
+      Number(statusFilter !== "all") +
+      Number(taskPresenceFilter !== "all") +
+      Number(taskCountFilter !== "0"),
+    [groupFilter, statusFilter, taskPresenceFilter, taskCountFilter],
+  );
+
+  const sortedRows = useMemo(() => {
+    const items = [...filteredRows];
+    const column = (sortDescriptor.column as TaskSortColumn | undefined) ?? "tasks";
+    const directionMultiplier = sortDescriptor.direction === "descending" ? -1 : 1;
+
+    items.sort((left, right) => {
+      let comparison = 0;
+
+      if (column === "employeeName") {
+        comparison = left.employeeName.localeCompare(
+          right.employeeName,
           locale === "ru" ? "ru" : "en",
         );
-      });
-  }, [employees, locale, today, visibleTasks]);
+      } else if (column === "status") {
+        comparison = left.statusSort - right.statusSort;
+      } else if (column === "teams") {
+        comparison = left.teamsSort.localeCompare(right.teamsSort, locale === "ru" ? "ru" : "en");
+      } else if (column === "tasks") {
+        comparison = left.tasksSort - right.tasksSort;
+        if (comparison === 0) {
+          comparison = right.entry.stats.total - left.entry.stats.total;
+        }
+      }
+
+      if (comparison === 0) {
+        comparison = left.employeeName.localeCompare(
+          right.employeeName,
+          locale === "ru" ? "ru" : "en",
+        );
+      }
+
+      return comparison * directionMultiplier;
+    });
+
+    return items;
+  }, [filteredRows, locale, sortDescriptor]);
+
+  const renderRows = useMemo<TaskRenderRow[]>(
+    () =>
+      sortedRows.length
+        ? sortedRows.flatMap((row) => {
+        const items: TaskRenderRow[] = [
+          {
+            ...row,
+            kind: "summary",
+            renderKey: `${row.id}:summary`,
+          },
+        ];
+
+        if (expandedEmployeeIds.includes(row.id)) {
+          items.push({
+            kind: "details",
+            renderKey: `${row.id}:details`,
+            row,
+          });
+        }
+
+        return items;
+      })
+        : [
+            {
+              kind: "empty",
+              renderKey: "empty-filter-results",
+            },
+          ],
+    [expandedEmployeeIds, sortedRows],
+  );
 
   useEffect(() => {
-    if (!employeeTaskEntries.length) {
-      setExpandedEmployeeIds([]);
+    if (!expandedEmployeeIds.length) {
       return;
     }
 
-    const validEmployeeIds = new Set(
-      employeeTaskEntries.map((entry) => entry.employee.id),
-    );
-
     setExpandedEmployeeIds((current) =>
-      current.filter((employeeId) => validEmployeeIds.has(employeeId)),
+      current.filter((employeeId) =>
+        sortedRows.some((row) => row.id === employeeId),
+      ),
     );
-  }, [employeeTaskEntries]);
+  }, [expandedEmployeeIds.length, sortedRows]);
 
   useEffect(() => {
-    if (
-      expandedTaskId &&
-      !visibleTasks.some((task) => task.id === expandedTaskId)
-    ) {
-      setExpandedTaskId(null);
+    if (!showFilters) {
+      return;
     }
-  }, [expandedTaskId, visibleTasks]);
 
-  const employeesWithTasks = useMemo(
-    () => employeeTaskEntries.filter((entry) => entry.stats.total > 0).length,
-    [employeeTaskEntries],
-  );
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target;
 
-  const teamSummary = useMemo(() => {
-    return {
-      total: visibleTasks.length,
-      completed: visibleTasks.filter((task) => task.status === "DONE").length,
-      overdue: visibleTasks.filter((task) => isTaskOverdue(task, today)).length,
-      photoPending: visibleTasks.filter(
-        (task) =>
-          task.requiresPhoto &&
-          isTaskOpen(task.status) &&
-          getActivePhotoProofs(task).length === 0,
-      ).length,
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        filterMenuRef.current?.contains(target) ||
+        target.closest("[data-radix-popper-content-wrapper]")
+      ) {
+        return;
+      }
+
+      setShowFilters(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowFilters(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [today, visibleTasks]);
-  const isSingleDaySelection = formatDateKey(rangeStart) === formatDateKey(rangeEnd);
-  const isPreviousDaySelection =
-    isSingleDaySelection &&
-    formatDateKey(startOfDay(rangeStart)) === formatDateKey(addDays(today, -1));
+  }, [showFilters]);
+
+  function toggleExpandedEmployee(employeeId: string) {
+    setExpandedEmployeeIds((current) =>
+      current.includes(employeeId)
+        ? current.filter((id) => id !== employeeId)
+        : [...current, employeeId],
+    );
+  }
+
+  function resetFilters() {
+    setGroupFilter("");
+    setStatusFilter("all");
+    setTaskPresenceFilter("all");
+    setTaskCountFilter("0");
+  }
 
   function applyPreset(nextPreset: Exclude<DatePreset, "custom">) {
     const base = new Date();
@@ -575,17 +982,47 @@ export function ManagerTasksPage() {
     setPreset(nextPreset);
   }
 
-  const summaryLabel = getPresetSummaryLabel(preset, locale);
-  const rangeHeroLabel = formatResolvedRangeLabel(
+  const rangeHero = formatResolvedRangeHeading(
     rangeStart,
     rangeEnd,
     locale,
-  ).toLocaleUpperCase(
-    locale === "ru" ? "ru-RU" : "en-US",
+    preset,
   );
+  const isCustomMultiDayRange =
+    preset === "custom" && formatDateKey(rangeStart) !== formatDateKey(rangeEnd);
 
-  function renderTaskStatusIcon(task: TaskItem) {
+  function renderTaskStatusIcon(
+    task: TaskItem,
+    taskMeta?: ReturnType<typeof parseTaskMeta>,
+  ) {
     const overdue = isTaskOverdue(task, today);
+    const hasPhotoProofs = getActivePhotoProofs(task).length > 0;
+    const isMeeting = isMeetingTask(task, taskMeta);
+
+    if (isMeeting) {
+      return (
+        <span className="team-tasks-status-icon is-symbol is-meeting-symbol" aria-hidden="true">
+          <UsersRound className="size-4" />
+        </span>
+      );
+    }
+
+    if (task.requiresPhoto) {
+      return (
+        <span
+          className={`team-tasks-status-icon is-symbol is-photo-symbol${
+            task.status === "DONE"
+              ? " is-done"
+              : hasPhotoProofs
+                ? " is-has-photo"
+                : ""
+          }`}
+          aria-hidden="true"
+        >
+          <Camera className="size-3.5" />
+        </span>
+      );
+    }
 
     if (task.status === "DONE") {
       return (
@@ -622,9 +1059,8 @@ export function ManagerTasksPage() {
         Boolean(proof.url),
     );
     const embedded = options?.embedded ?? false;
-    const isExpanded = expandedTaskId === task.id;
-    const canExpand =
-      photoProofs.length > 0 || Boolean(taskMeta.meeting?.meetingLink);
+    const canOpenPhotos = photoProofs.length > 0;
+    const canExpand = canOpenPhotos || Boolean(taskMeta.meeting?.meetingLink);
     const title = normalizeTaskTitle(task.title);
     const overdue = isTaskOverdue(task, today);
     const done = task.status === "DONE";
@@ -632,7 +1068,7 @@ export function ManagerTasksPage() {
     const taskRow = (
       <>
         <div className="team-tasks-task-line-main">
-          {renderTaskStatusIcon(task)}
+          {renderTaskStatusIcon(task, taskMeta)}
           <span
             className={`team-tasks-task-line-title ${
               done ? "is-done" : overdue ? "is-overdue" : ""
@@ -649,7 +1085,7 @@ export function ManagerTasksPage() {
           >
             {priorityLabel(task.priority, locale)}
           </span>
-          {photoProofs.length ? (
+          {photoProofs.length && !task.requiresPhoto ? (
             <span className="team-tasks-task-camera-mark" aria-hidden="true">
               <Camera className="size-3.5" />
             </span>
@@ -665,55 +1101,35 @@ export function ManagerTasksPage() {
         } ${canExpand ? "is-expandable" : ""} ${embedded ? "is-embedded" : ""}`}
         key={task.id}
       >
-        {canExpand ? (
+        {canOpenPhotos ? (
           <button
             className="team-tasks-task-line-button"
             onClick={() =>
-              setExpandedTaskId((current) => (current === task.id ? null : task.id))
+              setPhotoProofDialogTask({
+                title,
+                proofs: photoProofs.map((proof) => ({
+                  id: proof.id,
+                  url: proof.url,
+                })),
+              })
             }
             type="button"
           >
             {taskRow}
           </button>
+        ) : taskMeta.meeting?.meetingLink ? (
+          <a
+            className="team-tasks-task-line-button"
+            href={taskMeta.meeting.meetingLink}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {taskRow}
+          </a>
         ) : (
           <div className="team-tasks-task-line-static">{taskRow}</div>
         )}
 
-        {isExpanded ? (
-          <div className="team-tasks-task-preview">
-            {photoProofs.length ? (
-              <div className="team-tasks-photo-grid">
-                {photoProofs.map((proof) => (
-                  <a
-                    className="team-tasks-photo-card"
-                    href={proof.url ?? "#"}
-                    key={proof.id}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <img
-                      alt={localize(locale, "Фотоотчёт по задаче", "Task photo proof")}
-                      className="team-tasks-photo-image"
-                      src={proof.url ?? ""}
-                    />
-                  </a>
-                ))}
-              </div>
-            ) : null}
-
-            {taskMeta.meeting?.meetingLink ? (
-              <a
-                className="team-tasks-inline-link"
-                href={taskMeta.meeting.meetingLink}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <ExternalLink className="size-3.5" />
-                {localize(locale, "Открыть встречу", "Open meeting")}
-              </a>
-            ) : null}
-          </div>
-        ) : null}
       </article>
     );
   }
@@ -732,15 +1148,88 @@ export function ManagerTasksPage() {
     ));
   }
 
+  function renderStatusBadge(item: TaskTableRow) {
+    return (
+      <span className={`team-tasks-employee-status is-${item.statusTone}`}>
+        <span className="team-tasks-employee-status-dot" aria-hidden="true" />
+        {item.statusLabel}
+      </span>
+    );
+  }
+
+  function renderTeamsBadges(item: TaskTableRow) {
+    if (!item.teams.length) {
+      return null;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {item.teams.slice(0, 2).map((team, index) => (
+          <Badge
+            color={teamBadgeColors[index % teamBadgeColors.length]}
+            key={`${item.id}-${team}`}
+            size="sm"
+            type="color"
+          >
+            {team}
+          </Badge>
+        ))}
+        {item.teams.length > 2 ? (
+          <Badge color="gray" size="sm" type="color">
+            +{item.teams.length - 2}
+          </Badge>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <AdminShell>
       <main className="page-shell section-stack team-tasks-page">
-        <section className="team-tasks-toolbar">
+        <section className={`team-tasks-toolbar${preset === "custom" ? " is-custom-open" : ""}`}>
           <div className="team-tasks-heading">
-            <p className="team-tasks-focus-label">{rangeHeroLabel}</p>
+            <p
+              className={`team-tasks-focus-label${
+                isCustomMultiDayRange ? " is-custom-range" : ""
+              }`}
+            >
+              {rangeHero.weekday ? (
+                <span className="team-tasks-focus-weekday">{rangeHero.weekday}</span>
+              ) : null}
+              <span className="team-tasks-focus-text">{rangeHero.primary}</span>
+              {rangeHero.separateYear && rangeHero.year ? (
+                <span className="team-tasks-focus-year">{rangeHero.year}</span>
+              ) : null}
+            </p>
           </div>
 
           <div className="team-tasks-period-controls">
+            {preset === "custom" ? (
+              <div className="team-tasks-custom-range">
+                <div className="team-tasks-custom-field">
+                  <DateRangePicker
+                    aria-label={localize(locale, "Период дат", "Date range")}
+                    buttonClassName="justify-start whitespace-nowrap"
+                    onChange={(value) => {
+                      if (!value?.start || !value?.end) {
+                        return;
+                      }
+
+                      setDateFrom(
+                        formatDateInput(value.start.toDate(getLocalTimeZone())),
+                      );
+                      setDateTo(
+                        formatDateInput(value.end.toDate(getLocalTimeZone())),
+                      );
+                    }}
+                    placeholder={localize(locale, "Выберите даты", "Select dates")}
+                    size="md"
+                    value={parseCalendarDateRangeInput(dateFrom, dateTo)}
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <div className="team-tasks-period-toggle" role="tablist">
               {(
                 [
@@ -783,68 +1272,106 @@ export function ManagerTasksPage() {
               ))}
             </div>
 
-            {preset === "custom" ? (
-              <div className="team-tasks-custom-range">
-                <label className="team-tasks-custom-field">
-                  <Input
-                    aria-label={localize(locale, "Дата от", "Date from")}
-                    onChange={(event) => setDateFrom(event.target.value)}
-                    type="date"
-                    value={dateFrom}
-                  />
-                </label>
-                <label className="team-tasks-custom-field">
-                  <Input
-                    aria-label={localize(locale, "Дата до", "Date to")}
-                    onChange={(event) => setDateTo(event.target.value)}
-                    type="date"
-                    value={dateTo}
-                  />
-                </label>
-              </div>
-            ) : null}
+            <div className="team-tasks-filter-menu" ref={filterMenuRef}>
+              <button
+                aria-controls="team-tasks-filter-popover"
+                aria-expanded={showFilters}
+                aria-haspopup="dialog"
+                className={`team-tasks-filter-toggle ${showFilters ? "is-open" : ""}`}
+                onClick={() => setShowFilters((current) => !current)}
+                type="button"
+              >
+                <span className="team-tasks-filter-toggle-label">
+                  <Filter className="size-3.5" />
+                  <span>{localize(locale, "Фильтры", "Filters")}</span>
+                </span>
+                {activeFilterCount > 0 ? (
+                  <span className="team-tasks-filter-count">{activeFilterCount}</span>
+                ) : null}
+              </button>
+
+              {showFilters ? (
+                <div
+                  className="team-tasks-filter-popover"
+                  id="team-tasks-filter-popover"
+                  role="dialog"
+                >
+                  <div className="team-tasks-filter-popover-head">
+                    <div className="team-tasks-filter-popover-copy">
+                      <strong>{localize(locale, "Фильтры", "Filters")}</strong>
+                      <span>
+                        {localize(
+                          locale,
+                          "Быстро сузьте таблицу команды.",
+                          "Narrow the team table quickly.",
+                        )}
+                      </span>
+                    </div>
+                    {hasActiveFilters ? (
+                      <button
+                        className="team-tasks-filter-clear"
+                        onClick={resetFilters}
+                        type="button"
+                      >
+                        {localize(locale, "Сбросить", "Reset")}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="team-tasks-filters-grid">
+                    <div className="team-tasks-filter-field">
+                      <AppSelectField
+                        className="team-tasks-filter-select"
+                        emptyLabel={localize(locale, "Все команды", "All teams")}
+                        onValueChange={setGroupFilter}
+                        options={groupOptions}
+                        placeholder={localize(locale, "Команда", "Team")}
+                        value={groupFilter}
+                      />
+                    </div>
+                    <div className="team-tasks-filter-field">
+                      <AppSelectField
+                        className="team-tasks-filter-select"
+                        onValueChange={setStatusFilter}
+                        options={[
+                          { value: "all", label: localize(locale, "Все статусы", "All statuses") },
+                          { value: "on_shift", label: localize(locale, "На смене", "On shift") },
+                          { value: "late", label: localize(locale, "Опаздывает", "Late") },
+                          { value: "off_shift", label: localize(locale, "Не на смене", "Off shift") },
+                        ]}
+                        value={statusFilter}
+                      />
+                    </div>
+                    <div className="team-tasks-filter-field">
+                      <AppSelectField
+                        className="team-tasks-filter-select"
+                        onValueChange={setTaskPresenceFilter}
+                        options={[
+                          { value: "all", label: localize(locale, "Любые задачи", "Any task state") },
+                          { value: "with_tasks", label: localize(locale, "Есть задачи", "Has tasks") },
+                          { value: "without_tasks", label: localize(locale, "Без задач", "No tasks") },
+                        ]}
+                        value={taskPresenceFilter}
+                      />
+                    </div>
+                    <div className="team-tasks-filter-field">
+                      <AppSelectField
+                        className="team-tasks-filter-select"
+                        onValueChange={setTaskCountFilter}
+                        options={[
+                          { value: "0", label: localize(locale, "Любое кол-во задач", "Any task count") },
+                          { value: "1", label: localize(locale, "От 1 задачи", "From 1 task") },
+                          { value: "3", label: localize(locale, "От 3 задач", "From 3 tasks") },
+                          { value: "5", label: localize(locale, "От 5 задач", "From 5 tasks") },
+                        ]}
+                        value={taskCountFilter}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </section>
-
-        <section className="team-tasks-summary">
-          <dl className="team-tasks-summary-line">
-            <div className="team-tasks-summary-item is-total">
-              <dt className="team-tasks-summary-label">{summaryLabel}</dt>
-              <dd className="team-tasks-summary-total">{teamSummary.total}</dd>
-            </div>
-
-            <div className="team-tasks-summary-item is-progress">
-              <dt className="team-tasks-summary-label">
-                {localize(locale, "Выполнено", "Completed")}
-              </dt>
-              <dd className="team-tasks-summary-progress">
-                <span className="team-tasks-positive">{teamSummary.completed}</span>
-              </dd>
-            </div>
-
-            <div className="team-tasks-summary-item">
-              <dt className="team-tasks-summary-label">
-                {localize(locale, "Сотрудников", "Employees")}
-              </dt>
-              <dd>{employeeTaskEntries.length}</dd>
-            </div>
-
-            <div className="team-tasks-summary-item">
-              <dt className="team-tasks-summary-label">
-                {localize(locale, "С задачами", "With tasks")}
-              </dt>
-              <dd>{employeesWithTasks}</dd>
-            </div>
-
-            {isPreviousDaySelection ? (
-              <div className="team-tasks-summary-item">
-                <dt className="team-tasks-summary-label">
-                  {localize(locale, "Просрочено", "Overdue")}
-                </dt>
-                <dd>{teamSummary.overdue}</dd>
-              </div>
-            ) : null}
-          </dl>
         </section>
 
         {error ? (
@@ -865,104 +1392,232 @@ export function ManagerTasksPage() {
               )}
             </span>
           </section>
-        ) : (
+            ) : (
           <section className="team-tasks-list">
-            {employeeTaskEntries.length ? (
-              <Accordion
-                className="team-tasks-accordion"
-                onValueChange={setExpandedEmployeeIds}
-                type="multiple"
-                value={expandedEmployeeIds}
-              >
-                {employeeTaskEntries.map((entry) => {
-                  const recurringTasks = entry.tasks.filter(
-                    (task) => task.isRecurring,
-                  );
-                  const regularTasks = entry.tasks.filter(
-                    (task) => !task.isRecurring,
-                  );
-                  const employeeName = getEmployeeName(entry.employee, locale);
+              <div className="team-tasks-table-card">
+                <div className="team-tasks-table-shell">
+                  <Table
+                    aria-label={localize(locale, "Таблица задач команды", "Team tasks table")}
+                    onSortChange={setSortDescriptor}
+                    size="sm"
+                    sortDescriptor={sortDescriptor}
+                  >
+                    <Table.Header>
+                      <Table.Head
+                        allowsSorting
+                        className="w-[46%] min-w-[320px]"
+                        id="employeeName"
+                        isRowHeader
+                        label={`${localize(locale, "Сотрудники", "Employees")} ${sortedRows.length}`}
+                      />
+                      <Table.Head
+                        allowsSorting
+                        className="w-[18%] min-w-[170px] team-tasks-head-center"
+                        id="status"
+                        label={localize(locale, "Статус", "Status")}
+                      />
+                      <Table.Head
+                        allowsSorting
+                        className="w-[18%] min-w-[170px] team-tasks-head-center"
+                        id="teams"
+                        label={localize(locale, "Команды", "Teams")}
+                      />
+                      <Table.Head
+                        allowsSorting
+                        className="w-[18%] min-w-[170px] team-tasks-head-center team-tasks-head-progress"
+                        id="tasks"
+                        label={`${localize(locale, "Задачи", "Tasks")} ${teamSummary.completed} ${localize(locale, "из", "of")} ${teamSummary.total}`}
+                      />
+                    </Table.Header>
 
-                  return (
-                    <AccordionItem
-                      className="team-tasks-employee-item"
-                      key={entry.employee.id}
-                      value={entry.employee.id}
-                    >
-                      <AccordionTrigger className="team-tasks-employee-trigger">
-                        <div className="team-tasks-employee-head">
-                          <div className="team-tasks-avatar">
-                            <img
-                              alt={employeeName}
-                              className="h-full w-full object-cover"
-                              src={
-                                entry.employee.avatarUrl ??
-                                getMockAvatarDataUrl(employeeName)
-                              }
-                            />
-                          </div>
-
-                          <div className="team-tasks-employee-copy">
-                            <strong>{employeeName}</strong>
-                          </div>
-                        </div>
-
-                        <div className="team-tasks-employee-progress">
-                          <strong className="team-tasks-positive">
-                            {entry.stats.done}
-                          </strong>
-                          <span>/</span>
-                          <strong>{entry.stats.total}</strong>
-                        </div>
-                      </AccordionTrigger>
-
-                      <AccordionContent className="team-tasks-employee-content data-[state=closed]:animate-none data-[state=open]:animate-none">
-                          <div className="team-tasks-compact-list">
-                          {renderTaskCollection(regularTasks)}
-
-                          {recurringTasks.length ? (
-                            <section className="team-tasks-routine-box">
-                              <div className="team-tasks-routine-label">
-                                {localize(
-                                  locale,
-                                  "Повседневные задачи",
-                                  "Routine tasks",
-                                )}
-                              </div>
-                              <div className="team-tasks-routine-list">
-                                {renderTaskCollection(recurringTasks, {
-                                  embedded: true,
-                                })}
-                              </div>
-                            </section>
-                          ) : null}
-
-                          {!entry.tasks.length ? (
-                            <div className="team-tasks-group-empty">
+                    <Table.Body items={renderRows}>
+                      {(item) => {
+                      if (item.kind === "empty") {
+                        return (
+                          <Table.Row className="team-tasks-table-row team-tasks-table-row--empty" id={item.renderKey}>
+                            <Table.Cell className="team-tasks-empty-cell" colSpan={4}>
                               {localize(
                                 locale,
-                                "На выбранный день задач нет.",
-                                "No tasks for the selected day.",
+                                hasActiveFilters
+                                  ? "По этим фильтрам сотрудники не найдены"
+                                  : "В выбранном периоде задач пока нет",
+                                hasActiveFilters
+                                  ? "No employees match these filters"
+                                  : "No tasks were found in this range",
                               )}
-                            </div>
-                          ) : null}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            ) : (
-              <div className="team-tasks-empty-note">
-                {localize(
-                  locale,
-                  "В выбранном периоде задач пока нет.",
-                  "No tasks were found in this range.",
-                )}
+                            </Table.Cell>
+                          </Table.Row>
+                        );
+                      }
+
+                      if (item.kind === "details") {
+                        const recurringTasks = item.row.entry.tasks.filter((task) => task.isRecurring);
+                        const regularTasks = item.row.entry.tasks.filter((task) => !task.isRecurring);
+
+                        return (
+                          <Table.Row
+                            className={`team-tasks-detail-row ${
+                              item.row.isComplete ? "is-complete" : ""
+                            } !h-auto`}
+                            id={item.renderKey}
+                          >
+                            <Table.Cell className="team-tasks-detail-cell" colSpan={4}>
+                              <div className="team-tasks-detail-panel">
+                                {item.row.entry.tasks.length ? (
+                                  <div className="team-tasks-inline-details">
+                                    <div className="team-tasks-detail-list">
+                                      {renderTaskCollection(regularTasks)}
+
+                                      {recurringTasks.length ? (
+                                        <section className="team-tasks-routine-box">
+                                          <div className="team-tasks-routine-label">
+                                            {localize(locale, "Повседневные задачи", "Routine tasks")}
+                                          </div>
+                                          <div className="team-tasks-routine-list">
+                                            {renderTaskCollection(recurringTasks, {
+                                              embedded: true,
+                                            })}
+                                          </div>
+                                        </section>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="team-tasks-inline-details">
+                                    <div className="team-tasks-group-empty">
+                                      {localize(
+                                        locale,
+                                        "На выбранный день задач нет",
+                                        "No tasks for the selected day",
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </Table.Cell>
+                          </Table.Row>
+                        );
+                      }
+
+                      return (
+                        <Table.Row
+                          className={`team-tasks-table-row ${
+                            item.isComplete ? "is-complete" : ""
+                          } ${expandedEmployeeIds.includes(item.id) ? "is-open" : ""
+                          }`}
+                          id={item.renderKey}
+                        >
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--identity"
+                              onClick={() => toggleExpandedEmployee(item.id)}
+                              type="button"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Avatar
+                                  alt={item.employeeName}
+                                  className="shrink-0"
+                                  initials={item.employeeInitials}
+                                  rounded={false}
+                                  size="sm"
+                                  src={item.employeeAvatarUrl}
+                                />
+                                <div className="min-w-0 space-y-0.5">
+                                  <p className="truncate text-sm font-semibold text-primary">
+                                    {item.employeeName}
+                                  </p>
+                                  {item.employeeSubtitle ? (
+                                    <p className="truncate text-sm text-tertiary">
+                                      {item.employeeSubtitle}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle whitespace-nowrap">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => toggleExpandedEmployee(item.id)}
+                              type="button"
+                            >
+                              {renderStatusBadge(item)}
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => toggleExpandedEmployee(item.id)}
+                              type="button"
+                            >
+                              {renderTeamsBadges(item)}
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--progress"
+                              onClick={() => toggleExpandedEmployee(item.id)}
+                              type="button"
+                            >
+                              <strong className="text-base font-semibold text-primary">
+                                {item.tasksProgressLabel}
+                              </strong>
+                            </button>
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    }}
+                    </Table.Body>
+                  </Table>
+                </div>
               </div>
-            )}
           </section>
         )}
+
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setPhotoProofDialogTask(null);
+            }
+          }}
+          open={Boolean(photoProofDialogTask)}
+        >
+          <DialogContent className="team-tasks-photo-dialog">
+            <DialogHeader className="gap-2 pr-10">
+              <DialogTitle>
+                {photoProofDialogTask?.title ?? localize(locale, "Фотоотчёты", "Photo proofs")}
+              </DialogTitle>
+              <DialogDescription>
+                {localize(
+                  locale,
+                  "Все фотографии, приложенные к выполнению этой задачи.",
+                  "All photos attached to this completed task.",
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="team-tasks-photo-dialog-grid">
+              {photoProofDialogTask?.proofs.map((proof) => (
+                <a
+                  className="team-tasks-photo-dialog-card"
+                  href={proof.url}
+                  key={proof.id}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <img
+                    alt={localize(locale, "Фотоотчёт по задаче", "Task photo proof")}
+                    className="team-tasks-photo-dialog-image"
+                    src={proof.url}
+                  />
+                </a>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </AdminShell>
   );

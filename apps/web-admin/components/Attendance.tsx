@@ -1040,7 +1040,7 @@ export default function Attendance() {
                   <span>Всего: {audit?.totals.total ?? 0}</span>
                   <span>Подтверждено: {audit?.totals.accepted ?? 0}</span>
                   <span>Отклонено: {audit?.totals.rejected ?? 0}</span>
-                  <span>Ручная проверка: {audit?.totals.reviewRequired ?? 0}</span>
+                  <span>Требуют внимания: {audit?.totals.reviewRequired ?? 0}</span>
                 </div>
               </div>
 
@@ -1227,7 +1227,7 @@ export default function Attendance() {
                                 </div>
                                 {selectedAuditItem.biometricVerification.reviewReason ? (
                                   <div>
-                                    <strong className="text-[color:var(--foreground)]">Причина review:</strong>{" "}
+                                    <strong className="text-[color:var(--foreground)]">Причина отказа:</strong>{" "}
                                     {selectedAuditItem.biometricVerification.reviewReason}
                                   </div>
                                 ) : null}

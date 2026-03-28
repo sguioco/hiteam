@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
 import { AuthSession, resolveHomeRoute, saveSession } from '@/lib/auth';
-import { Globe, Hand, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { BrandWordmark } from './brand-wordmark';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -31,6 +31,8 @@ const texts = {
     desc: 'Sign in to your HiTeam workspace',
     emailOrPhone: 'Email or phone',
     password: 'Password',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     signIn: 'Sign in',
     signingIn: 'Signing in…',
     forgot: 'Forgot password?',
@@ -50,6 +52,8 @@ const texts = {
     desc: 'Войдите в рабочее пространство HiTeam',
     emailOrPhone: 'Email или телефон',
     password: 'Пароль',
+    showPassword: 'Показать пароль',
+    hidePassword: 'Скрыть пароль',
     signIn: 'Войти',
     signingIn: 'Входим…',
     forgot: 'Забыли пароль?',
@@ -69,6 +73,8 @@ const texts = {
     desc: 'سجّل الدخول إلى مساحة عمل HiTeam',
     emailOrPhone: 'البريد الإلكتروني أو الهاتف',
     password: 'كلمة المرور',
+    showPassword: 'إظهار كلمة المرور',
+    hidePassword: 'إخفاء كلمة المرور',
     signIn: 'تسجيل الدخول',
     signingIn: 'جاري الدخول…',
     forgot: 'نسيت كلمة المرور؟',
@@ -148,6 +154,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   });
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const t = texts[lang];
@@ -235,14 +242,26 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
                 <label htmlFor="login-password" className="text-sm font-medium">{t.password}</label>
                 <a href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline">{t.forgot}</a>
               </div>
-              <Input
-                id="login-password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={passwordVisible ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  className="pr-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  aria-label={passwordVisible ? t.hidePassword : t.showPassword}
+                  title={passwordVisible ? t.hidePassword : t.showPassword}
+                  className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => setPasswordVisible((current) => !current)}
+                >
+                  {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button

@@ -5,7 +5,7 @@ import { KeyRound, LogOut, Mail, Shield, UploadCloud, UserRound } from 'lucide-r
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
 import { SessionLoader } from '../../components/session-loader';
-import { AuthSession, clearSession, getSession, redirectToLogin } from '../../lib/auth';
+import { AuthSession, clearSession, getSession, isEmployeeOnlyRole, redirectToLogin } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { buildUserDisplayName, getDisplayInitials } from '../../lib/profile-display';
@@ -19,6 +19,7 @@ type ProfileEmployee = {
 
 export default function ProfilePage() {
   const { locale } = useI18n();
+  const [employeeMode, setEmployeeMode] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export default function ProfilePage() {
     }
 
     setSession(s);
+    setEmployeeMode(isEmployeeOnlyRole(s.user.roleCodes));
 
     void apiRequest<ProfileEmployee | null>('/employees/me', {
       token: s.accessToken,
@@ -82,7 +84,7 @@ export default function ProfilePage() {
   const avatarFallback = getDisplayInitials(displayName || user.email);
 
   return (
-    <AdminShell>
+    <AdminShell mode={employeeMode ? "employee" : "admin"}>
       <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
         <h1 className="mb-6 font-heading text-2xl font-bold">
           {locale === 'ru' ? 'Профиль' : 'Profile'}

@@ -1193,8 +1193,15 @@ export default function Schedule({
       setLoading(true);
       setMessage(null);
 
+      const visibleStart = calendarDays[0];
+      const visibleEnd = calendarDays[calendarDays.length - 1];
+      const taskSearch = new URLSearchParams({
+        dateFrom: formatDateInput(visibleStart),
+        dateTo: formatDateInput(visibleEnd),
+      });
+
       const tasksResult = await Promise.allSettled([
-        apiRequest<TaskItem[]>("/collaboration/tasks/me", {
+        apiRequest<TaskItem[]>(`/collaboration/tasks/me?${taskSearch.toString()}`, {
           token: session.accessToken,
         }),
       ]);
@@ -1231,6 +1238,13 @@ export default function Schedule({
     setLoading(true);
     setMessage(null);
 
+    const visibleStart = calendarDays[0];
+    const visibleEnd = calendarDays[calendarDays.length - 1];
+    const taskSearch = new URLSearchParams({
+      dateFrom: formatDateInput(visibleStart),
+      dateTo: formatDateInput(visibleEnd),
+    });
+
     const results = await Promise.allSettled([
       apiRequest<ShiftTemplateRecord[]>("/schedule/templates", {
         token: session.accessToken,
@@ -1253,9 +1267,12 @@ export default function Schedule({
       apiRequest<ApprovalInboxItem[]>("/requests/inbox", {
         token: session.accessToken,
       }),
-      apiRequest<CollaborationTaskBoardResponse>("/collaboration/tasks", {
-        token: session.accessToken,
-      }),
+      apiRequest<CollaborationTaskBoardResponse>(
+        `/collaboration/tasks?${taskSearch.toString()}`,
+        {
+          token: session.accessToken,
+        },
+      ),
     ]);
 
     const [
@@ -1338,7 +1355,7 @@ export default function Schedule({
 
   useEffect(() => {
     void loadData();
-  }, [isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
+  }, [calendarDays, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
 
   useEffect(() => {
     const dateParam = searchParams.get("date");

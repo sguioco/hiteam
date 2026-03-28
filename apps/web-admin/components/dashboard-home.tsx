@@ -66,6 +66,7 @@ import {
   isEmployeeOnlyRole,
   isManagerOnlyRole,
 } from "@/lib/auth";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import {
@@ -133,6 +134,18 @@ type DashboardMessageAction = {
   label: string;
 };
 
+type DashboardCachePayload = {
+  liveSessions: AttendanceLiveSession[];
+  anomalies: AttendanceAnomalyResponse | null;
+  requests: ApprovalInboxItem[];
+  taskBoard: CollaborationTaskBoardResponse | null;
+  employees: EmployeeDirectoryItem[];
+  groups: WorkGroupItem[];
+  scheduleShifts: EmployeeScheduleShift[];
+  canCheckWorkdays: boolean;
+  personalHistory: AttendanceHistoryResponse | null;
+};
+
 type AttendanceFilterKey =
   | "all"
   | "present"
@@ -140,6 +153,15 @@ type AttendanceFilterKey =
   | "late"
   | "checked"
   | "issues";
+
+const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function buildDashboardCacheKey(
+  session: NonNullable<ReturnType<typeof getSession>>,
+  isEmployeeMode: boolean,
+) {
+  return `dashboard:${isEmployeeMode ? "employee" : "admin"}:${session.user.tenantId}:${session.user.id}`;
+}
 
 const initialTaskDraft: TaskDraft = {
   mode: "task",
@@ -597,6 +619,10 @@ export default function DashboardHome({
   const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
+  const dashboardCacheKey = useMemo(
+    () => (session ? buildDashboardCacheKey(session, isEmployeeMode) : null),
+    [isEmployeeMode, session],
+  );
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
   const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(
     null,
@@ -626,6 +652,25 @@ export default function DashboardHome({
     useState<AttendanceFilterKey>("all");
   const [personalHistory, setPersonalHistory] =
     useState<AttendanceHistoryResponse | null>(null);
+  function applyDashboardSnapshot(
+    snapshot: DashboardCachePayload,
+    cacheKey?: string | null,
+  ) {
+    setLiveSessions(snapshot.liveSessions);
+    setAnomalies(snapshot.anomalies);
+    setRequests(snapshot.requests);
+    setTaskBoard(snapshot.taskBoard);
+    setEmployees(snapshot.employees);
+    setGroups(snapshot.groups);
+    setScheduleShifts(snapshot.scheduleShifts);
+    setCanCheckWorkdays(snapshot.canCheckWorkdays);
+    setPersonalHistory(snapshot.personalHistory);
+
+    if (cacheKey) {
+      writeClientCache(cacheKey, snapshot);
+    }
+  }
+
   async function loadData() {
     const currentSession = getSession();
     if (!currentSession) return;
@@ -653,24 +698,35 @@ export default function DashboardHome({
       setEmployees([]);
       setScheduleShifts([]);
       setCanCheckWorkdays(false);
-      setTaskBoard({
-        tasks: employeeTasks,
-        totals: {
-          total: employeeTasks.length,
-          overdue: employeeTasks.filter(
-            (task) =>
-              task.status !== "DONE" &&
-              Boolean(task.dueAt) &&
-              new Date(task.dueAt as string).getTime() < Date.now(),
-          ).length,
-          active: employeeTasks.filter((task) => task.status !== "DONE").length,
-          done: employeeTasks.filter((task) => task.status === "DONE").length,
+      applyDashboardSnapshot(
+        {
+          liveSessions: [],
+          anomalies: null,
+          requests: [],
+          employees: [],
+          groups: [],
+          scheduleShifts: [],
+          canCheckWorkdays: false,
+          taskBoard: {
+            tasks: employeeTasks,
+            totals: {
+              total: employeeTasks.length,
+              overdue: employeeTasks.filter(
+                (task) =>
+                  task.status !== "DONE" &&
+                  Boolean(task.dueAt) &&
+                  new Date(task.dueAt as string).getTime() < Date.now(),
+              ).length,
+              active: employeeTasks.filter((task) => task.status !== "DONE").length,
+              done: employeeTasks.filter((task) => task.status === "DONE").length,
+            },
+          },
+          personalHistory:
+            personalHistoryResult.status === "fulfilled"
+              ? personalHistoryResult.value
+              : null,
         },
-      });
-      setPersonalHistory(
-        personalHistoryResult.status === "fulfilled"
-          ? personalHistoryResult.value
-          : null,
+        dashboardCacheKey,
       );
       return;
     }
@@ -711,30 +767,46 @@ export default function DashboardHome({
       }),
     ]);
 
-    setLiveSessions(liveResult.status === "fulfilled" ? liveResult.value : []);
-    setAnomalies(
-      anomalyResult.status === "fulfilled" ? anomalyResult.value : null,
-    );
-    setRequests(
-      requestResult.status === "fulfilled" ? requestResult.value : [],
-    );
-    setTaskBoard(taskResult.status === "fulfilled" ? taskResult.value : null);
-    setEmployees(
-      employeeResult.status === "fulfilled" ? employeeResult.value : [],
-    );
-    setGroups(groupsResult.status === "fulfilled" ? groupsResult.value : []);
-    setScheduleShifts(shiftsResult.status === "fulfilled" ? shiftsResult.value : []);
-    setCanCheckWorkdays(shiftsResult.status === "fulfilled");
-    setPersonalHistory(
-      personalHistoryResult.status === "fulfilled"
-        ? personalHistoryResult.value
-        : null,
+    applyDashboardSnapshot(
+      {
+        liveSessions: liveResult.status === "fulfilled" ? liveResult.value : [],
+        anomalies:
+          anomalyResult.status === "fulfilled" ? anomalyResult.value : null,
+        requests:
+          requestResult.status === "fulfilled" ? requestResult.value : [],
+        taskBoard: taskResult.status === "fulfilled" ? taskResult.value : null,
+        employees:
+          employeeResult.status === "fulfilled" ? employeeResult.value : [],
+        groups: groupsResult.status === "fulfilled" ? groupsResult.value : [],
+        scheduleShifts:
+          shiftsResult.status === "fulfilled" ? shiftsResult.value : [],
+        canCheckWorkdays: shiftsResult.status === "fulfilled",
+        personalHistory:
+          personalHistoryResult.status === "fulfilled"
+            ? personalHistoryResult.value
+            : null,
+      },
+      dashboardCacheKey,
     );
   }
 
   useEffect(() => {
+    if (dashboardCacheKey) {
+      const cachedDashboard = readClientCache<DashboardCachePayload>(
+        dashboardCacheKey,
+        DASHBOARD_CACHE_TTL_MS,
+      );
+
+      if (cachedDashboard) {
+        applyDashboardSnapshot(cachedDashboard.value);
+        if (!cachedDashboard.isStale) {
+          return;
+        }
+      }
+    }
+
     void loadData();
-  }, [isEmployeeMode]);
+  }, [dashboardCacheKey, isEmployeeMode]);
 
   useEffect(() => {
     if (!session) return;

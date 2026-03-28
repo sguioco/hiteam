@@ -1,1 +1,5 @@
-export { default } from "../news/page";
+import { redirect } from "next/navigation";
+
+export default function LegacyEmployeeAnnouncementsPage() {
+  redirect("/app/news");
+}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Globe, Hand, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,6 +48,8 @@ const texts = {
     welcomeDesc: 'Sign in to your HiTeam workspace',
     emailOrPhone: 'Email or phone',
     password: 'Password',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     signIn: 'Sign in',
     signingIn: 'Signing in...',
     demoAdmin: 'Demo admin',
@@ -59,6 +61,8 @@ const texts = {
     welcomeDesc: 'Войдите в рабочее пространство HiTeam',
     emailOrPhone: 'Email или телефон',
     password: 'Пароль',
+    showPassword: 'Показать пароль',
+    hidePassword: 'Скрыть пароль',
     signIn: 'Войти',
     signingIn: 'Входим...',
     demoAdmin: 'Демо админ',
@@ -70,6 +74,8 @@ const texts = {
     welcomeDesc: 'سجّل الدخول إلى مساحة عمل HiTeam',
     emailOrPhone: 'البريد الإلكتروني أو الهاتف',
     password: 'كلمة المرور',
+    showPassword: 'إظهار كلمة المرور',
+    hidePassword: 'إخفاء كلمة المرور',
     signIn: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول...',
     demoAdmin: 'مشرف تجريبي',
@@ -116,6 +122,7 @@ export function AuthPanel() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const t = texts[lang];
@@ -209,14 +216,26 @@ export function AuthPanel() {
               <label htmlFor="login-password" className="text-sm font-medium">
                 {t.password}
               </label>
-              <Input
-                id="login-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={passwordVisible ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  className="pr-11"
+                  required
+                />
+                <button
+                  type="button"
+                  aria-label={passwordVisible ? t.hidePassword : t.showPassword}
+                  title={passwordVisible ? t.hidePassword : t.showPassword}
+                  className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => setPasswordVisible((current) => !current)}
+                >
+                  {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button
