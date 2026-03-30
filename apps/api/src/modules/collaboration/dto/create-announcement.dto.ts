@@ -1,5 +1,5 @@
 import type { AnnouncementAudience } from '@prisma/client';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ANNOUNCEMENT_AUDIENCES } from '../../../common/constants/prisma-enum-values';
 
 export class CreateAnnouncementDto {
@@ -11,8 +11,18 @@ export class CreateAnnouncementDto {
   groupId?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  groupIds?: string[];
+
+  @IsOptional()
   @IsString()
   targetEmployeeId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetEmployeeIds?: string[];
 
   @IsOptional()
   @IsString()

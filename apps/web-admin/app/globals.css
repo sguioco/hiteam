@@ -87,6 +87,7 @@
 
 :root {
   --background-strong: #efe9df;
+  --hero-gradient: linear-gradient(135deg, #f8fbff 0%, #eef5ff 42%, #ffffff 100%);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -7580,6 +7581,52 @@ body {
   box-shadow: none;
 }
 
+.employee-directory-table-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  border: 1px solid rgba(20, 27, 45, 0.1);
+  border-radius: 22px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.employee-directory-table-shell {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.employee-directory-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(244, 247, 252, 0.96);
+}
+
+.employee-directory-table-head tr {
+  background: rgba(244, 247, 252, 0.92);
+}
+
+.employee-directory-table-head th {
+  border-bottom: 1px solid rgba(20, 27, 45, 0.1);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--muted-foreground);
+}
+
+.employee-directory-table-row td {
+  border-top: 1px solid rgba(20, 27, 45, 0.08);
+  background: #ffffff;
+  transition: background-color 180ms ease;
+}
+
+.employee-directory-table-row:hover td {
+  background: rgba(246, 248, 252, 0.76);
+}
+
 .employee-directory-list {
   display: grid;
   gap: 14px;
@@ -9187,6 +9234,11 @@ body {
   padding-right: 0.55em;
 }
 
+.team-tasks-focus-weekday.is-ru {
+  width: 12.5ch;
+  min-width: 12.5ch;
+}
+
 .team-tasks-focus-year {
   display: inline-block;
   padding-left: 0.34em;
@@ -9334,8 +9386,12 @@ body {
 
 .team-tasks-list {
   border-top: 0;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  gap: 0;
+  padding-bottom: 14px;
 }
 
 .team-tasks-filter-menu {
@@ -9400,13 +9456,15 @@ body {
 }
 
 .team-tasks-table-card {
-  --team-tasks-line-width: 0.5px;
-  --team-tasks-line-color: rgba(17, 17, 17, 0.18);
-  --team-tasks-line-color-strong: rgba(17, 17, 17, 0.22);
+  --team-tasks-line-width: 1px;
+  --team-tasks-line-color: rgba(20, 27, 45, 0.08);
+  --team-tasks-line-color-strong: rgba(20, 27, 45, 0.1);
   --team-tasks-columns: minmax(0, 46fr) minmax(170px, 18fr) minmax(170px, 18fr) minmax(170px, 18fr);
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
   border: var(--team-tasks-line-width) solid var(--team-tasks-line-color-strong) !important;
-  border-radius: 24px;
+  border-radius: 22px;
   overflow: hidden;
   box-shadow: none !important;
   background: #ffffff !important;
@@ -9525,8 +9583,8 @@ body {
 .team-tasks-table-row > td {
   background: #ffffff !important;
   border-bottom: 0 !important;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
+  padding-top: 11px !important;
+  padding-bottom: 11px !important;
   transition:
     background-color 180ms ease,
     box-shadow 180ms ease;
@@ -9541,6 +9599,14 @@ body {
   border-bottom: 0;
 }
 
+.team-tasks-table-row:last-of-type > td:first-child {
+  border-bottom-left-radius: 22px;
+}
+
+.team-tasks-table-row:last-of-type > td:last-child {
+  border-bottom-right-radius: 22px;
+}
+
 .team-tasks-table-row.is-open > td {
   border-bottom: 0 !important;
 }
@@ -9550,28 +9616,28 @@ body {
 }
 
 .team-tasks-table-row:hover > td {
-  background: rgba(234, 243, 255, 0.48) !important;
+  background: rgba(246, 248, 252, 0.76) !important;
 }
 
 .team-tasks-table-row.is-complete > td {
   background:
-    linear-gradient(90deg, rgba(236, 253, 243, 0.74), rgba(255, 255, 255, 0.96) 24%);
+    linear-gradient(90deg, rgba(248, 251, 255, 0.94), rgba(255, 255, 255, 1) 24%);
 }
 
 .team-tasks-table-row.is-open > td {
-  background: rgba(234, 243, 255, 0.58) !important;
+  background: rgba(246, 248, 252, 0.94) !important;
 }
 
 .team-tasks-detail-row > td {
   padding: 0 !important;
-  background: rgba(234, 243, 255, 0.58) !important;
+  background: rgba(246, 248, 252, 0.94) !important;
   border-top: 0 !important;
   border-bottom: 0 !important;
 }
 
 .team-tasks-table-card thead,
 .team-tasks-table-card .bg-secondary {
-  background: #ffffff !important;
+  background: rgba(244, 247, 252, 0.92) !important;
 }
 
 .team-tasks-head-progress {
@@ -9581,11 +9647,11 @@ body {
 .team-tasks-employee-status {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 500;
-  color: rgba(15, 23, 42, 0.82);
+  color: var(--muted-foreground);
 }
 
 .team-tasks-employee-status-dot {
@@ -9597,11 +9663,11 @@ body {
 }
 
 .team-tasks-employee-status.is-success {
-  color: #1fa160;
+  color: #29a36a;
 }
 
 .team-tasks-employee-status.is-gray {
-  color: #475569;
+  color: var(--muted-foreground);
 }
 
 .team-tasks-employee-status.is-error {
@@ -9629,7 +9695,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: #ffffff !important;
+  background: rgba(244, 247, 252, 0.96) !important;
 }
 
 .team-tasks-table-card thead > tr > th {
@@ -9641,17 +9707,17 @@ body {
 }
 
 .team-tasks-table-card thead th span.text-xs {
-  font-size: 0.94rem !important;
-  font-weight: 600 !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
   letter-spacing: -0.01em !important;
-  color: #161616 !important;
+  color: var(--muted-foreground) !important;
 }
 
 .team-tasks-row-button {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -9678,8 +9744,23 @@ body {
 .team-tasks-detail-panel {
   display: grid;
   gap: 0;
-  background: rgba(234, 243, 255, 0.58) !important;
+  background: rgba(246, 248, 252, 0.94) !important;
   border-top: 0;
+}
+
+.team-tasks-team-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--foreground);
+}
+
+.team-tasks-team-text.is-empty {
+  color: var(--muted-foreground);
 }
 
 .team-tasks-detail-card {
@@ -10297,6 +10378,11 @@ body {
   .team-tasks-focus-weekday {
     width: 5.2ch;
     min-width: 5.2ch;
+  }
+
+  .team-tasks-focus-weekday.is-ru {
+    width: 7.8ch;
+    min-width: 7.8ch;
   }
 
   .team-tasks-custom-range,

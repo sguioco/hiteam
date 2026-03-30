@@ -494,6 +494,8 @@ export type AnnouncementItem = {
   title: string;
   body: string;
   isPinned: boolean;
+  groupIds?: string[];
+  targetEmployeeIds?: string[];
   imageUrl?: string | null;
   imageAspectRatio?: AnnouncementImageAspectRatio | null;
   createdAt: string;

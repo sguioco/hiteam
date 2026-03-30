@@ -251,6 +251,7 @@ export async function loadMyProfile(): Promise<{
   primaryLocation: {
     id: string;
     name: string;
+    timezone?: string | null;
   } | null;
   position: {
     id: string;
@@ -743,9 +744,20 @@ export async function createManagerAnnouncement(input: {
   title: string;
   body: string;
   isPinned?: boolean;
+  groupId?: string;
+  groupIds?: string[];
+  targetEmployeeId?: string;
+  targetEmployeeIds?: string[];
   imageDataUrl?: string;
   imageAspectRatio?: AnnouncementImageAspectRatio;
 }) {
+  const normalizedGroupIds = Array.from(
+    new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean)),
+  );
+  const normalizedTargetEmployeeIds = Array.from(
+    new Set([input.targetEmployeeId, ...(input.targetEmployeeIds ?? [])].filter(Boolean)),
+  );
+
   return authRequest<AnnouncementItem>('/collaboration/announcements', {
     method: 'POST',
     body: JSON.stringify({
@@ -753,6 +765,14 @@ export async function createManagerAnnouncement(input: {
       title: input.title,
       body: input.body,
       isPinned: input.isPinned ?? false,
+      ...(normalizedGroupIds.length === 1 ? { groupId: normalizedGroupIds[0] } : {}),
+      ...(normalizedGroupIds.length > 1 ? { groupIds: normalizedGroupIds } : {}),
+      ...(normalizedTargetEmployeeIds.length === 1
+        ? { targetEmployeeId: normalizedTargetEmployeeIds[0] }
+        : {}),
+      ...(normalizedTargetEmployeeIds.length > 1
+        ? { targetEmployeeIds: normalizedTargetEmployeeIds }
+        : {}),
       ...(input.imageDataUrl ? { imageDataUrl: input.imageDataUrl } : {}),
       ...(input.imageAspectRatio ? { imageAspectRatio: input.imageAspectRatio } : {}),
     }),
@@ -836,9 +856,35 @@ export async function loadManagerApprovalInbox(): Promise<ApprovalInboxItem[]> {
   return Array.isArray(response) ? response : (response.items ?? []);
 }
 
-export async function loadManagerTasks(): Promise<TaskItem[]> {
-  const response = await authRequest<TaskItem[] | { items: TaskItem[] }>('/collaboration/tasks');
-  return Array.isArray(response) ? response : (response.items ?? []);
+export async function loadManagerTasks(query?: {
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<TaskItem[]> {
+  const searchParams = new URLSearchParams();
+
+  if (query?.date) {
+    searchParams.set('date', query.date);
+  }
+
+  if (query?.dateFrom) {
+    searchParams.set('dateFrom', query.dateFrom);
+  }
+
+  if (query?.dateTo) {
+    searchParams.set('dateTo', query.dateTo);
+  }
+
+  const suffix = searchParams.toString();
+  const response = await authRequest<
+    TaskItem[] | { items?: TaskItem[]; tasks?: TaskItem[] }
+  >(`/collaboration/tasks${suffix ? `?${suffix}` : ''}`);
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  return response.tasks ?? response.items ?? [];
 }
 
 export async function loadManagerAttendanceHistory(employeeId: string, dateFrom: string, dateTo: string) {
@@ -865,6 +911,7 @@ export async function loadManagerEmployees(): Promise<Array<{
   primaryLocation: {
     id: string;
     name: string;
+    timezone?: string | null;
   } | null;
   avatar?: any;
 }>> {
@@ -893,6 +940,7 @@ export async function loadManagerEmployees(): Promise<Array<{
       ? {
           id: emp.primaryLocation.id,
           name: emp.primaryLocation.name,
+          timezone: emp.primaryLocation.timezone ?? null,
         }
       : null,
       avatar: resolveEmployeeAvatarSource({

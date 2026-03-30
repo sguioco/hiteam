@@ -311,7 +311,7 @@ const EmployeeRow = ({
   onSelect: (employeeId: string) => void;
 }) => (
   <tr
-    className="cursor-pointer border-t border-border transition-colors hover:bg-secondary/30"
+    className="employee-directory-table-row cursor-pointer transition-colors"
     onClick={() => onSelect(emp.id)}
   >
     <td className="px-3 py-2.5">
@@ -381,8 +381,8 @@ const EmployeeRow = ({
 );
 
 const TableHead = () => (
-  <thead>
-    <tr className="bg-secondary/50">
+  <thead className="employee-directory-table-head">
+    <tr>
       <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
         ФИО
       </th>
@@ -1424,15 +1424,12 @@ const Employees = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
-      <div className="scrollbar-hide mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-y-auto space-y-5 p-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-heading font-bold text-foreground">
               Сотрудники
             </h1>
-            <span className="text-sm font-heading text-muted-foreground">
-              {filteredEmployees.length} чел.
-            </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex overflow-hidden rounded-xl border border-border">
@@ -1444,7 +1441,7 @@ const Employees = () => {
                 }`}
                 onClick={() => setViewMode("employees")}
               >
-                <Users className="h-4 w-4" /> Сотрудники
+                <Users className="h-4 w-4" /> Сотрудники {filteredEmployees.length}
               </button>
               <button
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors ${
@@ -1454,7 +1451,7 @@ const Employees = () => {
                 }`}
                 onClick={() => setViewMode("groups")}
               >
-                <FolderOpen className="h-4 w-4" /> Группы
+                <FolderOpen className="h-4 w-4" /> Группы {groups.length}
               </button>
             </div>
             <Button
@@ -1484,7 +1481,13 @@ const Employees = () => {
           </div>
         </div>
 
-        <div className="dashboard-card">
+        <div
+          className={
+            viewMode === "employees"
+              ? "flex min-h-0 flex-1 flex-col"
+              : "min-h-0 overflow-y-auto pr-1"
+          }
+        >
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <div className="relative min-w-[280px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1578,21 +1581,23 @@ const Employees = () => {
             </div>
           ) : viewMode === "employees" ? (
             filteredEmployees.length > 0 ? (
-              <div className="overflow-hidden rounded-xl border border-border">
-                <table className="w-full text-sm">
-                  <TableHead />
-                  <tbody>
-                    {filteredEmployees.map((employee) => (
-                      <EmployeeRow
-                        emp={employee}
-                        key={employee.id}
-                        onMove={openMoveDialog}
-                        onOpenTask={openTaskDialogForEmployee}
-                        onSelect={setSelectedEmployeeId}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+              <div className="employee-directory-table-card flex-1">
+                <div className="employee-directory-table-shell">
+                  <table className="w-full text-sm">
+                    <TableHead />
+                    <tbody>
+                      {filteredEmployees.map((employee) => (
+                        <EmployeeRow
+                          emp={employee}
+                          key={employee.id}
+                          onMove={openMoveDialog}
+                          onOpenTask={openTaskDialogForEmployee}
+                          onSelect={setSelectedEmployeeId}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
               <p className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">

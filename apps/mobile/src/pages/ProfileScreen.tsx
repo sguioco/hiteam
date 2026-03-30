@@ -9,11 +9,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getLanguageLabel, useI18n } from "../../lib/i18n";
+import { readScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
 
 const ProfileScreen = () => {
+  const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, t } = useI18n();
@@ -29,7 +31,22 @@ const ProfileScreen = () => {
     let cancelled = false;
 
     async function loadProfile() {
-      setLoading(true);
+      const cached = await readScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
+        "profile-screen",
+        PROFILE_SCREEN_CACHE_TTL_MS,
+      );
+
+      if (cached && !cancelled) {
+        setProfile(cached.value);
+        setAvatarLoadFailed(false);
+        setLoading(false);
+        if (!cached.isStale) {
+          return;
+        }
+      } else {
+        setLoading(true);
+      }
+
       setError(null);
 
       try {
@@ -38,6 +55,7 @@ const ProfileScreen = () => {
         if (!cancelled) {
           setProfile(nextProfile);
           setAvatarLoadFailed(false);
+          void writeScreenCache("profile-screen", nextProfile);
         }
       } catch (nextError) {
         if (!cancelled) {

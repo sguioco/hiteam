@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { ActionSheetIOS, Alert, Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
 import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
@@ -24,6 +24,7 @@ type TaskPhoto = {
   label: string;
   capturedAt: string;
   uri: string;
+  isPending?: boolean;
 };
 
 type PhotoSourceAction = 'add' | 'edit';
@@ -102,6 +103,7 @@ export default function TaskList({
   const [photoSourceAction, setPhotoSourceAction] = useState<PhotoSourceAction>('add');
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [pendingPhotosByTaskId, setPendingPhotosByTaskId] = useState<Record<string, TaskPhoto[]>>({});
 
   const activeTasks = tasks.filter((task) => task.status !== 'DONE' && task.status !== 'CANCELLED');
   const completedTasks = tasks.filter((task) => task.status === 'DONE');
@@ -114,7 +116,16 @@ export default function TaskList({
       >,
     [locale, tasks],
   );
-  const activeTaskPhotos = activeTask ? taskPhotos[activeTask.id] ?? [] : [];
+  const activeTaskPhotos = useMemo(() => {
+    if (!activeTask) {
+      return [];
+    }
+
+    return [
+      ...(taskPhotos[activeTask.id] ?? []),
+      ...(pendingPhotosByTaskId[activeTask.id] ?? []),
+    ];
+  }, [activeTask, pendingPhotosByTaskId, taskPhotos]);
   const selectedPhoto = activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ?? activeTaskPhotos[0] ?? null;
   const activeTaskHasPhotos = activeTaskPhotos.length > 0;
   const photoReportLayout = activeTaskHasPhotos
@@ -214,36 +225,91 @@ export default function TaskList({
       return;
     }
 
-    const currentPhotos = taskPhotos[activeTask.id] ?? [];
+    const currentPhotos = [
+      ...(taskPhotos[activeTask.id] ?? []),
+      ...(pendingPhotosByTaskId[activeTask.id] ?? []),
+    ];
     if (action === 'add' && currentPhotos.length >= PHOTO_REPORT_LIMIT) {
       hapticError();
       setMediaError(photoLimitErrorMessage());
       return;
     }
 
-    const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const mimeType = asset.mimeType ?? 'image/jpeg';
-    const fileExtension = mimeType.split('/')[1] ?? 'jpg';
-    const fileName = asset.fileName?.trim() || `task-photo-${Date.now()}.${fileExtension}`;
-    const updatedTask = await addMyTaskPhotoProof(activeTask.id, {
-      action: action === 'edit' ? 'replace' : 'add',
-      fileName,
-      dataUrl: `data:${mimeType};base64,${base64}`,
-      ...(action === 'edit' && selectedPhotoId ? { targetProofId: selectedPhotoId } : {}),
-    });
+    const pendingPhotoId = `pending:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    const pendingPhoto: TaskPhoto = {
+      id: pendingPhotoId,
+      label: `Photo ${currentPhotos.length + 1}`,
+      capturedAt: new Date().toLocaleTimeString(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+      uri: asset.uri,
+      isPending: true,
+    };
 
-    onTaskUpdate?.(updatedTask);
+    if (action === 'add') {
+      setPendingPhotosByTaskId((current) => ({
+        ...current,
+        [activeTask.id]: [...(current[activeTask.id] ?? []), pendingPhoto],
+      }));
+      setSelectedPhotoId(pendingPhotoId);
+    }
 
-    const nextPhotos = buildTaskPhotos(updatedTask, locale);
-    const nextSelected =
-      action === 'edit'
-        ? nextPhotos[nextPhotos.length - 1] ?? null
-        : nextPhotos[nextPhotos.length - 1] ?? null;
+    try {
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const fileExtension = mimeType.split('/')[1] ?? 'jpg';
+      const fileName = asset.fileName?.trim() || `task-photo-${Date.now()}.${fileExtension}`;
+      const updatedTask = await addMyTaskPhotoProof(activeTask.id, {
+        action: action === 'edit' ? 'replace' : 'add',
+        fileName,
+        dataUrl: `data:${mimeType};base64,${base64}`,
+        ...(action === 'edit' && selectedPhotoId ? { targetProofId: selectedPhotoId } : {}),
+      });
 
-    setSelectedPhotoId(nextSelected?.id ?? null);
-    hapticSuccess();
+      setPendingPhotosByTaskId((current) => {
+        const nextTaskPhotos = (current[activeTask.id] ?? []).filter((photo) => photo.id !== pendingPhotoId);
+
+        if (nextTaskPhotos.length === 0) {
+          const { [activeTask.id]: _removed, ...rest } = current;
+          return rest;
+        }
+
+        return {
+          ...current,
+          [activeTask.id]: nextTaskPhotos,
+        };
+      });
+
+      onTaskUpdate?.(updatedTask);
+
+      const nextPhotos = buildTaskPhotos(updatedTask, locale);
+      const nextSelected = nextPhotos[nextPhotos.length - 1] ?? null;
+
+      setSelectedPhotoId(nextSelected?.id ?? null);
+      hapticSuccess();
+    } catch (error) {
+      if (action === 'add') {
+        setPendingPhotosByTaskId((current) => {
+          const nextTaskPhotos = (current[activeTask.id] ?? []).filter((photo) => photo.id !== pendingPhotoId);
+
+          if (nextTaskPhotos.length === 0) {
+            const { [activeTask.id]: _removed, ...rest } = current;
+            return rest;
+          }
+
+          return {
+            ...current,
+            [activeTask.id]: nextTaskPhotos,
+          };
+        });
+      }
+
+      throw error;
+    }
   }
 
   async function pickFromCamera() {
@@ -362,32 +428,42 @@ export default function TaskList({
       const iconColor = completed ? '#22a55b' : hasPhotos ? '#6d73ff' : '#6b7a90';
 
       return (
-        <View
-          className={`h-8 w-8 items-center justify-center rounded-full ${
-            completed ? 'bg-[#dcfce7]' : 'bg-white'
-          }`}
-          style={{ borderWidth: 1.5, borderColor: completed ? '#7fd59b' : '#d6def5' }}
-        >
-          <Ionicons color={iconColor} name="camera-outline" size={15} />
+        <View className="h-8 w-8 shrink-0 items-center justify-center">
+          <View
+            className={`h-8 w-8 items-center justify-center rounded-full ${
+              completed ? 'bg-[#dcfce7]' : 'bg-white'
+            }`}
+            style={{ borderWidth: 1.5, borderColor: completed ? '#7fd59b' : '#d6def5' }}
+          >
+            <Ionicons color={iconColor} name="camera-outline" size={15} />
+          </View>
         </View>
       );
     }
 
     if (completed) {
       return (
-        <View className="h-8 w-8 items-center justify-center rounded-full bg-[#e8fbef]">
-          <Ionicons color="#1fa160" name="checkmark" size={18} />
+        <View className="h-8 w-8 shrink-0 items-center justify-center">
+          <View className="h-8 w-8 items-center justify-center rounded-full bg-[#e8fbef]">
+            <Ionicons color="#1fa160" name="checkmark" size={18} />
+          </View>
         </View>
       );
     }
 
-    return <View className="h-6 w-6 rounded-full border border-[#cfd7eb] bg-white" />;
+    return (
+      <View className="h-8 w-8 shrink-0 items-center justify-center">
+        <View className="h-6 w-6 rounded-full border border-[#cfd7eb] bg-white" />
+      </View>
+    );
   }
 
   function renderTaskRow(task: TaskItem, index: number, completed = false) {
     const title = normalizeTaskTitle(task.title);
     const isUpdating = updatingTaskIds.includes(task.id);
-    const photoCount = taskPhotos[task.id]?.length ?? 0;
+    const photoCount =
+      (taskPhotos[task.id]?.length ?? 0) +
+      (pendingPhotosByTaskId[task.id]?.length ?? 0);
 
     return (
       <Animated.View
@@ -528,13 +604,20 @@ export default function TaskList({
                               haptic="selection"
                               onPress={() => setSelectedPhotoId(photo.id)}
                             >
-                              <Text
-                                className={`font-display text-sm font-bold ${
-                                  isSelected ? 'text-white' : 'text-foreground'
-                                }`}
-                              >
-                                {index + 1}
-                              </Text>
+                              {photo.isPending ? (
+                                <ActivityIndicator
+                                  color={isSelected ? '#ffffff' : '#6d73ff'}
+                                  size="small"
+                                />
+                              ) : (
+                                <Text
+                                  className={`font-display text-sm font-bold ${
+                                    isSelected ? 'text-white' : 'text-foreground'
+                                  }`}
+                                >
+                                  {index + 1}
+                                </Text>
+                              )}
                             </PressableScale>
                           );
                         })}
@@ -553,16 +636,27 @@ export default function TaskList({
                 {selectedPhoto ? (
                   <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
                     <Image source={{ uri: selectedPhoto.uri }} style={StyleSheet.absoluteFillObject} />
-                    <PressableScale
-                      className="absolute right-4 top-4 h-8 w-8 items-center justify-center"
-                      disabled={mediaBusy}
-                      haptic="selection"
-                      onPress={() => {
-                        void deleteSelectedPhoto();
-                      }}
-                    >
-                      <Ionicons color="#ffffff" name="close" size={16} />
-                    </PressableScale>
+                    {selectedPhoto.isPending ? (
+                      <View className="absolute inset-0 items-center justify-center bg-[#0f172a]/18">
+                        <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">
+                          <ActivityIndicator color="#546cf2" size="large" />
+                          <Text className="font-body text-sm text-[#24314b]">
+                            Uploading photo...
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <PressableScale
+                        className="absolute right-4 top-4 h-8 w-8 items-center justify-center"
+                        disabled={mediaBusy}
+                        haptic="selection"
+                        onPress={() => {
+                          void deleteSelectedPhoto();
+                        }}
+                      >
+                        <Ionicons color="#ffffff" name="close" size={16} />
+                      </PressableScale>
+                    )}
                     <View
                       className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
                       style={{ backgroundColor: 'rgba(15, 23, 42, 0.38)' }}
@@ -571,7 +665,9 @@ export default function TaskList({
                         {selectedPhoto.label}
                       </Text>
                       <Text className="mt-2 font-body text-sm text-white/90">
-                        {t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
+                        {selectedPhoto.isPending
+                          ? 'Uploading...'
+                          : t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
                       </Text>
                     </View>
                   </View>

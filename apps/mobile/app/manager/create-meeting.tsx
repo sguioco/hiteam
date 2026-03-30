@@ -20,6 +20,7 @@ import { getDateLocale, useI18n } from '../../lib/i18n';
 import { SmartMeetingMeta, appendTaskMeta } from '../../lib/task-meta';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
+import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
 
 type Step = 'details' | 'confirm';
 type TimeTarget = 'start' | 'end';
@@ -541,17 +542,7 @@ export default function CreateMeetingScreen() {
                     <View className="flex-row items-center justify-between gap-3">
                       <Text className="text-[13px] font-semibold text-muted-foreground">{t('manager.meetingSelectedCount', { count: invitedEmployeeIds.length })}</Text>
                     </View>
-                    <View className="mt-3 flex-row flex-wrap gap-2">
-                      {invitedEmployees.map((employee) => (
-                        <View key={employee.id} className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#eef2ff]">
-                          {employee.avatar ? (
-                            <Image source={employee.avatar} className="h-9 w-9 rounded-full" resizeMode="cover" />
-                          ) : (
-                            <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-                          )}
-                        </View>
-                      ))}
-                    </View>
+                    <ParticipantAvatarStrip participants={invitedEmployees} />
                     <View className="mt-3 gap-2">
                       {selectedGroups.map((group) => (
                         <View key={group.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">

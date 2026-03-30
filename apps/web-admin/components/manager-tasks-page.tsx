@@ -20,6 +20,7 @@ import {
   CircleX,
   ExternalLink,
   Filter,
+  Search,
   UsersRound,
 } from "lucide-react";
 import type { SortDescriptor } from "react-aria-components";
@@ -27,7 +28,6 @@ import { AdminShell } from "@/components/admin-shell";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
-import { Badge } from "@/components/base/badges/badges";
 import {
   Dialog,
   DialogContent,
@@ -35,11 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { AppSelectField } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/api";
 import { getSession, hasManagerAccess } from "@/lib/auth";
 import { toAdminHref } from "@/lib/admin-routes";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
@@ -430,11 +432,27 @@ function getEmployeeSubtitle(
   return employee.position?.name ?? employee.department?.name ?? employee.primaryLocation?.name ?? null;
 }
 
-const teamBadgeColors = ["blue", "indigo", "purple", "sky", "gray"] as const;
+const TASKS_CACHE_TTL_MS = 60_000;
+
+type ManagerTasksCachePayload = {
+  tasks: TaskItem[];
+  employees: EmployeeDirectoryItem[];
+  groups: WorkGroupItem[];
+  liveSessions: AttendanceLiveSession[];
+};
+
+function buildManagerTasksCacheKey(session: ReturnType<typeof getSession>) {
+  return session ? `manager-tasks:${session.user.id}` : null;
+}
 
 export function ManagerTasksPage() {
   const router = useRouter();
   const { locale } = useI18n();
+  const session = getSession();
+  const tasksCacheKey = useMemo(
+    () => buildManagerTasksCacheKey(session),
+    [session],
+  );
   const [accessChecked, setAccessChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -454,12 +472,20 @@ export function ManagerTasksPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [taskPresenceFilter, setTaskPresenceFilter] = useState("all");
   const [taskCountFilter, setTaskCountFilter] = useState("0");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: "tasks",
     direction: "ascending",
   });
+
+  function applyCachedSnapshot(snapshot: ManagerTasksCachePayload) {
+    setTasks(snapshot.tasks);
+    setEmployees(snapshot.employees);
+    setGroups(snapshot.groups);
+    setLiveSessions(snapshot.liveSessions);
+  }
 
   useEffect(() => {
     const session = getSession();
@@ -482,14 +508,25 @@ export function ManagerTasksPage() {
       return;
     }
 
-    const session = getSession();
     if (!session) {
       return;
     }
 
     let cancelled = false;
+    const cached = tasksCacheKey
+      ? readClientCache<ManagerTasksCachePayload>(
+          tasksCacheKey,
+          TASKS_CACHE_TTL_MS,
+        )
+      : null;
 
-    setLoading(true);
+    if (cached) {
+      applyCachedSnapshot(cached.value);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
 
     void Promise.all([
@@ -530,7 +567,10 @@ export function ManagerTasksPage() {
     })
       .then((groupResponse) => {
         if (cancelled) return;
-        setGroups(Array.isArray(groupResponse) ? groupResponse : groupResponse.groups ?? []);
+        const nextGroups = Array.isArray(groupResponse)
+          ? groupResponse
+          : groupResponse.groups ?? [];
+        setGroups(nextGroups);
       })
       .catch(() => {
         if (cancelled) return;
@@ -552,7 +592,20 @@ export function ManagerTasksPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessChecked, locale]);
+  }, [accessChecked, locale, tasksCacheKey]);
+
+  useEffect(() => {
+    if (!tasksCacheKey || loading) {
+      return;
+    }
+
+    writeClientCache(tasksCacheKey, {
+      tasks,
+      employees,
+      groups,
+      liveSessions,
+    } satisfies ManagerTasksCachePayload);
+  }, [employees, groups, liveSessions, loading, tasks, tasksCacheKey]);
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
@@ -759,11 +812,22 @@ export function ManagerTasksPage() {
 
   const filteredRows = useMemo(() => {
     const minTasks = Number(taskCountFilter) || 0;
+    const searchQuery = employeeSearch.trim().toLowerCase();
     const selectedGroupName = groupFilter
       ? groups.find((group) => group.id === groupFilter)?.name ?? null
       : null;
 
     return tableRows.filter((row) => {
+      if (
+        searchQuery &&
+        ![row.employeeName, row.employeeSubtitle ?? "", row.teams.join(" ")]
+          .join(" ")
+          .toLowerCase()
+          .includes(searchQuery)
+      ) {
+        return false;
+      }
+
       if (selectedGroupName && !row.teams.includes(selectedGroupName)) {
         return false;
       }
@@ -794,7 +858,15 @@ export function ManagerTasksPage() {
 
       return true;
     });
-  }, [groupFilter, groups, statusFilter, tableRows, taskCountFilter, taskPresenceFilter]);
+  }, [
+    employeeSearch,
+    groupFilter,
+    groups,
+    statusFilter,
+    tableRows,
+    taskCountFilter,
+    taskPresenceFilter,
+  ]);
 
   const teamSummary = useMemo(() => {
     return filteredRows.reduce(
@@ -1159,27 +1231,11 @@ export function ManagerTasksPage() {
 
   function renderTeamsBadges(item: TaskTableRow) {
     if (!item.teams.length) {
-      return null;
+      return <span className="team-tasks-team-text is-empty">—</span>;
     }
 
     return (
-      <div className="flex flex-wrap gap-1.5">
-        {item.teams.slice(0, 2).map((team, index) => (
-          <Badge
-            color={teamBadgeColors[index % teamBadgeColors.length]}
-            key={`${item.id}-${team}`}
-            size="sm"
-            type="color"
-          >
-            {team}
-          </Badge>
-        ))}
-        {item.teams.length > 2 ? (
-          <Badge color="gray" size="sm" type="color">
-            +{item.teams.length - 2}
-          </Badge>
-        ) : null}
-      </div>
+      <span className="team-tasks-team-text">{item.teams.join(", ")}</span>
     );
   }
 
@@ -1194,7 +1250,13 @@ export function ManagerTasksPage() {
               }`}
             >
               {rangeHero.weekday ? (
-                <span className="team-tasks-focus-weekday">{rangeHero.weekday}</span>
+                <span
+                  className={`team-tasks-focus-weekday${
+                    locale === "ru" ? " is-ru" : ""
+                  }`}
+                >
+                  {rangeHero.weekday}
+                </span>
               ) : null}
               <span className="team-tasks-focus-text">{rangeHero.primary}</span>
               {rangeHero.separateYear && rangeHero.year ? (
@@ -1394,6 +1456,19 @@ export function ManagerTasksPage() {
           </section>
             ) : (
           <section className="team-tasks-list">
+              <div className="relative mb-2 min-w-[280px]">
+                <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
+                  onChange={(event) => setEmployeeSearch(event.target.value)}
+                  placeholder={localize(
+                    locale,
+                    "Поиск сотрудника...",
+                    "Search employee...",
+                  )}
+                  value={employeeSearch}
+                />
+              </div>
               <div className="team-tasks-table-card">
                 <div className="team-tasks-table-shell">
                   <Table
@@ -1518,16 +1593,15 @@ export function ManagerTasksPage() {
                                   alt={item.employeeName}
                                   className="shrink-0"
                                   initials={item.employeeInitials}
-                                  rounded={false}
                                   size="sm"
                                   src={item.employeeAvatarUrl}
                                 />
                                 <div className="min-w-0 space-y-0.5">
-                                  <p className="truncate text-sm font-semibold text-primary">
+                                  <p className="truncate text-base font-medium text-[color:var(--foreground)]">
                                     {item.employeeName}
                                   </p>
                                   {item.employeeSubtitle ? (
-                                    <p className="truncate text-sm text-tertiary">
+                                    <p className="truncate text-sm text-[color:var(--muted-foreground)]">
                                       {item.employeeSubtitle}
                                     </p>
                                   ) : null}
@@ -1562,7 +1636,7 @@ export function ManagerTasksPage() {
                               onClick={() => toggleExpandedEmployee(item.id)}
                               type="button"
                             >
-                              <strong className="text-base font-semibold text-primary">
+                              <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
                                 {item.tasksProgressLabel}
                               </strong>
                             </button>

@@ -17,6 +17,7 @@ import {
 } from '../../lib/manager-group-options';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
+import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
 
 const PRIORITY_OPTIONS = [
   { label: 'Low', value: 'LOW' as const },
@@ -496,17 +497,7 @@ export default function CreateTaskScreen() {
                   </PressableScale>
                 </View>
 
-                <View className="mt-3 flex-row flex-wrap gap-2">
-                  {selectedAssignees.map((employee) => (
-                    <View key={employee.id} className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#eef2ff]">
-                      {employee.avatar ? (
-                        <Image source={employee.avatar} className="h-9 w-9 rounded-full" resizeMode="cover" />
-                      ) : (
-                        <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
+                <ParticipantAvatarStrip participants={selectedAssignees} />
 
                 <View className="mt-3 gap-2">
                   {selectedGroups.map((group) => (

@@ -44,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import { getSession } from "@/lib/auth";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
 import { cn } from "@/lib/utils";
@@ -276,6 +277,12 @@ const requestTypeConfig: Record<
   },
 };
 
+const REQUESTS_CACHE_TTL_MS = 60_000;
+
+function buildRequestsCacheKey(session: ReturnType<typeof getSession>) {
+  return session ? `requests-inbox:${session.user.id}` : null;
+}
+
 function formatDate(value: string, locale = "ru-RU") {
   return new Date(value).toLocaleDateString(locale, {
     day: "numeric",
@@ -359,6 +366,8 @@ function applyDecisionToItem(
 
 export default function Requests() {
   const { locale } = useI18n();
+  const session = getSession();
+  const requestsCacheKey = buildRequestsCacheKey(session);
   const ui = requestsCopy[locale];
   const localeTag = locale === "ru" ? "ru-RU" : "en-US";
   const [items, setItems] = useState<ApprovalInboxItem[]>([]);
@@ -401,7 +410,6 @@ export default function Requests() {
     setError(null);
     setMessage(null);
 
-    const session = getSession();
     const isDemoSession = isDemoAccessToken(session?.accessToken);
 
     try {
@@ -437,8 +445,32 @@ export default function Requests() {
   }
 
   useEffect(() => {
+    const cached = requestsCacheKey
+      ? readClientCache<ApprovalInboxItem[]>(
+          requestsCacheKey,
+          REQUESTS_CACHE_TTL_MS,
+        )
+      : null;
+
+    if (cached) {
+      setItems(cached.value);
+      setIsMockMode(false);
+      setLoading(false);
+      if (!cached.isStale) {
+        return;
+      }
+    }
+
     void loadInbox();
-  }, [locale]);
+  }, [locale, requestsCacheKey]);
+
+  useEffect(() => {
+    if (!requestsCacheKey || isMockMode || loading) {
+      return;
+    }
+
+    writeClientCache(requestsCacheKey, items);
+  }, [isMockMode, items, loading, requestsCacheKey]);
 
   const counts = useMemo(
     () => ({

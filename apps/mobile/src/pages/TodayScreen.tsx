@@ -1,28 +1,121 @@
-import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import type { AttendanceStatusResponse } from '@smart/types';
+import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
+import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
 import TaskList from '../components/TaskList';
 import { loadAttendanceStatus, loadMyProfile, loadMyShifts, loadMyTasks, updateMyTaskStatus } from '../../lib/api';
-import { isTaskMeeting, isTaskOpen, parseTaskDueAt, startOfDay, taskDueToday } from '../../lib/task-utils';
+import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
 
 type TodayScreenProps = {
   onOpenOverdue?: () => void;
 };
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
 
-function formatDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function normalizeTodayTaskTitle(title: string) {
+  return title
+    .replace(/^Employee recurring:\s*/i, '')
+    .replace(/^Owner recurring:\s*/i, '')
+    .trim()
+    .toLowerCase();
+}
+
+function getTodayTaskAnchorDate(task: TaskItem) {
+  const candidates = [task.dueAt, task.occurrenceDate, task.createdAt];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getTodayTaskDuplicateKey(
+  task: TaskItem,
+  timeZone?: string | null,
+) {
+  const anchorDate = getTodayTaskAnchorDate(task);
+  const anchorKey = anchorDate
+    ? formatDateKeyInTimeZone(anchorDate, timeZone)
+    : 'no-date';
+  const kindKey = isTaskMeeting(task) ? 'meeting' : 'task';
+  const photoKey = task.requiresPhoto ? 'photo' : 'plain';
+
+  return `${kindKey}|${photoKey}|${normalizeTodayTaskTitle(task.title)}|${anchorKey}`;
+}
+
+function taskAnchorsToday(
+  task: TaskItem,
+  dateKey: string,
+  timeZone?: string | null,
+) {
+  const anchorDate = getTodayTaskAnchorDate(task);
+  if (!anchorDate) return false;
+
+  return formatDateKeyInTimeZone(anchorDate, timeZone) === dateKey;
+}
+
+function choosePreferredTodayTask(current: TaskItem, candidate: TaskItem) {
+  const currentHasPhotos = current.photoProofs.some((proof) => !proof.deletedAt && !proof.supersededByProofId);
+  const candidateHasPhotos = candidate.photoProofs.some((proof) => !proof.deletedAt && !proof.supersededByProofId);
+
+  const currentScore =
+    (current.requiresPhoto ? 100 : 0) +
+    (currentHasPhotos ? 40 : 0) +
+    (!current.isRecurring ? 20 : 0) +
+    (current.status !== 'DONE' && current.status !== 'CANCELLED' ? 10 : 0);
+
+  const candidateScore =
+    (candidate.requiresPhoto ? 100 : 0) +
+    (candidateHasPhotos ? 40 : 0) +
+    (!candidate.isRecurring ? 20 : 0) +
+    (candidate.status !== 'DONE' && candidate.status !== 'CANCELLED' ? 10 : 0);
+
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current;
+  }
+
+  return new Date(candidate.updatedAt).getTime() >= new Date(current.updatedAt).getTime()
+    ? candidate
+    : current;
+}
+
+function collapseDuplicateTodayTasks(
+  tasks: TaskItem[],
+  timeZone?: string | null,
+) {
+  const byKey = new Map<string, TaskItem>();
+
+  for (const task of tasks) {
+    const key = getTodayTaskDuplicateKey(task, timeZone);
+    const current = byKey.get(key);
+
+    if (!current) {
+      byKey.set(key, task);
+      continue;
+    }
+
+    byKey.set(key, choosePreferredTodayTask(current, task));
+  }
+
+  return Array.from(byKey.values());
 }
 
 function toAttendanceShift(shift: ShiftItem) {
@@ -47,17 +140,34 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<string[]>([]);
+  const businessTimeZone = profile?.primaryLocation?.timezone ?? null;
+  const todayDateKey = useMemo(
+    () => formatDateKeyInTimeZone(new Date(), businessTimeZone),
+    [businessTimeZone],
+  );
 
-  async function refreshAttendance() {
+  const refreshAttendance = useCallback(async () => {
     setAttendanceLoading(true);
     setAttendanceError(null);
 
     try {
-      const [nextStatus, nextProfile, nextShifts, nextTasks] = await Promise.all([
+      const nextProfile = await loadMyProfile();
+      const now = new Date();
+      const previousDateKey = formatDateKeyInTimeZone(
+        addDays(now, -1),
+        nextProfile.primaryLocation?.timezone,
+      );
+      const nextDayDateKey = formatDateKeyInTimeZone(
+        addDays(now, 1),
+        nextProfile.primaryLocation?.timezone,
+      );
+      const [nextStatus, nextShifts, nextTasks] = await Promise.all([
         loadAttendanceStatus(),
-        loadMyProfile(),
         loadMyShifts(),
-        loadMyTasks({ date: formatDateKey(new Date()) }),
+        loadMyTasks({
+          dateFrom: previousDateKey,
+          dateTo: nextDayDateKey,
+        }),
       ]);
       setAttendanceStatus(nextStatus);
       setProfile(nextProfile);
@@ -68,37 +178,57 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     } finally {
       setAttendanceLoading(false);
     }
-  }
+  }, [t]);
 
-  useEffect(() => {
-    void refreshAttendance();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void refreshAttendance();
+    }, [refreshAttendance]),
+  );
+
+  const visibleTasks = useMemo(
+    () => collapseDuplicateTodayTasks(tasks, businessTimeZone),
+    [businessTimeZone, tasks],
+  );
 
   const todayTasks = useMemo(
-    () => tasks.filter((task) => !isTaskMeeting(task) && taskDueToday(task)),
-    [tasks],
+    () =>
+      visibleTasks.filter(
+        (task) =>
+          !isTaskMeeting(task) &&
+          taskAnchorsToday(task, todayDateKey, businessTimeZone),
+      ),
+    [businessTimeZone, todayDateKey, visibleTasks],
   );
 
   const todayMeetings = useMemo(
     () =>
-      tasks.filter(
+      visibleTasks.filter(
         (task) =>
-          task.status !== 'DONE' && task.status !== 'CANCELLED' && isTaskMeeting(task) && taskDueToday(task),
+          task.status !== 'DONE' &&
+          task.status !== 'CANCELLED' &&
+          isTaskMeeting(task) &&
+          taskAnchorsToday(task, todayDateKey, businessTimeZone),
       ),
-    [tasks],
+    [businessTimeZone, todayDateKey, visibleTasks],
   );
 
   const overdueCount = useMemo(() => {
-    const todayStart = startOfDay(new Date());
-    return tasks.filter((task) => {
+    return visibleTasks.filter((task) => {
       if (!isTaskOpen(task.status)) {
         return false;
       }
 
       const dueAt = parseTaskDueAt(task);
-      return Boolean(dueAt && startOfDay(dueAt).getTime() < todayStart.getTime());
+      return Boolean(
+        dueAt &&
+          isDateKeyBefore(
+            formatDateKeyInTimeZone(dueAt, businessTimeZone),
+            todayDateKey,
+          ),
+      );
     }).length;
-  }, [tasks]);
+  }, [businessTimeZone, todayDateKey, visibleTasks]);
 
   const effectiveAttendanceStatus = useMemo<AttendanceStatusResponse | null>(() => {
     if (!attendanceStatus) {
@@ -152,16 +282,23 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   }, [attendanceStatus, shifts]);
 
   function openAttendanceAction() {
-    if (!effectiveAttendanceStatus?.shift) {
+    if (!effectiveAttendanceStatus) {
       return;
     }
 
-    if (effectiveAttendanceStatus.attendanceState === 'not_checked_in') {
+    if (
+      effectiveAttendanceStatus.attendanceState === 'not_checked_in' &&
+      effectiveAttendanceStatus.allowedActions.includes('check_in')
+    ) {
       router.push('/say-hi' as never);
       return;
     }
 
-    if (effectiveAttendanceStatus.attendanceState === 'checked_in' || effectiveAttendanceStatus.attendanceState === 'on_break') {
+    if (
+      (effectiveAttendanceStatus.attendanceState === 'checked_in' ||
+        effectiveAttendanceStatus.attendanceState === 'on_break') &&
+      effectiveAttendanceStatus.allowedActions.includes('check_out')
+    ) {
       router.push('/say-bye' as never);
     }
   }

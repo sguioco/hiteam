@@ -16,6 +16,7 @@ import { TimeWheelPicker, type TimeValue } from '../components/TimeWheelPicker';
 import { loadMyShifts, loadMyTasks, rescheduleMyTask, updateMyTaskStatus } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
+import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { parseTaskMeta } from '../../lib/task-meta';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
 import { PressableScale } from '../../components/ui/pressable-scale';
@@ -33,6 +34,8 @@ type CalendarDayItem = {
 type CalendarScreenProps = {
   overdueSheetSignal?: number;
 };
+
+const CALENDAR_SCREEN_CACHE_TTL_MS = 60_000;
 
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
@@ -91,6 +94,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
   const firstDay = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const month = currentDate.toLocaleString(locale, { month: 'long', year: 'numeric' });
+  const calendarCacheKey = `calendar-screen:${year}-${monthIndex}`;
   const isCurrentMonth = year === today.getFullYear() && monthIndex === today.getMonth();
   const selectedDate = new Date(year, monthIndex, selectedDay);
   const selectedDayKey = formatDateKey(selectedDate);
@@ -100,7 +104,22 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     let cancelled = false;
 
     async function loadData() {
-      setLoading(true);
+      const cached = await readScreenCache<{
+        shifts: Awaited<ReturnType<typeof loadMyShifts>>;
+        tasks: Awaited<ReturnType<typeof loadMyTasks>>;
+      }>(calendarCacheKey, CALENDAR_SCREEN_CACHE_TTL_MS);
+
+      if (cached && !cancelled) {
+        setShifts(cached.value.shifts);
+        setTasks(cached.value.tasks);
+        setLoading(false);
+        if (!cached.isStale) {
+          return;
+        }
+      } else {
+        setLoading(true);
+      }
+
       setError(null);
 
       try {
@@ -117,6 +136,10 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
         if (!cancelled) {
           setShifts(nextShifts);
           setTasks(nextTasks);
+          void writeScreenCache(calendarCacheKey, {
+            shifts: nextShifts,
+            tasks: nextTasks,
+          });
         }
       } catch (nextError) {
         if (!cancelled) {
@@ -134,7 +157,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     return () => {
       cancelled = true;
     };
-  }, [monthIndex, t, year]);
+  }, [calendarCacheKey, monthIndex, t, year]);
 
   useEffect(() => {
     if (selectedDay > daysInMonth) {

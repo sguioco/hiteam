@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnnouncementImageAspectRatio } from '@smart/types';
 import { Ionicons } from '@expo/vector-icons';
 import { manipulateAsync, SaveFormat, type Action } from 'expo-image-manipulator';
@@ -7,19 +7,16 @@ import {
   Alert,
   Dimensions,
   Image,
-  Modal,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CropZoom, type CropZoomRefType, fitContainer } from 'react-native-zoom-toolkit';
+import { CropZoom, type CropZoomRefType } from 'react-native-zoom-toolkit';
+import BottomSheetModal from './BottomSheetModal';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { hapticError, hapticSuccess } from '../../lib/haptics';
 import { useI18n } from '../../lib/i18n';
-import {
-  ANNOUNCEMENT_IMAGE_ASPECT_RATIO_OPTIONS,
-  announcementAspectRatioToNumber,
-} from '../lib/announcement-images';
+import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 
 export type NewsImageSource = {
   uri: string;
@@ -38,14 +35,14 @@ export type NewsImageDraft = {
 type NewsImageCropperModalProps = {
   visible: boolean;
   source: NewsImageSource | null;
-  initialAspectRatio: AnnouncementImageAspectRatio;
   onClose: () => void;
   onApply: (draft: NewsImageDraft) => void;
 };
 
 function getCropCanvas(aspectRatio: number) {
-  const maxWidth = Math.min(Dimensions.get('window').width - 36, 360);
-  const maxHeight = 340;
+  const windowDimensions = Dimensions.get('window');
+  const maxWidth = Math.min(windowDimensions.width - 64, 360);
+  const maxHeight = Math.min(248, Math.max(196, Math.floor(windowDimensions.height * 0.26)));
 
   let width = maxWidth;
   let height = width / aspectRatio;
@@ -59,6 +56,24 @@ function getCropCanvas(aspectRatio: number) {
     width: Math.round(width),
     height: Math.round(height),
   };
+}
+
+function resolveAnnouncementAspectRatio(source: NewsImageSource | null): AnnouncementImageAspectRatio {
+  if (!source?.width || !source?.height) {
+    return '16:9';
+  }
+
+  const ratio = source.width / source.height;
+
+  if (ratio < 1.15) {
+    return '1:1';
+  }
+
+  if (ratio < 1.56) {
+    return '4:3';
+  }
+
+  return '16:9';
 }
 
 function CropGridOverlay() {
@@ -75,7 +90,7 @@ function CropGridOverlay() {
           position: 'absolute',
           inset: 0,
           borderColor: 'rgba(255,255,255,0.92)',
-          borderRadius: 28,
+          borderRadius: 26,
           borderWidth: 2,
         }}
       />
@@ -126,32 +141,21 @@ function CropGridOverlay() {
 export function NewsImageCropperModal({
   visible,
   source,
-  initialAspectRatio,
   onClose,
   onApply,
 }: NewsImageCropperModalProps) {
   const { language } = useI18n();
   const insets = useSafeAreaInsets();
   const cropRef = useRef<CropZoomRefType>(null);
-  const [selectedAspectRatio, setSelectedAspectRatio] =
-    useState<AnnouncementImageAspectRatio>(initialAspectRatio);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    setSelectedAspectRatio(initialAspectRatio);
-  }, [initialAspectRatio, source?.uri, visible]);
+  const selectedAspectRatio = useMemo(
+    () => resolveAnnouncementAspectRatio(source),
+    [source],
+  );
 
   const copy = useMemo(
     () => ({
       title: language === 'ru' ? 'Фото новости' : 'News photo',
-      subtitle:
-        language === 'ru'
-          ? 'Подвиньте фото и приблизьте его так, как оно должно выглядеть в новости.'
-          : 'Drag and zoom the image so it looks right in the news card.',
       cancel: language === 'ru' ? 'Отмена' : 'Cancel',
       apply: language === 'ru' ? 'Использовать фото' : 'Use photo',
       saving: language === 'ru' ? 'Сохраняем...' : 'Saving...',
@@ -168,14 +172,6 @@ export function NewsImageCropperModal({
     () => getCropCanvas(aspectRatioValue),
     [aspectRatioValue],
   );
-  const displaySize = useMemo(() => {
-    if (!source) {
-      return { width: cropSize.width, height: cropSize.height };
-    }
-
-    return fitContainer(source.width / source.height, cropSize);
-  }, [cropSize, source]);
-
   async function handleApply() {
     if (!source || !cropRef.current) {
       return;
@@ -184,13 +180,15 @@ export function NewsImageCropperModal({
     try {
       setSaving(true);
       const cropResult = cropRef.current.crop(1600);
-      const actions: Action[] = [
-        { crop: cropResult.crop },
-      ];
+      const actions: Action[] = [];
 
+      // CropZoom scales crop coordinates when fixedWidth is provided,
+      // so the image must be resized before applying the crop rectangle.
       if (cropResult.resize) {
         actions.push({ resize: cropResult.resize });
       }
+
+      actions.push({ crop: cropResult.crop });
 
       const result = await manipulateAsync(
         source.uri,
@@ -223,70 +221,42 @@ export function NewsImageCropperModal({
   }
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="fullScreen"
-      transparent={false}
+    <BottomSheetModal
+      onClose={onClose}
+      sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
       visible={visible && Boolean(source)}
     >
       <View
         style={{
-          flex: 1,
-          backgroundColor: '#0f172a',
-          paddingTop: insets.top + 10,
-          paddingBottom: insets.bottom + 14,
+          paddingBottom: Math.max(insets.bottom, 18),
         }}
       >
-        <View className="flex-row items-start justify-between gap-4 px-5">
-          <View className="flex-1">
-            <Text className="text-[26px] font-extrabold text-white">
+        <View className="mb-4 flex-row items-start justify-between gap-4">
+          <View className="w-10" />
+          <View className="flex-1 items-center">
+            <Text className="text-center font-display text-[24px] font-bold text-foreground">
               {copy.title}
-            </Text>
-            <Text className="mt-2 text-[14px] leading-6 text-white/72">
-              {copy.subtitle}
             </Text>
           </View>
 
           <PressableScale
-            className="h-11 w-11 items-center justify-center rounded-full border border-white/16 bg-white/8"
+            className="h-10 w-10 items-center justify-center"
             haptic="selection"
             onPress={onClose}
           >
-            <Ionicons color="#ffffff" name="close" size={20} />
+            <Ionicons color="#111827" name="close" size={18} />
           </PressableScale>
         </View>
 
-        <View className="mt-5 flex-row flex-wrap gap-2 px-5">
-          {ANNOUNCEMENT_IMAGE_ASPECT_RATIO_OPTIONS.map((option) => {
-            const active = option.key === selectedAspectRatio;
-
-            return (
-              <PressableScale
-                className={`rounded-full px-4 py-2.5 ${active ? 'bg-white' : 'border border-white/18 bg-white/8'}`}
-                haptic="selection"
-                key={option.key}
-                onPress={() => setSelectedAspectRatio(option.key)}
-              >
-                <Text
-                  className={`text-[13px] font-semibold ${active ? 'text-[#0f172a]' : 'text-white'}`}
-                >
-                  {option.label}
-                </Text>
-              </PressableScale>
-            );
-          })}
-        </View>
-
-        <View className="flex-1 items-center justify-center px-4">
+        <View className="items-center justify-center pb-2 pt-1">
           {source ? (
             <View
               style={{
                 width: cropSize.width,
                 height: cropSize.height,
-                borderRadius: 28,
+                borderRadius: 26,
                 overflow: 'hidden',
-                backgroundColor: '#020617',
+                backgroundColor: '#dbe7ff',
               }}
             >
               <CropZoom
@@ -305,8 +275,8 @@ export function NewsImageCropperModal({
                   resizeMode="cover"
                   source={{ uri: source.uri }}
                   style={{
-                    width: displaySize.width,
-                    height: displaySize.height,
+                    width: '100%',
+                    height: '100%',
                   }}
                 />
               </CropZoom>
@@ -314,39 +284,43 @@ export function NewsImageCropperModal({
           ) : null}
         </View>
 
-        <View className="flex-row items-center gap-3 px-5">
+        <View className="mt-4 flex-row w-full items-center gap-3 pb-1">
           <PressableScale
-            className="flex-1 rounded-[24px] border border-white/18 bg-white/8 px-4 py-4"
+            className="w-full min-h-[56px] items-center justify-center rounded-[24px] border border-[#d8deea] bg-white px-4"
+            containerClassName="flex-1"
+            contentStyle={{ width: '100%' }}
             disabled={saving}
             haptic="selection"
             onPress={onClose}
           >
-            <Text className="text-center text-[15px] font-semibold text-white">
+            <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
               {copy.cancel}
             </Text>
           </PressableScale>
 
           <PressableScale
-            className={`flex-1 rounded-[24px] border border-transparent bg-white px-4 py-4 ${saving ? 'opacity-70' : ''}`}
+            className={`w-full min-h-[56px] items-center justify-center rounded-[24px] bg-primary px-4 ${saving ? 'opacity-70' : ''}`}
+            containerClassName="flex-1"
+            contentStyle={{ width: '100%' }}
             disabled={saving}
             haptic="selection"
             onPress={() => void handleApply()}
           >
             {saving ? (
               <View className="flex-row items-center justify-center gap-2">
-                <ActivityIndicator color="#0f172a" size="small" />
-                <Text className="text-[15px] font-semibold text-[#0f172a]">
+                <ActivityIndicator color="#ffffff" size="small" />
+                <Text className="font-display text-[16px] font-semibold text-white">
                   {copy.saving}
                 </Text>
               </View>
             ) : (
-              <Text className="text-center text-[15px] font-semibold text-[#0f172a]">
+              <Text className="text-center font-display text-[16px] font-semibold text-white">
                 {copy.apply}
               </Text>
             )}
           </PressableScale>
         </View>
       </View>
-    </Modal>
+    </BottomSheetModal>
   );
 }

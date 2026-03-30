@@ -2,10 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Image, ScrollView, Text, TextInput, View } from 'react-native';
-import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeInUp,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Socket } from 'socket.io-client';
 import { AnnouncementItem } from '@smart/types';
+import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { Screen } from '../../components/ui/screen';
@@ -19,12 +29,15 @@ import {
 } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
+import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
 
 type NewsScreenProps = {
   standalone?: boolean;
 };
+
+const NEWS_SCREEN_CACHE_TTL_MS = 60_000;
 
 function formatDate(value: string, language: 'ru' | 'en') {
   const parsed = new Date(value);
@@ -71,6 +84,45 @@ function formatMetaLine(
     : `${relativeOrDate} by ${authorName}`;
 }
 
+function UnreadPulseIndicator() {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.7);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.24, { duration: 900, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }),
+        withTiming(0.45, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+  }, [opacity, scale]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View className="relative h-2.5 w-2.5 items-center justify-center">
+      <Animated.View
+        className="absolute h-2.5 w-2.5 rounded-full bg-[#67b7ff]"
+        style={pulseStyle}
+      />
+      <View className="h-1.5 w-1.5 rounded-full bg-[#1d9bf0]" />
+    </View>
+  );
+}
+
 export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -89,7 +141,8 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
   const copy = useMemo(
     () => ({
-      title: language === 'ru' ? 'Новости команды' : 'Team news',
+      title: language === 'ru' ? 'Новости' : 'News',
+      create: language === 'ru' ? 'Создать' : 'Create',
       empty: language === 'ru' ? 'Пока новостей нет.' : 'No news yet.',
       loading: language === 'ru' ? 'Загружаем новости...' : 'Loading news...',
       countLabel: (count: number) =>
@@ -117,16 +170,22 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
   const orderedItems = useMemo(() => {
     return [...items].sort((left, right) => {
+      if (!isManager && left.isRead !== right.isRead) {
+        return left.isRead ? 1 : -1;
+      }
+
       if (left.isPinned !== right.isPinned) {
         return left.isPinned ? -1 : 1;
       }
 
       return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
     });
-  }, [items]);
+  }, [isManager, items]);
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -142,8 +201,40 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   }
 
   useEffect(() => {
-    void loadData();
+    let cancelled = false;
+
+    void (async () => {
+      const cached = await readScreenCache<AnnouncementItem[]>(
+        `news-screen:${isManager ? 'manager' : 'employee'}`,
+        NEWS_SCREEN_CACHE_TTL_MS,
+      );
+
+      if (cached && !cancelled) {
+        setItems(cached.value);
+        setLoading(false);
+        if (!cached.isStale) {
+          return;
+        }
+      }
+
+      await loadData({ silent: Boolean(cached) });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isManager]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    void writeScreenCache(
+      `news-screen:${isManager ? 'manager' : 'employee'}`,
+      items,
+    );
+  }, [isManager, items, loading]);
 
   useEffect(() => {
     let socket: Socket | null = null;
@@ -281,10 +372,19 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
   const content = (
     <>
-      <View className="px-1">
-        <Text className="text-[30px] font-extrabold text-foreground">
+      <View className="flex-row items-center justify-between gap-3 px-1">
+        <Text className="flex-1 text-[30px] font-extrabold text-foreground">
           {copy.title}
         </Text>
+        {isManager ? (
+          <Button
+            className="rounded-full border-white/80 bg-white/80 px-5"
+            label={`+ ${copy.create}`}
+            onPress={() => router.push('/manager/create-news')}
+            textClassName="text-[13px] tracking-[1.2px]"
+            variant="secondary"
+          />
+        ) : null}
       </View>
 
       {error ? (
@@ -310,6 +410,8 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
               const isExpanded = expandedId === item.id;
               const isLast = index === orderedItems.length - 1;
               const shouldMute = expandedId !== null && !isExpanded;
+              const isReadMuted = !isManager && item.isRead && !isExpanded;
+              const cardOpacity = shouldMute ? 0.58 : isReadMuted ? 0.62 : 1;
 
               return (
                 <Animated.View
@@ -326,7 +428,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                     <View
                       className="relative px-5 py-5"
                       style={{
-                        opacity: shouldMute ? 0.58 : 1,
+                        opacity: cardOpacity,
                       }}
                     >
                       {item.isPinned ? (
@@ -344,20 +446,23 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                       ) : null}
 
                       <View className="gap-3">
-                        <Text className="text-[13px] font-medium text-[#64748b]">
+                        <Text className={`text-[13px] font-medium ${isReadMuted ? 'text-[#8ea0b8]' : 'text-[#64748b]'}`}>
                           {formatMetaLine(item, language)}
                         </Text>
 
                         <View className="flex-row items-start justify-between gap-3">
-                          <Text className="flex-1 text-[20px] font-extrabold text-foreground">
+                          <Text className={`flex-1 text-[20px] font-extrabold ${isReadMuted ? 'text-[#6c7b91]' : 'text-foreground'}`}>
                             {item.title}
                           </Text>
-                          <Ionicons
-                            className="mt-1"
-                            color="#94a3b8"
-                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={18}
-                          />
+                          <View className="items-center gap-1">
+                            {!isManager && !item.isRead ? <UnreadPulseIndicator /> : <View className="h-2.5 w-2.5" />}
+                            <Ionicons
+                              className="mt-1"
+                              color={isReadMuted ? '#b2bfd0' : '#94a3b8'}
+                              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                              size={18}
+                            />
+                          </View>
                         </View>
 
                         {isExpanded ? (
@@ -377,7 +482,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 />
                               ) : null}
 
-                              <Text className="text-[15px] leading-7 text-foreground">
+                              <Text className={`text-[15px] leading-7 ${isReadMuted ? 'text-[#607086]' : 'text-foreground'}`}>
                                 {item.body}
                               </Text>
 

@@ -5,6 +5,18 @@ import { TASK_PRIORITIES, TASK_STATUSES } from '../../../common/constants/prisma
 export class ListManagerTasksQueryDto {
   @IsOptional()
   @IsString()
+  date?: string;
+
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
+
+  @IsOptional()
+  @IsString()
   search?: string;
 
   @IsOptional()

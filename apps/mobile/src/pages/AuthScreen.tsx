@@ -135,6 +135,7 @@ const AuthScreen = () => {
   const [inviteCode, setInviteCode] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [joinCompany, setJoinCompany] = useState<JoinCompanyPayload | null>(null);
   const [joinProfileForm, setJoinProfileForm] = useState<JoinProfileForm>(INITIAL_JOIN_PROFILE_FORM);
   const [joinProfileCountryCode, setJoinProfileCountryCode] = useState('+7');
@@ -678,6 +679,15 @@ const AuthScreen = () => {
     setMode('landing');
   }
 
+  const passwordToggleLabel =
+    language === 'ru'
+      ? passwordVisible
+        ? 'Скрыть пароль'
+        : 'Показать пароль'
+      : passwordVisible
+        ? 'Hide password'
+        : 'Show password';
+
   async function handleSignIn() {
     const trimmedIdentifier = identifier.trim();
     const trimmedPassword = password.trim();
@@ -1208,24 +1218,39 @@ const AuthScreen = () => {
                                 textAlign="center"
                                 value={identifier}
                               />
-                              <TextInput
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-                                key="signin-password-input"
-                                onChangeText={(nextValue) => {
-                                  setPassword(nextValue);
-                                  setMessage(null);
-                                }}
-                                placeholder={t('login.passwordPlaceholder')}
-                                placeholderTextColor="#7f8da1"
-                                returnKeyType="go"
-                                secureTextEntry
-                                selectionColor="#26334a"
-                                showSoftInputOnFocus
-                                textAlign="center"
-                                value={password}
-                              />
+                              <View className="relative justify-center">
+                                <TextInput
+                                  autoCapitalize="none"
+                                  autoCorrect={false}
+                                  className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-14 text-center text-[17px] text-[#0f2530]"
+                                  key="signin-password-input"
+                                  onChangeText={(nextValue) => {
+                                    setPassword(nextValue);
+                                    setMessage(null);
+                                  }}
+                                  placeholder={t('login.passwordPlaceholder')}
+                                  placeholderTextColor="#7f8da1"
+                                  returnKeyType="go"
+                                  secureTextEntry={!passwordVisible}
+                                  selectionColor="#26334a"
+                                  showSoftInputOnFocus
+                                  textAlign="center"
+                                  value={password}
+                                />
+                                <Pressable
+                                  accessibilityLabel={passwordToggleLabel}
+                                  accessibilityRole="button"
+                                  className="absolute right-0 top-0 h-[58px] w-14 items-center justify-center"
+                                  hitSlop={10}
+                                  onPress={() => setPasswordVisible((current) => !current)}
+                                >
+                                  <Ionicons
+                                    color="#6f7892"
+                                    name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                                    size={22}
+                                  />
+                                </Pressable>
+                              </View>
                             </>
                           )}
                         </View>

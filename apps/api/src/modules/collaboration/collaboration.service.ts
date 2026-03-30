@@ -1231,6 +1231,23 @@ export class CollaborationService {
             audience: AnnouncementAudience.GROUP,
             groupId: groupIds.length > 0 ? { in: groupIds } : undefined,
           },
+          {
+            employeeTargets: {
+              some: {
+                employeeId: employee.id,
+              },
+            },
+          },
+          {
+            groupTargets:
+              groupIds.length > 0
+                ? {
+                    some: {
+                      groupId: { in: groupIds },
+                    },
+                  }
+                : undefined,
+          },
         ],
       },
       include: {
@@ -1510,6 +1527,8 @@ export class CollaborationService {
       dto.audience,
       dto.groupId,
       dto.targetEmployeeId,
+      dto.groupIds,
+      dto.targetEmployeeIds,
       dto.departmentId,
       dto.locationId,
     );
@@ -1838,6 +1857,22 @@ export class CollaborationService {
 
     if (assignees.length === 0) {
       throw new BadRequestException("Task has no assignees.");
+    }
+
+    const normalizedTitle = dto.title.trim();
+    if (dueAt && normalizedTitle) {
+      const duplicateConflict = await this.findTaskCreationConflict(
+        manager.tenantId,
+        assignees.map((assignee) => assignee.id),
+        normalizedTitle,
+        dueAt,
+      );
+
+      if (duplicateConflict) {
+        throw new BadRequestException(
+          `Task "${normalizedTitle}" already exists for ${duplicateConflict.employeeName} on the selected day.`,
+        );
+      }
     }
 
     const tasks = await this.prisma.$transaction(async (tx) => {
@@ -2220,6 +2255,7 @@ export class CollaborationService {
       where: { userId },
     });
     const now = new Date();
+    const taskWindow = this.resolveTaskWindow(query);
 
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -2242,21 +2278,65 @@ export class CollaborationService {
                 primaryLocationId: query.locationId,
               }
             : undefined,
+        ...this.buildTaskDateWhere(taskWindow),
       },
       include: this.taskInclude(),
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     });
 
+    let boardTasks = tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
+
+    if (taskWindow) {
+      const recurringTasks = await this.buildRecurringTasksForManager(
+        manager,
+        taskWindow.start,
+        taskWindow.end,
+        query,
+      );
+      boardTasks = [...boardTasks, ...recurringTasks].sort((left, right) => {
+        const leftDone =
+          left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+            ? 1
+            : 0;
+        const rightDone =
+          right.status === TaskStatus.DONE ||
+          right.status === TaskStatus.CANCELLED
+            ? 1
+            : 0;
+        if (leftDone !== rightDone) {
+          return leftDone - rightDone;
+        }
+
+        const leftDueAt = left.dueAt
+          ? new Date(left.dueAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        const rightDueAt = right.dueAt
+          ? new Date(right.dueAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        if (leftDueAt !== rightDueAt) {
+          return leftDueAt - rightDueAt;
+        }
+
+        return (
+          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        );
+      });
+    }
+
+    const statusFilteredTasks = query.status
+      ? boardTasks.filter((task) => task.status === query.status)
+      : boardTasks;
+
     const filteredTasks =
       query.onlyOverdue === "true"
-        ? tasks.filter(
+        ? statusFilteredTasks.filter(
             (task) =>
               task.status !== TaskStatus.DONE &&
               task.status !== TaskStatus.CANCELLED &&
               task.dueAt &&
               new Date(task.dueAt) < now,
           )
-        : tasks;
+        : statusFilteredTasks;
 
     return {
       totals: {
@@ -2276,9 +2356,7 @@ export class CollaborationService {
         done: filteredTasks.filter((task) => task.status === TaskStatus.DONE)
           .length,
       },
-      tasks: filteredTasks.map((task) =>
-        this.serializeTaskWithPhotoProofUrls(task),
-      ),
+      tasks: filteredTasks,
     };
   }
 
@@ -2667,7 +2745,9 @@ export class CollaborationService {
     });
 
     if (!taskWindow) {
-      return tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
+      return this.collapseEmployeeVisibleTasks(
+        tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task)),
+      );
     }
 
     const recurringTasks = await this.buildRecurringTasksForEmployee(
@@ -2675,37 +2755,40 @@ export class CollaborationService {
       taskWindow.start,
       taskWindow.end,
     );
-    return [
-      ...tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task)),
-      ...recurringTasks,
-    ].sort((left, right) => {
-      const leftDone =
-        left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
-          ? 1
-          : 0;
-      const rightDone =
-        right.status === TaskStatus.DONE ||
-        right.status === TaskStatus.CANCELLED
-          ? 1
-          : 0;
-      if (leftDone !== rightDone) {
-        return leftDone - rightDone;
-      }
+    return this.collapseEmployeeVisibleTasks(
+      [
+        ...tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task)),
+        ...recurringTasks,
+      ].sort((left, right) => {
+        const leftDone =
+          left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+            ? 1
+            : 0;
+        const rightDone =
+          right.status === TaskStatus.DONE ||
+          right.status === TaskStatus.CANCELLED
+            ? 1
+            : 0;
+        if (leftDone !== rightDone) {
+          return leftDone - rightDone;
+        }
 
-      const leftDueAt = left.dueAt
-        ? new Date(left.dueAt).getTime()
-        : Number.POSITIVE_INFINITY;
-      const rightDueAt = right.dueAt
-        ? new Date(right.dueAt).getTime()
-        : Number.POSITIVE_INFINITY;
-      if (leftDueAt !== rightDueAt) {
-        return leftDueAt - rightDueAt;
-      }
+        const leftDueAt = left.dueAt
+          ? new Date(left.dueAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        const rightDueAt = right.dueAt
+          ? new Date(right.dueAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        if (leftDueAt !== rightDueAt) {
+          return leftDueAt - rightDueAt;
+        }
 
-      return (
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      );
-    });
+        return (
+          new Date(right.createdAt).getTime() -
+          new Date(left.createdAt).getTime()
+        );
+      }),
+    );
   }
 
   async getEmployeeInbox(userId: string) {
@@ -3755,10 +3838,18 @@ export class CollaborationService {
     audience: AnnouncementAudience,
     groupId: string | null | undefined,
     targetEmployeeId: string | null | undefined,
+    groupIds: string[] | null | undefined,
+    targetEmployeeIds: string[] | null | undefined,
     departmentId: string | null | undefined,
     locationId: string | null | undefined,
     authorEmployeeId: string,
   ) {
+    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(groupId, groupIds);
+    const normalizedTargetEmployeeIds = this.normalizeAnnouncementScopeIds(
+      targetEmployeeId,
+      targetEmployeeIds,
+    );
+
     if (audience === AnnouncementAudience.ALL) {
       return this.prisma.employee.findMany({
         where: {
@@ -3769,21 +3860,72 @@ export class CollaborationService {
       });
     }
 
-    if (audience === AnnouncementAudience.EMPLOYEE && targetEmployeeId) {
+    if (
+      (audience === AnnouncementAudience.GROUP ||
+        audience === AnnouncementAudience.EMPLOYEE) &&
+      (normalizedGroupIds.length > 0 || normalizedTargetEmployeeIds.length > 0)
+    ) {
+      const recipientsById = new Map<string, Prisma.EmployeeGetPayload<{ include: { user: true } }>>();
+
+      if (normalizedGroupIds.length > 0) {
+        const memberships = await this.prisma.workGroupMembership.findMany({
+          where: {
+            tenantId,
+            groupId: { in: normalizedGroupIds },
+          },
+          include: {
+            employee: {
+              include: { user: true },
+            },
+          },
+        });
+
+        memberships.forEach((membership) => {
+          if (membership.employee.id !== authorEmployeeId) {
+            recipientsById.set(membership.employee.id, membership.employee);
+          }
+        });
+      }
+
+      if (normalizedTargetEmployeeIds.length > 0) {
+        const directEmployees = await this.prisma.employee.findMany({
+          where: {
+            tenantId,
+            id: {
+              in: normalizedTargetEmployeeIds.filter(
+                (employeeId) => employeeId !== authorEmployeeId,
+              ),
+            },
+          },
+          include: { user: true },
+        });
+
+        directEmployees.forEach((employee) => {
+          recipientsById.set(employee.id, employee);
+        });
+      }
+
+      return Array.from(recipientsById.values());
+    }
+
+    if (
+      audience === AnnouncementAudience.EMPLOYEE &&
+      normalizedTargetEmployeeIds.length > 0
+    ) {
       return this.prisma.employee.findMany({
         where: {
           tenantId,
-          id: targetEmployeeId,
+          id: { in: normalizedTargetEmployeeIds },
         },
         include: { user: true },
       });
     }
 
-    if (audience === AnnouncementAudience.GROUP && groupId) {
+    if (audience === AnnouncementAudience.GROUP && normalizedGroupIds.length > 0) {
       const memberships = await this.prisma.workGroupMembership.findMany({
         where: {
           tenantId,
-          groupId,
+          groupId: { in: normalizedGroupIds },
         },
         include: {
           employee: {
@@ -3833,6 +3975,8 @@ export class CollaborationService {
       audience: AnnouncementAudience;
       groupId?: string | null;
       targetEmployeeId?: string | null;
+      groupIds?: string[] | null;
+      targetEmployeeIds?: string[] | null;
       departmentId?: string | null;
       locationId?: string | null;
       title: string;
@@ -3860,18 +4004,48 @@ export class CollaborationService {
       throw new BadRequestException("Unsupported announcement image aspect ratio.");
     }
 
+    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(
+      dto.groupId,
+      dto.groupIds,
+    );
+    const normalizedTargetEmployeeIds = this.normalizeAnnouncementScopeIds(
+      dto.targetEmployeeId,
+      dto.targetEmployeeIds,
+    );
+
     let announcement = await this.prisma.announcement.create({
       data: {
         tenantId: author.tenantId,
         authorEmployeeId: author.id,
         audience: dto.audience,
-        groupId: dto.groupId ?? null,
-        targetEmployeeId: dto.targetEmployeeId ?? null,
+        groupId: normalizedGroupIds.length === 1 ? normalizedGroupIds[0] : null,
+        targetEmployeeId:
+          normalizedTargetEmployeeIds.length === 1
+            ? normalizedTargetEmployeeIds[0]
+            : null,
         departmentId: dto.departmentId ?? null,
         locationId: dto.locationId ?? null,
         title: dto.title,
         body: dto.body,
         isPinned: dto.isPinned ?? false,
+        ...(normalizedGroupIds.length > 0
+          ? {
+              groupTargets: {
+                create: normalizedGroupIds.map((targetGroupId) => ({
+                  groupId: targetGroupId,
+                })),
+              },
+            }
+          : {}),
+        ...(normalizedTargetEmployeeIds.length > 0
+          ? {
+              employeeTargets: {
+                create: normalizedTargetEmployeeIds.map((employeeTargetId) => ({
+                  employeeId: employeeTargetId,
+                })),
+              },
+            }
+          : {}),
       },
       include: {
         authorEmployee: true,
@@ -3908,8 +4082,10 @@ export class CollaborationService {
     const recipients = await this.resolveAnnouncementRecipients(
       author.tenantId,
       dto.audience,
-      dto.groupId,
-      dto.targetEmployeeId,
+      normalizedGroupIds[0],
+      normalizedTargetEmployeeIds[0],
+      normalizedGroupIds,
+      normalizedTargetEmployeeIds,
       dto.departmentId,
       dto.locationId,
       author.id,
@@ -3946,6 +4122,8 @@ export class CollaborationService {
         audience: announcement.audience,
         groupId: announcement.groupId,
         targetEmployeeId: announcement.targetEmployeeId,
+        groupIds: normalizedGroupIds,
+        targetEmployeeIds: normalizedTargetEmployeeIds,
         departmentId: announcement.departmentId,
         locationId: announcement.locationId,
         ...metadata,
@@ -3979,15 +4157,23 @@ export class CollaborationService {
     audience: AnnouncementAudience,
     groupId?: string | null,
     targetEmployeeId?: string | null,
+    groupIds?: string[] | null,
+    targetEmployeeIds?: string[] | null,
     departmentId?: string | null,
     locationId?: string | null,
   ) {
-    const selectedTargetCount = [
-      groupId,
+    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(groupId, groupIds);
+    const normalizedTargetEmployeeIds = this.normalizeAnnouncementScopeIds(
       targetEmployeeId,
-      departmentId,
-      locationId,
-    ].filter((value) => Boolean(value)).length;
+      targetEmployeeIds,
+    );
+    const hasTargetedParticipants =
+      normalizedGroupIds.length > 0 || normalizedTargetEmployeeIds.length > 0;
+    const selectedTargetCount = [
+      hasTargetedParticipants,
+      Boolean(departmentId),
+      Boolean(locationId),
+    ].filter(Boolean).length;
 
     if (audience === AnnouncementAudience.ALL) {
       if (selectedTargetCount > 0) {
@@ -4001,11 +4187,14 @@ export class CollaborationService {
       );
     }
 
-    if (audience === AnnouncementAudience.GROUP && !groupId) {
+    if (audience === AnnouncementAudience.GROUP && normalizedGroupIds.length === 0) {
       throw new BadRequestException("Group announcement requires groupId.");
     }
 
-    if (audience === AnnouncementAudience.EMPLOYEE && !targetEmployeeId) {
+    if (
+      audience === AnnouncementAudience.EMPLOYEE &&
+      normalizedTargetEmployeeIds.length === 0
+    ) {
       throw new BadRequestException(
         "Employee announcement requires targetEmployeeId.",
       );
@@ -4023,28 +4212,28 @@ export class CollaborationService {
       );
     }
 
-    if (groupId) {
-      const group = await this.prisma.workGroup.findFirst({
+    if (normalizedGroupIds.length > 0) {
+      const groups = await this.prisma.workGroup.findMany({
         where: {
-          id: groupId,
+          id: { in: normalizedGroupIds },
           tenantId,
         },
       });
 
-      if (!group) {
+      if (groups.length !== normalizedGroupIds.length) {
         throw new NotFoundException("Target group not found.");
       }
     }
 
-    if (targetEmployeeId) {
-      const employee = await this.prisma.employee.findFirst({
+    if (normalizedTargetEmployeeIds.length > 0) {
+      const employees = await this.prisma.employee.findMany({
         where: {
-          id: targetEmployeeId,
+          id: { in: normalizedTargetEmployeeIds },
           tenantId,
         },
       });
 
-      if (!employee) {
+      if (employees.length !== normalizedTargetEmployeeIds.length) {
         throw new NotFoundException("Target employee not found.");
       }
     }
@@ -4074,6 +4263,19 @@ export class CollaborationService {
         throw new NotFoundException("Target location not found.");
       }
     }
+  }
+
+  private normalizeAnnouncementScopeIds(
+    singleId?: string | null,
+    multipleIds?: string[] | null,
+  ) {
+    return Array.from(
+      new Set(
+        [singleId ?? null, ...(multipleIds ?? [])]
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .filter(Boolean),
+      ),
+    );
   }
 
   private async ensureDirectChatThread(
@@ -4864,12 +5066,151 @@ export class CollaborationService {
       return {};
     }
 
+    const dayStart = this.utcDayStart(taskWindow.start);
+    const dayEnd = this.utcDayEnd(taskWindow.end);
+
     return {
-      dueAt: {
-        gte: this.utcDayStart(taskWindow.start),
-        lte: this.utcDayEnd(taskWindow.end),
-      },
+      OR: [
+        {
+          dueAt: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+        },
+        {
+          dueAt: null,
+          createdAt: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+        },
+      ],
     };
+  }
+
+  private normalizeEmployeeVisibleTaskTitle(title: string) {
+    return title
+      .replace(/^Employee recurring:\s*/i, "")
+      .replace(/^Owner recurring:\s*/i, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  private getEmployeeVisibleTaskAnchorDate(task: {
+    dueAt: string | null;
+    occurrenceDate?: string | null;
+    createdAt: string | Date;
+  }) {
+    const candidates = [task.dueAt, task.occurrenceDate, task.createdAt];
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const parsed = new Date(candidate);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  private getEmployeeVisibleTaskDuplicateKey(task: {
+    title: string;
+    dueAt: string | null;
+    occurrenceDate?: string | null;
+    createdAt: string | Date;
+    requiresPhoto: boolean;
+  }) {
+    const anchorDate = this.getEmployeeVisibleTaskAnchorDate(task);
+    const anchorKey = anchorDate
+      ? this.formatDateKey(anchorDate)
+      : "no-date";
+    const kindKey = /^(встреча|meeting):/i.test(task.title)
+      ? "meeting"
+      : "task";
+    const photoKey = task.requiresPhoto ? "photo" : "plain";
+
+    return `${kindKey}|${photoKey}|${this.normalizeEmployeeVisibleTaskTitle(task.title)}|${anchorKey}`;
+  }
+
+  private choosePreferredEmployeeVisibleTask<
+    T extends {
+      status: TaskStatus;
+      requiresPhoto: boolean;
+      isRecurring?: boolean;
+      updatedAt: string | Date;
+      photoProofs?: Array<{
+        deletedAt?: string | Date | null;
+        supersededByProofId?: string | null;
+      }>;
+    },
+  >(current: T, candidate: T) {
+    const currentHasPhotos = (current.photoProofs ?? []).some(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId,
+    );
+    const candidateHasPhotos = (candidate.photoProofs ?? []).some(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId,
+    );
+
+    const currentScore =
+      (current.requiresPhoto ? 100 : 0) +
+      (currentHasPhotos ? 40 : 0) +
+      (!current.isRecurring ? 20 : 0) +
+      (current.status !== TaskStatus.DONE &&
+      current.status !== TaskStatus.CANCELLED
+        ? 10
+        : 0);
+
+    const candidateScore =
+      (candidate.requiresPhoto ? 100 : 0) +
+      (candidateHasPhotos ? 40 : 0) +
+      (!candidate.isRecurring ? 20 : 0) +
+      (candidate.status !== TaskStatus.DONE &&
+      candidate.status !== TaskStatus.CANCELLED
+        ? 10
+        : 0);
+
+    if (candidateScore !== currentScore) {
+      return candidateScore > currentScore ? candidate : current;
+    }
+
+    return new Date(candidate.updatedAt).getTime() >=
+      new Date(current.updatedAt).getTime()
+      ? candidate
+      : current;
+  }
+
+  private collapseEmployeeVisibleTasks<
+    T extends {
+      title: string;
+      dueAt: string | null;
+      occurrenceDate?: string | null;
+      createdAt: string | Date;
+      status: TaskStatus;
+      requiresPhoto: boolean;
+      isRecurring?: boolean;
+      updatedAt: string | Date;
+      photoProofs?: Array<{
+        deletedAt?: string | Date | null;
+        supersededByProofId?: string | null;
+      }>;
+    },
+  >(tasks: T[]) {
+    const byKey = new Map<string, T>();
+
+    for (const task of tasks) {
+      const key = this.getEmployeeVisibleTaskDuplicateKey(task);
+      const current = byKey.get(key);
+
+      if (!current) {
+        byKey.set(key, task);
+        continue;
+      }
+
+      byKey.set(key, this.choosePreferredEmployeeVisibleTask(current, task));
+    }
+
+    return Array.from(byKey.values());
   }
 
   private async buildRecurringTasksForEmployee(
@@ -4984,6 +5325,187 @@ export class CollaborationService {
         items.push(
           this.buildRecurringTaskItem(template, employee, completion, cursor),
         );
+      }
+    }
+
+    return items;
+  }
+
+  private async buildRecurringTasksForManager(
+    manager: {
+      id: string;
+      tenantId: string;
+    },
+    start: Date,
+    end: Date,
+    query: ListManagerTasksQueryDto,
+  ) {
+    const templates = await this.prisma.taskTemplate.findMany({
+      where: {
+        tenantId: manager.tenantId,
+        managerEmployeeId: manager.id,
+        isActive: true,
+        expandOnDemand: true,
+        startDate: {
+          lte: this.utcDayEnd(end),
+        },
+        title: query.search
+          ? {
+              contains: query.search,
+              mode: "insensitive",
+            }
+          : undefined,
+        priority: query.priority,
+        groupId: query.groupId,
+        OR: [
+          { endDate: null },
+          { endDate: { gte: this.utcDayStart(start) } },
+        ],
+      },
+      include: {
+        managerEmployee: true,
+        group: true,
+      },
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    if (templates.length === 0) {
+      return [];
+    }
+
+    const candidateEmployees = await this.prisma.employee.findMany({
+      where: {
+        tenantId: manager.tenantId,
+        id: query.assigneeEmployeeId,
+        departmentId: query.departmentId,
+        primaryLocationId: query.locationId,
+      },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+
+    if (candidateEmployees.length === 0) {
+      return [];
+    }
+
+    const matchedEmployeesByTemplate = new Map<
+      string,
+      typeof candidateEmployees
+    >();
+
+    for (const template of templates) {
+      const matchedEmployees = candidateEmployees.filter((employee) => {
+        if (
+          template.assigneeEmployeeId &&
+          employee.id === template.assigneeEmployeeId
+        ) {
+          return true;
+        }
+
+        if (
+          template.groupId &&
+          employee.groupMemberships.some(
+            (membership) => membership.groupId === template.groupId,
+          )
+        ) {
+          return true;
+        }
+
+        if (
+          template.departmentId &&
+          employee.departmentId === template.departmentId
+        ) {
+          return true;
+        }
+
+        if (
+          template.locationId &&
+          employee.primaryLocationId === template.locationId
+        ) {
+          return true;
+        }
+
+        return false;
+      });
+
+      if (matchedEmployees.length > 0) {
+        matchedEmployeesByTemplate.set(template.id, matchedEmployees);
+      }
+    }
+
+    if (matchedEmployeesByTemplate.size === 0) {
+      return [];
+    }
+
+    const employeeIds = Array.from(
+      new Set(
+        Array.from(matchedEmployeesByTemplate.values()).flatMap((employees) =>
+          employees.map((employee) => employee.id),
+        ),
+      ),
+    );
+
+    const completions = await this.prisma.taskCompletion.findMany({
+      where: {
+        tenantId: manager.tenantId,
+        assigneeEmployeeId: {
+          in: employeeIds,
+        },
+        taskTemplateId: {
+          in: Array.from(matchedEmployeesByTemplate.keys()),
+        },
+        occurrenceDate: {
+          gte: this.utcDayStart(start),
+          lte: this.utcDayEnd(end),
+        },
+      },
+      include: {
+        photoProofs: {
+          include: {
+            uploadedByEmployee: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    const completionByKey = new Map(
+      completions.map((completion) => [
+        `${completion.taskTemplateId}:${completion.assigneeEmployeeId}:${this.formatDateKey(completion.occurrenceDate)}`,
+        completion,
+      ]),
+    );
+
+    const items = [];
+
+    for (
+      let cursor = new Date(start);
+      this.utcDayNumber(cursor) <= this.utcDayNumber(end);
+      cursor = this.addUtcDays(cursor, 1)
+    ) {
+      for (const template of templates) {
+        if (!this.isTemplateDueOnOccurrence(template, cursor)) {
+          continue;
+        }
+
+        const matchedEmployees =
+          matchedEmployeesByTemplate.get(template.id) ?? [];
+
+        for (const employee of matchedEmployees) {
+          const completion =
+            completionByKey.get(
+              `${template.id}:${employee.id}:${this.formatDateKey(cursor)}`,
+            ) ?? null;
+          items.push(
+            this.buildRecurringTaskItem(template, employee, completion, cursor),
+          );
+        }
       }
     }
 
@@ -5477,6 +5999,99 @@ export class CollaborationService {
 
     result.setUTCHours(12, 0, 0, 0);
     return result.toISOString();
+  }
+
+  private async findTaskCreationConflict(
+    tenantId: string,
+    assigneeEmployeeIds: string[],
+    title: string,
+    dueAt: Date,
+  ) {
+    const dayStart = this.utcDayStart(dueAt);
+    const dayEnd = this.utcDayEnd(dueAt);
+    const occurrenceDate = this.parseOccurrenceDate(this.formatDateKey(dueAt));
+
+    const directTaskConflict = await this.prisma.task.findFirst({
+      where: {
+        tenantId,
+        assigneeEmployeeId: {
+          in: assigneeEmployeeIds,
+        },
+        title: {
+          equals: title,
+          mode: "insensitive",
+        },
+        status: {
+          not: TaskStatus.CANCELLED,
+        },
+        dueAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
+      },
+      select: {
+        assigneeEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (directTaskConflict?.assigneeEmployee) {
+      return {
+        employeeName: `${directTaskConflict.assigneeEmployee.firstName} ${directTaskConflict.assigneeEmployee.lastName}`.trim(),
+      };
+    }
+
+    if (!occurrenceDate) {
+      return null;
+    }
+
+    const recurringTemplateConflict = await this.prisma.taskTemplate.findFirst({
+      where: {
+        tenantId,
+        isActive: true,
+        assigneeEmployeeId: {
+          in: assigneeEmployeeIds,
+        },
+        title: {
+          equals: title,
+          mode: "insensitive",
+        },
+        startDate: {
+          lte: dayEnd,
+        },
+        OR: [{ endDate: null }, { endDate: { gte: dayStart } }],
+      },
+      select: {
+        frequency: true,
+        weekDaysJson: true,
+        dayOfMonth: true,
+        startDate: true,
+        endDate: true,
+        assigneeEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    if (
+      recurringTemplateConflict &&
+      this.isTemplateDueOnOccurrence(recurringTemplateConflict, occurrenceDate) &&
+      recurringTemplateConflict.assigneeEmployee
+    ) {
+      return {
+        employeeName: `${recurringTemplateConflict.assigneeEmployee.firstName} ${recurringTemplateConflict.assigneeEmployee.lastName}`.trim(),
+      };
+    }
+
+    return null;
   }
 
   private formatDateKey(date: Date) {

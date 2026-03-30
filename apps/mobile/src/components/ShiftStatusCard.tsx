@@ -144,6 +144,9 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 
   const shiftMeta = useMemo(() => {
     const now = new Date();
+    const canCheckIn =
+      status?.attendanceState === 'not_checked_in' &&
+      status.allowedActions.includes('check_in');
 
     if (loading) {
       return {
@@ -178,8 +181,8 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
           statusColor: '#86efac',
           statusIcon: 'time-outline' as const,
           statusVariant: 'default' as const,
-          buttonLabel: null,
-          buttonTone: 'neutral' as const,
+          buttonLabel: canCheckIn ? t('workspace.checkIn') : null,
+          buttonTone: canCheckIn ? ('success' as const) : ('neutral' as const),
         };
       }
 
@@ -192,8 +195,8 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         statusColor: '#fef3c7',
         statusIcon: 'calendar-outline' as const,
         statusVariant: 'default' as const,
-        buttonLabel: null,
-        buttonTone: 'neutral' as const,
+        buttonLabel: canCheckIn ? t('workspace.checkIn') : null,
+        buttonTone: canCheckIn ? ('success' as const) : ('neutral' as const),
       };
     }
 

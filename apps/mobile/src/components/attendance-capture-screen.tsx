@@ -260,6 +260,28 @@ export function AttendanceCaptureScreen({
     locationCheck.state === "running" ||
     loading;
 
+  function hasInvalidAttendanceState(
+    nextStatus: Awaited<ReturnType<typeof loadAttendanceStatus>>,
+  ) {
+    return isCheckIn
+      ? nextStatus.attendanceState !== "not_checked_in"
+      : nextStatus.attendanceState === "not_checked_in" ||
+          nextStatus.attendanceState === "checked_out";
+  }
+
+  function applyLatestStatus(
+    nextStatus: Awaited<ReturnType<typeof loadAttendanceStatus>>,
+  ) {
+    setStatus(nextStatus);
+
+    if (hasInvalidAttendanceState(nextStatus)) {
+      router.replace("/today" as never);
+      return null;
+    }
+
+    return nextStatus;
+  }
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -270,21 +292,14 @@ export function AttendanceCaptureScreen({
         loadAttendanceStatus(),
         loadBiometricPolicy(),
       ]);
-
-      const invalidState = isCheckIn
-        ? nextStatus.attendanceState !== "not_checked_in"
-        : nextStatus.attendanceState === "not_checked_in" ||
-          nextStatus.attendanceState === "checked_out";
-
-      setStatus(nextStatus);
       setBiometricPolicy(nextBiometricPolicy);
 
-      if (invalidState) {
-        router.replace("/today" as never);
+      const activeStatus = applyLatestStatus(nextStatus);
+      if (!activeStatus) {
         return;
       }
 
-      void runLocationCheck(nextStatus);
+      void runLocationCheck(activeStatus);
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -320,6 +335,7 @@ export function AttendanceCaptureScreen({
       }
 
       void syncCameraPermission();
+      void refresh();
       if (permissionRefreshTimerRef.current) {
         clearTimeout(permissionRefreshTimerRef.current);
       }
@@ -393,7 +409,7 @@ export function AttendanceCaptureScreen({
 
   async function runLocationCheck(baseStatus = status) {
     if (!baseStatus?.location) {
-      return;
+      return null;
     }
 
     const requestId = locationCheckRequestRef.current + 1;
@@ -420,21 +436,23 @@ export function AttendanceCaptureScreen({
       );
 
       if (nextDistanceMeters > baseStatus.location.radiusMeters) {
-        setLocationCheck({
+        const nextState = {
           state: "outside",
           snapshot,
           distanceMeters: nextDistanceMeters,
           errorMessage: null,
-        });
-        return;
+        } as const;
+        setLocationCheck(nextState);
+        return nextState;
       }
 
-      setLocationCheck({
+      const nextState = {
         state: "ready",
         snapshot,
         distanceMeters: nextDistanceMeters,
         errorMessage: null,
-      });
+      } as const;
+      setLocationCheck(nextState);
       setMessage(
         isCheckIn
           ? t("arrival.locationCaptured", { accuracy: snapshot.accuracyMeters })
@@ -442,9 +460,10 @@ export function AttendanceCaptureScreen({
               accuracy: snapshot.accuracyMeters,
             }),
       );
+      return nextState;
     } catch (nextError) {
       if (locationCheckRequestRef.current !== requestId) {
-        return;
+        return null;
       }
 
       let errorMessage = isCheckIn
@@ -469,17 +488,29 @@ export function AttendanceCaptureScreen({
         errorMessage = nextError.message;
       }
 
-      setLocationCheck({
+      const nextState = {
         state: "error",
         snapshot: null,
         distanceMeters: null,
         errorMessage,
-      });
+      } as const;
+      setLocationCheck(nextState);
       setError(errorMessage);
+      return nextState;
     }
   }
 
   async function captureAndVerifyFace() {
+    const nextStatus = applyLatestStatus(await loadAttendanceStatus());
+    if (!nextStatus) {
+      return;
+    }
+
+    const nextLocationCheck = await runLocationCheck(nextStatus);
+    if (nextLocationCheck?.state !== "ready") {
+      return;
+    }
+
     const permissionGranted = await ensurePermission();
     if (!permissionGranted) {
       setError(t("biometric.permissionRequired"));
@@ -536,8 +567,8 @@ export function AttendanceCaptureScreen({
       const result = await pollJob(queuedJob.id);
       if (result.result?.result !== "PASSED" || !result.result.verificationId) {
         throw new Error(
-          result.result?.result === "REVIEW"
-            ? t("biometric.reviewRequired")
+          result.result?.result === "FAILED"
+            ? t("biometric.verificationFailed")
             : t("biometric.verificationCompleted", {
                 result: result.result?.result ?? result.status,
               }),

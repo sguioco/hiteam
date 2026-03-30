@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -18,9 +18,12 @@ import {
   loadManagerEmployees,
   loadManagerLiveSessions,
   loadManagerTasks,
+  loadMyProfile,
 } from "../../lib/api";
 import { getDateLocale, useI18n } from "../../lib/i18n";
+import { readScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
+import { formatDateKeyInTimeZone } from "../../lib/timezone";
 
 type ManagerEmployee = Awaited<
   ReturnType<typeof loadManagerEmployees>
@@ -44,6 +47,15 @@ type ManagerScreenProps = {
   standalone?: boolean;
 };
 
+const MANAGER_SCREEN_CACHE_TTL_MS = 60_000;
+
+type TaskPhoto = {
+  id: string;
+  label: string;
+  capturedAt: string;
+  uri: string;
+};
+
 function formatLocalDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -61,6 +73,196 @@ function isTaskOpen(status: TaskItem["status"]) {
 
 function isManagerTaskMeeting(task: TaskItem) {
   return Boolean(parseTaskMeta(task.description).meeting);
+}
+
+function normalizeManagerTaskTitle(title: string) {
+  return title
+    .replace(/^Employee recurring:\s*/i, "")
+    .replace(/^Owner recurring:\s*/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+function getManagerTaskAnchorDate(task: TaskItem) {
+  const candidates = [task.dueAt, task.occurrenceDate, task.createdAt];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getManagerTaskDuplicateKey(task: TaskItem, timeZone?: string | null) {
+  const anchorDate = getManagerTaskAnchorDate(task);
+  const anchorKey = anchorDate
+    ? formatDateKeyInTimeZone(anchorDate, timeZone)
+    : "no-date";
+  const kindKey = isManagerTaskMeeting(task) ? "meeting" : "task";
+  const photoKey = task.requiresPhoto ? "photo" : "plain";
+
+  return `${kindKey}|${photoKey}|${normalizeManagerTaskTitle(task.title)}|${anchorKey}|${task.assigneeEmployeeId ?? task.assigneeEmployee?.id ?? "no-assignee"}`;
+}
+
+function taskAnchorsManagerDateKey(
+  task: TaskItem,
+  dateKey: string,
+  timeZone?: string | null,
+) {
+  const anchorDate = getManagerTaskAnchorDate(task);
+  if (!anchorDate) {
+    return false;
+  }
+
+  return formatDateKeyInTimeZone(anchorDate, timeZone) === dateKey;
+}
+
+function choosePreferredManagerTask(current: TaskItem, candidate: TaskItem) {
+  const currentHasPhotos = current.photoProofs.some(
+    (proof) => !proof.deletedAt && !proof.supersededByProofId,
+  );
+  const candidateHasPhotos = candidate.photoProofs.some(
+    (proof) => !proof.deletedAt && !proof.supersededByProofId,
+  );
+
+  const currentScore =
+    (current.requiresPhoto ? 100 : 0) +
+    (currentHasPhotos ? 40 : 0) +
+    (!current.isRecurring ? 20 : 0) +
+    (current.status !== "DONE" && current.status !== "CANCELLED" ? 10 : 0);
+
+  const candidateScore =
+    (candidate.requiresPhoto ? 100 : 0) +
+    (candidateHasPhotos ? 40 : 0) +
+    (!candidate.isRecurring ? 20 : 0) +
+    (candidate.status !== "DONE" && candidate.status !== "CANCELLED" ? 10 : 0);
+
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current;
+  }
+
+  return new Date(candidate.updatedAt).getTime() >=
+    new Date(current.updatedAt).getTime()
+    ? candidate
+    : current;
+}
+
+function collapseDuplicateManagerTasks(
+  tasks: TaskItem[],
+  timeZone?: string | null,
+) {
+  const byKey = new Map<string, TaskItem>();
+
+  for (const task of tasks) {
+    const key = getManagerTaskDuplicateKey(task, timeZone);
+    const current = byKey.get(key);
+
+    if (!current) {
+      byKey.set(key, task);
+      continue;
+    }
+
+    byKey.set(key, choosePreferredManagerTask(current, task));
+  }
+
+  return Array.from(byKey.values());
+}
+
+function getEmployeeTaskDateKey(
+  employee: ManagerEmployee,
+  fallbackTimeZone?: string | null,
+) {
+  return formatDateKeyInTimeZone(
+    new Date(),
+    employee.primaryLocation?.timezone ?? fallbackTimeZone,
+  );
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
+  const photoLabelPrefix = locale.startsWith("ru") ? "Фото" : "Photo";
+
+  return task.photoProofs
+    .filter(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url,
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+    )
+    .map((proof, index) => ({
+      id: proof.id,
+      label: `${photoLabelPrefix} ${index + 1}`,
+      capturedAt: new Date(proof.createdAt).toLocaleTimeString(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+      uri: proof.url ?? "",
+    }));
+}
+
+function buildEmployeeName(firstName?: string | null, lastName?: string | null) {
+  return [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ").trim();
+}
+
+function buildManagerEmployeeFromTask(task: TaskItem): ManagerEmployee | null {
+  if (!task.assigneeEmployee) {
+    return null;
+  }
+
+  return {
+    id: task.assigneeEmployee.id,
+    firstName: task.assigneeEmployee.firstName,
+    lastName: task.assigneeEmployee.lastName,
+    email: "",
+    employeeNumber: task.assigneeEmployee.employeeNumber,
+    department: task.assigneeEmployee.department ?? null,
+    position: null,
+    primaryLocation: task.assigneeEmployee.primaryLocation ?? null,
+  };
+}
+
+function buildManagerEmployeeFromLiveSession(
+  session: AttendanceLiveSession,
+): ManagerEmployee | null {
+  if (!session.employeeId || !session.employeeName.trim()) {
+    return null;
+  }
+
+  const nameParts = session.employeeName.trim().split(/\s+/);
+  const firstName = nameParts[0] ?? session.employeeName.trim();
+  const lastName = nameParts.slice(1).join(" ");
+
+  return {
+    id: session.employeeId,
+    firstName,
+    lastName,
+    email: "",
+    employeeNumber: session.employeeNumber,
+    department: session.department
+      ? {
+          id: `session-department:${session.employeeId}`,
+          name: session.department,
+        }
+      : null,
+    position: null,
+    primaryLocation: session.location
+      ? {
+          id: `session-location:${session.employeeId}`,
+          name: session.location,
+        }
+      : null,
+  };
 }
 
 function attendanceSortRank(session: AttendanceLiveSession | null) {
@@ -368,6 +570,10 @@ export default function ManagerScreen({
     language === "ru"
       ? "Откройте список новостей компании и общий статус прочтения."
       : "Open company news and overall readership status.";
+  const managerCacheKey = "manager-screen-v4";
+  const [profile, setProfile] = useState<Awaited<
+    ReturnType<typeof loadMyProfile>
+  > | null>(null);
   const [employees, setEmployees] = useState<ManagerEmployee[]>([]);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -376,39 +582,120 @@ export default function ManagerScreen({
     null,
   );
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [activePhotoTaskId, setActivePhotoTaskId] = useState<string | null>(
+    null,
+  );
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [failedAvatarEmployeeIds, setFailedAvatarEmployeeIds] = useState<
     Set<string>
   >(new Set());
+  const businessTimeZone = profile?.primaryLocation?.timezone ?? null;
 
   useEffect(() => {
     async function loadData() {
-      try {
-        const [teamEmployees, teamLiveSessions, managerTasks] =
-          await Promise.all([
-            loadManagerEmployees(),
-            loadManagerLiveSessions(),
-            loadManagerTasks(),
-          ]);
-        const safeEmployees = Array.isArray(teamEmployees) ? teamEmployees : [];
-        const safeLiveSessions = Array.isArray(teamLiveSessions)
-          ? teamLiveSessions
-          : [];
-        const safeManagerTasks = Array.isArray(managerTasks)
-          ? managerTasks
-          : [];
+      const cached = await readScreenCache<{
+        profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
+        employees: ManagerEmployee[];
+        liveSessions: AttendanceLiveSession[];
+        tasks: TaskItem[];
+      }>(managerCacheKey, MANAGER_SCREEN_CACHE_TTL_MS);
 
-        setEmployees(safeEmployees);
-        setLiveSessions(safeLiveSessions);
-        setTasks(safeManagerTasks);
-        setFailedAvatarEmployeeIds(new Set());
-      } catch {
-        setEmployees([]);
-        setLiveSessions([]);
-        setTasks([]);
-        setFailedAvatarEmployeeIds(new Set());
-      } finally {
+      if (cached) {
+        setProfile(cached.value.profile ?? null);
+        setEmployees(cached.value.employees);
+        setLiveSessions(cached.value.liveSessions);
+        setTasks(cached.value.tasks);
         setLoading(false);
+        const hasUsefulCachedData =
+          cached.value.employees.length > 0 ||
+          cached.value.liveSessions.length > 0 ||
+          cached.value.tasks.length > 0;
+
+        if (!cached.isStale && hasUsefulCachedData) {
+          return;
+        }
       }
+
+      const now = new Date();
+      const cachedTimeZone = cached?.value.profile?.primaryLocation?.timezone ?? null;
+      const initialPreviousDateKey = formatDateKeyInTimeZone(
+        addDays(now, -1),
+        cachedTimeZone,
+      );
+      const initialNextDayDateKey = formatDateKeyInTimeZone(
+        addDays(now, 1),
+        cachedTimeZone,
+      );
+
+      const [profileResult, employeesResult, liveSessionsResult] =
+        await Promise.allSettled([
+          loadMyProfile(),
+          loadManagerEmployees(),
+          loadManagerLiveSessions(),
+        ]);
+
+      const nextProfile =
+        profileResult.status === "fulfilled"
+          ? profileResult.value
+          : cached?.value.profile ?? null;
+      const nextEmployees =
+        employeesResult.status === "fulfilled"
+          ? Array.isArray(employeesResult.value)
+            ? employeesResult.value
+            : []
+          : cached?.value.employees ?? [];
+      const nextLiveSessions =
+        liveSessionsResult.status === "fulfilled"
+          ? Array.isArray(liveSessionsResult.value)
+            ? liveSessionsResult.value
+            : []
+          : cached?.value.liveSessions ?? [];
+
+      const resolvedTimeZone = nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
+      const resolvedPreviousDateKey = formatDateKeyInTimeZone(
+        addDays(now, -1),
+        resolvedTimeZone,
+      );
+      const resolvedNextDayDateKey = formatDateKeyInTimeZone(
+        addDays(now, 1),
+        resolvedTimeZone,
+      );
+
+      let nextTasks = cached?.value.tasks ?? [];
+
+      try {
+        nextTasks = await loadManagerTasks({
+          dateFrom: resolvedPreviousDateKey,
+          dateTo: resolvedNextDayDateKey,
+        });
+      } catch {
+        try {
+          nextTasks = await loadManagerTasks({
+            dateFrom: initialPreviousDateKey,
+            dateTo: initialNextDayDateKey,
+          });
+        } catch {
+          try {
+            nextTasks = await loadManagerTasks();
+          } catch {
+            nextTasks = cached?.value.tasks ?? [];
+          }
+        }
+      }
+
+      setProfile(nextProfile);
+      setEmployees(nextEmployees);
+      setLiveSessions(nextLiveSessions);
+      setTasks(nextTasks);
+      setFailedAvatarEmployeeIds(new Set());
+      setLoading(false);
+
+      void writeScreenCache(managerCacheKey, {
+        profile: nextProfile,
+        employees: nextEmployees,
+        liveSessions: nextLiveSessions,
+        tasks: nextTasks,
+      });
     }
 
     void loadData();
@@ -422,12 +709,51 @@ export default function ManagerScreen({
     [liveSessions],
   );
 
+  const visibleTasks = useMemo(() => {
+    return collapseDuplicateManagerTasks(tasks, businessTimeZone).filter(
+      (task) => !isManagerTaskMeeting(task),
+    );
+  }, [businessTimeZone, tasks]);
+
   const employeeCards = useMemo(() => {
-    return (employees ?? [])
+    const employeeMap = new Map<string, ManagerEmployee>();
+
+    for (const employee of employees ?? []) {
+      employeeMap.set(employee.id, employee);
+    }
+
+    for (const task of visibleTasks) {
+      const taskEmployee = buildManagerEmployeeFromTask(task);
+      if (taskEmployee && !employeeMap.has(taskEmployee.id)) {
+        employeeMap.set(taskEmployee.id, taskEmployee);
+      }
+    }
+
+    for (const session of liveSessions ?? []) {
+      const sessionEmployee = buildManagerEmployeeFromLiveSession(session);
+      if (sessionEmployee && !employeeMap.has(sessionEmployee.id)) {
+        employeeMap.set(sessionEmployee.id, sessionEmployee);
+      }
+    }
+
+    return Array.from(employeeMap.values())
       .map((employee) => {
         const liveSession = liveSessionByEmployeeId.get(employee.id) ?? null;
-        const assignedTasks = (tasks ?? []).filter(
-          (task) => task.assigneeEmployeeId === employee.id,
+        const employeeTimeZone =
+          employee.primaryLocation?.timezone ?? businessTimeZone;
+        const employeeTodayDateKey = getEmployeeTaskDateKey(
+          employee,
+          businessTimeZone,
+        );
+        const assignedTasks = visibleTasks.filter(
+          (task) =>
+            (task.assigneeEmployeeId === employee.id ||
+              task.assigneeEmployee?.id === employee.id) &&
+            taskAnchorsManagerDateKey(
+              task,
+              employeeTodayDateKey,
+              employeeTimeZone,
+            ),
         );
         const openTasks = assignedTasks.filter((task) =>
           isTaskOpen(task.status),
@@ -463,12 +789,48 @@ export default function ManagerScreen({
           );
         }
 
-        return `${left.employee.firstName} ${left.employee.lastName}`.localeCompare(
-          `${right.employee.firstName} ${right.employee.lastName}`,
+        return buildEmployeeName(
+          left.employee.firstName,
+          left.employee.lastName,
+        ).localeCompare(
+          buildEmployeeName(right.employee.firstName, right.employee.lastName),
           locale,
         );
       });
-  }, [employees, liveSessionByEmployeeId, locale, tasks]);
+  }, [businessTimeZone, employees, liveSessionByEmployeeId, liveSessions, locale, visibleTasks]);
+
+  const activePhotoTask = useMemo(
+    () => visibleTasks.find((task) => task.id === activePhotoTaskId) ?? null,
+    [activePhotoTaskId, visibleTasks],
+  );
+
+  const activeTaskPhotos = useMemo(() => {
+    if (!activePhotoTask) {
+      return [];
+    }
+
+    return buildTaskPhotos(activePhotoTask, locale);
+  }, [activePhotoTask, locale]);
+
+  const selectedPhoto =
+    activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ??
+    activeTaskPhotos[0] ??
+    null;
+
+  useEffect(() => {
+    if (!activeTaskPhotos.length) {
+      setSelectedPhotoId(null);
+      return;
+    }
+
+    setSelectedPhotoId((current) => {
+      if (current && activeTaskPhotos.some((photo) => photo.id === current)) {
+        return current;
+      }
+
+      return activeTaskPhotos[0]?.id ?? null;
+    });
+  }, [activeTaskPhotos]);
 
   const summary = useMemo(() => {
     const checkedInCount = employeeCards.filter(
@@ -518,6 +880,15 @@ export default function ManagerScreen({
     });
   }
 
+  function closePhotoViewer() {
+    setActivePhotoTaskId(null);
+    setSelectedPhotoId(null);
+  }
+
+  function openTaskPhotos(taskId: string) {
+    setActivePhotoTaskId(taskId);
+  }
+
   function attendanceTone(session: AttendanceLiveSession | null) {
     if (!session) {
       return {
@@ -565,6 +936,48 @@ export default function ManagerScreen({
         }),
       }),
     };
+  }
+
+  function renderTaskLeading(task: TaskItem, photoCount: number) {
+    const isDone = task.status === "DONE";
+
+    if (task.requiresPhoto && photoCount > 0) {
+      return (
+        <Ionicons
+          color="#6d73ff"
+          name="images-outline"
+          size={20}
+        />
+      );
+    }
+
+    if (task.requiresPhoto) {
+      return (
+        <Ionicons
+          color="#22c55e"
+          name="camera-outline"
+          size={20}
+        />
+      );
+    }
+
+    if (isDone) {
+      return (
+        <Ionicons
+          color="#22c55e"
+          name="checkmark-circle"
+          size={20}
+        />
+      );
+    }
+
+    return (
+      <Ionicons
+        color="#c4cfdf"
+        name="ellipse-outline"
+        size={20}
+      />
+    );
   }
 
   return (
@@ -747,25 +1160,57 @@ export default function ManagerScreen({
                                   .slice(0, 5)
                                   .map((task) => {
                                     const isDone = task.status === "DONE";
-                                    return (
-                                      <Text
+                                    const photoCount = buildTaskPhotos(
+                                      task,
+                                      locale,
+                                    ).length;
+                                    const canOpenPhotos = photoCount > 0;
+                                    const rowContent = (
+                                      <View className="flex-row items-start gap-3 px-1 py-2">
+                                        <View className="w-6 items-center pt-0.5">
+                                          {renderTaskLeading(task, photoCount)}
+                                        </View>
+                                        <View className="flex-1">
+                                          <Text
+                                            className={`text-[16px] leading-6 ${isDone ? "line-through" : "text-foreground"}`}
+                                            style={
+                                              isDone
+                                                ? { color: "#22c55e" }
+                                                : undefined
+                                            }
+                                          >
+                                            {task.title}
+                                          </Text>
+                                          {task.requiresPhoto && photoCount > 0 ? (
+                                            <Text className="mt-1 text-[13px] leading-5 text-[#7b8798]">
+                                              {t("today.photosSaved", {
+                                                count: photoCount,
+                                              })}
+                                            </Text>
+                                          ) : null}
+                                        </View>
+                                      </View>
+                                    );
+
+                                    return canOpenPhotos ? (
+                                      <PressableScale
                                         key={task.id}
-                                        className={`text-[16px] leading-7 ${isDone ? "line-through" : "text-foreground"}`}
-                                        style={
-                                          isDone
-                                            ? { color: "#22c55e" }
-                                            : undefined
-                                        }
+                                        haptic="selection"
+                                        onPress={() => openTaskPhotos(task.id)}
                                       >
-                                        {task.title}
-                                      </Text>
+                                        {rowContent}
+                                      </PressableScale>
+                                    ) : (
+                                      <View key={task.id}>{rowContent}</View>
                                     );
                                   })}
                               </View>
                             ) : (
-                              <Text className="text-[13px] leading-5 text-[#6b7280]">
-                                {t("manager.noEmployeeTasks")}
-                              </Text>
+                              <View className="items-center justify-center px-4 py-6">
+                                <Text className="text-center text-[13px] leading-5 text-[#6b7280]">
+                                  {t("manager.noEmployeeTasks")}
+                                </Text>
+                              </View>
                             )}
                           </View>
                         ) : item.liveSession ? (
@@ -790,6 +1235,107 @@ export default function ManagerScreen({
           </View>
         </ScrollView>
       </View>
+
+      <BottomSheetModal
+        onClose={closePhotoViewer}
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        visible={activePhotoTask !== null}
+      >
+        {activePhotoTask ? (
+          <View className="relative min-h-[610px]">
+            <View className="pb-24">
+              <View className="mb-4 flex-row items-start justify-between gap-4">
+                <View className="w-10" />
+                <View className="flex-1 items-center">
+                  <Text className="text-center font-display text-[24px] font-bold text-foreground">
+                    {t("manager.photoViewerTitle")}
+                  </Text>
+                  <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
+                    {t("manager.photoViewerHint")}
+                  </Text>
+                </View>
+                <View className="w-10" />
+              </View>
+
+              <View className="mb-4 h-9">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className="flex-row gap-2">
+                    {activeTaskPhotos.map((photo, index) => {
+                      const isSelected = selectedPhoto?.id === photo.id;
+
+                      return (
+                        <PressableScale
+                          key={photo.id}
+                          className={`h-9 w-9 items-center justify-center rounded-full border ${
+                            isSelected
+                              ? "border-primary bg-primary"
+                              : "border-[#d7def5] bg-white"
+                          }`}
+                          haptic="selection"
+                          onPress={() => setSelectedPhotoId(photo.id)}
+                        >
+                          <Text
+                            className={`font-display text-sm font-bold ${
+                              isSelected ? "text-white" : "text-foreground"
+                            }`}
+                          >
+                            {index + 1}
+                          </Text>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {selectedPhoto ? (
+                <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
+                  <Image
+                    source={{ uri: selectedPhoto.uri }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                  <View
+                    className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
+                    style={{ backgroundColor: "rgba(15, 23, 42, 0.38)" }}
+                  >
+                    <Text className="font-display text-[28px] font-bold text-white">
+                      {selectedPhoto.label}
+                    </Text>
+                    <Text className="mt-2 font-body text-sm text-white/90">
+                      {t("today.photoCapturedAt", {
+                        time: selectedPhoto.capturedAt,
+                      })}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View className="items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10">
+                  <Ionicons
+                    color="#6d73ff"
+                    name="images-outline"
+                    size={24}
+                  />
+                  <Text className="mt-4 text-center font-body text-sm leading-6 text-muted-foreground">
+                    {t("manager.noTaskPhotos")}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View className="absolute inset-x-0 bottom-2">
+              <PressableScale
+                className="rounded-[24px] bg-primary px-4 py-4"
+                haptic="selection"
+                onPress={closePhotoViewer}
+              >
+                <Text className="text-center font-display text-[16px] font-semibold text-white">
+                  {t("common.done")}
+                </Text>
+              </PressableScale>
+            </View>
+          </View>
+        ) : null}
+      </BottomSheetModal>
 
       <BottomSheetModal
         onClose={() => setActionMenuOpen(false)}

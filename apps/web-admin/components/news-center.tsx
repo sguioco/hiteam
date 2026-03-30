@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toAdminHref } from "@/lib/admin-routes";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { Locale, useI18n } from "@/lib/i18n";
 
 type NewsCenterProps = {
@@ -67,6 +68,26 @@ const EMPTY_DRAFT: NewsDraft = {
   imageAspectRatio: "16:9",
   imageFileName: "",
 };
+
+const NEWS_CACHE_TTL_MS = 60_000;
+
+type NewsCenterCachePayload = {
+  items: AnnouncementItem[];
+  employees: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  }>;
+  groups: WorkGroupItem[];
+};
+
+function buildNewsCacheKey(
+  session: ReturnType<typeof getSession>,
+  mode: NewsCenterProps["mode"],
+) {
+  return session ? `news-center:${mode}:${session.user.id}` : null;
+}
 
 function localize(locale: Locale, ru: string, en: string) {
   return locale === "ru" ? ru : en;
@@ -304,6 +325,8 @@ function getAnnouncementImageOutputDimensions(value: AnnouncementImageAspectRati
 
 export function NewsCenter({ mode }: NewsCenterProps) {
   const { locale } = useI18n();
+  const session = getSession();
+  const cacheKey = buildNewsCacheKey(session, mode);
   const [items, setItems] = useState<AnnouncementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -330,8 +353,13 @@ export function NewsCenter({ mode }: NewsCenterProps) {
   const [groups, setGroups] = useState<WorkGroupItem[]>([]);
   const isManagerView = mode === "manager";
 
+  function applyCachedSnapshot(snapshot: NewsCenterCachePayload) {
+    setItems(snapshot.items);
+    setEmployees(snapshot.employees);
+    setGroups(snapshot.groups);
+  }
+
   async function loadItems() {
-    const session = getSession();
     if (!session) {
       return;
     }
@@ -359,8 +387,20 @@ export function NewsCenter({ mode }: NewsCenterProps) {
   }
 
   useEffect(() => {
+    const cached = cacheKey
+      ? readClientCache<NewsCenterCachePayload>(cacheKey, NEWS_CACHE_TTL_MS)
+      : null;
+
+    if (cached) {
+      applyCachedSnapshot(cached.value);
+      setLoading(false);
+      if (!cached.isStale) {
+        return;
+      }
+    }
+
     void loadItems();
-  }, [isManagerView]);
+  }, [cacheKey, isManagerView]);
 
   useEffect(() => {
     if (!feedback) {
@@ -376,7 +416,6 @@ export function NewsCenter({ mode }: NewsCenterProps) {
       return;
     }
 
-    const session = getSession();
     if (!session) {
       return;
     }
@@ -427,6 +466,18 @@ export function NewsCenter({ mode }: NewsCenterProps) {
       active = false;
     };
   }, [isManagerView]);
+
+  useEffect(() => {
+    if (!cacheKey || loading) {
+      return;
+    }
+
+    writeClientCache(cacheKey, {
+      items,
+      employees,
+      groups,
+    } satisfies NewsCenterCachePayload);
+  }, [cacheKey, employees, groups, items, loading]);
 
   const orderedItems = useMemo(() => {
     return [...items].sort((left, right) => {
@@ -768,11 +819,11 @@ export function NewsCenter({ mode }: NewsCenterProps) {
     <section className="flex flex-col gap-5">
       {isManagerView ? (
         <header className="animate-fade-in flex flex-col gap-4 px-1 py-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="text-3xl font-semibold tracking-[-0.05em] text-[color:var(--foreground)] md:text-4xl">
+          <div className="flex min-w-0 items-baseline gap-5">
+            <h1 className="text-[clamp(2.35rem,5.6vw,3.8rem)] font-medium uppercase leading-[0.92] tracking-[-0.07em] text-[color:var(--foreground)]">
               {localize(locale, "Новости", "News")}
             </h1>
-            <span className="text-xl font-semibold tracking-[-0.04em] text-[rgba(71,85,105,0.62)] md:text-2xl">
+            <span className="text-[clamp(2.35rem,5.6vw,3.8rem)] font-medium leading-[0.92] tracking-[-0.07em] text-[rgba(71,85,105,0.62)]">
               {orderedItems.length}
             </span>
           </div>

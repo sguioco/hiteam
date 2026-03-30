@@ -107,7 +107,7 @@ export class BiometricController {
     @Param('employeeId') employeeId: string,
     @Query() query: BiometricHistoryQueryDto,
   ) {
-    return this.biometricService.getEmployeeHistory(user.tenantId, employeeId, Number(query.limit ?? '8'));
+    return this.biometricService.getEmployeeHistory(user.tenantId, employeeId, Number(query.limit ?? '50'));
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

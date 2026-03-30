@@ -1,5 +1,6 @@
 "use client";
 
+import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import { useEffect, useMemo, useState } from "react";
 import {
   AttendanceAuditResponse,
@@ -16,6 +17,9 @@ import {
   Search,
   X,
 } from "lucide-react";
+import type { SortDescriptor } from "react-aria-components";
+import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
+import { Table } from "@/components/application/table/table";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { AttendanceAuditMap } from "@/components/AttendanceAuditMap";
@@ -78,6 +82,16 @@ type PeriodSummaryRow = {
   attendanceRate: number;
 };
 
+type PeriodSortColumn =
+  | "employeeName"
+  | "total"
+  | "ontime"
+  | "late"
+  | "earlyLeave"
+  | "missed"
+  | "workedMinutes"
+  | "attendanceRate";
+
 type AuditItem = AttendanceAuditResponse["items"][number];
 
 const todayFilters: Array<{ key: TodayFilter; label: string }> = [
@@ -137,6 +151,27 @@ function formatDateKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function parseCalendarDateRangeInput(startValue: string, endValue: string) {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(startValue) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(endValue)
+  ) {
+    return null;
+  }
+
+  try {
+    const start = parseDate(startValue);
+    const end = parseDate(endValue);
+
+    return {
+      start: start.compare(end) <= 0 ? start : end,
+      end: start.compare(end) <= 0 ? end : start,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function shiftDate(date: Date, days: number) {
@@ -326,6 +361,11 @@ export default function Attendance() {
   const [todayFilter, setTodayFilter] = useState<TodayFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("week");
+  const [periodSortDescriptor, setPeriodSortDescriptor] =
+    useState<SortDescriptor>({
+      column: "employeeName",
+      direction: "ascending",
+    });
   const [todayDate, setTodayDate] = useState(() => new Date());
   const [rangeFrom, setRangeFrom] = useState(() =>
     formatDateKey(shiftDate(new Date(), -6)),
@@ -674,6 +714,49 @@ export default function Attendance() {
       .sort((left, right) => left.name.localeCompare(right.name, "ru"));
   }, [anomaliesByEmployee, employees, historyByEmployee, search]);
 
+  const sortedPeriodRows = useMemo(() => {
+    const { column, direction } = periodSortDescriptor;
+    const sortDirection = direction === "descending" ? -1 : 1;
+
+    return [...periodRows].sort((left, right) => {
+      let comparison = 0;
+
+      switch (column as PeriodSortColumn | undefined) {
+        case "total":
+          comparison = left.total - right.total;
+          break;
+        case "ontime":
+          comparison = left.ontime - right.ontime;
+          break;
+        case "late":
+          comparison = left.late - right.late;
+          break;
+        case "earlyLeave":
+          comparison = left.earlyLeave - right.earlyLeave;
+          break;
+        case "missed":
+          comparison = left.missed - right.missed;
+          break;
+        case "workedMinutes":
+          comparison = left.workedMinutes - right.workedMinutes;
+          break;
+        case "attendanceRate":
+          comparison = left.attendanceRate - right.attendanceRate;
+          break;
+        case "employeeName":
+        default:
+          comparison = left.name.localeCompare(right.name, "ru");
+          break;
+      }
+
+      if (comparison === 0) {
+        comparison = left.name.localeCompare(right.name, "ru");
+      }
+
+      return comparison * sortDirection;
+    });
+  }, [periodRows, periodSortDescriptor]);
+
   function handlePresetChange(nextPreset: Preset) {
     setPreset(nextPreset);
 
@@ -696,11 +779,11 @@ export default function Attendance() {
             <h2 className="text-3xl font-semibold text-[color:var(--foreground)]">
               Посещаемость
             </h2>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {viewMode === "today"
-                ? "Кто сейчас на месте, кто на перерыве и где уже есть проблемы."
-                : "Сводка по посещаемости сотрудников за выбранный период."}
-            </p>
+            {viewMode === "period" ? (
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                Сводка по посещаемости сотрудников за выбранный период.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1244,36 +1327,51 @@ export default function Attendance() {
           </>
         ) : (
           <div className="space-y-5">
-            <div className="flex w-fit flex-wrap items-center overflow-hidden rounded-xl border border-border">
-              {periodPresets.map((option) => (
-                <button
-                  className={cn(
-                    "px-4 py-2 text-sm font-heading font-medium transition-colors",
-                    preset === option.key
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  key={option.key}
-                  onClick={() => handlePresetChange(option.key)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex w-fit flex-wrap items-center overflow-hidden rounded-xl border border-border">
+                {periodPresets.map((option) => (
+                  <button
+                    className={cn(
+                      "px-4 py-2 text-sm font-heading font-medium transition-colors",
+                      preset === option.key
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    key={option.key}
+                    onClick={() => handlePresetChange(option.key)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
 
               {preset === "custom" ? (
-                <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:flex-nowrap">
-                  <Input
-                    className="w-full md:w-[180px]"
-                    onChange={(event) => setRangeFrom(event.target.value)}
-                    type="date"
-                    value={rangeFrom}
-                  />
-                  <Input
-                    className="w-full md:w-[180px]"
-                    onChange={(event) => setRangeTo(event.target.value)}
-                    type="date"
-                    value={rangeTo}
+                <div className="min-w-[260px] max-w-full">
+                  <DateRangePicker
+                    aria-label="Период дат"
+                    buttonClassName="justify-start whitespace-nowrap"
+                    onChange={(value) => {
+                      if (!value?.start || !value?.end) {
+                        return;
+                      }
+
+                      setRangeFrom(
+                        value.start.toDate(getLocalTimeZone()) <=
+                          value.end.toDate(getLocalTimeZone())
+                          ? formatDateKey(value.start.toDate(getLocalTimeZone()))
+                          : formatDateKey(value.end.toDate(getLocalTimeZone())),
+                      );
+                      setRangeTo(
+                        value.start.toDate(getLocalTimeZone()) <=
+                          value.end.toDate(getLocalTimeZone())
+                          ? formatDateKey(value.end.toDate(getLocalTimeZone()))
+                          : formatDateKey(value.start.toDate(getLocalTimeZone())),
+                      );
+                    }}
+                    placeholder="Выберите даты"
+                    size="md"
+                    value={parseCalendarDateRangeInput(rangeFrom, rangeTo)}
                   />
                 </div>
               ) : null}
@@ -1307,99 +1405,122 @@ export default function Attendance() {
                 </div>
               ) : null}
 
-              <div className="overflow-x-auto rounded-[22px] border border-[color:var(--border)]">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[color:var(--panel-muted)] text-left">
-                    <tr>
-                      <th className="px-4 py-3 text-xs font-medium text-[color:var(--muted-foreground)]">
-                        Сотрудник
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--muted-foreground)]">
-                        Смен
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--success)]">
-                        Вовремя
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--warning)]">
-                        Опоздания
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--danger)]">
-                        Ранний уход
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--accent)]">
-                        Пропуски
-                      </th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-[color:var(--muted-foreground)]">
-                        Часы
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-[color:var(--muted-foreground)]">
-                        Посещаемость
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {periodRows.map((row, index) => (
-                      <tr
-                        className="animate-fade-in border-t border-[color:var(--border)] bg-white transition hover:bg-[color:var(--panel-muted)]"
-                        key={row.id}
-                        style={{ animationDelay: `${index * 25}ms` }}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <AttendanceAvatar name={row.name} size="sm" />
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-[color:var(--foreground)]">
-                                {row.name}
-                              </div>
-                              <div className="truncate text-xs text-[color:var(--muted-foreground)]">
-                                {row.position} • {row.employeeNumber}
-                              </div>
+              <Table
+                aria-label="Сводка по сотрудникам"
+                onSortChange={setPeriodSortDescriptor}
+                size="sm"
+                sortDescriptor={periodSortDescriptor}
+              >
+                <Table.Header>
+                  <Table.Head
+                    allowsSorting
+                    className="w-[34%] min-w-[280px]"
+                    id="employeeName"
+                    isRowHeader
+                    label={`Сотрудники ${sortedPeriodRows.length}`}
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[9%] min-w-[88px] text-center"
+                    id="total"
+                    label="Смен"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[10%] min-w-[92px] text-center"
+                    id="ontime"
+                    label="Вовремя"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[10%] min-w-[104px] text-center"
+                    id="late"
+                    label="Опоздания"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[10%] min-w-[116px] text-center"
+                    id="earlyLeave"
+                    label="Ранний уход"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[9%] min-w-[96px] text-center"
+                    id="missed"
+                    label="Пропуски"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[8%] min-w-[94px] text-center"
+                    id="workedMinutes"
+                    label="Часы"
+                  />
+                  <Table.Head
+                    allowsSorting
+                    className="w-[10%] min-w-[126px] text-center"
+                    id="attendanceRate"
+                    label="Посещаемость"
+                  />
+                </Table.Header>
+
+                <Table.Body items={sortedPeriodRows}>
+                  {(row) => (
+                    <Table.Row className="animate-fade-in" id={row.id}>
+                      <Table.Cell className="align-middle">
+                        <div className="flex items-center gap-3">
+                          <AttendanceAvatar name={row.name} size="sm" />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-primary">
+                              {row.name}
+                            </div>
+                            <div className="truncate text-sm text-tertiary">
+                              {row.position} • {row.employeeNumber}
                             </div>
                           </div>
-                        </td>
-                        <td className="px-3 py-3 text-center font-medium text-[color:var(--foreground)]">
-                          {row.total}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="font-semibold text-[color:var(--success)]">
-                            {row.ontime}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center font-semibold text-primary">
+                        {row.total}
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center">
+                        <span className="font-semibold text-[color:var(--success)]">
+                          {row.ontime}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center">
+                        <span className="font-semibold text-[color:var(--warning)]">
+                          {row.late}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center">
+                        <span className="font-semibold text-[color:var(--danger)]">
+                          {row.earlyLeave}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center">
+                        <span className="font-semibold text-[color:var(--accent-strong)]">
+                          {row.missed}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell className="align-middle text-center text-primary">
+                        {formatMinutes(row.workedMinutes)}
+                      </Table.Cell>
+                      <Table.Cell className="align-middle">
+                        <div className="mx-auto flex max-w-[110px] flex-col items-center gap-1">
+                          <span className="text-sm font-semibold text-primary">
+                            {row.attendanceRate}%
                           </span>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="font-semibold text-[color:var(--warning)]">
-                            {row.late}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="font-semibold text-[color:var(--danger)]">
-                            {row.earlyLeave}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="font-semibold text-[color:var(--accent-strong)]">
-                            {row.missed}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center text-[color:var(--foreground)]">
-                          {formatMinutes(row.workedMinutes)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="mx-auto flex max-w-[110px] flex-col items-center gap-1">
-                            <span className="text-sm font-semibold text-[color:var(--foreground)]">
-                              {row.attendanceRate}%
-                            </span>
-                            <ProgressBar
-                              className="h-1.5 w-full"
-                              tone={getProgressTone(row.attendanceRate)}
-                              value={row.attendanceRate}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          <ProgressBar
+                            className="h-1.5 w-full"
+                            tone={getProgressTone(row.attendanceRate)}
+                            value={row.attendanceRate}
+                          />
+                        </div>
+                      </Table.Cell>
+                    </Table.Row>
+                  )}
+                </Table.Body>
+              </Table>
 
               {!isLoading && !error && periodRows.length === 0 ? (
                 <div className="px-1 py-6 text-center text-sm text-[color:var(--muted-foreground)]">

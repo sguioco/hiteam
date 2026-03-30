@@ -12,6 +12,7 @@ import { PublicCompanyCodeDto } from './dto/public-company-code.dto';
 import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
+import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
 import { EmployeesService } from './employees.service';
 
 @Controller('employees')
@@ -95,6 +96,29 @@ export class EmployeesController {
   @Get(':employeeId')
   getById(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
     return this.employeesService.getById(user.tenantId, employeeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin')
+  @Get(':employeeId/manager-access')
+  getManagerAccess(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
+    return this.employeesService.getManagerAccess(user.tenantId, employeeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin')
+  @Patch(':employeeId/manager-access')
+  updateManagerAccess(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: UpdateEmployeeManagerAccessDto,
+  ) {
+    return this.employeesService.updateManagerAccess(
+      user.tenantId,
+      user.sub,
+      employeeId,
+      dto.grantManagerAccess,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

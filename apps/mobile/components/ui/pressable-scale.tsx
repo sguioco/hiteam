@@ -18,6 +18,7 @@ type PressableScaleProps = Omit<PressableProps, 'children'> & {
   className?: string;
   containerClassName?: string;
   contentStyle?: StyleProp<ViewStyle>;
+  dimWhenDisabled?: boolean;
   haptic?: HapticKind;
   scaleTo?: number;
 };
@@ -52,6 +53,7 @@ export function PressableScale({
   className,
   containerClassName,
   contentStyle,
+  dimWhenDisabled = true,
   disabled,
   haptic = 'press',
   onPress,
@@ -88,7 +90,9 @@ export function PressableScale({
       {...props}
     >
       <Animated.View style={[animatedStyle, contentStyle]}>
-        <View className={cn(className, disabled && 'opacity-60')}>{children}</View>
+        <View className={cn(className, disabled && dimWhenDisabled && 'opacity-60')}>
+          {children}
+        </View>
       </Animated.View>
     </Pressable>
   );

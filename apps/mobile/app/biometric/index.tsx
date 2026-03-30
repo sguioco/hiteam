@@ -298,8 +298,8 @@ export default function BiometricPage() {
           return;
         }
         setMessage(
-          result.result?.result === 'REVIEW'
-            ? t('biometric.reviewRequired')
+          result.result?.result === 'FAILED'
+            ? t('biometric.verificationFailed')
             : t('biometric.verificationCompleted', { result: result.result?.result ?? result.status }),
         );
       }

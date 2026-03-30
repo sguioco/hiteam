@@ -667,11 +667,6 @@ export function AdminShell({
             label: locale === "ru" ? "Биометрия" : "Biometric",
             icon: ScanFace,
           },
-          {
-            href: toAdminHref("/payroll"),
-            label: locale === "ru" ? "Зарплата" : "Payroll",
-            icon: Wallet,
-          },
         ],
       });
     }

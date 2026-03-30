@@ -76,6 +76,97 @@ export class EmployeesService {
     });
   }
 
+  async getManagerAccess(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId },
+      include: {
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const roleCodes = employee.user?.roles.map((assignment) => assignment.role.code) ?? [];
+    const hasAdminRole = roleCodes.some((roleCode) =>
+      ['tenant_owner', 'hr_admin', 'operations_admin'].includes(roleCode),
+    );
+
+    return {
+      employeeId: employee.id,
+      roleCodes,
+      hasAdminRole,
+      hasManagerAccess: hasAdminRole || roleCodes.includes('manager'),
+      canToggleManagerAccess: Boolean(employee.userId) && !hasAdminRole,
+    };
+  }
+
+  async updateManagerAccess(
+    tenantId: string,
+    actorUserId: string,
+    employeeId: string,
+    grantManagerAccess: boolean,
+  ) {
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId },
+      include: {
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!employee.userId || !employee.user) {
+      throw new BadRequestException('Employee account is not linked to a user yet.');
+    }
+
+    if (employee.userId === actorUserId) {
+      throw new BadRequestException('You cannot change your own manager access.');
+    }
+
+    const currentRoleCodes = employee.user.roles.map((assignment) => assignment.role.code);
+    const hasAdminRole = currentRoleCodes.some((roleCode) =>
+      ['tenant_owner', 'hr_admin', 'operations_admin'].includes(roleCode),
+    );
+
+    if (hasAdminRole) {
+      throw new BadRequestException('Administrative roles cannot be changed here.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.syncManagerRole(tx, employee.userId!, tenantId, grantManagerAccess);
+      await tx.session.deleteMany({
+        where: { userId: employee.userId! },
+      });
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: employee.id,
+      action: grantManagerAccess ? 'employee.manager_access_granted' : 'employee.manager_access_revoked',
+      metadata: {
+        employeeId: employee.id,
+        userId: employee.userId,
+        email: employee.user.email,
+      },
+    });
+
+    return this.getManagerAccess(tenantId, employeeId);
+  }
+
   getMe(user: JwtUser) {
     return this.prisma.employee.findFirst({
       where: {

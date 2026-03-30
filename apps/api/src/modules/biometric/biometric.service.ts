@@ -5,13 +5,10 @@ import {
   BiometricEnrollmentStatus,
   BiometricJobStatus,
   BiometricJobType,
-  BiometricManualReviewStatus,
   BiometricVerificationResult,
-  NotificationType,
 } from '@prisma/client';
 import { Job, Queue, Worker } from 'bullmq';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
-import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
@@ -35,7 +32,6 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     private readonly auditService: AuditService,
     private readonly storageService: StorageService,
     private readonly biometricProviderService: BiometricProviderService,
-    private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -413,20 +409,6 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       return verification;
     }
 
-    if (
-      verification.result === BiometricVerificationResult.REVIEW &&
-      verification.manualReviewStatus === BiometricManualReviewStatus.APPROVED
-    ) {
-      return verification;
-    }
-
-    if (
-      verification.result === BiometricVerificationResult.REVIEW &&
-      verification.manualReviewStatus === BiometricManualReviewStatus.PENDING
-    ) {
-      throw new ForbiddenException('Biometric verification is pending manual review.');
-    }
-
     throw new ForbiddenException('Biometric verification did not pass.');
   }
 
@@ -604,6 +586,9 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     if (awsProviderEnabled && (!sourceBytes || !targetBytes)) {
       throw new BadRequestException('Biometric reference or verification image is missing for AWS comparison.');
     }
+    if (comprefaceEnabled && (!sourceBytes || !targetBytes)) {
+      throw new BadRequestException('Biometric reference or verification image is missing for CompreFace comparison.');
+    }
 
     const fallbackLivenessScore =
       awsProviderEnabled || comprefaceEnabled ? null : this.deriveGuidedLivenessScore(dto.captureMetadata ?? null);
@@ -618,10 +603,13 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     if (awsProviderEnabled && providerMatchScore === null) {
       throw new BadRequestException('AWS face comparison did not return a similarity score.');
     }
+    if (comprefaceEnabled && !comprefaceVerification) {
+      throw new BadRequestException('CompreFace did not return a similarity score.');
+    }
     const livenessScore = comprefaceEnabled ? null : providerLivenessScore ?? fallbackLivenessScore;
     const matchScore = comprefaceEnabled
       ? comprefaceVerification?.similarity ?? null
-      : providerMatchScore ?? (awsProviderEnabled ? null : 0.96);
+      : providerMatchScore;
     if (livenessScore === null || matchScore === null) {
       if (!comprefaceEnabled) {
         throw new BadRequestException('Biometric verification requires real liveness and face match scores.');
@@ -631,20 +619,20 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       comprefaceEnabled
         ? matchScore !== null && matchScore >= this.biometricProviderService.getCompreFaceSimilarityThreshold()
           ? BiometricVerificationResult.PASSED
-          : BiometricVerificationResult.REVIEW
+          : BiometricVerificationResult.FAILED
         : livenessScore !== null && matchScore !== null && livenessScore >= 0.9 && matchScore >= 0.9
         ? BiometricVerificationResult.PASSED
-        : BiometricVerificationResult.REVIEW;
+        : BiometricVerificationResult.FAILED;
 
     const verification = await this.prisma.biometricVerification.create({
       data: {
         employeeId: employee.id,
         attendanceEventId: dto.attendanceEventId,
         result,
-        manualReviewStatus: result === BiometricVerificationResult.REVIEW ? BiometricManualReviewStatus.PENDING : null,
+        manualReviewStatus: null,
         livenessScore,
         matchScore,
-        reviewReason: result === BiometricVerificationResult.REVIEW ? 'Threshold not met' : null,
+        reviewReason: result === BiometricVerificationResult.FAILED ? 'Threshold not met' : null,
         provider: this.biometricProviderService.getProviderName(),
       },
     });
@@ -686,15 +674,6 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
         comprefaceRawResult: comprefaceVerification?.rawResult ?? null,
       },
     });
-
-    if (result === BiometricVerificationResult.REVIEW) {
-      await this.notifyManualReviewRequired({
-        tenantId: employee.tenantId,
-        employeeId: employee.id,
-        verificationId: verification.id,
-        employeeName: `${employee.firstName} ${employee.lastName}`,
-      });
-    }
 
     return {
       verificationId: verification.id,
@@ -804,7 +783,8 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getEmployeeHistory(tenantId: string, employeeId: string, limit = 8) {
-    const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 20) : 8;
+    const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50;
+    const historyWindowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const employee = await this.prisma.employee.findFirstOrThrow({
       where: {
         tenantId,
@@ -829,6 +809,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
         },
         biometricProfile: true,
         biometricChecks: {
+          where: {
+            capturedAt: {
+              gte: historyWindowStart,
+            },
+          },
           orderBy: { capturedAt: 'desc' },
           take: safeLimit,
           include: {
@@ -909,151 +894,18 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getReviewInbox(tenantId: string) {
-    const rows = await this.prisma.biometricVerification.findMany({
-      where: {
-        employee: { tenantId },
-        manualReviewStatus: BiometricManualReviewStatus.PENDING,
-      },
-      orderBy: { capturedAt: 'desc' },
-      include: {
-        employee: {
-          include: {
-            department: true,
-            primaryLocation: true,
-          },
-        },
-        artifacts: {
-          orderBy: { createdAt: 'asc' },
-        },
-        attendanceEvent: true,
-      },
-    });
+    void tenantId;
 
     return {
-      items: rows.map((row) => ({
-        verificationId: row.id,
-        employeeId: row.employee.id,
-        employeeName: `${row.employee.firstName} ${row.employee.lastName}`,
-        employeeNumber: row.employee.employeeNumber,
-        department: row.employee.department.name,
-        location: row.employee.primaryLocation.name,
-        provider: row.provider,
-        result: row.result,
-        manualReviewStatus: row.manualReviewStatus,
-        livenessScore: row.livenessScore,
-        matchScore: row.matchScore,
-        reviewReason: row.reviewReason,
-        capturedAt: row.capturedAt.toISOString(),
-        attendanceEvent: row.attendanceEvent
-          ? {
-              id: row.attendanceEvent.id,
-              eventType: row.attendanceEvent.eventType,
-              occurredAt: row.attendanceEvent.occurredAt.toISOString(),
-            }
-          : null,
-        artifacts: row.artifacts.map((artifact) => ({
-          id: artifact.id,
-          kind: artifact.kind,
-          stepId: artifact.stepId,
-          url: this.storageService.getObjectUrl(artifact.storageKey),
-        })),
-      })),
+      items: [],
     };
   }
 
   async reviewVerification(user: JwtUser, verificationId: string, dto: ReviewBiometricVerificationDto) {
-    const verification = await this.prisma.biometricVerification.findFirst({
-      where: {
-        id: verificationId,
-        employee: {
-          tenantId: user.tenantId,
-        },
-      },
-      include: {
-        employee: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-
-    if (!verification) {
-      throw new NotFoundException('Biometric verification not found.');
-    }
-
-    if (verification.manualReviewStatus !== BiometricManualReviewStatus.PENDING) {
-      throw new ForbiddenException('This biometric verification is not pending manual review.');
-    }
-
-    const reviewerEmployee = await this.prisma.employee.findUnique({
-      where: { userId: user.sub },
-      select: { id: true, firstName: true, lastName: true },
-    });
-
-    const manualReviewStatus =
-      dto.decision === 'APPROVE' ? BiometricManualReviewStatus.APPROVED : BiometricManualReviewStatus.REJECTED;
-
-    const updated = await this.prisma.biometricVerification.update({
-      where: { id: verification.id },
-      data: {
-        manualReviewStatus,
-        reviewedAt: new Date(),
-        reviewerComment: dto.comment ?? null,
-        reviewerEmployeeId: reviewerEmployee?.id ?? null,
-      },
-      include: {
-        reviewerEmployee: true,
-      },
-    });
-
-    await this.auditService.log({
-      tenantId: verification.employee.tenantId,
-      actorUserId: user.sub,
-      entityType: 'biometric_verification',
-      entityId: verification.id,
-      action: dto.decision === 'APPROVE' ? 'biometric.review_approved' : 'biometric.review_rejected',
-      metadata: {
-        reviewerEmployeeId: reviewerEmployee?.id ?? null,
-        comment: dto.comment ?? null,
-        automatedResult: verification.result,
-      },
-    });
-
-    await this.notificationsService.createForUser({
-      tenantId: verification.employee.tenantId,
-      userId: verification.employee.userId,
-      type:
-        dto.decision === 'APPROVE'
-          ? NotificationType.BIOMETRIC_REVIEW_APPROVED
-          : NotificationType.BIOMETRIC_REVIEW_REJECTED,
-      title:
-        dto.decision === 'APPROVE'
-          ? 'Biometric review approved'
-          : 'Biometric review rejected',
-      body:
-        dto.decision === 'APPROVE'
-          ? 'Your biometric verification was approved by management.'
-          : 'Your biometric verification requires a new capture.',
-      actionUrl: '/employee/biometric',
-      metadata: {
-        verificationId: verification.id,
-        decision: dto.decision,
-      },
-    });
-
-    return {
-      verificationId: updated.id,
-      manualReviewStatus: updated.manualReviewStatus,
-      reviewedAt: updated.reviewedAt?.toISOString() ?? null,
-      reviewerEmployee: updated.reviewerEmployee
-        ? {
-            id: updated.reviewerEmployee.id,
-            firstName: updated.reviewerEmployee.firstName,
-            lastName: updated.reviewerEmployee.lastName,
-          }
-        : null,
-    };
+    void user;
+    void verificationId;
+    void dto;
+    throw new ForbiddenException('Manual biometric review is disabled.');
   }
 
   private async processBiometricJob(job: Job<{ biometricJobId: string }>) {
@@ -1216,55 +1068,6 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     });
 
     return storageKey;
-  }
-
-  private async notifyManualReviewRequired(params: {
-    tenantId: string;
-    employeeId: string;
-    verificationId: string;
-    employeeName: string;
-  }) {
-    const reviewerUsers = await this.prisma.userRole.findMany({
-      where: {
-        scopeType: 'tenant',
-        scopeId: params.tenantId,
-        role: {
-          code: {
-            in: ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'],
-          },
-        },
-        user: {
-          employee: {
-            id: {
-              not: params.employeeId,
-            },
-          },
-        },
-      },
-      include: {
-        user: true,
-        role: true,
-      },
-    });
-
-    const uniqueUserIds = [...new Set(reviewerUsers.map((item) => item.userId))];
-
-    await Promise.all(
-      uniqueUserIds.map((userId) =>
-        this.notificationsService.createForUser({
-          tenantId: params.tenantId,
-          userId,
-          type: NotificationType.BIOMETRIC_REVIEW_ACTION_REQUIRED,
-          title: 'Biometric review required',
-          body: `${params.employeeName} has a biometric verification that requires manual review.`,
-          actionUrl: '/biometric',
-          metadata: {
-            verificationId: params.verificationId,
-            employeeId: params.employeeId,
-          },
-        }),
-      ),
-    );
   }
 
   private buildBullConnection(redisUrl: string) {

@@ -22,9 +22,12 @@ export class BiometricProviderService {
     this.provider = this.configService.get<string>('BIOMETRIC_PROVIDER', 'guided-web');
     this.comprefaceBaseUrl = this.configService.get<string>('COMPRE_FACE_BASE_URL')?.replace(/\/$/, '') ?? null;
     this.comprefaceApiKey = this.configService.get<string>('COMPRE_FACE_API_KEY') ?? null;
-    this.comprefaceSimilarityThreshold = Number(
-      this.configService.get<string>('COMPRE_FACE_SIMILARITY_THRESHOLD', '0.93'),
+    const rawCompreFaceThreshold = Number(
+      this.configService.get<string>('COMPRE_FACE_SIMILARITY_THRESHOLD', '0.60'),
     );
+    this.comprefaceSimilarityThreshold = Number.isFinite(rawCompreFaceThreshold)
+      ? Math.min(Math.max(rawCompreFaceThreshold, 0), 1)
+      : 0.6;
     this.client = new RekognitionClient({
       region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
       credentials: this.configService.get<string>('AWS_ACCESS_KEY_ID') && this.configService.get<string>('AWS_SECRET_ACCESS_KEY')
