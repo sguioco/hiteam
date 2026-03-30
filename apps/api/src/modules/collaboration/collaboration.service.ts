@@ -1577,6 +1577,8 @@ export class CollaborationService {
       dto.audience,
       dto.groupId,
       dto.targetEmployeeId,
+      undefined,
+      undefined,
       dto.departmentId,
       dto.locationId,
     );
@@ -1653,6 +1655,8 @@ export class CollaborationService {
       dto.audience,
       dto.groupId,
       dto.targetEmployeeId,
+      undefined,
+      undefined,
       dto.departmentId,
       dto.locationId,
     );
@@ -2284,7 +2288,13 @@ export class CollaborationService {
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     });
 
-    let boardTasks = tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
+    const serializedTasks = tasks.map((task) =>
+      this.serializeTaskWithPhotoProofUrls(task),
+    );
+    let boardTasks: Array<
+      | (typeof serializedTasks)[number]
+      | Awaited<ReturnType<typeof this.buildRecurringTasksForManager>>[number]
+    > = serializedTasks;
 
     if (taskWindow) {
       const recurringTasks = await this.buildRecurringTasksForManager(
@@ -5097,8 +5107,8 @@ export class CollaborationService {
   }
 
   private getEmployeeVisibleTaskAnchorDate(task: {
-    dueAt: string | null;
-    occurrenceDate?: string | null;
+    dueAt: string | Date | null;
+    occurrenceDate?: string | Date | null;
     createdAt: string | Date;
   }) {
     const candidates = [task.dueAt, task.occurrenceDate, task.createdAt];
@@ -5116,8 +5126,8 @@ export class CollaborationService {
 
   private getEmployeeVisibleTaskDuplicateKey(task: {
     title: string;
-    dueAt: string | null;
-    occurrenceDate?: string | null;
+    dueAt: string | Date | null;
+    occurrenceDate?: string | Date | null;
     createdAt: string | Date;
     requiresPhoto: boolean;
   }) {
@@ -5183,8 +5193,8 @@ export class CollaborationService {
   private collapseEmployeeVisibleTasks<
     T extends {
       title: string;
-      dueAt: string | null;
-      occurrenceDate?: string | null;
+      dueAt: string | Date | null;
+      occurrenceDate?: string | Date | null;
       createdAt: string | Date;
       status: TaskStatus;
       requiresPhoto: boolean;
