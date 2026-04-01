@@ -7581,52 +7581,6 @@ body {
   box-shadow: none;
 }
 
-.employee-directory-table-card {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: auto;
-  border: 1px solid rgba(20, 27, 45, 0.1);
-  border-radius: 22px;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.employee-directory-table-shell {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.employee-directory-table-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: rgba(244, 247, 252, 0.96);
-}
-
-.employee-directory-table-head tr {
-  background: rgba(244, 247, 252, 0.92);
-}
-
-.employee-directory-table-head th {
-  border-bottom: 1px solid rgba(20, 27, 45, 0.1);
-  font-size: 0.82rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--muted-foreground);
-}
-
-.employee-directory-table-row td {
-  border-top: 1px solid rgba(20, 27, 45, 0.08);
-  background: #ffffff;
-  transition: background-color 180ms ease;
-}
-
-.employee-directory-table-row:hover td {
-  background: rgba(246, 248, 252, 0.76);
-}
-
 .employee-directory-list {
   display: grid;
   gap: 14px;
@@ -9229,8 +9183,8 @@ body {
 
 .team-tasks-focus-weekday {
   display: inline-block;
-  width: 9ch;
-  min-width: 9ch;
+  width: 11ch;
+  min-width: 11сh;
   padding-right: 0.55em;
 }
 
@@ -9435,7 +9389,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 0.94rem;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: -0.01em;
   text-transform: none;
   line-height: 1;

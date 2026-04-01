@@ -21,14 +21,12 @@ import {
   Wallet,
 } from 'lucide-react';
 import { AdminShell } from '@/components/admin-shell';
+import { Table } from '@/components/application/table/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 import { apiDownload, apiRequest } from '@/lib/api';
 import { getSession } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
@@ -231,37 +229,56 @@ export default function PayrollPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('employees.name')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.scheduled')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.worked')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.breaks')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.late')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.night')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.overtime')}</TableHead>
-                  <TableHead className="text-right">{t('payroll.gross')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.rows.map((row) => (
-                  <TableRow key={row.employeeId}>
-                    <TableCell>
-                      <span className="font-medium">{row.employeeName}</span>
-                      <p className="text-xs text-muted-foreground">{row.department || row.position ? `${row.department || '–'} / ${row.position || '–'}` : row.employeeNumber}</p>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.scheduledMinutes)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.workedMinutes)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.breakMinutes)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.lateMinutes)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.nightMinutes)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatHours(row.overtimeMinutes + row.weekendOvertimeMinutes + row.holidayOvertimeMinutes)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{formatMoney(row.estimatedGrossPay)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="team-tasks-table-card !rounded-none !border-0">
+              <div className="team-tasks-table-shell">
+                <Table aria-label={t('payroll.rows')} size="sm">
+                  <Table.Header>
+                    <Table.Head
+                      className="min-w-[280px]"
+                      id="employeeName"
+                      isRowHeader
+                      label={t('employees.name')}
+                    />
+                    <Table.Head className="text-right [&>div]:justify-end" id="scheduled" label={t('payroll.scheduled')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="worked" label={t('payroll.worked')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="breaks" label={t('payroll.breaks')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="late" label={t('payroll.late')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="night" label={t('payroll.night')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="overtime" label={t('payroll.overtime')} />
+                    <Table.Head className="text-right [&>div]:justify-end" id="gross" label={t('payroll.gross')} />
+                  </Table.Header>
+                  <Table.Body items={summary.rows}>
+                    {(row) => (
+                      <Table.Row className="team-tasks-table-row" id={row.employeeId}>
+                        <Table.Cell>
+                          <div className="min-w-0">
+                            <span className="font-medium text-foreground">{row.employeeName}</span>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {row.department || row.position
+                                ? `${row.department || '–'} / ${row.position || '–'}`
+                                : row.employeeNumber}
+                            </p>
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">{formatHours(row.scheduledMinutes)}</Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">{formatHours(row.workedMinutes)}</Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">{formatHours(row.breakMinutes)}</Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">{formatHours(row.lateMinutes)}</Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">{formatHours(row.nightMinutes)}</Table.Cell>
+                        <Table.Cell className="text-right tabular-nums">
+                          {formatHours(
+                            row.overtimeMinutes + row.weekendOvertimeMinutes + row.holidayOvertimeMinutes,
+                          )}
+                        </Table.Cell>
+                        <Table.Cell className="text-right font-semibold tabular-nums">
+                          {formatMoney(row.estimatedGrossPay)}
+                        </Table.Cell>
+                      </Table.Row>
+                    )}
+                  </Table.Body>
+                </Table>
+              </div>
+            </div>
           </CardContent>
         </Card>
         <div className="space-y-6">

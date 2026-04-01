@@ -1,18 +1,20 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
+  Search,
   ScanFace,
   Users,
   XCircle,
 } from 'lucide-react';
 import { BiometricReviewResponse } from '@smart/types';
+import type { SortDescriptor } from 'react-aria-components';
 import { AdminShell } from '../../components/admin-shell';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Avatar } from '../../components/base/avatar/avatar';
+import { Table } from '../../components/application/table/table';
+import { Input } from '../../components/ui/input';
 import {
   Select,
   SelectContent,
@@ -20,30 +22,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../components/ui/table';
 import { apiRequest } from '../../lib/api';
 import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
+import { getMockAvatarDataUrl } from '../../lib/mock-avatar';
 
 type EmployeeOption = {
   id: string;
   firstName: string;
   lastName: string;
   employeeNumber: string;
+  avatarUrl?: string | null;
+  department?: { name: string } | null;
+  primaryLocation?: { name: string } | null;
 };
 
 const resultOptions = ['', 'PASSED', 'FAILED', 'REVIEW'] as const;
+type BiometricSortColumn =
+  | 'employeeName'
+  | 'enrollmentStatus'
+  | 'lastScan'
+  | 'result'
+  | 'match'
+  | 'liveness';
 
 function scoreLabel(value: number | null) {
   if (value === null) return '—';
   return `${Math.round(value * 100)}%`;
+}
+
+function getEmployeeInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function getBiometricTone(
+  status: 'NOT_STARTED' | 'PENDING' | 'ENROLLED' | 'FAILED' | 'PASSED' | 'REVIEW',
+) {
+  if (status === 'ENROLLED' || status === 'PASSED') {
+    return 'is-success';
+  }
+
+  if (status === 'FAILED') {
+    return 'is-error';
+  }
+
+  return 'is-gray';
 }
 
 function formatDate(iso: string) {
@@ -62,16 +90,20 @@ function formatDateTime(iso: string) {
 
 export default function BiometricReviewPage() {
   const { locale } = useI18n();
+  const router = useRouter();
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [reviews, setReviews] = useState<BiometricReviewResponse | null>(null);
-  const [employeeId, setEmployeeId] = useState('');
-  const [result, setResult] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [result, setResult] = useState<string>('__all');
+  const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
+    column: 'employeeName',
+    direction: 'ascending',
+  });
 
   async function loadReviewData() {
     const session = getSession();
     if (!session) return;
     const searchParams = new URLSearchParams();
-    if (employeeId && employeeId !== '__all') searchParams.set('employeeId', employeeId);
     if (result && result !== '__all') searchParams.set('result', result);
 
     const suffix = searchParams.toString();
@@ -92,30 +124,140 @@ export default function BiometricReviewPage() {
     void loadReviewData().catch(() => {
       setReviews({ totals: { employees: 0, enrolled: 0, reviewRequired: 0, notEnrolled: 0 }, items: [] });
     });
-  }, [employeeId, result]);
+  }, [result]);
 
   const failedCount = useMemo(
     () => reviews?.items.filter((item) => item.latestVerification?.result === 'FAILED').length ?? 0,
     [reviews],
   );
 
+  const employeeDirectoryById = useMemo(
+    () =>
+      new Map(
+        employees.map((employee) => [
+          employee.id,
+          {
+            avatarUrl: employee.avatarUrl ?? null,
+            department: employee.department?.name ?? null,
+            location: employee.primaryLocation?.name ?? null,
+          },
+        ]),
+      ),
+    [employees],
+  );
+
+  const sortedItems = useMemo(() => {
+    const collator = new Intl.Collator(locale === 'ru' ? 'ru' : 'en', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+    const direction = sortDescriptor.direction === 'descending' ? -1 : 1;
+    const enrollmentOrder = {
+      ENROLLED: 0,
+      PENDING: 1,
+      NOT_STARTED: 2,
+      FAILED: 3,
+    } as const;
+    const resultOrder = {
+      PASSED: 0,
+      REVIEW: 1,
+      FAILED: 2,
+      NONE: 3,
+    } as const;
+
+    return [...(reviews?.items ?? [])]
+      .filter((item) => item.employeeName.toLowerCase().includes(search.trim().toLowerCase()))
+      .sort((left, right) => {
+      const leftReview = left.latestVerification;
+      const rightReview = right.latestVerification;
+
+      switch (sortDescriptor.column as BiometricSortColumn) {
+        case 'enrollmentStatus':
+          return (
+            direction *
+            ((enrollmentOrder[left.enrollmentStatus] - enrollmentOrder[right.enrollmentStatus]) ||
+              collator.compare(left.employeeName, right.employeeName))
+          );
+        case 'lastScan':
+          return (
+            direction *
+            (((leftReview ? new Date(leftReview.capturedAt).getTime() : 0) -
+              (rightReview ? new Date(rightReview.capturedAt).getTime() : 0)) ||
+              collator.compare(left.employeeName, right.employeeName))
+          );
+        case 'result':
+          return (
+            direction *
+            ((resultOrder[leftReview?.result ?? 'NONE'] - resultOrder[rightReview?.result ?? 'NONE']) ||
+              collator.compare(left.employeeName, right.employeeName))
+          );
+        case 'match':
+          return (
+            direction *
+            (((leftReview?.matchScore ?? -1) - (rightReview?.matchScore ?? -1)) ||
+              collator.compare(left.employeeName, right.employeeName))
+          );
+        case 'liveness':
+          return (
+            direction *
+            (((leftReview?.livenessScore ?? -1) - (rightReview?.livenessScore ?? -1)) ||
+              collator.compare(left.employeeName, right.employeeName))
+          );
+        case 'employeeName':
+        default:
+          return direction * collator.compare(left.employeeName, right.employeeName);
+      }
+    });
+  }, [locale, reviews?.items, search, sortDescriptor]);
+
+  function openEmployeeProfile(targetEmployeeId: string) {
+    router.push(`/employees/${targetEmployeeId}`);
+  }
+
+function renderStatusChip(label: string, tone: string) {
+  return (
+    <span className={`team-tasks-employee-status ${tone}`}>
+      <span className="team-tasks-employee-status-dot" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function getEnrollmentStatusLabel(
+  status: 'NOT_STARTED' | 'PENDING' | 'ENROLLED' | 'FAILED',
+  locale: string,
+) {
+  if (locale === 'ru') {
+    switch (status) {
+      case 'ENROLLED':
+        return 'Проверен';
+      case 'NOT_STARTED':
+        return 'Не проверен';
+      case 'PENDING':
+        return 'В ожидании';
+      case 'FAILED':
+      default:
+        return 'Ошибка';
+    }
+  }
+
+  switch (status) {
+    case 'ENROLLED':
+      return 'Verified';
+    case 'NOT_STARTED':
+      return 'Not verified';
+    case 'PENDING':
+      return 'Pending';
+    case 'FAILED':
+    default:
+      return 'Failed';
+  }
+}
+
   return (
     <AdminShell>
-      <main className="flex w-full flex-col gap-8 px-6 py-8 lg:px-10">
-        <header className="flex flex-col gap-1">
-          <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            {locale === 'ru' ? 'Сотрудники' : 'Employees'}
-          </span>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {locale === 'ru' ? 'Биометрия' : 'Biometric'}
-          </h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            {locale === 'ru'
-              ? 'Автоматическая верификация лица и история сканов за последние 7 дней.'
-              : 'Automatic face verification and scan history for the last 7 days.'}
-          </p>
-        </header>
-
+      <main className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
         <div className="grid grid-cols-2 rounded-xl border bg-card sm:grid-cols-4">
           {[
             { label: locale === 'ru' ? 'Всего' : 'Total', value: reviews?.totals.employees ?? 0, icon: Users },
@@ -138,33 +280,17 @@ export default function BiometricReviewPage() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">
-              {locale === 'ru' ? 'Последние автоматические проверки' : 'Latest automatic scans'}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {locale === 'ru'
-                ? 'Менеджер видит результат, проценты совпадения и переход к карточке сотрудника.'
-                : 'Managers can inspect the result, similarity scores, and open the employee profile.'}
-            </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={locale === 'ru' ? 'Поиск сотрудника...' : 'Search employee...'}
+              value={search}
+            />
           </div>
           <div className="flex items-center gap-2">
-            <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger className="w-[200px] whitespace-nowrap">
-                <SelectValue placeholder={locale === 'ru' ? 'Все сотрудники' : 'All employees'} />
-              </SelectTrigger>
-              <SelectContent className="biometric-select-content">
-                <SelectItem className="biometric-select-item" value="__all">
-                  {locale === 'ru' ? 'Все сотрудники' : 'All employees'}
-                </SelectItem>
-                {employees.map((employee) => (
-                  <SelectItem className="biometric-select-item" key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={result} onValueChange={(value) => setResult(value as (typeof resultOptions)[number])}>
               <SelectTrigger className="w-[180px] whitespace-nowrap">
                 <SelectValue placeholder={locale === 'ru' ? 'Все результаты' : 'All results'} />
@@ -181,104 +307,170 @@ export default function BiometricReviewPage() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {locale === 'ru' ? 'Командная история сканов' : 'Team scan history'}
-            </CardTitle>
-            <CardDescription>
-              {locale === 'ru'
-                ? 'Статус регистрации, последняя автоматическая проверка и быстрый переход в карточку сотрудника.'
-                : 'Enrollment status, latest automatic verification, and a quick link to the employee profile.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{locale === 'ru' ? 'Сотрудник' : 'Employee'}</TableHead>
-                  <TableHead>{locale === 'ru' ? 'Статус' : 'Status'}</TableHead>
-                  <TableHead>{locale === 'ru' ? 'Регистрация' : 'Enrolled'}</TableHead>
-                  <TableHead>{locale === 'ru' ? 'Последний скан' : 'Last scan'}</TableHead>
-                  <TableHead>{locale === 'ru' ? 'Результат' : 'Result'}</TableHead>
-                  <TableHead className="text-right">Match</TableHead>
-                  <TableHead className="text-right">Liveness</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reviews && reviews.items.length > 0 ? (
-                  reviews.items.map((item) => (
-                    <TableRow key={item.employeeId}>
-                      <TableCell>
-                        <p className="font-medium">{item.employeeName}</p>
-                        <p className="text-[11px] text-muted-foreground">{item.employeeNumber} · {item.department}</p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={item.enrollmentStatus === 'ENROLLED' ? 'success' : 'secondary'}>
-                          {item.enrollmentStatus === 'ENROLLED' ? (
-                            <>
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              {locale === 'ru' ? 'Активна' : 'Active'}
-                            </>
-                          ) : (
-                            item.enrollmentStatus
-                          )}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs">{item.enrolledAt ? formatDate(item.enrolledAt) : '—'}</TableCell>
-                      <TableCell className="text-xs">
-                        {item.latestVerification ? formatDateTime(item.latestVerification.capturedAt) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {item.latestVerification ? (
-                          <Badge
-                            variant={
-                              item.latestVerification.result === 'PASSED'
-                                ? 'success'
-                                : item.latestVerification.result === 'FAILED'
-                                ? 'danger'
-                                : 'warning'
-                            }
-                          >
-                            {item.latestVerification.result === 'PASSED' ? (
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                            ) : item.latestVerification.result === 'FAILED' ? (
-                              <XCircle className="mr-1 h-3 w-3" />
-                            ) : (
-                              <ScanFace className="mr-1 h-3 w-3" />
-                            )}
-                            {item.latestVerification.result}
-                          </Badge>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">
-                        {item.latestVerification ? scoreLabel(item.latestVerification.matchScore) : '—'}
-                      </TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">
-                        {item.latestVerification ? scoreLabel(item.latestVerification.livenessScore) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Button asChild size="sm" variant="ghost">
-                          <Link href={`/employees/${item.employeeId}`}>
-                            {locale === 'ru' ? 'Открыть' : 'Open'}
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell className="py-16 text-center text-muted-foreground" colSpan={8}>
-                      <ScanFace className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                      <p>{locale === 'ru' ? 'Нет данных' : 'No data'}</p>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="team-tasks-table-card flex-1">
+            <div className="team-tasks-table-shell">
+              {sortedItems.length > 0 ? (
+                <Table
+                  aria-label={locale === 'ru' ? 'Таблица биометрии' : 'Biometric table'}
+                  onSortChange={setSortDescriptor}
+                  size="sm"
+                  sortDescriptor={sortDescriptor}
+                >
+                  <Table.Header>
+                    <Table.Head
+                      allowsSorting
+                      className="w-[34%] min-w-[320px]"
+                      id="employeeName"
+                      isRowHeader
+                      label={locale === 'ru' ? 'ФИО' : 'Employee'}
+                    />
+                    <Table.Head
+                      allowsSorting
+                      className="w-[16%] min-w-[170px] team-tasks-head-center"
+                      id="enrollmentStatus"
+                      label={locale === 'ru' ? 'Статус' : 'Status'}
+                    />
+                    <Table.Head
+                      allowsSorting
+                      className="w-[16%] min-w-[170px] team-tasks-head-center"
+                      id="lastScan"
+                      label={locale === 'ru' ? 'Последний скан' : 'Last scan'}
+                    />
+                    <Table.Head
+                      allowsSorting
+                      className="w-[14%] min-w-[150px] team-tasks-head-center"
+                      id="result"
+                      label={locale === 'ru' ? 'Результат' : 'Result'}
+                    />
+                    <Table.Head
+                      allowsSorting
+                      className="w-[10%] min-w-[110px] team-tasks-head-center team-tasks-head-progress"
+                      id="match"
+                      label="Match"
+                    />
+                    <Table.Head
+                      allowsSorting
+                      className="w-[10%] min-w-[110px] team-tasks-head-center team-tasks-head-progress"
+                      id="liveness"
+                      label="Liveness"
+                    />
+                  </Table.Header>
+                  <Table.Body items={sortedItems}>
+                    {(item) => {
+                      const employeeProfile = employeeDirectoryById.get(item.employeeId);
+                      const employeeSubtitle = [item.department, item.location]
+                        .filter((part) => part && part !== '—')
+                        .join(' • ');
+
+                      return (
+                        <Table.Row className="team-tasks-table-row" id={item.employeeId}>
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--identity"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Avatar
+                                  alt={item.employeeName}
+                                  className="shrink-0"
+                                  initials={getEmployeeInitials(item.employeeName)}
+                                  size="sm"
+                                  src={employeeProfile?.avatarUrl || getMockAvatarDataUrl(item.employeeName)}
+                                />
+                                <div className="min-w-0 space-y-0.5">
+                                  <p className="truncate text-base font-medium text-[color:var(--foreground)]">
+                                    {item.employeeName}
+                                  </p>
+                                  <p className="truncate text-sm text-[color:var(--muted-foreground)]">
+                                    {employeeSubtitle || item.department}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle whitespace-nowrap">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              {renderStatusChip(
+                                getEnrollmentStatusLabel(item.enrollmentStatus, locale),
+                                getBiometricTone(item.enrollmentStatus),
+                              )}
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle whitespace-nowrap">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              <span className="team-tasks-team-text">
+                                {item.latestVerification
+                                  ? formatDateTime(item.latestVerification.capturedAt)
+                                  : '—'}
+                              </span>
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle whitespace-nowrap">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              {item.latestVerification
+                                ? renderStatusChip(
+                                    item.latestVerification.result,
+                                    getBiometricTone(item.latestVerification.result),
+                                  )
+                                : <span className="team-tasks-team-text is-empty">—</span>}
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--progress"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
+                                {item.latestVerification ? scoreLabel(item.latestVerification.matchScore) : '—'}
+                              </strong>
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--progress"
+                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              type="button"
+                            >
+                              <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
+                                {item.latestVerification ? scoreLabel(item.latestVerification.livenessScore) : '—'}
+                              </strong>
+                            </button>
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    }}
+                  </Table.Body>
+                </Table>
+              ) : (
+                <div className="px-5 py-16 text-center text-sm text-muted-foreground">
+                  <ScanFace className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                  <p>{locale === 'ru' ? 'Нет данных' : 'No data'}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        </div>
       </main>
     </AdminShell>
   );

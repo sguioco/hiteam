@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
@@ -11,6 +12,7 @@ import {
   FolderOpen,
   ListTodo,
   Mail,
+  Plus,
   Search,
   Settings,
   Smartphone,
@@ -24,6 +26,9 @@ import {
   EmployeeBiometricHistoryResponse,
   TaskItem,
 } from "@smart/types";
+import type { SortDescriptor } from "react-aria-components";
+import { Table } from "@/components/application/table/table";
+import { Avatar } from "@/components/base/avatar/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
@@ -152,6 +157,7 @@ type OrganizationSetupResponse = {
 
 type EmployeeStatus = "active" | "inactive" | "vacation" | "sick" | "dismissed";
 type ViewMode = "employees" | "groups";
+type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
 type TaskDialogState =
   | {
       mode: "employee";
@@ -190,20 +196,20 @@ const statusStyles: Record<EmployeeStatus, string> = {
   dismissed: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
 };
 
-const statusTextStyles: Record<EmployeeStatus, string> = {
-  active: "text-[color:var(--success)]",
-  inactive: "text-[color:var(--accent-strong)]",
-  vacation: "text-[color:var(--accent-strong)]",
-  sick: "text-[color:var(--warning)]",
-  dismissed: "text-[color:var(--danger)]",
-};
-
 const statusLabels: Record<EmployeeStatus, string> = {
   active: "На смене",
   inactive: "Вне смены",
   vacation: "Отпуск",
   sick: "Больничный",
   dismissed: "Уволен",
+};
+
+const statusToneByEmployeeStatus: Record<EmployeeStatus, string> = {
+  active: "is-success",
+  inactive: "is-gray",
+  vacation: "is-gray",
+  sick: "is-error",
+  dismissed: "is-error",
 };
 
 const invitationLabels: Record<InvitationRecord["status"], string> = {
@@ -299,115 +305,45 @@ function formatHireDate(value?: string | null) {
     : date.toLocaleDateString("ru-RU");
 }
 
-const EmployeeRow = ({
-  emp,
-  onMove,
-  onOpenTask,
-  onSelect,
-}: {
-  emp: EmployeeRowView;
-  onMove: (employee: EmployeeRowView) => void;
-  onOpenTask: (employee: EmployeeRowView) => void;
-  onSelect: (employeeId: string) => void;
-}) => (
-  <tr
-    className="employee-directory-table-row cursor-pointer transition-colors"
-    onClick={() => onSelect(emp.id)}
-  >
-    <td className="px-3 py-2.5">
-      <div className="flex items-center gap-3">
-        <img
-          alt={emp.name}
-          className="h-10 w-10 shrink-0 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-          src={emp.avatarUrl || getMockAvatarDataUrl(emp.name)}
-        />
-        <div className="min-w-0">
-          <p className="truncate font-heading font-medium text-foreground">
-            {emp.name}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {emp.position} • {emp.employeeNumber}
-          </p>
-        </div>
-      </div>
-    </td>
-    <td className="px-3 py-2.5">
-      <span className={`text-xs font-heading ${statusTextStyles[emp.status]}`}>
-        {statusLabels[emp.status]}
-      </span>
-    </td>
-    <td className="px-3 py-2.5 text-xs font-heading text-muted-foreground">
-      {emp.location}
-    </td>
-    <td className="px-3 py-2.5">
-      {emp.group ? (
-        <span className="text-xs font-heading text-foreground">
-          {emp.group}
-        </span>
-      ) : (
-        <span className="text-xs italic text-muted-foreground">—</span>
-      )}
-    </td>
-    <td className="px-3 py-2.5 text-center font-heading font-semibold text-foreground">
-      {emp.activeTasks}
-    </td>
-    <td className="px-3 py-2.5">
-      <div className="flex gap-1">
-        <Button
-          className="h-7 w-7 rounded-lg p-0"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenTask(emp);
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          <ListTodo className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          className="h-7 w-7 rounded-lg p-0"
-          onClick={(event) => {
-            event.stopPropagation();
-            onMove(emp);
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          <ArrowRightLeft className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </td>
-  </tr>
-);
+function getEmployeeInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-const TableHead = () => (
-  <thead className="employee-directory-table-head">
-    <tr>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
-        ФИО
-      </th>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
-        Статус
-      </th>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
-        Локация
-      </th>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
-        Группа
-      </th>
-      <th className="px-3 py-2.5 text-center text-xs font-heading font-medium text-muted-foreground">
-        Задачи
-      </th>
-      <th className="px-3 py-2.5 text-left text-xs font-heading font-medium text-muted-foreground">
-        Действия
-      </th>
-    </tr>
-  </thead>
-);
+function renderEmployeeStatusBadge(status: EmployeeStatus) {
+  const tableStatusLabel =
+    status === "active"
+      ? "On shift"
+      : status === "inactive"
+        ? "Off shift"
+        : status === "vacation"
+          ? "Vacation"
+          : status === "sick"
+            ? "Sick leave"
+            : "Dismissed";
+
+  return (
+    <span
+      className={`team-tasks-employee-status ${statusToneByEmployeeStatus[status]}`}
+    >
+      <span className="team-tasks-employee-status-dot" aria-hidden="true" />
+      {tableStatusLabel}
+    </span>
+  );
+}
 
 const Employees = () => {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("employees");
+  const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
+    column: "name",
+    direction: "ascending",
+  });
   const [showFormerEmployees, setShowFormerEmployees] = useState(false);
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
@@ -689,6 +625,47 @@ const Employees = () => {
     });
   }, [employees, search, showFormerEmployees]);
 
+  const sortedEmployees = useMemo(() => {
+    const collator = new Intl.Collator("ru", {
+      sensitivity: "base",
+      numeric: true,
+    });
+    const direction = sortDescriptor.direction === "descending" ? -1 : 1;
+    const statusOrder: Record<EmployeeStatus, number> = {
+      active: 0,
+      inactive: 1,
+      vacation: 2,
+      sick: 3,
+      dismissed: 4,
+    };
+
+    return [...filteredEmployees].sort((left, right) => {
+      switch (sortDescriptor.column as EmployeeSortKey) {
+        case "status":
+          return (
+            direction *
+            (statusOrder[left.status] - statusOrder[right.status] ||
+              collator.compare(left.name, right.name))
+          );
+        case "group":
+          return (
+            direction *
+            (collator.compare(left.group ?? "яяя", right.group ?? "яяя") ||
+              collator.compare(left.name, right.name))
+          );
+        case "activeTasks":
+          return (
+            direction *
+            (left.activeTasks - right.activeTasks ||
+              collator.compare(left.name, right.name))
+          );
+        case "name":
+        default:
+          return direction * collator.compare(left.name, right.name);
+      }
+    });
+  }, [filteredEmployees, sortDescriptor]);
+
   const groupedEmployees = useMemo(
     () =>
       groups
@@ -726,6 +703,10 @@ const Employees = () => {
       employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
   );
+
+  function openEmployeePage(employeeId: string) {
+    router.push(`/employees/${employeeId}`);
+  }
 
   const groupEditor = useMemo(
     () => groups.find((group) => group.id === groupEditorId) ?? null,
@@ -1422,15 +1403,180 @@ const Employees = () => {
     }
   }
 
+  function renderEmployeesTable(
+    items: EmployeeRowView[],
+    options?: {
+      cardClassName?: string;
+    },
+  ) {
+    const cardClassName = options?.cardClassName
+      ? ` ${options.cardClassName}`
+      : "";
+
+    return (
+      <div className={`team-tasks-table-card${cardClassName}`}>
+        <div className="team-tasks-table-shell">
+          <Table
+            aria-label="Таблица сотрудников"
+            onSortChange={setSortDescriptor}
+            size="sm"
+            sortDescriptor={sortDescriptor}
+          >
+            <Table.Header>
+              <Table.Head
+                allowsSorting
+                className="w-[38%] min-w-[320px]"
+                id="name"
+                isRowHeader
+                label="ФИО"
+              />
+              <Table.Head
+                allowsSorting
+                className="w-[16%] min-w-[170px] team-tasks-head-center"
+                id="status"
+                label="Статус"
+              />
+              <Table.Head
+                className="w-[16%] min-w-[170px] team-tasks-head-center"
+                id="location"
+                label="Локация"
+              />
+              <Table.Head
+                allowsSorting
+                className="w-[16%] min-w-[170px] team-tasks-head-center"
+                id="group"
+                label="Группа"
+              />
+              <Table.Head
+                allowsSorting
+                className="w-[8%] min-w-[96px] team-tasks-head-center team-tasks-head-progress"
+                id="activeTasks"
+                label="Задачи"
+              />
+              <Table.Head
+                className="w-[6%] min-w-[96px] team-tasks-head-center"
+                id="actions"
+                label="Действия"
+              />
+            </Table.Header>
+
+            <Table.Body items={items}>
+              {(employee) => (
+                <Table.Row className="team-tasks-table-row" id={employee.id}>
+                  <Table.Cell className="align-middle">
+                    <button
+                      className="team-tasks-row-button team-tasks-row-button--identity"
+                      onClick={() => openEmployeePage(employee.id)}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar
+                          alt={employee.name}
+                          className="shrink-0"
+                          initials={getEmployeeInitials(employee.name)}
+                          size="sm"
+                          src={
+                            employee.avatarUrl ||
+                            getMockAvatarDataUrl(employee.name)
+                          }
+                        />
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="truncate text-base font-medium text-[color:var(--foreground)]">
+                            {employee.name}
+                          </p>
+                          <p className="truncate text-sm text-[color:var(--muted-foreground)]">
+                            {employee.position} • {employee.employeeNumber}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </Table.Cell>
+
+                  <Table.Cell className="align-middle whitespace-nowrap">
+                    <button
+                      className="team-tasks-row-button team-tasks-row-button--center"
+                      onClick={() => openEmployeePage(employee.id)}
+                      type="button"
+                    >
+                      {renderEmployeeStatusBadge(employee.status)}
+                    </button>
+                  </Table.Cell>
+
+                  <Table.Cell className="align-middle whitespace-nowrap">
+                    <button
+                      className="team-tasks-row-button team-tasks-row-button--center"
+                      onClick={() => openEmployeePage(employee.id)}
+                      type="button"
+                    >
+                      <span className="team-tasks-team-text">
+                        {employee.location}
+                      </span>
+                    </button>
+                  </Table.Cell>
+
+                  <Table.Cell className="align-middle whitespace-nowrap">
+                    <button
+                      className="team-tasks-row-button team-tasks-row-button--center"
+                      onClick={() => openEmployeePage(employee.id)}
+                      type="button"
+                    >
+                      {employee.group ? (
+                        <span className="team-tasks-team-text">
+                          {employee.group}
+                        </span>
+                      ) : (
+                        <span className="team-tasks-team-text is-empty">—</span>
+                      )}
+                    </button>
+                  </Table.Cell>
+
+                  <Table.Cell className="align-middle">
+                    <button
+                      className="team-tasks-row-button team-tasks-row-button--progress"
+                      onClick={() => openEmployeePage(employee.id)}
+                      type="button"
+                    >
+                      <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
+                        {employee.activeTasks}
+                      </strong>
+                    </button>
+                  </Table.Cell>
+
+                  <Table.Cell className="align-middle">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button
+                        className="h-7 w-7 rounded-lg p-0"
+                        onClick={() => openTaskDialogForEmployee(employee)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        className="h-7 w-7 rounded-lg p-0"
+                        onClick={() => openMoveDialog(employee)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              )}
+            </Table.Body>
+          </Table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-heading font-bold text-foreground">
-              Сотрудники
-            </h1>
-          </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex overflow-hidden rounded-xl border border-border">
               <button
@@ -1441,7 +1587,8 @@ const Employees = () => {
                 }`}
                 onClick={() => setViewMode("employees")}
               >
-                <Users className="h-4 w-4" /> Сотрудники {filteredEmployees.length}
+                <Users className="h-4 w-4" /> Сотрудники{" "}
+                {filteredEmployees.length}
               </button>
               <button
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors ${
@@ -1580,25 +1727,8 @@ const Employees = () => {
               Загружаю сотрудников...
             </div>
           ) : viewMode === "employees" ? (
-            filteredEmployees.length > 0 ? (
-              <div className="employee-directory-table-card flex-1">
-                <div className="employee-directory-table-shell">
-                  <table className="w-full text-sm">
-                    <TableHead />
-                    <tbody>
-                      {filteredEmployees.map((employee) => (
-                        <EmployeeRow
-                          emp={employee}
-                          key={employee.id}
-                          onMove={openMoveDialog}
-                          onOpenTask={openTaskDialogForEmployee}
-                          onSelect={setSelectedEmployeeId}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            sortedEmployees.length > 0 ? (
+              renderEmployeesTable(sortedEmployees, { cardClassName: "flex-1" })
             ) : (
               <p className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">
                 По текущему фильтру сотрудники не найдены.
@@ -1653,22 +1783,11 @@ const Employees = () => {
                         </Button>
                       </div>
                     </div>
-                    {isOpen && members.length > 0 ? (
-                      <table className="w-full text-sm">
-                        <TableHead />
-                        <tbody>
-                          {members.map((employee) => (
-                            <EmployeeRow
-                              emp={employee}
-                              key={employee.id}
-                              onMove={openMoveDialog}
-                              onOpenTask={openTaskDialogForEmployee}
-                              onSelect={setSelectedEmployeeId}
-                            />
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : null}
+                    {isOpen && members.length > 0
+                      ? renderEmployeesTable(members, {
+                          cardClassName: "!rounded-none !border-0",
+                        })
+                      : null}
                     {isOpen && members.length === 0 ? (
                       <p className="p-4 text-center text-sm font-heading text-muted-foreground">
                         В этой группе нет сотрудников.
@@ -1699,22 +1818,11 @@ const Employees = () => {
                       </span>
                     </div>
                   </button>
-                  {expandedGroups.has("__none") ? (
-                    <table className="w-full text-sm">
-                      <TableHead />
-                      <tbody>
-                        {ungroupedEmployees.map((employee) => (
-                          <EmployeeRow
-                            emp={employee}
-                            key={employee.id}
-                            onMove={openMoveDialog}
-                            onOpenTask={openTaskDialogForEmployee}
-                            onSelect={setSelectedEmployeeId}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : null}
+                  {expandedGroups.has("__none")
+                    ? renderEmployeesTable(ungroupedEmployees, {
+                        cardClassName: "!rounded-none !border-0",
+                      })
+                    : null}
                 </div>
               ) : null}
             </div>

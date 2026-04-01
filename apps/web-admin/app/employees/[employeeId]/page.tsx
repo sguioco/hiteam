@@ -22,9 +22,12 @@ import {
   EmployeeBiometricHistoryResponse,
 } from '@smart/types';
 import { AdminShell } from '../../../components/admin-shell';
+import { Table } from '../../../components/application/table/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { apiRequest } from '../../../lib/api';
 import { getSession, hasDesktopAdminAccess } from '../../../lib/auth';
 import { useI18n } from '../../../lib/i18n';
+import { getMockAvatarDataUrl } from '../../../lib/mock-avatar';
 
 type EmployeeDetails = {
   id: string;
@@ -32,6 +35,7 @@ type EmployeeDetails = {
   lastName: string;
   employeeNumber: string;
   hireDate: string;
+  avatarUrl?: string | null;
   user: { email: string };
   department: { name: string };
   company: { name: string };
@@ -92,6 +96,30 @@ function formatDevicePlatform(platform: string, locale: string) {
   }
 }
 
+function getEnrollmentStatusLabel(status: string | null | undefined, locale: string) {
+  switch (status) {
+    case 'ENROLLED':
+      return locale === 'ru' ? 'Подтверждено' : 'Verified';
+    case 'PENDING':
+      return locale === 'ru' ? 'В процессе' : 'Pending';
+    case 'NOT_STARTED':
+    default:
+      return locale === 'ru' ? 'Не подтверждено' : 'Not verified';
+  }
+}
+
+function getEnrollmentStatusClassName(status: string | null | undefined) {
+  switch (status) {
+    case 'ENROLLED':
+      return 'text-green-600';
+    case 'PENDING':
+      return 'text-amber-600';
+    case 'NOT_STARTED':
+    default:
+      return 'text-muted-foreground';
+  }
+}
+
 export default function EmployeeCardPage() {
   const { locale } = useI18n();
   const params = useParams<{ employeeId: string }>();
@@ -105,6 +133,7 @@ export default function EmployeeCardPage() {
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
   const [roleActionPending, setRoleActionPending] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [selectedVerificationId, setSelectedVerificationId] = useState<string | null>(null);
   const session = getSession();
   const canManageRoles = hasDesktopAdminAccess(session?.user.roleCodes ?? []);
 
@@ -185,6 +214,16 @@ export default function EmployeeCardPage() {
   );
 
   const fullName = employee ? `${employee.firstName} ${employee.lastName}` : '...';
+  const employeeAvatarSrc = employee
+    ? employee.avatarUrl || getMockAvatarDataUrl(fullName)
+    : getMockAvatarDataUrl('employee');
+  const selectedVerification = useMemo(
+    () => biometricHistory?.verifications.find((item) => item.id === selectedVerificationId) ?? null,
+    [biometricHistory, selectedVerificationId],
+  );
+  const selectedVerificationArtifacts = selectedVerification?.artifacts.filter((artifact) => artifact.url) ?? [];
+  const biometricStatusLabel = getEnrollmentStatusLabel(biometricHistory?.profile?.enrollmentStatus, locale);
+  const biometricStatusClassName = getEnrollmentStatusClassName(biometricHistory?.profile?.enrollmentStatus);
   const primaryBiometricUrl = useMemo(() => {
     if (biometricHistory?.profile?.templateUrl) {
       return biometricHistory.profile.templateUrl;
@@ -314,9 +353,11 @@ export default function EmployeeCardPage() {
           </Link>
 
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-full bg-accent/10 text-xl font-bold text-accent">
-              {employee ? `${employee.firstName[0]}${employee.lastName[0]}` : '..'}
-            </div>
+            <img
+              alt={employee ? fullName : locale === 'ru' ? 'Фото сотрудника' : 'Employee photo'}
+              className="size-14 rounded-full object-cover"
+              src={employeeAvatarSrc}
+            />
             <div>
               <h1 className="font-heading text-2xl font-bold text-foreground">{fullName}</h1>
               {employee && (
@@ -324,7 +365,6 @@ export default function EmployeeCardPage() {
                   <span className="flex items-center gap-1"><Briefcase className="size-3.5" />{employee.position.name}</span>
                   <span className="flex items-center gap-1"><MapPin className="size-3.5" />{employee.primaryLocation.name}</span>
                   <span className="flex items-center gap-1"><Calendar className="size-3.5" />{employee.department.name}</span>
-                  <span className="font-mono text-xs opacity-60">#{employee.employeeNumber}</span>
                 </p>
               )}
               {managerAccess ? (
@@ -367,7 +407,7 @@ export default function EmployeeCardPage() {
                   : managerAccess.hasManagerAccess
                     ? locale === 'ru'
                       ? 'Сделать обычным сотрудником'
-                      : 'Make employee'
+                      : 'Downgrade to employee'
                     : locale === 'ru'
                       ? 'Сделать менеджером'
                       : 'Make manager'}
@@ -394,8 +434,8 @@ export default function EmployeeCardPage() {
                 <Icon className="size-4" />
                 {t.label}
                 {t.count !== undefined && t.count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
-                    tab === t.key ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
+                  <span className={`text-sm font-semibold leading-none ${
+                    tab === t.key ? 'text-white/90' : 'text-muted-foreground'
                   }`}>
                     {t.count}
                   </span>
@@ -423,81 +463,81 @@ export default function EmployeeCardPage() {
           {tab === 'attendance' && (
             <>
               {history && history.rows.length > 0 ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Дата' : 'Date'}</th>
-                        <th className="px-4 py-3">Check-in</th>
-                        <th className="px-4 py-3">Check-out</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Отработано' : 'Worked'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Перерывы' : 'Breaks'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Опоздание' : 'Late'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Ранний уход' : 'Early leave'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Статус' : 'Status'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {history.rows.map((row) => (
-                        <tr className="transition-colors hover:bg-muted/20" key={row.sessionId}>
-                          <td className="px-4 py-3 font-medium">{formatDate(row.startedAt)}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-green-600">{formatTime(row.checkInEvent.occurredAt)}</span>
-                              {row.checkInEvent.distanceMeters !== null && (
-                                <span className="text-[10px] text-muted-foreground">{row.checkInEvent.distanceMeters}m</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            {row.checkOutEvent ? (
+                <div className="team-tasks-table-card">
+                  <div className="team-tasks-table-shell">
+                    <Table aria-label={locale === 'ru' ? 'История посещаемости' : 'Attendance history'} size="sm">
+                      <Table.Header>
+                        <Table.Head className="min-w-[130px]" id="date" isRowHeader label={locale === 'ru' ? 'Дата' : 'Date'} />
+                        <Table.Head id="checkIn" label="Check-in" />
+                        <Table.Head id="checkOut" label="Check-out" />
+                        <Table.Head id="worked" label={locale === 'ru' ? 'Отработано' : 'Worked'} />
+                        <Table.Head id="breaks" label={locale === 'ru' ? 'Перерывы' : 'Breaks'} />
+                        <Table.Head id="late" label={locale === 'ru' ? 'Опоздание' : 'Late'} />
+                        <Table.Head id="earlyLeave" label={locale === 'ru' ? 'Ранний уход' : 'Early leave'} />
+                        <Table.Head id="status" label={locale === 'ru' ? 'Статус' : 'Status'} />
+                      </Table.Header>
+                      <Table.Body items={history.rows}>
+                        {(row) => (
+                          <Table.Row className="team-tasks-table-row" id={row.sessionId}>
+                            <Table.Cell className="font-medium">{formatDate(row.startedAt)}</Table.Cell>
+                            <Table.Cell>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-red-500">{formatTime(row.checkOutEvent.occurredAt)}</span>
-                                {row.checkOutEvent.distanceMeters !== null && (
-                                  <span className="text-[10px] text-muted-foreground">{row.checkOutEvent.distanceMeters}m</span>
-                                )}
+                                <span className="text-green-600">{formatTime(row.checkInEvent.occurredAt)}</span>
+                                {row.checkInEvent.distanceMeters !== null ? (
+                                  <span className="text-[10px] text-muted-foreground">{row.checkInEvent.distanceMeters}m</span>
+                                ) : null}
                               </div>
-                            ) : (
-                              <span className="text-amber-500">{locale === 'ru' ? 'На смене' : 'On shift'}</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 font-medium">{formatHours(row.workedMinutes)}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{formatHours(row.breakMinutes)}</td>
-                          <td className="px-4 py-3">
-                            {row.lateMinutes > 0 ? (
-                              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">{row.lateMinutes}м</span>
-                            ) : (
-                              <span className="text-muted-foreground/50">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {row.earlyLeaveMinutes > 0 ? (
-                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">{row.earlyLeaveMinutes}м</span>
-                            ) : (
-                              <span className="text-muted-foreground/50">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {row.status === 'on_shift' ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                                <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
-                                {locale === 'ru' ? 'На смене' : 'On shift'}
-                              </span>
-                            ) : row.status === 'on_break' ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                {locale === 'ru' ? 'Перерыв' : 'Break'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                <CheckCircle2 className="size-3.5 text-green-500" />
-                                {locale === 'ru' ? 'Завершено' : 'Done'}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            </Table.Cell>
+                            <Table.Cell>
+                              {row.checkOutEvent ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-red-500">{formatTime(row.checkOutEvent.occurredAt)}</span>
+                                  {row.checkOutEvent.distanceMeters !== null ? (
+                                    <span className="text-[10px] text-muted-foreground">{row.checkOutEvent.distanceMeters}m</span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-amber-500">{locale === 'ru' ? 'На смене' : 'On shift'}</span>
+                              )}
+                            </Table.Cell>
+                            <Table.Cell className="font-medium">{formatHours(row.workedMinutes)}</Table.Cell>
+                            <Table.Cell className="text-muted-foreground">{formatHours(row.breakMinutes)}</Table.Cell>
+                            <Table.Cell>
+                              {row.lateMinutes > 0 ? (
+                                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">{row.lateMinutes}м</span>
+                              ) : (
+                                <span className="text-muted-foreground/50">—</span>
+                              )}
+                            </Table.Cell>
+                            <Table.Cell>
+                              {row.earlyLeaveMinutes > 0 ? (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">{row.earlyLeaveMinutes}м</span>
+                              ) : (
+                                <span className="text-muted-foreground/50">—</span>
+                              )}
+                            </Table.Cell>
+                            <Table.Cell>
+                              {row.status === 'on_shift' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                                  <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
+                                  {locale === 'ru' ? 'На смене' : 'On shift'}
+                                </span>
+                              ) : row.status === 'on_break' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                  {locale === 'ru' ? 'Перерыв' : 'Break'}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                  <CheckCircle2 className="size-3.5 text-green-500" />
+                                  {locale === 'ru' ? 'Завершено' : 'Done'}
+                                </span>
+                              )}
+                            </Table.Cell>
+                          </Table.Row>
+                        )}
+                      </Table.Body>
+                    </Table>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground">
@@ -513,8 +553,8 @@ export default function EmployeeCardPage() {
             <>
               {biometricHistory?.profile && (
                 <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <div className="mb-3 flex items-center gap-2">
+                  <div className="p-4">
+                    <div className="mb-3 flex items-center justify-center gap-2 text-center">
                       <ScanFace className="size-4 text-accent" />
                       <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
                         {locale === 'ru' ? 'Основная биометрия' : 'Primary biometric'}
@@ -531,40 +571,32 @@ export default function EmployeeCardPage() {
                         {locale === 'ru' ? 'Основное лицо ещё не загружено в хранилище.' : 'Primary face is not available in storage yet.'}
                       </div>
                     )}
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2">
-                        <span className="text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</span>
-                        <span className="font-medium text-foreground">{biometricHistory.profile.enrollmentStatus}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2">
-                        <span className="text-muted-foreground">{locale === 'ru' ? 'Провайдер' : 'Provider'}</span>
-                        <span className="font-medium text-foreground">{biometricHistory.profile.provider}</span>
-                      </div>
-                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-2xl border border-border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</p>
-                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrollmentStatus}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Провайдер' : 'Provider'}</p>
-                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.provider}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Зарегистрирован' : 'Enrolled at'}</p>
-                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.enrolledAt ? formatDate(biometricHistory.profile.enrolledAt) : '—'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Последняя проверка' : 'Last verified'}</p>
-                      <p className="mt-1 font-heading text-lg font-bold">{biometricHistory.profile.lastVerifiedAt ? formatDate(biometricHistory.profile.lastVerifiedAt) : '—'}</p>
-                    </div>
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <dl className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 px-4 py-3">
+                        <dt className="text-muted-foreground">{locale === 'ru' ? 'Статус' : 'Status'}</dt>
+                        <dd className={`font-semibold ${biometricStatusClassName}`}>{biometricStatusLabel}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 px-4 py-3">
+                        <dt className="text-muted-foreground">{locale === 'ru' ? 'Зарегистрирован' : 'Enrolled at'}</dt>
+                        <dd className="font-medium text-foreground">
+                          {biometricHistory.profile.enrolledAt ? formatDate(biometricHistory.profile.enrolledAt) : '—'}
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 px-4 py-3">
+                        <dt className="text-muted-foreground">{locale === 'ru' ? 'Последняя проверка' : 'Last verified'}</dt>
+                        <dd className="font-medium text-foreground">
+                          {biometricHistory.profile.lastVerifiedAt ? formatDate(biometricHistory.profile.lastVerifiedAt) : '—'}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
                 </div>
               )}
 
               {biometricHistory && biometricHistory.verifications.length > 0 ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="team-tasks-table-card">
                   <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
                     <div>
                       <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-foreground">
@@ -580,45 +612,59 @@ export default function EmployeeCardPage() {
                       {biometricHistory.verifications.length}
                     </span>
                   </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Дата' : 'Date'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Результат' : 'Result'}</th>
-                        <th className="px-4 py-3">Liveness</th>
-                        <th className="px-4 py-3">Match</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Событие' : 'Event'}</th>
-                        <th className="px-4 py-3">{locale === 'ru' ? 'Примечание' : 'Note'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {biometricHistory.verifications.map((v) => (
-                        <tr className="transition-colors hover:bg-muted/20" key={v.id}>
-                          <td className="px-4 py-3 font-medium">
-                            {formatDate(v.capturedAt)}
-                            <br />
-                            <span className="text-xs text-muted-foreground">{formatTime(v.capturedAt)}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              v.result === 'PASSED' ? 'bg-green-50 text-green-700' :
-                              v.result === 'REVIEW' ? 'bg-amber-50 text-amber-700' :
-                              'bg-red-50 text-red-700'
-                            }`}>
-                              {v.result === 'PASSED' ? <CheckCircle2 className="size-3" /> : v.result === 'FAILED' ? <XCircle className="size-3" /> : <ShieldAlert className="size-3" />}
-                              {v.result}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">{v.livenessScore !== null ? `${Math.round(v.livenessScore * 100)}%` : '—'}</td>
-                          <td className="px-4 py-3">{v.matchScore !== null ? `${Math.round(v.matchScore * 100)}%` : '—'}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
-                            {v.attendanceEvent ? `${v.attendanceEvent.eventType} ${formatDateTime(v.attendanceEvent.occurredAt)}` : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-xs">{v.reviewReason ?? '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="team-tasks-table-shell">
+                    <Table
+                      aria-label={locale === 'ru' ? 'История верификаций' : 'Verification history'}
+                      onRowAction={(key) => setSelectedVerificationId(String(key))}
+                      size="sm"
+                    >
+                      <Table.Header>
+                        <Table.Head className="min-w-[150px]" id="capturedAt" isRowHeader label={locale === 'ru' ? 'Дата' : 'Date'} />
+                        <Table.Head id="result" label={locale === 'ru' ? 'Результат' : 'Result'} />
+                        <Table.Head id="liveness" label="Liveness" />
+                        <Table.Head id="match" label="Match" />
+                        <Table.Head id="event" label={locale === 'ru' ? 'Событие' : 'Event'} />
+                        <Table.Head id="note" label={locale === 'ru' ? 'Примечание' : 'Note'} />
+                      </Table.Header>
+                      <Table.Body items={biometricHistory.verifications}>
+                        {(v) => (
+                          <Table.Row className="team-tasks-table-row cursor-pointer" id={v.id}>
+                            <Table.Cell className="font-medium">
+                              {formatDate(v.capturedAt)}
+                              <br />
+                              <span className="text-xs text-muted-foreground">{formatTime(v.capturedAt)}</span>
+                            </Table.Cell>
+                            <Table.Cell>
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                  v.result === 'PASSED'
+                                    ? 'bg-green-50 text-green-700'
+                                    : v.result === 'REVIEW'
+                                      ? 'bg-amber-50 text-amber-700'
+                                      : 'bg-red-50 text-red-700'
+                                }`}
+                              >
+                                {v.result === 'PASSED' ? (
+                                  <CheckCircle2 className="size-3" />
+                                ) : v.result === 'FAILED' ? (
+                                  <XCircle className="size-3" />
+                                ) : (
+                                  <ShieldAlert className="size-3" />
+                                )}
+                                {v.result}
+                              </span>
+                            </Table.Cell>
+                            <Table.Cell>{v.livenessScore !== null ? `${Math.round(v.livenessScore * 100)}%` : '—'}</Table.Cell>
+                            <Table.Cell>{v.matchScore !== null ? `${Math.round(v.matchScore * 100)}%` : '—'}</Table.Cell>
+                            <Table.Cell className="text-xs text-muted-foreground">
+                              {v.attendanceEvent ? `${v.attendanceEvent.eventType} ${formatDateTime(v.attendanceEvent.occurredAt)}` : '—'}
+                            </Table.Cell>
+                            <Table.Cell className="text-xs">{v.reviewReason ?? '—'}</Table.Cell>
+                          </Table.Row>
+                        )}
+                      </Table.Body>
+                    </Table>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground">
@@ -663,7 +709,6 @@ export default function EmployeeCardPage() {
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Имя' : 'Name'}</dt><dd className="font-medium">{employee.firstName} {employee.lastName}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">Email</dt><dd className="font-medium">{employee.user.email}</dd></div>
-                  <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Номер' : 'Number'}</dt><dd className="font-medium">#{employee.employeeNumber}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Дата найма' : 'Hire date'}</dt><dd className="font-medium">{formatDate(employee.hireDate)}</dd></div>
                 </dl>
               </div>
@@ -672,7 +717,6 @@ export default function EmployeeCardPage() {
                   <Briefcase className="size-4" />{locale === 'ru' ? 'Организация' : 'Organization'}
                 </h3>
                 <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Компания' : 'Company'}</dt><dd className="font-medium">{employee.company.name}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Отдел' : 'Department'}</dt><dd className="font-medium">{employee.department.name}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Должность' : 'Position'}</dt><dd className="font-medium">{employee.position.name}</dd></div>
                   <div className="flex justify-between"><dt className="text-muted-foreground">{locale === 'ru' ? 'Локация' : 'Location'}</dt><dd className="font-medium">{employee.primaryLocation.name}</dd></div>
@@ -744,6 +788,58 @@ export default function EmployeeCardPage() {
             </div>
           )}
         </div>
+
+        <Dialog
+          open={Boolean(selectedVerification)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedVerificationId(null);
+            }
+          }}
+        >
+          <DialogContent className="w-[min(880px,calc(100vw-2rem))]">
+            <DialogHeader>
+              <DialogTitle>{locale === 'ru' ? 'Фото верификации' : 'Verification photo'}</DialogTitle>
+              <DialogDescription>
+                {selectedVerification
+                  ? `${formatDate(selectedVerification.capturedAt)} ${formatTime(selectedVerification.capturedAt)}`
+                  : locale === 'ru'
+                    ? 'Артефакты верификации сотрудника.'
+                    : 'Employee verification artifacts.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedVerification ? (
+              selectedVerificationArtifacts.length > 0 ? (
+                <div className="space-y-4">
+                  <img
+                    alt={locale === 'ru' ? 'Загруженное фото верификации' : 'Uploaded verification photo'}
+                    className="max-h-[68vh] w-full rounded-2xl border border-border object-contain"
+                    src={selectedVerificationArtifacts[0].url ?? undefined}
+                  />
+                  {selectedVerificationArtifacts.length > 1 ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {selectedVerificationArtifacts.map((artifact) => (
+                        <img
+                          alt={locale === 'ru' ? 'Артефакт верификации' : 'Verification artifact'}
+                          className="aspect-square w-full rounded-xl border border-border object-cover"
+                          key={artifact.id}
+                          src={artifact.url ?? undefined}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex min-h-60 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+                  {locale === 'ru'
+                    ? 'У этой верификации нет сохранённого фото.'
+                    : 'This verification does not have a saved photo.'}
+                </div>
+              )
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </main>
     </AdminShell>
   );

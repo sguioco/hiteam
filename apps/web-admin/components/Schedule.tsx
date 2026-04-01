@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Calendar,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -156,9 +157,11 @@ type CalendarTaskEvent = {
 };
 
 type CalendarDayEntryDetail = {
+  avatarSrc: string;
+  employeeId: string | null;
   id: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
 };
 
 type CalendarDayEntry = {
@@ -682,6 +685,7 @@ export default function Schedule({
   const [period] = useState<PeriodMode>("month");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [collapsedDayEntryIds, setCollapsedDayEntryIds] = useState<Set<string>>(new Set());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("all");
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -973,7 +977,7 @@ export default function Schedule({
               >
             >((map, shift) => {
               const time = `${shift.startsAt}-${shift.endsAt}`;
-              const subtitle = `${shift.locationName} · ${shift.templateName}`;
+              const subtitle = shift.templateName;
               const key = [
                 "shift",
                 time,
@@ -986,9 +990,11 @@ export default function Schedule({
                 existing.peopleCount += 1;
                 existing.employeeIds.push(shift.employeeId);
                 existing.detailItems.push({
+                  avatarSrc: shift.avatarSrc,
+                  employeeId: shift.employeeId,
                   id: shift.id,
                   title: shift.employeeName,
-                  subtitle: shift.employeeNumber || shift.roleName,
+                  subtitle: shift.roleName || "",
                 });
                 return map;
               }
@@ -1002,9 +1008,11 @@ export default function Schedule({
                 employeeIds: [shift.employeeId],
                 detailItems: [
                   {
+                    avatarSrc: shift.avatarSrc,
+                    employeeId: shift.employeeId,
                     id: shift.id,
                     title: shift.employeeName,
-                    subtitle: shift.employeeNumber || shift.roleName,
+                    subtitle: shift.roleName || "",
                   },
                 ],
               });
@@ -1066,12 +1074,13 @@ export default function Schedule({
                   existing.employeeIds.push(event.employeeId);
                 }
                 existing.detailItems.push({
+                  avatarSrc:
+                    (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
+                    getMockAvatarDataUrl(event.assigneeName || event.id),
+                  employeeId: event.employeeId,
                   id: event.id,
                   title: event.assigneeName,
-                  subtitle:
-                    event.locationName !== "—"
-                      ? `${event.locationName}${event.employeeNumber ? ` · ${event.employeeNumber}` : ""}`
-                      : event.employeeNumber || event.roleName,
+                  subtitle: "",
                 });
                 return map;
               }
@@ -1087,12 +1096,13 @@ export default function Schedule({
                 employeeIds: event.employeeId ? [event.employeeId] : [],
                 detailItems: [
                   {
+                    avatarSrc:
+                      (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
+                      getMockAvatarDataUrl(event.assigneeName || event.id),
+                    employeeId: event.employeeId,
                     id: event.id,
                     title: event.assigneeName,
-                    subtitle:
-                      event.locationName !== "—"
-                        ? `${event.locationName}${event.employeeNumber ? ` · ${event.employeeNumber}` : ""}`
-                        : event.employeeNumber || event.roleName,
+                    subtitle: "",
                   },
                 ],
               });
@@ -1399,6 +1409,22 @@ export default function Schedule({
     () => (selectedDay ? calendarEntriesForDay(selectedDay) : []),
     [selectedDay, periodShifts, periodTaskEvents, calendarEventFilter],
   );
+
+  useEffect(() => {
+    setCollapsedDayEntryIds(new Set());
+  }, [selectedDay]);
+
+  function toggleDayEntry(entryId: string) {
+    setCollapsedDayEntryIds((current) => {
+      const next = new Set(current);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
+  }
 
   async function handleCreateShift() {
     const session = getSession();
@@ -2476,10 +2502,7 @@ export default function Schedule({
               <h2 className="font-heading text-lg font-bold text-foreground">
                 {ui.newTemplate}
               </h2>
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]/75">
-                  {ui.templateName}
-                </p>
+              <div>
                 <Input
                   className="h-12 rounded-2xl border-[color:var(--accent)]/15 bg-[color:var(--soft-accent)]/35 px-4 font-heading text-lg placeholder:font-heading placeholder:text-muted-foreground/65 focus-visible:ring-[color:var(--accent)]/20"
                   onChange={(event) =>
@@ -2528,7 +2551,7 @@ export default function Schedule({
 
                     return (
                       <button
-                        className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                        className={`flex items-center justify-center rounded-xl border px-3 py-2 text-center text-sm font-medium transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
@@ -2710,9 +2733,9 @@ export default function Schedule({
         }}
         open={Boolean(selectedDay)}
       >
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto rounded-[28px]">
+        <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-3xl flex-col overflow-hidden rounded-[28px]">
           <DialogHeader>
-            <DialogTitle className="font-heading text-2xl">
+            <DialogTitle className="font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
               {selectedDay
                 ? formatDateTime(selectedDay, {
                     day: "numeric",
@@ -2731,89 +2754,110 @@ export default function Schedule({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-1">
-            {selectedDayEntries.length ? (
-              selectedDayEntries.map((entry) => (
-                <article
-                  className="border-b border-border/70 py-4 last:border-b-0"
-                  key={entry.id}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        {entry.time}
-                      </div>
-                      <h2 className="mt-1 font-heading text-lg font-bold text-foreground">
-                        {entry.kind === "shift" ? entry.subtitle : entry.title}
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        {entry.kind === "shift"
-                          ? `${entry.peopleCount} ${ui.peopleShort}`
-                          : entry.subtitle}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {entry.peopleCount > 1 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                          <Users className="size-3" />
-                          {entry.peopleCount}
-                        </span>
-                      ) : null}
-                      <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                        {entry.kind === "shift"
-                          ? ui.shift
-                          : entry.kind === "meeting"
-                            ? ui.meeting
-                            : ui.task}
-                      </span>
-                    </div>
-                  </div>
+          <div className="scrollbar-hide flex-1 overflow-y-auto">
+            <div>
+              {selectedDayEntries.length ? (
+                selectedDayEntries.map((entry) => {
+                  const isCollapsed = collapsedDayEntryIds.has(entry.id);
 
-                  {entry.detailItems.length ? (
-                    <div className="mt-4 divide-y divide-border/70">
-                      {entry.detailItems.map((item) => (
-                        <div
-                          className="flex flex-wrap items-start justify-between gap-2 py-2 first:pt-0 last:pb-0"
-                          key={item.id}
-                        >
-                          <div className="min-w-0">
-                            <p className="font-heading text-base font-semibold text-foreground">
-                              {item.title}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {item.subtitle}
-                            </p>
-                          </div>
+                  return (
+                    <article
+                      className="border-b border-border/70 pb-4 pt-0 last:border-b-0"
+                      key={entry.id}
+                    >
+                      <button
+                        className="flex w-full flex-wrap items-start justify-between gap-3 rounded-none bg-[linear-gradient(135deg,rgba(40,75,255,0.08),rgba(40,75,255,0.02)_38%,rgba(255,255,255,0)_100%)] px-3 py-3 text-left transition-all duration-200 hover:bg-[linear-gradient(135deg,rgba(40,75,255,0.13),rgba(40,75,255,0.05)_38%,rgba(255,255,255,0.02)_100%)]"
+                        onClick={() => toggleDayEntry(entry.id)}
+                        type="button"
+                      >
+                        <div className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
+                          <span className="shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] font-medium leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
+                            {entry.time}
+                          </span>
+                          <span className="shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-muted-foreground">
+                            {entry.kind === "shift"
+                              ? ui.shift
+                              : entry.kind === "meeting"
+                                ? ui.meeting
+                                : ui.task}
+                          </span>
+                          <h2 className="truncate font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
+                            {entry.kind === "shift" ? entry.subtitle : entry.title}
+                          </h2>
                         </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              ))
-            ) : (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                {ui.noDayEvents}
-              </div>
-            )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {entry.peopleCount > 1 ? (
+                            <span className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground">
+                              <Users className="size-3" />
+                              {entry.peopleCount}
+                            </span>
+                          ) : null}
+                          {entry.detailItems.length ? (
+                            isCollapsed ? (
+                              <ChevronRight className="size-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="size-4 text-muted-foreground" />
+                            )
+                          ) : null}
+                        </div>
+                      </button>
+
+                      {entry.detailItems.length && !isCollapsed ? (
+                        <div className="mt-3 space-y-1">
+                          {entry.detailItems.map((item) => (
+                            <div
+                              className="flex items-center gap-3 py-1"
+                              key={item.id}
+                            >
+                              <img
+                                alt={item.title}
+                                className="size-9 rounded-full object-cover"
+                                src={item.avatarSrc}
+                              />
+                              <div className="min-w-0">
+                                <p className="font-heading text-[15px] font-medium text-foreground">
+                                  {item.title}
+                                </p>
+                                {item.subtitle ? (
+                                  <p className="text-[13px] text-muted-foreground">
+                                    {item.subtitle}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  {ui.noDayEvents}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button
-              onClick={() => {
-                setCreateShiftDraft((current) => ({
-                  ...current,
-                  shiftDate: formatDateInput(selectedDay ?? today),
-                  employeeId:
-                    current.employeeId ||
-                    (selectedEmployeeId !== "all" ? selectedEmployeeId : ""),
-                }));
-                setCreateShiftOpen(true);
-              }}
-              type="button"
-            >
-              <Plus className="size-4" />
-              {ui.addShiftForDay}
-            </Button>
+          <div className="shrink-0 border-t border-border/70 pt-3">
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  setCreateShiftDraft((current) => ({
+                    ...current,
+                    shiftDate: formatDateInput(selectedDay ?? today),
+                    employeeId:
+                      current.employeeId ||
+                      (selectedEmployeeId !== "all" ? selectedEmployeeId : ""),
+                  }));
+                  setCreateShiftOpen(true);
+                }}
+                type="button"
+              >
+                <Plus className="size-4" />
+                {ui.addShiftForDay}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
