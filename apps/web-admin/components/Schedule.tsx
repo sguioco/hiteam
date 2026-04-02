@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -107,6 +107,21 @@ type ShiftRecord = {
     startsAtLocal: string;
     endsAtLocal: string;
   };
+};
+
+export type ScheduleInitialData = {
+  departments: Option[];
+  employees: EmployeeApiRecord[];
+  isMockMode: boolean;
+  locations: Option[];
+  mode: "admin" | "employee";
+  positions: Option[];
+  requests: ApprovalInboxItem[];
+  shifts: ShiftRecord[];
+  taskBoard: CollaborationTaskBoardResponse | null;
+  templates: ShiftTemplateRecord[];
+  visibleDateFrom: string;
+  visibleDateTo: string;
 };
 
 type EnrichedShift = {
@@ -665,8 +680,10 @@ const scheduleCopy = {
 } as const;
 
 export default function Schedule({
+  initialData,
   mode = "admin",
 }: {
+  initialData?: ScheduleInitialData | null;
   mode?: "admin" | "employee";
 }) {
   const searchParams = useSearchParams();
@@ -680,7 +697,7 @@ export default function Schedule({
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
   const today = useMemo(() => new Date(), []);
-  const [isMockMode, setIsMockMode] = useState(false);
+  const [isMockMode, setIsMockMode] = useState(initialData?.isMockMode ?? false);
   const [activeTab, setActiveTab] = useState<TabKey>("schedules");
   const [period] = useState<PeriodMode>("month");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -695,18 +712,27 @@ export default function Schedule({
     useState<CalendarEventFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!initialData);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
 
-  const [employees, setEmployees] = useState<EmployeeApiRecord[]>([]);
-  const [locations, setLocations] = useState<Option[]>([]);
-  const [departments, setDepartments] = useState<Option[]>([]);
-  const [positions, setPositions] = useState<Option[]>([]);
-  const [templates, setTemplates] = useState<ShiftTemplateRecord[]>([]);
-  const [shifts, setShifts] = useState<ShiftRecord[]>([]);
-  const [requests, setRequests] = useState<ApprovalInboxItem[]>([]);
+  const [employees, setEmployees] = useState<EmployeeApiRecord[]>(
+    initialData?.employees ?? [],
+  );
+  const [locations, setLocations] = useState<Option[]>(initialData?.locations ?? []);
+  const [departments, setDepartments] = useState<Option[]>(
+    initialData?.departments ?? [],
+  );
+  const [positions, setPositions] = useState<Option[]>(initialData?.positions ?? []);
+  const [templates, setTemplates] = useState<ShiftTemplateRecord[]>(
+    initialData?.templates ?? [],
+  );
+  const [shifts, setShifts] = useState<ShiftRecord[]>(initialData?.shifts ?? []);
+  const [requests, setRequests] = useState<ApprovalInboxItem[]>(
+    initialData?.requests ?? [],
+  );
   const [taskBoard, setTaskBoard] =
-    useState<CollaborationTaskBoardResponse | null>(null);
+    useState<CollaborationTaskBoardResponse | null>(initialData?.taskBoard ?? null);
+  const didUseInitialData = useRef(Boolean(initialData));
 
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
@@ -1181,6 +1207,13 @@ export default function Schedule({
   }, [enrichedShifts, templates, ui.createdShift, ui.createdTemplate, localeTag, visibleTaskEvents, ui.meeting, ui.task]);
 
   async function loadData() {
+    const visibleStart = calendarDays[0];
+    const visibleEnd = calendarDays[calendarDays.length - 1];
+    const bootstrapQuery = new URLSearchParams({
+      dateFrom: formatDateInput(visibleStart),
+      dateTo: formatDateInput(visibleEnd),
+    }).toString();
+
     if (!session) {
       const mock = createMockScheduleData(new Date(), locale);
       setTemplates(mock.templates);
@@ -1199,119 +1232,33 @@ export default function Schedule({
       return;
     }
 
-    if (isEmployeeMode) {
-      setLoading(true);
-      setMessage(null);
-
-      const visibleStart = calendarDays[0];
-      const visibleEnd = calendarDays[calendarDays.length - 1];
-      const taskSearch = new URLSearchParams({
-        dateFrom: formatDateInput(visibleStart),
-        dateTo: formatDateInput(visibleEnd),
-      });
-
-      const tasksResult = await Promise.allSettled([
-        apiRequest<TaskItem[]>(`/collaboration/tasks/me?${taskSearch.toString()}`, {
-          token: session.accessToken,
-        }),
-      ]);
-
-      const employeeTasks =
-        tasksResult[0].status === "fulfilled" ? tasksResult[0].value : [];
-
-      setIsMockMode(false);
-      setTemplates([]);
-      setShifts([]);
-      setEmployees([]);
-      setLocations([]);
-      setDepartments([]);
-      setPositions([]);
-      setRequests([]);
-      setTaskBoard({
-        tasks: employeeTasks,
-        totals: {
-          total: employeeTasks.length,
-          overdue: employeeTasks.filter(
-            (task) =>
-              task.status !== "DONE" &&
-              Boolean(task.dueAt) &&
-              new Date(task.dueAt as string).getTime() < Date.now(),
-          ).length,
-          active: employeeTasks.filter((task) => task.status !== "DONE").length,
-          done: employeeTasks.filter((task) => task.status === "DONE").length,
-        },
-      });
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setMessage(null);
 
-    const visibleStart = calendarDays[0];
-    const visibleEnd = calendarDays[calendarDays.length - 1];
-    const taskSearch = new URLSearchParams({
-      dateFrom: formatDateInput(visibleStart),
-      dateTo: formatDateInput(visibleEnd),
-    });
+    try {
+      const snapshot = await apiRequest<{
+        initialData: ScheduleInitialData | null;
+        mode: "admin" | "employee";
+      }>(`/bootstrap/schedule?${bootstrapQuery}`, {
+        token: session.accessToken,
+      });
 
-    const results = await Promise.allSettled([
-      apiRequest<ShiftTemplateRecord[]>("/schedule/templates", {
-        token: session.accessToken,
-      }),
-      apiRequest<ShiftRecord[]>("/schedule/shifts", {
-        token: session.accessToken,
-      }),
-      apiRequest<EmployeeApiRecord[]>("/employees", {
-        token: session.accessToken,
-      }),
-      apiRequest<Option[]>("/org/locations", {
-        token: session.accessToken,
-      }),
-      apiRequest<Option[]>("/org/departments", {
-        token: session.accessToken,
-      }),
-      apiRequest<Option[]>("/org/positions", {
-        token: session.accessToken,
-      }),
-      apiRequest<ApprovalInboxItem[]>("/requests/inbox", {
-        token: session.accessToken,
-      }),
-      apiRequest<CollaborationTaskBoardResponse>(
-        `/collaboration/tasks?${taskSearch.toString()}`,
-        {
-          token: session.accessToken,
-        },
-      ),
-    ]);
+      if (!snapshot.initialData) {
+        throw new Error(ui.scheduleLoadError);
+      }
 
-    const [
-      templatesResult,
-      shiftsResult,
-      employeesResult,
-      locationsResult,
-      departmentsResult,
-      positionsResult,
-      requestsResult,
-      tasksResult,
-    ] = results;
-
-    if (
-      templatesResult.status === "rejected" ||
-      shiftsResult.status === "rejected" ||
-      employeesResult.status === "rejected" ||
-      locationsResult.status === "rejected" ||
-      departmentsResult.status === "rejected" ||
-      positionsResult.status === "rejected"
-    ) {
-      const firstError = [
-        templatesResult,
-        shiftsResult,
-        employeesResult,
-        locationsResult,
-        departmentsResult,
-        positionsResult,
-      ].find((result) => result.status === "rejected");
+      setIsMockMode(false);
+      setTemplates(snapshot.initialData.templates);
+      setShifts(snapshot.initialData.shifts);
+      setEmployees(snapshot.initialData.employees);
+      setLocations(snapshot.initialData.locations);
+      setDepartments(snapshot.initialData.departments);
+      setPositions(snapshot.initialData.positions);
+      setRequests(snapshot.initialData.requests);
+      setTaskBoard(snapshot.initialData.taskBoard);
+      setLoading(false);
+      return;
+    } catch (error) {
       if (isDemoSession) {
         const mock = createMockScheduleData(new Date(), locale);
         setTemplates(mock.templates);
@@ -1327,8 +1274,8 @@ export default function Schedule({
         });
         setIsMockMode(true);
         setMessage(
-          firstError?.status === "rejected" && firstError.reason instanceof Error
-            ? `${firstError.reason.message} ${ui.scheduleLoadedFromMock}`
+          error instanceof Error
+            ? `${error.message} ${ui.scheduleLoadedFromMock}`
             : ui.scheduleLoadedFromMock,
         );
       } else {
@@ -1342,30 +1289,31 @@ export default function Schedule({
         setTaskBoard(null);
         setIsMockMode(false);
         setMessage(
-          firstError?.status === "rejected" && firstError.reason instanceof Error
-            ? firstError.reason.message
+          error instanceof Error
+            ? error.message
             : ui.scheduleLoadError,
         );
       }
       setLoading(false);
-      return;
     }
-
-    setIsMockMode(false);
-    setTemplates(templatesResult.value);
-    setShifts(shiftsResult.value);
-    setEmployees(employeesResult.value);
-    setLocations(locationsResult.value);
-    setDepartments(departmentsResult.value);
-    setPositions(positionsResult.value);
-    setRequests(requestsResult.status === "fulfilled" ? requestsResult.value : []);
-    setTaskBoard(tasksResult.status === "fulfilled" ? tasksResult.value : null);
-    setLoading(false);
   }
 
   useEffect(() => {
+    if (
+      didUseInitialData.current &&
+      initialData &&
+      initialData.mode === (isEmployeeMode ? "employee" : "admin") &&
+      initialData.visibleDateFrom === formatDateInput(calendarDays[0]) &&
+      initialData.visibleDateTo === formatDateInput(calendarDays[calendarDays.length - 1])
+    ) {
+      didUseInitialData.current = false;
+      setLoading(false);
+      setMessage(null);
+      return;
+    }
+
     void loadData();
-  }, [calendarDays, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
+  }, [calendarDays, initialData, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
 
   useEffect(() => {
     const dateParam = searchParams.get("date");

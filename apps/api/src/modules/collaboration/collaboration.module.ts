@@ -13,5 +13,6 @@ import { CollaborationService } from './collaboration.service';
   imports: [PrismaModule, AuditModule, NotificationsModule, StorageModule, JwtModule.register({})],
   controllers: [CollaborationController],
   providers: [CollaborationService, CollaborationGateway, CollaborationScheduler],
+  exports: [CollaborationService],
 })
 export class CollaborationModule {}

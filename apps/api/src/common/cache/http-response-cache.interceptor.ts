@@ -13,6 +13,16 @@ import { ResponseCacheService } from './response-cache.service';
 
 const DEFAULT_TTL_SECONDS = 60;
 const TTL_RULES: Array<{ pattern: RegExp; ttlSeconds: number }> = [
+  { pattern: /\/auth\/bootstrap$/, ttlSeconds: 20 },
+  { pattern: /\/bootstrap\/tasks$/, ttlSeconds: 20 },
+  { pattern: /\/bootstrap\/attendance$/, ttlSeconds: 15 },
+  { pattern: /\/bootstrap\/employees$/, ttlSeconds: 30 },
+  { pattern: /\/bootstrap\/schedule$/, ttlSeconds: 30 },
+  { pattern: /\/bootstrap\/dashboard$/, ttlSeconds: 15 },
+  { pattern: /\/bootstrap\/analytics(?:\?|$)/, ttlSeconds: 20 },
+  { pattern: /\/bootstrap\/organization$/, ttlSeconds: 60 },
+  { pattern: /\/bootstrap\/news$/, ttlSeconds: 20 },
+  { pattern: /\/bootstrap\/biometric(?:\?|$)/, ttlSeconds: 20 },
   { pattern: /\/notifications\/me\/unread-count$/, ttlSeconds: 15 },
   { pattern: /\/notifications\/me$/, ttlSeconds: 20 },
   { pattern: /\/attendance\/(?:me\/status|team\/live)$/, ttlSeconds: 10 },

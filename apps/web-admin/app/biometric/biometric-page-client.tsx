@@ -119,22 +119,18 @@ export default function BiometricReviewPageClient({
     if (result && result !== '__all') searchParams.set('result', result);
 
     const suffix = searchParams.toString();
-    const reviewData = await apiRequest<BiometricReviewResponse>(
-      `/biometric/team/reviews${suffix ? `?${suffix}` : ''}`,
+    const snapshot = await apiRequest<BiometricPageInitialData>(
+      `/bootstrap/biometric${suffix ? `?${suffix}` : ''}`,
       { token: session.accessToken },
     );
-    setReviews(reviewData);
+    setEmployees(snapshot.employees);
+    setReviews(snapshot.reviews);
   }
 
   useEffect(() => {
     if (didUseInitialEmployees.current) {
       didUseInitialEmployees.current = false;
-      return;
     }
-
-    const session = getSession();
-    if (!session) return;
-    void apiRequest<EmployeeOption[]>('/employees', { token: session.accessToken }).then(setEmployees).catch(() => setEmployees([]));
   }, []);
 
   useEffect(() => {

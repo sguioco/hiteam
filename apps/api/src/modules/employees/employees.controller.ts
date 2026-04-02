@@ -7,6 +7,7 @@ import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
+import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicCompanyCodeDto } from './dto/public-company-code.dto';
 import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
@@ -82,6 +83,13 @@ export class EmployeesController {
     @Body() dto: ReviewEmployeeInvitationDto,
   ) {
     return this.employeesService.reviewInvitation(user.tenantId, user.sub, invitationId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('stats')
+  stats(@CurrentUser() user: JwtUser, @Query() query: EmployeeStatsQueryDto) {
+    return this.employeesService.stats(user.tenantId, query);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

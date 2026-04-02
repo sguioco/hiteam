@@ -1,7 +1,7 @@
 "use client";
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttendanceAuditResponse,
   AttendanceAnomalyResponse,
@@ -93,6 +93,16 @@ type PeriodSortColumn =
   | "attendanceRate";
 
 type AuditItem = AttendanceAuditResponse["items"][number];
+
+export type AttendanceInitialData = {
+  anomalies: AttendanceAnomalyResponse | null;
+  audit: AttendanceAuditResponse | null;
+  dateFrom: string;
+  dateTo: string;
+  employees: EmployeeRecord[];
+  history: AttendanceHistoryResponse | null;
+  liveSessions: AttendanceLiveSession[];
+};
 
 const todayFilters: Array<{ key: TodayFilter; label: string }> = [
   { key: "all", label: "Все" },
@@ -354,7 +364,11 @@ function AttendanceAvatar({
   );
 }
 
-export default function Attendance() {
+export default function Attendance({
+  initialData,
+}: {
+  initialData?: AttendanceInitialData | null;
+}) {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [viewMode, setViewMode] = useState<ViewMode>("today");
   const [search, setSearch] = useState("");
@@ -371,18 +385,27 @@ export default function Attendance() {
     formatDateKey(shiftDate(new Date(), -6)),
   );
   const [rangeTo, setRangeTo] = useState(() => formatDateKey(new Date()));
-  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
-  const [history, setHistory] = useState<AttendanceHistoryResponse | null>(null);
-  const [audit, setAudit] = useState<AttendanceAuditResponse | null>(null);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>(
+    initialData?.employees ?? [],
+  );
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
+    initialData?.liveSessions ?? [],
+  );
+  const [history, setHistory] = useState<AttendanceHistoryResponse | null>(
+    initialData?.history ?? null,
+  );
+  const [audit, setAudit] = useState<AttendanceAuditResponse | null>(
+    initialData?.audit ?? null,
+  );
   const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(
-    null,
+    initialData?.anomalies ?? null,
   );
   const [selectedAuditEventId, setSelectedAuditEventId] = useState<string | null>(
     null,
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
+  const didUseInitialRange = useRef(Boolean(initialData));
 
   const activeDateFrom =
     viewMode === "today" ? formatDateKey(todayDate) : rangeFrom || rangeTo;
@@ -390,45 +413,19 @@ export default function Attendance() {
     viewMode === "today" ? formatDateKey(todayDate) : rangeTo || rangeFrom;
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadEmployees() {
-      const session = getSession();
-      if (!session) {
-        if (!cancelled) {
-          setEmployees([]);
-          setError("Сессия не найдена. Войди заново.");
-        }
-        return;
-      }
-
-      try {
-        const response = await apiRequest<EmployeeRecord[]>("/employees", {
-          token: session.accessToken,
-        });
-        if (!cancelled) {
-          setEmployees(response);
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Не удалось загрузить сотрудников.",
-          );
-        }
-      }
-    }
-
-    void loadEmployees();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!activeDateFrom || !activeDateTo) return;
+
+    if (
+      didUseInitialRange.current &&
+      initialData &&
+      activeDateFrom === initialData.dateFrom &&
+      activeDateTo === initialData.dateTo
+    ) {
+      didUseInitialRange.current = false;
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
 
     let cancelled = false;
 
@@ -454,33 +451,23 @@ export default function Attendance() {
           dateFrom: activeDateFrom,
           dateTo: activeDateTo,
         }).toString();
-
-        const [historyData, anomaliesData, liveData, auditData] = await Promise.all([
-          apiRequest<AttendanceHistoryResponse>(`/attendance/team/history?${query}`, {
+        const snapshot = await apiRequest<AttendanceInitialData>(
+          `/bootstrap/attendance?${query}`,
+          {
             token: session.accessToken,
-          }),
-          apiRequest<AttendanceAnomalyResponse>(
-            `/attendance/team/anomalies?${query}`,
-            {
-              token: session.accessToken,
-            },
-          ),
-          apiRequest<AttendanceLiveSession[]>("/attendance/team/live", {
-            token: session.accessToken,
-          }),
-          apiRequest<AttendanceAuditResponse>(`/attendance/team/audit?${query}`, {
-            token: session.accessToken,
-          }),
-        ]);
+          },
+        );
 
         if (!cancelled) {
-          setHistory(historyData);
-          setAnomalies(anomaliesData);
-          setLiveSessions(liveData);
-          setAudit(auditData);
+          setEmployees(snapshot.employees);
+          setHistory(snapshot.history);
+          setAnomalies(snapshot.anomalies);
+          setLiveSessions(snapshot.liveSessions);
+          setAudit(snapshot.audit);
         }
       } catch (requestError) {
         if (!cancelled) {
+          setEmployees([]);
           setHistory(null);
           setAnomalies(null);
           setLiveSessions([]);
@@ -503,7 +490,7 @@ export default function Attendance() {
     return () => {
       cancelled = true;
     };
-  }, [activeDateFrom, activeDateTo]);
+  }, [activeDateFrom, activeDateTo, initialData]);
 
   useEffect(() => {
     if (!audit?.items.length) {

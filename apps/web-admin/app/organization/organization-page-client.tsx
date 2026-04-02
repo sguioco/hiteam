@@ -44,13 +44,6 @@ type OrganizationSetupResponse = {
   location: Location | null;
 };
 
-type EmployeeSummary = {
-  id: string;
-  company?: {
-    id: string;
-  } | null;
-};
-
 type SetupDraft = {
   address: string;
   companyLogoUrl: string;
@@ -243,18 +236,17 @@ export default function OrganizationPageClient({
     }
 
     try {
-      const [nextSetup, employees] = await Promise.all([
-        apiRequest<OrganizationSetupResponse>("/org/setup", { token: session.accessToken }),
-        apiRequest<EmployeeSummary[]>("/employees", { token: session.accessToken }),
-      ]);
+      const snapshot = await apiRequest<OrganizationPageInitialData>("/bootstrap/organization", {
+        token: session.accessToken,
+      });
 
-      setSetup(nextSetup);
-      setEmployeeCount(nextSetup.company?.id ? employees.filter((employee) => employee.company?.id === nextSetup.company?.id).length : 0);
-      setDraft(buildDraftFromSetup(nextSetup));
-      setRadiusInput(String(normalizeRadius(nextSetup.location?.geofenceRadiusMeters ?? nextSetup.defaultGeofenceRadiusMeters)));
+      setSetup(snapshot.setup);
+      setEmployeeCount(snapshot.employeeCount);
+      setDraft(buildDraftFromSetup(snapshot.setup));
+      setRadiusInput(String(normalizeRadius(snapshot.setup.location?.geofenceRadiusMeters ?? snapshot.setup.defaultGeofenceRadiusMeters)));
       setError(null);
       setSaveSuccess(false);
-      setSetupMode(nextSetup.configured ? "update" : "create");
+      setSetupMode(snapshot.setup.configured ? "update" : "create");
     } catch (loadError) {
       setSetup(EMPTY_SETUP);
       setEmployeeCount(0);

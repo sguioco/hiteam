@@ -21,6 +21,7 @@ import { StorageService } from '../storage/storage.service';
 import { EmployeeInvitationsMailerService } from './employee-invitations.mailer';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
+import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
@@ -60,6 +61,17 @@ export class EmployeesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async stats(tenantId: string, query: EmployeeStatsQueryDto) {
+    const total = await this.prisma.employee.count({
+      where: {
+        tenantId,
+        companyId: query.companyId || undefined,
+      },
+    });
+
+    return { total };
   }
 
   getById(tenantId: string, employeeId: string) {

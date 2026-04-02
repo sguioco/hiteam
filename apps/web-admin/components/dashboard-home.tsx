@@ -6,6 +6,7 @@ import {
   useId,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -146,6 +147,8 @@ type DashboardCachePayload = {
   canCheckWorkdays: boolean;
   personalHistory: AttendanceHistoryResponse | null;
 };
+
+export type DashboardInitialData = DashboardCachePayload;
 
 type AttendanceFilterKey =
   | "all"
@@ -611,9 +614,11 @@ function createMockDashboardTasks(
 }
 
 export default function DashboardHome({
+  initialData,
   initialSession = null,
   mode = "admin",
 }: {
+  initialData?: DashboardInitialData | null;
   initialSession?: AuthSession | null;
   mode?: "admin" | "employee";
 }) {
@@ -626,15 +631,21 @@ export default function DashboardHome({
     () => (session ? buildDashboardCacheKey(session, isEmployeeMode) : null),
     [isEmployeeMode, session],
   );
-  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
-  const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(
-    null,
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
+    initialData?.liveSessions ?? [],
   );
-  const [requests, setRequests] = useState<ApprovalInboxItem[]>([]);
+  const [anomalies, setAnomalies] = useState<AttendanceAnomalyResponse | null>(
+    initialData?.anomalies ?? null,
+  );
+  const [requests, setRequests] = useState<ApprovalInboxItem[]>(
+    initialData?.requests ?? [],
+  );
   const [taskBoard, setTaskBoard] =
-    useState<CollaborationTaskBoardResponse | null>(null);
-  const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>([]);
-  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
+    useState<CollaborationTaskBoardResponse | null>(initialData?.taskBoard ?? null);
+  const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>(
+    initialData?.employees ?? [],
+  );
+  const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [taskDraft, setTaskDraft] = useState<TaskDraft>(initialTaskDraft);
@@ -645,16 +656,19 @@ export default function DashboardHome({
   const [messageAction, setMessageAction] =
     useState<DashboardMessageAction | null>(null);
   const [scheduleShifts, setScheduleShifts] = useState<EmployeeScheduleShift[]>(
-    [],
+    initialData?.scheduleShifts ?? [],
   );
-  const [canCheckWorkdays, setCanCheckWorkdays] = useState(false);
+  const [canCheckWorkdays, setCanCheckWorkdays] = useState(
+    initialData?.canCheckWorkdays ?? false,
+  );
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
   const [selectedCalendarEvent, setSelectedCalendarEvent] =
     useState<PersonalCalendarEvent | null>(null);
   const [attendanceFilter, setAttendanceFilter] =
     useState<AttendanceFilterKey>("all");
   const [personalHistory, setPersonalHistory] =
-    useState<AttendanceHistoryResponse | null>(null);
+    useState<AttendanceHistoryResponse | null>(initialData?.personalHistory ?? null);
+  const didUseInitialData = useRef(Boolean(initialData));
   function applyDashboardSnapshot(
     snapshot: DashboardCachePayload,
     cacheKey?: string | null,
@@ -677,123 +691,25 @@ export default function DashboardHome({
   async function loadData() {
     const currentSession = getSession();
     if (!currentSession) return;
-    const historyQuery = new URLSearchParams({
-      dateFrom: startOfSixMonthWindow(new Date()).toISOString(),
-      dateTo: new Date().toISOString(),
-    }).toString();
+    const snapshot = await apiRequest<{
+      initialData: DashboardCachePayload;
+      mode: "admin" | "employee";
+    }>("/bootstrap/dashboard", {
+      token: currentSession.accessToken,
+    });
 
-    if (isEmployeeMode) {
-      const [taskResult, personalHistoryResult] = await Promise.allSettled([
-        apiRequest<TaskItem[]>("/collaboration/tasks/me", {
-          token: currentSession.accessToken,
-        }),
-        apiRequest<AttendanceHistoryResponse>(`/attendance/me/history?${historyQuery}`, {
-          token: currentSession.accessToken,
-        }),
-      ]);
-
-      const employeeTasks =
-        taskResult.status === "fulfilled" ? taskResult.value : [];
-
-      setLiveSessions([]);
-      setAnomalies(null);
-      setRequests([]);
-      setEmployees([]);
-      setScheduleShifts([]);
-      setCanCheckWorkdays(false);
-      applyDashboardSnapshot(
-        {
-          liveSessions: [],
-          anomalies: null,
-          requests: [],
-          employees: [],
-          groups: [],
-          scheduleShifts: [],
-          canCheckWorkdays: false,
-          taskBoard: {
-            tasks: employeeTasks,
-            totals: {
-              total: employeeTasks.length,
-              overdue: employeeTasks.filter(
-                (task) =>
-                  task.status !== "DONE" &&
-                  Boolean(task.dueAt) &&
-                  new Date(task.dueAt as string).getTime() < Date.now(),
-              ).length,
-              active: employeeTasks.filter((task) => task.status !== "DONE").length,
-              done: employeeTasks.filter((task) => task.status === "DONE").length,
-            },
-          },
-          personalHistory:
-            personalHistoryResult.status === "fulfilled"
-              ? personalHistoryResult.value
-              : null,
-        },
-        dashboardCacheKey,
-      );
-      return;
-    }
-
-    const [
-      liveResult,
-      anomalyResult,
-      requestResult,
-      taskResult,
-      employeeResult,
-      groupsResult,
-      shiftsResult,
-      personalHistoryResult,
-    ] = await Promise.allSettled([
-      apiRequest<AttendanceLiveSession[]>("/attendance/team/live", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<AttendanceAnomalyResponse>("/attendance/team/anomalies", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<ApprovalInboxItem[]>("/requests/inbox", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<CollaborationTaskBoardResponse>("/collaboration/tasks", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<EmployeeDirectoryItem[]>("/employees", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<WorkGroupItem[]>("/collaboration/groups", {
-        token: currentSession.accessToken,
-      }).catch(() => []),
-      apiRequest<EmployeeScheduleShift[]>("/schedule/shifts", {
-        token: currentSession.accessToken,
-      }),
-      apiRequest<AttendanceHistoryResponse>(`/attendance/me/history?${historyQuery}`, {
-        token: currentSession.accessToken,
-      }),
-    ]);
-
-    applyDashboardSnapshot(
-      {
-        liveSessions: liveResult.status === "fulfilled" ? liveResult.value : [],
-        anomalies:
-          anomalyResult.status === "fulfilled" ? anomalyResult.value : null,
-        requests:
-          requestResult.status === "fulfilled" ? requestResult.value : [],
-        taskBoard: taskResult.status === "fulfilled" ? taskResult.value : null,
-        employees:
-          employeeResult.status === "fulfilled" ? employeeResult.value : [],
-        groups: groupsResult.status === "fulfilled" ? groupsResult.value : [],
-        scheduleShifts:
-          shiftsResult.status === "fulfilled" ? shiftsResult.value : [],
-        canCheckWorkdays: shiftsResult.status === "fulfilled",
-        personalHistory:
-          personalHistoryResult.status === "fulfilled"
-            ? personalHistoryResult.value
-            : null,
-      },
-      dashboardCacheKey,
-    );
+    applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
   }
 
   useEffect(() => {
+    if (didUseInitialData.current && initialData) {
+      didUseInitialData.current = false;
+      if (dashboardCacheKey) {
+        writeClientCache(dashboardCacheKey, initialData);
+      }
+      return;
+    }
+
     if (dashboardCacheKey) {
       const cachedDashboard = readClientCache<DashboardCachePayload>(
         dashboardCacheKey,
@@ -809,7 +725,7 @@ export default function DashboardHome({
     }
 
     void loadData();
-  }, [dashboardCacheKey, isEmployeeMode]);
+  }, [dashboardCacheKey, initialData, isEmployeeMode]);
 
   useEffect(() => {
     if (!session) return;

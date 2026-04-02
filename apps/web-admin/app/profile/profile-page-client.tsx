@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyRound, LogOut, Mail, Shield, UploadCloud, UserRound } from 'lucide-react';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
@@ -33,6 +33,7 @@ export default function ProfilePageClient({
   );
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [employee, setEmployee] = useState<ProfileEmployee | null>(initialEmployee ?? null);
+  const didUseInitialEmployee = useRef(Boolean(initialEmployee));
 
   useEffect(() => {
     const s = getSession();
@@ -43,6 +44,17 @@ export default function ProfilePageClient({
 
     setSession(s);
     setEmployeeMode(isEmployeeOnlyRole(s.user.roleCodes));
+
+    if (didUseInitialEmployee.current && initialEmployee) {
+      didUseInitialEmployee.current = false;
+      if (initialEmployee.avatarUrl) {
+        setAvatarPreview(initialEmployee.avatarUrl);
+        writeStoredProfileAvatar(initialEmployee.avatarUrl);
+      } else {
+        setAvatarPreview(readStoredProfileAvatar());
+      }
+      return;
+    }
 
     void apiRequest<ProfileEmployee | null>('/employees/me', {
       token: s.accessToken,
@@ -62,7 +74,7 @@ export default function ProfilePageClient({
       .catch(() => {
         setAvatarPreview(readStoredProfileAvatar());
       });
-  }, []);
+  }, [initialEmployee]);
 
   async function handleSignOut() {
     await destroySession();

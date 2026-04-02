@@ -52,6 +52,14 @@ import {
   readStoredProfileAvatar,
 } from "../lib/profile-avatar";
 import { readClientCache, writeClientCache } from "../lib/client-cache";
+import {
+  readWindowInitialShellBootstrap,
+  type AccountProfile,
+  type OrganizationHeaderState,
+  type ShellBootstrapResponse,
+  type ShellHeaderCachePayload,
+  type ShellNotificationsCachePayload,
+} from "../lib/shell-bootstrap";
 
 type NavItem = {
   href: string;
@@ -66,38 +74,9 @@ type NavItem = {
   }>;
 };
 
-type OrganizationHeaderState = {
-  company: {
-    logoUrl?: string | null;
-    name: string;
-  } | null;
-  configured: boolean;
-};
-
-type AccountProfile = {
-  firstName?: string | null;
-  lastName?: string | null;
-  avatarUrl?: string | null;
-  company?: {
-    name?: string | null;
-    logoUrl?: string | null;
-  } | null;
-};
-
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const SHELL_HEADER_CACHE_TTL_MS = 10 * 60 * 1000;
 const SHELL_NOTIFICATIONS_CACHE_TTL_MS = 45 * 1000;
-
-type ShellHeaderCachePayload = {
-  employeeCount: number;
-  organization: OrganizationHeaderState | null;
-  accountProfile: AccountProfile | null;
-};
-
-type ShellNotificationsCachePayload = {
-  unreadCount: number;
-  notificationItems: NotificationItem[];
-};
 
 function buildShellHeaderCacheKey(
   session: AuthSession,
@@ -168,20 +147,38 @@ export function AdminShell({
   showTopbar?: boolean;
   mode?: "admin" | "employee";
 }) {
+  const initialShellBootstrap =
+    initialSession &&
+    (() => {
+      const bootstrap = readWindowInitialShellBootstrap();
+      if (!bootstrap) return null;
+      if (bootstrap.userId !== initialSession.user.id) return null;
+      if (bootstrap.tenantId !== initialSession.user.tenantId) return null;
+      if (bootstrap.mode !== mode) return null;
+      return bootstrap;
+    })();
   const pathname = usePathname();
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
   const [session, setSession] = useState<AuthSession | null>(initialSession);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(
+    initialShellBootstrap?.notifications?.unreadCount ?? 0,
+  );
   const [notificationItems, setNotificationItems] = useState<
     NotificationItem[]
-  >([]);
-  const [employeeCount, setEmployeeCount] = useState(0);
+  >(initialShellBootstrap?.notifications?.notificationItems ?? []);
+  const [employeeCount, setEmployeeCount] = useState(
+    initialShellBootstrap?.header?.employeeCount ?? 0,
+  );
   const [organization, setOrganization] =
-    useState<OrganizationHeaderState | null>(null);
-  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+    useState<OrganizationHeaderState | null>(
+      initialShellBootstrap?.header?.organization ?? null,
+    );
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
+    initialShellBootstrap?.header?.accountProfile ?? null,
+  );
   const [storedAvatarUrl, setStoredAvatarUrl] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(Boolean(initialSession));
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
     {},
   );
@@ -191,6 +188,7 @@ export function AdminShell({
   const [routeLoading, setRouteLoading] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const routeLoadingTimerRef = useRef<number | null>(null);
   const shellHeaderCacheKey = useMemo(
     () => (session ? buildShellHeaderCacheKey(session, mode) : null),
     [mode, session],
@@ -267,13 +265,37 @@ export function AdminShell({
         notificationsCacheKey,
         SHELL_NOTIFICATIONS_CACHE_TTL_MS,
       );
+    const effectiveHeader =
+      cachedHeader ??
+      (initialShellBootstrap?.header
+        ? {
+            value: initialShellBootstrap.header,
+            storedAt: Date.now(),
+            isStale: false,
+          }
+        : null);
+    const effectiveNotifications =
+      cachedNotifications ??
+      (initialShellBootstrap?.notifications
+        ? {
+            value: initialShellBootstrap.notifications,
+            storedAt: Date.now(),
+            isStale: false,
+          }
+        : null);
+    const shouldRefreshHeader = !effectiveHeader || effectiveHeader.isStale;
+    const shouldRefreshNotifications =
+      !effectiveNotifications || effectiveNotifications.isStale;
 
-    if (cachedHeader) {
-      applyHeaderSnapshot(cachedHeader.value);
+    if (effectiveHeader) {
+      applyHeaderSnapshot(effectiveHeader.value, headerCacheKey);
     }
 
-    if (cachedNotifications) {
-      applyNotificationsSnapshot(cachedNotifications.value);
+    if (effectiveNotifications) {
+      applyNotificationsSnapshot(
+        effectiveNotifications.value,
+        notificationsCacheKey,
+      );
     }
 
     setStoredAvatarUrl(readStoredProfileAvatar());
@@ -287,53 +309,21 @@ export function AdminShell({
       setSession(currentSession);
       setReady(true);
 
-      if (!cachedNotifications || cachedNotifications.isStale) {
-        void Promise.allSettled([
-          apiRequest<NotificationUnreadResponse>("/notifications/me/unread-count", {
-            token: currentSession.accessToken,
-          }),
-          apiRequest<NotificationItem[]>("/notifications/me", {
-            token: currentSession.accessToken,
-          }),
-        ]).then((results) => {
-          applyNotificationsSnapshot(
-            {
-              unreadCount:
-                results[0].status === "fulfilled"
-                  ? results[0].value.unreadCount
-                  : cachedNotifications?.value.unreadCount ?? 0,
-              notificationItems:
-                results[1].status === "fulfilled"
-                  ? results[1].value
-                  : cachedNotifications?.value.notificationItems ?? [],
-            },
-            notificationsCacheKey,
-          );
-        });
-      }
-
-      if (!cachedHeader || cachedHeader.isStale) {
-        void apiRequest<AccountProfile | null>("/employees/me", {
+      if (shouldRefreshHeader || shouldRefreshNotifications) {
+        void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
           token: currentSession.accessToken,
-          realBackend: true,
         })
-          .then((profile) => {
-            applyHeaderSnapshot(
-              {
-                employeeCount: 0,
-                organization: profile?.company?.name
-                  ? {
-                      company: {
-                        name: profile.company.name,
-                        logoUrl: profile.company.logoUrl ?? null,
-                      },
-                      configured: true,
-                    }
-                  : null,
-                accountProfile: profile,
-              },
-              headerCacheKey,
-            );
+          .then((snapshot) => {
+            if (snapshot.header) {
+              applyHeaderSnapshot(snapshot.header, headerCacheKey);
+            }
+
+            if (snapshot.notifications) {
+              applyNotificationsSnapshot(
+                snapshot.notifications,
+                notificationsCacheKey,
+              );
+            }
           })
           .catch(() => undefined);
       }
@@ -348,75 +338,25 @@ export function AdminShell({
     setSession(currentSession);
     setReady(true);
 
-    if (!cachedNotifications || cachedNotifications.isStale) {
-      void Promise.allSettled([
-        apiRequest<NotificationUnreadResponse>("/notifications/me/unread-count", {
-          token: currentSession.accessToken,
-        }),
-        apiRequest<NotificationItem[]>("/notifications/me", {
-          token: currentSession.accessToken,
-        }),
-      ]).then((results) => {
-        applyNotificationsSnapshot(
-          {
-            unreadCount:
-              results[0].status === "fulfilled"
-                ? results[0].value.unreadCount
-                : cachedNotifications?.value.unreadCount ?? 0,
-            notificationItems:
-              results[1].status === "fulfilled"
-                ? results[1].value
-                : cachedNotifications?.value.notificationItems ?? [],
-          },
-          notificationsCacheKey,
-        );
-      });
-    }
+    if (shouldRefreshHeader || shouldRefreshNotifications) {
+      void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
+        token: currentSession.accessToken,
+      })
+        .then((snapshot) => {
+          if (snapshot.header) {
+            applyHeaderSnapshot(snapshot.header, headerCacheKey);
+          }
 
-    if (!cachedHeader || cachedHeader.isStale) {
-      void Promise.allSettled([
-        apiRequest<Array<{ id: string }>>("/employees", {
-          token: currentSession.accessToken,
-        }),
-        apiRequest<OrganizationHeaderState>("/org/setup", {
-          token: currentSession.accessToken,
-        }),
-        apiRequest<AccountProfile | null>("/employees/me", {
-          token: currentSession.accessToken,
-          realBackend: true,
-        }),
-      ]).then((results) => {
-        const nextAccountProfile =
-          results[2].status === "fulfilled"
-            ? results[2].value
-            : cachedHeader?.value.accountProfile ?? null;
-        const nextOrganization =
-          results[1].status === "fulfilled"
-            ? results[1].value
-            : nextAccountProfile?.company?.name
-              ? {
-                  company: {
-                    name: nextAccountProfile.company.name,
-                    logoUrl: nextAccountProfile.company.logoUrl ?? null,
-                  },
-                  configured: true,
-                }
-              : cachedHeader?.value.organization ?? null;
-
-        applyHeaderSnapshot(
-          {
-            employeeCount:
-              results[0].status === "fulfilled"
-                ? results[0].value.length
-                : cachedHeader?.value.employeeCount ?? 0,
-            organization: nextOrganization,
-            accountProfile: nextAccountProfile,
-          },
-          headerCacheKey,
-        );
-      });
+          if (snapshot.notifications) {
+            applyNotificationsSnapshot(
+              snapshot.notifications,
+              notificationsCacheKey,
+            );
+          }
+        })
+        .catch(() => undefined);
     }
-  }, [mode, router]);
+  }, [initialSession, initialShellBootstrap, mode, router]);
 
   useEffect(() => {
     setStoredAvatarUrl(readStoredProfileAvatar());
@@ -538,10 +478,17 @@ export function AdminShell({
   }, [accountProfile, employeeCount, session, shellHeaderCacheKey]);
 
   useEffect(() => {
+    clearRouteLoadingTimer();
     setNotificationsOpen(false);
     setAccountMenuOpen(false);
     setRouteLoading(false);
   }, [pathname]);
+
+  useEffect(() => {
+    return () => {
+      clearRouteLoadingTimer();
+    };
+  }, []);
 
   useEffect(() => {
     if (!notificationsOpen && !accountMenuOpen) {
@@ -764,6 +711,72 @@ export function AdminShell({
             ]
           : []),
       ];
+  const prefetchRoutes = useMemo(() => {
+    const routes = new Set<string>();
+
+    for (const item of navItems) {
+      routes.add(item.href);
+      for (const subItem of item.items ?? []) {
+        routes.add(subItem.href);
+      }
+    }
+
+    for (const item of accountMenuItems) {
+      routes.add(item.href);
+    }
+
+    routes.add(profileHref);
+    routes.add(notificationsHref);
+
+    return Array.from(routes).filter((href) => !isActive(pathname, href));
+  }, [accountMenuItems, navItems, notificationsHref, pathname, profileHref]);
+
+  useEffect(() => {
+    if (!prefetchRoutes.length) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+    const prefetch = () => {
+      if (cancelled) {
+        return;
+      }
+
+      for (const href of prefetchRoutes.slice(0, 8)) {
+        void router.prefetch(href);
+      }
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleWindow = window as Window &
+        typeof globalThis & {
+          cancelIdleCallback: (handle: number) => void;
+          requestIdleCallback: (
+            callback: IdleRequestCallback,
+            options?: IdleRequestOptions,
+          ) => number;
+        };
+      const idleCallback = idleWindow.requestIdleCallback(prefetch, {
+        timeout: 1500,
+      });
+
+      return () => {
+        cancelled = true;
+        idleWindow.cancelIdleCallback(idleCallback);
+      };
+    }
+
+    timeoutId = globalThis.setTimeout(prefetch, 450);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    };
+  }, [prefetchRoutes, router]);
 
   useEffect(() => {
     setProfileAvatarFailed(false);
@@ -789,14 +802,26 @@ export function AdminShell({
     return notificationsHref;
   }
 
+  function clearRouteLoadingTimer() {
+    if (routeLoadingTimerRef.current !== null) {
+      window.clearTimeout(routeLoadingTimerRef.current);
+      routeLoadingTimerRef.current = null;
+    }
+  }
+
   function handleRouteStart(href?: string | null) {
     if (!href || isActive(pathname, href)) {
       return;
     }
 
+    void router.prefetch(href);
     setNotificationsOpen(false);
     setAccountMenuOpen(false);
-    setRouteLoading(true);
+    clearRouteLoadingTimer();
+    routeLoadingTimerRef.current = window.setTimeout(() => {
+      setRouteLoading(true);
+      routeLoadingTimerRef.current = null;
+    }, 180);
   }
 
   async function handleMarkRead(notificationId: string) {

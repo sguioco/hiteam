@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
@@ -165,6 +165,8 @@ type EmployeesDirectorySnapshot = {
   organizationSetup: OrganizationSetupResponse | null;
   canCheckWorkdays: boolean;
 };
+
+export type EmployeesInitialData = EmployeesDirectorySnapshot;
 
 type EmployeeStatus = "active" | "inactive" | "vacation" | "sick" | "dismissed";
 type ViewMode = "employees" | "groups";
@@ -354,7 +356,33 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
   );
 }
 
-const Employees = () => {
+function buildExpandedGroupsFromSnapshot(
+  snapshot?: EmployeesDirectorySnapshot | null,
+) {
+  if (!snapshot) {
+    return new Set<string>();
+  }
+
+  return new Set([
+    ...(snapshot.overview?.groups.map((group) => group.id) ?? []),
+    ...(snapshot.employeeRecords.some(
+      (employee) =>
+        !snapshot.overview?.groups.some((group) =>
+          group.memberships.some(
+            (membership) => membership.employeeId === employee.id,
+          ),
+        ),
+    )
+      ? ["__none"]
+      : []),
+  ]);
+}
+
+const Employees = ({
+  initialData,
+}: {
+  initialData?: EmployeesInitialData | null;
+}) => {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("employees");
@@ -363,15 +391,15 @@ const Employees = () => {
     direction: "ascending",
   });
   const [showFormerEmployees, setShowFormerEmployees] = useState(false);
-  const [directoryLoading, setDirectoryLoading] = useState(true);
+  const [directoryLoading, setDirectoryLoading] = useState(!initialData);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState<string | null>(null);
 
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>(
-    [],
+    initialData?.employeeRecords ?? [],
   );
   const [overview, setOverview] =
-    useState<CollaborationOverviewResponse | null>(null);
+    useState<CollaborationOverviewResponse | null>(initialData?.overview ?? null);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null,
@@ -385,7 +413,9 @@ const Employees = () => {
   >("general");
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => buildExpandedGroupsFromSnapshot(initialData),
+  );
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -396,7 +426,7 @@ const Employees = () => {
     "code" | "link" | "email" | "password" | null
   >(null);
   const [organizationSetup, setOrganizationSetup] =
-    useState<OrganizationSetupResponse | null>(null);
+    useState<OrganizationSetupResponse | null>(initialData?.organizationSetup ?? null);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
@@ -405,8 +435,8 @@ const Employees = () => {
 
   const [pendingInvitations, setPendingInvitations] = useState<
     InvitationRecord[]
-  >([]);
-  const [invitationsLoading, setInvitationsLoading] = useState(true);
+  >(initialData?.pendingInvitations ?? []);
+  const [invitationsLoading, setInvitationsLoading] = useState(!initialData);
   const [selectedInvitation, setSelectedInvitation] =
     useState<InvitationRecord | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -442,11 +472,11 @@ const Employees = () => {
   const [taskSubmitting, setTaskSubmitting] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [scheduleShifts, setScheduleShifts] = useState<EmployeeScheduleShift[]>(
-    [],
+    initialData?.scheduleShifts ?? [],
   );
   const [scheduleTemplates, setScheduleTemplates] = useState<
     ShiftTemplateRecord[]
-  >([]);
+  >(initialData?.scheduleTemplates ?? []);
 
   const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
   const [templateDraft, setTemplateDraft] = useState({
@@ -567,8 +597,11 @@ const Employees = () => {
       setCreateTemplateSubmitting(false);
     }
   }
-  const [canCheckWorkdays, setCanCheckWorkdays] = useState(false);
+  const [canCheckWorkdays, setCanCheckWorkdays] = useState(
+    initialData?.canCheckWorkdays ?? false,
+  );
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
+  const didUseInitialData = useRef(Boolean(initialData));
 
   const [groupEditorId, setGroupEditorId] = useState<string | null>(null);
   const [groupEditorMembers, setGroupEditorMembers] = useState<string[]>([]);
@@ -794,21 +827,7 @@ const Employees = () => {
     setOrganizationSetup(snapshot.organizationSetup);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
 
-    setExpandedGroups(
-      new Set([
-        ...(snapshot.overview?.groups.map((group) => group.id) ?? []),
-        ...(snapshot.employeeRecords.some(
-          (employee) =>
-            !snapshot.overview?.groups.some((group) =>
-              group.memberships.some(
-                (membership) => membership.employeeId === employee.id,
-              ),
-            ),
-        )
-          ? ["__none"]
-          : []),
-      ]),
-    );
+    setExpandedGroups(buildExpandedGroupsFromSnapshot(snapshot));
 
     if (cacheKey) {
       writeClientCache(cacheKey, snapshot);
@@ -827,55 +846,15 @@ const Employees = () => {
     setDirectoryError(null);
 
     try {
-      let nextCanCheckWorkdays = false;
-      const [
-        employeesData,
-        overviewData,
-        invitationsData,
-        shiftsData,
-        templatesData,
-        orgSetupData,
-      ] = await Promise.all([
-        apiRequest<EmployeeApiRecord[]>("/employees", {
+      const snapshot = await apiRequest<EmployeesDirectorySnapshot>(
+        "/bootstrap/employees",
+        {
           token: session.accessToken,
-        }),
-        apiRequest<CollaborationOverviewResponse>("/collaboration/overview", {
-          token: session.accessToken,
-        }),
-        apiRequest<InvitationRecord[]>("/employees/invitations/pending", {
-          token: session.accessToken,
-        }),
-        apiRequest<EmployeeScheduleShift[]>("/schedule/shifts", {
-          token: session.accessToken,
-        })
-          .then((result) => {
-            nextCanCheckWorkdays = true;
-            setCanCheckWorkdays(true);
-            return result;
-          })
-          .catch(() => {
-            nextCanCheckWorkdays = false;
-            setCanCheckWorkdays(false);
-            return [];
-          }),
-        apiRequest<ShiftTemplateRecord[]>("/schedule/templates", {
-          token: session.accessToken,
-        }).catch(() => []),
-        apiRequest<OrganizationSetupResponse>("/org/setup", {
-          token: session.accessToken,
-        }).catch(() => ({ company: null })),
-      ]);
+        },
+      );
 
       applyDirectorySnapshot(
-        {
-          employeeRecords: employeesData,
-          overview: overviewData,
-          pendingInvitations: invitationsData,
-          scheduleShifts: shiftsData,
-          scheduleTemplates: templatesData,
-          organizationSetup: orgSetupData,
-          canCheckWorkdays: nextCanCheckWorkdays,
-        },
+        snapshot,
         buildEmployeesDirectoryCacheKey(session),
       );
     } catch (requestError) {
@@ -898,6 +877,17 @@ const Employees = () => {
   }
 
   useEffect(() => {
+    if (didUseInitialData.current && initialData) {
+      didUseInitialData.current = false;
+      const session = getSession();
+      if (session) {
+        writeClientCache(buildEmployeesDirectoryCacheKey(session), initialData);
+      }
+      setDirectoryLoading(false);
+      setInvitationsLoading(false);
+      return;
+    }
+
     const session = getSession();
     if (session) {
       const cachedDirectory = readClientCache<EmployeesDirectorySnapshot>(
@@ -913,7 +903,7 @@ const Employees = () => {
     }
 
     void loadDirectory();
-  }, []);
+  }, [initialData]);
 
   useEffect(() => {
     const session = getSession();

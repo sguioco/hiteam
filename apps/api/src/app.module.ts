@@ -23,6 +23,7 @@ import { PushModule } from './modules/push/push.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { BootstrapModule } from './modules/bootstrap/bootstrap.module';
 import { DiagnosticsModule } from './modules/diagnostics/diagnostics.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
@@ -48,6 +49,7 @@ import { ResponseCacheService } from './common/cache/response-cache.service';
     SystemModule,
     AuditModule,
     StorageModule,
+    BootstrapModule,
     ExportsModule,
     DiagnosticsModule,
     ObservabilityModule,

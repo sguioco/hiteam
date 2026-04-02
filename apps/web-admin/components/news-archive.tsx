@@ -3,7 +3,7 @@
 import { AnnouncementArchiveEntry } from "@smart/types";
 import { ArrowLeft, FileText, Pin, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toAdminHref } from "@/lib/admin-routes";
@@ -175,11 +175,16 @@ function getArchiveErrorMessage(error: unknown, locale: Locale) {
   return localize(locale, "Не удалось загрузить архив.", "Unable to load archive.");
 }
 
-export function NewsArchive() {
+export function NewsArchive({
+  initialItems,
+}: {
+  initialItems?: AnnouncementArchiveEntry[] | null;
+}) {
   const { locale } = useI18n();
-  const [items, setItems] = useState<AnnouncementArchiveEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<AnnouncementArchiveEntry[]>(initialItems ?? []);
+  const [loading, setLoading] = useState(!initialItems);
   const [error, setError] = useState<string | null>(null);
+  const didUseInitialItems = useRef(Boolean(initialItems));
   const groupedItems = useMemo<AnnouncementArchiveGroup[]>(() => {
     const groups = new Map<string, AnnouncementArchiveGroup>();
 
@@ -205,6 +210,12 @@ export function NewsArchive() {
   }, [items]);
 
   useEffect(() => {
+    if (didUseInitialItems.current && initialItems) {
+      didUseInitialItems.current = false;
+      setLoading(false);
+      return;
+    }
+
     async function loadArchive() {
       const session = getSession();
       if (!session) {
@@ -230,7 +241,7 @@ export function NewsArchive() {
     }
 
     void loadArchive();
-  }, [locale]);
+  }, [initialItems, locale]);
 
   return (
     <section className="flex flex-col gap-5">

@@ -1,15 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NotificationItem } from '@smart/types';
 import { apiRequest } from '../lib/api';
 import { getSession } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
 import { createNotificationsSocket } from '../lib/notifications-socket';
 
-export function NotificationsCenter() {
+export function NotificationsCenter({
+  initialItems,
+}: {
+  initialItems?: NotificationItem[] | null;
+}) {
   const { t } = useI18n();
-  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [items, setItems] = useState<NotificationItem[]>(initialItems ?? []);
+  const didUseInitialItems = useRef(Boolean(initialItems));
 
   async function loadNotifications() {
     const session = getSession();
@@ -19,8 +24,13 @@ export function NotificationsCenter() {
   }
 
   useEffect(() => {
+    if (didUseInitialItems.current && initialItems) {
+      didUseInitialItems.current = false;
+      return;
+    }
+
     void loadNotifications();
-  }, []);
+  }, [initialItems]);
 
   useEffect(() => {
     const session = getSession();

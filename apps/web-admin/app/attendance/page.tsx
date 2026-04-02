@@ -1,10 +1,27 @@
-import Attendance from "@/components/Attendance";
+import Attendance, { type AttendanceInitialData } from "@/components/Attendance";
 import { AdminShell } from "@/components/admin-shell";
+import { requireServerSession } from "@/lib/server-auth";
+import { serverApiRequestWithSession } from "@/lib/server-api";
 
-export default function AttendancePage() {
+async function loadInitialAttendanceData(): Promise<AttendanceInitialData | null> {
+  const session = await requireServerSession();
+
+  try {
+    return await serverApiRequestWithSession<AttendanceInitialData>(
+      session,
+      "/bootstrap/attendance",
+    );
+  } catch {
+    return null;
+  }
+}
+
+export default async function AttendancePage() {
+  const initialData = await loadInitialAttendanceData();
+
   return (
     <AdminShell>
-      <Attendance />
+      <Attendance initialData={initialData} />
     </AdminShell>
   );
 }

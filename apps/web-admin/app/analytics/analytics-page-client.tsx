@@ -130,30 +130,16 @@ export default function AnalyticsPageClient({
       return;
     }
 
-    const { start, end } = buildDateRange(days);
-    const query = new URLSearchParams({
-      dateFrom: start.toISOString(),
-      dateTo: end.toISOString(),
-    });
-
     setLoading(true);
     setError(null);
 
-    void Promise.all([
-      apiRequest<AttendanceHistoryResponse>(`/attendance/team/history?${query.toString()}`, {
+    void apiRequest<AnalyticsPageInitialData>(`/bootstrap/analytics?days=${days}`, {
         token: session.accessToken,
-      }),
-      apiRequest<AttendanceAnomalyResponse>(`/attendance/team/anomalies?${query.toString()}`, {
-        token: session.accessToken,
-      }),
-      apiRequest<Array<{ id: string }>>('/employees', {
-        token: session.accessToken,
-      }),
-    ])
-      .then(([historyData, anomaliesData, employees]) => {
-        setHistory(historyData);
-        setAnomalies(anomaliesData);
-        setEmployeeCount(employees.length);
+      })
+      .then((snapshot) => {
+        setHistory(snapshot.history);
+        setAnomalies(snapshot.anomalies);
+        setEmployeeCount(snapshot.employeeCount);
       })
       .catch((loadError) => {
         setHistory(null);

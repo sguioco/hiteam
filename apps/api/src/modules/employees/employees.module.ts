@@ -10,5 +10,6 @@ import { EmployeesService } from './employees.service';
   imports: [ConfigModule, AuditModule, NotificationsModule],
   controllers: [EmployeesController],
   providers: [EmployeesService, EmployeeInvitationsMailerService],
+  exports: [EmployeesService],
 })
 export class EmployeesModule {}

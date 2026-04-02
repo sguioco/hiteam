@@ -46,7 +46,7 @@ import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 
-type EmployeeDirectoryItem = {
+export type EmployeeDirectoryItem = {
   id: string;
   firstName: string;
   lastName: string;
@@ -441,11 +441,17 @@ type ManagerTasksCachePayload = {
   liveSessions: AttendanceLiveSession[];
 };
 
+export type ManagerTasksPageInitialData = ManagerTasksCachePayload;
+
 function buildManagerTasksCacheKey(session: ReturnType<typeof getSession>) {
   return session ? `manager-tasks:${session.user.id}` : null;
 }
 
-export function ManagerTasksPage() {
+export function ManagerTasksPage({
+  initialData,
+}: {
+  initialData?: ManagerTasksPageInitialData | null;
+}) {
   const router = useRouter();
   const { locale } = useI18n();
   const session = getSession();
@@ -454,12 +460,16 @@ export function ManagerTasksPage() {
     [session],
   );
   const [accessChecked, setAccessChecked] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>([]);
-  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
-  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>(initialData?.tasks ?? []);
+  const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>(
+    initialData?.employees ?? [],
+  );
+  const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
+    initialData?.liveSessions ?? [],
+  );
   const [preset, setPreset] = useState<DatePreset>("today");
   const [dateFrom, setDateFrom] = useState(() => formatDateInput(new Date()));
   const [dateTo, setDateTo] = useState(() => formatDateInput(new Date()));
@@ -479,6 +489,7 @@ export function ManagerTasksPage() {
     column: "tasks",
     direction: "ascending",
   });
+  const didUseInitialData = useRef(Boolean(initialData));
 
   function applyCachedSnapshot(snapshot: ManagerTasksCachePayload) {
     setTasks(snapshot.tasks);
@@ -512,6 +523,13 @@ export function ManagerTasksPage() {
       return;
     }
 
+    if (didUseInitialData.current && initialData) {
+      didUseInitialData.current = false;
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     const cached = tasksCacheKey
       ? readClientCache<ManagerTasksCachePayload>(
@@ -529,23 +547,19 @@ export function ManagerTasksPage() {
 
     setError(null);
 
-    void Promise.all([
-      apiRequest<CollaborationTaskBoardResponse>("/collaboration/tasks", {
-        token: session.accessToken,
-      }),
-      apiRequest<EmployeeDirectoryItem[]>("/employees", {
-        token: session.accessToken,
-      }),
-    ])
-      .then(([taskBoard, employeeDirectory]) => {
+    void apiRequest<ManagerTasksCachePayload>("/bootstrap/tasks", {
+      token: session.accessToken,
+    })
+      .then((snapshot) => {
         if (cancelled) return;
-        setTasks(taskBoard.tasks);
-        setEmployees(employeeDirectory);
+        applyCachedSnapshot(snapshot);
       })
       .catch((loadError) => {
         if (cancelled) return;
         setTasks([]);
         setEmployees([]);
+        setGroups([]);
+        setLiveSessions([]);
         setError(
           loadError instanceof Error
             ? loadError.message
@@ -562,37 +576,10 @@ export function ManagerTasksPage() {
         }
       });
 
-    void apiRequest<WorkGroupItem[] | { groups: WorkGroupItem[] }>("/collaboration/groups", {
-      token: session.accessToken,
-    })
-      .then((groupResponse) => {
-        if (cancelled) return;
-        const nextGroups = Array.isArray(groupResponse)
-          ? groupResponse
-          : groupResponse.groups ?? [];
-        setGroups(nextGroups);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setGroups([]);
-      });
-
-    void apiRequest<AttendanceLiveSession[]>("/attendance/team/live", {
-      token: session.accessToken,
-    })
-      .then((response) => {
-        if (cancelled) return;
-        setLiveSessions(response);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLiveSessions([]);
-      });
-
     return () => {
       cancelled = true;
     };
-  }, [accessChecked, locale, tasksCacheKey]);
+  }, [accessChecked, initialData, locale, tasksCacheKey]);
 
   useEffect(() => {
     if (!tasksCacheKey || loading) {

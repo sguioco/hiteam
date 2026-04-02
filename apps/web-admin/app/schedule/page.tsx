@@ -1,13 +1,28 @@
-import { Suspense } from "react";
-import Schedule from "@/components/Schedule";
-import { getServerSessionMode } from "@/lib/server-auth";
+import Schedule, { type ScheduleInitialData } from "@/components/Schedule";
+import { requireServerSession } from "@/lib/server-auth";
+import { serverApiRequestWithSession } from "@/lib/server-api";
+
+async function loadInitialScheduleData(): Promise<{
+  initialData: ScheduleInitialData | null;
+  mode: "admin" | "employee";
+}> {
+  const session = await requireServerSession();
+
+  try {
+    return await serverApiRequestWithSession<{
+      initialData: ScheduleInitialData | null;
+      mode: "admin" | "employee";
+    }>(session, "/bootstrap/schedule");
+  } catch {
+    return {
+      mode: "admin",
+      initialData: null,
+    };
+  }
+}
 
 export default async function SchedulePage() {
-  const mode = await getServerSessionMode();
+  const { initialData, mode } = await loadInitialScheduleData();
 
-  return (
-    <Suspense>
-      <Schedule mode={mode} />
-    </Suspense>
-  );
+  return <Schedule initialData={initialData} mode={mode} />;
 }

@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +81,8 @@ type NewsCenterCachePayload = {
   }>;
   groups: WorkGroupItem[];
 };
+
+export type NewsCenterInitialData = NewsCenterCachePayload;
 
 function buildNewsCacheKey(
   session: ReturnType<typeof getSession>,
@@ -323,12 +325,17 @@ function getAnnouncementImageOutputDimensions(value: AnnouncementImageAspectRati
   };
 }
 
-export function NewsCenter({ mode }: NewsCenterProps) {
+export function NewsCenter({
+  mode,
+  initialData,
+}: NewsCenterProps & {
+  initialData?: NewsCenterInitialData | null;
+}) {
   const { locale } = useI18n();
   const session = getSession();
   const cacheKey = buildNewsCacheKey(session, mode);
-  const [items, setItems] = useState<AnnouncementItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<AnnouncementItem[]>(initialData?.items ?? []);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -349,9 +356,13 @@ export function NewsCenter({ mode }: NewsCenterProps) {
       lastName: string;
       employeeNumber: string;
     }>
-  >([]);
-  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
+  >(initialData?.employees ?? []);
+  const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
   const isManagerView = mode === "manager";
+  const didUseInitialData = useRef(Boolean(initialData));
+  const didUseInitialDirectory = useRef(
+    Boolean(initialData) && mode === "manager",
+  );
 
   function applyCachedSnapshot(snapshot: NewsCenterCachePayload) {
     setItems(snapshot.items);
@@ -387,6 +398,13 @@ export function NewsCenter({ mode }: NewsCenterProps) {
   }
 
   useEffect(() => {
+    if (didUseInitialData.current && initialData) {
+      didUseInitialData.current = false;
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     const cached = cacheKey
       ? readClientCache<NewsCenterCachePayload>(cacheKey, NEWS_CACHE_TTL_MS)
       : null;
@@ -400,7 +418,7 @@ export function NewsCenter({ mode }: NewsCenterProps) {
     }
 
     void loadItems();
-  }, [cacheKey, isManagerView]);
+  }, [cacheKey, initialData, isManagerView]);
 
   useEffect(() => {
     if (!feedback) {
@@ -420,52 +438,43 @@ export function NewsCenter({ mode }: NewsCenterProps) {
       return;
     }
 
+    if (didUseInitialDirectory.current) {
+      didUseInitialDirectory.current = false;
+      return;
+    }
+
     let active = true;
 
-    void Promise.allSettled([
-      apiRequest<any[]>("/employees", {
+    void apiRequest<{
+      initialData: NewsCenterInitialData | null;
+      mode: "admin" | "employee";
+    }>("/bootstrap/news", {
         token: session.accessToken,
-      }),
-      apiRequest<WorkGroupItem[] | { groups: WorkGroupItem[] }>("/collaboration/groups", {
-        token: session.accessToken,
-      }),
-    ]).then(([employeesResult, groupsResult]) => {
+      }).then((snapshot) => {
       if (!active) {
         return;
       }
 
-      if (employeesResult.status === "fulfilled") {
-        const employeeItems = Array.isArray(employeesResult.value)
-          ? employeesResult.value
-          : (employeesResult.value as any)?.items ?? [];
-
-        setEmployees(
-          employeeItems.map((employee: any) => ({
-            id: employee.id,
-            firstName: employee.firstName,
-            lastName: employee.lastName,
-            employeeNumber: employee.employeeNumber,
-          })),
-        );
-      } else {
+      if (!snapshot.initialData) {
         setEmployees([]);
+        setGroups([]);
+      } else {
+        setEmployees(snapshot.initialData.employees);
+        setGroups(snapshot.initialData.groups);
+      }
+    }).catch(() => {
+      if (!active) {
+        return;
       }
 
-      if (groupsResult.status === "fulfilled") {
-        setGroups(
-          Array.isArray(groupsResult.value)
-            ? groupsResult.value
-            : groupsResult.value.groups ?? [],
-        );
-      } else {
-        setGroups([]);
-      }
+      setEmployees([]);
+      setGroups([]);
     });
 
     return () => {
       active = false;
     };
-  }, [isManagerView]);
+  }, [initialData, isManagerView]);
 
   useEffect(() => {
     if (!cacheKey || loading) {
