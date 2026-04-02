@@ -2,7 +2,6 @@
 
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -142,7 +141,6 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (l: S
 }
 
 export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) {
-  const router = useRouter();
   const isApple = useIsApplePlatform();
 
   const [lang, setLang] = useState<SupportedLang>('en');
@@ -181,7 +179,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
       });
       await persistSession(session);
       navigationStarted = true;
-      router.push(resolveHomeRoute(session.user.roleCodes));
+      window.location.replace(resolveHomeRoute(session.user.roleCodes));
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {

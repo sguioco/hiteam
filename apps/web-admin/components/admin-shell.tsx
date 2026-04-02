@@ -240,7 +240,7 @@ export function AdminShell({
   }
 
   useEffect(() => {
-    const currentSession = getSession() ?? initialSession;
+    const currentSession = initialSession ?? getSession();
 
     if (!currentSession) {
       redirectToLogin();

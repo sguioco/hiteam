@@ -121,7 +121,12 @@ async function fetchAndCacheApiRequest<T>(
     }
 
     if (!response.ok) {
-      if (response.status === 401 && options?.token && typeof window !== "undefined") {
+      if (
+        response.status === 401 &&
+        options?.token &&
+        typeof window !== "undefined" &&
+        shouldExpireSessionForPath(path)
+      ) {
         expireSession();
       }
 
@@ -280,6 +285,10 @@ async function getApiErrorMessage(
   return `Ошибка ${response.status}. Запрос не выполнен.`;
 }
 
+function shouldExpireSessionForPath(path: string): boolean {
+  return path !== "/auth/bootstrap";
+}
+
 export async function apiRequest<T>(
   path: string,
   options?: ApiRequestOptions,
@@ -316,7 +325,12 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    if (response.status === 401 && options?.token && typeof window !== "undefined") {
+    if (
+      response.status === 401 &&
+      options?.token &&
+      typeof window !== "undefined" &&
+      shouldExpireSessionForPath(path)
+    ) {
       expireSession();
     }
 
@@ -363,7 +377,12 @@ export async function apiDownload(
   }
 
   if (!response.ok) {
-    if (response.status === 401 && options?.token && typeof window !== "undefined") {
+    if (
+      response.status === 401 &&
+      options?.token &&
+      typeof window !== "undefined" &&
+      shouldExpireSessionForPath(path)
+    ) {
       expireSession();
     }
     throw new Error(await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }));

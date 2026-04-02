@@ -32,7 +32,7 @@
     "aws-amplify": "^6.16.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cobe": "^0.6.5",
+    "cobe": "^2.0.1",
     "lucide-react": "^0.577.0",
     "motion": "^12.36.0",
     "next": "^15.2.8",

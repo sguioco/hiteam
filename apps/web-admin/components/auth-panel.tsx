@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -111,7 +110,6 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (lang
 }
 
 export function AuthPanel() {
-  const router = useRouter();
   const [lang, setLang] = useState<SupportedLang>('en');
 
   const [identifier, setIdentifier] = useState('');
@@ -151,7 +149,7 @@ export function AuthPanel() {
         const session = getDemoSessionForRole(demoRole);
         await persistSession(session);
         navigationStarted = true;
-        router.push(resolveHomeRoute(session.user.roleCodes));
+        window.location.replace(resolveHomeRoute(session.user.roleCodes));
         return;
       }
 
@@ -167,7 +165,7 @@ export function AuthPanel() {
       disableDemoMode();
       await persistSession(session);
       navigationStarted = true;
-      router.push(resolveHomeRoute(session.user.roleCodes));
+      window.location.replace(resolveHomeRoute(session.user.roleCodes));
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
@@ -182,8 +180,9 @@ export function AuthPanel() {
     enableDemoMode();
     resetDemoState();
     const session = getDemoSessionForRole(role);
-    void persistSession(session);
-    router.push(resolveHomeRoute(session.user.roleCodes));
+    void persistSession(session).then(() => {
+      window.location.replace(resolveHomeRoute(session.user.roleCodes));
+    });
   }
 
   return (

@@ -7098,10 +7098,10 @@ body {
 }
 
 .manager-week-day-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  column-gap: 12px;
 }
 
 .manager-week-day-copy {
@@ -7119,7 +7119,7 @@ body {
 }
 
 .manager-week-day-copy strong {
-  font-size: 1.8rem;
+  font-size: 1.55rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -7137,6 +7137,8 @@ body {
   justify-items: end;
   align-content: start;
   text-align: right;
+  min-width: max-content;
+  padding-right: 4px;
 }
 
 .manager-week-day-date strong {
@@ -7144,7 +7146,7 @@ body {
   font-size: clamp(2.2rem, 3vw, 3rem);
   font-weight: 400;
   line-height: 0.9;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   color: #284bff;
 }
 

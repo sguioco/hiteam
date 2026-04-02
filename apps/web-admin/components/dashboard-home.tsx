@@ -623,7 +623,7 @@ export default function DashboardHome({
   mode?: "admin" | "employee";
 }) {
   const router = useRouter();
-  const session = getSession() ?? initialSession;
+  const session = initialSession ?? getSession();
   const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);

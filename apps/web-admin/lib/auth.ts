@@ -99,9 +99,9 @@ export function saveSession(session: AuthSession): void {
 
 export function getSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
+  const bootstrappedSession = readWindowBootstrapSession();
   const raw = window.localStorage.getItem(SESSION_KEY);
   if (!raw) {
-    const bootstrappedSession = readWindowBootstrapSession();
     if (bootstrappedSession) {
       window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
       return bootstrappedSession;
@@ -115,7 +115,20 @@ export function getSession(): AuthSession | null {
 
     if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled()) {
       window.localStorage.removeItem(SESSION_KEY);
-      return null;
+      return bootstrappedSession;
+    }
+
+    if (
+      bootstrappedSession &&
+      (
+        session.accessToken !== bootstrappedSession.accessToken ||
+        session.refreshToken !== bootstrappedSession.refreshToken ||
+        session.user.id !== bootstrappedSession.user.id ||
+        session.user.tenantId !== bootstrappedSession.user.tenantId
+      )
+    ) {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+      return bootstrappedSession;
     }
 
     return session;
@@ -123,7 +136,6 @@ export function getSession(): AuthSession | null {
     window.localStorage.removeItem(SESSION_KEY);
   }
 
-  const bootstrappedSession = readWindowBootstrapSession();
   if (bootstrappedSession) {
     window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
     return bootstrappedSession;
@@ -196,14 +208,19 @@ export async function persistSession(session: AuthSession): Promise<void> {
   window.__SMART_INITIAL_SESSION__ = session;
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 
-  await fetch('/api/session', {
+  const response = await fetch('/api/session', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    cache: 'no-store',
     credentials: 'same-origin',
     body: JSON.stringify({ session }),
-  }).catch(() => undefined);
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to persist session.');
+  }
 
   window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, { detail: session }));
 }
