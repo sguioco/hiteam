@@ -11,7 +11,23 @@ function buildStorageKey(key: string) {
 }
 
 function canUseBrowserStorage() {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+  return typeof window !== "undefined";
+}
+
+function getPreferredStorage(): Storage | null {
+  if (!canUseBrowserStorage()) {
+    return null;
+  }
+
+  if (typeof window.localStorage !== "undefined") {
+    return window.localStorage;
+  }
+
+  if (typeof window.sessionStorage !== "undefined") {
+    return window.sessionStorage;
+  }
+
+  return null;
 }
 
 export function readClientCache<T>(key: string, maxAgeMs?: number) {
@@ -30,7 +46,8 @@ export function readClientCache<T>(key: string, maxAgeMs?: number) {
     return null;
   }
 
-  const raw = window.sessionStorage.getItem(buildStorageKey(key));
+  const storage = getPreferredStorage();
+  const raw = storage?.getItem(buildStorageKey(key)) ?? null;
   if (!raw) {
     return null;
   }
@@ -38,7 +55,7 @@ export function readClientCache<T>(key: string, maxAgeMs?: number) {
   try {
     const parsed = JSON.parse(raw) as CacheEnvelope<T>;
     if (!parsed || typeof parsed.storedAt !== "number") {
-      window.sessionStorage.removeItem(buildStorageKey(key));
+      storage?.removeItem(buildStorageKey(key));
       return null;
     }
 
@@ -49,7 +66,7 @@ export function readClientCache<T>(key: string, maxAgeMs?: number) {
       isStale: typeof maxAgeMs === "number" ? now - parsed.storedAt > maxAgeMs : false,
     };
   } catch {
-    window.sessionStorage.removeItem(buildStorageKey(key));
+    storage?.removeItem(buildStorageKey(key));
     return null;
   }
 }
@@ -67,7 +84,7 @@ export function writeClientCache<T>(key: string, value: T) {
   }
 
   try {
-    window.sessionStorage.setItem(buildStorageKey(key), JSON.stringify(envelope));
+    getPreferredStorage()?.setItem(buildStorageKey(key), JSON.stringify(envelope));
   } catch {
     // Ignore quota and serialization issues; memory cache is still enough for in-app navigation.
   }
@@ -80,5 +97,5 @@ export function clearClientCache(key: string) {
     return;
   }
 
-  window.sessionStorage.removeItem(buildStorageKey(key));
+  getPreferredStorage()?.removeItem(buildStorageKey(key));
 }

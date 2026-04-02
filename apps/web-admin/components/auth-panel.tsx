@@ -29,8 +29,8 @@ import {
 } from '@/lib/demo-mode';
 import {
   AuthSession,
+  persistSession,
   resolveHomeRoute,
-  saveSession,
 } from '@/lib/auth';
 import { BrandWordmark } from './brand-wordmark';
 
@@ -138,7 +138,7 @@ export function AuthPanel() {
         enableDemoMode();
         resetDemoState();
         const session = getDemoSessionForRole(demoRole);
-        saveSession(session);
+        await persistSession(session);
         if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
         router.push(resolveHomeRoute(session.user.roleCodes));
         return;
@@ -154,7 +154,7 @@ export function AuthPanel() {
       });
 
       disableDemoMode();
-      saveSession(session);
+      await persistSession(session);
       if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
       router.push(resolveHomeRoute(session.user.roleCodes));
     } catch (error) {
@@ -169,7 +169,7 @@ export function AuthPanel() {
     enableDemoMode();
     resetDemoState();
     const session = getDemoSessionForRole(role);
-    saveSession(session);
+    void persistSession(session);
     if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
     router.push(resolveHomeRoute(session.user.roleCodes));
   }

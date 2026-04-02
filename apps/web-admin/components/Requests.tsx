@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApprovalInboxItem,
   RequestStatus,
@@ -364,15 +364,19 @@ function applyDecisionToItem(
   };
 }
 
-export default function Requests() {
+export default function Requests({
+  initialItems,
+}: {
+  initialItems?: ApprovalInboxItem[] | null;
+}) {
   const { locale } = useI18n();
   const session = getSession();
   const requestsCacheKey = buildRequestsCacheKey(session);
   const ui = requestsCopy[locale];
   const localeTag = locale === "ru" ? "ru-RU" : "en-US";
-  const [items, setItems] = useState<ApprovalInboxItem[]>([]);
+  const [items, setItems] = useState<ApprovalInboxItem[]>(initialItems ?? []);
   const [isMockMode, setIsMockMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialItems);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -391,6 +395,7 @@ export default function Requests() {
     null,
   );
   const [commentLoadingId, setCommentLoadingId] = useState<string | null>(null);
+  const didUseInitialItems = useRef(Boolean(initialItems));
   const requestTypeLabels = ui.requestTypes;
   const requestStatusLabels = ui.statuses;
   const requestTypeSelectOptions = REQUEST_TYPE_FILTERS.map((filter) =>
@@ -445,6 +450,14 @@ export default function Requests() {
   }
 
   useEffect(() => {
+    if (didUseInitialItems.current && initialItems) {
+      didUseInitialItems.current = false;
+      if (requestsCacheKey) {
+        writeClientCache(requestsCacheKey, initialItems);
+      }
+      return;
+    }
+
     const cached = requestsCacheKey
       ? readClientCache<ApprovalInboxItem[]>(
           requestsCacheKey,

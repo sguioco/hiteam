@@ -5,6 +5,7 @@ import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
 import { Providers } from './providers';
 import { cn } from "@/lib/utils";
+import { getServerSession } from "@/lib/server-auth";
 
 const teodor = localFont({
   src: [
@@ -27,10 +28,14 @@ export const metadata: Metadata = {
   description: 'Operational control center for attendance, scheduling, and workforce workflows.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const initialSession = await getServerSession();
+  const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")};`;
+
   return (
     <html lang="en" className={cn(teodor.variable)}>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers>{children}</Providers>
       </body>
     </html>

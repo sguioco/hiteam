@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   AuthSession,
-  clearSession,
+  destroySession,
   hasManagerAccess,
   hasDesktopAdminAccess,
   isEmployeeOnlyRole,
@@ -1046,9 +1046,10 @@ export function AdminShell({
                   className="sidebar-user-menu-item is-danger"
                   onClick={() => {
                     setAccountMenuOpen(false);
-                    clearSession();
-                    setSession(null);
-                    redirectToLogin();
+                    void destroySession().finally(() => {
+                      setSession(null);
+                      redirectToLogin();
+                    });
                   }}
                   type="button"
                 >

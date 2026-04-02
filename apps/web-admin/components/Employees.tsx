@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
+import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import {
   buildEmployeeWorkdayLookup,
   formatWorkdayDateLabel,
@@ -155,6 +156,16 @@ type OrganizationSetupResponse = {
   } | null;
 };
 
+type EmployeesDirectorySnapshot = {
+  employeeRecords: EmployeeApiRecord[];
+  overview: CollaborationOverviewResponse | null;
+  pendingInvitations: InvitationRecord[];
+  scheduleShifts: EmployeeScheduleShift[];
+  scheduleTemplates: ShiftTemplateRecord[];
+  organizationSetup: OrganizationSetupResponse | null;
+  canCheckWorkdays: boolean;
+};
+
 type EmployeeStatus = "active" | "inactive" | "vacation" | "sick" | "dismissed";
 type ViewMode = "employees" | "groups";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
@@ -253,6 +264,13 @@ const initialTaskDraft = {
 const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
 const reviewInfoBoxClassName =
   "flex min-h-11 items-center rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted-foreground";
+const EMPLOYEES_DIRECTORY_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function buildEmployeesDirectoryCacheKey(
+  session: NonNullable<ReturnType<typeof getSession>>,
+) {
+  return `employees:directory:${session.user.tenantId}:${session.user.id}`;
+}
 
 function buildEmployeeName(employee: {
   firstName?: string | null;
@@ -764,6 +782,39 @@ const Employees = () => {
       ? `${window.location.origin}/join/company/${encodeURIComponent(employeeJoinCode)}`
       : "";
 
+  function applyDirectorySnapshot(
+    snapshot: EmployeesDirectorySnapshot,
+    cacheKey?: string | null,
+  ) {
+    setEmployeeRecords(snapshot.employeeRecords);
+    setOverview(snapshot.overview);
+    setPendingInvitations(snapshot.pendingInvitations);
+    setScheduleShifts(snapshot.scheduleShifts);
+    setScheduleTemplates(snapshot.scheduleTemplates);
+    setOrganizationSetup(snapshot.organizationSetup);
+    setCanCheckWorkdays(snapshot.canCheckWorkdays);
+
+    setExpandedGroups(
+      new Set([
+        ...(snapshot.overview?.groups.map((group) => group.id) ?? []),
+        ...(snapshot.employeeRecords.some(
+          (employee) =>
+            !snapshot.overview?.groups.some((group) =>
+              group.memberships.some(
+                (membership) => membership.employeeId === employee.id,
+              ),
+            ),
+        )
+          ? ["__none"]
+          : []),
+      ]),
+    );
+
+    if (cacheKey) {
+      writeClientCache(cacheKey, snapshot);
+    }
+  }
+
   async function loadDirectory() {
     const session = getSession();
     if (!session) {
@@ -776,6 +827,7 @@ const Employees = () => {
     setDirectoryError(null);
 
     try {
+      let nextCanCheckWorkdays = false;
       const [
         employeesData,
         overviewData,
@@ -797,10 +849,12 @@ const Employees = () => {
           token: session.accessToken,
         })
           .then((result) => {
+            nextCanCheckWorkdays = true;
             setCanCheckWorkdays(true);
             return result;
           })
           .catch(() => {
+            nextCanCheckWorkdays = false;
             setCanCheckWorkdays(false);
             return [];
           }),
@@ -812,26 +866,17 @@ const Employees = () => {
         }).catch(() => ({ company: null })),
       ]);
 
-      setEmployeeRecords(employeesData);
-      setOverview(overviewData);
-      setPendingInvitations(invitationsData);
-      setScheduleShifts(shiftsData);
-      setScheduleTemplates(templatesData);
-      setOrganizationSetup(orgSetupData);
-      setExpandedGroups(
-        new Set([
-          ...overviewData.groups.map((group) => group.id),
-          ...(employeesData.some(
-            (employee) =>
-              !overviewData.groups.some((group) =>
-                group.memberships.some(
-                  (membership) => membership.employeeId === employee.id,
-                ),
-              ),
-          )
-            ? ["__none"]
-            : []),
-        ]),
+      applyDirectorySnapshot(
+        {
+          employeeRecords: employeesData,
+          overview: overviewData,
+          pendingInvitations: invitationsData,
+          scheduleShifts: shiftsData,
+          scheduleTemplates: templatesData,
+          organizationSetup: orgSetupData,
+          canCheckWorkdays: nextCanCheckWorkdays,
+        },
+        buildEmployeesDirectoryCacheKey(session),
       );
     } catch (requestError) {
       setDirectoryError(
@@ -853,6 +898,20 @@ const Employees = () => {
   }
 
   useEffect(() => {
+    const session = getSession();
+    if (session) {
+      const cachedDirectory = readClientCache<EmployeesDirectorySnapshot>(
+        buildEmployeesDirectoryCacheKey(session),
+        EMPLOYEES_DIRECTORY_CACHE_TTL_MS,
+      );
+
+      if (cachedDirectory) {
+        applyDirectorySnapshot(cachedDirectory.value);
+        setDirectoryLoading(false);
+        setInvitationsLoading(false);
+      }
+    }
+
     void loadDirectory();
   }, []);
 

@@ -10,7 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
-import { AuthSession, resolveHomeRoute, saveSession } from '@/lib/auth';
+import { AuthSession, persistSession, resolveHomeRoute } from '@/lib/auth';
 import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { BrandWordmark } from './brand-wordmark';
 import {
@@ -168,7 +168,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
         method: 'POST',
         body: JSON.stringify({ identifier, password }),
       });
-      saveSession(session);
+      await persistSession(session);
       if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
       router.push(resolveHomeRoute(session.user.roleCodes));
     } catch (err) {

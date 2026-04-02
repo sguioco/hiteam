@@ -26,6 +26,12 @@ const TENANT_SLUG_KEY = 'smart-admin-tenant-slug';
 export const SESSION_EXPIRED_EVENT = 'smart-admin-session-expired';
 export const SESSION_UPDATED_EVENT = 'smart-admin-session-updated';
 
+declare global {
+  interface Window {
+    __SMART_INITIAL_SESSION__?: AuthSession | null;
+  }
+}
+
 function normalizeTenantSlug(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -54,9 +60,40 @@ function getTenantSlugFromHostname(hostname: string): string {
   return parts.length >= 3 ? normalizeTenantSlug(parts[0]) : '';
 }
 
+function syncSessionCookie(session: AuthSession | null) {
+  if (typeof window === 'undefined') return;
+
+  void fetch('/api/session', {
+    method: session ? 'POST' : 'DELETE',
+    headers: session ? { 'Content-Type': 'application/json' } : undefined,
+    credentials: 'same-origin',
+    keepalive: true,
+    body: session ? JSON.stringify({ session }) : undefined,
+  }).catch(() => undefined);
+}
+
+function readWindowBootstrapSession(): AuthSession | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const session = window.__SMART_INITIAL_SESSION__ ?? null;
+  if (!session) {
+    return null;
+  }
+
+  if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled()) {
+    return null;
+  }
+
+  return session;
+}
+
 export function saveSession(session: AuthSession): void {
   if (typeof window === 'undefined') return;
+  window.__SMART_INITIAL_SESSION__ = session;
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  syncSessionCookie(session);
   window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, { detail: session }));
 }
 
@@ -76,19 +113,28 @@ export function getSession(): AuthSession | null {
     return session;
   } catch {
     window.localStorage.removeItem(SESSION_KEY);
-    return null;
   }
+
+  const bootstrappedSession = readWindowBootstrapSession();
+  if (bootstrappedSession) {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+    return bootstrappedSession;
+  }
+
+  return null;
 }
 
 export function clearSession(): void {
   if (typeof window === 'undefined') return;
+  window.__SMART_INITIAL_SESSION__ = null;
   window.localStorage.removeItem(SESSION_KEY);
+  syncSessionCookie(null);
 }
 
 export function redirectToLogin(): void {
   if (typeof window === 'undefined') return;
   if (window.location.pathname !== '/login') {
-    window.location.replace('/login');
+    window.location.replace('/login?force=1');
   }
 }
 
@@ -132,6 +178,39 @@ export function expireSession(): void {
   clearSession();
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
   redirectToLogin();
+}
+
+export async function persistSession(session: AuthSession): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.__SMART_INITIAL_SESSION__ = session;
+  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+  await fetch('/api/session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({ session }),
+  }).catch(() => undefined);
+
+  window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, { detail: session }));
+}
+
+export async function destroySession(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.__SMART_INITIAL_SESSION__ = null;
+  window.localStorage.removeItem(SESSION_KEY);
+  await fetch('/api/session', {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).catch(() => undefined);
 }
 
 export function resolveHomeRoute(roleCodes: string[]): string {

@@ -1,42 +1,61 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { ADMIN_APP_PREFIX, ADMIN_ROUTE_PREFIXES } from './lib/admin-routes';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { decodeSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 
-function isAdminLegacyPath(pathname: string) {
-  return ADMIN_ROUTE_PREFIXES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
-  );
+const PUBLIC_EXACT_PATHS = new Set([
+  "/",
+  "/login",
+  "/signup",
+]);
+
+const PUBLIC_PREFIXES = [
+  "/join/",
+  "/hi-team/create-organization",
+];
+
+function isPublicPath(pathname: string) {
+  if (PUBLIC_EXACT_PATHS.has(pathname)) {
+    return true;
+  }
+
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  if (pathname === ADMIN_APP_PREFIX) {
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith(`${ADMIN_APP_PREFIX}/`)) {
-    const nextUrl = request.nextUrl.clone();
-    nextUrl.pathname = pathname.slice(ADMIN_APP_PREFIX.length) || '/';
-    return NextResponse.rewrite(nextUrl);
-  }
+  const { pathname, searchParams } = request.nextUrl;
 
   if (
-    pathname === '/' ||
-    pathname === '/login' ||
-    pathname.startsWith('/employee')
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/api/") ||
+    pathname === "/favicon.ico" ||
+    pathname.match(/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|map|txt|woff|woff2|ttf|otf)$/)
   ) {
     return NextResponse.next();
   }
 
-  if (isAdminLegacyPath(pathname)) {
-    const nextUrl = request.nextUrl.clone();
-    nextUrl.pathname = `${ADMIN_APP_PREFIX}${pathname}`;
-    return NextResponse.redirect(nextUrl);
+  const session = decodeSessionCookie(
+    request.cookies.get(SESSION_COOKIE_NAME)?.value,
+  );
+  const hasSession = Boolean(session);
+  const forceAuthPage = searchParams.get("force") === "1";
+
+  if (!hasSession && !isPublicPath(pathname)) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (
+    hasSession &&
+    !forceAuthPage &&
+    (pathname === "/login" || pathname === "/signup")
+  ) {
+    return NextResponse.redirect(new URL("/app", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)'],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
