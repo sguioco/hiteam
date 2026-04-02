@@ -1,6 +1,7 @@
 'use client';
 
 import type { AnchorHTMLAttributes, CSSProperties, FC, HTMLAttributes } from 'react';
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import createGlobe from 'cobe';
 import { ChartBreakoutSquare, MessageChatCircle, ZapFast } from '@untitledui/icons';
@@ -600,12 +601,12 @@ const Landing = () => {
         </nav>
 
         <div className="flex items-center gap-3">
-          <a className="hidden text-sm font-medium text-foreground transition-colors hover:text-primary sm:inline-block" href="#">
+          <Link className="hidden text-sm font-medium text-foreground transition-colors hover:text-primary sm:inline-block" href="/login">
             Войти
-          </a>
-          <a className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90" href="#">
+          </Link>
+          <Link className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90" href="/login">
             Начать
-          </a>
+          </Link>
         </div>
       </header>
 

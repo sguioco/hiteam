@@ -145,13 +145,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   const router = useRouter();
   const isApple = useIsApplePlatform();
 
-  const [lang, setLang] = useState<SupportedLang>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('smart-admin-locale');
-      if (saved === 'ru' || saved === 'ar') return saved;
-    }
-    return 'en';
-  });
+  const [lang, setLang] = useState<SupportedLang>('en');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -159,22 +153,41 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   const [error, setError] = useState('');
   const t = texts[lang];
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem('smart-admin-locale');
+    if (saved === 'ru' || saved === 'ar') {
+      setLang(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lang === 'en') {
+      window.localStorage.removeItem('smart-admin-locale');
+      return;
+    }
+
+    window.localStorage.setItem('smart-admin-locale', lang);
+  }, [lang]);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
     setLoading(true);
+    let navigationStarted = false;
     try {
       const session = await apiRequest<AuthSession>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ identifier, password }),
       });
       await persistSession(session);
-      if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
+      navigationStarted = true;
       router.push(resolveHomeRoute(session.user.roleCodes));
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {
-      setLoading(false);
+      if (!navigationStarted) {
+        setLoading(false);
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -112,13 +112,7 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (lang
 
 export function AuthPanel() {
   const router = useRouter();
-  const [lang, setLang] = useState<SupportedLang>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('smart-admin-locale');
-      if (saved === 'ru' || saved === 'ar') return saved;
-    }
-    return 'en';
-  });
+  const [lang, setLang] = useState<SupportedLang>('en');
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -127,10 +121,27 @@ export function AuthPanel() {
   const [loginError, setLoginError] = useState('');
   const t = texts[lang];
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem('smart-admin-locale');
+    if (saved === 'ru' || saved === 'ar') {
+      setLang(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lang === 'en') {
+      window.localStorage.removeItem('smart-admin-locale');
+      return;
+    }
+
+    window.localStorage.setItem('smart-admin-locale', lang);
+  }, [lang]);
+
   async function handleLoginSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoginError('');
     setLoginLoading(true);
+    let navigationStarted = false;
 
     try {
       const demoRole = getDemoRoleByCredentials(identifier, password);
@@ -139,7 +150,7 @@ export function AuthPanel() {
         resetDemoState();
         const session = getDemoSessionForRole(demoRole);
         await persistSession(session);
-        if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
+        navigationStarted = true;
         router.push(resolveHomeRoute(session.user.roleCodes));
         return;
       }
@@ -155,12 +166,14 @@ export function AuthPanel() {
 
       disableDemoMode();
       await persistSession(session);
-      if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
+      navigationStarted = true;
       router.push(resolveHomeRoute(session.user.roleCodes));
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
-      setLoginLoading(false);
+      if (!navigationStarted) {
+        setLoginLoading(false);
+      }
     }
   }
 
@@ -170,7 +183,6 @@ export function AuthPanel() {
     resetDemoState();
     const session = getDemoSessionForRole(role);
     void persistSession(session);
-    if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
     router.push(resolveHomeRoute(session.user.roleCodes));
   }
 

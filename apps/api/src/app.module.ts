@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule as NestScheduleModule } from '@nestjs/schedule';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -27,6 +27,8 @@ import { DiagnosticsModule } from './modules/diagnostics/diagnostics.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
+import { HttpResponseCacheInterceptor } from './common/cache/http-response-cache.interceptor';
+import { ResponseCacheService } from './common/cache/response-cache.service';
 
 @Module({
   imports: [
@@ -64,9 +66,14 @@ import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
     JobsModule,
   ],
   providers: [
+    ResponseCacheService,
     {
       provide: APP_GUARD,
       useClass: WorkspaceAccessGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpResponseCacheInterceptor,
     },
   ],
 })

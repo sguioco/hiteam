@@ -62,6 +62,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
 import {
   getSession,
+  type AuthSession,
   hasDesktopAdminAccess,
   isEmployeeOnlyRole,
   isManagerOnlyRole,
@@ -610,12 +611,14 @@ function createMockDashboardTasks(
 }
 
 export default function DashboardHome({
+  initialSession = null,
   mode = "admin",
 }: {
+  initialSession?: AuthSession | null;
   mode?: "admin" | "employee";
 }) {
   const router = useRouter();
-  const session = getSession();
+  const session = getSession() ?? initialSession;
   const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
@@ -1344,7 +1347,7 @@ export default function DashboardHome({
     setCreateTaskOpen(false);
     setTaskDayOffConfirmOpen(false);
     setMessageAction({
-      href: `/app/schedule?date=${(taskDraft.dueAt || new Date().toISOString()).slice(0, 10)}&eventType=${
+      href: `/schedule?date=${(taskDraft.dueAt || new Date().toISOString()).slice(0, 10)}&eventType=${
         taskDraft.mode === "meeting" ? "meetings" : "tasks"
       }`,
       label: "Открыть в календаре",
@@ -1396,6 +1399,7 @@ export default function DashboardHome({
 
   return (
     <AdminShell
+      initialSession={session}
       mode={mode}
       onCreateAction={
         isEmployeeMode
@@ -2046,7 +2050,7 @@ export default function DashboardHome({
                       <Button
                         onClick={() =>
                           router.push(
-                            `/app/schedule?date=${selectedCalendarEvent.date.toISOString().slice(0, 10)}&eventType=${
+                            `/schedule?date=${selectedCalendarEvent.date.toISOString().slice(0, 10)}&eventType=${
                               selectedCalendarEvent.kind === "meeting" ? "meetings" : "tasks"
                             }`,
                           )

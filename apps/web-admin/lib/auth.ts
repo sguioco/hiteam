@@ -100,7 +100,15 @@ export function saveSession(session: AuthSession): void {
 export function getSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
+  if (!raw) {
+    const bootstrappedSession = readWindowBootstrapSession();
+    if (bootstrappedSession) {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+      return bootstrappedSession;
+    }
+
+    return null;
+  }
 
   try {
     const session = JSON.parse(raw) as AuthSession;

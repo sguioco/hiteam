@@ -36,6 +36,7 @@ import {
   getSession,
   redirectToLogin,
   resolveHomeRoute,
+  saveSession,
 } from "../lib/auth";
 import { toAdminHref } from "../lib/admin-routes";
 import { apiRequest } from "../lib/api";
@@ -155,12 +156,14 @@ function hasStudioBackground(pathname: string) {
 export function AdminShell({
   createDialogActions,
   children,
+  initialSession = null,
   onCreateAction,
   showTopbar = true,
   mode = "admin",
 }: {
   createDialogActions?: CreateDialogAction[];
   children: ReactNode;
+  initialSession?: AuthSession | null;
   onCreateAction?: () => void;
   showTopbar?: boolean;
   mode?: "admin" | "employee";
@@ -168,7 +171,7 @@ export function AdminShell({
   const pathname = usePathname();
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(initialSession);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationItems, setNotificationItems] = useState<
     NotificationItem[]
@@ -239,11 +242,15 @@ export function AdminShell({
   }
 
   useEffect(() => {
-    const currentSession = getSession();
+    const currentSession = getSession() ?? initialSession;
 
     if (!currentSession) {
       redirectToLogin();
       return;
+    }
+
+    if (!getSession()) {
+      saveSession(currentSession);
     }
 
     const resolvedHomeRoute = resolveHomeRoute(currentSession.user.roleCodes);

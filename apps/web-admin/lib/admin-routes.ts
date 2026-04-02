@@ -20,5 +20,5 @@ export const ADMIN_ROUTE_PREFIXES = [
 
 export function toAdminHref(path = '/'): string {
   if (path === '/') return ADMIN_APP_PREFIX;
-  return `${ADMIN_APP_PREFIX}${path}`;
+  return path;
 }

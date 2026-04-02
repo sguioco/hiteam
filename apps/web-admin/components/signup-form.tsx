@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -107,13 +107,7 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (l: S
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'div'>) {
   const router = useRouter();
-  const [lang, setLang] = useState<SupportedLang>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('smart-admin-locale');
-      if (saved === 'ru' || saved === 'ar') return saved;
-    }
-    return 'en';
-  });
+  const [lang, setLang] = useState<SupportedLang>('en');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -123,6 +117,22 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
   const [error, setError] = useState('');
   const t = texts[lang];
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem('smart-admin-locale');
+    if (saved === 'ru' || saved === 'ar') {
+      setLang(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lang === 'en') {
+      window.localStorage.removeItem('smart-admin-locale');
+      return;
+    }
+
+    window.localStorage.setItem('smart-admin-locale', lang);
+  }, [lang]);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
@@ -131,18 +141,21 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
       return;
     }
     setLoading(true);
+    let navigationStarted = false;
     try {
       const session = await apiRequest<AuthSession>('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email, password }),
       });
       await persistSession(session);
-      if (lang !== 'en') localStorage.setItem('smart-admin-locale', lang);
+      navigationStarted = true;
       router.push(resolveHomeRoute(session.user.roleCodes));
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {
-      setLoading(false);
+      if (!navigationStarted) {
+        setLoading(false);
+      }
     }
   }
 

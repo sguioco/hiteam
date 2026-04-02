@@ -1,7 +1,9 @@
 import DashboardHome from "@/components/dashboard-home";
-import { getServerSessionMode } from "@/lib/server-auth";
+import { isEmployeeOnlyRole } from "@/lib/auth";
+import { requireServerSession } from "@/lib/server-auth";
 
 export default async function AdminHomePage() {
-  const mode = await getServerSessionMode();
-  return <DashboardHome mode={mode} />;
+  const session = await requireServerSession();
+  const mode = isEmployeeOnlyRole(session.user.roleCodes) ? "employee" : "admin";
+  return <DashboardHome initialSession={session} mode={mode} />;
 }
