@@ -6,6 +6,8 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/session-cookie";
 
+export const runtime = "edge";
+
 export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => null)) as {
     session?: AuthSession;
