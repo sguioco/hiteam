@@ -48,6 +48,7 @@ import { SessionLoader } from "./session-loader";
 import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { localizePersonName } from "../lib/transliteration";
+import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
 import {
   PROFILE_AVATAR_UPDATED_EVENT,
   readStoredProfileAvatar,
@@ -78,6 +79,11 @@ type NavItem = {
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const SHELL_HEADER_CACHE_TTL_MS = 10 * 60 * 1000;
 const SHELL_NOTIFICATIONS_CACHE_TTL_MS = 45 * 1000;
+const DEMO_COMPANY_NAME_EN = "Beauty Saloon";
+const DEMO_COMPANY_NAME_RU = "Салон Красоты";
+const DEMO_HEADER_EMPLOYEE_COUNT = 16;
+const DEMO_ADMIN_AVATAR_URL =
+  "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
 function buildShellHeaderCacheKey(
   session: AuthSession,
@@ -114,6 +120,26 @@ function resolveSidebarRoleLabel(roleCodes: string[], locale: Locale) {
   return locale === "ru" ? "Пользователь" : "User";
 }
 
+function resolveDemoHeaderBrand(
+  email: string | undefined,
+  locale: Locale,
+): { companyName: string; employeeCount: number } | null {
+  const normalizedEmail = email?.trim().toLowerCase();
+
+  if (
+    normalizedEmail !== DEMO_ADMIN_EMAIL &&
+    normalizedEmail !== DEMO_EMPLOYEE_EMAIL
+  ) {
+    return null;
+  }
+
+  return {
+    companyName:
+      locale === "ru" ? DEMO_COMPANY_NAME_RU : DEMO_COMPANY_NAME_EN,
+    employeeCount: DEMO_HEADER_EMPLOYEE_COUNT,
+  };
+}
+
 function formatNotificationTimestamp(value: string, locale: Locale) {
   const parsed = new Date(value);
 
@@ -131,6 +157,26 @@ function formatNotificationTimestamp(value: string, locale: Locale) {
 
 function hasStudioBackground(pathname: string) {
   return Boolean(pathname);
+}
+
+function resolveDemoSidebarProfile(
+  email: string | null | undefined,
+  locale: Locale,
+) {
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (normalizedEmail === DEMO_ADMIN_EMAIL) {
+    return {
+      name: locale === "ru" ? "Сергей Григорьев" : "Sergei Grigoryev",
+      avatarUrl: DEMO_ADMIN_AVATAR_URL,
+    };
+  }
+  if (normalizedEmail === DEMO_EMPLOYEE_EMAIL) {
+    return {
+      name: locale === "ru" ? "Алексей Миронов" : "Alex Mironov",
+      avatarUrl: getMockAvatarDataUrl("Alex Mironov", "male"),
+    };
+  }
+  return null;
 }
 
 export function AdminShell({
@@ -662,8 +708,11 @@ export function AdminShell({
     setExpandedItems((current) => ({ ...nextExpanded, ...current }));
   }, [navItems, pathname]);
 
+  const demoSidebarProfile = resolveDemoSidebarProfile(session?.user.email, locale);
+  const demoHeaderBrand = resolveDemoHeaderBrand(session?.user.email, locale);
   const profileName = session
-    ? buildUserDisplayName(
+    ? demoSidebarProfile?.name ??
+      buildUserDisplayName(
         accountProfile?.firstName,
         accountProfile?.lastName,
         session.user.email
@@ -677,10 +726,13 @@ export function AdminShell({
     ? resolveSidebarRoleLabel(session.user.roleCodes, locale)
     : "";
   const companyName =
+    demoHeaderBrand?.companyName ||
     organization?.company?.name?.trim() ||
     (locale === "ru" ? "Организация" : "Organization");
+  const displayEmployeeCount = demoHeaderBrand?.employeeCount ?? employeeCount;
   const companyLogoUrl = organization?.company?.logoUrl ?? null;
-  const resolvedProfileAvatarUrl = accountProfile?.avatarUrl || storedAvatarUrl;
+  const resolvedProfileAvatarUrl =
+    accountProfile?.avatarUrl || storedAvatarUrl || demoSidebarProfile?.avatarUrl;
   const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
   const unreadNotifications = notificationItems.filter((item) => !item.isRead);
   const readNotifications = notificationItems.filter((item) => item.isRead);
@@ -1136,7 +1188,7 @@ export function AdminShell({
                     <div className="shell-topbar-meta">
                       <span className="shell-topbar-meta-item">
                         <UsersRound className="size-3.5" />
-                        {employeeCount}{" "}
+                        {displayEmployeeCount}{" "}
                         {locale === "ru" ? "сотрудников" : "employees"}
                       </span>
                     </div>

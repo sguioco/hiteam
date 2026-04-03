@@ -93,10 +93,18 @@ function formatMonthHeading(value: Date, locale: "ru" | "en") {
 }
 
 function formatRangeLabel(start: Date, end: Date) {
+  if (start.getDate() === end.getDate()) {
+    return `${start.getDate()}`;
+  }
+
   return `${start.getDate()}-${end.getDate()}`;
 }
 
 function formatRangeHeading(start: Date, end: Date, locale: "ru" | "en") {
+  if (start.getDate() === end.getDate()) {
+    return locale === "ru" ? `${start.getDate()} число` : `${start.getDate()}`;
+  }
+
   return locale === "ru"
     ? `с ${start.getDate()} по ${end.getDate()}`
     : `${start.getDate()} to ${end.getDate()}`;
@@ -108,6 +116,10 @@ function formatRangeTooltip(start: Date, end: Date, locale: "ru" | "en") {
     year: "numeric",
   });
 
+  if (start.getDate() === end.getDate()) {
+    return `${start.getDate()} ${monthLabel}`;
+  }
+
   return `${start.getDate()}-${end.getDate()} ${monthLabel}`;
 }
 
@@ -117,6 +129,10 @@ function formatTaskSubtitle(task: TaskItem) {
 
 function startOfMonth(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function endOfMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
 function getMonthKey(year: number, month: number) {
@@ -133,29 +149,6 @@ function getMonthDateFromKey(key: string) {
   }
 
   return new Date(year, month, 1);
-}
-
-function getDominantWorkMonth(weekStart: Date) {
-  const scores = new Map<string, { month: number; score: number; year: number }>();
-
-  for (let index = 0; index < 5; index += 1) {
-    const day = new Date(weekStart);
-    day.setDate(weekStart.getDate() + index);
-    const key = getMonthKey(day.getFullYear(), day.getMonth());
-    const current = scores.get(key);
-
-    if (current) {
-      current.score += 1;
-    } else {
-      scores.set(key, {
-        month: day.getMonth(),
-        score: 1,
-        year: day.getFullYear(),
-      });
-    }
-  }
-
-  return [...scores.values()].sort((left, right) => right.score - left.score)[0];
 }
 
 function buildBucketTask(task: TaskItem, locale: "ru" | "en"): BucketTaskItem {
@@ -192,6 +185,59 @@ function getTaskSortTime(task: TaskItem) {
   return Number.isNaN(parsed.getTime()) ? Number.NEGATIVE_INFINITY : parsed.getTime();
 }
 
+function getRangeLengthInDays(start: Date, end: Date) {
+  const safeStart = startOfDay(start);
+  const safeEnd = startOfDay(end);
+  return Math.floor((safeEnd.getTime() - safeStart.getTime()) / 86_400_000) + 1;
+}
+
+function buildMonthRanges(monthDate: Date) {
+  const firstDay = startOfMonth(monthDate);
+  const lastDay = endOfMonth(monthDate);
+  const ranges: Array<{ start: Date; end: Date }> = [];
+  let cursor = new Date(firstDay);
+
+  while (cursor <= lastDay) {
+    const rangeStart = new Date(cursor);
+    const rangeEnd = endOfWeek(rangeStart);
+    const clippedEnd = rangeEnd > lastDay ? new Date(lastDay) : rangeEnd;
+
+    ranges.push({
+      start: rangeStart,
+      end: clippedEnd,
+    });
+
+    const next = new Date(clippedEnd);
+    next.setDate(next.getDate() + 1);
+    next.setHours(0, 0, 0, 0);
+    cursor = next;
+  }
+
+  if (ranges.length > 1 && getRangeLengthInDays(ranges[0].start, ranges[0].end) === 1) {
+    ranges[1] = {
+      start: ranges[0].start,
+      end: ranges[1].end,
+    };
+    ranges.shift();
+  }
+
+  if (
+    ranges.length > 1 &&
+    getRangeLengthInDays(ranges[ranges.length - 1].start, ranges[ranges.length - 1].end) === 1
+  ) {
+    ranges[ranges.length - 2] = {
+      start: ranges[ranges.length - 2].start,
+      end: ranges[ranges.length - 1].end,
+    };
+    ranges.pop();
+  }
+
+  return ranges.map((range, index) => ({
+    ...range,
+    weekNumberInMonth: index + 1,
+  }));
+}
+
 function buildWeeklyBuckets(
   rows: AttendanceRow[],
   tasks: TaskItem[],
@@ -199,49 +245,8 @@ function buildWeeklyBuckets(
   locale: "ru" | "en",
 ): ChartBucket[] {
   const today = startOfDay(new Date());
-  const currentWeekStart = startOfWeek(today);
   const targetMonth = monthDate.getMonth();
-  const targetYear = monthDate.getFullYear();
-  const weekStartMap = new Map<string, Date>();
-
-  const collectWeek = (value: string | null | undefined) => {
-    if (!value) {
-      return;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return;
-    }
-
-    const weekStart = startOfWeek(date);
-    const dominantMonth = getDominantWorkMonth(weekStart);
-
-    if (
-      dominantMonth.month !== targetMonth ||
-      dominantMonth.year !== targetYear ||
-      weekStart > currentWeekStart
-    ) {
-      return;
-    }
-
-    weekStartMap.set(weekStart.toISOString(), weekStart);
-  };
-
-  rows.forEach((row) => collectWeek(row.startedAt));
-  tasks.forEach((task) => {
-    collectWeek(task.createdAt);
-    collectWeek(task.dueAt);
-  });
-  collectWeek(today.toISOString());
-
-  const eligibleWeeks = [...weekStartMap.values()]
-    .sort((left, right) => left.getTime() - right.getTime())
-    .map((start, index) => ({
-      end: endOfWeek(start),
-      start,
-      weekNumberInMonth: index + 1,
-    }));
+  const eligibleWeeks = buildMonthRanges(monthDate);
 
   return eligibleWeeks.map(({ start, end, weekNumberInMonth: bucketWeekNumber }) => {
       const bucketRows = rows.filter((row) => isWithinRange(row.startedAt, start, end));
@@ -304,6 +309,12 @@ function collectAvailableMonths(rows: AttendanceRow[], tasks: TaskItem[]) {
     collectMonth(task.createdAt);
     collectMonth(task.dueAt);
   });
+
+  const currentMonth = startOfMonth(new Date());
+  monthMap.set(
+    getMonthKey(currentMonth.getFullYear(), currentMonth.getMonth()),
+    currentMonth,
+  );
 
   if (!monthMap.size) {
     const fallbackMonth = startOfMonth(new Date());
@@ -437,6 +448,10 @@ export function ManagerPerformancePanel({
     }
   }, [availableMonths, defaultMonthKey, selectedMonthKey]);
 
+  useEffect(() => {
+    setSelectedBucketKey(null);
+  }, [selectedMonthKey]);
+
   const selectedMonthDate =
     getMonthDateFromKey(selectedMonthKey) ??
     getMonthDateFromKey(defaultMonthKey) ??
@@ -444,13 +459,6 @@ export function ManagerPerformancePanel({
   const chartData = useMemo(
     () => buildWeeklyBuckets(history?.rows ?? [], tasks, selectedMonthDate, locale),
     [history?.rows, locale, selectedMonthDate, tasks],
-  );
-  const allBuckets = useMemo(
-    () =>
-      availableMonths.flatMap((monthDate) =>
-        buildWeeklyBuckets(history?.rows ?? [], tasks, monthDate, locale),
-      ),
-    [availableMonths, history?.rows, locale, tasks],
   );
   const currentMonthTotal = chartData.reduce(
     (total, bucket) => total + bucket.totalShifts,
@@ -462,21 +470,21 @@ export function ManagerPerformancePanel({
   );
 
   const selectedBucket = useMemo(() => {
-    if (!allBuckets.length) {
+    if (!chartData.length) {
       return null;
     }
 
-    const explicit = allBuckets.find((bucket) => bucket.key === selectedBucketKey);
+    const explicit = chartData.find((bucket) => bucket.key === selectedBucketKey);
     if (explicit) {
       return explicit;
     }
 
-    const currentWeekBucket = allBuckets.find(
+    const currentWeekBucket = chartData.find(
       (bucket) => today >= bucket.start && today <= bucket.end,
     );
 
-    return currentWeekBucket ?? allBuckets[allBuckets.length - 1] ?? allBuckets[0];
-  }, [allBuckets, selectedBucketKey, today]);
+    return currentWeekBucket ?? chartData[chartData.length - 1] ?? chartData[0];
+  }, [chartData, selectedBucketKey, today]);
   const selectedMonthIndex = availableMonths.findIndex(
     (month) => getMonthKey(month.getFullYear(), month.getMonth()) === selectedMonthKey,
   );
@@ -485,7 +493,7 @@ export function ManagerPerformancePanel({
     selectedMonthIndex >= 0 && selectedMonthIndex < availableMonths.length - 1
       ? availableMonths[selectedMonthIndex + 1]
       : null;
-  const chartWidth = Math.max(chartData.length * 118, 118);
+  const chartWidth = Math.max(chartData.length * 136, 680);
   const selectedWeekNumber = selectedBucket?.weekNumberInMonth ?? null;
   const visibleTasks = showPendingTasks
     ? selectedBucket?.pendingTasks ?? []
@@ -544,11 +552,11 @@ export function ManagerPerformancePanel({
                 <ChartContainer
                   className="manager-performance-chart-wrap"
                   config={chartConfig}
-                  style={{ width: `${chartWidth}px` }}
+                  style={{ width: `max(100%, ${chartWidth}px)` }}
                 >
                   <BarChart
                     accessibilityLayer
-                    barCategoryGap="22%"
+                    barCategoryGap="16%"
                     data={chartData}
                     margin={{ top: 14, right: 8, left: 8, bottom: 0 }}
                   >
@@ -561,7 +569,7 @@ export function ManagerPerformancePanel({
                       tickMargin={12}
                     />
                     <Bar
-                      barSize={72}
+                      barSize={82}
                       dataKey="chartValue"
                       fill="var(--color-totalShifts)"
                       onClick={(state) => {

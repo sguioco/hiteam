@@ -6,7 +6,6 @@ import { useI18n } from "@/lib/i18n";
 type BirthdayItem = {
   avatarUrl?: string | null;
   dateLabel: string;
-  department: string;
   name: string;
 };
 
@@ -24,7 +23,7 @@ export const BirthdaysSidebar = ({
     <div className="birthdays-sidebar">
       <div className="birthdays-sidebar-header">
         <Cake className="w-4 h-4 text-[var(--accent)]" />
-        <div>
+        <div className="birthdays-sidebar-title">
           <h2 className="font-semibold text-sm">
             {locale === "ru" ? "Дни рождения" : "Birthdays"}
           </h2>
@@ -45,20 +44,17 @@ export const BirthdaysSidebar = ({
               />
               <div className="birthdays-sidebar-copy">
                 <p className="birthdays-sidebar-name">{item.name}</p>
-                <p className="birthdays-sidebar-department">
-                  {item.department}
-                </p>
+                <span className="birthdays-sidebar-date">
+                  {item.dateLabel}
+                </span>
               </div>
-              <span className="birthdays-sidebar-date">
-                {item.dateLabel}
-              </span>
             </div>
           ))
         ) : (
           <div className="birthdays-sidebar-empty">
             {locale === "ru"
-              ? "В ближайшие дни дней рождения нет."
-              : "No birthdays in the next few days."}
+              ? "В ближайшие дни дней рождения нет"
+              : "No birthdays in the next few days"}
           </div>
         )}
       </div>

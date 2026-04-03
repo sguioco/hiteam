@@ -1,12 +1,190 @@
-const SKIN_TONES = ["#f6d2b8", "#eabf9f", "#d8a07b", "#b97852"];
-const HAIR_TONES = ["#2f231d", "#5b4232", "#8a5a3c", "#1f2430", "#6f4e37"];
-const SHIRT_TONES = ["#284bff", "#4e8be7", "#3ea76b", "#ff8a3d", "#9b87f5"];
-const BACKGROUNDS = [
-  ["#eef2ff", "#d7f0df"],
-  ["#f7efe6", "#d9ebff"],
-  ["#efe8ff", "#ffe6da"],
-  ["#e7f6ef", "#e8ecff"],
-];
+const MALE_AVATARS = [
+  "https://www.untitledui.com/images/avatars/transparent/ethan-valdez?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/franklin-mays?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/jackson-reed?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/jordan-burgess?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/liam-hood?bg=%23E0E0E0",
+] as const;
+
+const FEMALE_AVATARS = [
+  "https://www.untitledui.com/images/avatars/transparent/levi-rocha?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/kate-morrison?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/nicola-harris?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/olivia-rhye?bg=%23E0E0E0",
+  "https://www.untitledui.com/images/avatars/transparent/rhea-levine?bg=%23E0E0E0",
+] as const;
+
+const AVATAR_OVERRIDES: Record<string, string> = {
+  sidorov:
+    "https://www.untitledui.com/images/avatars/transparent/orlando-diggs?bg=%23E0E0E0",
+  morozov:
+    "https://www.untitledui.com/images/avatars/transparent/owen-garcia?bg=%23E0E0E0",
+};
+
+const FEMALE_NAME_HINTS = new Set([
+  "anna",
+  "maria",
+  "olivia",
+  "emma",
+  "ava",
+  "sofia",
+  "grace",
+  "kate",
+  "nicola",
+  "rhea",
+  "levi",
+  "анна",
+  "мария",
+  "ольга",
+  "екатерина",
+  "смирнова",
+  "петрова",
+  "андреева",
+  "лебедева",
+  "егорова",
+]);
+
+type MockAvatarGender = "male" | "female";
+
+function extractPrimaryNameToken(seed: string) {
+  return (
+    seed
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/[^A-Za-zА-Яа-яЁё-]/g, "")
+      .toLowerCase() ?? ""
+  );
+}
+
+function inferGenderFromSurname(seed: string): MockAvatarGender | null {
+  const token = extractPrimaryNameToken(seed);
+
+  if (!token) {
+    return null;
+  }
+
+  const femaleSurnamePattern =
+    /(ова|ева|ёва|ина|ына|ская|цкая|ая|яя|ova|eva|ina|yna|skaya|tskaya|aya)$/;
+  const maleSurnamePattern =
+    /(ов|ев|ёв|ин|ын|ский|цкий|ой|ий|ov|ev|in|yn|sky|skiy|tsky|oy|iy)$/;
+
+  if (femaleSurnamePattern.test(token)) {
+    return "female";
+  }
+
+  if (maleSurnamePattern.test(token)) {
+    return "male";
+  }
+
+  return null;
+}
+
+function inferGenderFromFirstName(seed: string): MockAvatarGender | null {
+  const token =
+    seed
+      .trim()
+      .split(/\s+/)
+      .find((part) => /^[A-Za-zА-Яа-яЁё-]+$/.test(part))
+      ?.replace(/[^A-Za-zА-Яа-яЁё-]/g, "")
+      .toLowerCase() ?? "";
+
+  if (!token) {
+    return null;
+  }
+
+  const femaleFirstNames = new Set([
+    "анна",
+    "мария",
+    "ольга",
+    "екатерина",
+    "елена",
+    "алёна",
+    "алена",
+    "наталья",
+    "татьяна",
+    "светлана",
+    "ирина",
+    "анастасия",
+    "юлия",
+    "лилия",
+    "ольга",
+    "emma",
+    "olivia",
+    "mia",
+    "ava",
+    "grace",
+    "sofia",
+    "sophia",
+    "kate",
+    "nicola",
+    "rhea",
+  ]);
+
+  const maleFirstNames = new Set([
+    "илья",
+    "дмитрий",
+    "алексей",
+    "игорь",
+    "павел",
+    "иван",
+    "сергей",
+    "андрей",
+    "михаил",
+    "николай",
+    "орлов",
+    "john",
+    "alex",
+    "noah",
+    "james",
+    "lucas",
+    "liam",
+    "ethan",
+    "owen",
+    "orlando",
+  ]);
+
+  if (femaleFirstNames.has(token)) {
+    return "female";
+  }
+
+  if (maleFirstNames.has(token)) {
+    return "male";
+  }
+
+  return null;
+}
+
+export function resolveMockAvatarGender(
+  seed: string,
+  genderHint?: MockAvatarGender | null,
+): MockAvatarGender {
+  if (genderHint === "male" || genderHint === "female") {
+    return genderHint;
+  }
+
+  const surnameGender = inferGenderFromSurname(seed);
+  if (surnameGender) {
+    return surnameGender;
+  }
+
+  const firstNameGender = inferGenderFromFirstName(seed);
+  if (firstNameGender) {
+    return firstNameGender;
+  }
+
+  const normalizedSeed =
+    typeof seed === "string" && seed.trim().length > 0 ? seed : "user";
+  const hash = hashSeed(normalizedSeed);
+  const hasFemaleNameHint = Array.from(FEMALE_NAME_HINTS).some((hint) =>
+    normalizedSeed.toLowerCase().includes(hint),
+  );
+
+  if (hasFemaleNameHint) {
+    return "female";
+  }
+
+  return hash % 2 === 0 ? "male" : "female";
+}
 
 function hashSeed(seed: string) {
   let hash = 0;
@@ -16,37 +194,21 @@ function hashSeed(seed: string) {
   return hash;
 }
 
-export function getMockAvatarDataUrl(seed: string) {
+export function getMockAvatarDataUrl(
+  seed: string,
+  genderHint?: MockAvatarGender | null,
+) {
   const normalizedSeed =
     typeof seed === "string" && seed.trim().length > 0 ? seed : "user";
+  const primaryToken = extractPrimaryNameToken(normalizedSeed);
+  const directOverride = primaryToken ? AVATAR_OVERRIDES[primaryToken] : null;
+
+  if (directOverride) {
+    return directOverride;
+  }
+
   const hash = hashSeed(normalizedSeed);
-  const skin = SKIN_TONES[hash % SKIN_TONES.length];
-  const hair = HAIR_TONES[(hash >>> 3) % HAIR_TONES.length];
-  const shirt = SHIRT_TONES[(hash >>> 5) % SHIRT_TONES.length];
-  const background = BACKGROUNDS[(hash >>> 7) % BACKGROUNDS.length];
-  const eyeOffset = 30 + ((hash >>> 9) % 4);
-  const mouthCurve = 2 + ((hash >>> 11) % 4);
-  const hairHeight = 24 + ((hash >>> 13) % 8);
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
-      <defs>
-        <linearGradient id="bg" x1="14" y1="10" x2="82" y2="86" gradientUnits="userSpaceOnUse">
-          <stop stop-color="${background[0]}"/>
-          <stop offset="1" stop-color="${background[1]}"/>
-        </linearGradient>
-      </defs>
-      <rect width="96" height="96" rx="28" fill="url(#bg)"/>
-      <path d="M16 96c3-20 17-31 32-31s29 11 32 31H16Z" fill="${shirt}"/>
-      <ellipse cx="48" cy="40" rx="21" ry="23" fill="${skin}"/>
-      <path d="M27 ${hairHeight + 2}c1-13 11-22 21-22 11 0 21 9 21 22v8c-4-5-9-8-14-8-8 0-12 5-28 6v-6Z" fill="${hair}"/>
-      <path d="M33 60c4 5 9 8 15 8 6 0 11-3 15-8-2 12-12 20-15 20-4 0-13-8-15-20Z" fill="${shirt}" fill-opacity=".08"/>
-      <circle cx="39" cy="${eyeOffset}" r="2.2" fill="#1c1c1c"/>
-      <circle cx="57" cy="${eyeOffset}" r="2.2" fill="#1c1c1c"/>
-      <path d="M41 48c2 2 4 3 7 3s5-1 7-3" stroke="#8a4f3d" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M40 58c2 ${mouthCurve} 4 ${mouthCurve + 1} 8 ${mouthCurve + 1}s6-1 8-${mouthCurve + 1}" stroke="#8a4f3d" stroke-width="2.2" stroke-linecap="round"/>
-    </svg>
-  `.trim();
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const gender = resolveMockAvatarGender(normalizedSeed, genderHint);
+  const pool = gender === "female" ? FEMALE_AVATARS : MALE_AVATARS;
+  return pool[hash % pool.length];
 }

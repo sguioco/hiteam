@@ -45,12 +45,16 @@ interface ActionItem {
   title: string;
   from: string;
   avatar: string;
+  avatarUrl?: string | null;
   description: string;
   detail: string;
   time: string;
+  isRelativeTime?: boolean;
   priority: Priority;
   icon: ElementType;
 }
+
+export type ActionCenterItem = ActionItem;
 
 const actions: ActionItem[] = [
   {
@@ -467,10 +471,24 @@ function translateActionItem(
   };
 }
 
+export function getMockActionCenterItems(locale: "ru" | "en"): ActionCenterItem[] {
+  return actions.map((action) => {
+    const translatedAction = translateActionItem(action, locale);
+    return {
+      ...translatedAction,
+      avatarUrl:
+        translatedAction.avatarUrl ||
+        getMockAvatarDataUrl(translatedAction.from),
+    };
+  });
+}
+
 export const ActionCenter = ({
+  items,
   locale: forcedLocale,
   useMockData = true,
 }: {
+  items?: ActionCenterItem[];
   locale?: "ru" | "en";
   useMockData?: boolean;
 }) => {
@@ -482,8 +500,12 @@ export const ActionCenter = ({
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
   const availableActions = useMemo(
     () =>
-      useMockData ? actions.map((action) => translateActionItem(action, locale)) : [],
-    [locale, useMockData],
+      items?.length
+        ? items
+        : useMockData
+          ? getMockActionCenterItems(locale)
+          : [],
+    [items, locale, useMockData],
   );
 
   const filtered = availableActions.filter((a) => {
@@ -521,16 +543,7 @@ export const ActionCenter = ({
             <h2 className="font-heading font-semibold text-base text-foreground">
               {localize(locale, "Центр действий", "Action center")}
             </h2>
-            {urgentCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[13px] font-heading font-semibold text-accent">
-                <span className="text-[15px] leading-none text-accent">•</span>
-                {urgentCount} {localize(locale, "срочных", "urgent")}
-              </span>
-            )}
           </div>
-          <span className="text-xs text-muted-foreground font-heading">
-            {totalPending} {localize(locale, "входящих", "inbox")}
-          </span>
         </div>
 
         {/* Tabs */}
@@ -674,7 +687,7 @@ const ActionRow = ({
         <img
           alt={action.from}
           className="h-10 w-10 rounded-xl object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-          src={getMockAvatarDataUrl(action.from)}
+          src={action.avatarUrl || getMockAvatarDataUrl(action.from)}
         />
       </div>
 
@@ -794,7 +807,7 @@ const ActionDetailDialog = ({
               <img
                 alt={action.from}
                 className="h-9 w-9 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-                src={getMockAvatarDataUrl(action.from)}
+                src={action.avatarUrl || getMockAvatarDataUrl(action.from)}
               />
               <span className="font-heading font-semibold text-[14px] text-foreground">
                 {action.from}
@@ -807,7 +820,9 @@ const ActionDetailDialog = ({
             <div className="flex items-center gap-2.5 text-[12px] text-muted-foreground">
               <Clock className="w-3.5 h-3.5" />
               <span>
-                {locale === "ru" ? `${action.time} назад` : action.time}
+                {locale === "ru" && action.isRelativeTime !== false
+                  ? `${action.time} назад`
+                  : action.time}
               </span>
             </div>
             <div className="flex items-center gap-2.5 text-[12px]">

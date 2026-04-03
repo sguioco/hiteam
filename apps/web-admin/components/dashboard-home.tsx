@@ -80,10 +80,15 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { appendTaskMeta, parseTaskMeta } from "@/lib/task-meta";
-import { ActionCenter } from "@/components/ActionsCenter";
+import {
+  ActionCenter,
+  getMockActionCenterItems,
+  type ActionCenterItem,
+} from "@/components/ActionsCenter";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
+import { localizePersonName } from "@/lib/transliteration";
 
 type EmployeeDirectoryItem = {
   id: string;
@@ -167,6 +172,141 @@ function localize(locale: "ru" | "en", ru: string, en: string) {
 
 function toIntlLocale(locale: "ru" | "en") {
   return locale === "ru" ? "ru-RU" : "en-US";
+}
+
+function formatActionCenterDate(value: string, locale: "ru" | "en") {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleDateString(toIntlLocale(locale), {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function getRequestActionMeta(
+  requestType: ApprovalInboxItem["request"]["requestType"],
+  locale: "ru" | "en",
+) {
+  switch (requestType) {
+    case "ADVANCE":
+      return {
+        category: "decisions" as const,
+        type: localize(locale, "Запрос", "Request"),
+        icon: TriangleAlert,
+        priority: "urgent" as const,
+      };
+    case "SHIFT_CHANGE":
+      return {
+        category: "approvals" as const,
+        type: localize(locale, "Согласование", "Approval"),
+        icon: Users,
+        priority: "urgent" as const,
+      };
+    case "SUPPLY":
+      return {
+        category: "documents" as const,
+        type: localize(locale, "Документ", "Document"),
+        icon: FileSignature,
+        priority: "normal" as const,
+      };
+    case "LEAVE":
+    case "VACATION_CHANGE":
+    case "SICK_LEAVE":
+    case "UNPAID_LEAVE":
+      return {
+        category: "approvals" as const,
+        type: localize(locale, "Отсутствие", "Leave"),
+        icon: CalendarDays,
+        priority: "normal" as const,
+      };
+    default:
+      return {
+        category: "documents" as const,
+        type: localize(locale, "Документ", "Document"),
+        icon: FileSignature,
+        priority: "normal" as const,
+      };
+  }
+}
+
+function buildActionCenterItems(
+  requests: ApprovalInboxItem[],
+  employees: EmployeeDirectoryItem[],
+  locale: "ru" | "en",
+): ActionCenterItem[] {
+  const employeeAvatarMap = new Map(
+    employees.map((employee) => [
+      employee.id,
+      employee.avatarUrl ||
+        getMockAvatarDataUrl(
+          `${employee.firstName} ${employee.lastName}`.trim(),
+        ),
+    ]),
+  );
+
+  return requests
+    .filter((item) => item.status === "PENDING")
+    .slice(0, 15)
+    .map((item, index) => {
+      const employeeName = `${item.request.employee.firstName} ${item.request.employee.lastName}`.trim();
+      const localizedName =
+        locale === "en" ? localizePersonName(employeeName, locale) : employeeName;
+      const periodLabel =
+        item.request.startsOn && item.request.endsOn
+          ? formatActionCenterDate(item.request.startsOn, locale) ===
+            formatActionCenterDate(item.request.endsOn, locale)
+            ? formatActionCenterDate(item.request.startsOn, locale)
+            : `${formatActionCenterDate(item.request.startsOn, locale)} - ${formatActionCenterDate(item.request.endsOn, locale)}`
+          : "";
+      const requestedDaysLabel =
+        item.request.requestedDays > 0
+          ? locale === "ru"
+            ? `${item.request.requestedDays} дн.`
+            : `${item.request.requestedDays} d`
+          : "";
+      const currentStep = item.request.approvalSteps.find(
+        (step) => step.sequence === item.sequence,
+      );
+      const meta = getRequestActionMeta(item.request.requestType, locale);
+      const descriptionParts = [
+        periodLabel,
+        requestedDaysLabel,
+        currentStep
+          ? locale === "ru"
+            ? `Шаг ${currentStep.sequence}`
+            : `Step ${currentStep.sequence}`
+          : "",
+      ].filter(Boolean);
+
+      return {
+        id: index + 1,
+        category: meta.category,
+        type: meta.type,
+        title: item.request.title,
+        from: localizedName,
+        avatar: localizedName.slice(0, 2).toUpperCase(),
+        avatarUrl:
+          employeeAvatarMap.get(item.request.employee.id) ||
+          getMockAvatarDataUrl(localizedName),
+        description:
+          descriptionParts.join(" · ") ||
+          localize(locale, "Требуется действие", "Action required"),
+        detail:
+          item.request.reason ||
+          localize(
+            locale,
+            "Сотрудник не добавил описание.",
+            "The employee did not provide a description.",
+          ),
+        time: formatActionCenterDate(item.request.startsOn, locale),
+        isRelativeTime: false,
+        priority: meta.priority,
+        icon: meta.icon,
+      };
+    });
 }
 
 function buildDashboardCacheKey(
@@ -846,6 +986,10 @@ export default function DashboardHome({
       return apiTasks;
     }
 
+    if (apiTasks.length > 0) {
+      return apiTasks;
+    }
+
     const mockTasks = createMockDashboardTasks(managerEmployee, locale).map((task) => ({
       ...task,
       status: mockTaskStatuses[task.id] ?? task.status,
@@ -854,7 +998,7 @@ export default function DashboardHome({
           ? new Date().toISOString()
           : null,
     }));
-    return [...apiTasks, ...mockTasks];
+    return mockTasks;
   }, [isDemoSession, locale, managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
   const personalTasks = useMemo(() => {
     if (isEmployeeMode) {
@@ -924,32 +1068,83 @@ export default function DashboardHome({
   const signOffItems = pendingRequests.filter(
     (item) => item.request.attachments.length > 0,
   );
+  const actionCenterItems = useMemo(
+    () => buildActionCenterItems(requests, employees, locale),
+    [employees, locale, requests],
+  );
+  const actionCenterAvatarMap = useMemo(
+    () =>
+      new Map(
+        actionCenterItems
+          .filter((item) => item.avatarUrl)
+          .map((item) => [item.from.toLowerCase(), item.avatarUrl as string]),
+      ),
+    [actionCenterItems],
+  );
   const issueItems = anomalies?.items ?? [];
   const issuePreview = showAllIssues ? issueItems : issueItems.slice(0, 4);
-  const birthdays = employees
-    .map((employee) => ({
-      employee,
-      nextDate: nextBirthdayDate(employee.birthDate),
-    }))
-    .filter(
-      (item): item is { employee: EmployeeDirectoryItem; nextDate: Date } =>
-        Boolean(item.nextDate),
-    )
-    .sort((left, right) => left.nextDate.getTime() - right.nextDate.getTime())
-    .slice(0, 5)
-    .map((item) => ({
-      name: `${item.employee.firstName} ${item.employee.lastName}`.trim(),
-      department: item.employee.department?.name ?? localize(locale, "Команда", "Team"),
-      dateLabel: item.nextDate.toLocaleDateString(toIntlLocale(locale), {
-        day: "numeric",
-        month: "long",
-      }),
-      avatarUrl:
-        item.employee.avatarUrl ||
-        getMockAvatarDataUrl(
-          `${item.employee.firstName} ${item.employee.lastName}`.trim(),
-        ),
-    }));
+  const birthdaysItems = useMemo(() => {
+    if (isDemoSession) {
+      const birthdayOffsets = [1, 3, 6];
+      const mockPeople = Array.from(
+        new Map(
+          getMockActionCenterItems(locale)
+            .filter((item) => item.from.trim().length > 0)
+            .map((item) => [item.from, item]),
+        ).values(),
+      ).slice(0, 3);
+
+      return mockPeople.map((item, index) => {
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + birthdayOffsets[index]);
+
+        return {
+          name: item.from,
+          dateLabel: nextDate.toLocaleDateString(toIntlLocale(locale), {
+            day: "numeric",
+            month: "long",
+          }),
+          avatarUrl: item.avatarUrl || getMockAvatarDataUrl(item.from),
+        };
+      });
+    }
+
+    return employees
+      .map((employee) => ({
+        employee,
+        nextDate: nextBirthdayDate(employee.birthDate),
+      }))
+      .filter(
+        (item): item is { employee: EmployeeDirectoryItem; nextDate: Date } =>
+          Boolean(item.nextDate),
+      )
+      .sort((left, right) => left.nextDate.getTime() - right.nextDate.getTime())
+      .slice(0, 5)
+      .map((item) => ({
+        name: `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+        dateLabel: item.nextDate.toLocaleDateString(toIntlLocale(locale), {
+          day: "numeric",
+          month: "long",
+        }),
+        avatarUrl:
+          item.employee.avatarUrl ||
+          actionCenterAvatarMap.get(
+            `${item.employee.firstName} ${item.employee.lastName}`.trim().toLowerCase(),
+          ) ||
+          actionCenterAvatarMap.get(
+            (locale === "en"
+              ? localizePersonName(
+                  `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+                  locale,
+                )
+              : `${item.employee.firstName} ${item.employee.lastName}`.trim()
+            ).toLowerCase(),
+          ) ||
+          getMockAvatarDataUrl(
+            `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+          ),
+      }));
+  }, [actionCenterAvatarMap, employees, isDemoSession, locale]);
   const today = startOfDay(new Date());
   const presentCount = liveSessions.length;
   const absentCount = Math.max(0, employees.length - presentCount);
@@ -2148,7 +2343,11 @@ export default function DashboardHome({
                 />
               ) : (
                 <div className="dashboard-actions-center-shell">
-                  <ActionCenter locale={locale} useMockData={isDemoSession} />
+                  <ActionCenter
+                    items={isDemoSession ? undefined : actionCenterItems}
+                    locale={locale}
+                    useMockData={isDemoSession}
+                  />
                 </div>
               )}
             </div>
@@ -2210,7 +2409,7 @@ export default function DashboardHome({
 
             {!isEmployeeMode ? (
               <aside className="dashboard-birthdays-rail">
-                <DashboardBirthdaysSidebar items={birthdays} locale={locale} />
+                <DashboardBirthdaysSidebar items={birthdaysItems} locale={locale} />
               </aside>
             ) : null}
           </div>

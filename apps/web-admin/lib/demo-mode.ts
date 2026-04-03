@@ -69,10 +69,11 @@ export function createDemoSession(role: "admin" | "employee"): AuthSession {
 
 export function getDemoRoleByCredentials(identifier: string, password: string): "admin" | "employee" | null {
   const normalizedIdentifier = identifier.trim().toLowerCase();
-  if (normalizedIdentifier === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
+  const normalizedPassword = password.trim();
+  if (normalizedIdentifier === DEMO_ADMIN_EMAIL && normalizedPassword === DEMO_ADMIN_PASSWORD) {
     return "admin";
   }
-  if (normalizedIdentifier === DEMO_EMPLOYEE_EMAIL && password === DEMO_EMPLOYEE_PASSWORD) {
+  if (normalizedIdentifier === DEMO_EMPLOYEE_EMAIL && normalizedPassword === DEMO_EMPLOYEE_PASSWORD) {
     return "employee";
   }
   return null;
