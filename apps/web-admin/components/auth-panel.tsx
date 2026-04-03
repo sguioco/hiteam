@@ -32,6 +32,7 @@ import {
   resolveHomeRoute,
 } from '@/lib/auth';
 import { BrandWordmark } from './brand-wordmark';
+import { SessionLoader } from './session-loader';
 
 type SupportedLang = 'en' | 'ru' | 'ar';
 
@@ -51,6 +52,7 @@ const texts = {
     hidePassword: 'Hide password',
     signIn: 'Sign in',
     signingIn: 'Signing in...',
+    openingWorkspace: 'Opening workspace...',
     demoAdmin: 'Demo admin',
     demoEmployee: 'Demo employee',
     demoHint: 'Quick access without backend',
@@ -64,6 +66,7 @@ const texts = {
     hidePassword: 'Скрыть пароль',
     signIn: 'Войти',
     signingIn: 'Входим...',
+    openingWorkspace: 'Открываем рабочее пространство...',
     demoAdmin: 'Демо админ',
     demoEmployee: 'Демо сотрудник',
     demoHint: 'Быстрый вход без backend',
@@ -77,6 +80,7 @@ const texts = {
     hidePassword: 'إخفاء كلمة المرور',
     signIn: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول...',
+    openingWorkspace: 'جارٍ فتح مساحة العمل...',
     demoAdmin: 'مشرف تجريبي',
     demoEmployee: 'موظف تجريبي',
     demoHint: 'دخول سريع بدون خلفية',
@@ -118,6 +122,10 @@ export function AuthPanel() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const t = texts[lang];
+
+  if (loginLoading) {
+    return <SessionLoader label={t.openingWorkspace} />;
+  }
 
   useEffect(() => {
     const saved = window.localStorage.getItem('smart-admin-locale');
@@ -177,12 +185,18 @@ export function AuthPanel() {
 
   function handleDemoAccess(role: 'admin' | 'employee') {
     setLoginError('');
+    setLoginLoading(true);
     enableDemoMode();
     resetDemoState();
     const session = getDemoSessionForRole(role);
-    void persistSession(session).then(() => {
-      window.location.replace(resolveHomeRoute(session.user.roleCodes));
-    });
+    void persistSession(session)
+      .then(() => {
+        window.location.replace(resolveHomeRoute(session.user.roleCodes));
+      })
+      .catch((error) => {
+        setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
+        setLoginLoading(false);
+      });
   }
 
   return (

@@ -19,3 +19,5 @@ apps/web-admin/.next
 
 .vercel
 .env*.local
+.aidesigner/*
+!.aidesigner/.gitkeep

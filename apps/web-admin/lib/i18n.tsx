@@ -20,6 +20,7 @@ type I18nContextValue = {
 };
 
 const STORAGE_KEY = "smart-admin-locale";
+const fallbackLocale: Locale = "en";
 
 const dictionaries = {
   en: {
@@ -1766,7 +1767,11 @@ export function useI18n(): I18nContextValue {
   const context = useContext(I18nContext);
 
   if (!context) {
-    throw new Error("useI18n must be used within I18nProvider");
+    return {
+      locale: fallbackLocale,
+      setLocale: () => undefined,
+      t: (key: string) => getValue(dictionaries[fallbackLocale], key),
+    };
   }
 
   return context;

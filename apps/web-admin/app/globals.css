@@ -663,7 +663,7 @@
   background: transparent;
   color: var(--foreground);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 500;
   width: 100%;
   text-align: center;
 }
@@ -684,7 +684,7 @@
 .tasks-sidebar-title {
   margin: 0;
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -1255,6 +1255,7 @@ textarea {
 
 .shell-topbar-copy strong {
   font-size: 1.125rem;
+  font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.02em;
   color: var(--foreground);
@@ -3037,6 +3038,23 @@ textarea {
   width: 156px;
   height: 156px;
   isolation: isolate;
+}
+
+.session-loader-panel {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  min-width: min(420px, calc(100vw - 48px));
+  padding: 40px 32px 34px;
+}
+
+.session-loader-label {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 
 .session-loader-glow,
@@ -5270,6 +5288,7 @@ body {
 .sidebar-feature-card strong,
 .sidebar-user-copy strong {
   color: #101828;
+  font-weight: 400;
 }
 
 .sidebar-feature-card p,
@@ -7146,7 +7165,7 @@ body {
 
 .manager-week-day-copy strong {
   font-size: 1.55rem;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1;
   color: var(--foreground);
