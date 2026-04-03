@@ -407,7 +407,7 @@ function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
 
 function getBiometricStatusLabel(
   enrollmentStatus?: string | null,
-  locale: "ru" | "en",
+  locale: "ru" | "en" = "ru",
 ) {
   switch (enrollmentStatus) {
     case "ENROLLED":
