@@ -21,8 +21,10 @@ export function isDemoModeAvailable() {
 }
 
 export function isDemoModeEnabled() {
-  if (!isDemoModeAvailable()) return false;
-  if (typeof window === "undefined") return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  if (typeof window === "undefined") {
+    return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  }
+
   return (
     process.env.NEXT_PUBLIC_DEMO_MODE === "true" ||
     window.localStorage.getItem(DEMO_MODE_STORAGE_KEY) === "true"
