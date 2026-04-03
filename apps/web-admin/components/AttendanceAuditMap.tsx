@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { loadGoogleMaps } from "./location-map-picker";
 
 type AttendanceAuditMapProps = {
@@ -27,6 +28,7 @@ export function AttendanceAuditMap({
   locationLongitude,
   geofenceRadiusMeters,
 }: AttendanceAuditMapProps) {
+  const { locale } = useI18n();
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const eventMarkerRef = useRef<any>(null);
@@ -145,7 +147,9 @@ export function AttendanceAuditMap({
   if (status === "missing_key") {
     return (
       <div className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] px-4 py-5 text-sm text-[color:var(--muted-foreground)]">
-        Добавь `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, чтобы видеть карту событий.
+        {locale === "ru"
+          ? "Добавь `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, чтобы видеть карту событий."
+          : "Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to display the event map."}
       </div>
     );
   }
@@ -153,7 +157,9 @@ export function AttendanceAuditMap({
   if (status === "error") {
     return (
       <div className="rounded-[20px] border border-[color:var(--soft-danger)] bg-[color:var(--panel-muted)] px-4 py-5 text-sm text-[color:var(--danger)]">
-        Не удалось загрузить Google Maps для журнала событий.
+        {locale === "ru"
+          ? "Не удалось загрузить Google Maps для журнала событий."
+          : "Failed to load Google Maps for the event log."}
       </div>
     );
   }
@@ -163,10 +169,12 @@ export function AttendanceAuditMap({
       <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] px-4 py-3">
         <div>
           <strong className="text-sm text-[color:var(--foreground)]">
-            Событие и рабочая точка
+            {locale === "ru" ? "Событие и рабочая точка" : "Event and work location"}
           </strong>
           <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-            Круг показывает разрешённую геозону.
+            {locale === "ru"
+              ? "Круг показывает разрешённую геозону."
+              : "The circle shows the allowed geofence."}
           </p>
         </div>
       </div>

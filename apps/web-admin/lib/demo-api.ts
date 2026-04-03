@@ -109,6 +109,16 @@ type DemoState = {
 
 let memoryState: DemoState | null = null;
 
+function isLocalDevHost() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return ["localhost", "127.0.0.1", "::1"].includes(
+    window.location.hostname,
+  );
+}
+
 function createIsoAt(offsetDays: number, hours: number, minutes: number) {
   const next = new Date();
   next.setDate(next.getDate() + offsetDays);
@@ -646,7 +656,7 @@ function currentEmployeeId(token?: string) {
 
 function shouldHandle(token?: string) {
   return (
-    isDemoModeEnabled() &&
+    (isDemoModeEnabled() || isLocalDevHost()) &&
     isDemoAccessToken(token ?? getSession()?.accessToken ?? null)
   );
 }
@@ -1014,6 +1024,31 @@ function buildTaskBoard(state: DemoState) {
       done: tasks.filter((task) => task.status === "DONE").length,
     },
     tasks,
+  };
+}
+
+function buildBootstrapTasks(state: DemoState) {
+  const snapshot = cloneState(state);
+
+  return {
+    tasks: snapshot.tasks,
+    employees: snapshot.employees.map((employee) => ({
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber,
+      avatarUrl: employee.avatarUrl,
+      department: employee.department,
+      primaryLocation: employee.primaryLocation,
+      position: employee.position,
+    })),
+    groups: snapshot.groups.map((group) => ({
+      ...group,
+      _count: {
+        tasks: snapshot.tasks.filter((task) => task.groupId === group.id).length,
+      },
+    })),
+    liveSessions: buildAttendanceLive(snapshot),
   };
 }
 
@@ -1462,6 +1497,10 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/org/positions" && method === "GET") {
     return cloneState(currentState).positions as T;
+  }
+
+  if (pathname === "/bootstrap/tasks" && method === "GET") {
+    return buildBootstrapTasks(currentState) as T;
   }
 
   if (pathname === "/collaboration/overview" && method === "GET") {

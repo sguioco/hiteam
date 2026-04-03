@@ -77,6 +77,7 @@ import {
   getEmployeeWorkdayStatus,
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
+import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { appendTaskMeta, parseTaskMeta } from "@/lib/task-meta";
 import { ActionCenter } from "@/components/ActionsCenter";
@@ -160,6 +161,14 @@ type AttendanceFilterKey =
 
 const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 
+function localize(locale: "ru" | "en", ru: string, en: string) {
+  return locale === "ru" ? ru : en;
+}
+
+function toIntlLocale(locale: "ru" | "en") {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
+
 function buildDashboardCacheKey(
   session: NonNullable<ReturnType<typeof getSession>>,
   isEmployeeMode: boolean,
@@ -187,37 +196,71 @@ const initialTaskDraft: TaskDraft = {
   meetingLocation: "",
 };
 
-const priorityOptions: Array<{
+function getPriorityOptions(locale: "ru" | "en"): Array<{
   value: TaskItem["priority"];
   label: string;
   description: string;
   icon: ReactNode;
-}> = [
-  {
-    value: "URGENT",
-    label: "Urgent",
-    description: "Немедленное выполнение",
-    icon: <AlertCircle className="size-4 text-[#b42318]" />,
-  },
-  {
-    value: "HIGH",
-    label: "High",
-    description: "Высокий приоритет",
-    icon: <ArrowUp className="size-4 text-[#d97706]" />,
-  },
-  {
-    value: "MEDIUM",
-    label: "Medium",
-    description: "Стандартная задача",
-    icon: <Minus className="size-4 text-[#2563eb]" />,
-  },
-  {
-    value: "LOW",
-    label: "Low",
-    description: "Можно выполнить позже",
-    icon: <ArrowDown className="size-4 text-[#0f9b65]" />,
-  },
-];
+}> {
+  return [
+    {
+      value: "URGENT",
+      label: "Urgent",
+      description: localize(locale, "Немедленное выполнение", "Immediate action required"),
+      icon: <AlertCircle className="size-4 text-[#b42318]" />,
+    },
+    {
+      value: "HIGH",
+      label: "High",
+      description: localize(locale, "Высокий приоритет", "High priority"),
+      icon: <ArrowUp className="size-4 text-[#d97706]" />,
+    },
+    {
+      value: "MEDIUM",
+      label: "Medium",
+      description: localize(locale, "Стандартная задача", "Standard priority"),
+      icon: <Minus className="size-4 text-[#2563eb]" />,
+    },
+    {
+      value: "LOW",
+      label: "Low",
+      description: localize(locale, "Можно выполнить позже", "Can be done later"),
+      icon: <ArrowDown className="size-4 text-[#0f9b65]" />,
+    },
+  ];
+}
+
+function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
+  if (locale === "en") {
+    return day === 0
+      ? "Su"
+      : day === 1
+        ? "Mo"
+        : day === 2
+          ? "Tu"
+          : day === 3
+            ? "We"
+            : day === 4
+              ? "Th"
+              : day === 5
+                ? "Fr"
+                : "Sa";
+  }
+
+  return day === 0
+    ? "Вс"
+    : day === 1
+      ? "Пн"
+      : day === 2
+        ? "Вт"
+        : day === 3
+          ? "Ср"
+          : day === 4
+            ? "Чт"
+            : day === 5
+              ? "Пт"
+              : "Сб";
+}
 
 function getInitials(value: string) {
   return value
@@ -264,8 +307,8 @@ function TaskCheckbox({ checked, meta, onChange, title }: TaskCheckboxProps) {
   );
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("ru-RU", {
+function formatDateTime(value: string, locale: "ru" | "en") {
+  return new Date(value).toLocaleString(toIntlLocale(locale), {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -273,9 +316,9 @@ function formatDateTime(value: string) {
   });
 }
 
-function formatTime(value: string | null | undefined) {
+function formatTime(value: string | null | undefined, locale: "ru" | "en") {
   if (!value) return "—";
-  return new Date(value).toLocaleTimeString("ru-RU", {
+  return new Date(value).toLocaleTimeString(toIntlLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -301,34 +344,43 @@ function startOfSixMonthWindow(value: Date) {
   return new Date(value.getFullYear(), value.getMonth() - 5, 1);
 }
 
-function formatDayHeader(value: Date) {
-  return value.toLocaleDateString("ru-RU", {
+function formatDayHeader(value: Date, locale: "ru" | "en") {
+  return value.toLocaleDateString(toIntlLocale(locale), {
     weekday: "short",
     day: "numeric",
     month: "short",
   });
 }
 
-function formatMonthLabel(value: Date) {
+function formatMonthLabel(value: Date, locale: "ru" | "en") {
   return value
-    .toLocaleDateString("ru-RU", { month: "long" })
+    .toLocaleDateString(toIntlLocale(locale), { month: "long" })
     .replace(/\.$/, "")
     .toUpperCase();
 }
 
-function formatWeekdayLabel(value: Date) {
+function formatWeekdayLabel(value: Date, locale: "ru" | "en") {
   return value
-    .toLocaleDateString("ru-RU", { weekday: "short" })
+    .toLocaleDateString(toIntlLocale(locale), { weekday: "short" })
     .replace(/\.$/, "")
     .toUpperCase();
 }
 
-function getAttendanceArrivalLabel(session: AttendanceLiveSession | undefined) {
-  if (!session) return "Отсутствует";
-  if (session.lateMinutes > 0) return `Опоздание +${session.lateMinutes} мин`;
-  if (session.status === "on_break") return "На перерыве";
-  if (session.status === "checked_out") return "Завершил смену";
-  return "Вовремя";
+function getAttendanceArrivalLabel(
+  session: AttendanceLiveSession | undefined,
+  locale: "ru" | "en",
+) {
+  if (!session) return localize(locale, "Отсутствует", "Absent");
+  if (session.lateMinutes > 0) {
+    return locale === "ru"
+      ? `Опоздание +${session.lateMinutes} мин`
+      : `Late +${session.lateMinutes} min`;
+  }
+  if (session.status === "on_break") return localize(locale, "На перерыве", "On break");
+  if (session.status === "checked_out") {
+    return localize(locale, "Завершил смену", "Shift completed");
+  }
+  return localize(locale, "Вовремя", "On time");
 }
 
 function getAttendanceArrivalTone(session: AttendanceLiveSession | undefined) {
@@ -367,25 +419,46 @@ function shouldShowCompletedTask(task: TaskItem, referenceDay: Date) {
 }
 
 function stripMeetingPrefix(title: string) {
-  return title.replace(/^Встреча:\s*/i, "").trim();
+  return title.replace(/^(Встреча|Meeting):\s*/i, "").trim();
 }
 
-function formatTaskCountLabel(count: number) {
+function formatTaskCountLabel(count: number, locale: "ru" | "en") {
+  if (locale === "en") {
+    return count === 1 ? "1 task" : `${count} tasks`;
+  }
   if (count === 1) return "1 задача";
   if (count >= 2 && count <= 4) return `${count} задачи`;
   return `${count} задач`;
 }
 
-function formatParticipantSummary(names: string[], kind: "meeting" | "task") {
+function formatParticipantSummary(
+  names: string[],
+  kind: "meeting" | "task",
+  locale: "ru" | "en",
+) {
   if (names.length === 0) {
-    return kind === "meeting" ? "Без участников" : "Без исполнителей";
+    return kind === "meeting"
+      ? localize(locale, "Без участников", "No participants")
+      : localize(locale, "Без исполнителей", "No assignees");
   }
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]}, ${names[1]}`;
-  return `${names[0]}, ${names[1]} и ещё ${names.length - 2}`;
+  return locale === "ru"
+    ? `${names[0]}, ${names[1]} и ещё ${names.length - 2}`
+    : `${names[0]}, ${names[1]} and ${names.length - 2} more`;
 }
 
-function formatParticipantLabel(count: number, kind: "meeting" | "task") {
+function formatParticipantLabel(
+  count: number,
+  kind: "meeting" | "task",
+  locale: "ru" | "en",
+) {
+  if (locale === "en") {
+    if (kind === "meeting") {
+      return count === 1 ? "1 participant" : `${count} participants`;
+    }
+    return count === 1 ? "1 assignee" : `${count} assignees`;
+  }
   if (kind === "meeting") {
     if (count === 1) return "1 участник";
     if (count >= 2 && count <= 4) return `${count} участника`;
@@ -420,11 +493,12 @@ function createMockTaskDate(offsetDays: number, hours: number, minutes: number) 
 
 function createMockDashboardTasks(
   managerEmployee: EmployeeDirectoryItem | null,
+  locale: "ru" | "en",
 ): TaskItem[] {
   const managerRef = {
     id: "mock-manager",
-    firstName: "Анна",
-    lastName: "Крылова",
+    firstName: localize(locale, "Анна", "Anna"),
+    lastName: localize(locale, "Крылова", "Krylova"),
   };
   const assigneeRef = managerEmployee
     ? {
@@ -439,10 +513,10 @@ function createMockDashboardTasks(
       }
     : {
         id: "mock-employee",
-        firstName: "Алексей",
-        lastName: "Соколов",
+        firstName: localize(locale, "Алексей", "Alexey"),
+        lastName: localize(locale, "Соколов", "Sokolov"),
         employeeNumber: "0001",
-        department: { id: "dept-ops", name: "Операции" },
+        department: { id: "dept-ops", name: localize(locale, "Операции", "Operations") },
         primaryLocation: null,
       };
 
@@ -480,18 +554,18 @@ function createMockDashboardTasks(
   return [
     buildTask(
       "mock-task-1",
-      "Проверить табель за первую половину месяца",
-      "Сверить отметки прихода и подготовить комментарии по отклонениям.",
+      localize(locale, "Проверить табель за первую половину месяца", "Review the timesheet for the first half of the month"),
+      localize(locale, "Сверить отметки прихода и подготовить комментарии по отклонениям.", "Compare attendance punches and prepare comments on deviations."),
       createMockTaskDate(0, 10, 30),
       "HIGH",
     ),
     buildTask(
       "mock-task-2",
-      "Встреча: Ежедневный синк по сменам",
-      appendTaskMeta("Обсуждение покрытия вечерних смен и замен на выходные.", {
+      `${localize(locale, "Встреча", "Meeting")}: ${localize(locale, "Ежедневный синк по сменам", "Daily shift sync")}`,
+      appendTaskMeta(localize(locale, "Обсуждение покрытия вечерних смен и замен на выходные.", "Discuss evening shift coverage and weekend substitutions."), {
         kind: "meeting",
         meetingMode: "offline",
-        meetingLocation: "Переговорная B",
+        meetingLocation: localize(locale, "Переговорная B", "Meeting room B"),
       }) ?? null,
       createMockTaskDate(0, 15, 0),
       "MEDIUM",
@@ -499,15 +573,15 @@ function createMockDashboardTasks(
     ),
     buildTask(
       "mock-task-3",
-      "Подготовить список сотрудников на обучение",
-      "Собрать кандидатов на апрельское внутреннее обучение и согласовать отделы.",
+      localize(locale, "Подготовить список сотрудников на обучение", "Prepare the training shortlist"),
+      localize(locale, "Собрать кандидатов на апрельское внутреннее обучение и согласовать отделы.", "Gather candidates for April internal training and align with departments."),
       createMockTaskDate(1, 11, 15),
       "MEDIUM",
     ),
     buildTask(
       "mock-task-4",
-      "Встреча: Разбор опозданий за неделю",
-      appendTaskMeta("Короткий созвон с HR по повторяющимся опозданиям.", {
+      `${localize(locale, "Встреча", "Meeting")}: ${localize(locale, "Разбор опозданий за неделю", "Weekly late-arrival review")}`,
+      appendTaskMeta(localize(locale, "Короткий созвон с HR по повторяющимся опозданиям.", "Short call with HR about repeated late arrivals."), {
         kind: "meeting",
         meetingMode: "online",
         meetingLink: "https://meet.example.com/attendance-review",
@@ -517,96 +591,96 @@ function createMockDashboardTasks(
     ),
     buildTask(
       "mock-task-4a",
-      "Проверить подтверждение смен на вечер",
-      "Проверить, кто подтвердил вечерние смены на пятницу, и закрыть незаполненные слоты.",
+      localize(locale, "Проверить подтверждение смен на вечер", "Review evening shift confirmations"),
+      localize(locale, "Проверить, кто подтвердил вечерние смены на пятницу, и закрыть незаполненные слоты.", "Check who confirmed Friday evening shifts and close unfilled slots."),
       createMockTaskDate(2, 10, 0),
       "HIGH",
     ),
     buildTask(
       "mock-task-4b",
-      "Собрать причины опозданий по группе А",
-      "Сверить объяснительные и обновить комментарии в табеле перед встречей с HR.",
+      localize(locale, "Собрать причины опозданий по группе А", "Collect late-arrival reasons for group A"),
+      localize(locale, "Сверить объяснительные и обновить комментарии в табеле перед встречей с HR.", "Review explanations and update timesheet comments before the HR meeting."),
       createMockTaskDate(2, 11, 30),
       "MEDIUM",
     ),
     buildTask(
       "mock-task-4c",
-      "Проверить готовность формы отчета",
-      "Убедиться, что шаблон отчета по посещаемости заполнен и готов к отправке руководителю.",
+      localize(locale, "Проверить готовность формы отчета", "Check report form readiness"),
+      localize(locale, "Убедиться, что шаблон отчета по посещаемости заполнен и готов к отправке руководителю.", "Make sure the attendance report template is complete and ready to be sent to the manager."),
       createMockTaskDate(2, 13, 15),
       "LOW",
     ),
     buildTask(
       "mock-task-4d",
-      "Согласовать подмену на субботу",
-      "Связаться с сотрудниками по субботней смене и зафиксировать финальную подмену в расписании.",
+      localize(locale, "Согласовать подмену на субботу", "Approve Saturday substitution"),
+      localize(locale, "Связаться с сотрудниками по субботней смене и зафиксировать финальную подмену в расписании.", "Contact Saturday shift employees and lock the final substitution in the schedule."),
       createMockTaskDate(2, 14, 40),
       "HIGH",
     ),
     buildTask(
       "mock-task-4e",
-      "Подготовить комментарии по смене 19 марта",
-      "Собрать замечания по фактическим отметкам и вынести короткое резюме для менеджера смены.",
+      localize(locale, "Подготовить комментарии по смене 19 марта", "Prepare comments for the March 19 shift"),
+      localize(locale, "Собрать замечания по фактическим отметкам и вынести короткое резюме для менеджера смены.", "Collect notes on actual punches and prepare a short summary for the shift manager."),
       createMockTaskDate(2, 15, 20),
       "MEDIUM",
     ),
     buildTask(
       "mock-task-4f",
-      "Проверить закрытие ночного слота",
-      "Убедиться, что ночной слот на пятницу подтвержден и сотрудник получил уведомление.",
+      localize(locale, "Проверить закрытие ночного слота", "Check night-slot coverage"),
+      localize(locale, "Убедиться, что ночной слот на пятницу подтвержден и сотрудник получил уведомление.", "Make sure the Friday night slot is confirmed and the employee received the notification."),
       createMockTaskDate(2, 17, 10),
       "HIGH",
     ),
     buildTask(
       "mock-task-4g",
-      "Обновить список контактов дежурной группы",
-      "Сверить телефоны и мессенджеры по дежурной группе перед выходными.",
+      localize(locale, "Обновить список контактов дежурной группы", "Update the on-duty contact list"),
+      localize(locale, "Сверить телефоны и мессенджеры по дежурной группе перед выходными.", "Verify phone numbers and messengers for the on-duty group before the weekend."),
       createMockTaskDate(2, 18, 5),
       "LOW",
     ),
     buildTask(
       "mock-task-4h",
-      "Подтвердить готовность подменного состава",
-      "Проверить, что резерв на конец недели назначен и видит своё расписание.",
+      localize(locale, "Подтвердить готовность подменного состава", "Confirm backup coverage readiness"),
+      localize(locale, "Проверить, что резерв на конец недели назначен и видит своё расписание.", "Check that the end-of-week backup is assigned and can see the schedule."),
       createMockTaskDate(3, 9, 20),
       "MEDIUM",
     ),
     buildTask(
       "mock-task-5",
-      "Проверить готовность графика на выходные",
-      "Убедиться, что все слоты закрыты и нет пересечений по сменам.",
+      localize(locale, "Проверить готовность графика на выходные", "Check weekend schedule readiness"),
+      localize(locale, "Убедиться, что все слоты закрыты и нет пересечений по сменам.", "Make sure all slots are covered and there are no shift overlaps."),
       createMockTaskDate(4, 9, 45),
       "HIGH",
     ),
     buildTask(
       "mock-task-5a",
-      "Сверить список выходящих в субботу",
-      "Проверить подтверждения по сотрудникам субботней смены и убрать дубли.",
+      localize(locale, "Сверить список выходящих в субботу", "Review Saturday roster"),
+      localize(locale, "Проверить подтверждения по сотрудникам субботней смены и убрать дубли.", "Check confirmations for Saturday shift employees and remove duplicates."),
       createMockTaskDate(4, 11, 0),
       "MEDIUM",
     ),
     buildTask(
       "mock-task-5b",
-      "Подготовить короткий отчет по загрузке недели",
-      "Собрать по дням количество задач и передать сводку в конце пятницы.",
+      localize(locale, "Подготовить короткий отчет по загрузке недели", "Prepare a short weekly workload report"),
+      localize(locale, "Собрать по дням количество задач и передать сводку в конце пятницы.", "Collect the number of tasks by day and send the summary at the end of Friday."),
       createMockTaskDate(4, 12, 25),
       "LOW",
     ),
     buildTask(
       "mock-task-6",
-      "Встреча: 1-on-1 по итогам недели",
-      appendTaskMeta("Поговорить о загрузке, качестве смен и точках роста.", {
+      `${localize(locale, "Встреча", "Meeting")}: ${localize(locale, "1-on-1 по итогам недели", "Weekly 1-on-1 recap")}`,
+      appendTaskMeta(localize(locale, "Поговорить о загрузке, качестве смен и точках роста.", "Discuss workload, shift quality and growth points."), {
         kind: "meeting",
         meetingMode: "offline",
-        meetingLocation: "Кабинет менеджера",
+        meetingLocation: localize(locale, "Кабинет менеджера", "Manager office"),
       }) ?? null,
       createMockTaskDate(5, 13, 30),
       "LOW",
     ),
     buildTask(
       "mock-task-7",
-      "Собрать просроченные подтверждения смен",
-      "Есть неподтверждённые слоты за вчера, нужно быстро закрыть вопрос.",
+      localize(locale, "Собрать просроченные подтверждения смен", "Collect overdue shift confirmations"),
+      localize(locale, "Есть неподтверждённые слоты за вчера, нужно быстро закрыть вопрос.", "There are unconfirmed slots from yesterday and they need to be resolved quickly."),
       createMockTaskDate(-1, 18, 0),
       "URGENT",
     ),
@@ -623,6 +697,8 @@ export default function DashboardHome({
   mode?: "admin" | "employee";
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const priorityOptions = useMemo(() => getPriorityOptions(locale), [locale]);
   const session = initialSession ?? getSession();
   const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
@@ -770,7 +846,7 @@ export default function DashboardHome({
       return apiTasks;
     }
 
-    const mockTasks = createMockDashboardTasks(managerEmployee).map((task) => ({
+    const mockTasks = createMockDashboardTasks(managerEmployee, locale).map((task) => ({
       ...task,
       status: mockTaskStatuses[task.id] ?? task.status,
       completedAt:
@@ -779,7 +855,7 @@ export default function DashboardHome({
           : null,
     }));
     return [...apiTasks, ...mockTasks];
-  }, [isDemoSession, managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
+  }, [isDemoSession, locale, managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
   const personalTasks = useMemo(() => {
     if (isEmployeeMode) {
       return dashboardTasks;
@@ -863,8 +939,8 @@ export default function DashboardHome({
     .slice(0, 5)
     .map((item) => ({
       name: `${item.employee.firstName} ${item.employee.lastName}`.trim(),
-      department: item.employee.department?.name ?? "Команда",
-      dateLabel: item.nextDate.toLocaleDateString("ru-RU", {
+      department: item.employee.department?.name ?? localize(locale, "Команда", "Team"),
+      dateLabel: item.nextDate.toLocaleDateString(toIntlLocale(locale), {
         day: "numeric",
         month: "long",
       }),
@@ -890,30 +966,30 @@ export default function DashboardHome({
     ).length,
   };
   const attendanceChips: RadioItem[] = [
-    { key: "all", label: "Все", value: employees.length },
+    { key: "all", label: localize(locale, "Все", "All"), value: employees.length },
     {
       key: "present",
-      label: "Пришли",
+      label: localize(locale, "Пришли", "Present"),
       value: presentCount,
     },
     {
       key: "absent",
-      label: "Отсутствуют",
+      label: localize(locale, "Отсутствуют", "Absent"),
       value: absentCount,
     },
     {
       key: "late",
-      label: "Опоздание",
+      label: localize(locale, "Опоздание", "Late"),
       value: stats.late,
     },
     {
       key: "checked",
-      label: "Завершили",
+      label: localize(locale, "Завершили", "Checked out"),
       value: stats.checkedOut,
     },
     {
       key: "issues",
-      label: "Без отметки",
+      label: localize(locale, "Без отметки", "Missing punch"),
       value: stats.missingPunch,
     },
   ];
@@ -938,13 +1014,13 @@ export default function DashboardHome({
         id: employee.id,
         initials: getInitials(fullName),
         name: fullName,
-        schedule: session?.shiftLabel ?? "Нет расписания",
-        arrival: getAttendanceArrivalLabel(session),
+        schedule: session?.shiftLabel ?? localize(locale, "Нет расписания", "No schedule"),
+        arrival: getAttendanceArrivalLabel(session, locale),
         arrivalTone: getAttendanceArrivalTone(session),
         departure: session?.endedAt
-          ? formatTime(session.endedAt)
+          ? formatTime(session.endedAt, locale)
           : session
-            ? "В смене"
+            ? localize(locale, "В смене", "On shift")
             : "—",
         hasMissingPunch,
         isLate: Boolean(session?.lateMinutes && session.lateMinutes > 0),
@@ -955,7 +1031,7 @@ export default function DashboardHome({
     .sort(
       (left, right) =>
         Number(right.isPresent) - Number(left.isPresent) ||
-        left.name.localeCompare(right.name, "ru-RU"),
+        left.name.localeCompare(right.name, toIntlLocale(locale)),
     );
   const filteredAttendanceRows = attendanceRows
     .filter((row) => {
@@ -999,15 +1075,16 @@ export default function DashboardHome({
       .sort(sortWeeklyCalendarTasks)
       .forEach((task) => {
         const meta = parseTaskMeta(task.description);
-        const kind = meta.meeting || task.title.startsWith("Встреча:")
-          ? "meeting"
-          : "task";
+        const kind =
+          meta.meeting || /^(Встреча|Meeting):/i.test(task.title)
+            ? "meeting"
+            : "task";
         const isCompleted = task.status === "DONE";
         const displayTitle =
           kind === "meeting" ? stripMeetingPrefix(task.title) : task.title;
         const participantName = task.assigneeEmployee
           ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}`
-          : task.group?.name ?? "Без исполнителя";
+          : task.group?.name ?? localize(locale, "Без исполнителя", "No assignee");
         const eventKey = `${task.dueAt}|${kind}|${isCompleted ? "done" : "open"}|${displayTitle.toLowerCase()}`;
         const existing = eventMap.get(eventKey);
 
@@ -1032,7 +1109,7 @@ export default function DashboardHome({
           id: task.id,
           displayTitle,
           isCompleted,
-          time: isCompleted ? null : formatTime(task.dueAt),
+          time: isCompleted ? null : formatTime(task.dueAt, locale),
           kind,
           participants: [participantName],
           duplicateCount: 1,
@@ -1046,8 +1123,16 @@ export default function DashboardHome({
       .map((event) => ({
         ...event,
         date,
-        participantLabel: formatParticipantSummary(event.participants, event.kind),
-        tooltipLabel: formatParticipantLabel(event.participants.length, event.kind),
+        participantLabel: formatParticipantSummary(
+          event.participants,
+          event.kind,
+          locale,
+        ),
+        tooltipLabel: formatParticipantLabel(
+          event.participants.length,
+          event.kind,
+          locale,
+        ),
       }))
       .sort((left, right) => {
         if (left.isCompleted !== right.isCompleted) {
@@ -1056,19 +1141,19 @@ export default function DashboardHome({
         if (!left.time && !right.time) return 0;
         if (!left.time) return 1;
         if (!right.time) return -1;
-        return left.time.localeCompare(right.time, "ru-RU");
+        return left.time.localeCompare(right.time, toIntlLocale(locale));
       });
 
     return {
       date,
-      label: formatDayHeader(date),
-      monthLabel: formatMonthLabel(date),
-      weekdayLabel: formatWeekdayLabel(date),
+      label: formatDayHeader(date, locale),
+      monthLabel: formatMonthLabel(date, locale),
+      weekdayLabel: formatWeekdayLabel(date, locale),
       weekdayLongLabel: date
-        .toLocaleDateString("ru-RU", { weekday: "long" })
+        .toLocaleDateString(toIntlLocale(locale), { weekday: "long" })
         .toUpperCase(),
       dateNumber: date.getDate(),
-      taskCountLabel: formatTaskCountLabel(events.length),
+      taskCountLabel: formatTaskCountLabel(events.length, locale),
       tasks: events,
     };
   });
@@ -1079,8 +1164,8 @@ export default function DashboardHome({
       setMessageAction(null);
       setMessage(
         status === "DONE"
-          ? "Mock-задача отмечена как выполненная."
-          : "Статус mock-задачи обновлен.",
+          ? localize(locale, "Mock-задача отмечена как выполненная.", "Mock task marked as done.")
+          : localize(locale, "Статус mock-задачи обновлен.", "Mock task status updated."),
       );
       return;
     }
@@ -1093,8 +1178,8 @@ export default function DashboardHome({
     setMessageAction(null);
     setMessage(
       status === "DONE"
-        ? "Задача отмечена как выполненная."
-        : "Статус задачи обновлен.",
+        ? localize(locale, "Задача отмечена как выполненная.", "Task marked as done.")
+        : localize(locale, "Статус задачи обновлен.", "Task status updated."),
     );
     await loadData();
   }
@@ -1107,7 +1192,7 @@ export default function DashboardHome({
       body: JSON.stringify({}),
     });
     setMessageAction(null);
-    setMessage("Запрос подтвержден.");
+    setMessage(localize(locale, "Запрос подтвержден.", "Request approved."));
     await loadData();
   }
 
@@ -1127,8 +1212,8 @@ export default function DashboardHome({
       setMessageAction(null);
       setMessage(
         isEmployeeTargetMode
-          ? "Выберите хотя бы одного сотрудника."
-          : "Выберите группу.",
+          ? localize(locale, "Выберите хотя бы одного сотрудника.", "Select at least one employee.")
+          : localize(locale, "Выберите группу.", "Select a group."),
       );
       return;
     }
@@ -1139,8 +1224,8 @@ export default function DashboardHome({
         setMessageAction(null);
         setMessage(
           taskDraft.mode === "meeting"
-            ? "Нельзя создать встречу в прошлом."
-            : "Нельзя создать задачу с прошедшим сроком.",
+            ? localize(locale, "Нельзя создать встречу в прошлом.", "A meeting cannot be created in the past.")
+            : localize(locale, "Нельзя создать задачу с прошедшим сроком.", "A task cannot be created with a past due date."),
         );
         return;
       }
@@ -1224,7 +1309,7 @@ export default function DashboardHome({
             body: JSON.stringify({
               title:
                 taskDraft.mode === "meeting"
-                  ? `Встреча: ${taskDraft.title}`
+                  ? `${localize(locale, "Встреча", "Meeting")}: ${taskDraft.title}`
                   : taskDraft.title,
               description: payloadDescription,
               assigneeEmployeeId,
@@ -1245,7 +1330,7 @@ export default function DashboardHome({
         body: JSON.stringify({
           title:
             taskDraft.mode === "meeting"
-              ? `Встреча: ${taskDraft.title}`
+              ? `${localize(locale, "Встреча", "Meeting")}: ${taskDraft.title}`
               : taskDraft.title,
           description: payloadDescription,
           groupId: selectedGroupId,
@@ -1266,20 +1351,32 @@ export default function DashboardHome({
       href: `/schedule?date=${(taskDraft.dueAt || new Date().toISOString()).slice(0, 10)}&eventType=${
         taskDraft.mode === "meeting" ? "meetings" : "tasks"
       }`,
-      label: "Открыть в календаре",
+      label: localize(locale, "Открыть в календаре", "Open in calendar"),
     });
     setMessage(
       taskDraft.mode === "meeting"
         ? isEmployeeTargetMode
-          ? `Встреча создана для ${assigneeEmployeeIds.length} сотрудников.`
-          : "Встреча создана для группы."
+          ? localize(
+              locale,
+              `Встреча создана для ${assigneeEmployeeIds.length} сотрудников.`,
+              `Meeting created for ${assigneeEmployeeIds.length} employees.`,
+            )
+          : localize(locale, "Встреча создана для группы.", "Meeting created for the group.")
         : taskDraft.isRecurring
           ? isEmployeeTargetMode
-            ? `Шаблон задачи создан для ${assigneeEmployeeIds.length} сотрудников.`
-            : "Шаблон задачи создан для группы."
+            ? localize(
+                locale,
+                `Шаблон задачи создан для ${assigneeEmployeeIds.length} сотрудников.`,
+                `Task template created for ${assigneeEmployeeIds.length} employees.`,
+              )
+            : localize(locale, "Шаблон задачи создан для группы.", "Task template created for the group.")
           : isEmployeeTargetMode
-            ? `Задача создана для ${assigneeEmployeeIds.length} сотрудников.`
-            : "Задача создана для группы.",
+            ? localize(
+                locale,
+                `Задача создана для ${assigneeEmployeeIds.length} сотрудников.`,
+                `Task created for ${assigneeEmployeeIds.length} employees.`,
+              )
+            : localize(locale, "Задача создана для группы.", "Task created for the group."),
     );
     await loadData();
   }
@@ -1342,13 +1439,21 @@ export default function DashboardHome({
                   <DialogHeader>
                     <DialogTitle>
                       {taskDraft.mode === "meeting"
-                        ? "Новая встреча"
-                        : "Новая задача"}
+                        ? localize(locale, "Новая встреча", "New meeting")
+                        : localize(locale, "Новая задача", "New task")}
                     </DialogTitle>
                     <DialogDescription>
                       {taskDraft.mode === "meeting"
-                        ? "Назначьте встречу сотрудникам, добавьте время, ссылку или место встречи."
-                        : "Создайте задачу для сотрудников или сразу для целой группы."}
+                        ? localize(
+                            locale,
+                            "Назначьте встречу сотрудникам, добавьте время, ссылку или место встречи.",
+                            "Assign a meeting to employees and add time, a link or a location.",
+                          )
+                        : localize(
+                            locale,
+                            "Создайте задачу для сотрудников или сразу для целой группы.",
+                            "Create a task for employees or for an entire group at once.",
+                          )}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="manager-create-mode">
@@ -1361,7 +1466,7 @@ export default function DashboardHome({
                       }
                       type="button"
                     >
-                      <CheckSquare className="size-4" /> Создать задачу
+                      <CheckSquare className="size-4" /> {localize(locale, "Создать задачу", "Create task")}
                     </button>
                     <button
                       className={
@@ -1372,7 +1477,7 @@ export default function DashboardHome({
                       }
                       type="button"
                     >
-                      <CalendarDays className="size-4" /> Создать встречу
+                      <CalendarDays className="size-4" /> {localize(locale, "Создать встречу", "Create meeting")}
                     </button>
                   </div>
                   <form
@@ -1385,8 +1490,8 @@ export default function DashboardHome({
                       }
                       placeholder={
                         taskDraft.mode === "meeting"
-                          ? "Тема встречи"
-                          : "Что нужно сделать"
+                          ? localize(locale, "Тема встречи", "Meeting title")
+                          : localize(locale, "Что нужно сделать", "What needs to be done")
                       }
                       value={taskDraft.title}
                     />
@@ -1394,15 +1499,19 @@ export default function DashboardHome({
                       <div className="manager-form-block-head">
                         <strong>
                           {taskDraft.targetMode === "employees"
-                            ? "Сотрудники"
-                            : "Группа"}
+                            ? localize(locale, "Сотрудники", "Employees")
+                            : localize(locale, "Группа", "Group")}
                         </strong>
                         <span>
                           {taskDraft.targetMode === "employees"
-                            ? `Выбрано ${taskDraft.assigneeEmployeeIds.length}`
+                            ? localize(
+                                locale,
+                                `Выбрано ${taskDraft.assigneeEmployeeIds.length}`,
+                                `Selected ${taskDraft.assigneeEmployeeIds.length}`,
+                              )
                             : taskDraft.groupId
-                              ? "Группа выбрана"
-                              : "Не выбрано"}
+                              ? localize(locale, "Группа выбрана", "Group selected")
+                              : localize(locale, "Не выбрано", "Not selected")}
                         </span>
                       </div>
                       <div className="manager-create-mode manager-create-mode--compact">
@@ -1421,7 +1530,7 @@ export default function DashboardHome({
                           }
                           type="button"
                         >
-                          Сотрудники
+                          {localize(locale, "Сотрудники", "Employees")}
                         </button>
                         <button
                           className={
@@ -1438,7 +1547,7 @@ export default function DashboardHome({
                           }
                           type="button"
                         >
-                          Группа
+                          {localize(locale, "Группа", "Group")}
                         </button>
                       </div>
                       {taskDraft.targetMode === "employees" ? (
@@ -1473,7 +1582,8 @@ export default function DashboardHome({
                                 <span className="manager-assignee-copy">
                                   <strong>{employeeName}</strong>
                                   <span>
-                                    {employee.department?.name ?? "Команда"}
+                                    {employee.department?.name ??
+                                      localize(locale, "Команда", "Team")}
                                   </span>
                                 </span>
                               </label>
@@ -1489,7 +1599,7 @@ export default function DashboardHome({
                         >
                           <SelectTrigger>
                             <SelectTriggerLabel>
-                              <SelectValue placeholder="Выберите группу" />
+                              <SelectValue placeholder={localize(locale, "Выберите группу", "Select a group")} />
                             </SelectTriggerLabel>
                           </SelectTrigger>
                           <SelectContent>
@@ -1502,8 +1612,12 @@ export default function DashboardHome({
                                     </SelectOptionTitle>
                                     <SelectOptionDescription data-select-description>
                                       {group.memberships.length
-                                        ? `${group.memberships.length} участников`
-                                        : "Без участников"}
+                                        ? localize(
+                                            locale,
+                                            `${group.memberships.length} участников`,
+                                            `${group.memberships.length} members`,
+                                          )
+                                        : localize(locale, "Без участников", "No members")}
                                     </SelectOptionDescription>
                                   </SelectOptionText>
                                 </SelectOptionContent>
@@ -1513,7 +1627,7 @@ export default function DashboardHome({
                         </Select>
                       ) : (
                         <div className="rounded-[20px] border border-dashed border-[color:var(--border)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted-foreground)]">
-                          Группы ещё не созданы.
+                          {localize(locale, "Группы ещё не созданы.", "Groups have not been created yet.")}
                         </div>
                       )}
                     </div>
@@ -1526,8 +1640,12 @@ export default function DashboardHome({
                       }
                       placeholder={
                         taskDraft.mode === "meeting"
-                          ? "Что обсудить и что нужно подготовить"
-                          : "Короткое описание задачи"
+                          ? localize(
+                              locale,
+                              "Что обсудить и что нужно подготовить",
+                              "What should be discussed and prepared",
+                            )
+                          : localize(locale, "Короткое описание задачи", "Short task description")
                       }
                       value={taskDraft.description}
                     />
@@ -1560,7 +1678,7 @@ export default function DashboardHome({
                             </SelectOptionContent>
                           ) : (
                             <SelectTriggerLabel>
-                              <SelectValue placeholder="Приоритет" />
+                              <SelectValue placeholder={localize(locale, "Приоритет", "Priority")} />
                             </SelectTriggerLabel>
                           )}
                         </SelectTrigger>
@@ -1591,8 +1709,8 @@ export default function DashboardHome({
                         min={minTaskDateTime}
                         placeholder={
                           taskDraft.mode === "meeting"
-                            ? "Дата и время встречи"
-                            : "Срок"
+                            ? localize(locale, "Дата и время встречи", "Meeting date and time")
+                            : localize(locale, "Срок", "Due date")
                         }
                         type="datetime-local"
                         value={taskDraft.dueAt}
@@ -1612,7 +1730,7 @@ export default function DashboardHome({
                               }
                             />
                             <span className="whitespace-nowrap text-sm font-heading leading-none">
-                              Сделать регулярной задачей
+                              {localize(locale, "Сделать регулярной задачей", "Make recurring")}
                             </span>
                           </label>
                           <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
@@ -1626,14 +1744,14 @@ export default function DashboardHome({
                               }
                             />
                             <span className="whitespace-nowrap text-sm font-heading leading-none">
-                              Требуется фото-подтверждение
+                              {localize(locale, "Требуется фото-подтверждение", "Photo confirmation required")}
                             </span>
                           </label>
                         </div>
                         {taskDraft.isRecurring ? (
                           <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4 sm:grid-cols-2">
                             <label className="grid gap-2 text-sm font-heading">
-                              <span>Периодичность</span>
+                              <span>{localize(locale, "Периодичность", "Frequency")}</span>
                               <Select
                                 onValueChange={(value) =>
                                   setTaskDraft((current) => ({
@@ -1645,18 +1763,24 @@ export default function DashboardHome({
                               >
                                 <SelectTrigger>
                                   <SelectTriggerLabel>
-                                    <SelectValue placeholder="Выберите периодичность" />
+                                    <SelectValue
+                                      placeholder={localize(
+                                        locale,
+                                        "Выберите периодичность",
+                                        "Select frequency",
+                                      )}
+                                    />
                                   </SelectTriggerLabel>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="DAILY">Ежедневно</SelectItem>
-                                  <SelectItem value="WEEKLY">Еженедельно</SelectItem>
-                                  <SelectItem value="MONTHLY">Ежемесячно</SelectItem>
+                                  <SelectItem value="DAILY">{localize(locale, "Ежедневно", "Daily")}</SelectItem>
+                                  <SelectItem value="WEEKLY">{localize(locale, "Еженедельно", "Weekly")}</SelectItem>
+                                  <SelectItem value="MONTHLY">{localize(locale, "Ежемесячно", "Monthly")}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </label>
                             <label className="grid gap-2 text-sm font-heading">
-                              <span>Начало</span>
+                              <span>{localize(locale, "Начало", "Start date")}</span>
                               <Input
                                 className="h-11"
                                 onChange={(event) =>
@@ -1671,23 +1795,10 @@ export default function DashboardHome({
                             </label>
                             {taskDraft.frequency === "WEEKLY" ? (
                               <label className="col-span-full grid gap-2 text-sm font-heading">
-                                <span>Дни недели</span>
+                                <span>{localize(locale, "Дни недели", "Weekdays")}</span>
                                 <div className="flex flex-wrap gap-2">
                                   {[1, 2, 3, 4, 5, 6, 0].map((day) => {
-                                    const label =
-                                      day === 0
-                                        ? "Вс"
-                                        : day === 1
-                                          ? "Пн"
-                                          : day === 2
-                                            ? "Вт"
-                                            : day === 3
-                                              ? "Ср"
-                                              : day === 4
-                                                ? "Чт"
-                                                : day === 5
-                                                  ? "Пт"
-                                                  : "Сб";
+                                    const label = getWeekdayShortLabel(day, locale);
                                     const isSelected =
                                       taskDraft.weekDays.includes(day);
 
@@ -1717,7 +1828,7 @@ export default function DashboardHome({
                               </label>
                             ) : null}
                             <label className="col-span-full grid gap-2 text-sm font-heading">
-                              <span>Дата окончания (необязательно)</span>
+                              <span>{localize(locale, "Дата окончания (необязательно)", "End date (optional)")}</span>
                               <Input
                                 className="h-11"
                                 onChange={(event) =>
@@ -1740,11 +1851,12 @@ export default function DashboardHome({
                       <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <strong className="font-heading text-sm text-[color:var(--foreground)]">
-                            Рабочий день сотрудников
+                            {localize(locale, "Рабочий день сотрудников", "Employees' workday")}
                           </strong>
                           <span className="text-xs font-heading text-[color:var(--muted-foreground)]">
                             {formatWorkdayDateLabel(
                               selectedAssigneeDayStatuses[0].dayKey,
+                              locale,
                             )}
                           </span>
                         </div>
@@ -1759,7 +1871,9 @@ export default function DashboardHome({
                               key={item.employeeId}
                             >
                               {item.name}:{" "}
-                              {item.isWorkday ? "рабочий день" : "выходной день"}
+                              {item.isWorkday
+                                ? localize(locale, "рабочий день", "workday")
+                                : localize(locale, "выходной день", "day off")}
                             </span>
                           ))}
                         </div>
@@ -1782,7 +1896,7 @@ export default function DashboardHome({
                             }
                             type="button"
                           >
-                            Онлайн
+                            {localize(locale, "Онлайн", "Online")}
                           </button>
                           <button
                             className={
@@ -1798,7 +1912,7 @@ export default function DashboardHome({
                             }
                             type="button"
                           >
-                            Оффлайн
+                            {localize(locale, "Оффлайн", "Offline")}
                           </button>
                         </div>
                         {taskDraft.meetingMode === "online" ? (
@@ -1809,7 +1923,11 @@ export default function DashboardHome({
                                 meetingLink: e.target.value,
                               }))
                             }
-                            placeholder="Ссылка на Google Meet / Zoom / Teams"
+                            placeholder={localize(
+                              locale,
+                              "Ссылка на Google Meet / Zoom / Teams",
+                              "Google Meet / Zoom / Teams link",
+                            )}
                             value={taskDraft.meetingLink}
                           />
                         ) : (
@@ -1820,7 +1938,11 @@ export default function DashboardHome({
                                 meetingLocation: e.target.value,
                               }))
                             }
-                            placeholder="Кабинет, переговорка или кафе"
+                            placeholder={localize(
+                              locale,
+                              "Кабинет, переговорка или кафе",
+                              "Room, meeting space or cafe",
+                            )}
                             value={taskDraft.meetingLocation}
                           />
                         )}
@@ -1829,13 +1951,21 @@ export default function DashboardHome({
                     <div className="manager-task-form-actions">
                       <span className="manager-form-hint">
                         {taskDraft.mode === "meeting"
-                          ? "Встреча придет сотрудникам как задача, чтобы ее можно было отметить выполненной или вернуть обратно."
-                          : "Сотрудники увидят задачу в разделе «Мои задачи» и смогут отметить ее выполненной."}
+                          ? localize(
+                              locale,
+                              "Встреча придет сотрудникам как задача, чтобы ее можно было отметить выполненной или вернуть обратно.",
+                              "The meeting will arrive to employees as a task so it can be marked as completed or returned.",
+                            )
+                          : localize(
+                              locale,
+                              "Сотрудники увидят задачу в разделе «Мои задачи» и смогут отметить ее выполненной.",
+                              "Employees will see the task in My tasks and will be able to mark it as completed.",
+                            )}
                       </span>
                       <Button disabled={!canSubmitTaskDraft} type="submit">
                         {taskDraft.mode === "meeting"
-                          ? "Создать встречу"
-                          : "Создать задачу"}
+                          ? localize(locale, "Создать встречу", "Create meeting")
+                          : localize(locale, "Создать задачу", "Create task")}
                       </Button>
                     </div>
                   </form>
@@ -1849,16 +1979,24 @@ export default function DashboardHome({
             <DialogContent className="max-w-[460px]">
               <DialogHeader>
                 <DialogTitle>
-                  Выходной день сотрудника
+                  {localize(locale, "Выходной день сотрудника", "Employee day off")}
                 </DialogTitle>
                 <DialogDescription>
                   {taskDraft.mode === "meeting"
                     ? hasDayOffAssignee
-                      ? "У сотрудника выходной день. Вы хотите назначить встречу на этот день?"
-                      : "Подтвердите создание встречи."
+                      ? localize(
+                          locale,
+                          "У сотрудника выходной день. Вы хотите назначить встречу на этот день?",
+                          "The employee has a day off. Do you want to schedule the meeting for this day?",
+                        )
+                      : localize(locale, "Подтвердите создание встречи.", "Confirm meeting creation.")
                     : hasDayOffAssignee
-                      ? "У сотрудника выходной день. Вы хотите назначить задачу на этот день?"
-                      : "Подтвердите создание задачи."}
+                      ? localize(
+                          locale,
+                          "У сотрудника выходной день. Вы хотите назначить задачу на этот день?",
+                          "The employee has a day off. Do you want to assign the task for this day?",
+                        )
+                      : localize(locale, "Подтвердите создание задачи.", "Confirm task creation.")}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-wrap gap-2 text-sm text-[color:var(--muted-foreground)]">
@@ -1878,7 +2016,7 @@ export default function DashboardHome({
                   onClick={() => setTaskDayOffConfirmOpen(false)}
                   variant="outline"
                 >
-                  Поменять день
+                  {localize(locale, "Поменять день", "Change day")}
                 </Button>
                 <Button
                   onClick={() => {
@@ -1886,7 +2024,7 @@ export default function DashboardHome({
                     void submitTaskDraft(true);
                   }}
                 >
-                  Да
+                  {localize(locale, "Да", "Yes")}
                 </Button>
               </div>
             </DialogContent>
@@ -1905,60 +2043,65 @@ export default function DashboardHome({
                 <>
                   <DialogHeader>
                     <DialogTitle>
-                      {selectedCalendarEvent.kind === "meeting" ? "Встреча" : "Задача"}:{" "}
+                      {selectedCalendarEvent.kind === "meeting"
+                        ? localize(locale, "Встреча", "Meeting")
+                        : localize(locale, "Задача", "Task")}
+                      :{" "}
                       {selectedCalendarEvent.displayTitle}
                     </DialogTitle>
                     <DialogDescription>
-                      {selectedCalendarEvent.date.toLocaleDateString("ru-RU", {
+                      {selectedCalendarEvent.date.toLocaleDateString(toIntlLocale(locale), {
                         weekday: "long",
                         day: "numeric",
                         month: "long",
                       })}
                       {selectedCalendarEvent.time
                         ? ` · ${selectedCalendarEvent.time}`
-                        : " · выполнено"}
+                        : ` · ${localize(locale, "выполнено", "completed")}`}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="manager-event-dialog-body">
                     <div className="manager-event-dialog-grid">
                       <div className="manager-event-card">
-                        <span>Тип</span>
+                        <span>{localize(locale, "Тип", "Type")}</span>
                         <strong>
-                          {selectedCalendarEvent.kind === "meeting" ? "Встреча" : "Задача"}
+                          {selectedCalendarEvent.kind === "meeting"
+                            ? localize(locale, "Встреча", "Meeting")
+                            : localize(locale, "Задача", "Task")}
                         </strong>
                       </div>
                       <div className="manager-event-card">
                         <span>
                           {selectedCalendarEvent.kind === "meeting"
-                            ? "Участники"
-                            : "Исполнители"}
+                            ? localize(locale, "Участники", "Participants")
+                            : localize(locale, "Исполнители", "Assignees")}
                         </span>
                         <strong>{selectedCalendarEvent.tooltipLabel}</strong>
                       </div>
                     </div>
                     {selectedCalendarEvent.description ? (
                       <div className="manager-event-copy">
-                        <span>Описание</span>
+                        <span>{localize(locale, "Описание", "Description")}</span>
                         <p>{selectedCalendarEvent.description}</p>
                       </div>
                     ) : null}
                     <div className="manager-event-copy">
                       <span>
                         {selectedCalendarEvent.kind === "meeting"
-                          ? "Кто участвует"
-                          : "Кто назначен"}
+                          ? localize(locale, "Кто участвует", "Participants")
+                          : localize(locale, "Кто назначен", "Assigned to")}
                       </span>
                       <p>{selectedCalendarEvent.participants.join(", ")}</p>
                     </div>
                     {selectedCalendarEvent.meetingLocation ? (
                       <div className="manager-event-copy">
-                        <span>Место</span>
+                        <span>{localize(locale, "Место", "Location")}</span>
                         <p>{selectedCalendarEvent.meetingLocation}</p>
                       </div>
                     ) : null}
                     {selectedCalendarEvent.meetingLink ? (
                       <div className="manager-event-copy">
-                        <span>Ссылка</span>
+                        <span>{localize(locale, "Ссылка", "Link")}</span>
                         <p>{selectedCalendarEvent.meetingLink}</p>
                       </div>
                     ) : null}
@@ -1974,7 +2117,7 @@ export default function DashboardHome({
                         type="button"
                         variant="outline"
                       >
-                        Открыть в календаре
+                        {localize(locale, "Открыть в календаре", "Open in calendar")}
                       </Button>
                     </div>
                   </div>
@@ -1988,6 +2131,7 @@ export default function DashboardHome({
           >
             <aside className="dashboard-tasks-rail">
               <DashboardTasksSidebar
+                locale={locale}
                 onTaskToggle={(taskId, nextDone) =>
                   void handleTaskStatus(taskId, nextDone ? "DONE" : "TODO")
                 }
@@ -1999,11 +2143,12 @@ export default function DashboardHome({
               {managerOnly || isEmployeeMode ? (
                 <ManagerPerformancePanel
                   history={personalHistory}
+                  locale={locale}
                   tasks={personalTasks}
                 />
               ) : (
                 <div className="dashboard-actions-center-shell">
-                  <ActionCenter useMockData={isDemoSession} />
+                  <ActionCenter locale={locale} useMockData={isDemoSession} />
                 </div>
               )}
             </div>
@@ -2053,7 +2198,9 @@ export default function DashboardHome({
                           ))}
                         </div>
                       ) : (
-                        <p className="manager-week-empty">СОБЫТИЙ НЕТ</p>
+                        <p className="manager-week-empty">
+                          {localize(locale, "СОБЫТИЙ НЕТ", "NO EVENTS")}
+                        </p>
                       )}
                     </article>
                   ))}
@@ -2063,7 +2210,7 @@ export default function DashboardHome({
 
             {!isEmployeeMode ? (
               <aside className="dashboard-birthdays-rail">
-                <DashboardBirthdaysSidebar items={birthdays} />
+                <DashboardBirthdaysSidebar items={birthdays} locale={locale} />
               </aside>
             ) : null}
           </div>

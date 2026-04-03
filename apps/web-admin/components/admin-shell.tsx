@@ -47,6 +47,7 @@ import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
 import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
+import { localizePersonName } from "../lib/transliteration";
 import {
   PROFILE_AVATAR_UPDATED_EVENT,
   readStoredProfileAvatar,
@@ -671,6 +672,7 @@ export function AdminShell({
           .trim(),
       )
     : "";
+  const displayProfileName = localizePersonName(profileName, locale);
   const profileRole = session
     ? resolveSidebarRoleLabel(session.user.roleCodes, locale)
     : "";
@@ -700,10 +702,6 @@ export function AdminShell({
         },
         ...(canUseDesktopAdminTools
           ? [
-              {
-                href: toAdminHref("/organization"),
-                label: locale === "ru" ? "Настройки" : "Settings",
-              },
               {
                 href: toAdminHref("/diagnostics"),
                 label: locale === "ru" ? "Диагностика" : "Diagnostics",
@@ -785,7 +783,7 @@ export function AdminShell({
   const sidebarAvatarSrc =
     resolvedProfileAvatarUrl && !profileAvatarFailed
       ? resolvedProfileAvatarUrl
-      : getMockAvatarDataUrl(profileName);
+      : getMockAvatarDataUrl(displayProfileName);
 
   function resolveNotificationHref(actionUrl: string | null) {
     if (!actionUrl) return notificationsHref;
@@ -916,31 +914,8 @@ export function AdminShell({
 
       <aside className="sidebar sidebar-untitled">
         <div className="sidebar-brand sidebar-untitled-brand">
-          <img alt="" className="sidebar-brand-icon" src="/waving.png" />
           <div className="sidebar-untitled-brand-row">
-            <BrandWordmark className="text-[1.5rem]" />
-            <div
-              className="sidebar-flag-switch"
-              role="group"
-              aria-label={t("common.language")}
-            >
-              {languageOptions.map((option) => (
-                <button
-                  aria-label={option.label}
-                  className={`sidebar-flag-button ${locale === option.value ? "is-active" : ""}`}
-                  key={option.value}
-                  onClick={() => setLocale(option.value)}
-                  title={option.label}
-                  type="button"
-                >
-                  <img
-                    alt={option.label}
-                    className="sidebar-flag-icon"
-                    src={option.icon}
-                  />
-                </button>
-              ))}
-            </div>
+            <BrandWordmark className="text-[1.8rem]" />
           </div>
         </div>
 
@@ -1061,6 +1036,28 @@ export function AdminShell({
           <div className="sidebar-user-wrap" ref={accountMenuRef}>
             {accountMenuOpen ? (
               <div className="sidebar-user-menu">
+                <div
+                  className="sidebar-flag-switch"
+                  role="group"
+                  aria-label={t("common.language")}
+                >
+                  {languageOptions.map((option) => (
+                    <button
+                      aria-label={option.label}
+                      className={`sidebar-flag-button ${locale === option.value ? "is-active" : ""}`}
+                      key={option.value}
+                      onClick={() => setLocale(option.value)}
+                      title={option.label}
+                      type="button"
+                    >
+                      <img
+                        alt={option.label}
+                        className="sidebar-flag-icon"
+                        src={option.icon}
+                      />
+                    </button>
+                  ))}
+                </div>
                 {accountMenuItems.map((item) => (
                   <Link
                     className="sidebar-user-menu-item"
@@ -1097,14 +1094,14 @@ export function AdminShell({
             >
               <div className="sidebar-user-avatar">
                 <img
-                  alt={profileName}
+                  alt={displayProfileName}
                   className="h-full w-full rounded-full object-cover"
                   onError={() => setProfileAvatarFailed(true)}
                   src={sidebarAvatarSrc}
                 />
               </div>
               <div className="sidebar-user-copy">
-                <strong>{profileName}</strong>
+                <strong>{displayProfileName}</strong>
                 <span>{profileRole}</span>
               </div>
               <span className="sidebar-expand-toggle">

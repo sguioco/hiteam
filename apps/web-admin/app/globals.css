@@ -34,6 +34,30 @@
   font-style: italic;
 }
 
+.landing-shell,
+.landing-shell h1,
+.landing-shell h2,
+.landing-shell h3,
+.landing-shell h4,
+.landing-shell h5,
+.landing-shell h6,
+.landing-shell p,
+.landing-shell span,
+.landing-shell a,
+.landing-shell button,
+.landing-shell li,
+.landing-shell label,
+.landing-shell input,
+.landing-shell textarea {
+  font-family: var(--font-landing), var(--font-sf-base) !important;
+}
+
+.landing-shell .brand-wordmark,
+.landing-shell .brand-wordmark-hi,
+.landing-shell .brand-wordmark-team {
+  font-family: var(--font-brand-stack) !important;
+}
+
 @theme inline {
   --font-heading: var(--font-sf-stack);
   --font-body: var(--font-sf-stack);
@@ -5047,6 +5071,7 @@ body {
 .sidebar-nav-untitled {
   min-height: 0;
   overflow-y: auto;
+  margin-top: 14px;
   padding-right: 4px;
   gap: 6px;
   scrollbar-gutter: stable;

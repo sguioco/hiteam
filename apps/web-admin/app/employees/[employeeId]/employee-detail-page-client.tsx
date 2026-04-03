@@ -27,6 +27,7 @@ import { apiRequest } from '../../../lib/api';
 import { getSession, hasDesktopAdminAccess } from '../../../lib/auth';
 import { useI18n } from '../../../lib/i18n';
 import { getMockAvatarDataUrl } from '../../../lib/mock-avatar';
+import { getRuntimeLocale, getRuntimeLocaleTag } from '../../../lib/runtime-locale';
 
 type EmployeeDetails = {
   id: string;
@@ -61,19 +62,22 @@ type EmployeeManagerAccess = {
 function formatHours(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h > 0 ? `${h}ч ${m}м` : `${m}м`;
+  if (getRuntimeLocale() === 'ru') {
+    return h > 0 ? `${h}ч ${m}м` : `${m}м`;
+  }
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(getRuntimeLocaleTag(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(getRuntimeLocaleTag(), { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString([], {
+  return new Date(iso).toLocaleString(getRuntimeLocaleTag(), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -501,7 +505,7 @@ export default function EmployeeCardPageClient({
                               <div className="flex items-center gap-1.5">
                                 <span className="text-green-600">{formatTime(row.checkInEvent.occurredAt)}</span>
                                 {row.checkInEvent.distanceMeters !== null ? (
-                                  <span className="text-[10px] text-muted-foreground">{row.checkInEvent.distanceMeters}m</span>
+                                  <span className="text-[10px] text-muted-foreground">{row.checkInEvent.distanceMeters}{locale === 'ru' ? 'м' : 'm'}</span>
                                 ) : null}
                               </div>
                             </Table.Cell>
@@ -510,7 +514,7 @@ export default function EmployeeCardPageClient({
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-red-500">{formatTime(row.checkOutEvent.occurredAt)}</span>
                                   {row.checkOutEvent.distanceMeters !== null ? (
-                                    <span className="text-[10px] text-muted-foreground">{row.checkOutEvent.distanceMeters}m</span>
+                                    <span className="text-[10px] text-muted-foreground">{row.checkOutEvent.distanceMeters}{locale === 'ru' ? 'м' : 'm'}</span>
                                   ) : null}
                                 </div>
                               ) : (
@@ -521,14 +525,14 @@ export default function EmployeeCardPageClient({
                             <Table.Cell className="text-muted-foreground">{formatHours(row.breakMinutes)}</Table.Cell>
                             <Table.Cell>
                               {row.lateMinutes > 0 ? (
-                                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">{row.lateMinutes}м</span>
+                                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">{row.lateMinutes}{locale === 'ru' ? 'м' : 'm'}</span>
                               ) : (
                                 <span className="text-muted-foreground/50">—</span>
                               )}
                             </Table.Cell>
                             <Table.Cell>
                               {row.earlyLeaveMinutes > 0 ? (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">{row.earlyLeaveMinutes}м</span>
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">{row.earlyLeaveMinutes}{locale === 'ru' ? 'м' : 'm'}</span>
                               ) : (
                                 <span className="text-muted-foreground/50">—</span>
                               )}

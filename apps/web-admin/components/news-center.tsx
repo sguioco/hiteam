@@ -38,6 +38,7 @@ import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { Locale, useI18n } from "@/lib/i18n";
+import { localizePersonName } from "@/lib/transliteration";
 
 type NewsCenterProps = {
   mode: "manager" | "employee";
@@ -135,19 +136,25 @@ function formatEmployeeName(
       }
     | null
     | undefined,
+  locale: Locale,
 ) {
   if (!employee) {
     return null;
   }
 
-  return [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim() || null;
+  return localizePersonName(
+    [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim(),
+    locale,
+  );
 }
 
 function formatNewsMetaLine(
   item: Pick<AnnouncementItem, "authorEmployee" | "createdAt">,
   locale: Locale,
 ) {
-  const authorName = formatEmployeeName(item.authorEmployee) ?? (locale === "ru" ? "Неизвестно" : "Unknown");
+  const authorName =
+    formatEmployeeName(item.authorEmployee, locale) ??
+    (locale === "ru" ? "Неизвестно" : "Unknown");
   const relativeOrDate = formatDate(item.createdAt, locale);
 
   return locale === "ru"
@@ -1288,7 +1295,7 @@ export function NewsCenter({
                                                 <div className="flex min-w-0 items-center gap-3">
                                                   {reader.avatarUrl ? (
                                                     <img
-                                                      alt={formatEmployeeName(reader) ?? localize(locale, "Сотрудник", "Employee")}
+                                                      alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
                                                       className="h-8 w-8 rounded-full object-cover"
                                                       src={reader.avatarUrl}
                                                     />
@@ -1298,7 +1305,7 @@ export function NewsCenter({
                                                     </div>
                                                   )}
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                                                    {formatEmployeeName(reader) ?? localize(locale, "Без имени", "Unnamed")}
+                                                    {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
                                                 </div>
                                                 <div className="shrink-0 text-sm text-[color:var(--muted-foreground)]">
@@ -1321,7 +1328,7 @@ export function NewsCenter({
                                       <div className="flex min-w-0 items-center gap-3">
                                         {reader.avatarUrl ? (
                                           <img
-                                            alt={formatEmployeeName(reader) ?? localize(locale, "Сотрудник", "Employee")}
+                                            alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
                                             className="h-8 w-8 rounded-full object-cover"
                                             src={reader.avatarUrl}
                                           />
@@ -1331,7 +1338,7 @@ export function NewsCenter({
                                           </div>
                                         )}
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                                          {formatEmployeeName(reader) ?? localize(locale, "Без имени", "Unnamed")}
+                                          {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>
                                       </div>
                                       <div className="shrink-0 text-sm text-[color:var(--muted-foreground)]">
@@ -1396,7 +1403,7 @@ export function NewsCenter({
                                                 <div className="flex min-w-0 items-center gap-3">
                                                   {reader.avatarUrl ? (
                                                     <img
-                                                      alt={formatEmployeeName(reader) ?? localize(locale, "Сотрудник", "Employee")}
+                                                      alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
                                                       className="h-8 w-8 rounded-full object-cover"
                                                       src={reader.avatarUrl}
                                                     />
@@ -1406,7 +1413,7 @@ export function NewsCenter({
                                                     </div>
                                                   )}
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                                                    {formatEmployeeName(reader) ?? localize(locale, "Без имени", "Unnamed")}
+                                                    {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
                                                 </div>
                                                 <div className="shrink-0 text-sm text-slate-500">
@@ -1429,7 +1436,7 @@ export function NewsCenter({
                                       <div className="flex min-w-0 items-center gap-3">
                                         {reader.avatarUrl ? (
                                           <img
-                                            alt={formatEmployeeName(reader) ?? localize(locale, "Сотрудник", "Employee")}
+                                            alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
                                             className="h-8 w-8 rounded-full object-cover"
                                             src={reader.avatarUrl}
                                           />
@@ -1439,7 +1446,7 @@ export function NewsCenter({
                                           </div>
                                         )}
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                                          {formatEmployeeName(reader) ?? localize(locale, "Без имени", "Unnamed")}
+                                          {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>
                                       </div>
                                       <div className="shrink-0 text-sm text-slate-500">
@@ -1522,7 +1529,8 @@ export function NewsCenter({
           <div className="overflow-hidden rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/94 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
             {orderedItems.map((item, index) => {
               const isExpanded = expandedId === item.id;
-              const preview = item.body.length > 220 ? `${item.body.slice(0, 220).trim()}…` : item.body;
+              const preview =
+                item.body.length > 220 ? `${item.body.slice(0, 220).trim()}…` : item.body;
               const readCount = item.readRecipients ?? 0;
               const totalCount = item.totalRecipients ?? 0;
               const isReadMuted = !isManagerView && Boolean(item.isRead) && !isExpanded;

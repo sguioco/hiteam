@@ -14,6 +14,8 @@ import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AppSelectField, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useI18n } from "@/lib/i18n";
+import { getRuntimeLocale } from "@/lib/runtime-locale";
 import type { PublicInvitationPayload } from "../../invitation-types";
 
 type CountryCodeOption = {
@@ -60,14 +62,16 @@ async function compressImageToDataUrl(
   const sourceDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+    reader.onerror = () =>
+      reject(new Error(getRuntimeLocale() === "ru" ? "Не удалось прочитать файл." : "Failed to read the file."));
     reader.readAsDataURL(file);
   });
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
-    nextImage.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    nextImage.onerror = () =>
+      reject(new Error(getRuntimeLocale() === "ru" ? "Не удалось обработать изображение." : "Failed to process the image."));
     nextImage.src = sourceDataUrl;
   });
 
@@ -81,7 +85,7 @@ async function compressImageToDataUrl(
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Не удалось подготовить изображение.");
+    throw new Error(getRuntimeLocale() === "ru" ? "Не удалось подготовить изображение." : "Failed to prepare the image.");
   }
 
   context.fillStyle = "#ffffff";
@@ -90,7 +94,7 @@ async function compressImageToDataUrl(
 
   const compressed = canvas.toDataURL("image/jpeg", options?.quality ?? 0.82);
   if (compressed.length > 7_000_000) {
-    throw new Error("Фото слишком большое. Выбери изображение поменьше.");
+    throw new Error(getRuntimeLocale() === "ru" ? "Фото слишком большое. Выбери изображение поменьше." : "The photo is too large. Choose a smaller image.");
   }
 
   return compressed;
@@ -103,7 +107,8 @@ async function resizeDataUrl(
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
-    nextImage.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    nextImage.onerror = () =>
+      reject(new Error(getRuntimeLocale() === "ru" ? "Не удалось обработать изображение." : "Failed to process the image."));
     nextImage.src = sourceDataUrl;
   });
 
@@ -116,7 +121,7 @@ async function resizeDataUrl(
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Не удалось подготовить изображение.");
+    throw new Error(getRuntimeLocale() === "ru" ? "Не удалось подготовить изображение." : "Failed to prepare the image.");
   }
 
   context.fillStyle = "#ffffff";
@@ -133,7 +138,8 @@ async function renderAvatarPreviewDataUrl(
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
-    nextImage.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    nextImage.onerror = () =>
+      reject(new Error(getRuntimeLocale() === "ru" ? "Не удалось обработать изображение." : "Failed to process the image."));
     nextImage.src = sourceDataUrl;
   });
 
@@ -144,7 +150,7 @@ async function renderAvatarPreviewDataUrl(
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Не удалось подготовить превью.");
+    throw new Error(getRuntimeLocale() === "ru" ? "Не удалось подготовить превью." : "Failed to prepare the preview.");
   }
 
   context.fillStyle = "#ffffff";
@@ -174,6 +180,7 @@ export default function ManagerJoinPageClient({
   token,
 }: ManagerJoinPageClientProps) {
   const router = useRouter();
+  const { locale } = useI18n();
   const [invitation] = useState<PublicInvitationPayload | null>(initialInvitation);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
@@ -376,10 +383,20 @@ export default function ManagerJoinPageClient({
 
       await persistSession(session);
       saveTenantSlug(invitation.tenantSlug);
-      setSuccess("Профиль создан. Перенаправляем в настройки организации.");
+      setSuccess(
+        locale === "ru"
+          ? "Профиль создан. Перенаправляем в настройки организации."
+          : "Profile created. Redirecting to organization settings.",
+      );
       setTimeout(() => router.replace(toAdminHref("/organization")), 600);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Произошла ошибка при настройке.");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : locale === "ru"
+            ? "Произошла ошибка при настройке."
+            : "An error occurred during setup.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -389,7 +406,9 @@ export default function ManagerJoinPageClient({
     return (
       <main className="auth-gate">
         <div className="auth-gate-card max-w-[520px] text-left">
-          <h1 className="text-2xl font-bold">Приглашение недоступно</h1>
+          <h1 className="text-2xl font-bold">
+            {locale === "ru" ? "Приглашение недоступно" : "Invitation unavailable"}
+          </h1>
           <p className="mt-3 text-sm text-gray-500">{error}</p>
         </div>
       </main>
@@ -402,12 +421,16 @@ export default function ManagerJoinPageClient({
     return (
       <main className="auth-gate">
         <div className="auth-gate-card max-w-[520px] text-left">
-          <h1 className="text-2xl font-bold">Настройка уже начата</h1>
+          <h1 className="text-2xl font-bold">
+            {locale === "ru" ? "Настройка уже начата" : "Setup already started"}
+          </h1>
           <p className="mt-3 text-sm text-gray-500">
-            Для {invitation.email} профиль уже заполнен. Войдите в систему и завершите настройку организации.
+            {locale === "ru"
+              ? `Для ${invitation.email} профиль уже заполнен. Войдите в систему и завершите настройку организации.`
+              : `The profile for ${invitation.email} has already been completed. Sign in to finish organization setup.`}
           </p>
           <Link className="solid-button mt-6 inline-flex" href="/login">
-            Войти
+            {locale === "ru" ? "Войти" : "Sign in"}
           </Link>
         </div>
       </main>
@@ -426,9 +449,13 @@ export default function ManagerJoinPageClient({
 
         <Card className="border-border/40 shadow-lg">
           <CardHeader className="pb-3">
-            <CardTitle className="text-center text-xl font-bold">Настройка организации</CardTitle>
+            <CardTitle className="text-center text-xl font-bold">
+              {locale === "ru" ? "Настройка организации" : "Organization setup"}
+            </CardTitle>
             <CardDescription className="mt-2 text-center">
-              Сначала создайте профиль менеджера. Сразу после этого вы попадёте в настройки организации, где зададите название, логотип, адрес, точку на карте и радиус. Название организации потом можно менять в любой момент.
+              {locale === "ru"
+                ? "Сначала создайте профиль менеджера. Сразу после этого вы попадёте в настройки организации, где зададите название, логотип, адрес, точку на карте и радиус. Название организации потом можно менять в любой момент."
+                : "First create the manager profile. Right after that you will land in organization settings, where you can set the name, logo, address, map point, and radius. The organization name can be changed later at any time."}
             </CardDescription>
           </CardHeader>
 
@@ -440,7 +467,7 @@ export default function ManagerJoinPageClient({
               </div>
               <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                 <ShieldCheck className="h-4 w-4" />
-                Код компании: <strong className="text-foreground">{invitation.companyCode ?? "—"}</strong>
+                {locale === "ru" ? "Код компании:" : "Company code:"} <strong className="text-foreground">{invitation.companyCode ?? "—"}</strong>
               </div>
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
@@ -467,7 +494,7 @@ export default function ManagerJoinPageClient({
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="manager-password" className="text-sm font-medium">Пароль{requiredMark}</label>
+                <label htmlFor="manager-password" className="text-sm font-medium">{locale === "ru" ? "Пароль" : "Password"}{requiredMark}</label>
                 <Input
                   className={textFieldClassName}
                   id="manager-password"
@@ -481,7 +508,7 @@ export default function ManagerJoinPageClient({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label htmlFor="manager-first-name" className="text-sm font-medium">Имя{requiredMark}</label>
+                  <label htmlFor="manager-first-name" className="text-sm font-medium">{locale === "ru" ? "Имя" : "First name"}{requiredMark}</label>
                   <Input
                     className={textFieldClassName}
                     id="manager-first-name"
@@ -492,7 +519,7 @@ export default function ManagerJoinPageClient({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="manager-last-name" className="text-sm font-medium">Фамилия{requiredMark}</label>
+                  <label htmlFor="manager-last-name" className="text-sm font-medium">{locale === "ru" ? "Фамилия" : "Last name"}{requiredMark}</label>
                   <Input
                     className={textFieldClassName}
                     id="manager-last-name"
@@ -504,7 +531,7 @@ export default function ManagerJoinPageClient({
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="manager-middle-name" className="text-sm font-medium">Отчество</label>
+                <label htmlFor="manager-middle-name" className="text-sm font-medium">{locale === "ru" ? "Отчество" : "Middle name"}</label>
                 <Input
                   className={textFieldClassName}
                   id="manager-middle-name"
@@ -515,7 +542,7 @@ export default function ManagerJoinPageClient({
 
               <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-3">
                 <div className="space-y-1.5">
-                  <label htmlFor="manager-birth-date" className="text-sm font-medium">Дата рождения{requiredMark}</label>
+                  <label htmlFor="manager-birth-date" className="text-sm font-medium">{locale === "ru" ? "Дата рождения" : "Date of birth"}{requiredMark}</label>
                   <DateOfBirthField
                     value={form.birthDate}
                     onChange={(nextValue) =>
@@ -526,13 +553,13 @@ export default function ManagerJoinPageClient({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="manager-gender" className="text-sm font-medium">Пол{requiredMark}</label>
+                  <label htmlFor="manager-gender" className="text-sm font-medium">{locale === "ru" ? "Пол" : "Gender"}{requiredMark}</label>
                   <AppSelectField
                     value={form.gender}
                     onValueChange={(value) => setForm((current) => ({ ...current, gender: value }))}
                     options={[
-                      { value: "male", label: "Мужской" },
-                      { value: "female", label: "Женский" },
+                      { value: "male", label: locale === "ru" ? "Мужской" : "Male" },
+                      { value: "female", label: locale === "ru" ? "Женский" : "Female" },
                     ]}
                     triggerClassName="h-11 rounded-md"
                   />
@@ -540,15 +567,15 @@ export default function ManagerJoinPageClient({
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="manager-phone" className="text-sm font-medium">Телефон{requiredMark}</label>
+                <label htmlFor="manager-phone" className="text-sm font-medium">{locale === "ru" ? "Телефон" : "Phone"}{requiredMark}</label>
                 <div className="flex h-11 overflow-hidden rounded-md border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
                   <div className="w-[128px] shrink-0 border-r border-input">
                     <Select value={countryCode} onValueChange={setCountryCode}>
                       <SelectTrigger
-                        aria-label="Код страны"
+                        aria-label={locale === "ru" ? "Код страны" : "Country code"}
                         className="h-full min-h-0 rounded-none border-0 bg-transparent px-2.5 py-0 text-xs shadow-none hover:bg-transparent hover:shadow-none focus:ring-0 data-[state=open]:scale-100"
                       >
-                        <SelectValue placeholder="Код страны" />
+                        <SelectValue placeholder={locale === "ru" ? "Код страны" : "Country code"} />
                       </SelectTrigger>
                       <SelectContent className="rounded-[24px]">
                         {COUNTRY_CODE_OPTIONS.map((option) => (
@@ -565,7 +592,7 @@ export default function ManagerJoinPageClient({
                     required
                     className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm outline-none"
                     inputMode="tel"
-                    placeholder="999 000 00 00"
+                    placeholder={locale === "ru" ? "999 000 00 00" : "999 000 00 00"}
                     value={form.phone}
                     onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
                   />
@@ -573,7 +600,7 @@ export default function ManagerJoinPageClient({
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="manager-photo" className="text-sm font-medium">Фото</label>
+                <label htmlFor="manager-photo" className="text-sm font-medium">{locale === "ru" ? "Фото" : "Photo"} </label>
                 <div className="flex min-h-[72px] items-center gap-3">
                   <button
                     type="button"
@@ -586,13 +613,13 @@ export default function ManagerJoinPageClient({
                   >
                     {avatarPreviewDataUrl ? (
                       <img
-                        alt="Avatar preview"
+                        alt={locale === "ru" ? "Превью аватара" : "Avatar preview"}
                         className="h-full w-full object-cover"
                         src={avatarPreviewDataUrl}
                       />
                     ) : (
                         <div className="flex h-full w-full items-center justify-center text-center text-xs text-muted-foreground">
-                          Preview
+                          {locale === "ru" ? "Превью" : "Preview"}
                         </div>
                       )}
                   </button>
@@ -610,10 +637,10 @@ export default function ManagerJoinPageClient({
                         htmlFor="manager-photo"
                         className="inline-flex h-10 shrink-0 cursor-pointer items-center rounded-md border border-input bg-[rgba(37,99,235,0.08)] px-4 text-sm font-medium text-[color:var(--accent)] transition hover:bg-[rgba(37,99,235,0.12)]"
                       >
-                        Выберите файл
+                        {locale === "ru" ? "Выберите файл" : "Choose file"}
                       </label>
                       <span className="truncate text-sm text-muted-foreground">
-                        {avatarFileName || "Файл не выбран"}
+                        {avatarFileName || (locale === "ru" ? "Файл не выбран" : "No file selected")}
                       </span>
                     </div>
                   </div>
@@ -626,7 +653,13 @@ export default function ManagerJoinPageClient({
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
               >
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {submitting ? "Создаём..." : "Продолжить"}
+                {submitting
+                  ? locale === "ru"
+                    ? "Создаём..."
+                    : "Creating..."
+                  : locale === "ru"
+                    ? "Продолжить"
+                    : "Continue"}
               </Button>
             </form>
           </CardContent>
@@ -637,9 +670,11 @@ export default function ManagerJoinPageClient({
         <DialogContent className="w-[min(760px,calc(100vw-1.5rem))] max-w-none overflow-hidden rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)] p-0">
           <div className="border-b border-[color:var(--border)] px-6 py-4">
             <DialogHeader className="gap-1">
-              <DialogTitle>Редактировать фото</DialogTitle>
+              <DialogTitle>{locale === "ru" ? "Редактировать фото" : "Edit photo"}</DialogTitle>
               <DialogDescription>
-                Подгони кадр так, как он должен выглядеть в профиле менеджера.
+                {locale === "ru"
+                  ? "Подгони кадр так, как он должен выглядеть в профиле менеджера."
+                  : "Adjust the frame to how it should look in the manager profile."}
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -656,7 +691,7 @@ export default function ManagerJoinPageClient({
               >
                 {avatarSourceDataUrl ? (
                   <img
-                    alt="Avatar editor preview"
+                    alt={locale === "ru" ? "Превью редактора аватара" : "Avatar editor preview"}
                     ref={avatarEditorImageRef}
                     className="absolute left-1/2 top-1/2 h-full w-full select-none object-cover"
                     draggable={false}
@@ -676,7 +711,7 @@ export default function ManagerJoinPageClient({
               <label className="flex min-w-[190px] flex-1 items-center gap-3 text-sm">
                 <span className="inline-flex shrink-0 items-center gap-2 font-medium whitespace-nowrap">
                   <ZoomIn className="h-4 w-4 text-muted-foreground" />
-                  Масштаб
+                  {locale === "ru" ? "Масштаб" : "Zoom"}
                 </span>
                 <input
                   ref={zoomRangeRef}
@@ -694,7 +729,7 @@ export default function ManagerJoinPageClient({
               </label>
 
               <label className="flex min-w-[190px] flex-1 items-center gap-3 text-sm">
-                <span className="shrink-0 font-medium whitespace-nowrap">Сдвиг по X</span>
+                <span className="shrink-0 font-medium whitespace-nowrap">{locale === "ru" ? "Сдвиг по X" : "Offset X"}</span>
                 <input
                   ref={offsetXRangeRef}
                   type="range"
@@ -711,7 +746,7 @@ export default function ManagerJoinPageClient({
               </label>
 
               <label className="flex min-w-[190px] flex-1 items-center gap-3 text-sm">
-                <span className="shrink-0 font-medium whitespace-nowrap">Сдвиг по Y</span>
+                <span className="shrink-0 font-medium whitespace-nowrap">{locale === "ru" ? "Сдвиг по Y" : "Offset Y"}</span>
                 <input
                   ref={offsetYRangeRef}
                   type="range"
@@ -735,7 +770,7 @@ export default function ManagerJoinPageClient({
               variant="outline"
               onClick={() => setAvatarEditorOpen(false)}
             >
-              Отмена
+              {locale === "ru" ? "Отмена" : "Cancel"}
             </Button>
             <Button
               type="button"

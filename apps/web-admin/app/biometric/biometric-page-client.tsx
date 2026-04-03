@@ -74,12 +74,16 @@ function getBiometricTone(
   return 'is-gray';
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+function formatDate(iso: string, locale: 'ru' | 'en') {
+  return new Date(iso).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString([], {
+function formatDateTime(iso: string, locale: 'ru' | 'en') {
+  return new Date(iso).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -430,7 +434,7 @@ function getEnrollmentStatusLabel(
                             >
                               <span className="team-tasks-team-text">
                                 {item.latestVerification
-                                  ? formatDateTime(item.latestVerification.capturedAt)
+                                  ? formatDateTime(item.latestVerification.capturedAt, locale)
                                   : '—'}
                               </span>
                             </button>

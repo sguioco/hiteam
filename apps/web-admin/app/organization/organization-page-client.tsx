@@ -20,6 +20,7 @@ import {
 } from "../../components/ui/select";
 import { apiRequest } from "../../lib/api";
 import { getSession } from "../../lib/auth";
+import { useI18n } from "../../lib/i18n";
 
 type Company = {
   code?: string;
@@ -196,6 +197,7 @@ export default function OrganizationPageClient({
 }: {
   initialData?: OrganizationPageInitialData | null;
 }) {
+  const { locale } = useI18n();
   const [setup, setSetup] = useState<OrganizationSetupResponse | null>(
     initialData?.setup ?? null,
   );
@@ -231,7 +233,11 @@ export default function OrganizationPageClient({
       setSetup(EMPTY_SETUP);
       setEmployeeCount(0);
       setDraft(buildDraftFromSetup(EMPTY_SETUP));
-      setError("Сессия истекла или токен недействителен. Войди заново.");
+      setError(
+        locale === "ru"
+          ? "Сессия истекла или токен недействителен. Войди заново."
+          : "Session expired or token is invalid. Sign in again.",
+      );
       return;
     }
 
@@ -251,7 +257,13 @@ export default function OrganizationPageClient({
       setSetup(EMPTY_SETUP);
       setEmployeeCount(0);
       setDraft(buildDraftFromSetup(EMPTY_SETUP));
-      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить организацию.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : locale === "ru"
+            ? "Не удалось загрузить организацию."
+            : "Failed to load organization.",
+      );
     }
   }
 
@@ -336,10 +348,30 @@ export default function OrganizationPageClient({
   async function handleSetupSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const session = getSession();
-    if (!session) { setError("Сессия истекла или токен недействителен. Войди заново."); return; }
-    if (!draft.companyName.trim()) { setError("Укажи название организации."); return; }
-    if (!draft.address.trim()) { setError("Укажи адрес организации."); return; }
-    if (!draft.latitude || !draft.longitude) { setError("Поставь точку на карте или выбери адрес из подсказок."); return; }
+    if (!session) {
+      setError(
+        locale === "ru"
+          ? "Сессия истекла или токен недействителен. Войди заново."
+          : "Session expired or token is invalid. Sign in again.",
+      );
+      return;
+    }
+    if (!draft.companyName.trim()) {
+      setError(locale === "ru" ? "Укажи название организации." : "Enter the organization name.");
+      return;
+    }
+    if (!draft.address.trim()) {
+      setError(locale === "ru" ? "Укажи адрес организации." : "Enter the organization address.");
+      return;
+    }
+    if (!draft.latitude || !draft.longitude) {
+      setError(
+        locale === "ru"
+          ? "Поставь точку на карте или выбери адрес из подсказок."
+          : "Place a point on the map or choose an address from suggestions.",
+      );
+      return;
+    }
 
     try {
       setIsSaving(true); setError(null); setSaveSuccess(false);
@@ -366,7 +398,13 @@ export default function OrganizationPageClient({
       );
       setSaveSuccess(true);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Не удалось сохранить организацию.");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : locale === "ru"
+            ? "Не удалось сохранить организацию."
+            : "Failed to save organization.",
+      );
     } finally { setIsSaving(false); }
   }
 
@@ -385,7 +423,9 @@ export default function OrganizationPageClient({
       <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 py-10 md:px-10 md:py-12 animate-in fade-in duration-500">
         <form className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
           <div className="organization-studio-hero">
-            <h1>{setupMode === "create" ? "Добавление организации" : "Организация"}</h1>
+            <h1>{setupMode === "create"
+              ? locale === "ru" ? "Добавление организации" : "Add organization"
+              : locale === "ru" ? "Организация" : "Organization"}</h1>
           </div>
 
           {error ? (
@@ -396,10 +436,12 @@ export default function OrganizationPageClient({
 
           <div className="organization-studio-identity">
             <div className="organization-studio-logo-field">
-              <span className="organization-studio-label">Логотип</span>
+              <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
               <ImageAdjustField
-                dialogDescription="Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
-                dialogTitle="Редактировать логотип"
+                dialogDescription={locale === "ru"
+                  ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
+                  : "Adjust the logo: you can change scale and X/Y offset before saving."}
+                dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
                 onChange={(nextLogoDataUrl) => {
                   updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
                   setError(null);
@@ -426,11 +468,11 @@ export default function OrganizationPageClient({
                     <Button
                       className="organization-studio-logo-action"
                       onClick={chooseFile}
-                      title={fileName || "Выбрать логотип"}
+                      title={fileName || (locale === "ru" ? "Выбрать логотип" : "Choose logo")}
                       type="button"
                       variant="outline"
                     >
-                      Выбрать логотип
+                      {locale === "ru" ? "Выбрать логотип" : "Choose logo"}
                     </Button>
                   </div>
                 )}
@@ -439,22 +481,24 @@ export default function OrganizationPageClient({
             </div>
 
             <label className="organization-studio-name-field">
-              <span className="organization-studio-label">Название организации</span>
+              <span className="organization-studio-label">
+                {locale === "ru" ? "Название организации" : "Organization name"}
+              </span>
               <Input
                 className="organization-studio-name-input"
                 onChange={(e) => updateDraft("companyName", e.target.value)}
-                placeholder="Название организации"
+                placeholder={locale === "ru" ? "Название организации" : "Organization name"}
                 required
                 value={draft.companyName}
               />
               <div className="organization-studio-meta-stack">
                 <span className="organization-studio-meta">
                   <Users className="h-4 w-4" />
-                  {employeeCount} сотрудников
+                  {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
                 </span>
                 {setup.company?.code ? (
                   <span className="organization-studio-code">
-                    Код компании: <strong>{setup.company.code}</strong>
+                    {locale === "ru" ? "Код компании:" : "Company code:"} <strong>{setup.company.code}</strong>
                   </span>
                 ) : null}
               </div>
@@ -465,7 +509,9 @@ export default function OrganizationPageClient({
             <div className="organization-studio-sidebar">
               <section className="organization-studio-fieldset">
                 <div className="organization-studio-label-row">
-                  <span className="organization-studio-label">Радиус геозоны, метры</span>
+                  <span className="organization-studio-label">
+                    {locale === "ru" ? "Радиус геозоны, метры" : "Geofence radius, meters"}
+                  </span>
                 </div>
                 <Input
                   className="organization-studio-radius-value"
@@ -502,13 +548,17 @@ export default function OrganizationPageClient({
                   </Button>
                 </div>
                 <div className="organization-studio-radius-caption">
-                  <span>Минимум {MIN_GEOFENCE_RADIUS_METERS} м</span>
+                  <span>
+                    {locale === "ru" ? "Минимум" : "Minimum"} {MIN_GEOFENCE_RADIUS_METERS} {locale === "ru" ? "м" : "m"}
+                  </span>
                 </div>
               </section>
 
               <section className="organization-studio-fieldset">
                 <div className="organization-studio-label-row">
-                  <span className="organization-studio-label">Часовой пояс</span>
+                  <span className="organization-studio-label">
+                    {locale === "ru" ? "Часовой пояс" : "Time zone"}
+                  </span>
                 </div>
                 <Select
                   onValueChange={(value) => updateDraft("timezone", value)}
@@ -530,7 +580,9 @@ export default function OrganizationPageClient({
 
             <div className="organization-studio-main">
               <div className="organization-studio-map-copy">
-                <span className="organization-studio-label">Адрес организации</span>
+                <span className="organization-studio-label">
+                  {locale === "ru" ? "Адрес организации" : "Organization address"}
+                </span>
               </div>
               <div className="organization-studio-map-shell">
                 <LocationMapPicker
@@ -541,7 +593,9 @@ export default function OrganizationPageClient({
                   longitude={draft.longitude}
                   mode="setup"
                   searchLabel=""
-                  searchPlaceholder="Красный проспект, 24, Новосибирск"
+                  searchPlaceholder={locale === "ru"
+                    ? "Красный проспект, 24, Новосибирск"
+                    : "1600 Amphitheatre Parkway, Mountain View"}
                   showCopy={false}
                   onSelect={handleMapSelect}
                 />
@@ -562,19 +616,23 @@ export default function OrganizationPageClient({
             {isSaving ? (
               <span className="flex items-center gap-2">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground/20" />
-                Сохраняем организацию
+                {locale === "ru" ? "Сохраняем организацию" : "Saving organization"}
               </span>
             ) : saveSuccess ? (
               <span className="flex items-center gap-2">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 animate-in zoom-in-50 duration-300">
                   <Check className="h-3.5 w-3.5" />
                 </span>
-                {setupMode === "create" ? "Организация добавлена" : "Организация сохранена"}
+                {setupMode === "create"
+                  ? locale === "ru" ? "Организация добавлена" : "Organization added"
+                  : locale === "ru" ? "Организация сохранена" : "Organization saved"}
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 <Save className="h-4 w-4" />
-                {setupMode === "create" ? "Добавить организацию" : "Сохранить организацию"}
+                {setupMode === "create"
+                  ? locale === "ru" ? "Добавить организацию" : "Add organization"
+                  : locale === "ru" ? "Сохранить организацию" : "Save organization"}
               </span>
             )}
           </Button>

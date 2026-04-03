@@ -4,23 +4,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, CheckCircle2, Circle, Filter, ListTodo } from "lucide-react";
 import { TaskItem } from "@smart/types";
 import Radio, { type RadioItem } from "@/components/ui/Radio";
+import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
 
 type TaskFilter = "today" | "tomorrow" | "week";
 
 type TasksSidebarProps = {
+  locale?: "ru" | "en";
   onTaskToggle?: (taskId: string, nextDone: boolean) => void;
   tasks: TaskItem[];
 };
 
+function localize(locale: "ru" | "en", ru: string, en: string) {
+  return locale === "ru" ? ru : en;
+}
+
 function getTaskKind(task: TaskItem): "task" | "meeting" {
   const meta = parseTaskMeta(task.description);
-  return meta.meeting || task.title.startsWith("Встреча:") ? "meeting" : "task";
+  return meta.meeting || /^(Встреча|Meeting):/i.test(task.title) ? "meeting" : "task";
 }
 
 function getTaskTitle(task: TaskItem) {
   return getTaskKind(task) === "meeting"
-    ? task.title.replace(/^Встреча:\s*/i, "").trim()
+    ? task.title.replace(/^(Встреча|Meeting):\s*/i, "").trim()
     : task.title;
 }
 
@@ -74,12 +80,12 @@ function matchesTaskWindow(
   }
 }
 
-function formatDeadline(task: TaskItem) {
-  if (!task.dueAt) return "Без срока";
+function formatDeadline(task: TaskItem, locale: "ru" | "en") {
+  if (!task.dueAt) return localize(locale, "Без срока", "No deadline");
   const dueDate = new Date(task.dueAt);
-  if (Number.isNaN(dueDate.getTime())) return "Без срока";
+  if (Number.isNaN(dueDate.getTime())) return localize(locale, "Без срока", "No deadline");
 
-  return dueDate.toLocaleString("ru-RU", {
+  return dueDate.toLocaleString(locale === "ru" ? "ru-RU" : "en-US", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -110,7 +116,9 @@ function toggleVisibleKind(
   return next;
 }
 
-export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
+export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: TasksSidebarProps) => {
+  const { locale: activeLocale } = useI18n();
+  const locale = forcedLocale ?? activeLocale;
   const [filter, setFilter] = useState<TaskFilter>("today");
   const [showOverdue, setShowOverdue] = useState(false);
   const [showKindFilter, setShowKindFilter] = useState(false);
@@ -129,9 +137,9 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
   weekEnd.setDate(today.getDate() + 7);
 
   const taskWindowItems: RadioItem[] = [
-    { key: "today", label: "Сегодня", value: 0 },
-    { key: "tomorrow", label: "Завтра", value: 0 },
-    { key: "week", label: "Неделя", value: 0 },
+    { key: "today", label: localize(locale, "Сегодня", "Today"), value: 0 },
+    { key: "tomorrow", label: localize(locale, "Завтра", "Tomorrow"), value: 0 },
+    { key: "week", label: localize(locale, "Неделя", "Week"), value: 0 },
   ];
 
   const overdueTasks = useMemo(
@@ -188,7 +196,7 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-2">
           <ListTodo className="w-4 h-4" />
-          <h2 className="tasks-sidebar-title">Задачи</h2>
+          <h2 className="tasks-sidebar-title">{localize(locale, "Задачи", "Tasks")}</h2>
         </div>
         <div className="tasks-filter-dropdown" ref={kindFilterRef}>
           <button
@@ -210,7 +218,7 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
                   }
                   type="checkbox"
                 />
-                <span>Задачи</span>
+                <span>{localize(locale, "Задачи", "Tasks")}</span>
               </label>
               <label className="tasks-filter-option">
                 <input
@@ -222,7 +230,7 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
                   }
                   type="checkbox"
                 />
-                <span>Встречи</span>
+                <span>{localize(locale, "Встречи", "Meetings")}</span>
               </label>
             </div>
           ) : null}
@@ -231,7 +239,7 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
 
       {!showOverdue ? (
         <Radio
-          ariaLabel="Фильтр задач"
+          ariaLabel={localize(locale, "Фильтр задач", "Task filter")}
           className="tasks-radio mb-4 shrink-0"
           items={taskWindowItems}
           name="task-filter"
@@ -280,9 +288,11 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
                   </p>
                   <p className={`text-[10px] mt-0.5 ${isOverdue ? "text-[var(--danger)]" : "text-[var(--muted-foreground)]"}`}>
                     <span className={`tasks-kind-label is-${taskKind}`}>
-                      {taskKind === "meeting" ? "Встреча" : "Задача"}
+                      {taskKind === "meeting"
+                        ? localize(locale, "Встреча", "Meeting")
+                        : localize(locale, "Задача", "Task")}
                     </span>
-                    <span> · {formatDeadline(task)}</span>
+                    <span> · {formatDeadline(task, locale)}</span>
                   </p>
                 </div>
               </button>
@@ -290,7 +300,9 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
           })
         ) : (
           <div className="px-1 py-3 text-center text-xs text-[var(--muted-foreground)]">
-            {showOverdue ? "Просроченных задач нет" : "Задач на этот период нет"}
+            {showOverdue
+              ? localize(locale, "Просроченных задач нет", "No overdue tasks")
+              : localize(locale, "Задач на этот период нет", "No tasks for this period")}
           </div>
         )}
       </div>
@@ -304,8 +316,8 @@ export const TasksSidebar = ({ onTaskToggle, tasks }: TasksSidebarProps) => {
           <ArrowLeftRight className="h-4 w-4" />
           <span>
             {showOverdue
-              ? "Текущие задачи"
-              : `Просроченные задачи${overdueTasks.length ? ` (${overdueTasks.length})` : ""}`}
+              ? localize(locale, "Текущие задачи", "Current tasks")
+              : `${localize(locale, "Просроченные задачи", "Overdue tasks")}${overdueTasks.length ? ` (${overdueTasks.length})` : ""}`}
           </span>
         </button>
       </div>

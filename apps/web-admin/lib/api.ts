@@ -7,6 +7,7 @@ import {
 } from "./demo-api";
 import { isDemoAccessToken } from "./demo-mode";
 import { humanizeValidationError } from "./humanize-validation-error";
+import { getRuntimeLocale } from "./runtime-locale";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 let sessionRefreshPromise: Promise<AuthSession | null> | null = null;
@@ -239,19 +240,22 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
 }
 
 function humanizeAuthErrorMessage(message: string): string {
+  const locale = getRuntimeLocale();
   switch (message) {
     case "Account with this email is not registered.":
-      return "Аккаунт с таким email не зарегистрирован.";
+      return locale === "ru" ? "Аккаунт с таким email не зарегистрирован." : "No account is registered with this email.";
     case "Account with this phone is not registered.":
-      return "Аккаунт с таким телефоном не зарегистрирован.";
+      return locale === "ru" ? "Аккаунт с таким телефоном не зарегистрирован." : "No account is registered with this phone.";
     case "Invalid password.":
-      return "Неверный пароль.";
+      return locale === "ru" ? "Неверный пароль." : "Invalid password.";
     case "This account is inactive.":
-      return "Аккаунт неактивен. Обратись к администратору.";
+      return locale === "ru" ? "Аккаунт неактивен. Обратись к администратору." : "This account is inactive. Contact your administrator.";
     case "Account identifier is required.":
-      return "Укажи email или телефон.";
+      return locale === "ru" ? "Укажи email или телефон." : "Enter your email or phone.";
     case "Multiple workspaces found for this account. Contact support or use a direct invite link.":
-      return "Для этого аккаунта найдено несколько рабочих пространств. Открой прямую ссылку-приглашение или обратись к администратору.";
+      return locale === "ru"
+        ? "Для этого аккаунта найдено несколько рабочих пространств. Открой прямую ссылку-приглашение или обратись к администратору."
+        : "Multiple workspaces were found for this account. Open a direct invite link or contact your administrator.";
     default:
       return humanizeValidationError(message);
   }
@@ -261,10 +265,13 @@ async function getApiErrorMessage(
   response: Response,
   options?: { hasAuthenticatedSession?: boolean },
 ): Promise<string> {
+  const locale = getRuntimeLocale();
   const text = await response.text();
 
   if (response.status === 401 && options?.hasAuthenticatedSession) {
-    return "Ошибка 401. Сессия истекла или токен недействителен. Войди заново.";
+    return locale === "ru"
+      ? "Ошибка 401. Сессия истекла или токен недействителен. Войди заново."
+      : "Error 401. The session expired or the token is invalid. Sign in again.";
   }
 
   if (text) {
@@ -282,7 +289,9 @@ async function getApiErrorMessage(
     }
   }
 
-  return `Ошибка ${response.status}. Запрос не выполнен.`;
+  return locale === "ru"
+    ? `Ошибка ${response.status}. Запрос не выполнен.`
+    : `Error ${response.status}. The request failed.`;
 }
 
 function shouldExpireSessionForPath(path: string): boolean {

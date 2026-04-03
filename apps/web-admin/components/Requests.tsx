@@ -47,6 +47,7 @@ import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
+import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
 
 type FilterStatus = "all" | "PENDING" | "APPROVED" | "REJECTED";
@@ -283,7 +284,7 @@ function buildRequestsCacheKey(session: ReturnType<typeof getSession>) {
   return session ? `requests-inbox:${session.user.id}` : null;
 }
 
-function formatDate(value: string, locale = "ru-RU") {
+function formatDate(value: string, locale = "en-US") {
   return new Date(value).toLocaleDateString(locale, {
     day: "numeric",
     month: "long",
@@ -291,7 +292,7 @@ function formatDate(value: string, locale = "ru-RU") {
   });
 }
 
-function formatDateTime(value: string, locale = "ru-RU") {
+function formatDateTime(value: string, locale = "en-US") {
   return new Date(value).toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
@@ -301,7 +302,7 @@ function formatDateTime(value: string, locale = "ru-RU") {
   });
 }
 
-function formatPeriod(startsOn: string, endsOn: string, locale = "ru-RU") {
+function formatPeriod(startsOn: string, endsOn: string, locale = "en-US") {
   return `${formatDate(startsOn, locale)} - ${formatDate(endsOn, locale)}`;
 }
 
@@ -395,6 +396,8 @@ export default function Requests({
     null,
   );
   const [commentLoadingId, setCommentLoadingId] = useState<string | null>(null);
+  const formatPersonName = (firstName: string, lastName: string) =>
+    localizePersonName(`${firstName} ${lastName}`.trim(), locale);
   const didUseInitialItems = useRef(Boolean(initialItems));
   const requestTypeLabels = ui.requestTypes;
   const requestStatusLabels = ui.statuses;
@@ -851,8 +854,10 @@ export default function Requests({
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[color:var(--muted-foreground)]">
                         <span className="inline-flex items-center gap-1.5">
                           <UserRound className="size-4" />
-                          {item.request.employee.firstName}{" "}
-                          {item.request.employee.lastName}
+                          {formatPersonName(
+                            item.request.employee.firstName,
+                            item.request.employee.lastName,
+                          )}
                         </span>
                         <span>#{item.request.employee.employeeNumber}</span>
                         <span>
@@ -1201,8 +1206,10 @@ export default function Requests({
                             <div>
                               <p className="text-sm font-semibold text-[color:var(--foreground)]">
                                 {ui.stepLabel} {step.sequence}.{" "}
-                                {step.approverEmployee.firstName}{" "}
-                                {step.approverEmployee.lastName}
+                                {formatPersonName(
+                                  step.approverEmployee.firstName,
+                                  step.approverEmployee.lastName,
+                                )}
                               </p>
                               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                                 {step.actedAt
@@ -1250,8 +1257,10 @@ export default function Requests({
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                              {comment.authorEmployee.firstName}{" "}
-                              {comment.authorEmployee.lastName}
+                              {formatPersonName(
+                                comment.authorEmployee.firstName,
+                                comment.authorEmployee.lastName,
+                              )}
                             </p>
                             <span className="text-xs text-[color:var(--muted-foreground)]">
                               {formatDateTime(comment.createdAt, localeTag)}

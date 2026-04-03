@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 
 type ActionCategory =
@@ -298,18 +299,191 @@ const priorityLabel: Record<Priority, { text: string; cls: string }> = {
   low: { text: "Низкий", cls: "text-muted-foreground" },
 };
 
+function localize(locale: "ru" | "en", ru: string, en: string) {
+  return locale === "ru" ? ru : en;
+}
+
+function getPriorityLabel(
+  priority: Priority,
+  locale: "ru" | "en",
+): { text: string; cls: string } {
+  const cls = priorityLabel[priority].cls;
+  if (priority === "urgent") {
+    return { text: localize(locale, "Срочный", "Urgent"), cls };
+  }
+  if (priority === "normal") {
+    return { text: localize(locale, "Обычный", "Normal"), cls };
+  }
+  return { text: localize(locale, "Низкий", "Low"), cls };
+}
+
+function translateActionItem(
+  action: ActionItem,
+  locale: "ru" | "en",
+): ActionItem {
+  if (locale === "ru") return action;
+
+  const translations: Record<number, Partial<ActionItem>> = {
+    1: {
+      type: "New employee",
+      title: "Approve profile",
+      from: "Smirnova A.P.",
+      description: "Engineering · Junior Frontend",
+      detail:
+        "A new employee has completed all hiring steps and is waiting for profile approval to receive access to the system. Documents have been uploaded and checked by HR.",
+      time: "10 min",
+    },
+    2: {
+      type: "Vacation",
+      title: "Vacation request",
+      from: "Sidorov K.L.",
+      description: "March 15-22 · 5 workdays",
+      detail:
+        "Annual paid leave. Remaining balance: 18 days. Backup employee: Volkov A.M. All current tasks will be handed over before March 14.",
+      time: "32 min",
+    },
+    3: {
+      type: "Document",
+      title: "Vacation statement",
+      from: "Petrova M.V.",
+      description: "Manager signature required",
+      detail:
+        "Vacation statement for March 20-27. The document was generated automatically and is waiting for the department manager's electronic signature.",
+      time: "1 h",
+    },
+    4: {
+      type: "Meeting",
+      title: "Sprint review #14",
+      from: "Kozlov D.I.",
+      description: "Today, 15:00 · Conference room B",
+      detail:
+        "Sprint #14 results review. Participants: engineering team (6 people). Duration: 1 hour. Agenda: demo of new features and retrospective.",
+      time: "2 h",
+    },
+    5: {
+      type: "Approval",
+      title: "Remote work",
+      from: "Morozov I.V.",
+      description: "March 12 · 1 day",
+      detail:
+        "Request for one day of remote work due to personal reasons. The employee confirms online availability during work hours.",
+      time: "3 h",
+    },
+    6: {
+      type: "Document",
+      title: "Completion certificate",
+      from: "Kozlov D.I.",
+      description: 'Project "Alpha" · Stage 3',
+      detail:
+        'Completion certificate for stage 3 of project "Alpha". Amount: 450,000 RUB. Signature is required before sending it to accounting.',
+      time: "4 h",
+    },
+    7: {
+      type: "Request",
+      title: "Advance payment request",
+      from: "Andreeva E.P.",
+      description: "15,000 RUB · Urgent payout",
+      detail:
+        "Request for an off-cycle advance payment of 15,000 RUB. Reason: unexpected expenses. Manager and accounting approval is required.",
+      time: "5 h",
+    },
+    8: {
+      type: "New employee",
+      title: "Document verification",
+      from: "Novikov R.S.",
+      description: "Marketing · Middle Designer",
+      detail:
+        "The uploaded documents of a new employee need to be verified: passport, insurance number, tax ID and diploma. After verification the employee will get access to work systems.",
+      time: "yesterday",
+    },
+    9: {
+      type: "Meeting",
+      title: "1-on-1 with team lead",
+      from: "Volkov A.M.",
+      description: "Tomorrow, 11:00 · Online",
+      detail:
+        "Regular 1-on-1 meeting. Topics: OKR progress, project feedback and next quarter plans. Format: video call.",
+      time: "yesterday",
+    },
+    10: {
+      type: "Document",
+      title: "Sign addendum",
+      from: "Egorova N.S.",
+      description: "Schedule change · effective April 1",
+      detail:
+        "An addendum to the employment contract has been prepared for the transition to a new work schedule. The document has been checked by HR and is waiting for signature.",
+      time: "6 h",
+    },
+    11: {
+      type: "Approval",
+      title: "Shift swap",
+      from: "Zaitsev P.O.",
+      description: "March 21 · with Nikitina A.V.",
+      detail:
+        "Two employees requested a shift swap this week. Hours were verified, there are no schedule conflicts, and final approval is required.",
+      time: "7 h",
+    },
+    12: {
+      type: "Request",
+      title: "Approve overtime",
+      from: "Gromov S.I.",
+      description: '4 hours · project "North"',
+      detail:
+        "The employee requested approval for overtime due to an extra shift. Basis and timelog are attached to the request card.",
+      time: "8 h",
+    },
+    13: {
+      type: "Employee",
+      title: "Confirm onboarding progress",
+      from: "Lebedeva O.V.",
+      description: "Probation period · week 2",
+      detail:
+        "You need to confirm the completion of the employee's second onboarding week and update the onboarding plan status. The mentor left comments.",
+      time: "today",
+    },
+    14: {
+      type: "Meeting",
+      title: "April schedule planning",
+      from: "Orlov D.A.",
+      description: "Friday, 10:30 · Room 203",
+      detail:
+        "A short meeting to align vacations and peak shifts for the next month. The team workload needs to be checked and the schedule template approved.",
+      time: "tomorrow",
+    },
+    15: {
+      type: "Tag",
+      title: "Update incident category",
+      from: "Service desk",
+      description: "Case #4812 · new tag required",
+      detail:
+        "The final category was not selected in the incident card. After updating the tag, the case will be archived and included in reporting without manual rework.",
+      time: "2 d",
+    },
+  };
+
+  return {
+    ...action,
+    ...(translations[action.id] ?? {}),
+  };
+}
+
 export const ActionCenter = ({
+  locale: forcedLocale,
   useMockData = true,
 }: {
+  locale?: "ru" | "en";
   useMockData?: boolean;
 }) => {
+  const { locale: activeLocale } = useI18n();
+  const locale = forcedLocale ?? activeLocale;
   const [activeCategory, setActiveCategory] = useState<ActionCategory>("all");
   const [dismissed, setDismissed] = useState<number[]>([]);
   const [exiting, setExiting] = useState<Record<number, ExitAction>>({});
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
   const availableActions = useMemo(
-    () => (useMockData ? actions : []),
-    [useMockData],
+    () =>
+      useMockData ? actions.map((action) => translateActionItem(action, locale)) : [],
+    [locale, useMockData],
   );
 
   const filtered = availableActions.filter((a) => {
@@ -345,17 +519,17 @@ export const ActionCenter = ({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <h2 className="font-heading font-semibold text-base text-foreground">
-              Центр действий
+              {localize(locale, "Центр действий", "Action center")}
             </h2>
             {urgentCount > 0 && (
               <span className="inline-flex items-center gap-1.5 text-[13px] font-heading font-semibold text-accent">
                 <span className="text-[15px] leading-none text-accent">•</span>
-                {urgentCount} срочных
+                {urgentCount} {localize(locale, "срочных", "urgent")}
               </span>
             )}
           </div>
           <span className="text-xs text-muted-foreground font-heading">
-            {totalPending} входящих
+            {totalPending} {localize(locale, "входящих", "inbox")}
           </span>
         </div>
 
@@ -384,7 +558,17 @@ export const ActionCenter = ({
                 }`}
               >
                 {cat.icon && <cat.icon className="w-3 h-3" />}
-                {cat.label}
+                {cat.key === "all"
+                  ? localize(locale, "Входящие", "Inbox")
+                  : cat.key === "decisions"
+                    ? localize(locale, "Срочные", "Urgent")
+                    : cat.key === "documents"
+                      ? localize(locale, "Документы", "Documents")
+                      : cat.key === "approvals"
+                        ? localize(locale, "Согласования", "Approvals")
+                        : cat.key === "meetings"
+                          ? localize(locale, "Встречи", "Meetings")
+                          : localize(locale, "Сотрудники", "Employees")}
                 {count > 0 && (
                   <span
                     className={`text-[13px] font-semibold leading-none ${
@@ -408,8 +592,12 @@ export const ActionCenter = ({
               <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center mb-3">
                 <Check className="w-5 h-5 opacity-40" />
               </div>
-              <p className="text-sm font-heading font-medium">Всё обработано</p>
-              <p className="mt-1 text-xs opacity-60">Нет входящих действий</p>
+              <p className="text-sm font-heading font-medium">
+                {localize(locale, "Всё обработано", "All caught up")}
+              </p>
+              <p className="mt-1 text-xs opacity-60">
+                {localize(locale, "Нет входящих действий", "No incoming actions")}
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -419,6 +607,7 @@ export const ActionCenter = ({
                   action={action}
                   exitState={exiting[action.id]}
                   index={i}
+                  locale={locale}
                   onApprove={handleDismiss}
                   onReject={handleDismiss}
                   onOpen={setSelectedAction}
@@ -432,6 +621,7 @@ export const ActionCenter = ({
       {/* Detail dialog */}
       <ActionDetailDialog
         action={selectedAction}
+        locale={locale}
         onClose={() => setSelectedAction(null)}
         onApprove={handleDismiss}
         onReject={handleDismiss}
@@ -445,6 +635,7 @@ const ActionRow = ({
   action,
   exitState,
   index,
+  locale,
   onApprove,
   onReject,
   onOpen,
@@ -452,6 +643,7 @@ const ActionRow = ({
   action: ActionItem;
   exitState?: ExitAction;
   index: number;
+  locale: "ru" | "en";
   onApprove: (id: number, type: ExitAction) => void;
   onReject: (id: number, type: ExitAction) => void;
   onOpen: (action: ActionItem) => void;
@@ -519,7 +711,7 @@ const ActionRow = ({
               }}
             >
               <Check className="w-3 h-3" />
-              Да
+              {localize(locale, "Да", "Yes")}
             </Button>
             <Button
               size="sm"
@@ -556,11 +748,13 @@ const ActionRow = ({
 /* ─── Detail Dialog ─── */
 const ActionDetailDialog = ({
   action,
+  locale,
   onClose,
   onApprove,
   onReject,
 }: {
   action: ActionItem | null;
+  locale: "ru" | "en";
   onClose: () => void;
   onApprove: (id: number, type: ExitAction) => void;
   onReject: (id: number, type: ExitAction) => void;
@@ -570,7 +764,7 @@ const ActionDetailDialog = ({
   const Icon = action.icon;
   const bg = iconBg[action.category];
   const color = iconColor[action.category];
-  const prio = priorityLabel[action.priority];
+  const prio = getPriorityLabel(action.priority, locale);
 
   return (
     <Dialog open={!!action} onOpenChange={(open) => !open && onClose()}>
@@ -612,7 +806,9 @@ const ActionDetailDialog = ({
             </div>
             <div className="flex items-center gap-2.5 text-[12px] text-muted-foreground">
               <Clock className="w-3.5 h-3.5" />
-              <span>{action.time} назад</span>
+              <span>
+                {locale === "ru" ? `${action.time} назад` : action.time}
+              </span>
             </div>
             <div className="flex items-center gap-2.5 text-[12px]">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
@@ -636,7 +832,7 @@ const ActionDetailDialog = ({
               onClick={() => onApprove(action.id, "approve")}
             >
               <Check className="w-4 h-4" />
-              Подтвердить
+              {localize(locale, "Подтвердить", "Approve")}
             </Button>
             <Button
               variant="outline"
@@ -644,7 +840,7 @@ const ActionDetailDialog = ({
               onClick={() => onReject(action.id, "reject")}
             >
               <X className="w-4 h-4" />
-              Отклонить
+              {localize(locale, "Отклонить", "Reject")}
             </Button>
           </div>
         </div>

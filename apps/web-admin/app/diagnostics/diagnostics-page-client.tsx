@@ -33,7 +33,8 @@ export default function DiagnosticsPageClient({
 }: {
   initialData?: DiagnosticsPageInitialData | null;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const localeTag = locale === 'ru' ? 'ru-RU' : 'en-US';
   const session = getSession();
   const canManagePolicy = session?.user.roleCodes.some((roleCode) =>
     ['tenant_owner', 'hr_admin', 'operations_admin'].includes(roleCode),
@@ -334,18 +335,11 @@ export default function DiagnosticsPageClient({
 
   return (
     <AdminShell>
-      <main className="flex w-full flex-col gap-10 px-5 py-6 lg:px-8">
-        <section className="grid gap-3 border-b border-[color:var(--border)] pb-8">
-          <span className="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--muted-foreground)]">
-            {t('diagnostics.eyebrow')}
-          </span>
-          <h1 className="font-heading text-4xl font-bold text-[color:var(--foreground)]">{t('diagnostics.title')}</h1>
-          <p className="max-w-5xl text-base leading-7 text-[color:var(--muted-foreground)]">{t('diagnostics.subtitle')}</p>
-          {summary ? (
-            <div className="text-sm text-[color:var(--muted-foreground)]">
-              {t('diagnostics.updatedAt')}: {new Date(summary.asOf).toLocaleString()}
-            </div>
-          ) : null}
+      <main className="flex w-full flex-col gap-8 px-5 py-6 lg:px-8">
+        <section className="border-b border-[color:var(--border)] pb-5">
+          <h1 className="text-2xl font-semibold text-[color:var(--foreground)]">
+            Diagnostics
+          </h1>
         </section>
 
         {message ? (
@@ -359,32 +353,29 @@ export default function DiagnosticsPageClient({
             <section className="grid gap-x-6 gap-y-5 border-b border-[color:var(--border)] pb-8 md:grid-cols-3 xl:grid-cols-5">
               <article className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--muted-foreground)]">{t('diagnostics.criticalAnomalies')}</span>
-                <strong className="font-heading text-5xl text-[color:var(--foreground)]">{summary.signals.criticalAnomaliesToday}</strong>
+                <strong className="text-3xl font-semibold text-[color:var(--foreground)]">{summary.signals.criticalAnomaliesToday}</strong>
               </article>
               <article className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--muted-foreground)]">{t('diagnostics.pendingBiometricReviews')}</span>
-                <strong className="font-heading text-5xl text-[color:var(--foreground)]">{summary.signals.pendingBiometricReviews}</strong>
+                <strong className="text-3xl font-semibold text-[color:var(--foreground)]">{summary.signals.pendingBiometricReviews}</strong>
               </article>
               <article className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--muted-foreground)]">{t('diagnostics.failedExports24h')}</span>
-                <strong className="font-heading text-5xl text-[color:var(--foreground)]">{summary.signals.exportFailures24h}</strong>
+                <strong className="text-3xl font-semibold text-[color:var(--foreground)]">{summary.signals.exportFailures24h}</strong>
               </article>
               <article className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--muted-foreground)]">{t('diagnostics.failedBiometricJobs24h')}</span>
-                <strong className="font-heading text-5xl text-[color:var(--foreground)]">{summary.signals.biometricFailures24h}</strong>
+                <strong className="text-3xl font-semibold text-[color:var(--foreground)]">{summary.signals.biometricFailures24h}</strong>
               </article>
               <article className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--muted-foreground)]">{t('diagnostics.failedPush24h')}</span>
-                <strong className="font-heading text-5xl text-[color:var(--foreground)]">{summary.signals.pushFailures24h}</strong>
+                <strong className="text-3xl font-semibold text-[color:var(--foreground)]">{summary.signals.pushFailures24h}</strong>
               </article>
             </section>
 
-            <section className="grid gap-10 border-b border-[color:var(--border)] pb-10 lg:grid-cols-3">
+            <section className="grid gap-8 border-b border-[color:var(--border)] pb-10 lg:grid-cols-3">
               <article className="grid gap-4">
-                <div className="grid gap-1">
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">{t('diagnostics.liveHealth')}</span>
-                  <h2 className="font-heading text-3xl font-bold text-[color:var(--foreground)]">{t('diagnostics.exportJobs')}</h2>
-                </div>
+                <h2 className="text-xl font-semibold text-[color:var(--foreground)]">{t('diagnostics.exportJobs')}</h2>
                 <div className={flatListClass}>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.queued')}</span><strong>{summary.queues.exports.queued}</strong></div>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.processing')}</span><strong>{summary.queues.exports.processing}</strong></div>
@@ -395,10 +386,7 @@ export default function DiagnosticsPageClient({
               </article>
 
               <article className="grid gap-4">
-                <div className="grid gap-1">
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">{t('diagnostics.liveHealth')}</span>
-                  <h2 className="font-heading text-3xl font-bold text-[color:var(--foreground)]">{t('diagnostics.biometricJobs')}</h2>
-                </div>
+                <h2 className="text-xl font-semibold text-[color:var(--foreground)]">{t('diagnostics.biometricJobs')}</h2>
                 <div className={flatListClass}>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.queued')}</span><strong>{summary.queues.biometric.queued}</strong></div>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.processing')}</span><strong>{summary.queues.biometric.processing}</strong></div>
@@ -409,10 +397,7 @@ export default function DiagnosticsPageClient({
               </article>
 
               <article className="grid gap-4">
-                <div className="grid gap-1">
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">{t('diagnostics.liveHealth')}</span>
-                  <h2 className="font-heading text-3xl font-bold text-[color:var(--foreground)]">{t('diagnostics.pushDeliveries')}</h2>
-                </div>
+                <h2 className="text-xl font-semibold text-[color:var(--foreground)]">{t('diagnostics.pushDeliveries')}</h2>
                 <div className={flatListClass}>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.queued')}</span><strong>{summary.queues.push.queued}</strong></div>
                   <div className="flex items-center justify-between border-b border-[color:var(--border)] py-3"><span>{t('diagnostics.processing')}</span><strong>{summary.queues.push.processing}</strong></div>
@@ -514,7 +499,7 @@ export default function DiagnosticsPageClient({
                     {trends.snapshots.map((snapshot) => (
                       <div className="grid gap-4 border-b border-[color:var(--border)] py-4" key={snapshot.capturedAt}>
                         <div className="grid gap-1">
-                          <strong>{new Date(snapshot.capturedAt).toLocaleString()}</strong>
+                          <strong>{new Date(snapshot.capturedAt).toLocaleString(localeTag)}</strong>
                           <span className="text-sm text-[color:var(--muted-foreground)]">{t('diagnostics.capturedAt')}</span>
                         </div>
                         <div className="grid gap-4">
@@ -619,7 +604,7 @@ export default function DiagnosticsPageClient({
                   ) : null}
                   <strong>{job.fileName ?? `${job.type} • ${job.format.toUpperCase()}`}</strong>
                   <span>{job.status}</span>
-                  <span>{new Date(job.createdAt).toLocaleString()}</span>
+                  <span>{new Date(job.createdAt).toLocaleString(localeTag)}</span>
                   {job.downloadUrl ? (
                     <a className="inline-link" href={job.downloadUrl} rel="noreferrer" target="_blank">
                       {t('exports.downloadResult')}
@@ -707,7 +692,7 @@ export default function DiagnosticsPageClient({
                   <strong>{job.employee.firstName} {job.employee.lastName} ({job.employee.employeeNumber})</strong>
                   <span>{job.type}</span>
                   <span>{job.status}</span>
-                  <span>{new Date(job.createdAt).toLocaleString()}</span>
+                  <span>{new Date(job.createdAt).toLocaleString(localeTag)}</span>
                   {job.result ? <span>{job.result.result}</span> : null}
                   {canOperateQueues && job.status === 'FAILED' ? (
                     <button
@@ -838,7 +823,7 @@ export default function DiagnosticsPageClient({
                   <span>{delivery.user.email}</span>
                   <span>{delivery.status}</span>
                   <span>{t('diagnostics.receiptStatus')}: {delivery.receiptStatus ?? '—'}</span>
-                  <span>{new Date(delivery.createdAt).toLocaleString()}</span>
+                  <span>{new Date(delivery.createdAt).toLocaleString(localeTag)}</span>
                   {canOperateQueues && delivery.status === 'FAILED' ? (
                     <button
                       className={flatButtonClass}

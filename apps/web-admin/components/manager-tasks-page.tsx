@@ -45,6 +45,7 @@ import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
+import { localizePersonName } from "@/lib/transliteration";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -208,7 +209,10 @@ function getEmployeeName(
     return `${employee.lastName} ${employee.firstName}`.trim();
   }
 
-  return `${employee.firstName} ${employee.lastName}`.trim();
+  return localizePersonName(
+    `${employee.firstName} ${employee.lastName}`.trim(),
+    "en",
+  );
 }
 
 function normalizeTaskTitle(title: string) {

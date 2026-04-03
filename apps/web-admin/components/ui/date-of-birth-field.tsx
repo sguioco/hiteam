@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AppSelectField } from "./select";
 
@@ -54,6 +55,7 @@ export function DateOfBirthField({
   value,
   onChange,
 }: DateOfBirthFieldProps) {
+  const { locale } = useI18n();
   const [parts, setParts] = useState(() => parseIsoDate(value));
   const { year, month, day } = parts;
 
@@ -100,21 +102,21 @@ export function DateOfBirthField({
     <div className={cn("grid grid-cols-[72px_84px_72px] gap-2", className)}>
       <AppSelectField
         value={day}
-        emptyLabel="ДД"
+        emptyLabel={locale === "ru" ? "ДД" : "DD"}
         onValueChange={(nextDay) => updateValue({ day: nextDay })}
         options={dayOptions}
         triggerClassName={triggerClassName}
       />
       <AppSelectField
         value={month}
-        emptyLabel="ММ"
+        emptyLabel={locale === "ru" ? "ММ" : "MM"}
         onValueChange={(nextMonth) => updateValue({ month: nextMonth })}
         options={MONTH_OPTIONS}
         triggerClassName={triggerClassName}
       />
       <AppSelectField
         value={year}
-        emptyLabel="ГОД"
+        emptyLabel={locale === "ru" ? "ГОД" : "YEAR"}
         onValueChange={(nextYear) => updateValue({ year: nextYear })}
         options={YEAR_OPTIONS}
         triggerClassName={triggerClassName}

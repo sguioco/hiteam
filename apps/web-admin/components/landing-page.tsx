@@ -111,6 +111,7 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     frameWidth: 82,
     imageHeight: 102,
     titleVariant: "badge",
+    titleTextClassName: "text-[#44944A]",
     rotation: -6,
     size: 0.028,
     offsetX: -42,
@@ -956,7 +957,10 @@ const Landing = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="landing-shell min-h-screen bg-background"
+      style={{ fontFamily: "var(--font-landing), var(--font-sf-base)" }}
+    >
       <header
         className={cx(
           "fixed inset-x-0 top-0 z-50 transition-all duration-300",
@@ -1011,19 +1015,23 @@ const Landing = () => {
       </header>
 
       <section
-        className="min-h-screen px-6 pb-20 pt-28 md:px-16 md:pb-32 md:pt-32 lg:px-24"
-        style={{ background: "var(--hero-gradient)" }}
+        className="min-h-[88vh] px-6 pb-10 pt-24 md:px-16 md:pb-16 md:pt-28 lg:px-24"
+        style={{
+          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+        }}
       >
-        <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-7xl flex-col items-center justify-center gap-12 lg:flex-row lg:gap-8">
-          <div className="max-w-xl flex-1 lg:max-w-lg">
-            <h1 className="mb-6 animate-[fadeInUp_0.6s_0.15s_ease_forwards] text-4xl leading-[1.1] font-bold tracking-tight text-foreground opacity-0 md:text-5xl lg:text-[3.4rem]">
-              Современные инструменты для вашей команды
+        <div className="mx-auto flex min-h-[calc(88vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2">
+          <div className="max-w-xl flex-1 lg:max-w-[52rem] lg:flex-[1.3]">
+            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] text-4xl leading-[1.1] font-semibold tracking-tight text-foreground opacity-0 md:text-5xl lg:text-[3.4rem]">
+              <span className="whitespace-nowrap">Современная платформа</span>
+              <br className="hidden lg:block" />
+              <span className="italic whitespace-nowrap">управления</span>{" "}
+              <span className="whitespace-nowrap">персоналом</span>
+              <br className="hidden lg:block" />
+              <span className="whitespace-nowrap">
+                и <span className="italic">контроля</span> посещаемости
+              </span>
             </h1>
-            <p className="mb-10 animate-[fadeInUp_0.6s_0.3s_ease_forwards] text-lg leading-relaxed text-muted-foreground opacity-0">
-              Контролируйте посещаемость с распознаванием лиц и геолокацией,
-              управляйте расписаниями и задачами, анализируйте эффективность —
-              всё в одной платформе.
-            </p>
             <div className="animate-[fadeInUp_0.6s_0.45s_ease_forwards] opacity-0">
               <a
                 className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
@@ -1062,7 +1070,7 @@ const Landing = () => {
               ))}
             </div>
           </div>
-          <div className="flex flex-1 justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] lg:justify-end">
+          <div className="flex flex-1 justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] lg:flex-[0.85] lg:translate-x-48 lg:justify-end">
             <div className="relative isolate h-[360px] w-[360px] md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
               <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.14)_0%,rgba(255,255,255,0)_68%)] blur-3xl" />
               <div className="absolute inset-[11%] rounded-full bg-white/78 shadow-[0_36px_120px_rgba(148,163,184,0.18)]" />
@@ -1094,88 +1102,13 @@ const Landing = () => {
         </div>
       </section>
 
-      <section className="px-6 py-20 md:px-16 md:py-32 lg:px-24">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
-          <div className="max-w-lg flex-1">
-            <p className="mb-4 text-sm font-medium tracking-wide text-primary">
-              Мобильное приложение
-            </p>
-            <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
-              Управляйте сменами прямо с телефона
-            </h2>
-            <p className="mb-8 text-lg leading-relaxed text-muted-foreground">
-              Сотрудники начинают и завершают смену одним касанием — с
-              автоматическим распознаванием лица и проверкой геолокации. Никаких
-              бумажных журналов.
-            </p>
-            <div className="space-y-4">
-              {[
-                "Сканирование лица за 2 секунды",
-                "Автоматическая проверка местоположения",
-                "Создание задач и запросов на ходу",
-                "Личный чат с командой",
-              ].map((feature) => (
-                <div className="flex items-center gap-3" key={feature}>
-                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <svg
-                      className="h-3 w-3 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M5 13l4 4L19 7"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-foreground">{feature}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-10 flex flex-wrap gap-3">
-              <AppStoreButton />
-              <GooglePlayButton />
-            </div>
-          </div>
-
-          <div className="flex flex-1 justify-center lg:justify-end">
-            <div className="relative">
-              <div className="relative h-[570px] w-[280px] overflow-hidden rounded-[3rem] border-[8px] border-foreground/90 bg-muted shadow-2xl shadow-primary/10 md:h-[610px] md:w-[300px]">
-                <div className="absolute top-0 left-1/2 z-10 h-[28px] w-[120px] -translate-x-1/2 rounded-b-2xl bg-foreground/90" />
-                <div className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                    <span className="text-lg font-bold text-primary">S</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Скриншот приложения
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
-                    Будет заменён
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="flex flex-col gap-12 overflow-hidden bg-primary py-16 sm:gap-16 md:gap-20 md:py-24 lg:gap-24">
         <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-            <span className="text-sm font-semibold text-white/72 md:text-base">
-              Веб-платформа
-            </span>
             <h2 className="mt-3 text-3xl font-semibold text-white md:text-5xl">
-              Красивый контроль и аналитика для операционной команды
+              Удобные <span className="italic">контроль и аналитика</span> для
+              операционной деятельности
             </h2>
-            <p className="mt-4 text-lg leading-8 text-white/72 md:mt-5 md:text-xl">
-              Веб-панель даёт полную картину по attendance, задачам,
-              коммуникациям и отчётности. Это не просто кабинет, а рабочий центр
-              для менеджеров и администраторов.
-            </p>
           </div>
         </div>
 
@@ -1284,7 +1217,137 @@ const Landing = () => {
         </div>
       </section>
 
-      <section className="px-6 py-20 md:px-16 md:py-32 lg:px-24">
+      <section
+        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        style={{
+          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+        }}
+      >
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
+          <div className="max-w-lg flex-1">
+            <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
+              <span className="italic">Управляйте</span> командой прямо{" "}
+              <span className="italic">с телефона</span>
+            </h2>
+            <p className="mb-8 text-lg leading-relaxed text-muted-foreground">
+              Сотрудники начинают и завершают смену одним касанием — с
+              автоматическим распознаванием лица и проверкой геолокации. Никаких
+              бумажных журналов.
+            </p>
+            <div className="space-y-4">
+              {[
+                "Сканирование лица за 2 секунды",
+                "Автоматическая проверка местоположения",
+                "Создание задач и запросов на ходу",
+              ].map((feature) => (
+                <div className="flex items-center gap-3" key={feature}>
+                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <svg
+                      className="h-3 w-3 text-primary"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M5 13l4 4L19 7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                      />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-foreground">{feature}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-10 flex flex-wrap gap-3">
+              <AppStoreButton />
+              <GooglePlayButton />
+            </div>
+          </div>
+
+          <div className="flex flex-1 justify-center lg:justify-end">
+            <div className="relative">
+              <div className="relative h-[570px] w-[280px] overflow-hidden rounded-[3rem] border-[8px] border-foreground/90 bg-muted shadow-2xl shadow-primary/10 md:h-[610px] md:w-[400px]">
+                <div className="absolute top-0 left-1/2 z-10 h-[28px] w-[120px] -translate-x-1/2 rounded-b-2xl bg-foreground/90" />
+                <div className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                    <span className="text-lg font-bold text-primary">S</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Скриншот приложения
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">
+                    Будет заменён
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        style={{ background: "#2f63ff" }}
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-16 text-center">
+            <p className="mb-4 text-sm font-medium tracking-wide text-white/72">
+              FAQ
+            </p>
+            <h2 className="text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
+              Частые вопросы
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            {faqs.map((faq, i) => (
+              <div
+                className="overflow-hidden rounded-2xl border border-white/70 bg-white transition-all duration-300 hover:border-white"
+                key={i}
+              >
+                <button
+                  className="flex w-full items-center justify-between p-5 text-left"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  type="button"
+                >
+                  <span className="pr-4 text-sm font-medium text-foreground">
+                    {faq.q}
+                  </span>
+                  <svg
+                    className={`h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform duration-300 ${openFaq === i ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M19 9l-7 7-7-7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                    />
+                  </svg>
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${openFaq === i ? "max-h-48 pb-5" : "max-h-0"}`}
+                >
+                  <p className="px-5 text-sm leading-relaxed text-muted-foreground">
+                    {faq.a}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        style={{
+          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+        }}
+      >
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto mb-16 max-w-2xl text-center">
             <p className="mb-4 text-sm font-medium tracking-wide text-primary">
@@ -1369,61 +1432,11 @@ const Landing = () => {
       </section>
 
       <section
-        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
-        style={{ background: "var(--hero-gradient)" }}
+        className="px-6 py-20 md:px-16 md:py-28 lg:px-24"
+        style={{
+          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+        }}
       >
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-16 text-center">
-            <p className="mb-4 text-sm font-medium tracking-wide text-primary">
-              FAQ
-            </p>
-            <h2 className="text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
-              Частые вопросы
-            </h2>
-          </div>
-
-          <div className="space-y-3">
-            {faqs.map((faq, i) => (
-              <div
-                className="overflow-hidden rounded-2xl border border-border/40 bg-background transition-all duration-300 hover:border-primary/20"
-                key={i}
-              >
-                <button
-                  className="flex w-full items-center justify-between p-5 text-left"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  type="button"
-                >
-                  <span className="pr-4 text-sm font-medium text-foreground">
-                    {faq.q}
-                  </span>
-                  <svg
-                    className={`h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform duration-300 ${openFaq === i ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M19 9l-7 7-7-7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                    />
-                  </svg>
-                </button>
-                <div
-                  className={`overflow-hidden transition-all duration-300 ${openFaq === i ? "max-h-48 pb-5" : "max-h-0"}`}
-                >
-                  <p className="px-5 text-sm leading-relaxed text-muted-foreground">
-                    {faq.a}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 py-20 md:px-16 md:py-28 lg:px-24">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
             Готовы начать?
@@ -1449,7 +1462,12 @@ const Landing = () => {
         </div>
       </section>
 
-      <footer className="border-t border-border/40 px-6 py-12 md:px-16 lg:px-24">
+      <footer
+        className="border-t border-border/40 px-6 py-12 md:px-16 lg:px-24"
+        style={{
+          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+        }}
+      >
         <div className="mx-auto max-w-7xl">
           <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-4">
             <div className="col-span-2 md:col-span-1">

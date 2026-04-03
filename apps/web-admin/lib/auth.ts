@@ -36,6 +36,11 @@ function normalizeTenantSlug(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function isLocalDevHost() {
+  if (typeof window === 'undefined') return false;
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
 function getDefaultTenantSlug(): string {
   const envSlug = process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG?.trim();
   if (envSlug) return normalizeTenantSlug(envSlug);
@@ -82,7 +87,7 @@ function readWindowBootstrapSession(): AuthSession | null {
     return null;
   }
 
-  if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled()) {
+  if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled() && !isLocalDevHost()) {
     return null;
   }
 
@@ -113,7 +118,7 @@ export function getSession(): AuthSession | null {
   try {
     const session = JSON.parse(raw) as AuthSession;
 
-    if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled()) {
+    if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled() && !isLocalDevHost()) {
       window.localStorage.removeItem(SESSION_KEY);
       return bootstrappedSession;
     }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { AppSelectField } from "@/components/ui/select";
+import { useI18n } from "@/lib/i18n";
 import type { PublicInvitationPayload } from "../invitation-types";
 
 type JoinInvitationPageClientProps = {
@@ -20,6 +21,7 @@ export default function JoinInvitationPageClient({
   token,
 }: JoinInvitationPageClientProps) {
   const router = useRouter();
+  const { locale } = useI18n();
   const [invitation] = useState<PublicInvitationPayload | null>(initialInvitation);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
@@ -54,7 +56,7 @@ export default function JoinInvitationPageClient({
     const nextDataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+      reader.onerror = () => reject(new Error(locale === "ru" ? "Не удалось прочитать файл." : "Failed to read the file."));
       reader.readAsDataURL(file);
     });
 
@@ -78,12 +80,22 @@ export default function JoinInvitationPageClient({
 
       setSuccess(
         invitationStatus === "APPROVED"
-          ? "Доступ завершён. Теперь можно войти в систему."
-          : "Профиль отправлен руководителю на подтверждение. Теперь можно войти в систему.",
+          ? locale === "ru"
+            ? "Доступ завершён. Теперь можно войти в систему."
+            : "Access setup is complete. You can sign in now."
+          : locale === "ru"
+            ? "Профиль отправлен руководителю на подтверждение. Теперь можно войти в систему."
+            : "The profile was sent to the manager for approval. You can sign in now.",
       );
       setTimeout(() => router.replace("/login"), 1200);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Не удалось завершить регистрацию.");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : locale === "ru"
+            ? "Не удалось завершить регистрацию."
+            : "Failed to complete registration.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -93,10 +105,12 @@ export default function JoinInvitationPageClient({
     return (
       <main className="auth-gate">
         <div className="auth-gate-card max-w-[520px] text-left">
-          <h1 className="text-2xl font-heading font-bold text-[color:var(--foreground)]">Приглашение недоступно</h1>
+          <h1 className="text-2xl font-heading font-bold text-[color:var(--foreground)]">
+            {locale === "ru" ? "Приглашение недоступно" : "Invitation unavailable"}
+          </h1>
           <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">{error}</p>
           <Link className="solid-button mt-6 inline-flex" href="/login">
-            На страницу входа
+            {locale === "ru" ? "На страницу входа" : "Go to sign-in"}
           </Link>
         </div>
       </main>
@@ -111,12 +125,16 @@ export default function JoinInvitationPageClient({
     return (
       <main className="auth-gate">
         <div className="auth-gate-card max-w-[520px] text-left">
-          <h1 className="text-2xl font-heading font-bold text-[color:var(--foreground)]">Профиль уже отправлен</h1>
+          <h1 className="text-2xl font-heading font-bold text-[color:var(--foreground)]">
+            {locale === "ru" ? "Профиль уже отправлен" : "Profile already submitted"}
+          </h1>
           <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
-            Для {invitation.email} анкета уже заполнена. Войдите в систему и дождитесь подтверждения руководителя.
+            {locale === "ru"
+              ? `Для ${invitation.email} анкета уже заполнена. Войдите в систему и дождитесь подтверждения руководителя.`
+              : `The form for ${invitation.email} has already been completed. Sign in and wait for manager approval.`}
           </p>
           <Link className="solid-button mt-6 inline-flex" href="/login">
-            Войти
+            {locale === "ru" ? "Войти" : "Sign in"}
           </Link>
         </div>
       </main>
@@ -128,26 +146,55 @@ export default function JoinInvitationPageClient({
       <section className="login-panel max-w-[1080px]">
         <div className="login-copy">
           <div className="login-topline">
-            <span className="eyebrow">Приглашение</span>
+            <span className="eyebrow">{locale === "ru" ? "Приглашение" : "Invitation"}</span>
           </div>
-          <h1>{invitationStatus === "APPROVED" ? "Завершите активацию доступа" : "Присоединение к компании"}</h1>
+          <h1>
+            {invitationStatus === "APPROVED"
+              ? locale === "ru"
+                ? "Завершите активацию доступа"
+                : "Complete access activation"
+              : locale === "ru"
+                ? "Присоединение к компании"
+                : "Join the company"}
+          </h1>
           <p>
             {invitationStatus === "APPROVED" ? (
               <>
-                Руководитель уже одобрил вашу заявку в <strong>{invitation.tenantName}</strong>. Завершите профиль и
-                задайте пароль для входа.
+                {locale === "ru" ? (
+                  <>
+                    Руководитель уже одобрил вашу заявку в <strong>{invitation.tenantName}</strong>. Завершите профиль и
+                    задайте пароль для входа.
+                  </>
+                ) : (
+                  <>
+                    The manager has already approved your request to join <strong>{invitation.tenantName}</strong>. Complete
+                    your profile and set a password to sign in.
+                  </>
+                )}
               </>
             ) : (
               <>
-                Компания <strong>{invitation.tenantName}</strong> приглашает вас присоединиться к системе. Заполните
-                обязательные поля, чтобы отправить профиль руководителю на подтверждение.
+                {locale === "ru" ? (
+                  <>
+                    Компания <strong>{invitation.tenantName}</strong> приглашает вас присоединиться к системе. Заполните
+                    обязательные поля, чтобы отправить профиль руководителю на подтверждение.
+                  </>
+                ) : (
+                  <>
+                    <strong>{invitation.tenantName}</strong> invites you to join the system. Fill in the required fields
+                    to send your profile to the manager for approval.
+                  </>
+                )}
               </>
             )}
           </p>
           <div className="preview-card mt-6">
             <span className="section-kicker">Email</span>
             <strong>{invitation.email}</strong>
-            <p>Ссылка действует до {new Date(invitation.expiresAt).toLocaleString("ru-RU")}.</p>
+            <p>
+              {locale === "ru" ? "Ссылка действует до " : "The link is valid until "}
+              {new Date(invitation.expiresAt).toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}.
+            </p>
           </div>
         </div>
 
@@ -157,7 +204,7 @@ export default function JoinInvitationPageClient({
             <input disabled value={invitation.email} />
           </label>
           <label>
-            <span>Пароль{requiredMark}</span>
+            <span>{locale === "ru" ? "Пароль" : "Password"}{requiredMark}</span>
             <input
               minLength={8}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
@@ -166,7 +213,7 @@ export default function JoinInvitationPageClient({
             />
           </label>
           <label>
-            <span>Имя{requiredMark}</span>
+            <span>{locale === "ru" ? "Имя" : "First name"}{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
               required
@@ -174,7 +221,7 @@ export default function JoinInvitationPageClient({
             />
           </label>
           <label>
-            <span>Фамилия{requiredMark}</span>
+            <span>{locale === "ru" ? "Фамилия" : "Last name"}{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
               required
@@ -182,14 +229,14 @@ export default function JoinInvitationPageClient({
             />
           </label>
           <label>
-            <span>Отчество</span>
+            <span>{locale === "ru" ? "Отчество" : "Middle name"}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, middleName: event.target.value }))}
               value={form.middleName}
             />
           </label>
           <label>
-            <span>Дата рождения{requiredMark}</span>
+            <span>{locale === "ru" ? "Дата рождения" : "Date of birth"}{requiredMark}</span>
             <DateOfBirthField
               value={form.birthDate}
               onChange={(nextValue) => setForm((current) => ({ ...current, birthDate: nextValue }))}
@@ -197,19 +244,19 @@ export default function JoinInvitationPageClient({
             />
           </label>
           <label>
-            <span>Пол{requiredMark}</span>
+            <span>{locale === "ru" ? "Пол" : "Gender"}{requiredMark}</span>
             <AppSelectField
               value={form.gender}
               onValueChange={(value) => setForm((current) => ({ ...current, gender: value }))}
               options={[
-                { value: "male", label: "Мужской" },
-                { value: "female", label: "Женский" },
+                { value: "male", label: locale === "ru" ? "Мужской" : "Male" },
+                { value: "female", label: locale === "ru" ? "Женский" : "Female" },
               ]}
               triggerClassName="rounded-2xl px-4 py-3"
             />
           </label>
           <label>
-            <span>Телефон{requiredMark}</span>
+            <span>{locale === "ru" ? "Телефон" : "Phone"}{requiredMark}</span>
             <input
               onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
               required
@@ -217,13 +264,19 @@ export default function JoinInvitationPageClient({
             />
           </label>
           <label>
-            <span>Аватар</span>
+            <span>{locale === "ru" ? "Аватар" : "Avatar"}</span>
             <input accept="image/*" onChange={handleAvatarChange} type="file" />
           </label>
           {error ? <div className="error-box">{error}</div> : null}
           {success ? <div className="success-box">{success}</div> : null}
           <button className="solid-button" disabled={submitting} type="submit">
-            {submitting ? "Отправляем..." : "Готово"}
+            {submitting
+              ? locale === "ru"
+                ? "Отправляем..."
+                : "Submitting..."
+              : locale === "ru"
+                ? "Готово"
+                : "Done"}
           </button>
         </form>
       </section>

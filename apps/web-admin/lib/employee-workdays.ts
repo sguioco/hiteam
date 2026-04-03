@@ -43,8 +43,8 @@ export function getEmployeeWorkdayStatus(
   };
 }
 
-export function formatWorkdayDateLabel(dayKey: string) {
-  return new Date(`${dayKey}T00:00:00`).toLocaleDateString("ru-RU", {
+export function formatWorkdayDateLabel(dayKey: string, locale: "ru" | "en" = "ru") {
+  return new Date(`${dayKey}T00:00:00`).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
     weekday: "long",
     day: "numeric",
     month: "long",

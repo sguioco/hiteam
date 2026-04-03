@@ -8,9 +8,11 @@ import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChartContainer } from "@/components/ui/chart";
 import { Separator } from "@/components/ui/separator";
+import { useI18n } from "@/lib/i18n";
 
 type ManagerPerformancePanelProps = {
   history: AttendanceHistoryResponse | null;
+  locale?: "ru" | "en";
   tasks?: TaskItem[];
 };
 
@@ -54,6 +56,10 @@ const chartConfig = {
   },
 };
 
+function localize(locale: "ru" | "en", ru: string, en: string) {
+  return locale === "ru" ? ru : en;
+}
+
 function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
@@ -79,9 +85,9 @@ function isWithinRange(value: string | null | undefined, start: Date, end: Date)
   return !Number.isNaN(parsed.getTime()) && parsed >= start && parsed <= end;
 }
 
-function formatMonthHeading(value: Date) {
+function formatMonthHeading(value: Date, locale: "ru" | "en") {
   return value
-    .toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
+    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { month: "long", year: "numeric" })
     .replace(/\s+г\.?$/i, "")
     .toUpperCase();
 }
@@ -90,12 +96,14 @@ function formatRangeLabel(start: Date, end: Date) {
   return `${start.getDate()}-${end.getDate()}`;
 }
 
-function formatRangeHeading(start: Date, end: Date) {
-  return `с ${start.getDate()} по ${end.getDate()}`;
+function formatRangeHeading(start: Date, end: Date, locale: "ru" | "en") {
+  return locale === "ru"
+    ? `с ${start.getDate()} по ${end.getDate()}`
+    : `${start.getDate()} to ${end.getDate()}`;
 }
 
-function formatRangeTooltip(start: Date, end: Date) {
-  const monthLabel = end.toLocaleDateString("ru-RU", {
+function formatRangeTooltip(start: Date, end: Date, locale: "ru" | "en") {
+  const monthLabel = end.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
     month: "long",
     year: "numeric",
   });
@@ -150,20 +158,24 @@ function getDominantWorkMonth(weekStart: Date) {
   return [...scores.values()].sort((left, right) => right.score - left.score)[0];
 }
 
-function buildBucketTask(task: TaskItem): BucketTaskItem {
+function buildBucketTask(task: TaskItem, locale: "ru" | "en"): BucketTaskItem {
   const dueDate = task.dueAt ? new Date(task.dueAt) : null;
   const hasDueDate = dueDate && !Number.isNaN(dueDate.getTime());
 
   return {
     dayNumber: hasDueDate
-      ? dueDate.toLocaleDateString("ru-RU", { day: "2-digit" })
+      ? dueDate.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+          day: "2-digit",
+        })
       : "∞",
     id: task.id,
     subtitle: formatTaskSubtitle(task),
     title: task.title.replace(/^Встреча:\s*/i, "").trim(),
     weekdayShort: hasDueDate
       ? dueDate
-          .toLocaleDateString("ru-RU", { weekday: "short" })
+          .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+            weekday: "short",
+          })
           .replace(/\.$/, "")
       : "",
   };
@@ -184,6 +196,7 @@ function buildWeeklyBuckets(
   rows: AttendanceRow[],
   tasks: TaskItem[],
   monthDate: Date,
+  locale: "ru" | "en",
 ): ChartBucket[] {
   const today = startOfDay(new Date());
   const currentWeekStart = startOfWeek(today);
@@ -238,11 +251,11 @@ function buildWeeklyBuckets(
       const completedTasks = weeklyTasks
         .filter((task) => task.status === "DONE")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map(buildBucketTask);
+        .map((task) => buildBucketTask(task, locale));
       const pendingTasks = weeklyTasks
         .filter((task) => task.status !== "DONE" && task.status !== "CANCELLED")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map(buildBucketTask);
+        .map((task) => buildBucketTask(task, locale));
       const lateShifts = bucketRows.filter((row) => row.lateMinutes > 0).length;
       const isCurrentWeek = today >= start && today <= end;
       const totalShifts = bucketRows.length;
@@ -263,7 +276,7 @@ function buildWeeklyBuckets(
         pendingTasks,
         start,
         totalShifts,
-        tooltipLabel: formatRangeTooltip(start, end),
+        tooltipLabel: formatRangeTooltip(start, end, locale),
         weekNumberInMonth: bucketWeekNumber,
       };
     });
@@ -391,8 +404,11 @@ function DualBarShape({
 
 export function ManagerPerformancePanel({
   history,
+  locale: forcedLocale,
   tasks = [],
 }: ManagerPerformancePanelProps) {
+  const { locale: activeLocale } = useI18n();
+  const locale = forcedLocale ?? activeLocale;
   const availableMonths = useMemo(
     () => collectAvailableMonths(history?.rows ?? [], tasks),
     [history?.rows, tasks],
@@ -426,15 +442,15 @@ export function ManagerPerformancePanel({
     getMonthDateFromKey(defaultMonthKey) ??
     startOfMonth(today);
   const chartData = useMemo(
-    () => buildWeeklyBuckets(history?.rows ?? [], tasks, selectedMonthDate),
-    [history?.rows, selectedMonthDate, tasks],
+    () => buildWeeklyBuckets(history?.rows ?? [], tasks, selectedMonthDate, locale),
+    [history?.rows, locale, selectedMonthDate, tasks],
   );
   const allBuckets = useMemo(
     () =>
       availableMonths.flatMap((monthDate) =>
-        buildWeeklyBuckets(history?.rows ?? [], tasks, monthDate),
+        buildWeeklyBuckets(history?.rows ?? [], tasks, monthDate, locale),
       ),
-    [availableMonths, history?.rows, tasks],
+    [availableMonths, history?.rows, locale, tasks],
   );
   const currentMonthTotal = chartData.reduce(
     (total, bucket) => total + bucket.totalShifts,
@@ -512,11 +528,11 @@ export function ManagerPerformancePanel({
                     </button>
                   ) : null}
                 </div>
-                <h2>{formatMonthHeading(selectedMonthDate)}</h2>
+                <h2>{formatMonthHeading(selectedMonthDate, locale)}</h2>
               </div>
 
               <div className="manager-performance-header-metric">
-                <span>Вовремя</span>
+                <span>{localize(locale, "Вовремя", "On time")}</span>
                 <strong>
                   {currentMonthOnTime}/{currentMonthTotal}
                 </strong>
@@ -567,7 +583,7 @@ export function ManagerPerformancePanel({
               </div>
             ) : (
               <div className="manager-performance-empty">
-                Недели появятся после первых смен или задач.
+                {localize(locale, "Недели появятся после первых смен или задач.", "Weeks will appear after the first shifts or tasks.")}
               </div>
             )}
           </div>
@@ -581,12 +597,14 @@ export function ManagerPerformancePanel({
           <div className="manager-performance-side">
             <div className="manager-performance-side-head">
               <span className="manager-performance-side-kicker">
-                {selectedWeekNumber ? `Неделя ${selectedWeekNumber}` : "Неделя"}
+                {selectedWeekNumber
+                  ? `${localize(locale, "Неделя", "Week")} ${selectedWeekNumber}`
+                  : localize(locale, "Неделя", "Week")}
               </span>
               <h3>
                 {selectedBucket
-                  ? formatRangeHeading(selectedBucket.start, selectedBucket.end)
-                  : "Неделя"}
+                  ? formatRangeHeading(selectedBucket.start, selectedBucket.end, locale)
+                  : localize(locale, "Неделя", "Week")}
               </h3>
             </div>
 
@@ -602,7 +620,9 @@ export function ManagerPerformancePanel({
                 <section className="manager-performance-task-section">
                   <div className="manager-performance-task-section-head">
                     <h4 className="manager-performance-task-section-title">
-                      {showPendingTasks ? "Невыполненные задачи" : "Выполненные задачи"}
+                      {showPendingTasks
+                        ? localize(locale, "Невыполненные задачи", "Open tasks")
+                        : localize(locale, "Выполненные задачи", "Completed tasks")}
                     </h4>
                     <button
                       className="manager-performance-task-toggle"
@@ -634,8 +654,8 @@ export function ManagerPerformancePanel({
                     ) : (
                       <div className="manager-performance-task-empty">
                         {showPendingTasks
-                          ? "На этой неделе нет невыполненных задач."
-                          : "На этой неделе пока нет выполненных задач"}
+                          ? localize(locale, "На этой неделе нет невыполненных задач.", "There are no open tasks this week.")
+                          : localize(locale, "На этой неделе пока нет выполненных задач", "There are no completed tasks this week yet.")}
                       </div>
                     )}
                   </div>

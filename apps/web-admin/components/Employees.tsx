@@ -61,6 +61,7 @@ import {
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
 
 type EmployeeApiRecord = {
   id: string;
@@ -209,26 +210,12 @@ const statusStyles: Record<EmployeeStatus, string> = {
   dismissed: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
 };
 
-const statusLabels: Record<EmployeeStatus, string> = {
-  active: "На смене",
-  inactive: "Вне смены",
-  vacation: "Отпуск",
-  sick: "Больничный",
-  dismissed: "Уволен",
-};
-
 const statusToneByEmployeeStatus: Record<EmployeeStatus, string> = {
   active: "is-success",
   inactive: "is-gray",
   vacation: "is-gray",
   sick: "is-error",
   dismissed: "is-error",
-};
-
-const invitationLabels: Record<InvitationRecord["status"], string> = {
-  INVITED: "Приглашение отправлено",
-  PENDING_APPROVAL: "Ждёт подтверждения",
-  REJECTED: "Отклонено",
 };
 
 const invitationStyles: Record<InvitationRecord["status"], string> = {
@@ -239,16 +226,6 @@ const invitationStyles: Record<InvitationRecord["status"], string> = {
 };
 
 const CREATE_SHIFT_TEMPLATE_OPTION = "__create_shift_template__";
-
-const taskPriorityOptions: Array<{
-  value: TaskItem["priority"];
-  label: string;
-}> = [
-  { value: "LOW", label: "Низкий" },
-  { value: "MEDIUM", label: "Средний" },
-  { value: "HIGH", label: "Высокий" },
-  { value: "URGENT", label: "Срочный" },
-];
 
 const initialTaskDraft = {
   title: "",
@@ -322,7 +299,7 @@ function formatHireDate(value?: string | null) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleDateString("ru-RU");
+    : date.toLocaleDateString(getRuntimeLocaleTag());
 }
 
 function getEmployeeInitials(name: string) {
@@ -335,16 +312,17 @@ function getEmployeeInitials(name: string) {
 }
 
 function renderEmployeeStatusBadge(status: EmployeeStatus) {
+  const locale = getRuntimeLocale();
   const tableStatusLabel =
     status === "active"
-      ? "On shift"
+      ? runtimeLocalize("На смене", "On shift", locale)
       : status === "inactive"
-        ? "Off shift"
+        ? runtimeLocalize("Вне смены", "Off shift", locale)
         : status === "vacation"
-          ? "Vacation"
+          ? runtimeLocalize("Отпуск", "Vacation", locale)
           : status === "sick"
-            ? "Sick leave"
-            : "Dismissed";
+            ? runtimeLocalize("Больничный", "Sick leave", locale)
+            : runtimeLocalize("Уволен", "Dismissed", locale);
 
   return (
     <span
@@ -354,6 +332,93 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
       {tableStatusLabel}
     </span>
   );
+}
+
+function getStatusLabel(status: EmployeeStatus, locale: "ru" | "en") {
+  if (status === "active") return runtimeLocalize("На смене", "On shift", locale);
+  if (status === "inactive") return runtimeLocalize("Вне смены", "Off shift", locale);
+  if (status === "vacation") return runtimeLocalize("Отпуск", "Vacation", locale);
+  if (status === "sick") return runtimeLocalize("Больничный", "Sick leave", locale);
+  return runtimeLocalize("Уволен", "Dismissed", locale);
+}
+
+function getInvitationLabel(
+  status: InvitationRecord["status"],
+  locale: "ru" | "en",
+) {
+  if (status === "INVITED") {
+    return runtimeLocalize("Приглашение отправлено", "Invitation sent", locale);
+  }
+  if (status === "PENDING_APPROVAL") {
+    return runtimeLocalize("Ждёт подтверждения", "Pending approval", locale);
+  }
+  return runtimeLocalize("Отклонено", "Rejected", locale);
+}
+
+function getTaskPriorityOptions(locale: "ru" | "en") {
+  return [
+    { value: "LOW" as TaskItem["priority"], label: runtimeLocalize("Низкий", "Low", locale) },
+    {
+      value: "MEDIUM" as TaskItem["priority"],
+      label: runtimeLocalize("Средний", "Medium", locale),
+    },
+    {
+      value: "HIGH" as TaskItem["priority"],
+      label: runtimeLocalize("Высокий", "High", locale),
+    },
+    {
+      value: "URGENT" as TaskItem["priority"],
+      label: runtimeLocalize("Срочный", "Urgent", locale),
+    },
+  ];
+}
+
+function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
+  if (locale === "en") {
+    return day === 0
+      ? "Su"
+      : day === 1
+        ? "Mo"
+        : day === 2
+          ? "Tu"
+          : day === 3
+            ? "We"
+            : day === 4
+              ? "Th"
+              : day === 5
+                ? "Fr"
+                : "Sa";
+  }
+
+  return day === 0
+    ? "Вс"
+    : day === 1
+      ? "Пн"
+      : day === 2
+        ? "Вт"
+        : day === 3
+          ? "Ср"
+          : day === 4
+            ? "Чт"
+            : day === 5
+              ? "Пт"
+              : "Сб";
+}
+
+function getBiometricStatusLabel(
+  enrollmentStatus?: string | null,
+  locale: "ru" | "en",
+) {
+  switch (enrollmentStatus) {
+    case "ENROLLED":
+      return runtimeLocalize("Биометрия подключена", "Biometrics connected", locale);
+    case "PENDING":
+      return runtimeLocalize("Ожидает завершения", "Pending completion", locale);
+    case "FAILED":
+      return runtimeLocalize("Ошибка биометрии", "Biometric error", locale);
+    default:
+      return runtimeLocalize("Не настроена", "Not configured", locale);
+  }
 }
 
 function buildExpandedGroupsFromSnapshot(
@@ -384,6 +449,8 @@ const Employees = ({
   initialData?: EmployeesInitialData | null;
 }) => {
   const router = useRouter();
+  const locale = getRuntimeLocale();
+  const taskPriorityOptions = useMemo(() => getTaskPriorityOptions(locale), [locale]);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("employees");
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
@@ -507,7 +574,13 @@ const Employees = ({
       !templateDraft.endsAtLocal ||
       templateDraft.weekDays.length === 0
     ) {
-      setCreateTemplateError("Заполните все поля шаблона смены");
+      setCreateTemplateError(
+        runtimeLocalize(
+          "Заполните все поля шаблона смены",
+          "Fill in all shift template fields",
+          locale,
+        ),
+      );
       return;
     }
 
@@ -518,11 +591,11 @@ const Employees = ({
     if (!session) {
       const location = scheduleTemplates[0]?.location || {
         id: "mock-loc",
-        name: "Офис",
+        name: runtimeLocalize("Офис", "Office", locale),
       };
       const position = scheduleTemplates[0]?.position || {
         id: "mock-pos",
-        name: "Сотрудник",
+        name: runtimeLocalize("Сотрудник", "Employee", locale),
       };
 
       const newTemplate: ShiftTemplateRecord = {
@@ -591,7 +664,13 @@ const Employees = ({
       });
     } catch (error) {
       setCreateTemplateError(
-        error instanceof Error ? error.message : "Ошибка создания шаблона",
+        error instanceof Error
+          ? error.message
+          : runtimeLocalize(
+              "Ошибка создания шаблона",
+              "Failed to create shift template",
+              locale,
+            ),
       );
     } finally {
       setCreateTemplateSubmitting(false);
@@ -648,14 +727,16 @@ const Employees = ({
           status: normalizeEmployeeStatus(employee.status),
           activeTasks: tasksByEmployeeId.get(employee.id) ?? 0,
           phone: employee.phone ?? "—",
-          position: employee.position?.name ?? "Сотрудник",
+          position:
+            employee.position?.name ??
+            runtimeLocalize("Сотрудник", "Employee", locale),
           hireDate: employee.hireDate,
           attendance: null,
           avatarUrl: employee.avatarUrl ?? null,
         };
       })
-      .sort((left, right) => left.name.localeCompare(right.name, "ru"));
-  }, [employeeRecords, groupByEmployeeId, tasksByEmployeeId]);
+      .sort((left, right) => left.name.localeCompare(right.name, locale));
+  }, [employeeRecords, groupByEmployeeId, locale, tasksByEmployeeId]);
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -677,7 +758,7 @@ const Employees = ({
   }, [employees, search, showFormerEmployees]);
 
   const sortedEmployees = useMemo(() => {
-    const collator = new Intl.Collator("ru", {
+    const collator = new Intl.Collator(locale === "ru" ? "ru" : "en", {
       sensitivity: "base",
       numeric: true,
     });
@@ -715,7 +796,7 @@ const Employees = ({
           return direction * collator.compare(left.name, right.name);
       }
     });
-  }, [filteredEmployees, sortDescriptor]);
+  }, [filteredEmployees, locale, sortDescriptor]);
 
   const groupedEmployees = useMemo(
     () =>
@@ -727,9 +808,9 @@ const Employees = ({
           ),
         }))
         .sort((left, right) =>
-          left.group.name.localeCompare(right.group.name, "ru"),
+          left.group.name.localeCompare(right.group.name, locale),
         ),
-    [filteredEmployees, groups],
+    [filteredEmployees, groups, locale],
   );
 
   const ungroupedEmployees = useMemo(
@@ -795,19 +876,11 @@ const Employees = ({
   }, [selectedEmployeeBiometric]);
 
   const biometricStatusLabel = useMemo(() => {
-    switch (selectedEmployeeBiometric?.profile?.enrollmentStatus) {
-      case "ENROLLED":
-        return "Биометрия подключена";
-      case "PENDING":
-        return "Ожидает завершения";
-      case "FAILED":
-        return "Ошибка биометрии";
-      case "NOT_STARTED":
-        return "Не настроена";
-      default:
-        return "Не настроена";
-    }
-  }, [selectedEmployeeBiometric]);
+    return getBiometricStatusLabel(
+      selectedEmployeeBiometric?.profile?.enrollmentStatus,
+      locale,
+    );
+  }, [locale, selectedEmployeeBiometric]);
 
   const employeeJoinCode = organizationSetup?.company?.code ?? "";
   const employeeJoinLink =
@@ -861,7 +934,11 @@ const Employees = ({
       setDirectoryError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось загрузить сотрудников.",
+          : runtimeLocalize(
+              "Не удалось загрузить сотрудников.",
+              "Failed to load employees.",
+              locale,
+            ),
       );
       setEmployeeRecords([]);
       setOverview(null);
@@ -990,14 +1067,24 @@ const Employees = ({
         token: session.accessToken,
         body: JSON.stringify({ email: inviteEmail }),
       });
-      setInviteSuccess("Приглашение отправлено. Ссылка действует 3 дня.");
+      setInviteSuccess(
+        runtimeLocalize(
+          "Приглашение отправлено. Ссылка действует 3 дня.",
+          "Invitation sent. The link is valid for 3 days.",
+          locale,
+        ),
+      );
       setInviteEmail("");
       await loadDirectory();
     } catch (requestError) {
       setInviteError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось отправить приглашение.",
+          : runtimeLocalize(
+              "Не удалось отправить приглашение.",
+              "Failed to send invitation.",
+              locale,
+            ),
       );
     } finally {
       setInviteSubmitting(false);
@@ -1019,7 +1106,13 @@ const Employees = ({
         setCopiedInviteField((current) => (current === field ? null : current));
       }, 1800);
     } catch {
-      setInviteError("Не удалось скопировать. Скопируйте значение вручную.");
+      setInviteError(
+        runtimeLocalize(
+          "Не удалось скопировать. Скопируйте значение вручную.",
+          "Copy failed. Copy the value manually.",
+          locale,
+        ),
+      );
     }
   }
 
@@ -1043,13 +1136,13 @@ const Employees = ({
       setCreateGroupOpen(false);
       setCreateGroupName("");
       setCreateGroupDescription("");
-      setPageMessage("Группа добавлена.");
+      setPageMessage(runtimeLocalize("Группа добавлена.", "Group added.", locale));
       await loadDirectory();
     } catch (requestError) {
       setCreateGroupError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось создать группу.",
+          : runtimeLocalize("Не удалось создать группу.", "Failed to create group.", locale),
       );
     } finally {
       setCreateGroupSubmitting(false);
@@ -1065,13 +1158,23 @@ const Employees = ({
         method: "POST",
         token: session.accessToken,
       });
-      setPageMessage("Приглашение отправлено повторно.");
+      setPageMessage(
+        runtimeLocalize(
+          "Приглашение отправлено повторно.",
+          "Invitation sent again.",
+          locale,
+        ),
+      );
       await loadDirectory();
     } catch (requestError) {
       setInviteError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось повторно отправить приглашение.",
+          : runtimeLocalize(
+              "Не удалось повторно отправить приглашение.",
+              "Failed to resend invitation.",
+              locale,
+            ),
       );
     }
   }
@@ -1158,15 +1261,27 @@ const Employees = ({
       }
       setPageMessage(
         decision === "APPROVE"
-          ? "Анкета сотрудника подтверждена."
-          : "Анкета сотрудника отклонена.",
+          ? runtimeLocalize(
+              "Анкета сотрудника подтверждена.",
+              "Employee form approved.",
+              locale,
+            )
+          : runtimeLocalize(
+              "Анкета сотрудника отклонена.",
+              "Employee form rejected.",
+              locale,
+            ),
       );
       await loadDirectory();
     } catch (requestError) {
       setReviewError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось сохранить решение.",
+          : runtimeLocalize(
+              "Не удалось сохранить решение.",
+              "Failed to save the decision.",
+              locale,
+            ),
       );
     } finally {
       setReviewSubmitting(false);
@@ -1242,13 +1357,23 @@ const Employees = ({
       }
 
       setMoveDialogEmployeeId(null);
-      setPageMessage("Группа сотрудника обновлена.");
+      setPageMessage(
+        runtimeLocalize(
+          "Группа сотрудника обновлена.",
+          "Employee group updated.",
+          locale,
+        ),
+      );
       await loadDirectory();
     } catch (requestError) {
       setMoveError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось обновить группу сотрудника.",
+          : runtimeLocalize(
+              "Не удалось обновить группу сотрудника.",
+              "Failed to update employee group.",
+              locale,
+            ),
       );
     } finally {
       setMoveSubmitting(false);
@@ -1343,15 +1468,27 @@ const Employees = ({
       setTaskDayOffConfirmOpen(false);
       setPageMessage(
         taskDialog.mode === "employee"
-          ? "Задача назначена сотруднику."
-          : "Задача назначена группе.",
+          ? runtimeLocalize(
+              "Задача назначена сотруднику.",
+              "Task assigned to the employee.",
+              locale,
+            )
+          : runtimeLocalize(
+              "Задача назначена группе.",
+              "Task assigned to the group.",
+              locale,
+            ),
       );
       await loadDirectory();
     } catch (requestError) {
       setTaskError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось создать задачу.",
+          : runtimeLocalize(
+              "Не удалось создать задачу.",
+              "Failed to create task.",
+              locale,
+            ),
       );
     } finally {
       setTaskSubmitting(false);
@@ -1379,7 +1516,9 @@ const Employees = ({
     const normalizedDescription = groupEditorDescription.trim();
 
     if (!normalizedName) {
-      setGroupError("Укажите название группы.");
+      setGroupError(
+        runtimeLocalize("Укажите название группы.", "Enter a group name.", locale),
+      );
       return;
     }
 
@@ -1412,13 +1551,17 @@ const Employees = ({
 
       setGroupEditorId(null);
       setGroupDeleteConfirmOpen(false);
-      setPageMessage("Группа обновлена.");
+      setPageMessage(runtimeLocalize("Группа обновлена.", "Group updated.", locale));
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось обновить группу.",
+          : runtimeLocalize(
+              "Не удалось обновить группу.",
+              "Failed to update group.",
+              locale,
+            ),
       );
     } finally {
       setGroupSaving(false);
@@ -1439,13 +1582,17 @@ const Employees = ({
       });
       setGroupDeleteConfirmOpen(false);
       setGroupEditorId(null);
-      setPageMessage("Группа удалена.");
+      setPageMessage(runtimeLocalize("Группа удалена.", "Group deleted.", locale));
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
-          : "Не удалось удалить группу.",
+          : runtimeLocalize(
+              "Не удалось удалить группу.",
+              "Failed to delete group.",
+              locale,
+            ),
       );
     } finally {
       setGroupDeleting(false);
@@ -1466,7 +1613,7 @@ const Employees = ({
       <div className={`team-tasks-table-card${cardClassName}`}>
         <div className="team-tasks-table-shell">
           <Table
-            aria-label="Таблица сотрудников"
+            aria-label={runtimeLocalize("Таблица сотрудников", "Employees table", locale)}
             onSortChange={setSortDescriptor}
             size="sm"
             sortDescriptor={sortDescriptor}
@@ -1477,35 +1624,35 @@ const Employees = ({
                 className="w-[38%] min-w-[320px]"
                 id="name"
                 isRowHeader
-                label="ФИО"
+                label={runtimeLocalize("ФИО", "Full name", locale)}
               />
               <Table.Head
                 allowsSorting
                 className="w-[16%] min-w-[170px] team-tasks-head-center"
                 id="status"
-                label="Статус"
+                label={runtimeLocalize("Статус", "Status", locale)}
               />
               <Table.Head
                 className="w-[16%] min-w-[170px] team-tasks-head-center"
                 id="location"
-                label="Локация"
+                label={runtimeLocalize("Локация", "Location", locale)}
               />
               <Table.Head
                 allowsSorting
                 className="w-[16%] min-w-[170px] team-tasks-head-center"
                 id="group"
-                label="Группа"
+                label={runtimeLocalize("Группа", "Group", locale)}
               />
               <Table.Head
                 allowsSorting
                 className="w-[8%] min-w-[96px] team-tasks-head-center team-tasks-head-progress"
                 id="activeTasks"
-                label="Задачи"
+                label={runtimeLocalize("Задачи", "Tasks", locale)}
               />
               <Table.Head
                 className="w-[6%] min-w-[96px] team-tasks-head-center"
                 id="actions"
-                label="Действия"
+                label={runtimeLocalize("Действия", "Actions", locale)}
               />
             </Table.Header>
 
@@ -1636,7 +1783,7 @@ const Employees = ({
                 }`}
                 onClick={() => setViewMode("employees")}
               >
-                <Users className="h-4 w-4" /> Сотрудники{" "}
+                <Users className="h-4 w-4" /> {runtimeLocalize("Сотрудники", "Employees", locale)}{" "}
                 {filteredEmployees.length}
               </button>
               <button
@@ -1647,7 +1794,7 @@ const Employees = ({
                 }`}
                 onClick={() => setViewMode("groups")}
               >
-                <FolderOpen className="h-4 w-4" /> Группы {groups.length}
+                <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Группы", "Groups", locale)} {groups.length}
               </button>
             </div>
             <Button
@@ -1666,11 +1813,11 @@ const Employees = ({
             >
               {viewMode === "groups" ? (
                 <>
-                  <FolderOpen className="h-4 w-4" /> Добавить группу
+                  <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Добавить группу", "Add group", locale)}
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4" /> Добавить сотрудника
+                  <UserPlus className="h-4 w-4" /> {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
                 </>
               )}
             </Button>
@@ -1690,7 +1837,7 @@ const Employees = ({
               <Input
                 className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Поиск сотрудника..."
+                placeholder={runtimeLocalize("Поиск сотрудника...", "Search employee...", locale)}
                 value={search}
               />
             </div>
@@ -1701,7 +1848,11 @@ const Employees = ({
                   setShowFormerEmployees(value === true)
                 }
               />
-              Показывать бывших сотрудников
+              {runtimeLocalize(
+                "Показывать бывших сотрудников",
+                "Show former employees",
+                locale,
+              )}
             </label>
             {viewMode === "groups" ? (
               <Button
@@ -1711,7 +1862,9 @@ const Employees = ({
                 variant="outline"
               >
                 <Users className="h-3.5 w-3.5" />
-                {allExpanded ? "Свернуть группы" : "Развернуть группы"}
+                {allExpanded
+                  ? runtimeLocalize("Свернуть группы", "Collapse groups", locale)
+                  : runtimeLocalize("Развернуть группы", "Expand groups", locale)}
               </Button>
             ) : null}
           </div>
@@ -1738,13 +1891,21 @@ const Employees = ({
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-heading ${invitationStyles[invitation.status]}`}
                       >
-                        {invitationLabels[invitation.status]}
+                        {getInvitationLabel(invitation.status, locale)}
                       </span>
                     </div>
                     <p className="text-xs font-heading text-muted-foreground">
                       {invitation.submittedAt
-                        ? `Анкета отправлена ${new Date(invitation.submittedAt).toLocaleString("ru-RU")}`
-                        : `Ссылка активна до ${new Date(invitation.expiresAt).toLocaleString("ru-RU")}`}
+                        ? `${
+                            runtimeLocalize("Анкета отправлена", "Form submitted", locale)
+                          } ${new Date(invitation.submittedAt).toLocaleString(getRuntimeLocaleTag(locale))}`
+                        : `${
+                            runtimeLocalize(
+                              "Ссылка активна до",
+                              "Link active until",
+                              locale,
+                            )
+                          } ${new Date(invitation.expiresAt).toLocaleString(getRuntimeLocaleTag(locale))}`}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1755,7 +1916,7 @@ const Employees = ({
                         size="sm"
                         variant="outline"
                       >
-                        <Mail className="h-4 w-4" /> Повторить
+                        <Mail className="h-4 w-4" /> {runtimeLocalize("Повторить", "Resend", locale)}
                       </Button>
                     ) : null}
                     <Button
@@ -1763,7 +1924,7 @@ const Employees = ({
                       onClick={() => openInvitation(invitation)}
                       size="sm"
                     >
-                      Проверить
+                      {runtimeLocalize("Проверить", "Review", locale)}
                     </Button>
                   </div>
                 </div>
@@ -1773,14 +1934,18 @@ const Employees = ({
 
           {directoryLoading ? (
             <div className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">
-              Загружаю сотрудников...
+              {runtimeLocalize("Загружаю сотрудников...", "Loading employees...", locale)}
             </div>
           ) : viewMode === "employees" ? (
             sortedEmployees.length > 0 ? (
               renderEmployeesTable(sortedEmployees, { cardClassName: "flex-1" })
             ) : (
               <p className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">
-                По текущему фильтру сотрудники не найдены.
+                {runtimeLocalize(
+                  "По текущему фильтру сотрудники не найдены.",
+                  "No employees found for the current filter.",
+                  locale,
+                )}
               </p>
             )
           ) : (
@@ -1818,7 +1983,7 @@ const Employees = ({
                           size="sm"
                           variant="ghost"
                         >
-                          <Settings className="h-3 w-3" /> Изменить
+                          <Settings className="h-3 w-3" /> {runtimeLocalize("Изменить", "Edit", locale)}
                         </Button>
                         <Button
                           className="h-7 rounded-lg px-2 text-xs font-heading"
@@ -1828,7 +1993,7 @@ const Employees = ({
                           size="sm"
                           variant="ghost"
                         >
-                          <ListTodo className="h-3 w-3" /> Задача группе
+                          <ListTodo className="h-3 w-3" /> {runtimeLocalize("Задача группе", "Task for group", locale)}
                         </Button>
                       </div>
                     </div>
@@ -1839,7 +2004,11 @@ const Employees = ({
                       : null}
                     {isOpen && members.length === 0 ? (
                       <p className="p-4 text-center text-sm font-heading text-muted-foreground">
-                        В этой группе нет сотрудников.
+                        {runtimeLocalize(
+                          "В этой группе нет сотрудников.",
+                          "There are no employees in this group.",
+                          locale,
+                        )}
                       </p>
                     ) : null}
                   </div>
@@ -1859,7 +2028,7 @@ const Employees = ({
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                       <span className="font-heading font-semibold italic text-muted-foreground">
-                        Без группы
+                        {runtimeLocalize("Без группы", "No group", locale)}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs font-heading text-muted-foreground">
                         <Users className="h-3.5 w-3.5" />
@@ -1883,23 +2052,33 @@ const Employees = ({
         <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Добавить сотрудника
+              {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Лучше выдать сотруднику код компании или mobile join link. Email
-              приглашение можно использовать как запасной вариант.
+              {runtimeLocalize(
+                "Лучше выдать сотруднику код компании или mobile join link. Email приглашение можно использовать как запасной вариант.",
+                "It is better to give the employee the company code or a mobile join link. Email invitation can be used as a fallback option.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-3 rounded-2xl border border-border bg-secondary/20 p-4">
               <div className="space-y-1">
                 <div className="text-sm font-heading font-semibold text-foreground">
-                  Код компании
+                  {runtimeLocalize("Код компании", "Company code", locale)}
                 </div>
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={employeeJoinCode || "Сначала настройте организацию"}
+                    value={
+                      employeeJoinCode ||
+                      runtimeLocalize(
+                        "Сначала настройте организацию",
+                        "Configure the organization first",
+                        locale,
+                      )
+                    }
                   />
                   <Button
                     disabled={!employeeJoinCode}
@@ -1911,8 +2090,8 @@ const Employees = ({
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {copiedInviteField === "code"
-                      ? "Скопировано"
-                      : "Копировать"}
+                      ? runtimeLocalize("Скопировано", "Copied", locale)
+                      : runtimeLocalize("Копировать", "Copy", locale)}
                   </Button>
                 </div>
               </div>
@@ -1920,14 +2099,18 @@ const Employees = ({
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm font-heading font-semibold text-foreground">
                   <Smartphone className="h-4 w-4 text-muted-foreground" />
-                  Mobile join link
+                  {runtimeLocalize("Ссылка для входа", "Mobile join link", locale)}
                 </div>
                 <div className="flex gap-2">
                   <Input
                     readOnly
                     value={
                       employeeJoinLink ||
-                      "Ссылка появится после настройки организации"
+                      runtimeLocalize(
+                        "Ссылка появится после настройки организации",
+                        "The link will appear after organization setup",
+                        locale,
+                      )
                     }
                   />
                   <Button
@@ -1940,8 +2123,8 @@ const Employees = ({
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {copiedInviteField === "link"
-                      ? "Скопировано"
-                      : "Копировать"}
+                      ? runtimeLocalize("Скопировано", "Copied", locale)
+                      : runtimeLocalize("Копировать", "Copy", locale)}
                   </Button>
                   {employeeJoinLink ? (
                     <Button asChild type="button" variant="outline">
@@ -1959,14 +2142,15 @@ const Employees = ({
             </div>
 
             <div className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-              Если не хотите зависеть от email-сервиса, просто отправьте
-              сотруднику код компании. Он сможет сам зарегистрироваться в
-              мобильном приложении. Менеджерский доступ задаётся на этапе
-              подтверждения анкеты.
+              {runtimeLocalize(
+                "Если не хотите зависеть от email-сервиса, просто отправьте сотруднику код компании. Он сможет сам зарегистрироваться в мобильном приложении. Менеджерский доступ задаётся на этапе подтверждения анкеты.",
+                "If you do not want to depend on the email service, just send the employee the company code. They can register in the mobile app on their own. Manager access is granted during form approval.",
+                locale,
+              )}
             </div>
 
             <label className="grid gap-2 text-sm font-heading">
-              <span>Email для приглашения</span>
+              <span>{runtimeLocalize("Email для приглашения", "Invitation email", locale)}</span>
               <Input
                 onChange={(event) => setInviteEmail(event.target.value)}
                 placeholder="employee@company.ru"
@@ -1986,7 +2170,9 @@ const Employees = ({
                 onClick={() => void handleInviteSubmit()}
               >
                 <Mail className="h-4 w-4" />
-                {inviteSubmitting ? "Отправляем..." : "Отправить приглашение"}
+                {inviteSubmitting
+                  ? runtimeLocalize("Отправляем...", "Sending...", locale)
+                  : runtimeLocalize("Отправить приглашение", "Send invitation", locale)}
               </Button>
             </div>
           </div>
@@ -2004,11 +2190,14 @@ const Employees = ({
         <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Доступ сотрудника создан
+              {runtimeLocalize("Доступ сотрудника создан", "Employee access created", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Отправьте сотруднику эти данные для первого входа. Пароль
-              показывается только один раз.
+              {runtimeLocalize(
+                "Отправьте сотруднику эти данные для первого входа. Пароль показывается только один раз.",
+                "Send these credentials to the employee for the first sign-in. The password is shown only once.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -2033,15 +2222,15 @@ const Employees = ({
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {copiedInviteField === "email"
-                      ? "Скопировано"
-                      : "Копировать"}
+                      ? runtimeLocalize("Скопировано", "Copied", locale)
+                      : runtimeLocalize("Копировать", "Copy", locale)}
                   </Button>
                 </div>
               </div>
 
               <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
                 <div className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                  Временный пароль
+                  {runtimeLocalize("Временный пароль", "Temporary password", locale)}
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="min-w-0 break-all font-mono text-base text-foreground">
@@ -2061,8 +2250,8 @@ const Employees = ({
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     {copiedInviteField === "password"
-                      ? "Скопировано"
-                      : "Копировать"}
+                      ? runtimeLocalize("Скопировано", "Copied", locale)
+                      : runtimeLocalize("Копировать", "Copy", locale)}
                   </Button>
                 </div>
               </div>
@@ -2075,7 +2264,7 @@ const Employees = ({
               onClick={() => setApprovalCredentials(null)}
               type="button"
             >
-              Готово
+              {runtimeLocalize("Готово", "Done", locale)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2095,32 +2284,43 @@ const Employees = ({
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Добавить группу
+              {runtimeLocalize("Добавить группу", "Add group", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Создайте новую группу внутри организации. Сотрудников можно будет
-              добавить сразу после создания.
+              {runtimeLocalize(
+                "Создайте новую группу внутри организации. Сотрудников можно будет добавить сразу после создания.",
+                "Create a new group inside the organization. Employees can be added right after creation.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>Название группы</span>
+              <span>{runtimeLocalize("Название группы", "Group name", locale)}</span>
               <Input
                 maxLength={120}
                 onChange={(event) => setCreateGroupName(event.target.value)}
-                placeholder="Например, Администраторы"
+                placeholder={runtimeLocalize(
+                  "Например, Администраторы",
+                  "For example, Administrators",
+                  locale,
+                )}
                 value={createGroupName}
               />
             </label>
             <label className="grid gap-2 text-sm font-heading">
-              <span>Описание</span>
+              <span>{runtimeLocalize("Описание", "Description", locale)}</span>
               <Textarea
                 className="min-h-[120px]"
                 maxLength={500}
                 onChange={(event) =>
                   setCreateGroupDescription(event.target.value)
                 }
-                placeholder="Короткое описание группы"
+                placeholder={runtimeLocalize(
+                  "Короткое описание группы",
+                  "Short group description",
+                  locale,
+                )}
                 value={createGroupDescription}
               />
             </label>
@@ -2134,7 +2334,9 @@ const Employees = ({
                 onClick={() => void handleCreateGroup()}
               >
                 <FolderOpen className="h-4 w-4" />
-                {createGroupSubmitting ? "Создаём..." : "Создать группу"}
+                {createGroupSubmitting
+                  ? runtimeLocalize("Создаём...", "Creating...", locale)
+                  : runtimeLocalize("Создать группу", "Create group", locale)}
               </Button>
             </div>
           </div>
@@ -2150,16 +2352,19 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  Проверка анкеты сотрудника
+                  {runtimeLocalize("Проверка анкеты сотрудника", "Employee form review", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
-                  Руководитель может исправить поля, добавить фото и подтвердить
-                  либо отклонить заявку.
+                  {runtimeLocalize(
+                    "Руководитель может исправить поля, добавить фото и подтвердить либо отклонить заявку.",
+                    "A manager can adjust the fields, add a photo, and approve or reject the request.",
+                    locale,
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Имя*</span>
+                  <span>{runtimeLocalize("Имя*", "First name*", locale)}</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -2172,7 +2377,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Фамилия*</span>
+                  <span>{runtimeLocalize("Фамилия*", "Last name*", locale)}</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -2185,7 +2390,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Отчество</span>
+                  <span>{runtimeLocalize("Отчество", "Middle name", locale)}</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -2198,7 +2403,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Дата рождения*</span>
+                  <span>{runtimeLocalize("Дата рождения*", "Date of birth*", locale)}</span>
                   <DateOfBirthField
                     className="grid-cols-[72px_84px_84px]"
                     value={reviewForm.birthDate}
@@ -2212,7 +2417,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Пол*</span>
+                  <span>{runtimeLocalize("Пол*", "Gender*", locale)}</span>
                   <AppSelectField
                     value={reviewForm.gender}
                     onValueChange={(value) =>
@@ -2222,14 +2427,14 @@ const Employees = ({
                       }))
                     }
                     options={[
-                      { value: "male", label: "Мужской" },
-                      { value: "female", label: "Женский" },
+                      { value: "male", label: runtimeLocalize("Мужской", "Male", locale) },
+                      { value: "female", label: runtimeLocalize("Женский", "Female", locale) },
                     ]}
                     triggerClassName={reviewFieldClassName}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Телефон*</span>
+                  <span>{runtimeLocalize("Телефон*", "Phone*", locale)}</span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -2242,7 +2447,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Смена*</span>
+                  <span>{runtimeLocalize("Смена*", "Shift*", locale)}</span>
                   <AppSelectField
                     value={reviewForm.shiftTemplateId}
                     onValueChange={(value) => {
@@ -2255,7 +2460,7 @@ const Employees = ({
                         }));
                       }
                     }}
-                    emptyLabel="Выберите смену"
+                    emptyLabel={runtimeLocalize("Выберите смену", "Select shift", locale)}
                     options={[
                       ...scheduleTemplates.map((template) => ({
                         value: template.id,
@@ -2263,14 +2468,14 @@ const Employees = ({
                       })),
                       {
                         value: CREATE_SHIFT_TEMPLATE_OPTION,
-                        label: "+ Добавить смену",
+                        label: runtimeLocalize("+ Добавить смену", "+ Add shift", locale),
                       },
                     ]}
                     triggerClassName={reviewFieldClassName}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Группа</span>
+                  <span>{runtimeLocalize("Группа", "Group", locale)}</span>
                   <AppSelectField
                     value={
                       reviewForm.groupId === "__none" ? "" : reviewForm.groupId
@@ -2281,7 +2486,7 @@ const Employees = ({
                         groupId: value || "__none",
                       }))
                     }
-                    emptyLabel="Без группы"
+                    emptyLabel={runtimeLocalize("Без группы", "No group", locale)}
                     options={groups.map((group) => ({
                       value: group.id,
                       label: group.name,
@@ -2300,16 +2505,24 @@ const Employees = ({
                     }
                   />
                   <span className="font-semibold text-foreground">
-                    Выдать менеджерский доступ
+                    {runtimeLocalize("Выдать менеджерский доступ", "Grant manager access", locale)}
                   </span>
                 </label>
               </div>
               <ImageAdjustField
-                dialogDescription="Подгони фото сотрудника перед подтверждением анкеты."
-                dialogTitle="Редактировать фото сотрудника"
+                dialogDescription={runtimeLocalize(
+                  "Подгони фото сотрудника перед подтверждением анкеты.",
+                  "Adjust the employee photo before approving the form.",
+                  locale,
+                )}
+                dialogTitle={runtimeLocalize(
+                  "Редактировать фото сотрудника",
+                  "Edit employee photo",
+                  locale,
+                )}
                 onChange={handleReviewAvatar}
                 onError={setReviewError}
-                previewAlt="Аватар сотрудника"
+                previewAlt={runtimeLocalize("Аватар сотрудника", "Employee avatar", locale)}
                 renderTrigger={({
                   chooseFile,
                   hasValue,
@@ -2320,22 +2533,30 @@ const Employees = ({
                     <div className="flex flex-col items-center gap-3">
                       {previewSrc ? (
                         <img
-                          alt="Аватар сотрудника"
+                          alt={runtimeLocalize("Аватар сотрудника", "Employee avatar", locale)}
                           className="h-32 w-32 rounded-xl object-cover"
                           src={previewSrc}
                         />
                       ) : (
                         <div className="flex h-32 w-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
-                          Нет фото
+                          {runtimeLocalize("Нет фото", "No photo", locale)}
                         </div>
                       )}
                     </div>
                     <div className="grid gap-2 text-sm font-heading">
-                      <span>Фото</span>
+                      <span>{runtimeLocalize("Фото", "Photo", locale)}</span>
                       <div className={reviewInfoBoxClassName}>
                         {hasValue
-                          ? "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб."
-                          : "Можно выбрать фото и сразу отрегулировать масштаб, X и Y."}
+                          ? runtimeLocalize(
+                              "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб.",
+                              "Photo selected. You can move the frame and adjust the scale if needed.",
+                              locale,
+                            )
+                          : runtimeLocalize(
+                              "Можно выбрать фото и сразу отрегулировать масштаб, X и Y.",
+                              "You can choose a photo and immediately adjust scale, X and Y.",
+                              locale,
+                            )}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -2344,7 +2565,7 @@ const Employees = ({
                           type="button"
                           variant="outline"
                         >
-                          Заменить файл
+                          {runtimeLocalize("Заменить файл", "Replace file", locale)}
                         </Button>
                         {hasValue ? (
                           <Button
@@ -2353,7 +2574,7 @@ const Employees = ({
                             type="button"
                             variant="outline"
                           >
-                            Настроить
+                            {runtimeLocalize("Настроить", "Adjust", locale)}
                           </Button>
                         ) : null}
                       </div>
@@ -2363,7 +2584,9 @@ const Employees = ({
                         disabled
                         value={selectedInvitation.email}
                       />
-                      <span className="mt-2">Причина отклонения</span>
+                      <span className="mt-2">
+                        {runtimeLocalize("Причина отклонения", "Rejection reason", locale)}
+                      </span>
                       <Input
                         className={reviewFieldClassName}
                         onChange={(event) =>
@@ -2372,7 +2595,11 @@ const Employees = ({
                             rejectedReason: event.target.value,
                           }))
                         }
-                        placeholder="Заполните, если отклоняете заявку"
+                        placeholder={runtimeLocalize(
+                          "Заполните, если отклоняете заявку",
+                          "Fill in if you reject the request",
+                          locale,
+                        )}
                         value={reviewForm.rejectedReason}
                       />
                     </div>
@@ -2390,7 +2617,7 @@ const Employees = ({
                   onClick={() => void submitReview("REJECT")}
                   variant="outline"
                 >
-                  <X className="h-4 w-4" /> Отклонить
+                  <X className="h-4 w-4" /> {runtimeLocalize("Отклонить", "Reject", locale)}
                 </Button>
                 <Button
                   className="rounded-xl font-heading"
@@ -2398,7 +2625,9 @@ const Employees = ({
                   onClick={() => void submitReview("APPROVE")}
                 >
                   <Check className="h-4 w-4" />
-                  {reviewSubmitting ? "Сохраняем..." : "Подтвердить"}
+                  {reviewSubmitting
+                    ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                    : runtimeLocalize("Подтвердить", "Approve", locale)}
                 </Button>
               </div>
             </>
@@ -2416,17 +2645,20 @@ const Employees = ({
         <DialogContent className="w-[min(480px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Создать шаблон смены
+              {runtimeLocalize("Создать шаблон смены", "Create shift template", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Новый шаблон появится в списке и будет автоматически выбран для
-              этого сотрудника.
+              {runtimeLocalize(
+                "Новый шаблон появится в списке и будет автоматически выбран для этого сотрудника.",
+                "The new template will appear in the list and will be automatically selected for this employee.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-[11px] font-heading font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]/75">
-                Название шаблона
+                {runtimeLocalize("Название шаблона", "Template name", locale)}
               </label>
               <Input
                 className="h-12 rounded-2xl border-[color:var(--accent)]/15 bg-[color:var(--soft-accent)]/35 px-4 font-heading text-lg placeholder:font-heading placeholder:text-muted-foreground/65 focus-visible:ring-[color:var(--accent)]/20"
@@ -2436,7 +2668,11 @@ const Employees = ({
                     name: event.target.value,
                   }))
                 }
-                placeholder="Например: Утренняя смена"
+                placeholder={runtimeLocalize(
+                  "Например: Утренняя смена",
+                  "For example: Morning shift",
+                  locale,
+                )}
                 value={templateDraft.name}
               />
             </div>
@@ -2467,16 +2703,19 @@ const Employees = ({
             <div className="space-y-2">
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  Рабочие дни
+                  {runtimeLocalize("Рабочие дни", "Workdays", locale)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Выберите дни недели, по которым проходит смена
+                  {runtimeLocalize(
+                    "Выберите дни недели, по которым проходит смена",
+                    "Select the weekdays when the shift takes place",
+                    locale,
+                  )}
                 </p>
               </div>
               <div className="grid grid-cols-7 gap-1">
-                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(
-                  (label, index) => {
-                    const day = index + 1;
+                {[1, 2, 3, 4, 5, 6, 0].map((day, index) => {
+                    const label = getWeekdayShortLabel(day, locale);
                     const active = templateDraft.weekDays.includes(day);
 
                     return (
@@ -2486,15 +2725,14 @@ const Employees = ({
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
                         }`}
-                        key={label}
+                        key={`${day}-${label}`}
                         onClick={() => toggleTemplateWeekDay(day)}
                         type="button"
                       >
                         {label}
                       </button>
                     );
-                  },
-                )}
+                  })}
               </div>
             </div>
 
@@ -2509,7 +2747,9 @@ const Employees = ({
                 onClick={() => void handleCreateTemplate()}
                 type="button"
               >
-                {createTemplateSubmitting ? "Создаём..." : "Создать шаблон"}
+                {createTemplateSubmitting
+                  ? runtimeLocalize("Создаём...", "Creating...", locale)
+                  : runtimeLocalize("Создать шаблон", "Create template", locale)}
               </Button>
             </div>
           </div>
@@ -2546,19 +2786,24 @@ const Employees = ({
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1 text-xs font-heading text-[color:var(--muted-foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
-                    {selectedEmployee.group || "Без группы"}
+                    {selectedEmployee.group ||
+                      runtimeLocalize("Без группы", "No group", locale)}
                   </span>
                   <span
                     className={`inline-block rounded-full px-3 py-1 text-xs font-heading ${statusStyles[selectedEmployee.status]}`}
                   >
-                    {statusLabels[selectedEmployee.status]}
+                    {getStatusLabel(selectedEmployee.status, locale)}
                   </span>
                 </div>
               </div>
               <div className="space-y-5 p-6">
                 {detailsLoading ? (
                   <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-6 text-center text-sm font-heading text-muted-foreground">
-                    Загружаю карточку сотрудника...
+                    {runtimeLocalize(
+                      "Загружаю карточку сотрудника...",
+                      "Loading employee card...",
+                      locale,
+                    )}
                   </div>
                 ) : null}
                 <div className="flex rounded-2xl border border-border bg-secondary/20 p-1">
@@ -2571,7 +2816,7 @@ const Employees = ({
                     onClick={() => setSelectedEmployeeTab("general")}
                     type="button"
                   >
-                    Общая информация
+                    {runtimeLocalize("Общая информация", "General", locale)}
                   </button>
                   <button
                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-heading font-medium transition ${
@@ -2582,7 +2827,7 @@ const Employees = ({
                     onClick={() => setSelectedEmployeeTab("personal")}
                     type="button"
                   >
-                    Персональная
+                    {runtimeLocalize("Персональная", "Personal", locale)}
                   </button>
                 </div>
                 {selectedEmployeeTab === "general" ? (
@@ -2590,7 +2835,7 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Телефон
+                          {runtimeLocalize("Телефон", "Phone", locale)}
                         </p>
                         <p className="mt-1 break-words font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeDetails?.phone ||
@@ -2610,7 +2855,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Офис / локация
+                          {runtimeLocalize("Офис / локация", "Office / location", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeDetails?.primaryLocation?.name ||
@@ -2620,7 +2865,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Сотрудник с
+                          {runtimeLocalize("Сотрудник с", "Employee since", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {formatHireDate(
@@ -2633,7 +2878,7 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-4">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          Группа
+                          {runtimeLocalize("Группа", "Group", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployee.group || "—"}
@@ -2641,7 +2886,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          Отдел
+                          {runtimeLocalize("Отдел", "Department", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployeeDetails?.department?.name || "—"}
@@ -2649,7 +2894,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          Задачи
+                          {runtimeLocalize("Задачи", "Tasks", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployee.activeTasks}
@@ -2657,7 +2902,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          Компания
+                          {runtimeLocalize("Компания", "Company", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployeeDetails?.company?.name || "—"}
@@ -2671,20 +2916,28 @@ const Employees = ({
                       <div className="rounded-2xl border border-border bg-secondary/20 p-3">
                         {biometricPreviewUrl ? (
                           <img
-                            alt="Биометрический профиль"
+                            alt={runtimeLocalize(
+                              "Биометрический профиль",
+                              "Biometric profile",
+                              locale,
+                            )}
                             className="h-40 w-full rounded-xl object-cover"
                             src={biometricPreviewUrl}
                           />
                         ) : (
                           <div className="flex h-40 items-center justify-center rounded-xl bg-secondary/50 text-center text-xs font-heading text-muted-foreground">
-                            Биометрический снимок не найден
+                            {runtimeLocalize(
+                              "Биометрический снимок не найден",
+                              "Biometric snapshot not found",
+                              locale,
+                            )}
                           </div>
                         )}
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            Биометрия
+                            {runtimeLocalize("Биометрия", "Biometrics", locale)}
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
                             {biometricStatusLabel}
@@ -2692,7 +2945,7 @@ const Employees = ({
                         </div>
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            Провайдер
+                            {runtimeLocalize("Провайдер", "Provider", locale)}
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
                             {selectedEmployeeBiometric?.profile?.provider ||
@@ -2701,7 +2954,7 @@ const Employees = ({
                         </div>
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            Дата рождения
+                            {runtimeLocalize("Дата рождения", "Date of birth", locale)}
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
                             {formatHireDate(selectedEmployeeDetails?.birthDate)}
@@ -2709,13 +2962,13 @@ const Employees = ({
                         </div>
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            Пол
+                            {runtimeLocalize("Пол", "Gender", locale)}
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
                             {selectedEmployeeDetails?.gender === "female"
-                              ? "Женский"
+                              ? runtimeLocalize("Женский", "Female", locale)
                               : selectedEmployeeDetails?.gender === "male"
-                                ? "Мужской"
+                                ? runtimeLocalize("Мужской", "Male", locale)
                                 : "—"}
                           </p>
                         </div>
@@ -2724,32 +2977,32 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Последняя верификация
+                          {runtimeLocalize("Последняя верификация", "Last verification", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeBiometric?.profile?.lastVerifiedAt
                             ? new Date(
                                 selectedEmployeeBiometric.profile
                                   .lastVerifiedAt,
-                              ).toLocaleString("ru-RU")
+                              ).toLocaleString(getRuntimeLocaleTag(locale))
                             : "—"}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Подключено с
+                          {runtimeLocalize("Подключено с", "Connected since", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeBiometric?.profile?.enrolledAt
                             ? new Date(
                                 selectedEmployeeBiometric.profile.enrolledAt,
-                              ).toLocaleString("ru-RU")
+                              ).toLocaleString(getRuntimeLocaleTag(locale))
                             : "—"}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Табельный номер
+                          {runtimeLocalize("Табельный номер", "Employee number", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployee.employeeNumber}
@@ -2757,7 +3010,7 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          Версия согласия
+                          {runtimeLocalize("Версия согласия", "Consent version", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeBiometric?.profile?.consentVersion ||
@@ -2767,13 +3020,14 @@ const Employees = ({
                     </div>
                     <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                       <p className="text-xs text-[color:var(--muted-foreground)]">
-                        Паспортные данные
+                        {runtimeLocalize("Паспортные данные", "Passport details", locale)}
                       </p>
                       <p className="mt-2 leading-6 text-[color:var(--foreground)]">
-                        В backend сейчас нет отдельных полей с паспортными
-                        реквизитами для отображения в карточке. Когда эти данные
-                        появятся в API, этот блок можно сразу заполнить без
-                        смены интерфейса.
+                        {runtimeLocalize(
+                          "В backend сейчас нет отдельных полей с паспортными реквизитами для отображения в карточке. Когда эти данные появятся в API, этот блок можно сразу заполнить без смены интерфейса.",
+                          "The backend does not yet provide separate passport fields for this card. Once the API exposes them, this block can be filled without changing the interface.",
+                          locale,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -2790,7 +3044,7 @@ const Employees = ({
                     }}
                     variant="outline"
                   >
-                    <ArrowRightLeft className="h-4 w-4" /> Переместить в группу
+                    <ArrowRightLeft className="h-4 w-4" /> {runtimeLocalize("Переместить в группу", "Move to group", locale)}
                   </Button>
                   <Button
                     className="flex-1 rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
@@ -2802,7 +3056,7 @@ const Employees = ({
                       );
                     }}
                   >
-                    <ListTodo className="h-4 w-4" /> Назначить задачу
+                    <ListTodo className="h-4 w-4" /> {runtimeLocalize("Назначить задачу", "Assign task", locale)}
                   </Button>
                 </div>
               </div>
@@ -2818,24 +3072,30 @@ const Employees = ({
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Переместить в группу
+              {runtimeLocalize("Переместить в группу", "Move to group", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              Выберите группу для сотрудника. Можно оставить без группы.
+              {runtimeLocalize(
+                "Выберите группу для сотрудника. Можно оставить без группы.",
+                "Select a group for the employee. The employee can remain without a group.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>Группа</span>
+              <span>{runtimeLocalize("Группа", "Group", locale)}</span>
               <Select
                 onValueChange={setMoveTargetGroupId}
                 value={moveTargetGroupId}
               >
                 <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
-                  <SelectValue placeholder="Выберите группу" />
+                  <SelectValue placeholder={runtimeLocalize("Выберите группу", "Select group", locale)} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none">Без группы</SelectItem>
+                  <SelectItem value="__none">
+                    {runtimeLocalize("Без группы", "No group", locale)}
+                  </SelectItem>
                   {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       {group.name}
@@ -2851,14 +3111,16 @@ const Employees = ({
                 onClick={() => setMoveDialogEmployeeId(null)}
                 variant="outline"
               >
-                Отмена
+                {runtimeLocalize("Отмена", "Cancel", locale)}
               </Button>
               <Button
                 className="rounded-xl font-heading"
                 disabled={moveSubmitting}
                 onClick={() => void handleMoveEmployee()}
               >
-                {moveSubmitting ? "Сохраняем..." : "Сохранить"}
+                {moveSubmitting
+                  ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                  : runtimeLocalize("Сохранить", "Save", locale)}
               </Button>
             </div>
           </div>
@@ -2878,18 +3140,18 @@ const Employees = ({
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {taskDialog?.mode === "group"
-                ? "Задача группе"
-                : "Назначить задачу"}
+                ? runtimeLocalize("Задача группе", "Task for group", locale)
+                : runtimeLocalize("Назначить задачу", "Assign task", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {taskDialog
-                ? `Получатель: ${taskDialog.targetLabel}`
-                : "Заполните параметры задачи."}
+                ? `${runtimeLocalize("Получатель", "Recipient", locale)}: ${taskDialog.targetLabel}`
+                : runtimeLocalize("Заполните параметры задачи.", "Fill in the task details.", locale)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>Название</span>
+              <span>{runtimeLocalize("Название", "Title", locale)}</span>
               <Input
                 onChange={(event) =>
                   setTaskDraft((current) => ({
@@ -2897,12 +3159,16 @@ const Employees = ({
                     title: event.target.value,
                   }))
                 }
-                placeholder="Например, Подготовить отчёт"
+                placeholder={runtimeLocalize(
+                  "Например, Подготовить отчёт",
+                  "For example, Prepare the report",
+                  locale,
+                )}
                 value={taskDraft.title}
               />
             </label>
             <label className="grid gap-2 text-sm font-heading">
-              <span>Описание</span>
+              <span>{runtimeLocalize("Описание", "Description", locale)}</span>
               <Textarea
                 className="min-h-[110px]"
                 onChange={(event) =>
@@ -2911,13 +3177,17 @@ const Employees = ({
                     description: event.target.value,
                   }))
                 }
-                placeholder="Кратко опишите задачу"
+                placeholder={runtimeLocalize(
+                  "Кратко опишите задачу",
+                  "Briefly describe the task",
+                  locale,
+                )}
                 value={taskDraft.description}
               />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-sm font-heading">
-                <span>Приоритет</span>
+                <span>{runtimeLocalize("Приоритет", "Priority", locale)}</span>
                 <AppSelectField
                   value={taskDraft.priority}
                   onValueChange={(value) =>
@@ -2935,7 +3205,7 @@ const Employees = ({
               </label>
               {!taskDraft.isRecurring ? (
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Срок</span>
+                  <span>{runtimeLocalize("Срок", "Due date", locale)}</span>
                   <Input
                     className="h-11"
                     onChange={(event) =>
@@ -2957,10 +3227,10 @@ const Employees = ({
                           : "bg-[color:var(--soft-warning)] text-[color:var(--warning)]"
                       }`}
                     >
-                      {formatWorkdayDateLabel(taskDayStatus.dayKey)}:{" "}
+                      {formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}:{" "}
                       {taskDayStatus.isWorkday
-                        ? "рабочий день"
-                        : "выходной день"}
+                        ? runtimeLocalize("рабочий день", "workday", locale)
+                        : runtimeLocalize("выходной день", "day off", locale)}
                     </span>
                   ) : null}
                 </label>
@@ -2977,9 +3247,9 @@ const Employees = ({
                     }))
                   }
                 />
-                <span className="whitespace-nowrap text-sm font-heading leading-none">
-                  Сделать регулярной задачей
-                </span>
+                  <span className="whitespace-nowrap text-sm font-heading leading-none">
+                  {runtimeLocalize("Сделать регулярной задачей", "Make recurring", locale)}
+                  </span>
               </label>
               <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
                 <Checkbox
@@ -2991,15 +3261,19 @@ const Employees = ({
                     }))
                   }
                 />
-                <span className="whitespace-nowrap text-sm font-heading leading-none">
-                  Требуется фото-подтверждение
-                </span>
+                  <span className="whitespace-nowrap text-sm font-heading leading-none">
+                  {runtimeLocalize(
+                    "Требуется фото-подтверждение",
+                    "Photo confirmation required",
+                    locale,
+                  )}
+                  </span>
               </label>
             </div>
             {taskDraft.isRecurring ? (
               <div className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-dashed border-border p-4 bg-secondary/10">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Периодичность</span>
+                  <span>{runtimeLocalize("Периодичность", "Frequency", locale)}</span>
                   <AppSelectField
                     value={taskDraft.frequency}
                     onValueChange={(value) =>
@@ -3009,15 +3283,15 @@ const Employees = ({
                       }))
                     }
                     options={[
-                      { value: "DAILY", label: "Ежедневно" },
-                      { value: "WEEKLY", label: "Еженедельно" },
-                      { value: "MONTHLY", label: "Ежемесячно" },
+                      { value: "DAILY", label: runtimeLocalize("Ежедневно", "Daily", locale) },
+                      { value: "WEEKLY", label: runtimeLocalize("Еженедельно", "Weekly", locale) },
+                      { value: "MONTHLY", label: runtimeLocalize("Ежемесячно", "Monthly", locale) },
                     ]}
                     triggerClassName="h-11 rounded-xl bg-secondary/30"
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Начало</span>
+                  <span>{runtimeLocalize("Начало", "Start date", locale)}</span>
                   <Input
                     className="h-11"
                     onChange={(event) =>
@@ -3032,23 +3306,10 @@ const Employees = ({
                 </label>
                 {taskDraft.frequency === "WEEKLY" ? (
                   <label className="col-span-full grid gap-2 text-sm font-heading">
-                    <span>Дни недели</span>
+                    <span>{runtimeLocalize("Дни недели", "Weekdays", locale)}</span>
                     <div className="flex flex-wrap gap-2">
                       {[1, 2, 3, 4, 5, 6, 0].map((day) => {
-                        const label =
-                          day === 0
-                            ? "Вс"
-                            : day === 1
-                              ? "Пн"
-                              : day === 2
-                                ? "Вт"
-                                : day === 3
-                                  ? "Ср"
-                                  : day === 4
-                                    ? "Чт"
-                                    : day === 5
-                                      ? "Пт"
-                                      : "Сб";
+                        const label = getWeekdayShortLabel(day, locale);
                         const isSelected = taskDraft.weekDays.includes(day);
                         return (
                           <button
@@ -3072,7 +3333,13 @@ const Employees = ({
                   </label>
                 ) : null}
                 <label className="col-span-full grid gap-2 text-sm font-heading">
-                  <span>Дата окончания (необязательно)</span>
+                  <span>
+                    {runtimeLocalize(
+                      "Дата окончания (необязательно)",
+                      "End date (optional)",
+                      locale,
+                    )}
+                  </span>
                   <Input
                     className="h-11"
                     onChange={(event) =>
@@ -3094,14 +3361,16 @@ const Employees = ({
                 onClick={() => setTaskDialog(null)}
                 variant="outline"
               >
-                Отмена
+                {runtimeLocalize("Отмена", "Cancel", locale)}
               </Button>
               <Button
                 className="rounded-xl font-heading"
                 disabled={taskSubmitting || !taskDraft.title.trim()}
                 onClick={() => void handleCreateTask()}
               >
-                {taskSubmitting ? "Создаём..." : "Создать задачу"}
+                {taskSubmitting
+                  ? runtimeLocalize("Создаём...", "Creating...", locale)
+                  : runtimeLocalize("Создать задачу", "Create task", locale)}
               </Button>
             </div>
           </div>
@@ -3115,12 +3384,18 @@ const Employees = ({
         <DialogContent className="max-w-[460px] rounded-[28px]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              Выходной день
+              {runtimeLocalize("Выходной день", "Day off", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {taskDialog?.mode === "employee" && taskDayStatus
-                ? `У сотрудника ${taskDialog.targetLabel} выходной день ${formatWorkdayDateLabel(taskDayStatus.dayKey)}. Вы хотите назначить задачу на этот день?`
-                : "У сотрудника выходной день. Вы хотите назначить задачу на этот день?"}
+                ? locale === "ru"
+                  ? `У сотрудника ${taskDialog.targetLabel} выходной день ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Вы хотите назначить задачу на этот день?`
+                  : `${taskDialog.targetLabel} has a day off on ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Do you want to assign a task for this day?`
+                : runtimeLocalize(
+                    "У сотрудника выходной день. Вы хотите назначить задачу на этот день?",
+                    "The employee has a day off. Do you want to assign a task for this day?",
+                    locale,
+                  )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -3129,7 +3404,7 @@ const Employees = ({
               onClick={() => setTaskDayOffConfirmOpen(false)}
               variant="outline"
             >
-              Поменять день
+              {runtimeLocalize("Поменять день", "Change day", locale)}
             </Button>
             <Button
               className="rounded-xl font-heading"
@@ -3138,7 +3413,7 @@ const Employees = ({
                 void handleCreateTask(true);
               }}
             >
-              Да
+              {runtimeLocalize("Да", "Yes", locale)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3159,37 +3434,49 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  Изменить группу
+                  {runtimeLocalize("Изменить группу", "Edit group", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
-                  Измените название, описание и состав группы «
-                  {groupEditor.name}».
+                  {runtimeLocalize(
+                    "Измените название, описание и состав группы",
+                    "Update the name, description and members of group",
+                    locale,
+                  )}{" "}
+                  «{groupEditor.name}».
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Название группы</span>
+                  <span>{runtimeLocalize("Название группы", "Group name", locale)}</span>
                   <Input
                     maxLength={120}
                     onChange={(event) => setGroupEditorName(event.target.value)}
-                    placeholder="Например, Администраторы"
+                    placeholder={runtimeLocalize(
+                      "Например, Администраторы",
+                      "For example, Administrators",
+                      locale,
+                    )}
                     value={groupEditorName}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>Описание</span>
+                  <span>{runtimeLocalize("Описание", "Description", locale)}</span>
                   <Textarea
                     className="min-h-[96px]"
                     maxLength={500}
                     onChange={(event) =>
                       setGroupEditorDescription(event.target.value)
                     }
-                    placeholder="Короткое описание группы"
+                    placeholder={runtimeLocalize(
+                      "Короткое описание группы",
+                      "Short group description",
+                      locale,
+                    )}
                     value={groupEditorDescription}
                   />
                 </label>
                 <div className="text-xs font-heading text-muted-foreground">
-                  Состав группы
+                  {runtimeLocalize("Состав группы", "Group members", locale)}
                 </div>
                 <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
                   {employees.map((employee) => (
@@ -3239,7 +3526,7 @@ const Employees = ({
                     variant="destructive"
                   >
                     <Trash2 className="h-4 w-4" />
-                    Удалить группу
+                    {runtimeLocalize("Удалить группу", "Delete group", locale)}
                   </Button>
                   <div className="flex gap-2">
                     <Button
@@ -3247,14 +3534,16 @@ const Employees = ({
                       onClick={() => setGroupEditorId(null)}
                       variant="outline"
                     >
-                      Отмена
+                      {runtimeLocalize("Отмена", "Cancel", locale)}
                     </Button>
                     <Button
                       className="rounded-xl font-heading"
                       disabled={groupSaving || groupDeleting}
                       onClick={() => void handleSaveGroup()}
                     >
-                      {groupSaving ? "Сохраняем..." : "Сохранить"}
+                      {groupSaving
+                        ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                        : runtimeLocalize("Сохранить", "Save", locale)}
                     </Button>
                   </div>
                 </div>
@@ -3273,16 +3562,19 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  Удалить группу
+                  {runtimeLocalize("Удалить группу", "Delete group", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
-                  Группа «{groupEditor.name}» будет удалена. Сотрудники
-                  останутся в системе без группы, а привязка у задач к этой
-                  группе будет снята.
+                  {runtimeLocalize(
+                    `Группа «${groupEditor.name}» будет удалена. Сотрудники останутся в системе без группы, а привязка у задач к этой группе будет снята.`,
+                    `Group "${groupEditor.name}" will be deleted. Employees will stay in the system without a group, and tasks will be detached from this group.`,
+                    locale,
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading text-muted-foreground">
-                В группе: {groupEditor.memberships.length} сотрудник(ов), задач:{" "}
+                {runtimeLocalize("В группе", "In group", locale)}: {groupEditor.memberships.length}{" "}
+                {runtimeLocalize("сотрудник(ов), задач", "employee(s), tasks", locale)}:{" "}
                 {groupEditor._count?.tasks ?? 0}.
               </div>
               {groupError ? (
@@ -3295,7 +3587,7 @@ const Employees = ({
                   onClick={() => setGroupDeleteConfirmOpen(false)}
                   variant="outline"
                 >
-                  Отмена
+                  {runtimeLocalize("Отмена", "Cancel", locale)}
                 </Button>
                 <Button
                   className="rounded-xl font-heading"
@@ -3304,7 +3596,9 @@ const Employees = ({
                   variant="destructive"
                 >
                   <Trash2 className="h-4 w-4" />
-                  {groupDeleting ? "Удаляем..." : "Удалить группу"}
+                  {groupDeleting
+                    ? runtimeLocalize("Удаляем...", "Deleting...", locale)
+                    : runtimeLocalize("Удалить группу", "Delete group", locale)}
                 </Button>
               </DialogFooter>
             </>

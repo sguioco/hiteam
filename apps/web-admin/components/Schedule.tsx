@@ -334,12 +334,12 @@ function buildTemplateCode(value: string) {
 function formatDateTime(
   value: Date,
   options: Intl.DateTimeFormatOptions,
-  locale = "ru-RU",
+  locale = "en-US",
 ) {
   return value.toLocaleDateString(locale, options);
 }
 
-function formatTime(value: Date, locale = "ru-RU") {
+function formatTime(value: Date, locale = "en-US") {
   return value.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
@@ -392,7 +392,7 @@ function formatCalendarLabel(
   date: Date,
   mode: PeriodMode,
   days: Date[],
-  locale = "ru-RU",
+  locale = "en-US",
 ) {
   if (mode === "week") {
     return `${formatDateTime(days[0], {
@@ -890,7 +890,7 @@ export default function Schedule({
         const role = "position" in (task.assigneeEmployee ?? {})
           ? ((task.assigneeEmployee as unknown as { position?: { name?: string } | null }).position?.name ?? ui.noRole)
           : ui.noRole;
-        const isMeeting = Boolean(meta.meeting) || task.title.startsWith("Встреча:");
+        const isMeeting = Boolean(meta.meeting) || /^(встреча|meeting):/i.test(task.title);
         const kind: CalendarTaskEvent["kind"] = isMeeting ? "meeting" : "task";
 
         return {
@@ -898,7 +898,7 @@ export default function Schedule({
           isDone: task.status === "DONE",
           kind,
           title: isMeeting
-            ? task.title.replace(/^Встреча:\s*/i, "").trim()
+            ? task.title.replace(/^(встреча|meeting):\s*/i, "").trim()
             : task.title,
           description: meta.body,
           date: dueAt,
