@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AnnouncementItem,
   AnnouncementTemplateItem,
@@ -22,6 +22,7 @@ import { getSession } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { createCollaborationSocket } from '../../lib/collaboration-socket';
 import { useI18n } from '../../lib/i18n';
+import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 
 type EmployeeOption = {
   id: string;
@@ -66,7 +67,7 @@ export default function CollaborationPageClient({
 }: {
   initialData?: CollaborationPageInitialData | null;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [overview, setOverview] = useState<CollaborationOverviewResponse | null>(initialData?.overview ?? null);
   const [analytics, setAnalytics] = useState<CollaborationAnalyticsResponse | null>(initialData?.analytics ?? null);
   const [taskBoard, setTaskBoard] = useState<CollaborationTaskBoardResponse | null>(initialData?.taskBoard ?? null);
@@ -78,6 +79,23 @@ export default function CollaborationPageClient({
   const [chats, setChats] = useState<ChatThreadItem[]>(initialData?.chats ?? []);
   const [selectedChatId, setSelectedChatId] = useState<string>(initialData?.chats[0]?.id ?? '');
   const [windowDays, setWindowDays] = useState(initialData?.windowDays ?? 30);
+  const translatedTasks = useMemo(
+    () => [
+      ...(taskBoard?.tasks ?? []),
+      ...(overview?.recentTasks ?? []),
+      ...(analytics?.deadlineBoard.overdue ?? []),
+      ...(analytics?.deadlineBoard.dueSoon ?? []),
+      ...(analytics?.deadlineBoard.urgentOpen ?? []),
+    ],
+    [
+      analytics?.deadlineBoard.dueSoon,
+      analytics?.deadlineBoard.overdue,
+      analytics?.deadlineBoard.urgentOpen,
+      overview?.recentTasks,
+      taskBoard?.tasks,
+    ],
+  );
+  const { getTaskTitle } = useTranslatedTaskCopy(translatedTasks, locale);
   const [message, setMessage] = useState<string | null>(null);
   const [groupDraft, setGroupDraft] = useState({
     name: '',
@@ -264,7 +282,7 @@ export default function CollaborationPageClient({
             <div className="panel-header">
               <div>
                 <span className="section-kicker">{task.priority}</span>
-                <h3>{task.title}</h3>
+                <h3>{getTaskTitle(task)}</h3>
               </div>
               <span className="status-chip">{task.status}</span>
             </div>
@@ -1142,7 +1160,7 @@ export default function CollaborationPageClient({
                   <div className="panel-header">
                     <div>
                       <span className="section-kicker">{task.priority}</span>
-                      <h3>{task.title}</h3>
+                      <h3>{getTaskTitle(task)}</h3>
                     </div>
                     <span className="status-chip">{task.status}</span>
                   </div>
@@ -1999,7 +2017,7 @@ export default function CollaborationPageClient({
                 {overview.recentTasks.map((task) => (
                   <article className="mini-panel" key={task.id}>
                     <div className="panel-header">
-                      <div><span className="section-kicker">{task.priority}</span><h3>{task.title}</h3></div>
+                      <div><span className="section-kicker">{task.priority}</span><h3>{getTaskTitle(task)}</h3></div>
                       <span className="status-chip">{task.status}</span>
                     </div>
                     <div className="detail-list">

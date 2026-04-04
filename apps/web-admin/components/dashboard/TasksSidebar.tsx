@@ -6,6 +6,7 @@ import { TaskItem } from "@smart/types";
 import Radio, { type RadioItem } from "@/components/ui/Radio";
 import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
+import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 type TaskFilter = "today" | "tomorrow" | "week";
 
@@ -22,12 +23,6 @@ function localize(locale: "ru" | "en", ru: string, en: string) {
 function getTaskKind(task: TaskItem): "task" | "meeting" {
   const meta = parseTaskMeta(task.description);
   return meta.meeting || /^(Встреча|Meeting):/i.test(task.title) ? "meeting" : "task";
-}
-
-function getTaskTitle(task: TaskItem) {
-  return getTaskKind(task) === "meeting"
-    ? task.title.replace(/^(Встреча|Meeting):\s*/i, "").trim()
-    : task.title;
 }
 
 function startOfDay(value: Date) {
@@ -119,6 +114,7 @@ function toggleVisibleKind(
 export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: TasksSidebarProps) => {
   const { locale: activeLocale } = useI18n();
   const locale = forcedLocale ?? activeLocale;
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
   const [filter, setFilter] = useState<TaskFilter>("today");
   const [showOverdue, setShowOverdue] = useState(false);
   const [showKindFilter, setShowKindFilter] = useState(false);
@@ -284,7 +280,9 @@ export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: Task
                           : ""
                     }`}
                   >
-                    {getTaskTitle(task)}
+                    {getTaskTitle(task, {
+                      stripMeetingPrefix: getTaskKind(task) === "meeting",
+                    })}
                   </p>
                   <p className={`text-[10px] mt-0.5 ${isOverdue ? "text-[var(--danger)]" : "text-[var(--muted-foreground)]"}`}>
                     <span className={`tasks-kind-label is-${taskKind}`}>

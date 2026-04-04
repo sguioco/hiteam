@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import localFont from 'next/font/local';
 import '@aws-amplify/ui-react-liveness/styles.css';
 import '../../../example-unframer-app/src/framer/styles.css';
@@ -46,9 +47,13 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const requestHeaders = await headers();
+  const isPublicRoute = requestHeaders.get("x-smart-public-route") === "1";
   const initialSession = await getServerSession();
   const initialShellBootstrap = initialSession
-    ? await loadInitialShellBootstrap(initialSession)
+    ? isPublicRoute
+      ? null
+      : await loadInitialShellBootstrap(initialSession)
     : null;
   const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = ${JSON.stringify(initialShellBootstrap).replace(/</g, "\\u003c")};`;
 

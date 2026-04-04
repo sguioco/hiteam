@@ -46,6 +46,7 @@ import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { localizePersonName } from "@/lib/transliteration";
+import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -213,19 +214,6 @@ function getEmployeeName(
     `${employee.firstName} ${employee.lastName}`.trim(),
     "en",
   );
-}
-
-function normalizeTaskTitle(title: string) {
-  const normalized = title
-    .replace(/^Employee recurring:\s*/i, "")
-    .replace(/^Owner recurring:\s*/i, "")
-    .trim();
-
-  if (!normalized) {
-    return normalized;
-  }
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function isMeetingTask(
@@ -467,6 +455,7 @@ export function ManagerTasksPage({
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>(initialData?.tasks ?? []);
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
   const [employees, setEmployees] = useState<EmployeeDirectoryItem[]>(
     initialData?.employees ?? [],
   );
@@ -1124,7 +1113,7 @@ export function ManagerTasksPage({
     const embedded = options?.embedded ?? false;
     const canOpenPhotos = photoProofs.length > 0;
     const canExpand = canOpenPhotos || Boolean(taskMeta.meeting?.meetingLink);
-    const title = normalizeTaskTitle(task.title);
+    const title = getTaskTitle(task, { normalize: true });
     const overdue = isTaskOverdue(task, today);
     const done = task.status === "DONE";
 

@@ -44,6 +44,7 @@ import { useI18n } from "@/lib/i18n";
 import { createMockScheduleData } from "@/lib/mock-admin-data";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
+import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 type TabKey =
   | "schedules"
@@ -732,6 +733,10 @@ export default function Schedule({
   );
   const [taskBoard, setTaskBoard] =
     useState<CollaborationTaskBoardResponse | null>(initialData?.taskBoard ?? null);
+  const { getTaskBody, getTaskTitle } = useTranslatedTaskCopy(
+    taskBoard?.tasks ?? [],
+    locale,
+  );
   const didUseInitialData = useRef(Boolean(initialData));
 
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
@@ -898,9 +903,9 @@ export default function Schedule({
           isDone: task.status === "DONE",
           kind,
           title: isMeeting
-            ? task.title.replace(/^(встреча|meeting):\s*/i, "").trim()
-            : task.title,
-          description: meta.body,
+            ? getTaskTitle(task, { stripMeetingPrefix: true })
+            : getTaskTitle(task),
+          description: getTaskBody(task),
           date: dueAt,
           time: formatTime(dueAt, localeTag),
           employeeId: task.assigneeEmployeeId,
@@ -955,6 +960,8 @@ export default function Schedule({
     roleFilter,
     search,
     selectedEmployeeId,
+    getTaskBody,
+    getTaskTitle,
     taskBoard?.tasks,
     ui.noDepartment,
     ui.noRole,

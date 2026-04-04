@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChartContainer } from "@/components/ui/chart";
 import { Separator } from "@/components/ui/separator";
 import { useI18n } from "@/lib/i18n";
+import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 type ManagerPerformancePanelProps = {
   history: AttendanceHistoryResponse | null;
@@ -243,6 +244,7 @@ function buildWeeklyBuckets(
   tasks: TaskItem[],
   monthDate: Date,
   locale: "ru" | "en",
+  resolveTaskTitle: (task: TaskItem) => string,
 ): ChartBucket[] {
   const today = startOfDay(new Date());
   const targetMonth = monthDate.getMonth();
@@ -256,11 +258,17 @@ function buildWeeklyBuckets(
       const completedTasks = weeklyTasks
         .filter((task) => task.status === "DONE")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map((task) => buildBucketTask(task, locale));
+        .map((task) => ({
+          ...buildBucketTask(task, locale),
+          title: resolveTaskTitle(task),
+        }));
       const pendingTasks = weeklyTasks
         .filter((task) => task.status !== "DONE" && task.status !== "CANCELLED")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map((task) => buildBucketTask(task, locale));
+        .map((task) => ({
+          ...buildBucketTask(task, locale),
+          title: resolveTaskTitle(task),
+        }));
       const lateShifts = bucketRows.filter((row) => row.lateMinutes > 0).length;
       const isCurrentWeek = today >= start && today <= end;
       const totalShifts = bucketRows.length;
@@ -420,6 +428,7 @@ export function ManagerPerformancePanel({
 }: ManagerPerformancePanelProps) {
   const { locale: activeLocale } = useI18n();
   const locale = forcedLocale ?? activeLocale;
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
   const availableMonths = useMemo(
     () => collectAvailableMonths(history?.rows ?? [], tasks),
     [history?.rows, tasks],
@@ -457,8 +466,15 @@ export function ManagerPerformancePanel({
     getMonthDateFromKey(defaultMonthKey) ??
     startOfMonth(today);
   const chartData = useMemo(
-    () => buildWeeklyBuckets(history?.rows ?? [], tasks, selectedMonthDate, locale),
-    [history?.rows, locale, selectedMonthDate, tasks],
+    () =>
+      buildWeeklyBuckets(
+        history?.rows ?? [],
+        tasks,
+        selectedMonthDate,
+        locale,
+        (task) => getTaskTitle(task, { stripMeetingPrefix: true }),
+      ),
+    [getTaskTitle, history?.rows, locale, selectedMonthDate, tasks],
   );
   const currentMonthTotal = chartData.reduce(
     (total, bucket) => total + bucket.totalShifts,

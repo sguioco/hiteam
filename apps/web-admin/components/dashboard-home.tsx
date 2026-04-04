@@ -89,6 +89,7 @@ import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerforman
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
 import { localizePersonName } from "@/lib/transliteration";
+import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 type EmployeeDirectoryItem = {
   id: string;
@@ -558,10 +559,6 @@ function shouldShowCompletedTask(task: TaskItem, referenceDay: Date) {
   return isSameDay(startOfDay(completedDate), referenceDay);
 }
 
-function stripMeetingPrefix(title: string) {
-  return title.replace(/^(Встреча|Meeting):\s*/i, "").trim();
-}
-
 function formatTaskCountLabel(count: number, locale: "ru" | "en") {
   if (locale === "en") {
     return count === 1 ? "1 task" : `${count} tasks`;
@@ -1009,6 +1006,8 @@ export default function DashboardHome({
     if (!managerEmployee) return tasks;
     return tasks.filter((task) => task.assigneeEmployeeId === managerEmployee.id);
   }, [dashboardTasks, isEmployeeMode, managerEmployee]);
+  const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
+    useTranslatedTaskCopy(dashboardTasks, locale);
   const employeeWorkdayLookup = useMemo(
     () => buildEmployeeWorkdayLookup(scheduleShifts),
     [scheduleShifts],
@@ -1275,8 +1274,9 @@ export default function DashboardHome({
             ? "meeting"
             : "task";
         const isCompleted = task.status === "DONE";
-        const displayTitle =
-          kind === "meeting" ? stripMeetingPrefix(task.title) : task.title;
+        const displayTitle = getTaskTitle(task, {
+          stripMeetingPrefix: kind === "meeting",
+        });
         const participantName = task.assigneeEmployee
           ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}`
           : task.group?.name ?? localize(locale, "Без исполнителя", "No assignee");
@@ -1288,11 +1288,13 @@ export default function DashboardHome({
           if (!existing.participants.includes(participantName)) {
             existing.participants.push(participantName);
           }
-          if (!existing.description && meta.body) {
-            existing.description = meta.body;
+          const translatedBody = getTaskBody(task);
+          if (!existing.description && translatedBody) {
+            existing.description = translatedBody;
           }
-          if (!existing.meetingLocation && meta.meeting?.meetingLocation) {
-            existing.meetingLocation = meta.meeting.meetingLocation;
+          const translatedMeetingLocation = getTaskMeetingLocation(task);
+          if (!existing.meetingLocation && translatedMeetingLocation) {
+            existing.meetingLocation = translatedMeetingLocation;
           }
           if (!existing.meetingLink && meta.meeting?.meetingLink) {
             existing.meetingLink = meta.meeting.meetingLink;
@@ -1308,8 +1310,8 @@ export default function DashboardHome({
           kind,
           participants: [participantName],
           duplicateCount: 1,
-          description: meta.body,
-          meetingLocation: meta.meeting?.meetingLocation ?? null,
+          description: getTaskBody(task),
+          meetingLocation: getTaskMeetingLocation(task) || null,
           meetingLink: meta.meeting?.meetingLink ?? null,
         });
       });
