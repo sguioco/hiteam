@@ -70,6 +70,7 @@ import {
 } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
+import { getDemoDashboardBootstrap } from "@/lib/demo-api";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import {
   buildEmployeeWorkdayLookup,
@@ -915,6 +916,17 @@ export default function DashboardHome({
   }
 
   useEffect(() => {
+    if (initialData || !isDemoSession || typeof window === "undefined") {
+      return;
+    }
+
+    const demoSnapshot = getDemoDashboardBootstrap(
+      session?.accessToken,
+    ).initialData as DashboardCachePayload;
+    applyDashboardSnapshot(demoSnapshot, dashboardCacheKey);
+  }, [dashboardCacheKey, initialData, isDemoSession, session?.accessToken]);
+
+  useEffect(() => {
     if (didUseInitialData.current && initialData) {
       didUseInitialData.current = false;
       if (dashboardCacheKey) {
@@ -979,24 +991,20 @@ export default function DashboardHome({
   );
   const dashboardTasks = useMemo(() => {
     const apiTasks = taskBoard?.tasks ?? [];
+
     if (!isDemoSession) {
       return apiTasks;
     }
 
-    if (apiTasks.length > 0) {
-      return apiTasks;
-    }
-
-    const mockTasks = createMockDashboardTasks(managerEmployee, locale).map((task) => ({
+    return apiTasks.map((task) => ({
       ...task,
       status: mockTaskStatuses[task.id] ?? task.status,
       completedAt:
         (mockTaskStatuses[task.id] ?? task.status) === "DONE"
           ? new Date().toISOString()
-          : null,
+          : task.completedAt,
     }));
-    return mockTasks;
-  }, [isDemoSession, locale, managerEmployee, mockTaskStatuses, taskBoard?.tasks]);
+  }, [isDemoSession, mockTaskStatuses, taskBoard?.tasks]);
   const personalTasks = useMemo(() => {
     if (isEmployeeMode) {
       return dashboardTasks;

@@ -1726,6 +1726,55 @@ export function getDemoDashboardBootstrap(token?: string) {
   };
 }
 
+export function getDemoScheduleBootstrap(
+  token?: string,
+  options?: {
+    dateFrom?: string | null;
+    dateTo?: string | null;
+  },
+) {
+  const snapshot = cloneState(loadState());
+  const mode = currentDemoRole(token) === "employee" ? "employee" : "admin";
+
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const visibleDateFrom = options?.dateFrom?.trim() || dateKey(monthStart);
+  const visibleDateTo = options?.dateTo?.trim() || dateKey(monthEnd);
+
+  return {
+    initialData: {
+      departments: snapshot.departments,
+      employees: snapshot.employees.map((employee) => ({
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        middleName: employee.middleName,
+        employeeNumber: employee.employeeNumber,
+        hireDate: employee.hireDate,
+        avatarUrl: employee.avatarUrl,
+        department: employee.department,
+        primaryLocation: employee.primaryLocation,
+        position: employee.position,
+      })),
+      isMockMode: false,
+      locations: snapshot.locations,
+      mode,
+      positions: snapshot.positions,
+      requests: snapshot.requests,
+      shifts: snapshot.shifts,
+      taskBoard:
+        mode === "employee"
+          ? buildDemoEmployeeShowcaseTaskBoard(snapshot, currentEmployeeId(token))
+          : buildTaskBoard(snapshot),
+      templates: snapshot.templates,
+      visibleDateFrom,
+      visibleDateTo,
+    },
+    mode,
+  };
+}
+
 function buildBiometricReviewResponse(
   state: DemoState,
   searchParams: URLSearchParams,
@@ -2183,6 +2232,13 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/bootstrap/dashboard" && method === "GET") {
     return getDemoDashboardBootstrap(token) as T;
+  }
+
+  if (pathname === "/bootstrap/schedule" && method === "GET") {
+    return getDemoScheduleBootstrap(token, {
+      dateFrom: url.searchParams.get("dateFrom"),
+      dateTo: url.searchParams.get("dateTo"),
+    }) as T;
   }
 
   if (pathname === "/collaboration/overview" && method === "GET") {

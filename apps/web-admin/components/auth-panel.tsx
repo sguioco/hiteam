@@ -123,10 +123,6 @@ export function AuthPanel() {
   const [loginError, setLoginError] = useState('');
   const t = texts[lang];
 
-  if (loginLoading) {
-    return <SessionLoader label={t.openingWorkspace} />;
-  }
-
   useEffect(() => {
     const saved = window.localStorage.getItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
@@ -197,6 +193,10 @@ export function AuthPanel() {
         setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
         setLoginLoading(false);
       });
+  }
+
+  if (loginLoading) {
+    return <SessionLoader label={t.openingWorkspace} />;
   }
 
   return (

@@ -1266,41 +1266,20 @@ export default function Schedule({
       setLoading(false);
       return;
     } catch (error) {
-      if (isDemoSession) {
-        const mock = createMockScheduleData(new Date(), locale);
-        setTemplates(mock.templates);
-        setShifts(mock.shifts);
-        setEmployees(mock.employees);
-        setLocations(mock.locations);
-        setDepartments(mock.departments);
-        setPositions(mock.positions);
-        setRequests(mock.requests);
-        setTaskBoard({
-          tasks: [],
-          totals: { total: 0, overdue: 0, active: 0, done: 0 },
-        });
-        setIsMockMode(true);
-        setMessage(
-          error instanceof Error
-            ? `${error.message} ${ui.scheduleLoadedFromMock}`
-            : ui.scheduleLoadedFromMock,
-        );
-      } else {
-        setTemplates([]);
-        setShifts([]);
-        setEmployees([]);
-        setLocations([]);
-        setDepartments([]);
-        setPositions([]);
-        setRequests([]);
-        setTaskBoard(null);
-        setIsMockMode(false);
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : ui.scheduleLoadError,
-        );
-      }
+      setTemplates([]);
+      setShifts([]);
+      setEmployees([]);
+      setLocations([]);
+      setDepartments([]);
+      setPositions([]);
+      setRequests([]);
+      setTaskBoard(null);
+      setIsMockMode(false);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : ui.scheduleLoadError,
+      );
       setLoading(false);
     }
   }

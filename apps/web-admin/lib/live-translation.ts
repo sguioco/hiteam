@@ -1,4 +1,5 @@
 import type { Locale } from "./i18n";
+import { getLocalTextTranslation } from "./local-text-translation";
 
 type TranslationResponse = Record<string, string>;
 
@@ -134,6 +135,12 @@ async function translateViaGoogleGtx(
 async function translateSingleText(text: string, targetLocale: Locale) {
   if (!shouldTranslate(text, targetLocale)) {
     return text;
+  }
+
+  const localTranslation = getLocalTextTranslation(text, targetLocale);
+  if (localTranslation) {
+    translationCache.set(getCacheKey(text, targetLocale), localTranslation);
+    return localTranslation;
   }
 
   const cacheKey = getCacheKey(text, targetLocale);

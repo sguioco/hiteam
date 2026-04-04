@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { type Locale, useI18n } from "@/lib/i18n";
+import { getLocalTextTranslation } from "@/lib/local-text-translation";
 import { localizePersonName } from "@/lib/transliteration";
 
 const originalTextMap = new WeakMap<Text, string>();
@@ -40,6 +41,12 @@ function looksLikePersonName(value: string) {
 function getTranslatedValue(text: string, locale: Locale) {
   if (locale === "ru") {
     return text;
+  }
+
+  const localTranslation = getLocalTextTranslation(text, locale);
+  if (localTranslation) {
+    clientCache.set(getCacheKey(locale, text), localTranslation);
+    return localTranslation;
   }
 
   const cached = clientCache.get(getCacheKey(locale, text));
