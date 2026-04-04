@@ -2,6 +2,12 @@
 
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
+import {
+  getClientTranslation,
+  hasClientTranslation,
+  hydrateClientTranslationCache,
+  setClientTranslation,
+} from "@/lib/client-translation-cache";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { getLocalTextTranslation } from "@/lib/local-text-translation";
 import { localizePersonName } from "@/lib/transliteration";
@@ -43,10 +49,19 @@ function getTranslatedValue(text: string, locale: Locale) {
     return text;
   }
 
+  hydrateClientTranslationCache();
+
   const localTranslation = getLocalTextTranslation(text, locale);
   if (localTranslation) {
     clientCache.set(getCacheKey(locale, text), localTranslation);
+    setClientTranslation(locale, text, localTranslation);
     return localTranslation;
+  }
+
+  const persistedTranslation = getClientTranslation(locale, text);
+  if (persistedTranslation) {
+    clientCache.set(getCacheKey(locale, text), persistedTranslation);
+    return persistedTranslation;
   }
 
   const cached = clientCache.get(getCacheKey(locale, text));
@@ -57,6 +72,7 @@ function getTranslatedValue(text: string, locale: Locale) {
   if (looksLikePersonName(text)) {
     const transliterated = localizePersonName(text, locale);
     clientCache.set(getCacheKey(locale, text), transliterated);
+    setClientTranslation(locale, text, transliterated);
     return transliterated;
   }
 
@@ -113,7 +129,13 @@ function collectTranslatableAttributes(root: HTMLElement) {
 }
 
 async function requestTranslations(texts: string[], locale: Locale) {
-  const missing = texts.filter((text) => !clientCache.has(getCacheKey(locale, text)));
+  hydrateClientTranslationCache();
+
+  const missing = texts.filter(
+    (text) =>
+      !clientCache.has(getCacheKey(locale, text)) &&
+      !hasClientTranslation(locale, text),
+  );
   if (locale === "ru" || missing.length === 0) {
     return;
   }
@@ -147,6 +169,7 @@ async function requestTranslations(texts: string[], locale: Locale) {
 
       for (const [source, translated] of Object.entries(body.translations ?? {})) {
         clientCache.set(getCacheKey(locale, source), translated || source);
+        setClientTranslation(locale, source, translated || source);
       }
     })
     .finally(() => {

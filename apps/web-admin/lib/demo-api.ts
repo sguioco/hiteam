@@ -1134,6 +1134,13 @@ function buildTaskBoard(state: DemoState) {
   };
 }
 
+function buildDemoShowcaseTaskBoardForCurrentUser(
+  state: DemoState,
+  token?: string,
+) {
+  return buildDemoEmployeeShowcaseTaskBoard(state, currentEmployeeId(token));
+}
+
 function buildBootstrapTasks(state: DemoState) {
   const snapshot = cloneState(state);
 
@@ -1689,9 +1696,7 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
     liveSessions: buildAttendanceLive(snapshot),
     anomalies: buildAttendanceAnomalies(snapshot),
     requests: snapshot.requests,
-    taskBoard: isEmployee
-      ? buildDemoEmployeeShowcaseTaskBoard(snapshot, employeeId)
-      : buildTaskBoard(snapshot),
+    taskBoard: buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token),
     employees: snapshot.employees.map((employee) => ({
       id: employee.id,
       firstName: employee.firstName,
@@ -1763,10 +1768,7 @@ export function getDemoScheduleBootstrap(
       positions: snapshot.positions,
       requests: snapshot.requests,
       shifts: snapshot.shifts,
-      taskBoard:
-        mode === "employee"
-          ? buildDemoEmployeeShowcaseTaskBoard(snapshot, currentEmployeeId(token))
-          : buildTaskBoard(snapshot),
+      taskBoard: buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token),
       templates: snapshot.templates,
       visibleDateFrom,
       visibleDateTo,
@@ -2250,7 +2252,7 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/collaboration/tasks" && method === "GET") {
-    return buildTaskBoard(currentState) as T;
+    return buildDemoShowcaseTaskBoardForCurrentUser(currentState, token) as T;
   }
 
   if (pathname === "/collaboration/tasks/me" && method === "GET") {

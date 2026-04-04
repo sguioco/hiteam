@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Locale } from "./i18n";
+import {
+  getClientTranslation,
+  hasClientTranslation,
+  hydrateClientTranslationCache,
+  setClientTranslation,
+} from "./client-translation-cache";
 import { getLocalTextTranslation } from "./local-text-translation";
 
 const clientCache = new Map<string, string>();
@@ -11,10 +17,19 @@ function getCacheKey(locale: Locale, text: string) {
 }
 
 function primeLocalTranslations(texts: string[], locale: Locale) {
+  hydrateClientTranslationCache();
+
   for (const text of texts) {
+    const persistedTranslation = getClientTranslation(locale, text);
+    if (persistedTranslation) {
+      clientCache.set(getCacheKey(locale, text), persistedTranslation);
+      continue;
+    }
+
     const translated = getLocalTextTranslation(text, locale);
     if (translated) {
       clientCache.set(getCacheKey(locale, text), translated);
+      setClientTranslation(locale, text, translated);
     }
   }
 }
@@ -51,7 +66,11 @@ export function useLiveTextMap(texts: string[], locale: Locale) {
 
     primeLocalTranslations(uniqueTexts, locale);
 
-    const missing = uniqueTexts.filter((text) => !clientCache.has(getCacheKey(locale, text)));
+    const missing = uniqueTexts.filter(
+      (text) =>
+        !clientCache.has(getCacheKey(locale, text)) &&
+        !hasClientTranslation(locale, text),
+    );
 
     if (missing.length === 0) {
       return;
@@ -84,6 +103,7 @@ export function useLiveTextMap(texts: string[], locale: Locale) {
         const translations = payload.translations ?? {};
         for (const [source, translated] of Object.entries(translations)) {
           clientCache.set(getCacheKey(locale, source), translated || source);
+          setClientTranslation(locale, source, translated || source);
         }
 
         setTextMap((current) => ({

@@ -152,7 +152,11 @@ function getMonthDateFromKey(key: string) {
   return new Date(year, month, 1);
 }
 
-function buildBucketTask(task: TaskItem, locale: "ru" | "en"): BucketTaskItem {
+function buildBucketTask(
+  task: TaskItem,
+  locale: "ru" | "en",
+  resolvedTitle?: string,
+): BucketTaskItem {
   const dueDate = task.dueAt ? new Date(task.dueAt) : null;
   const hasDueDate = dueDate && !Number.isNaN(dueDate.getTime());
 
@@ -164,7 +168,7 @@ function buildBucketTask(task: TaskItem, locale: "ru" | "en"): BucketTaskItem {
       : "∞",
     id: task.id,
     subtitle: formatTaskSubtitle(task),
-    title: task.title.replace(/^Встреча:\s*/i, "").trim(),
+    title: resolvedTitle ?? task.title.replace(/^(Встреча|Meeting):\s*/i, "").trim(),
     weekdayShort: hasDueDate
       ? dueDate
           .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
@@ -258,17 +262,11 @@ function buildWeeklyBuckets(
       const completedTasks = weeklyTasks
         .filter((task) => task.status === "DONE")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map((task) => ({
-          ...buildBucketTask(task, locale),
-          title: resolveTaskTitle(task),
-        }));
+        .map((task) => buildBucketTask(task, locale, resolveTaskTitle(task)));
       const pendingTasks = weeklyTasks
         .filter((task) => task.status !== "DONE" && task.status !== "CANCELLED")
         .sort((left, right) => getTaskSortTime(right) - getTaskSortTime(left))
-        .map((task) => ({
-          ...buildBucketTask(task, locale),
-          title: resolveTaskTitle(task),
-        }));
+        .map((task) => buildBucketTask(task, locale, resolveTaskTitle(task)));
       const lateShifts = bucketRows.filter((row) => row.lateMinutes > 0).length;
       const isCurrentWeek = today >= start && today <= end;
       const totalShifts = bucketRows.length;

@@ -1,6 +1,45 @@
 import type { Locale } from "./i18n";
 
 const RU_TO_EN_TEXT_MAP: Record<string, string> = {
+  "Проверить табель за первую половину месяца":
+    "Review the timesheet for the first half of the month",
+  "Сверить отметки прихода и комментарии по отклонениям.":
+    "Review attendance punches and comments on deviations.",
+  "Сверить отметки прихода и подготовить комментарии по отклонениям.":
+    "Compare attendance punches and prepare comments on deviations.",
+  "Проверить опоздания по группе A": "Review late arrivals for group A",
+  "Подготовить комментарии руководителю": "Prepare comments for the manager",
+  "Ежедневный синк по сменам": "Daily shift sync",
+  "Обсуждение покрытия вечерних смен.": "Discuss evening shift coverage.",
+  "Обсуждение покрытия вечерних смен и замен на выходные.":
+    "Discuss evening shift coverage and weekend substitutions.",
+  "Подготовить список сотрудников на обучение": "Prepare the training shortlist",
+  "Собрать кандидатов на внутреннее обучение в апреле.":
+    "Gather candidates for internal training in April.",
+  "Собрать кандидатов на апрельское внутреннее обучение и согласовать отделы.":
+    "Gather candidates for April internal training and align with departments.",
+  "Подтвердить подменный состав": "Confirm the backup staffing roster",
+  "Убедиться, что резерв на конец недели подтвержден.":
+    "Make sure the end-of-week backup staffing is confirmed.",
+  "Собрать комментарии по повторным опозданиям":
+    "Collect notes on repeated late arrivals",
+  "Подготовить short summary для HR.": "Prepare a short summary for HR.",
+  "Открыть новый onboarding-поток": "Launch a new onboarding flow",
+  "Групповая задача для People Ops.": "Group task for People Ops.",
+  "Разбор опозданий за неделю": "Weekly late-arrival review",
+  "Короткий созвон с HR по повторяющимся опозданиям.":
+    "Short call with HR about repeated late arrivals.",
+  "Проверить подтверждение смен на вечер":
+    "Review evening shift confirmations",
+  "Проверить, кто подтвердил вечерние смены на пятницу, и закрыть незаполненные слоты.":
+    "Check who confirmed Friday evening shifts and close unfilled slots.",
+  "Собрать причины опозданий по группе А":
+    "Collect late-arrival reasons for group A",
+  "Сверить объяснительные и обновить комментарии в табеле перед встречей с HR.":
+    "Review explanations and update timesheet comments before the HR meeting.",
+  "Проверить готовность формы отчета": "Check report form readiness",
+  "Убедиться, что шаблон отчета по посещаемости заполнен и готов к отправке руководителю.":
+    "Make sure the attendance report template is complete and ready to be sent to the manager.",
   "Подготовить рабочее место к открытию недели": "Prepare the workstation for the start of the week",
   "Проверить чек-лист витрины": "Check the display checklist",
   "Сверить остатки по расходным материалам": "Reconcile consumables stock levels",
@@ -36,14 +75,29 @@ const RU_TO_EN_TEXT_MAP: Record<string, string> = {
   "Кабинет менеджера": "Manager office",
 };
 
-export function getLocalTextTranslation(text: string, locale: Locale) {
+export function getLocalTextTranslation(
+  text: string,
+  locale: Locale,
+): string | null {
   const normalized = text.trim();
   if (!normalized) {
     return null;
   }
 
   if (locale === "en") {
-    return RU_TO_EN_TEXT_MAP[normalized] ?? null;
+    const directMatch = RU_TO_EN_TEXT_MAP[normalized];
+    if (directMatch) {
+      return directMatch;
+    }
+
+    const meetingMatch = normalized.match(/^Встреча:\s*(.+)$/i);
+    if (meetingMatch) {
+      const translatedSubject: string =
+        getLocalTextTranslation(meetingMatch[1], locale) ?? meetingMatch[1];
+      return `Meeting: ${translatedSubject}`;
+    }
+
+    return null;
   }
 
   return null;

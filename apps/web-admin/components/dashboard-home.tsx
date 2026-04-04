@@ -315,7 +315,7 @@ function buildDashboardCacheKey(
   session: NonNullable<ReturnType<typeof getSession>>,
   isEmployeeMode: boolean,
 ) {
-  return `dashboard:${isEmployeeMode ? "employee" : "admin"}:${session.user.tenantId}:${session.user.id}`;
+  return `dashboard:v2:${isEmployeeMode ? "employee" : "admin"}:${session.user.tenantId}:${session.user.id}`;
 }
 
 const initialTaskDraft: TaskDraft = {
