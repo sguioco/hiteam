@@ -53,7 +53,7 @@ export function middleware(request: NextRequest) {
   if (
     hasSession &&
     !forceAuthPage &&
-    pathname === "/signup"
+    (pathname === "/signup" || pathname === "/login")
   ) {
     return NextResponse.redirect(new URL("/app", request.url));
   }

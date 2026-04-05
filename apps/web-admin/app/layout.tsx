@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import localFont from 'next/font/local';
+import { Montserrat } from 'next/font/google';
 import '@aws-amplify/ui-react-liveness/styles.css';
 import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
@@ -25,19 +26,8 @@ const teodor = localFont({
   variable: '--font-brand',
 });
 
-const petersburg = localFont({
-  src: [
-    {
-      path: '../public/fonts/Petersburg.ttf',
-      style: 'normal',
-      weight: '400',
-    },
-    {
-      path: '../public/fonts/Petersburg_Italic.ttf',
-      style: 'italic',
-      weight: '400',
-    },
-  ],
+const montserrat = Montserrat({
+  subsets: ['latin', 'cyrillic'],
   variable: '--font-landing',
 });
 
@@ -58,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = ${JSON.stringify(initialShellBootstrap).replace(/</g, "\\u003c")};`;
 
   return (
-    <html lang="en" className={cn(teodor.variable, petersburg.variable)}>
+    <html lang="en" className={cn(teodor.variable, montserrat.variable)}>
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers>{children}</Providers>

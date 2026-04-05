@@ -6,7 +6,6 @@ import type {
   FC,
   HTMLAttributes,
 } from "react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import createGlobe from "cobe";
 import {
@@ -16,38 +15,48 @@ import {
 } from "@untitledui/icons";
 import { BrandWordmark } from "./brand-wordmark";
 import { cx } from "@/lib/utils/cx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type GlobeOverlayItem =
   | {
-      id: string;
-      type: "polaroid";
-      location: [number, number];
-      image: string;
-      alt: string;
-      title: string;
-      frameWidth?: number;
-      imageHeight?: number;
-      rotation?: number;
-      titleVariant?: "default" | "badge";
-      cardClassName?: string;
-      titleWrapperClassName?: string;
-      titleTextClassName?: string;
-      titleSizeClassName?: string;
-      size: number;
-      offsetX?: number;
-      offsetY?: number;
-    }
+    id: string;
+    type: "polaroid";
+    location: [number, number];
+    image: string;
+    alt: string;
+    title: string;
+    frameWidth?: number;
+    imageHeight?: number;
+    rotation?: number;
+    titleVariant?: "default" | "badge";
+    cardClassName?: string;
+    titleWrapperClassName?: string;
+    titleTextClassName?: string;
+    titleSizeClassName?: string;
+    size: number;
+    offsetX?: number;
+    offsetY?: number;
+  }
   | {
-      id: string;
-      type: "chip";
-      location: [number, number];
-      text: string;
-      tone: "emerald" | "ink" | "blue" | "red" | "success" | "mint";
-      rotation?: number;
-      size: number;
-      offsetX?: number;
-      offsetY?: number;
-    };
+    id: string;
+    type: "chip";
+    location: [number, number];
+    text: string;
+    tone: "emerald" | "ink" | "blue" | "red" | "success" | "mint";
+    rotation?: number;
+    size: number;
+    offsetX?: number;
+    offsetY?: number;
+  };
 
 const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
   {
@@ -165,6 +174,8 @@ const GLOBE_OFFSET_Y = 20;
 const GLOBE_GLOBAL_OFFSET_Y = 0;
 const GLOBE_POLAROID_OFFSET_Y = 100;
 
+type LandingLocale = "ru" | "en";
+
 type GlobeAnchorStyle = CSSProperties & {
   positionAnchor?: string;
 };
@@ -178,7 +189,7 @@ function buildGlobeOverlayTransform(item: GlobeOverlayItem) {
 
 function buildGlobeAnchorStyle(item: GlobeOverlayItem): GlobeAnchorStyle {
   const visibilityVar = `var(--cobe-visible-${item.id}, 0)`;
-  const shownVar = `clamp(0, calc((${visibilityVar} - 0.18) * 1.55), 1)`;
+  const shownVar = `clamp(0, calc((${visibilityVar} - 0.4) * 2), 1)`;
 
   return {
     positionAnchor: `--cobe-${item.id}`,
@@ -187,7 +198,13 @@ function buildGlobeAnchorStyle(item: GlobeOverlayItem): GlobeAnchorStyle {
     opacity: shownVar,
     filter: `blur(calc((1 - ${shownVar}) * 12px))`,
     transform: buildGlobeOverlayTransform(item),
-  };
+    "--item-scale":
+      item.type === "polaroid"
+        ? `calc(0.85 + 0.15 * ${shownVar})`
+        : `calc(0.65 + 0.35 * ${shownVar})`,
+    "--item-rotate":
+      item.type === "polaroid" ? `calc((1 - ${shownVar}) * 35deg)` : "0deg",
+  } as React.CSSProperties;
 }
 
 function projectGlobeLocation(
@@ -241,6 +258,8 @@ function GlobeStatusChip({
   item: Extract<GlobeOverlayItem, { type: "chip" }>;
   overlayRef?: (node: HTMLDivElement | null) => void;
 }) {
+  const hasShimmer = item.tone === "ink" || item.tone === "success";
+
   const toneStyles = {
     emerald: {
       chip: "bg-[#d8f3e6] text-[#18794e] ring-[#b8edd7]/90 shadow-[0_20px_45px_rgba(62,167,107,0.18)]",
@@ -264,22 +283,23 @@ function GlobeStatusChip({
 
   return (
     <div
-      className="pointer-events-none absolute z-20 hidden origin-bottom transition-[opacity,filter,transform] duration-300 will-change-transform md:block"
+      className="pointer-events-none absolute z-20 hidden origin-bottom transition-[opacity,filter,transform] duration-[400ms] ease-out will-change-transform md:block"
       ref={overlayRef}
       style={buildGlobeAnchorStyle(item)}
     >
       <div
         style={{
           transformOrigin: "center bottom",
+          transform: "scale(var(--item-scale)) rotateX(var(--item-rotate))",
         }}
       >
         <div
           className={cx(
-            "inline-flex w-max items-center whitespace-nowrap rounded-[2px] px-3 py-2 text-[0.62rem] font-semibold tracking-[0.18em] uppercase ring-1 backdrop-blur-sm",
+            "globe-chip-pulse relative inline-flex w-max items-center whitespace-nowrap rounded-full px-3 py-2 text-[0.62rem] font-semibold tracking-[0.18em] uppercase ring-1 backdrop-blur-sm",
             toneStyles.chip,
           )}
         >
-          <span>{item.text}</span>
+          <span className={hasShimmer ? "globe-shimmer-text" : ""}>{item.text}</span>
         </div>
       </div>
       <GlobeMarkerPin />
@@ -306,39 +326,48 @@ function GlobePolaroidCard({
 
   return (
     <div
-      className="pointer-events-none absolute z-20 hidden origin-bottom transition-[opacity,filter,transform] duration-300 will-change-transform md:block"
+      className="pointer-events-none absolute z-20 hidden origin-bottom transition-[opacity,filter,transform] duration-[400ms] ease-out will-change-transform md:block"
       ref={overlayRef}
       style={buildGlobeAnchorStyle(item)}
     >
       <div
         style={{
           transformOrigin: "center bottom",
+          transform: "scale(var(--item-scale)) rotateX(var(--item-rotate))",
         }}
       >
-        <div className={cx("px-2.5 pt-2.5 pb-0 ring-1", cardClassName)}>
-          <div
-            className="overflow-hidden bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
-            style={{ width: `${frameWidth}px` }}
-          >
-            <img
-              alt={item.alt}
-              className="w-full object-cover"
-              style={{ height: `${imageHeight}px` }}
-              src={item.image}
-            />
-            <div className={cx("py-1.5 text-center", titleWrapperClassName)}>
-              <p
-                className={cx(
-                  "block w-full text-center whitespace-nowrap",
-                  titleVariant === "badge"
-                    ? "leading-[1.15] font-semibold tracking-[0.18em] uppercase"
-                    : "text-[11px] leading-none font-medium tracking-[-0.02em]",
-                  titleVariant === "badge" && (titleSizeClassName ?? "text-[0.62rem]"),
-                  titleTextClassName,
-                )}
-              >
-                {item.title}
-              </p>
+        <div
+          className="animate-[polaroidFloat_4s_ease-in-out_infinite]"
+          style={{
+            transformOrigin: "center bottom",
+            animationDelay: `${Math.random() * 2}s`,
+          }}
+        >
+          <div className={cx("globe-polaroid-glow px-2.5 pt-2.5 pb-0 ring-1 rounded-xl", cardClassName)}>
+            <div
+              className="overflow-hidden rounded-lg bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+              style={{ width: `${frameWidth}px` }}
+            >
+              <img
+                alt={item.alt}
+                className="w-full object-cover transition-transform duration-700 hover:scale-105"
+                style={{ height: `${imageHeight}px` }}
+                src={item.image}
+              />
+              <div className={cx("py-1.5 text-center", titleWrapperClassName)}>
+                <p
+                  className={cx(
+                    "globe-shimmer-text block w-full text-center whitespace-nowrap",
+                    titleVariant === "badge"
+                      ? "leading-[1.15] font-semibold tracking-[0.18em] uppercase"
+                      : "text-[11px] leading-none font-medium tracking-[-0.02em]",
+                    titleVariant === "badge" && (titleSizeClassName ?? "text-[0.62rem]"),
+                    titleTextClassName,
+                  )}
+                >
+                  {item.title}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -412,6 +441,13 @@ function CheckItemText({ text }: { text: string }) {
       <span>{text}</span>
     </li>
   );
+}
+
+function getLandingMockupSrc(
+  mockupNumber: 1 | 2 | 3,
+  locale: LandingLocale,
+) {
+  return `/${mockupNumber}${locale}.webp`;
 }
 
 const GooglePlayButton = ({
@@ -658,12 +694,49 @@ const Landing = () => {
   const globeContainerRef = useRef<HTMLDivElement>(null);
   const overlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const basePhiRef = useRef(GLOBE_INITIAL_PHI);
+  const [locale, setLocale] = useState<LandingLocale>("ru");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [demoName, setDemoName] = useState("");
+  const [demoEmail, setDemoEmail] = useState("");
+  const [demoPhone, setDemoPhone] = useState("");
+  const [demoTermsAccepted, setDemoTermsAccepted] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  const isDemoFormValid =
+    demoName.trim().length > 0 &&
+    (demoEmail.trim().length > 0 || demoPhone.trim().length > 0) &&
+    demoTermsAccepted;
+
+  const firstFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
+  const secondFeatureRowShift = { "--feature-row-offset": "280px" } as CSSProperties;
+  const thirdFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
 
   const setOverlayRef = (id: string) => (node: HTMLDivElement | null) => {
     overlayRefs.current[id] = node;
   };
+
+  useEffect(() => {
+    setIsMounted(true);
+    const savedLocale = window.localStorage.getItem("smart-admin-locale");
+    if (savedLocale === "en" || savedLocale === "ru") {
+      setLocale(savedLocale);
+    }
+
+    const syncLocale = () => {
+      const nextLocale = window.localStorage.getItem("smart-admin-locale");
+      setLocale(nextLocale === "en" ? "en" : "ru");
+    };
+
+    window.addEventListener("storage", syncLocale);
+    window.addEventListener("focus", syncLocale);
+
+    return () => {
+      window.removeEventListener("storage", syncLocale);
+      window.removeEventListener("focus", syncLocale);
+    };
+  }, []);
 
   useEffect(() => {
     if (!canvasRef.current || !globeContainerRef.current) return;
@@ -691,8 +764,19 @@ const Landing = () => {
           GLOBE_SCALE,
         );
         const depthLayer = 200 + Math.round((projection.depth + 1) * 100);
-
         node.style.zIndex = String(depthLayer);
+
+        if (item.type === "chip") {
+          const isVisible = projection.visibility > 0.45;
+          const wasVisible = node.dataset.bouncing === "true";
+          if (isVisible && !wasVisible) {
+            node.dataset.bouncing = "false";
+            void node.offsetWidth;
+            node.dataset.bouncing = "true";
+          } else if (!isVisible && wasVisible) {
+            node.dataset.bouncing = "false";
+          }
+        }
       }
     };
 
@@ -945,10 +1029,6 @@ const Landing = () => {
       a: "Нет. Достаточно обычного смартфона с камерой. Наше приложение работает на iOS и Android.",
     },
     {
-      q: "Можно ли интегрировать с нашей системой?",
-      a: "Да, мы предоставляем API для интеграции с любыми HR-системами, ERP и бухгалтерскими программами.",
-    },
-    {
       q: "Как обеспечивается безопасность данных?",
       a: "Все биометрические данные шифруются end-to-end. Серверы расположены в защищённых дата-центрах. Соответствие GDPR.",
     },
@@ -963,16 +1043,16 @@ const Landing = () => {
       className="landing-shell min-h-screen bg-background"
       style={{ fontFamily: "var(--font-landing), var(--font-sf-base)" }}
     >
-      <header
-        className={cx(
-          "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-          isHeaderScrolled
-            ? "bg-white/92 shadow-[0_16px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl"
-            : "bg-transparent shadow-none backdrop-blur-none",
-        )}
-      >
-        <div className="px-6 py-5 md:px-16 lg:px-24">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
+      <header className="fixed inset-x-0 top-0 z-50 pointer-events-none">
+        <div
+          className={cx(
+            "mx-auto w-full transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-auto transform-gpu",
+            isHeaderScrolled
+              ? "max-w-[100vw] mt-0 rounded-b-2xl bg-white/50 border-b border-white/60 shadow-[0px_10px_40px_5px_rgba(194,194,194,0.25)] backdrop-blur-xl px-6 py-4 md:px-16 lg:px-24"
+              : "max-w-5xl mt-6 rounded-[40px] bg-white/50 border border-white/60 shadow-[0px_10px_40px_5px_rgba(194,194,194,0.25)] backdrop-blur-xl px-8 py-3 md:px-12 lg:px-16"
+          )}
+        >
+          <div className="flex w-full items-center justify-between">
             <button
               className="flex items-center"
               onClick={() =>
@@ -999,63 +1079,48 @@ const Landing = () => {
             </nav>
 
             <div className="flex items-center gap-3">
-              <Link
+              <a
                 className="hidden text-sm font-medium text-foreground transition-colors hover:text-primary sm:inline-block"
                 href="/login"
               >
                 Войти
-              </Link>
-              <Link
+              </a>
+              <button
+                type="button"
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
-                href="/login"
+                onClick={() => setIsDemoModalOpen(true)}
               >
                 Начать
-              </Link>
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <section
-        className="min-h-[88vh] px-6 pb-10 pt-24 md:px-16 md:pb-16 md:pt-28 lg:px-24"
+        className="relative min-h-[95vh] overflow-hidden px-6 pb-10 pt-24 md:px-16 md:pb-16 md:pt-28 lg:px-24"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
       >
-        <div className="mx-auto flex min-h-[calc(88vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2">
-          <div className="max-w-xl flex-1 lg:max-w-[52rem] lg:flex-[1.3]">
-            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] text-4xl leading-[1.1] font-semibold tracking-tight text-foreground opacity-0 md:text-5xl lg:text-[3.4rem]">
-              <span className="whitespace-nowrap">Современная платформа</span>
-              <br className="hidden lg:block" />
-              <span className="italic whitespace-nowrap">управления</span>{" "}
-              <span className="whitespace-nowrap">персоналом</span>
-              <br className="hidden lg:block" />
-              <span className="whitespace-nowrap">
-                и <span className="italic">контроля</span> посещаемости
-              </span>
+        {/* Background Video */}
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 z-0 size-full object-cover opacity-60 mix-blend-multiply transition-opacity duration-1000"
+          style={{ transform: "scale(-1, -1)" }}
+          src="/hero.webm"
+        />
+        <div className="mx-auto flex relative z-10 min-h-[calc(95vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2">
+          <div className="max-w-xl flex-1 lg:max-w-[38rem] lg:flex-[1.1]">
+            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] flex flex-col text-[clamp(2rem,5vw,3.4rem)] leading-[1.05] tracking-[-0.05em] font-medium uppercase text-foreground opacity-0 !font-sans">
+              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-normal tracking-[-0.06em]">ВСЯ</span>
+              <span>работа команды</span>
+              <span>на одном экране</span>
             </h1>
-            <div className="animate-[fadeInUp_0.6s_0.45s_ease_forwards] opacity-0">
-              <a
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
-                href="#"
-              >
-                Заказать демо
-                <svg
-                  className="ml-2 h-4 w-4 text-white!"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M17 8l4 4m0 0l-4 4m4-4H3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                  />
-                </svg>
-              </a>
-            </div>
-            <div className="mt-14 flex gap-10 animate-[fadeInUp_0.6s_0.6s_ease_forwards] opacity-0">
+            <div className="flex gap-10 animate-[fadeInUp_0.6s_0.45s_ease_forwards] opacity-0">
               {[
                 { value: "99.8%", label: "Точность распознавания" },
                 { value: "500+", label: "Компаний доверяют" },
@@ -1071,8 +1136,30 @@ const Landing = () => {
                 </div>
               ))}
             </div>
+            <div className="mt-14 animate-[fadeInUp_0.6s_0.6s_ease_forwards] opacity-0">
+              <button
+                type="button"
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
+                onClick={() => setIsDemoModalOpen(true)}
+              >
+                Заказать демо
+                <svg
+                  className="ml-2 h-4 w-4 text-white!"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M17 8l4 4m0 0l-4 4m4-4H3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="flex flex-1 justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] lg:flex-[0.85] lg:translate-x-48 lg:justify-end">
+          <div className="flex flex-1 justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] lg:flex-[0.9] lg:translate-x-24 lg:justify-end">
             <div className="relative isolate h-[360px] w-[360px] md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
               <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.14)_0%,rgba(255,255,255,0)_68%)] blur-3xl" />
               <div className="absolute inset-[11%] rounded-full bg-white/78 shadow-[0_36px_120px_rgba(148,163,184,0.18)]" />
@@ -1107,15 +1194,19 @@ const Landing = () => {
       <section className="flex flex-col gap-12 overflow-hidden bg-primary py-16 sm:gap-16 md:gap-20 md:py-24 lg:gap-24">
         <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-            <h2 className="mt-3 text-3xl font-semibold text-white md:text-5xl">
-              Удобные <span className="italic">контроль и аналитика</span> для
-              операционной деятельности
+            <h2 className="mt-3 text-[clamp(1.75rem,4vw,3rem)] leading-[1.1] tracking-[-0.04em] font-medium uppercase text-white !font-sans">
+              <span className="whitespace-nowrap">Удобные <span className="italic">контроль и аналитика</span></span>
+              <br className="hidden md:block" />
+              <span className="whitespace-nowrap">для операционной деятельности</span>
             </h2>
           </div>
         </div>
 
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-6 sm:gap-16 md:gap-20 md:px-16 lg:gap-24 lg:px-24">
-          <div className="grid grid-cols-1 gap-10 md:gap-20 lg:grid-cols-2 lg:gap-24">
+          <div
+            className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            style={firstFeatureRowShift}
+          >
             <div className="max-w-xl flex-1 self-center">
               <FeatureBadge
                 description="Веб-интерфейс собирает рабочие диалоги, объявления и уведомления в единый поток для команды и менеджеров."
@@ -1138,18 +1229,21 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-light-01.webp"
+                  src={getLandingMockupSrc(1, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-dark-01.webp"
+                  src={getLandingMockupSrc(1, locale)}
                 />
               </AlternateImageMockup>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-10 md:gap-20 lg:grid-cols-2 lg:gap-24">
+          <div
+            className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            style={secondFeatureRowShift}
+          >
             <div className="max-w-xl flex-1 self-center lg:order-last">
               <FeatureBadge
                 description="Ключевые сценарии работают быстро: attendance, заявки, payroll, шаблоны задач и операционные процессы."
@@ -1172,18 +1266,21 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-light-01.webp"
+                  src={getLandingMockupSrc(2, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-dark-01.webp"
+                  src={getLandingMockupSrc(2, locale)}
                 />
               </AlternateImageMockup>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-10 md:gap-20 lg:grid-cols-2 lg:gap-24">
+          <div
+            className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            style={thirdFeatureRowShift}
+          >
             <div className="max-w-xl flex-1 self-center">
               <FeatureBadge
                 description="Отчёты и drilldown помогают быстро понять, что происходит с командой, attendance и эффективностью."
@@ -1206,12 +1303,12 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-light-01.webp"
+                  src={getLandingMockupSrc(3, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
-                  src="https://www.untitledui.com/marketing/screen-mockups/dashboard-desktop-mockup-dark-01.webp"
+                  src={getLandingMockupSrc(3, locale)}
                 />
               </AlternateImageMockup>
             </div>
@@ -1227,8 +1324,9 @@ const Landing = () => {
       >
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
           <div className="max-w-lg flex-1">
-            <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
+            <h2 className="mb-6 text-[clamp(1.75rem,4vw,2.8rem)] leading-[1.1] tracking-[-0.05em] font-medium uppercase text-foreground !font-sans">
               <span className="italic">Управляйте</span> командой прямо{" "}
+              <br className="hidden md:block" />
               <span className="italic">с телефона</span>
             </h2>
             <p className="mb-8 text-lg leading-relaxed text-muted-foreground">
@@ -1366,11 +1464,10 @@ const Landing = () => {
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3">
             {pricingPlans.map((plan) => (
               <div
-                className={`relative rounded-2xl border p-8 transition-all duration-300 ${
-                  plan.highlighted
-                    ? "scale-[1.03] border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
-                    : "border-border/60 bg-background hover:border-primary/20 hover:shadow-lg"
-                }`}
+                className={`relative flex flex-col rounded-2xl border p-8 transition-all duration-300 ${plan.highlighted
+                  ? "scale-[1.03] border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
+                  : "border-border/60 bg-background hover:border-primary/20 hover:shadow-lg"
+                  }`}
                 key={plan.name}
               >
                 {plan.highlighted && (
@@ -1417,16 +1514,16 @@ const Landing = () => {
                     </li>
                   ))}
                 </ul>
-                <a
-                  className={`block w-full rounded-xl py-3 text-center text-sm font-semibold transition-all duration-300 ${
-                    plan.highlighted
-                      ? "bg-background text-foreground hover:opacity-90"
-                      : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
-                  }`}
-                  href="#"
+                <button
+                  type="button"
+                  className={`mt-auto block w-full rounded-xl py-3 text-center text-sm font-semibold transition-all duration-300 ${plan.highlighted
+                    ? "bg-background text-black!"
+                    : "bg-primary/10 text-primary hover:bg-primary hover:text-white!"
+                    }`}
+                  onClick={() => setIsDemoModalOpen(true)}
                 >
                   {plan.name === "Enterprise" ? "Связаться" : "Начать"}
-                </a>
+                </button>
               </div>
             ))}
           </div>
@@ -1448,18 +1545,20 @@ const Landing = () => {
             управление персоналом с HiTeam
           </p>
           <div className="flex flex-col justify-center gap-4 sm:flex-row">
-            <a
+            <button
+              type="button"
               className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
-              href="#"
+              onClick={() => setIsDemoModalOpen(true)}
             >
               Попробовать бесплатно
-            </a>
-            <a
+            </button>
+            <button
+              type="button"
               className="inline-flex h-12 items-center justify-center rounded-xl border border-border px-8 text-base font-medium text-foreground transition-all duration-300 hover:border-primary/30 hover:text-primary"
-              href="#"
+              onClick={() => setIsDemoModalOpen(true)}
             >
               Заказать демо
-            </a>
+            </button>
           </div>
         </div>
       </section>
@@ -1473,19 +1572,12 @@ const Landing = () => {
         <div className="mx-auto max-w-7xl">
           <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-4">
             <div className="col-span-2 md:col-span-1">
-              <div className="mb-4 flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <span className="text-sm font-bold text-primary-foreground">
-                    S
-                  </span>
-                </div>
-                <span className="text-lg font-semibold tracking-tight text-foreground">
-                  HiTeam
-                </span>
+              <div className="mb-4 flex items-center">
+                <BrandWordmark className="text-[1.95rem] text-foreground" />
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Современная платформа для управления персоналом и контроля
-                посещаемости.
+                посещаемости
               </p>
             </div>
             {[
@@ -1556,7 +1648,130 @@ const Landing = () => {
           from { opacity: 0; }
           to { opacity: 1; }
         }
+        @keyframes polaroidFloat {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          25% { transform: translateY(-6px) rotate(0.5deg); }
+          75% { transform: translateY(4px) rotate(-0.5deg); }
+        }
+        @keyframes shimmer {
+          0% { background-position: 200% center; }
+          100% { background-position: -200% center; }
+        }
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+          50% { box-shadow: 0 0 20px 4px rgba(59, 130, 246, 0.15); }
+        }
+        @keyframes bounceTextBadge {
+          0%, 70% { transform: translateY(0%); }
+          80% { transform: translateY(-15%); }
+          90% { transform: translateY(0%); }
+          95% { transform: translateY(-7%); }
+          97% { transform: translateY(0%); }
+          99% { transform: translateY(-3%); }
+          100% { transform: translateY(0); }
+        }
+        .globe-shimmer-text {
+          background: linear-gradient(
+            90deg,
+            currentColor 0%,
+            currentColor 40%,
+            rgba(255,255,255,0.9) 50%,
+            currentColor 60%,
+            currentColor 100%
+          );
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: shimmer 3s ease-in-out infinite;
+        }
+        .globe-chip-pulse {
+          animation: pulseGlow 3s ease-in-out infinite;
+        }
+        [data-bouncing="true"] .globe-chip-pulse {
+          animation: pulseGlow 3s ease-in-out infinite, bounceTextBadge 2s ease forwards;
+        }
+        .globe-polaroid-glow {
+          transition: box-shadow 0.3s ease;
+        }
       `}</style>
+
+      <Dialog open={isDemoModalOpen} onOpenChange={setIsDemoModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader className="text-center sm:text-center">
+            <DialogTitle className="text-2xl font-bold text-center">
+              {locale === "ru" ? "Заказать демо" : "Get demo"}
+            </DialogTitle>
+            <DialogDescription className="text-base text-center">
+              {locale === "ru"
+                ? "Оставьте свои контакты, и мы скоро свяжемся с вами"
+                : "Leave your contacts and we will get back to you shortly"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Input
+                id="name"
+                placeholder={locale === "ru" ? "Ваше имя" : "Your name"}
+                className="h-12"
+                value={demoName}
+                onChange={(e) => setDemoName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Input
+                id="email"
+                type="email"
+                placeholder={locale === "ru" ? "Ваш email" : "Your email"}
+                className="h-12"
+                value={demoEmail}
+                onChange={(e) => setDemoEmail(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Input
+                id="phone"
+                type="tel"
+                placeholder={locale === "ru" ? "Номер телефона (+...)" : "Phone number (+...)"}
+                className="h-12"
+                value={demoPhone}
+                onChange={(e) => setDemoPhone(e.target.value)}
+              />
+            </div>
+            <div className="flex items-start space-x-3 mt-2">
+              <Checkbox
+                id="terms"
+                className="mt-1"
+                checked={demoTermsAccepted}
+                onCheckedChange={(checked) => setDemoTermsAccepted(checked === true)}
+              />
+              <label
+                htmlFor="terms"
+                className="text-sm text-muted-foreground leading-snug cursor-pointer text-left"
+              >
+                {locale === "ru" ? (
+                  <>
+                    Я даю согласие на обработку персональных данных и подтверждаю, что ознакомлен с{" "}
+                    <a href="#" className="underline hover:text-primary">Политикой конфиденциальности</a>.
+                  </>
+                ) : (
+                  <>
+                    I consent to the processing of personal data and confirm that I have read the{" "}
+                    <a href="#" className="underline hover:text-primary">Privacy Policy</a>.
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="w-full h-12 text-base mt-2"
+            disabled={!isDemoFormValid}
+          >
+            {locale === "ru" ? "Заказать демо" : "Request demo"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

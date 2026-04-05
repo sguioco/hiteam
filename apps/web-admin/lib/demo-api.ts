@@ -251,7 +251,7 @@ function createInitialState(): DemoState {
         status: index < 4 ? "ACTIVE" : "INACTIVE",
         user: {
           id: `user-${employee.id}`,
-          email: `employee${index + 1}@hiteam.demo`,
+          email: index === 0 ? "sgiuoco688@gmail.com" : `employee${index + 1}@hiteam.demo`,
         },
         company,
         devices: [
@@ -464,6 +464,110 @@ function createInitialState(): DemoState {
       groupId: groups[1].id,
       assigneeEmployeeId: employees[3].id,
     }),
+    buildTask({
+      id: "task-sgiuoco-1",
+      title: "Финальная проверка квартального отчета",
+      description: "Необходимо сверить все цифры перед отправкой в финансовый отдел.",
+      dueAt: createIsoAt(0, 18, 0),
+      priority: "URGENT",
+      status: "TODO",
+      assigneeEmployeeId: employees[0].id,
+      checklistItems: [
+        { id: "s1-c1", title: "Сверить налоги за март", isCompleted: true },
+        { id: "s1-c2", title: "Проверить выплаты по пропускам", isCompleted: false },
+        { id: "s1-c3", title: "Подписать PDF", isCompleted: false },
+      ],
+    }),
+    buildTask({
+      id: "task-sgiuoco-2",
+      title: "Встреча: Ревью дизайн-системы",
+      description: "Обсуждение новых UI-компонентов для мобильного приложения.",
+      dueAt: createIsoAt(1, 10, 0),
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-sgiuoco-3",
+      title: "Заказать новые пропуска для офиса",
+      description: "Закончились болванки для NFС-карт.",
+      dueAt: createIsoAt(2, 12, 0),
+      priority: "LOW",
+      status: "TODO",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-sgiuoco-4",
+      title: "Подготовка презентации для инвесторов",
+      description: "Собрать метрики роста за последний месяц.",
+      dueAt: createIsoAt(4, 15, 30),
+      priority: "HIGH",
+      status: "TODO",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-sgiuoco-5",
+      title: "Обновление документации API",
+      description: "Добавить описание новых эндпоинтов для интеграции с ERP.",
+      dueAt: createIsoAt(-2, 17, 0),
+      priority: "MEDIUM",
+      status: "DONE",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-sgiuoco-today-1",
+      title: "Проверить состояние инвентаря в зале",
+      description: "Необходимо осмотреть витрины и убедиться, что все товары на своих местах.",
+      dueAt: createIsoAt(0, 11, 0),
+      priority: "MEDIUM",
+      status: "TODO",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-sgiuoco-today-2",
+      title: "Сверить отчет по кассе за утро",
+      description: "Проверить Z-отчет и соответствие наличных в кассе.",
+      dueAt: createIsoAt(0, 13, 30),
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    {
+      ...buildTask({
+        id: "task-sgiuoco-today-photo-1",
+        title: "Уборка рабочего места",
+        description: "Фото-отчет о чистоте рабочего стола в конце смены.",
+        dueAt: createIsoAt(0, 16, 45),
+        priority: "LOW",
+        status: "DONE",
+        assigneeEmployeeId: employees[0].id,
+      }),
+      photoProofs: [
+        {
+          id: "proof-1",
+          url: "https://images.unsplash.com/photo-1593062096033-9a26b09da705?auto=format&fit=crop&q=80&w=1000",
+          createdAt: createIsoAt(0, 16, 30),
+        }
+      ]
+    },
+    {
+      ...buildTask({
+        id: "task-sgiuoco-today-photo-2",
+        title: "Проверка выкладки товара",
+        description: "Фото нового поступления на главной витрине.",
+        dueAt: createIsoAt(0, 10, 0),
+        priority: "MEDIUM",
+        status: "DONE",
+        assigneeEmployeeId: employees[0].id,
+      }),
+      photoProofs: [
+        {
+          id: "proof-2",
+          url: "https://images.unsplash.com/photo-1601004890684-d8cbf393f922?auto=format&fit=crop&q=80&w=1000",
+          createdAt: createIsoAt(0, 9, 45),
+        }
+      ]
+    },
   ];
 
   const requests = createMockApprovalInboxItems(new Date(), "ru").map(
@@ -667,7 +771,32 @@ function createInitialState(): DemoState {
     requests,
     notifications,
     invitations,
-    shifts: scheduleData.shifts,
+    shifts: [
+      ...scheduleData.shifts,
+      {
+        id: "shift-sgiuoco-today-1",
+        shiftDate: dateKey(),
+        startsAt: createIsoAt(0, 9, 0),
+        endsAt: createIsoAt(0, 17, 0),
+        status: "ASSIGNED",
+        createdAt: createIsoAt(-1, 9, 0),
+        updatedAt: createIsoAt(-1, 9, 0),
+        employee: {
+          id: employees[0].id,
+          firstName: employees[0].firstName,
+          lastName: employees[0].lastName,
+        },
+        location: employees[0].primaryLocation ?? { id: "loc-1", name: "Main Location" },
+        position: employees[0].position ?? { id: "pos-1", name: "Manager" },
+        template: {
+          id: "tpl-1",
+          name: "Основная смена",
+          code: "MAIN",
+          startsAtLocal: "09:00",
+          endsAtLocal: "17:00",
+        },
+      },
+    ],
     templates: scheduleData.templates,
     payrollPolicy,
     holidays,

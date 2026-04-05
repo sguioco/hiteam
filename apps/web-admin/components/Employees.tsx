@@ -20,6 +20,7 @@ import {
   UserPlus,
   Users,
   X,
+  Clock,
 } from "lucide-react";
 import {
   CollaborationOverviewResponse,
@@ -51,6 +52,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
@@ -557,6 +564,16 @@ const Employees = ({
   const [createTemplateError, setCreateTemplateError] = useState<string | null>(
     null,
   );
+  const [assignShiftDialog, setAssignShiftDialog] = useState<{
+    employeeId: string;
+    employeeName: string;
+  } | null>(null);
+  const [assignShiftDraft, setAssignShiftDraft] = useState({
+    templateId: "",
+    shiftDate: new Date().toISOString().split("T")[0],
+  });
+  const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
+  const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
 
   function toggleTemplateWeekDay(day: number) {
     setTemplateDraft((current) => ({
@@ -1495,6 +1512,59 @@ const Employees = ({
     }
   }
 
+  function openAssignShiftDialog(employee: EmployeeRowView) {
+    setAssignShiftError(null);
+    setAssignShiftDraft({
+      templateId: scheduleTemplates[0]?.id ?? "",
+      shiftDate: new Date().toISOString().split("T")[0],
+    });
+    setAssignShiftDialog({
+      employeeId: employee.id,
+      employeeName: employee.name,
+    });
+  }
+
+  async function handleCreateShift() {
+    const session = getSession();
+    if (!session || !assignShiftDialog) return;
+
+    if (!assignShiftDraft.templateId || !assignShiftDraft.shiftDate) {
+      setAssignShiftError(
+        runtimeLocalize("Выберите шаблон и дату", "Select template and date", locale),
+      );
+      return;
+    }
+
+    setAssignShiftSubmitting(true);
+    setAssignShiftError(null);
+
+    try {
+      await apiRequest("/schedule/shifts", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({
+          employeeId: assignShiftDialog.employeeId,
+          templateId: assignShiftDraft.templateId,
+          shiftDate: assignShiftDraft.shiftDate,
+        }),
+      });
+
+      setAssignShiftDialog(null);
+      setPageMessage(
+        runtimeLocalize("Смена успешно назначена.", "Shift assigned successfully.", locale),
+      );
+      await loadDirectory();
+    } catch (requestError) {
+      setAssignShiftError(
+        requestError instanceof Error
+          ? requestError.message
+          : runtimeLocalize("Не удалось назначить смену.", "Failed to assign shift.", locale),
+      );
+    } finally {
+      setAssignShiftSubmitting(false);
+    }
+  }
+
   function openGroupEditor(groupId: string) {
     const group = groups.find((item) => item.id === groupId);
     if (!group) return;
@@ -1681,7 +1751,7 @@ const Employees = ({
                             {employee.name}
                           </p>
                           <p className="truncate text-sm text-[color:var(--muted-foreground)]">
-                            {employee.position} • {employee.employeeNumber}
+                            {employee.position}
                           </p>
                         </div>
                       </div>
@@ -1740,15 +1810,28 @@ const Employees = ({
 
                   <Table.Cell className="align-middle">
                     <div className="flex items-center justify-center gap-1">
-                      <Button
-                        className="h-7 w-7 rounded-lg p-0"
-                        onClick={() => openTaskDialogForEmployee(employee)}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            className="h-7 w-7 rounded-lg p-0"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[200px] rounded-xl font-heading">
+                          <DropdownMenuItem onClick={() => openTaskDialogForEmployee(employee)}>
+                            <ListTodo className="mr-2 h-4 w-4" />
+                            {runtimeLocalize("Назначить задачу", "Assign task", locale)}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openAssignShiftDialog(employee)}>
+                            <Clock className="mr-2 h-4 w-4" />
+                            {runtimeLocalize("Назначить смену", "Assign shift", locale)}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button
                         className="h-7 w-7 rounded-lg p-0"
                         onClick={() => openMoveDialog(employee)}
@@ -3603,6 +3686,83 @@ const Employees = ({
               </DialogFooter>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        onOpenChange={(open) => !open && setAssignShiftDialog(null)}
+        open={!!assignShiftDialog}
+      >
+        <DialogContent className="w-[min(480px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-2xl">
+              {runtimeLocalize("Назначить смену", "Assign shift", locale)}
+            </DialogTitle>
+            <DialogDescription className="font-heading">
+              {assignShiftDialog
+                ? `${runtimeLocalize("Сотрудник", "Employee", locale)}: ${assignShiftDialog.employeeName}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <label className="grid gap-2 text-sm font-heading">
+              <span>{runtimeLocalize("Шаблон смены", "Shift template", locale)}</span>
+              <Select
+                onValueChange={(value) =>
+                  setAssignShiftDraft((current) => ({
+                    ...current,
+                    templateId: value,
+                  }))
+                }
+                value={assignShiftDraft.templateId}
+              >
+                <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
+                  <SelectValue placeholder={runtimeLocalize("Выберите шаблон", "Select template", locale)} />
+                </SelectTrigger>
+                <SelectContent>
+                  {scheduleTemplates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name} ({template.startsAtLocal}-{template.endsAtLocal})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-2 text-sm font-heading">
+              <span>{runtimeLocalize("Дата", "Date", locale)}</span>
+              <Input
+                className="h-11"
+                onChange={(event) =>
+                  setAssignShiftDraft((current) => ({
+                    ...current,
+                    shiftDate: event.target.value,
+                  }))
+                }
+                type="date"
+                value={assignShiftDraft.shiftDate}
+              />
+            </label>
+            {assignShiftError ? (
+              <div className="error-box">{assignShiftError}</div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button
+                className="rounded-xl font-heading"
+                onClick={() => setAssignShiftDialog(null)}
+                variant="outline"
+              >
+                {runtimeLocalize("Отмена", "Cancel", locale)}
+              </Button>
+              <Button
+                className="rounded-xl font-heading"
+                disabled={assignShiftSubmitting || !assignShiftDraft.templateId}
+                onClick={() => void handleCreateShift()}
+              >
+                {assignShiftSubmitting
+                  ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                  : runtimeLocalize("Назначить", "Assign", locale)}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

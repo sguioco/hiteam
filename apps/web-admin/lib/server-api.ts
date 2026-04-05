@@ -27,6 +27,7 @@ export async function serverApiRequest<T>(
     ...options,
     headers,
     cache: "no-store",
+    signal: options?.signal ?? AbortSignal.timeout(5000),
   });
 
   if (!response.ok) {
