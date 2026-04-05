@@ -6,6 +6,7 @@ import '@aws-amplify/ui-react-liveness/styles.css';
 import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
 import { Providers } from './providers';
+import { petersburgHero } from './landing-hero-font';
 import { cn } from "@/lib/utils";
 import { getServerSession } from "@/lib/server-auth";
 import { loadInitialShellBootstrap } from "@/lib/server-shell";
@@ -48,7 +49,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = ${JSON.stringify(initialShellBootstrap).replace(/</g, "\\u003c")};`;
 
   return (
-    <html lang="en" className={cn(teodor.variable, montserrat.variable)}>
+    <html
+      lang="en"
+      className={cn(teodor.variable, montserrat.variable, petersburgHero.variable)}
+    >
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers>{children}</Providers>

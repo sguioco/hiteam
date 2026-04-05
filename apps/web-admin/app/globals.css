@@ -58,6 +58,21 @@
   font-family: var(--font-brand-stack) !important;
 }
 
+/* Hero font: next/font → --font-petersburg-hero on <html> (see landing-hero-font.ts) */
+.landing-shell .lp-hero-petersburg,
+.landing-shell .lp-hero-petersburg h1,
+.landing-shell .lp-hero-petersburg h2,
+.landing-shell .lp-hero-petersburg h3,
+.landing-shell .lp-hero-petersburg p,
+.landing-shell .lp-hero-petersburg span,
+.landing-shell .lp-hero-petersburg a,
+.landing-shell .lp-hero-petersburg button,
+.landing-shell .lp-hero-petersburg div,
+.landing-shell .lp-hero-petersburg li,
+.landing-shell .lp-hero-petersburg label {
+  font-family: var(--font-petersburg-hero), var(--font-landing), var(--font-sf-base) !important;
+}
+
 @theme inline {
   --font-heading: var(--font-sf-stack);
   --font-body: var(--font-sf-stack);

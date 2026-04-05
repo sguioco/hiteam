@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { petersburgHero } from "@/app/landing-hero-font";
 
 type GlobeOverlayItem =
   | {
@@ -164,6 +165,21 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     offsetX: 88,
     offsetY: 35,
   },
+];
+
+/** `bg-primary` / --primaryrgb(160, 186, 241) (light theme); COBE expects linear RGB 0–1 */
+const LANDING_PRIMARY_COBE_RGB: [number, number, number] = [
+  224 / 255,
+  202 / 255,
+  252 / 255,
+];
+
+/** COBE uses one baseColor for land + ocean; low mix + low diffuse ⇒ land reads black. ~0.38–0.45 reads as blue land, light ocean. */
+const GLOBE_BASE_COLOR_MIX = 0.42;
+const GLOBE_BASE_COLOR: [number, number, number] = [
+  (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[0],
+  (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[1],
+  (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[2],
 ];
 
 const GLOBE_INITIAL_PHI = 0.52;
@@ -787,13 +803,13 @@ const Landing = () => {
       phi: basePhiRef.current,
       theta: GLOBE_THETA,
       dark: 0,
-      diffuse: 1.2,
-      mapSamples: 16000,
-      mapBrightness: 6,
+      diffuse: 0.2,
+      mapSamples: 24000,
+      mapBrightness: 7,
       mapBaseBrightness: 0,
       scale: GLOBE_SCALE,
-      baseColor: [1, 1, 1],
-      markerColor: [0.18, 0.43, 0.94],
+      baseColor: GLOBE_BASE_COLOR,
+      markerColor: LANDING_PRIMARY_COBE_RGB,
       glowColor: [0.98, 0.99, 1],
       offset: [0, 0],
       markerElevation: 0,
@@ -1039,10 +1055,7 @@ const Landing = () => {
   ];
 
   return (
-    <div
-      className="landing-shell min-h-screen bg-background"
-      style={{ fontFamily: "var(--font-landing), var(--font-sf-base)" }}
-    >
+    <div className="landing-shell min-h-screen bg-background">
       <header className="fixed inset-x-0 top-0 z-50 pointer-events-none">
         <div
           className={cx(
@@ -1113,10 +1126,15 @@ const Landing = () => {
           style={{ transform: "scale(-1, -1)" }}
           src="/hero.webm"
         />
-        <div className="mx-auto flex relative z-10 min-h-[calc(95vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2">
+        <div
+          className={cx(
+            "lp-hero-petersburg mx-auto flex relative z-10 min-h-[calc(95vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2",
+            petersburgHero.className,
+          )}
+        >
           <div className="max-w-xl flex-1 lg:max-w-[38rem] lg:flex-[1.1]">
-            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] flex flex-col text-[clamp(2rem,5vw,3.4rem)] leading-[1.05] tracking-[-0.05em] font-medium uppercase text-foreground opacity-0 !font-sans">
-              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-normal tracking-[-0.06em]">ВСЯ</span>
+            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] flex flex-col text-[clamp(2rem,5vw,3.4rem)] leading-[1.05] tracking-[-0.05em] font-medium uppercase text-foreground opacity-0">
+              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-medium tracking-[-0.06em]">ВСЯ</span>
               <span>работа команды</span>
               <span>на одном экране</span>
             </h1>
@@ -1325,21 +1343,46 @@ const Landing = () => {
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
           <div className="max-w-lg flex-1">
             <h2 className="mb-6 text-[clamp(1.75rem,4vw,2.8rem)] leading-[1.1] tracking-[-0.05em] font-medium uppercase text-foreground !font-sans">
-              <span className="italic">Управляйте</span> командой прямо{" "}
-              <br className="hidden md:block" />
-              <span className="italic">с телефона</span>
+              {locale === "ru" ? (
+                <>
+                  <span className="italic">Управляйте</span>
+                  <br />
+                  командой
+                  <br />
+                  прямо с
+                  <br />
+                  <span className="italic">телефона</span>
+                </>
+              ) : (
+                <>
+                  <span className="italic">Manage</span>
+                  <br />
+                  your team
+                  <br />
+                  right from
+                  <br />
+                  your <span className="italic">phone</span>
+                </>
+              )}
             </h2>
             <p className="mb-8 text-lg leading-relaxed text-muted-foreground">
-              Сотрудники начинают и завершают смену одним касанием — с
-              автоматическим распознаванием лица и проверкой геолокации. Никаких
-              бумажных журналов.
+              {locale === "ru"
+                ? "Сотрудники начинают и завершают смену одним касанием — с автоматическим распознаванием лица и проверкой геолокации. Никаких бумажных журналов."
+                : "Employees start and end their shifts with a single touch — with automatic facial recognition and geolocation checks. No paper logs."}
             </p>
             <div className="space-y-4">
-              {[
-                "Сканирование лица за 2 секунды",
-                "Автоматическая проверка местоположения",
-                "Создание задач и запросов на ходу",
-              ].map((feature) => (
+              {(locale === "ru"
+                ? [
+                  "Сканирование лица за 2 секунды",
+                  "Автоматическая проверка местоположения",
+                  "Создание задач и запросов на ходу",
+                ]
+                : [
+                  "Face scan in 2 seconds",
+                  "Automatic location verification",
+                  "Create tasks and requests on the go",
+                ]
+              ).map((feature) => (
                 <div className="flex items-center gap-3" key={feature}>
                   <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                     <svg
@@ -1368,18 +1411,15 @@ const Landing = () => {
 
           <div className="flex flex-1 justify-center lg:justify-end">
             <div className="relative">
-              <div className="relative h-[570px] w-[280px] overflow-hidden rounded-[3rem] border-[8px] border-foreground/90 bg-muted shadow-2xl shadow-primary/10 md:h-[610px] md:w-[400px]">
-                <div className="absolute top-0 left-1/2 z-10 h-[28px] w-[120px] -translate-x-1/2 rounded-b-2xl bg-foreground/90" />
-                <div className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                    <span className="text-lg font-bold text-primary">S</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Скриншот приложения
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
-                    Будет заменён
-                  </p>
+              {/* Padding bezel keeps inner aspect ratio; uniform border shrinks width more than height vs outer frame */}
+              <div className="relative rounded-[3rem] bg-foreground/90 p-2 shadow-2xl shadow-primary/10">
+                <div className="absolute top-0 left-1/2 z-20 h-[28px] w-[120px] -translate-x-1/2 rounded-b-2xl bg-foreground/90" />
+                <div className="relative aspect-[9/19.5] w-[247px] overflow-hidden rounded-[2.5rem] bg-background md:w-[266px]">
+                  <img
+                    alt={locale === "ru" ? "Скриншот приложения" : "App screenshot"}
+                    className="h-full w-full object-cover object-top"
+                    src={locale === "ru" ? "/mob_ru.webp" : "/mob_en.webp"}
+                  />
                 </div>
               </div>
             </div>
