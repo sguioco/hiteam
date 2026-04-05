@@ -9,7 +9,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { useI18n } from '../../lib/i18n';
+import { useI18n, pluralizeRu } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
 type ShiftStatusCardProps = {
@@ -20,23 +20,6 @@ type ShiftStatusCardProps = {
   onPrimaryAction?: () => void;
 };
 
-function pluralizeRu(value: number, forms: readonly [string, string, string]) {
-  const remainder100 = value % 100;
-  if (remainder100 >= 11 && remainder100 <= 19) {
-    return forms[2];
-  }
-
-  const remainder10 = value % 10;
-  if (remainder10 === 1) {
-    return forms[0];
-  }
-
-  if (remainder10 >= 2 && remainder10 <= 4) {
-    return forms[1];
-  }
-
-  return forms[2];
-}
 
 function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: 'ru' | 'en') {
   if (language === 'ru') {
@@ -324,7 +307,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         : 'bg-[#7ee787]/28';
 
   const buttonTextColor = shiftMeta.buttonTone === 'danger' ? 'text-white' : 'text-[#1e3358]';
-  const greetingLabel = greetingName?.trim() ? `Hi, ${greetingName.trim()}` : t('today.greetingCard');
+  const greetingLabel = greetingName?.trim() ? t('today.greetingWithName', { name: greetingName.trim() }) : t('today.greetingCard');
 
   return (
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">

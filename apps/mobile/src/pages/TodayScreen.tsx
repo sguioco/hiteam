@@ -27,8 +27,8 @@ function addDays(date: Date, amount: number) {
 
 function normalizeTodayTaskTitle(title: string) {
   return title
-    .replace(/^Employee recurring:\s*/i, '')
-    .replace(/^Owner recurring:\s*/i, '')
+    .replace(/^(Employee recurring|Повторяющаяся задача сотрудника):\s*/i, '')
+    .replace(/^(Owner recurring|Повторяющаяся задача владельца):\s*/i, '')
     .trim()
     .toLowerCase();
 }

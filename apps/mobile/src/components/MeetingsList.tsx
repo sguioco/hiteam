@@ -23,7 +23,7 @@ const meetingTitleStyle = {
 } as const;
 
 function normalizeMeetingTitle(title: string) {
-  const normalized = title.replace(/^Meeting:\s*/i, '').trim();
+  const normalized = title.replace(/^(Meeting|Встреча):\s*/i, '').trim();
 
   if (!normalized) {
     return normalized;
@@ -33,7 +33,7 @@ function normalizeMeetingTitle(title: string) {
 }
 
 export default function MeetingsList({ loading = false, tasks }: MeetingsListProps) {
-  const { language, t } = useI18n();
+  const { t, tp } = useI18n();
 
   const formatDuration = (startAt?: string, endAt?: string) => {
     if (!startAt || !endAt) {
@@ -44,7 +44,7 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
     const end = new Date(endAt);
     const durationMinutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 
-    return language === 'ru' ? `${durationMinutes} мин` : `${durationMinutes} min`;
+    return tp(durationMinutes, ['мин', 'мин', 'мин'], ['min', 'mins']);
   };
 
   return (

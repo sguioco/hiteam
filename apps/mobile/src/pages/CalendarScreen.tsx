@@ -263,11 +263,14 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
   const selectedMeetingCount = selectedItems.filter((item) => item.kind === 'meeting').length;
   const selectedSummaryText =
     selectedTaskCount > 0 && selectedMeetingCount > 0
-      ? t('calendar.countSummary', { tasks: selectedTaskCount, meetings: selectedMeetingCount })
+      ? t('calendar.countSummary', {
+        tasks: tp(selectedTaskCount, ['задача', 'задачи', 'задач'], ['task', 'tasks']),
+        meetings: tp(selectedMeetingCount, ['встреча', 'встречи', 'встреч'], ['meeting', 'meetings']),
+      })
       : selectedTaskCount > 0
-        ? `${selectedTaskCount} ${selectedTaskCount === 1 ? 'task' : 'tasks'}`
+        ? tp(selectedTaskCount, ['задача', 'задачи', 'задач'], ['task', 'tasks'])
         : selectedMeetingCount > 0
-          ? `${selectedMeetingCount} ${selectedMeetingCount === 1 ? 'meeting' : 'meetings'}`
+          ? tp(selectedMeetingCount, ['встреча', 'встречи', 'встреч'], ['meeting', 'meetings'])
           : null;
 
   const selectedDayRelation =

@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export type AppLanguage = 'ru' | 'en';
 
@@ -25,7 +26,7 @@ const translations = {
     'nav.calendar': 'Календарь',
     'nav.news': 'Новости',
     'nav.profile': 'Профиль',
-    'nav.manage': 'Управление',
+    'nav.manage': 'Управлять',
     'nav.language': 'Языки',
 
     'login.brandName': 'HiTeam',
@@ -49,8 +50,12 @@ const translations = {
     'login.signInTitle': 'Вход в аккаунт',
     'login.signInBody': 'Введите email или телефон и пароль, чтобы открыть рабочее пространство.',
     'login.needInvite': 'Нужен инвайт?',
-    'login.joinTeam': 'Join Team',
-    'login.logIn': 'Sign in',
+    'login.joinTeam': 'Вступить в команду',
+    'login.logIn': 'Войти',
+    'login.signInToAccount': 'Войти в аккаунт',
+    'login.joinWithCode': 'Вступить по коду',
+    'login.hidePassword': 'Скрыть пароль',
+    'login.showPassword': 'Показать пароль',
 
     'welcome.titleLineOne': 'Добро пожаловать',
     'welcome.titleLineTwo': 'в HiTeam',
@@ -64,9 +69,9 @@ const translations = {
     'invite.description': 'Уникальный код, предоставляемый вашим администратором для присоединения к компании',
     'invite.label': 'Код приглашения',
     'invite.placeholder': 'Например, TEAM-4821',
-    'invite.joinWithCodeTitle': 'Join with code',
+    'invite.joinWithCodeTitle': 'Вступить по коду',
     'invite.joinWithCodeBody': 'Введите код, который вам отправил администратор, и мы откроем регистрацию в команду.',
-    'invite.joinButton': 'Join',
+    'invite.joinButton': 'Вступить',
     'invite.continue': 'Далее',
     'invite.errorEmpty': 'Введите код приглашения.',
     'invite.invalidCode': 'Недействительный код приглашения',
@@ -259,10 +264,10 @@ const translations = {
     'today.requirementLocation': 'геолокация',
     'today.requirementDevice': 'основное устройство',
     'today.verificationRequirements': 'Для отметки нужны: {requirements}',
-    'today.startPromptTitle': 'Say HI and start your shift now',
-    'today.startPromptLead': 'Your shift starts in {duration}',
-    'today.startPromptConfirm': 'Say Hi',
-    'today.startPromptLater': 'Not now',
+    'today.startPromptTitle': 'Отметьте Hi и начните смену',
+    'today.startPromptLead': 'Смена начнётся через {duration}',
+    'today.startPromptConfirm': 'Отметить Hi',
+    'today.startPromptLater': 'Не сейчас',
     'today.photosAttached': 'Прикреплено фото: {count}',
     'today.photosSaved': 'Сохранено фото: {count}',
     'today.photoProofRequired': 'Нужно фото-подтверждение',
@@ -277,6 +282,11 @@ const translations = {
     'today.chooseFromLibrary': 'Выбрать из галереи',
     'today.addOneMorePhoto': 'Добавить ещё одно фото',
     'today.retakePhotos': 'Переснять фото',
+    'today.photoReportTitle': 'Фото-отчёт',
+    'today.photoLabel': 'Фото {index}',
+    'today.uploadingPhoto': 'Загрузка фото...',
+    'today.uploading': 'Загрузка...',
+    'today.photoLimitError': 'Можно добавить максимум {limit} фото.',
 
     'calendar.eyebrow': 'Планирование',
     'calendar.title': 'Календарь задач',
@@ -297,7 +307,10 @@ const translations = {
     'calendar.notDone': 'Не сделано',
     'calendar.activityOnDay': 'Активность за этот день',
     'calendar.planForDay': 'План на этот день',
-    'calendar.countSummary': '{tasks} задач • {meetings} встреч',
+    'calendar.noOverdueTasks': 'Просроченных задач нет.',
+    'calendar.taskCount': '{count} {count, plural, one {задача} few {задачи} other {задач}}',
+    'calendar.meetingCount': '{count} {count, plural, one {встреча} few {встречи} other {встреч}}',
+    'calendar.countSummary': '{tasks} и {meetings}',
     'calendar.statusDone': 'Готово',
     'calendar.statusDeleted': 'Удалено',
     'calendar.statusOverdue': 'Просрочено',
@@ -306,7 +319,6 @@ const translations = {
     'calendar.noItemsForDay': 'На этот день нет задач',
     'calendar.markDone': 'Отметить выполненной',
     'calendar.openTaskDay': 'Открыть день задачи',
-    'calendar.noOverdueTasks': 'Сейчас просроченных задач нет',
     'calendar.overdueSheetTitle': 'Просроченные задачи',
     'calendar.overdueSheetBody': 'Выберите задачу, чтобы быстро закрыть её или перейти к исходному дню в календаре',
     'calendar.taskNotDoneYet': 'Задача ещё не выполнена',
@@ -347,7 +359,7 @@ const translations = {
     'announcements.eyebrow': 'Объявления',
     'announcements.title': 'Обновления команды',
     'announcements.empty': 'Пока нет объявлений',
-    'announcements.loadError': 'Не удалось загрузить объявления.,
+    'announcements.loadError': 'Не удалось загрузить объявления.',
     'announcements.pinned': 'закреплено',
 
     'inbox.eyebrow': 'Входящие',
@@ -655,6 +667,10 @@ const translations = {
     'login.needInvite': 'Need an invite?',
     'login.joinTeam': 'Join Team',
     'login.logIn': 'Sign in',
+    'login.signInToAccount': 'Sign in to your account',
+    'login.joinWithCode': 'Join with code',
+    'login.hidePassword': 'Hide password',
+    'login.showPassword': 'Show password',
 
     'welcome.titleLineOne': 'Welcome',
     'welcome.titleLineTwo': 'to HiTeam',
@@ -798,6 +814,8 @@ const translations = {
     'today.nextShiftTitle': 'Your next shift is already scheduled',
     'today.nextShiftBody': 'Today is off. The closest upcoming shift from your schedule is shown below.',
     'today.nextShiftStatus': 'Next shift: {date}',
+    'today.greetingWithName': 'Hi, {name}',
+    'today.greetingCard': 'HiTeam',
     'today.quickActions': 'Quick actions',
     'today.openRequests': 'Open requests',
     'today.openInbox': 'Open inbox',
@@ -836,7 +854,6 @@ const translations = {
     'today.actionError': 'Unable to complete the attendance action.',
     'today.taskUpdateError': 'Unable to update the task.',
     'today.overdueBanner': 'You have {count} overdue tasks from previous days',
-    'today.greetingCard': 'HiTeam',
     'today.cardLoadingTitle': 'Loading your shift',
     'today.cardLoadingBody': 'Checking your shift, location, and attendance state.',
     'today.cardReadyTitle': 'Shift is ready to start',
@@ -881,6 +898,11 @@ const translations = {
     'today.chooseFromLibrary': 'Choose from library',
     'today.addOneMorePhoto': 'Add one more photo',
     'today.retakePhotos': 'Retake photos',
+    'today.photoReportTitle': 'Photo Report',
+    'today.photoLabel': 'Photo {index}',
+    'today.uploadingPhoto': 'Uploading photo...',
+    'today.uploading': 'Uploading...',
+    'today.photoLimitError': 'You can add up to {limit} photos.',
 
     'calendar.eyebrow': 'Planning',
     'calendar.title': 'Task calendar',
@@ -901,7 +923,10 @@ const translations = {
     'calendar.notDone': 'Not done',
     'calendar.activityOnDay': 'Activity on this day',
     'calendar.planForDay': 'Plan for this day',
-    'calendar.countSummary': '{tasks} tasks • {meetings} meetings',
+    'calendar.noOverdueTasks': 'No overdue tasks.',
+    'calendar.taskCount': '{count} {count, plural, one {task} other {tasks}}',
+    'calendar.meetingCount': '{count} {count, plural, one {meeting} other {meetings}}',
+    'calendar.countSummary': '{tasks} and {meetings}',
     'calendar.statusDone': 'Done',
     'calendar.statusDeleted': 'Deleted',
     'calendar.statusOverdue': 'Overdue',
@@ -910,7 +935,6 @@ const translations = {
     'calendar.noItemsForDay': 'No tasks for this day',
     'calendar.markDone': 'Mark done',
     'calendar.openTaskDay': 'Open task day',
-    'calendar.noOverdueTasks': 'There are no overdue tasks right now.',
     'calendar.overdueSheetTitle': 'Overdue tasks',
     'calendar.overdueSheetBody': 'Pick a task to finish it quickly or jump to its original day in the calendar.',
     'calendar.taskNotDoneYet': 'Task not done yet',
@@ -1224,9 +1248,31 @@ type I18nContextValue = {
   language: AppLanguage;
   setLanguage: (language: AppLanguage) => void;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
+  tp: (count: number, ruForms: [string, string, string], enForms: [string, string]) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
+
+export function pluralizeRu(value: number, forms: readonly [string, string, string]) {
+  const normalized = Math.abs(value);
+  const remainder100 = normalized % 100;
+  if (remainder100 >= 11 && remainder100 <= 19) {
+    return forms[2];
+  }
+
+  const remainder10 = normalized % 10;
+  if (remainder10 === 1) {
+    return forms[0];
+  }
+
+  if (remainder10 >= 2 && remainder10 <= 4) {
+    return forms[1];
+  }
+
+  return forms[2];
+}
+
+const LANGUAGE_STORAGE_PATH = `${FileSystem.documentDirectory}app-language.txt`;
 
 function detectInitialLanguage(): AppLanguage {
   try {
@@ -1256,15 +1302,47 @@ function translate(language: AppLanguage, key: TranslationKey, variables?: Recor
 }
 
 export function I18nProvider({ children }: PropsWithChildren) {
-  const [language, setLanguage] = useState<AppLanguage>(detectInitialLanguage);
+  const [language, setLanguageState] = useState<AppLanguage>(detectInitialLanguage);
+
+  useEffect(() => {
+    async function loadLanguage() {
+      try {
+        const info = await FileSystem.getInfoAsync(LANGUAGE_STORAGE_PATH);
+        if (info.exists) {
+          const saved = await FileSystem.readAsStringAsync(LANGUAGE_STORAGE_PATH);
+          if (saved === 'ru' || saved === 'en') {
+            setLanguageState(saved);
+          }
+        }
+      } catch {
+        // Fallback to default
+      }
+    }
+    loadLanguage();
+  }, []);
+
+  const setLanguage = useCallback(async (next: AppLanguage) => {
+    setLanguageState(next);
+    try {
+      await FileSystem.writeAsStringAsync(LANGUAGE_STORAGE_PATH, next);
+    } catch {
+      // Best effort save
+    }
+  }, []);
 
   const value = useMemo<I18nContextValue>(() => {
     return {
       language,
       setLanguage,
       t: (key, variables) => translate(language, key, variables),
+      tp: (count, ruForms, enForms) => {
+        if (language === 'ru') {
+          return `${count} ${pluralizeRu(count, ruForms)}`;
+        }
+        return `${count} ${count === 1 ? enForms[0] : enForms[1]}`;
+      },
     };
-  }, [language]);
+  }, [language, setLanguage]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

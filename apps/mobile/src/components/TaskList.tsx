@@ -60,10 +60,11 @@ const PHOTO_REPORT_LAYOUT = {
 
 const PHOTO_REPORT_LIMIT = 7;
 
+
 function normalizeTaskTitle(title: string) {
   const normalized = title
-    .replace(/^Employee recurring:\s*/i, '')
-    .replace(/^Owner recurring:\s*/i, '')
+    .replace(/^(Employee recurring|Повторяющаяся задача сотрудника):\s*/i, '')
+    .replace(/^(Owner recurring|Повторяющаяся задача владельца):\s*/i, '')
     .trim();
 
   if (!normalized) {
@@ -73,13 +74,13 @@ function normalizeTaskTitle(title: string) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
+function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?: any) => string): TaskPhoto[] {
   return task.photoProofs
     .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
     .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
     .map((proof, index) => ({
       id: proof.id,
-      label: `Photo ${index + 1}`,
+      label: t('today.photoLabel', { index: String(index + 1) }),
       capturedAt: new Date(proof.createdAt).toLocaleTimeString(locale, {
         hour: '2-digit',
         minute: '2-digit',
@@ -96,7 +97,7 @@ export default function TaskList({
   onToggleTask,
   onTaskUpdate,
 }: TaskListProps) {
-  const { language, t } = useI18n();
+  const { language, t, tp } = useI18n();
   const locale = getDateLocale(language);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -110,11 +111,11 @@ export default function TaskList({
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? null;
   const taskPhotos = useMemo(
     () =>
-      Object.fromEntries(tasks.map((task) => [task.id, buildTaskPhotos(task, locale)])) as Record<
+      Object.fromEntries(tasks.map((task) => [task.id, buildTaskPhotos(task, locale, t)])) as Record<
         string,
         TaskPhoto[]
       >,
-    [locale, tasks],
+    [locale, t, tasks],
   );
   const activeTaskPhotos = useMemo(() => {
     if (!activeTask) {
@@ -150,9 +151,7 @@ export default function TaskList({
   const totalCountLabel = useMemo(() => `${tasks.length}`, [tasks.length]);
 
   function photoLimitErrorMessage() {
-    return language === 'ru'
-      ? 'Можно добавить максимум 7 фото.'
-      : 'You can add up to 7 photos.';
+    return t('today.photoLimitError', { limit: 7 });
   }
 
   function closeTaskModal() {
@@ -238,7 +237,7 @@ export default function TaskList({
     const pendingPhotoId = `pending:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
     const pendingPhoto: TaskPhoto = {
       id: pendingPhotoId,
-      label: `Photo ${currentPhotos.length + 1}`,
+      label: t('today.photoLabel', { index: String(currentPhotos.length + 1) }),
       capturedAt: new Date().toLocaleTimeString(locale, {
         hour: '2-digit',
         minute: '2-digit',
@@ -566,7 +565,7 @@ export default function TaskList({
                 <View className="w-10" />
                 <View className="flex-1 items-center">
                   <Text className="text-center font-display text-[24px] font-bold text-foreground">
-                    Photo Report
+                    {t('today.photoReportTitle')}
                   </Text>
                   <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
                     {t('today.photoDefaultHint')}
@@ -641,7 +640,7 @@ export default function TaskList({
                         <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">
                           <ActivityIndicator color="#546cf2" size="large" />
                           <Text className="font-body text-sm text-[#24314b]">
-                            Uploading photo...
+                            {t('today.uploadingPhoto')}
                           </Text>
                         </View>
                       </View>
@@ -666,7 +665,7 @@ export default function TaskList({
                       </Text>
                       <Text className="mt-2 font-body text-sm text-white/90">
                         {selectedPhoto.isPending
-                          ? 'Uploading...'
+                          ? t('today.uploading')
                           : t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
                       </Text>
                     </View>

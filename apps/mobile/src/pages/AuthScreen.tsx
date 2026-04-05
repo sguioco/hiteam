@@ -679,14 +679,9 @@ const AuthScreen = () => {
     setMode('landing');
   }
 
-  const passwordToggleLabel =
-    language === 'ru'
-      ? passwordVisible
-        ? 'Скрыть пароль'
-        : 'Показать пароль'
-      : passwordVisible
-        ? 'Hide password'
-        : 'Show password';
+  const passwordToggleLabel = passwordVisible
+    ? t('login.hidePassword')
+    : t('login.showPassword');
 
   async function handleSignIn() {
     const trimmedIdentifier = identifier.trim();
@@ -774,8 +769,7 @@ const AuthScreen = () => {
   function renderJoinTitle() {
     return (
       <Text style={styles.joinTitle}>
-        <Text style={styles.joinTitleAccent}>Join</Text>
-        <Text style={styles.joinTitleBody}> with code</Text>
+        {t('login.joinWithCode')}
       </Text>
     );
   }
@@ -784,8 +778,7 @@ const AuthScreen = () => {
     return (
       <View pointerEvents="none" style={styles.signInTitleSlot}>
         <Text style={styles.signInTitle}>
-          <Text style={styles.signInTitleAccent}>Sign in</Text>
-          <Text style={styles.signInTitleBody}> to your account</Text>
+          {t('login.signInToAccount')}
         </Text>
       </View>
     );
@@ -794,8 +787,7 @@ const AuthScreen = () => {
   function renderJoinProfileTitle() {
     return (
       <Text className="text-[31px] leading-[34px] text-[#26334a]">
-        <Text style={{ fontFamily: 'Manrope_700Bold' }}>Submit</Text>
-        <Text style={{ fontFamily: 'Manrope_700Bold' }}> your profile</Text>
+        {t('invite.joinWithCodeTitle')}
       </Text>
     );
   }
