@@ -198,8 +198,8 @@ export default function OrganizationPageClient({
   initialData?: OrganizationPageInitialData | null;
 }) {
   const { locale } = useI18n();
-  const [setup, setSetup] = useState<OrganizationSetupResponse | null>(
-    initialData?.setup ?? null,
+  const [setup, setSetup] = useState<OrganizationSetupResponse>(
+    initialData?.setup ?? EMPTY_SETUP,
   );
   const [employeeCount, setEmployeeCount] = useState(initialData?.employeeCount ?? 0);
   const [draft, setDraft] = useState<SetupDraft>(() =>
@@ -408,26 +408,10 @@ export default function OrganizationPageClient({
     } finally { setIsSaving(false); }
   }
 
-  if (!setup) {
-    return (
-      <AdminShell showTopbar={false}>
-         <div className="flex items-center justify-center p-20 text-muted-foreground animate-pulse text-sm">
-           Loading setup...
-         </div>
-      </AdminShell>
-    );
-  }
-
   return (
     <AdminShell showTopbar={false}>
       <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 py-10 md:px-10 md:py-12 animate-in fade-in duration-500">
         <form className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
-          <div className="organization-studio-hero">
-            <h1>{setupMode === "create"
-              ? locale === "ru" ? "Добавление организации" : "Add organization"
-              : locale === "ru" ? "Организация" : "Organization"}</h1>
-          </div>
-
           {error ? (
             <div className="organization-studio-feedback organization-studio-feedback--error">
               {error}
@@ -435,51 +419,6 @@ export default function OrganizationPageClient({
           ) : null}
 
           <div className="organization-studio-identity">
-            <div className="organization-studio-logo-field">
-              <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
-              <ImageAdjustField
-                dialogDescription={locale === "ru"
-                  ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
-                  : "Adjust the logo: you can change scale and X/Y offset before saving."}
-                dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
-                onChange={(nextLogoDataUrl) => {
-                  updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
-                  setError(null);
-                }}
-                onError={setError}
-                previewAlt={draft.companyName || "Logo"}
-                renderTrigger={({ chooseFile, fileName, openEditor, previewSrc }) => (
-                  <div className="organization-studio-logo-trigger">
-                    <button
-                      className="org-logo-preview organization-studio-logo-preview"
-                      onClick={openEditor}
-                      type="button"
-                    >
-                      {previewSrc ? (
-                        <img
-                          alt={draft.companyName || "Logo"}
-                          src={previewSrc}
-                        />
-                      ) : (
-                        <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
-                      )}
-                    </button>
-
-                    <Button
-                      className="organization-studio-logo-action"
-                      onClick={chooseFile}
-                      title={fileName || (locale === "ru" ? "Выбрать логотип" : "Choose logo")}
-                      type="button"
-                      variant="outline"
-                    >
-                      {locale === "ru" ? "Выбрать логотип" : "Choose logo"}
-                    </Button>
-                  </div>
-                )}
-                value={draft.companyLogoUrl || null}
-              />
-            </div>
-
             <label className="organization-studio-name-field">
               <span className="organization-studio-label">
                 {locale === "ru" ? "Название организации" : "Organization name"}
@@ -507,6 +446,51 @@ export default function OrganizationPageClient({
 
           <div className="organization-studio-grid">
             <div className="organization-studio-sidebar">
+              <section className="organization-studio-fieldset organization-studio-logo-field">
+                <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
+                <ImageAdjustField
+                  dialogDescription={locale === "ru"
+                    ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
+                    : "Adjust the logo: you can change scale and X/Y offset before saving."}
+                  dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
+                  onChange={(nextLogoDataUrl) => {
+                    updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
+                    setError(null);
+                  }}
+                  onError={setError}
+                  previewAlt={draft.companyName || "Logo"}
+                  renderTrigger={({ chooseFile, fileName, openEditor, previewSrc }) => (
+                    <div className="organization-studio-logo-trigger">
+                      <button
+                        className="org-logo-preview organization-studio-logo-preview"
+                        onClick={openEditor}
+                        type="button"
+                      >
+                        {previewSrc ? (
+                          <img
+                            alt={draft.companyName || "Logo"}
+                            src={previewSrc}
+                          />
+                        ) : (
+                          <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
+                        )}
+                      </button>
+
+                      <Button
+                        className="organization-studio-logo-action"
+                        onClick={chooseFile}
+                        title={fileName || (locale === "ru" ? "Выбрать логотип" : "Choose logo")}
+                        type="button"
+                        variant="outline"
+                      >
+                        {locale === "ru" ? "Выбрать логотип" : "Choose logo"}
+                      </Button>
+                    </div>
+                  )}
+                  value={draft.companyLogoUrl || null}
+                />
+              </section>
+
               <section className="organization-studio-fieldset">
                 <div className="organization-studio-label-row">
                   <span className="organization-studio-label">

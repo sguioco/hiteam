@@ -1,0 +1,255 @@
+import { Image, type ImageSourcePropType } from 'react-native';
+import type { AnnouncementItem, AttendanceStatusResponse, TaskItem } from '@smart/types';
+import { hasManagerAccess } from './auth-flow';
+import {
+  loadAttendanceStatus,
+  loadManagerAnnouncements,
+  loadManagerEmployees,
+  loadManagerLiveSessions,
+  loadManagerTasks,
+  loadMyAnnouncements,
+  loadMyProfile,
+  loadMyShifts,
+  loadMyTasks,
+} from './api';
+import { resolveEmployeeAvatarSource } from './employee-avatar';
+import { writeScreenCache } from './screen-cache';
+import { formatDateKeyInTimeZone } from './timezone';
+
+type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
+type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>;
+type TodayTasks = Awaited<ReturnType<typeof loadMyTasks>>;
+
+export type TodayScreenCacheValue = {
+  attendanceStatus: AttendanceStatusResponse | null;
+  profile: WorkspaceProfile | null;
+  shifts: ShiftItem;
+  tasks: TodayTasks;
+};
+
+export const TODAY_SCREEN_CACHE_KEY = 'today-screen:v1';
+export const TODAY_SCREEN_CACHE_TTL_MS = 60_000;
+
+const PROFILE_SCREEN_CACHE_KEY = 'profile-screen';
+const MANAGER_SCREEN_CACHE_KEY = 'manager-screen-v4';
+const WORKSPACE_WARMUP_MIN_INTERVAL_MS = 30_000;
+
+let lastWorkspaceWarmupAt = 0;
+let workspaceWarmupPromise: Promise<void> | null = null;
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function getCalendarScreenCacheKey(date = new Date()) {
+  return `calendar-screen:${date.getFullYear()}-${date.getMonth()}`;
+}
+
+function getNewsScreenCacheKey(isManager: boolean) {
+  return `news-screen:${isManager ? 'manager' : 'employee'}`;
+}
+
+function buildTodayDateRange(timeZone?: string | null) {
+  const now = new Date();
+  return {
+    previousDateKey: formatDateKeyInTimeZone(addDays(now, -1), timeZone),
+    nextDateKey: formatDateKeyInTimeZone(addDays(now, 1), timeZone),
+  };
+}
+
+function buildCalendarDateRange(date = new Date()) {
+  const year = date.getFullYear();
+  const monthIndex = date.getMonth();
+  return {
+    rangeStart: new Date(year, monthIndex - 1, 1),
+    rangeEnd: new Date(year, monthIndex + 1, 0),
+  };
+}
+
+function getRemoteImageUri(source: string | ImageSourcePropType | null | undefined) {
+  if (!source) {
+    return null;
+  }
+
+  if (typeof source === 'string') {
+    return source.trim() || null;
+  }
+
+  if (typeof source === 'object' && 'uri' in source && typeof source.uri === 'string') {
+    return source.uri.trim() || null;
+  }
+
+  return null;
+}
+
+async function prefetchImageSources(sources: Array<string | ImageSourcePropType | null | undefined>) {
+  const uniqueUris = Array.from(
+    new Set(
+      sources
+        .map(getRemoteImageUri)
+        .filter((uri): uri is string => Boolean(uri)),
+    ),
+  );
+
+  if (!uniqueUris.length) {
+    return;
+  }
+
+  await Promise.allSettled(uniqueUris.map((uri) => Image.prefetch(uri)));
+}
+
+function buildProfileAvatarSource(profile: WorkspaceProfile) {
+  return resolveEmployeeAvatarSource({
+    avatarUrl: profile.avatarUrl,
+    email: profile.user.email,
+    employeeNumber: profile.employeeNumber,
+    firstName: profile.firstName,
+    gender: profile.gender,
+    id: profile.id,
+    lastName: profile.lastName,
+  });
+}
+
+function collectTaskPhotoUris(tasks: TaskItem[]) {
+  return tasks.flatMap((task) =>
+    task.photoProofs
+      .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
+      .map((proof) => proof.url),
+  );
+}
+
+async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
+  const nextProfile = profile ?? (await loadMyProfile());
+
+  await writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
+  await prefetchImageSources([buildProfileAvatarSource(nextProfile)]);
+
+  return nextProfile;
+}
+
+export async function warmTodayScreenCache(profile?: WorkspaceProfile | null) {
+  const nextProfile = profile ?? (await loadMyProfile());
+  const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
+  const [attendanceStatus, shifts, tasks] = await Promise.all([
+    loadAttendanceStatus(),
+    loadMyShifts(),
+    loadMyTasks({
+      dateFrom: previousDateKey,
+      dateTo: nextDateKey,
+    }),
+  ]);
+
+  const payload: TodayScreenCacheValue = {
+    attendanceStatus,
+    profile: nextProfile,
+    shifts,
+    tasks,
+  };
+
+  await writeScreenCache(TODAY_SCREEN_CACHE_KEY, payload);
+  await prefetchImageSources([buildProfileAvatarSource(nextProfile), ...collectTaskPhotoUris(tasks)]);
+
+  return payload;
+}
+
+async function warmCalendarScreenCache(date = new Date()) {
+  const { rangeStart, rangeEnd } = buildCalendarDateRange(date);
+  const [shifts, tasks] = await Promise.all([
+    loadMyShifts(),
+    loadMyTasks({
+      dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, '0')}-${`${rangeStart.getDate()}`.padStart(2, '0')}`,
+      dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, '0')}-${`${rangeEnd.getDate()}`.padStart(2, '0')}`,
+    }),
+  ]);
+
+  await writeScreenCache(getCalendarScreenCacheKey(date), {
+    shifts,
+    tasks,
+  });
+}
+
+async function warmNewsScreenCache(isManager: boolean) {
+  const items = isManager ? await loadManagerAnnouncements() : await loadMyAnnouncements();
+
+  await writeScreenCache(getNewsScreenCacheKey(isManager), items);
+  await prefetchImageSources(items.map((item) => item.imageUrl));
+
+  return items;
+}
+
+async function warmManagerScreenCache(profile?: WorkspaceProfile | null) {
+  const nextProfile = profile ?? (await loadMyProfile());
+  const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
+  const [employees, liveSessions, tasks] = await Promise.all([
+    loadManagerEmployees(),
+    loadManagerLiveSessions(),
+    loadManagerTasks({
+      dateFrom: previousDateKey,
+      dateTo: nextDateKey,
+    }),
+  ]);
+
+  await writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
+    profile: nextProfile,
+    employees,
+    liveSessions,
+    tasks,
+  });
+  await prefetchImageSources([
+    buildProfileAvatarSource(nextProfile),
+    ...employees.map((employee) => employee.avatar),
+  ]);
+}
+
+export async function warmAnnouncementImages(items: AnnouncementItem[]) {
+  await prefetchImageSources(items.map((item) => item.imageUrl));
+}
+
+export async function warmWorkspaceCaches(roleCodes: string[], options?: { force?: boolean }) {
+  if (workspaceWarmupPromise) {
+    return workspaceWarmupPromise;
+  }
+
+  if (!options?.force && Date.now() - lastWorkspaceWarmupAt < WORKSPACE_WARMUP_MIN_INTERVAL_MS) {
+    return;
+  }
+
+  workspaceWarmupPromise = (async () => {
+    const isManager = hasManagerAccess(roleCodes);
+    const profile = await warmProfileScreenCache().catch(() => null);
+
+    await Promise.allSettled([
+      warmTodayScreenCache(profile),
+      warmCalendarScreenCache(),
+      warmNewsScreenCache(isManager),
+      isManager ? warmManagerScreenCache(profile) : Promise.resolve(),
+    ]);
+
+    lastWorkspaceWarmupAt = Date.now();
+  })().finally(() => {
+    workspaceWarmupPromise = null;
+  });
+
+  return workspaceWarmupPromise;
+}
+
+export async function warmWorkspaceCachesWithinBudget(roleCodes: string[], budgetMs = 320) {
+  const warmup = warmWorkspaceCaches(roleCodes, { force: true });
+
+  if (!warmup) {
+    return;
+  }
+
+  await Promise.race([
+    warmup.catch(() => undefined),
+    delay(Math.max(budgetMs, 0)),
+  ]);
+}

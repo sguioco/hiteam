@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import type { AttendanceStatusResponse } from '@smart/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppGradientBackground } from '../../components/ui/screen';
@@ -18,6 +18,7 @@ import PendingAccessScreen from './PendingAccessScreen';
 import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 import { useI18n } from '../../lib/i18n';
+import { warmWorkspaceCaches } from '../../lib/workspace-cache';
 
 type Tab = 'calendar' | 'today' | 'manage' | 'news' | 'profile';
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
@@ -216,11 +217,12 @@ const Index = () => {
     };
 
     void refreshStartShiftPrompt();
+    void warmWorkspaceCaches(roleCodes);
 
     return () => {
       cancelled = true;
     };
-  }, [appEntrySignal, isAuthenticated, workspaceAccessAllowed]);
+  }, [appEntrySignal, isAuthenticated, roleCodes, workspaceAccessAllowed]);
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
     const nextTab = tab === 'manage' && !isManager ? 'today' : tab;
@@ -244,18 +246,41 @@ const Index = () => {
     return <PendingAccessScreen />;
   }
 
+  function renderActiveTab() {
+    if (activeTab === 'today') {
+      return <TodayScreen onOpenOverdue={openOverdueInCalendar} />;
+    }
+
+    if (activeTab === 'calendar') {
+      return <CalendarScreen overdueSheetSignal={overdueSheetSignal} />;
+    }
+
+    if (activeTab === 'manage' && isManager) {
+      return <ManagerScreen />;
+    }
+
+    if (activeTab === 'news') {
+      return <NewsScreen />;
+    }
+
+    return <ProfileScreen />;
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-transparent" edges={['left', 'right']}>
       <StatusBar backgroundColor="transparent" style={activeTab === 'today' ? 'light' : 'dark'} translucent />
       <View className="flex-1">
         <AppGradientBackground />
-        {activeTab === 'today' ? (
-          <TodayScreen onOpenOverdue={openOverdueInCalendar} />
-        ) : null}
-        {activeTab === 'calendar' ? <CalendarScreen overdueSheetSignal={overdueSheetSignal} /> : null}
-        {activeTab === 'manage' && isManager ? <ManagerScreen /> : null}
-        {activeTab === 'news' ? <NewsScreen /> : null}
-        {activeTab === 'profile' ? <ProfileScreen /> : null}
+        <Animated.View
+          entering={FadeIn.duration(180).withInitialValues({
+            opacity: 0,
+            transform: [{ translateY: 6 }],
+          })}
+          key={activeTab}
+          style={{ flex: 1 }}
+        >
+          {renderActiveTab()}
+        </Animated.View>
         <BottomNav active={activeTab} hasBadge onNavigate={navigateToTab} showManage={isManager} />
       </View>
       <Modal

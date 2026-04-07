@@ -1242,6 +1242,17 @@ const translations = {
   },
 } as const;
 
+const contentTranslations: Record<string, string> = {
+  'Ежедневный обход территории': 'Daily grounds walk',
+  'Проверить состояние всех объектов на территории и убедиться в отсутствии нарушений.': 'Check the status of all objects on the grounds and ensure there are no violations.',
+  'Проверка чистоты рабочего места': 'Workplace cleanliness check',
+  'Убедиться, что рабочее место чистое и соответствует стандартам компании.': 'Ensure the workplace is clean and meets company standards.',
+  'Отчет по остаткам материалов': 'Materials stock report',
+  'Подсчитать остатки расходных материалов и внести данные в систему.': 'Count the remaining consumables and enter the data into the system.',
+  'Фото фасада здания': 'Building facade photo',
+  'Сделать фотографию главного входа для ежедневного отчета.': 'Take a photo of the main entrance for the daily report.',
+};
+
 type TranslationKey = string;
 
 type I18nContextValue = {
@@ -1249,6 +1260,7 @@ type I18nContextValue = {
   setLanguage: (language: AppLanguage) => void;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
   tp: (count: number, ruForms: [string, string, string], enForms: [string, string]) => string;
+  tc: (text: string) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -1341,6 +1353,10 @@ export function I18nProvider({ children }: PropsWithChildren) {
         }
         return `${count} ${count === 1 ? enForms[0] : enForms[1]}`;
       },
+      tc: (text) => {
+        if (language === 'ru') return text;
+        return contentTranslations[text] || text;
+      },
     };
   }, [language, setLanguage]);
 
@@ -1357,6 +1373,16 @@ export function useI18n() {
       setLanguage: () => undefined,
       t: (key: TranslationKey, variables?: Record<string, string | number>) =>
         translate(fallbackLanguage, key, variables),
+      tp: (count: number, ruForms: [string, string, string], enForms: [string, string]) => {
+        if (fallbackLanguage === 'ru') {
+          return `${count} ${pluralizeRu(count, ruForms)}`;
+        }
+        return `${count} ${count === 1 ? enForms[0] : enForms[1]}`;
+      },
+      tc: (text: string) => {
+        if (fallbackLanguage === 'ru') return text;
+        return contentTranslations[text] || text;
+      },
     };
   }
 

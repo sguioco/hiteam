@@ -192,6 +192,33 @@ const GLOBE_POLAROID_OFFSET_Y = 100;
 
 type LandingLocale = "ru" | "en";
 
+function detectPreferredLandingLocale(): LandingLocale {
+  if (typeof window === "undefined") {
+    return "ru";
+  }
+
+  const localeCandidates = [
+    ...(window.navigator.languages ?? []),
+    window.navigator.language,
+    Intl.DateTimeFormat().resolvedOptions().locale,
+  ].filter(Boolean);
+
+  return localeCandidates.some((value) =>
+    value.toLowerCase().startsWith("ru"),
+  )
+    ? "ru"
+    : "en";
+}
+
+function readStoredLandingLocale(): LandingLocale | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const savedLocale = window.localStorage.getItem("smart-admin-locale");
+  return savedLocale === "ru" || savedLocale === "en" ? savedLocale : null;
+}
+
 type GlobeAnchorStyle = CSSProperties & {
   positionAnchor?: string;
 };
@@ -417,20 +444,22 @@ function FeatureBadge({
 }: {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
-    <div className="inline-flex items-start gap-4">
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-white ring-1 ring-white/18">
+    <div className="inline-flex items-start gap-4 md:gap-5">
+      <div className="mt-1 shrink-0 text-white">
         {icon}
       </div>
       <div>
         <h3 className="text-xl font-semibold text-white md:text-2xl">
           {title}
         </h3>
-        <p className="mt-2 text-base leading-7 text-white/72 md:text-lg">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-2 text-base leading-7 text-white/72 md:text-lg">
+            {description}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -439,7 +468,7 @@ function FeatureBadge({
 function CheckItemText({ text }: { text: string }) {
   return (
     <li className="flex items-start gap-3 text-sm text-white/82 md:text-base">
-      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10">
+      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-white">
         <svg
           className="h-3.5 w-3.5 text-white"
           fill="none"
@@ -718,7 +747,6 @@ const Landing = () => {
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [demoTermsAccepted, setDemoTermsAccepted] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
 
   const isDemoFormValid =
     demoName.trim().length > 0 &&
@@ -733,18 +761,36 @@ const Landing = () => {
     overlayRefs.current[id] = node;
   };
 
-  useEffect(() => {
-    setIsMounted(true);
-    const savedLocale = window.localStorage.getItem("smart-admin-locale");
-    if (savedLocale === "en" || savedLocale === "ru") {
-      setLocale(savedLocale);
+  const scrollToSection = (targetId: string) => {
+    const target = document.getElementById(targetId);
+    if (!target) {
+      return;
     }
 
+    const headerOffset = 112;
+    const targetTop =
+      target.getBoundingClientRect().top + window.scrollY - headerOffset;
+
+    window.scrollTo({
+      top: Math.max(targetTop, 0),
+      behavior: "smooth",
+    });
+  };
+
+  const updateLocale = (nextLocale: LandingLocale) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("smart-admin-locale", nextLocale);
+    }
+
+    setLocale(nextLocale);
+  };
+
+  useEffect(() => {
     const syncLocale = () => {
-      const nextLocale = window.localStorage.getItem("smart-admin-locale");
-      setLocale(nextLocale === "en" ? "en" : "ru");
+      setLocale(readStoredLandingLocale() ?? detectPreferredLandingLocale());
     };
 
+    syncLocale();
     window.addEventListener("storage", syncLocale);
     window.addEventListener("focus", syncLocale);
 
@@ -867,6 +913,240 @@ const Landing = () => {
       window.removeEventListener("scroll", syncHeaderState);
     };
   }, []);
+
+  const isRu = locale === "ru";
+  const navigationLabels = {
+    about: isRu ? "О нас" : "About",
+    mobile: isRu ? "Мобайл" : "Mobile",
+    pricing: isRu ? "Цены" : "Pricing",
+    questions: isRu ? "Вопросы" : "FAQ",
+  } as const;
+  const heroStats = isRu
+    ? [
+        { value: "99.8%", label: "Точность распознавания" },
+        { value: "500+", label: "Компаний доверяют" },
+        { value: "24/7", label: "Поддержка" },
+      ]
+    : [
+        { value: "99.8%", label: "Recognition accuracy" },
+        { value: "500+", label: "Companies trust us" },
+        { value: "24/7", label: "Support" },
+      ];
+  const aboutFeatureRows = isRu
+    ? [
+        {
+          bullets: [
+            "Следите за посещаемостью и статусами смен в реальном времени",
+            "Согласовывайте запросы и управляйте документами из одного места",
+            "Держите под контролем каждую задачу, смену и сотрудника",
+          ],
+          title: "Центр управления командой",
+        },
+        {
+          bullets: [
+            "Расписание, задачи, календарь и обновления в одном защищённом интерфейсе",
+            "Документы и всё нужное для рабочего дня всегда под рукой",
+            "Понятная личная история работы и текущих обязанностей",
+          ],
+          title: "Рабочее пространство сотрудника",
+        },
+        {
+          bullets: [
+            "Настраивайте организацию и задавайте рабочие зоны без лишних инструментов",
+            "Управляйте отчётами и выгружайте операционные данные в нужный момент",
+            "Стройте надёжную систему с прозрачностью команды в реальном времени",
+          ],
+          title: "Управление организацией",
+        },
+      ]
+    : [
+        {
+          bullets: [
+            "Monitor attendance and shift status in real time",
+            "Approve requests and manage documents from one place",
+            "Keep every task, shift, and team member under full control",
+          ],
+          title: "Workforce Command Center",
+        },
+        {
+          bullets: [
+            "Schedules, tasks, calendar, and updates in one secure workspace",
+            "Documents and daily work essentials always available",
+            "A clear view of personal work history and current responsibilities",
+          ],
+          title: "Employee Workspace",
+        },
+        {
+          bullets: [
+            "Set up your organization and define work zones without extra tools",
+            "Manage reports and export operational data when needed",
+            "Build a reliable system with real-time workforce visibility",
+          ],
+          title: "Organization Control",
+        },
+      ];
+  const pricingPlans = isRu
+    ? [
+        {
+          cta: "Начать",
+          desc: "Для небольших команд до 10 человек",
+          features: [
+            "До 10 сотрудников",
+            "Распознавание лиц",
+            "Базовые отчёты",
+            "Мобильное приложение",
+          ],
+          highlighted: false,
+          name: "Starter",
+          period: "",
+          price: "Бесплатно",
+        },
+        {
+          cta: "Начать",
+          desc: "Для растущих компаний",
+          features: [
+            "Неограниченно сотрудников",
+            "Веб-панель управления",
+            "Аналитика и экспорт",
+            "Payroll",
+            "Приоритетная поддержка",
+          ],
+          highlighted: true,
+          name: "Business",
+          period: "/ сотрудник в месяц",
+          price: "$4",
+        },
+        {
+          cta: "Связаться",
+          desc: "Индивидуальные решения для крупного бизнеса",
+          features: [
+            "Всё из Business",
+            "Выделенный менеджер",
+            "SLA 99.9%",
+            "On-premise установка",
+            "API доступ",
+          ],
+          highlighted: false,
+          name: "Enterprise",
+          period: "",
+          price: "По запросу",
+        },
+      ]
+    : [
+        {
+          cta: "Start",
+          desc: "For small teams of up to 10 people",
+          features: [
+            "Up to 10 employees",
+            "Face recognition",
+            "Basic reports",
+            "Mobile app",
+          ],
+          highlighted: false,
+          name: "Starter",
+          period: "",
+          price: "Free",
+        },
+        {
+          cta: "Start",
+          desc: "For growing companies",
+          features: [
+            "Unlimited employees",
+            "Web admin workspace",
+            "Analytics and export",
+            "Payroll",
+            "Priority support",
+          ],
+          highlighted: true,
+          name: "Business",
+          period: "/ employee per month",
+          price: "$4",
+        },
+        {
+          cta: "Contact us",
+          desc: "Custom solutions for large businesses",
+          features: [
+            "Everything in Business",
+            "Dedicated manager",
+            "SLA 99.9%",
+            "On-premise deployment",
+            "API access",
+          ],
+          highlighted: false,
+          name: "Enterprise",
+          period: "",
+          price: "Custom",
+        },
+      ];
+  const faqs = isRu
+    ? [
+        {
+          a: "Сотрудник открывает приложение, сканирует лицо камерой — система автоматически проверяет личность и фиксирует время. Точность распознавания — 99.8%.",
+          q: "Как работает распознавание лиц?",
+        },
+        {
+          a: "Нет. Достаточно обычного смартфона с камерой. Наше приложение работает на iOS и Android.",
+          q: "Нужно ли специальное оборудование?",
+        },
+        {
+          a: "Все биометрические данные шифруются end-to-end. Серверы расположены в защищённых дата-центрах. Соответствие GDPR.",
+          q: "Как обеспечивается безопасность данных?",
+        },
+        {
+          a: "Да, план Starter бесплатен навсегда для команд до 10 человек. Для Business-плана доступна 30-дневная пробная версия.",
+          q: "Есть ли пробный период?",
+        },
+      ]
+    : [
+        {
+          a: "An employee opens the app, scans their face with the camera, and the system verifies identity and records time automatically. Recognition accuracy reaches 99.8%.",
+          q: "How does face recognition work?",
+        },
+        {
+          a: "No. A regular smartphone with a camera is enough. The app works on both iOS and Android.",
+          q: "Do we need special hardware?",
+        },
+        {
+          a: "All biometric data is encrypted end-to-end. Servers are hosted in secure data centers with GDPR-compliant practices.",
+          q: "How is data protected?",
+        },
+        {
+          a: "Yes. The Starter plan stays free forever for teams up to 10 people, and the Business plan includes a 30-day trial.",
+          q: "Is there a trial period?",
+        },
+      ];
+  const footerColumns = isRu
+    ? [
+        {
+          links: ["Возможности", "Цены", "Интеграции", "API"],
+          title: "Продукт",
+        },
+        {
+          links: ["О нас", "Блог", "Карьера", "Контакты"],
+          title: "Компания",
+        },
+        {
+          links: ["Документация", "Статус", "Обратная связь", "Безопасность"],
+          title: "Поддержка",
+        },
+      ]
+    : [
+        {
+          links: ["Features", "Pricing", "Integrations", "API"],
+          title: "Product",
+        },
+        {
+          links: ["About", "Blog", "Careers", "Contacts"],
+          title: "Company",
+        },
+        {
+          links: ["Documentation", "Status", "Feedback", "Security"],
+          title: "Support",
+        },
+      ];
+  const footerLegalLinks = isRu
+    ? ["Политика конфиденциальности", "Условия использования"]
+    : ["Privacy policy", "Terms of use"];
 
   const webFeatures = [
     {
@@ -991,69 +1271,6 @@ const Landing = () => {
     },
   ];
 
-  const pricingPlans = [
-    {
-      name: "Starter",
-      price: "Бесплатно",
-      period: "",
-      desc: "Для небольших команд до 10 человек",
-      features: [
-        "До 10 сотрудников",
-        "Распознавание лиц",
-        "Базовые отчёты",
-        "Мобильное приложение",
-      ],
-      highlighted: false,
-    },
-    {
-      name: "Business",
-      price: "$4",
-      period: "/ сотрудник в месяц",
-      desc: "Для растущих компаний",
-      features: [
-        "Неограниченно сотрудников",
-        "Веб-панель управления",
-        "Аналитика и экспорт",
-        "Payroll",
-        "Приоритетная поддержка",
-      ],
-      highlighted: true,
-    },
-    {
-      name: "Enterprise",
-      price: "По запросу",
-      period: "",
-      desc: "Индивидуальные решения для крупного бизнеса",
-      features: [
-        "Всё из Business",
-        "Выделенный менеджер",
-        "SLA 99.9%",
-        "On-premise установка",
-        "API доступ",
-      ],
-      highlighted: false,
-    },
-  ];
-
-  const faqs = [
-    {
-      q: "Как работает распознавание лиц?",
-      a: "Сотрудник открывает приложение, сканирует лицо камерой — система автоматически проверяет личность и фиксирует время. Точность распознавания — 99.8%.",
-    },
-    {
-      q: "Нужно ли специальное оборудование?",
-      a: "Нет. Достаточно обычного смартфона с камерой. Наше приложение работает на iOS и Android.",
-    },
-    {
-      q: "Как обеспечивается безопасность данных?",
-      a: "Все биометрические данные шифруются end-to-end. Серверы расположены в защищённых дата-центрах. Соответствие GDPR.",
-    },
-    {
-      q: "Есть ли пробный период?",
-      a: "Да, план Starter бесплатен навсегда для команд до 10 человек. Для Business-плана доступна 30-дневная пробная версия.",
-    },
-  ];
-
   return (
     <div className="landing-shell min-h-screen bg-background">
       <header className="fixed inset-x-0 top-0 z-50 pointer-events-none">
@@ -1080,15 +1297,34 @@ const Landing = () => {
             </button>
 
             <nav className="hidden items-center gap-8 md:flex">
-              {["Продукт", "Возможности", "Цены", "О нас"].map((item) => (
-                <a
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  href="#"
-                  key={item}
-                >
-                  {item}
-                </a>
-              ))}
+              <button
+                className="text-sm font-medium text-black transition-colors hover:text-black"
+                onClick={() => scrollToSection("about")}
+                type="button"
+              >
+                {navigationLabels.about}
+              </button>
+              <button
+                className="text-sm font-medium text-black transition-colors hover:text-black"
+                onClick={() => scrollToSection("mobile")}
+                type="button"
+              >
+                {navigationLabels.mobile}
+              </button>
+              <button
+                className="text-sm font-medium text-black transition-colors hover:text-black"
+                onClick={() => scrollToSection("questions")}
+                type="button"
+              >
+                {navigationLabels.questions}
+              </button>
+              <button
+                className="text-sm font-medium text-black transition-colors hover:text-black"
+                onClick={() => scrollToSection("pricing")}
+                type="button"
+              >
+                {navigationLabels.pricing}
+              </button>
             </nav>
 
             <div className="flex items-center gap-3">
@@ -1096,14 +1332,14 @@ const Landing = () => {
                 className="hidden text-sm font-medium text-foreground transition-colors hover:text-primary sm:inline-block"
                 href="/login"
               >
-                Войти
+                {isRu ? "Войти" : "Sign in"}
               </a>
               <button
                 type="button"
-                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
+                className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
                 onClick={() => setIsDemoModalOpen(true)}
               >
-                Начать
+                {isRu ? "Начать" : "Start"}
               </button>
             </div>
           </div>
@@ -1134,16 +1370,14 @@ const Landing = () => {
         >
           <div className="max-w-xl flex-1 lg:max-w-[38rem] lg:flex-[1.1]">
             <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] flex flex-col text-[clamp(2rem,5vw,3.4rem)] leading-[1.05] tracking-[-0.05em] font-medium uppercase text-foreground opacity-0">
-              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-medium tracking-[-0.06em]">ВСЯ</span>
-              <span>работа команды</span>
-              <span>на одном экране</span>
+              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-medium tracking-[-0.06em]">
+                {isRu ? "ВСЯ" : "ALL"}
+              </span>
+              <span>{isRu ? "работа команды" : "team work"}</span>
+              <span>{isRu ? "на одном экране" : "on one screen"}</span>
             </h1>
             <div className="flex gap-10 animate-[fadeInUp_0.6s_0.45s_ease_forwards] opacity-0">
-              {[
-                { value: "99.8%", label: "Точность распознавания" },
-                { value: "500+", label: "Компаний доверяют" },
-                { value: "24/7", label: "Поддержка" },
-              ].map((stat) => (
+              {heroStats.map((stat) => (
                 <div key={stat.label}>
                   <p className="text-2xl font-bold text-foreground">
                     {stat.value}
@@ -1160,7 +1394,7 @@ const Landing = () => {
                 className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
                 onClick={() => setIsDemoModalOpen(true)}
               >
-                Заказать демо
+                {isRu ? "Заказать демо" : "Request demo"}
                 <svg
                   className="ml-2 h-4 w-4 text-white!"
                   fill="none"
@@ -1209,13 +1443,23 @@ const Landing = () => {
         </div>
       </section>
 
-      <section className="flex flex-col gap-12 overflow-hidden bg-primary py-16 sm:gap-16 md:gap-20 md:py-24 lg:gap-24">
+      <section
+        className="scroll-mt-32 flex flex-col gap-12 overflow-hidden bg-primary py-16 sm:gap-16 md:gap-20 md:py-24 lg:gap-24"
+        id="about"
+      >
         <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
             <h2 className="mt-3 text-[clamp(1.75rem,4vw,3rem)] leading-[1.1] tracking-[-0.04em] font-medium uppercase text-white !font-sans">
-              <span className="whitespace-nowrap">Удобные <span className="italic">контроль и аналитика</span></span>
+              <span className="whitespace-nowrap">
+                {isRu ? "Удобные " : "Operational "}
+                <span className="italic">
+                  {isRu ? "контроль и аналитика" : "control and analytics"}
+                </span>
+              </span>
               <br className="hidden md:block" />
-              <span className="whitespace-nowrap">для операционной деятельности</span>
+              <span className="whitespace-nowrap">
+                {isRu ? "для операционной деятельности" : "for daily operations"}
+              </span>
             </h2>
           </div>
         </div>
@@ -1227,16 +1471,11 @@ const Landing = () => {
           >
             <div className="max-w-xl flex-1 self-center">
               <FeatureBadge
-                description="Веб-интерфейс собирает рабочие диалоги, объявления и уведомления в единый поток для команды и менеджеров."
                 icon={<MessageChatCircle className="h-6 w-6" />}
-                title="Коммуникации и общие inbox-потоки"
+                title={aboutFeatureRows[0].title}
               />
               <ul className="mt-8 flex flex-col gap-4 pl-2 md:gap-5 md:pl-4">
-                {[
-                  "Единый канал объявлений и внутренних сообщений",
-                  "Быстрый доступ к чатам команды и сотрудникам",
-                  "Меньше потерь контекста между HR и менеджерами",
-                ].map((feat) => (
+                {aboutFeatureRows[0].bullets.map((feat) => (
                   <CheckItemText key={feat} text={feat} />
                 ))}
               </ul>
@@ -1264,16 +1503,11 @@ const Landing = () => {
           >
             <div className="max-w-xl flex-1 self-center lg:order-last">
               <FeatureBadge
-                description="Ключевые сценарии работают быстро: attendance, заявки, payroll, шаблоны задач и операционные процессы."
                 icon={<ZapFast className="h-6 w-6" />}
-                title="Скорость операционных решений"
+                title={aboutFeatureRows[1].title}
               />
               <ul className="mt-8 flex flex-col gap-4 pl-2 md:gap-5 md:pl-4">
-                {[
-                  "Мгновенная навигация по основным admin-модулям",
-                  "Сценарии без ручной склейки между системами",
-                  "Быстрые действия для HR, managers и operations",
-                ].map((feat) => (
+                {aboutFeatureRows[1].bullets.map((feat) => (
                   <CheckItemText key={feat} text={feat} />
                 ))}
               </ul>
@@ -1301,16 +1535,11 @@ const Landing = () => {
           >
             <div className="max-w-xl flex-1 self-center">
               <FeatureBadge
-                description="Отчёты и drilldown помогают быстро понять, что происходит с командой, attendance и эффективностью."
                 icon={<ChartBreakoutSquare className="h-6 w-6" />}
-                title="Управление командой через аналитику"
+                title={aboutFeatureRows[2].title}
               />
               <ul className="mt-8 flex flex-col gap-4 pl-2 md:gap-5 md:pl-4">
-                {[
-                  "Фильтрация, отчёты и быстрый экспорт нужных данных",
-                  "Сохранение операционных выводов в одном месте",
-                  "Основа для решений по людям, процессам и payroll",
-                ].map((feat) => (
+                {aboutFeatureRows[2].bullets.map((feat) => (
                   <CheckItemText key={feat} text={feat} />
                 ))}
               </ul>
@@ -1335,7 +1564,8 @@ const Landing = () => {
       </section>
 
       <section
-        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        id="mobile"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
@@ -1384,7 +1614,7 @@ const Landing = () => {
                 ]
               ).map((feature) => (
                 <div className="flex items-center gap-3" key={feature}>
-                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-primary">
                     <svg
                       className="h-3 w-3 text-primary"
                       fill="none"
@@ -1410,11 +1640,11 @@ const Landing = () => {
           </div>
 
           <div className="flex flex-1 justify-center lg:justify-end">
-            <div className="relative">
+            <div className="relative lg:translate-x-4">
               {/* Padding bezel keeps inner aspect ratio; uniform border shrinks width more than height vs outer frame */}
-              <div className="relative rounded-[3rem] bg-foreground/90 p-2 shadow-2xl shadow-primary/10">
-                <div className="absolute top-0 left-1/2 z-20 h-[28px] w-[120px] -translate-x-1/2 rounded-b-2xl bg-foreground/90" />
-                <div className="relative aspect-[9/19.5] w-[247px] overflow-hidden rounded-[2.5rem] bg-background md:w-[266px]">
+              <div className="relative rounded-[3.4rem] bg-foreground/90 p-2.5 shadow-2xl shadow-primary/10">
+                <div className="absolute top-0 left-1/2 z-20 h-[30px] w-[136px] -translate-x-1/2 rounded-b-[1.35rem] bg-foreground/90" />
+                <div className="relative aspect-[9/19.5] w-[288px] overflow-hidden rounded-[2.9rem] bg-background md:w-[332px] lg:w-[372px]">
                   <img
                     alt={locale === "ru" ? "Скриншот приложения" : "App screenshot"}
                     className="h-full w-full object-cover object-top"
@@ -1428,7 +1658,8 @@ const Landing = () => {
       </section>
 
       <section
-        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        id="questions"
         style={{ background: "#2f63ff" }}
       >
         <div className="mx-auto max-w-3xl">
@@ -1437,7 +1668,7 @@ const Landing = () => {
               FAQ
             </p>
             <h2 className="text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
-              Частые вопросы
+              {isRu ? "Частые вопросы" : "Frequently asked questions"}
             </h2>
           </div>
 
@@ -1483,7 +1714,8 @@ const Landing = () => {
       </section>
 
       <section
-        className="px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        id="pricing"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
@@ -1491,13 +1723,15 @@ const Landing = () => {
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto mb-16 max-w-2xl text-center">
             <p className="mb-4 text-sm font-medium tracking-wide text-primary">
-              Тарифы
+              {isRu ? "Тарифы" : "Pricing"}
             </p>
             <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
-              Простые и прозрачные цены
+              {isRu ? "Простые и прозрачные цены" : "Simple and transparent pricing"}
             </h2>
             <p className="text-lg leading-relaxed text-muted-foreground">
-              Начните бесплатно, масштабируйте по мере роста команды
+              {isRu
+                ? "Начните бесплатно, масштабируйте по мере роста команды"
+                : "Start free and scale as your team grows"}
             </p>
           </div>
 
@@ -1512,7 +1746,7 @@ const Landing = () => {
               >
                 {plan.highlighted && (
                   <span className="absolute top-[-0.75rem] left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
-                    Популярный
+                    {isRu ? "Популярный" : "Most popular"}
                   </span>
                 )}
                 <h3 className="mb-2 text-lg font-semibold">{plan.name}</h3>
@@ -1562,7 +1796,7 @@ const Landing = () => {
                     }`}
                   onClick={() => setIsDemoModalOpen(true)}
                 >
-                  {plan.name === "Enterprise" ? "Связаться" : "Начать"}
+                  {plan.cta}
                 </button>
               </div>
             ))}
@@ -1573,31 +1807,32 @@ const Landing = () => {
       <section
         className="px-6 py-20 md:px-16 md:py-28 lg:px-24"
         style={{
-          background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
+          background: "#2f63ff",
         }}
       >
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
-            Готовы начать?
+          <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
+            {isRu ? "Готовы начать?" : "Ready to get started?"}
           </h2>
-          <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            Присоединяйтесь к 500+ компаниям, которые уже автоматизировали
-            управление персоналом с HiTeam
+          <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-white/78">
+            {isRu
+              ? "Присоединяйтесь к 500+ компаниям, которые уже автоматизировали управление персоналом с HiTeam"
+              : "Join 500+ companies that already run workforce management with HiTeam"}
           </p>
           <div className="flex flex-col justify-center gap-4 sm:flex-row">
             <button
               type="button"
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-8 text-base font-semibold text-[#2f63ff] shadow-lg shadow-[#1839a6]/25 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/92 hover:shadow-xl hover:shadow-[#1839a6]/30"
               onClick={() => setIsDemoModalOpen(true)}
             >
-              Попробовать бесплатно
+              {isRu ? "Попробовать бесплатно" : "Try it for free"}
             </button>
             <button
               type="button"
-              className="inline-flex h-12 items-center justify-center rounded-xl border border-border px-8 text-base font-medium text-foreground transition-all duration-300 hover:border-primary/30 hover:text-primary"
+              className="inline-flex h-12 items-center justify-center rounded-xl border border-white/40 bg-white/8 px-8 text-base font-medium text-white transition-all duration-300 hover:border-white/70 hover:bg-white/14"
               onClick={() => setIsDemoModalOpen(true)}
             >
-              Заказать демо
+              {isRu ? "Заказать демо" : "Request demo"}
             </button>
           </div>
         </div>
@@ -1616,29 +1851,12 @@ const Landing = () => {
                 <BrandWordmark className="text-[1.95rem] text-foreground" />
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Современная платформа для управления персоналом и контроля
-                посещаемости
+                {isRu
+                  ? "Современная платформа для управления персоналом и контроля посещаемости"
+                  : "A modern platform for workforce management and attendance control"}
               </p>
             </div>
-            {[
-              {
-                title: "Продукт",
-                links: ["Возможности", "Цены", "Интеграции", "API"],
-              },
-              {
-                title: "Компания",
-                links: ["О нас", "Блог", "Карьера", "Контакты"],
-              },
-              {
-                title: "Поддержка",
-                links: [
-                  "Документация",
-                  "Статус",
-                  "Обратная связь",
-                  "Безопасность",
-                ],
-              },
-            ].map((col) => (
+            {footerColumns.map((col) => (
               <div key={col.title}>
                 <h4 className="mb-4 text-sm font-semibold text-foreground">
                   {col.title}
@@ -1660,11 +1878,13 @@ const Landing = () => {
           </div>
           <div className="flex flex-col items-center justify-between border-t border-border/40 pt-8 md:flex-row">
             <p className="text-xs text-muted-foreground">
-              © 2026 HiTeam. Все права защищены.
+              {isRu
+                ? "© 2026 HiTeam. Все права защищены."
+                : "© 2026 HiTeam. All rights reserved."}
             </p>
-            <div className="mt-4 flex gap-6 md:mt-0">
-              {["Политика конфиденциальности", "Условия использования"].map(
-                (link) => (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 md:mt-0 md:justify-end">
+              <div className="flex gap-6">
+                {footerLegalLinks.map((link) => (
                   <a
                     className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                     href="#"
@@ -1672,8 +1892,34 @@ const Landing = () => {
                   >
                     {link}
                   </a>
-                ),
-              )}
+                ))}
+              </div>
+              <div className="inline-flex items-center gap-3 rounded-full border border-border/50 bg-white/70 px-2 py-1 shadow-[0_12px_32px_rgba(148,163,184,0.12)] backdrop-blur">
+                <span className="px-2 text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  {isRu ? "Язык" : "Language"}
+                </span>
+                <div className="inline-flex rounded-full bg-[#eef3fb] p-1">
+                  {(["ru", "en"] as const).map((option) => {
+                    const active = locale === option;
+
+                    return (
+                      <button
+                        aria-pressed={active}
+                        className={`inline-flex min-w-[42px] items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-300 ${
+                          active
+                            ? "bg-primary text-white shadow-[0_10px_24px_rgba(47,99,255,0.28)]"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        key={option}
+                        onClick={() => updateLocale(option)}
+                        type="button"
+                      >
+                        {option.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1740,11 +1986,11 @@ const Landing = () => {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader className="text-center sm:text-center">
             <DialogTitle className="text-2xl font-bold text-center">
-              {locale === "ru" ? "Заказать демо" : "Get demo"}
+              {isRu ? "Попробовать демо" : "Get demo"}
             </DialogTitle>
             <DialogDescription className="text-base text-center">
-              {locale === "ru"
-                ? "Оставьте свои контакты, и мы скоро свяжемся с вами"
+              {isRu
+                ? "Оставьте контакты, и мы покажем, как HiTeam будет работать именно у вас"
                 : "Leave your contacts and we will get back to you shortly"}
             </DialogDescription>
           </DialogHeader>
@@ -1752,7 +1998,7 @@ const Landing = () => {
             <div className="grid gap-2">
               <Input
                 id="name"
-                placeholder={locale === "ru" ? "Ваше имя" : "Your name"}
+                placeholder={isRu ? "Ваше имя" : "Your name"}
                 className="h-12"
                 value={demoName}
                 onChange={(e) => setDemoName(e.target.value)}
@@ -1762,7 +2008,7 @@ const Landing = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder={locale === "ru" ? "Ваш email" : "Your email"}
+                placeholder={isRu ? "Ваш email" : "Your email"}
                 className="h-12"
                 value={demoEmail}
                 onChange={(e) => setDemoEmail(e.target.value)}
@@ -1772,7 +2018,7 @@ const Landing = () => {
               <Input
                 id="phone"
                 type="tel"
-                placeholder={locale === "ru" ? "Номер телефона (+...)" : "Phone number (+...)"}
+                placeholder={isRu ? "Номер телефона (+...)" : "Phone number (+...)"}
                 className="h-12"
                 value={demoPhone}
                 onChange={(e) => setDemoPhone(e.target.value)}
@@ -1789,7 +2035,7 @@ const Landing = () => {
                 htmlFor="terms"
                 className="text-sm text-muted-foreground leading-snug cursor-pointer text-left"
               >
-                {locale === "ru" ? (
+                {isRu ? (
                   <>
                     Я даю согласие на обработку персональных данных и подтверждаю, что ознакомлен с{" "}
                     <a href="#" className="underline hover:text-primary">Политикой конфиденциальности</a>.
@@ -1808,7 +2054,7 @@ const Landing = () => {
             className="w-full h-12 text-base mt-2"
             disabled={!isDemoFormValid}
           >
-            {locale === "ru" ? "Заказать демо" : "Request demo"}
+            {isRu ? "Получить демо" : "Request demo"}
           </Button>
         </DialogContent>
       </Dialog>

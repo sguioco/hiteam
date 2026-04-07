@@ -5,7 +5,7 @@ type SessionLoaderProps = {
 export function SessionLoader({ label }: SessionLoaderProps) {
   return (
     <main className="auth-gate auth-gate-loading">
-      <section className="auth-gate-card session-loader-panel">
+      <section className="session-loader-panel">
         <div aria-label={label} aria-live="polite" className="session-loader" role="status">
           <span aria-hidden="true" className="session-loader-glow" />
           <span aria-hidden="true" className="session-loader-ring session-loader-ring-primary" />

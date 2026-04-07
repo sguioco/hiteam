@@ -44,6 +44,7 @@ import { signInLocally } from '../../lib/auth-flow';
 import { useI18n } from '../../lib/i18n';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { getPreciseLocationAccessStatus } from '../../lib/location';
+import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { BrandWordmark } from '../components/brand-wordmark';
 
@@ -721,6 +722,7 @@ const AuthScreen = () => {
         return;
       }
 
+      await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 320);
       signInLocally();
 
       if (biometricPolicy.enrollmentStatus !== 'ENROLLED') {

@@ -575,6 +575,7 @@ export function AdminShell({
       const nextSession = customEvent.detail ?? getSession();
       if (nextSession) {
         setSession(nextSession);
+        setReady(true);
       }
     }
 
@@ -1088,28 +1089,31 @@ export function AdminShell({
           <div className="sidebar-user-wrap" ref={accountMenuRef}>
             {accountMenuOpen ? (
               <div className="sidebar-user-menu">
-                <div
-                  className="sidebar-flag-switch"
-                  role="group"
-                  aria-label={t("common.language")}
-                >
-                  {languageOptions.map((option) => (
-                    <button
-                      aria-label={option.label}
-                      className={`sidebar-flag-button ${locale === option.value ? "is-active" : ""}`}
-                      key={option.value}
-                      onClick={() => setLocale(option.value)}
-                      title={option.label}
-                      type="button"
-                    >
-                      <img
-                        alt={option.label}
-                        className="sidebar-flag-icon"
-                        src={option.icon}
-                      />
-                    </button>
-                  ))}
+                <div className="sidebar-user-menu-locale">
+                  <div
+                    className="sidebar-flag-switch"
+                    role="group"
+                    aria-label={t("common.language")}
+                  >
+                    {languageOptions.map((option) => (
+                      <button
+                        aria-label={option.label}
+                        className={`sidebar-flag-button ${locale === option.value ? "is-active" : ""}`}
+                        key={option.value}
+                        onClick={() => setLocale(option.value)}
+                        title={option.label}
+                        type="button"
+                      >
+                        <img
+                          alt={option.label}
+                          className="sidebar-flag-icon"
+                          src={option.icon}
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                <div className="sidebar-user-menu-separator" />
                 {accountMenuItems.map((item) => (
                   <Link
                     className="sidebar-user-menu-item"

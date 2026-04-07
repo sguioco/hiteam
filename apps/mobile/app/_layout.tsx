@@ -11,6 +11,7 @@ import { HeroUINativeProvider } from 'heroui-native';
 import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
 import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
 import { I18nProvider } from '../lib/i18n';
+import { warmWorkspaceCachesWithinBudget } from '../lib/workspace-cache';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -101,6 +102,10 @@ export default function RootLayout() {
           roleCodes: session?.user.roleCodes ?? [],
           workspaceAccessAllowed: session?.user.workspaceAccessAllowed ?? false,
         });
+
+        if (session?.user.workspaceAccessAllowed) {
+          await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240);
+        }
       } finally {
         if (!cancelled) {
           setAuthReady(true);

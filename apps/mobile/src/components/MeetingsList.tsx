@@ -33,7 +33,7 @@ function normalizeMeetingTitle(title: string) {
 }
 
 export default function MeetingsList({ loading = false, tasks }: MeetingsListProps) {
-  const { t, tp } = useI18n();
+  const { t, tp, tc } = useI18n();
 
   const formatDuration = (startAt?: string, endAt?: string) => {
     if (!startAt || !endAt) {
@@ -68,7 +68,7 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
             const durationLabel = formatDuration(meta.meeting?.scheduledAt, meta.meeting?.endAt);
             const secondary = meta.meeting?.meetingLocation || meta.meeting?.meetingLink || meta.body || t('calendar.statusMeeting');
             const isOnlineMeeting = meta.meeting?.meetingMode === 'online' && Boolean(meta.meeting?.meetingLink);
-            const normalizedTitle = normalizeMeetingTitle(task.title);
+            const normalizedTitle = tc(normalizeMeetingTitle(task.title));
 
             return (
               <Animated.View

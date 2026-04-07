@@ -97,7 +97,7 @@ export default function TaskList({
   onToggleTask,
   onTaskUpdate,
 }: TaskListProps) {
-  const { language, t, tp } = useI18n();
+  const { language, t, tp, tc } = useI18n();
   const locale = getDateLocale(language);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -285,7 +285,7 @@ export default function TaskList({
 
       onTaskUpdate?.(updatedTask);
 
-      const nextPhotos = buildTaskPhotos(updatedTask, locale);
+      const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
       const nextSelected = nextPhotos[nextPhotos.length - 1] ?? null;
 
       setSelectedPhotoId(nextSelected?.id ?? null);
@@ -393,7 +393,7 @@ export default function TaskList({
       const updatedTask = await deleteMyTaskPhotoProof(activeTask.id, selectedPhoto.id);
       onTaskUpdate?.(updatedTask);
 
-      const nextPhotos = buildTaskPhotos(updatedTask, locale);
+      const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
       const nextSelected =
         nextPhotos[currentIndex] ?? nextPhotos[currentIndex - 1] ?? nextPhotos[0] ?? null;
       setSelectedPhotoId(nextSelected?.id ?? null);
@@ -458,7 +458,7 @@ export default function TaskList({
   }
 
   function renderTaskRow(task: TaskItem, index: number, completed = false) {
-    const title = normalizeTaskTitle(task.title);
+    const title = tc(normalizeTaskTitle(task.title));
     const isUpdating = updatingTaskIds.includes(task.id);
     const photoCount =
       (taskPhotos[task.id]?.length ?? 0) +

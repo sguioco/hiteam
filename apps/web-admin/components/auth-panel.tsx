@@ -1,16 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { ArrowRight, Building2, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -18,6 +13,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
 import { getDemoSessionForRole, resetDemoState } from '@/lib/demo-api';
 import {
@@ -30,11 +32,19 @@ import {
   AuthSession,
   persistSession,
   resolveHomeRoute,
+  saveTenantSlug,
 } from '@/lib/auth';
 import { BrandWordmark } from './brand-wordmark';
 import { SessionLoader } from './session-loader';
 
 type SupportedLang = 'en' | 'ru' | 'ar';
+type AuthTab = 'signin' | 'company-code';
+type CompanyLookupResult = {
+  companyName: string;
+  companyCode: string;
+  tenantName: string;
+  tenantSlug: string;
+};
 
 const langs: { code: SupportedLang; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -44,8 +54,10 @@ const langs: { code: SupportedLang; label: string }[] = [
 
 const texts = {
   en: {
+    signInTab: 'Sign in',
+    companyCodeTab: 'Registration',
     welcome: 'Welcome back',
-    welcomeDesc: 'Sign in to your HiTeam workspace',
+    welcomeDesc: 'Enter your work email or phone to access your HiTeam workspace.',
     emailOrPhone: 'Email or phone',
     password: 'Password',
     showPassword: 'Show password',
@@ -53,13 +65,39 @@ const texts = {
     signIn: 'Sign in',
     signingIn: 'Signing in...',
     openingWorkspace: 'Opening workspace...',
+    companyCodeTitle: 'Join with company code',
+    companyCodeDesc: 'If you do not have an account yet, enter the company code from your administrator and continue the join flow.',
+    companyCodeLabel: 'Company code',
+    companyCodePlaceholder: 'For example, TEAM-4821',
+    companyCodeAction: 'Continue',
+    companyCodeChecking: 'Checking code...',
+    companyCodeRequired: 'Enter the company code.',
+    companyFoundLabel: 'Company found',
+    companyFoundBody: 'We found {companyName}. Continue in the mobile join flow or switch back to sign in if you already have an account.',
+    continueInMobile: 'Continue in mobile',
+    alreadyHaveAccount: 'I already have an account',
+    useAnotherCode: 'Use another code',
+    selectedWorkspace: 'Selected workspace',
+    forgotPassword: 'Forgot password?',
+    forgotTitle: 'Reset password',
+    forgotDesc: 'Temporary mock flow. Enter your work email and we will show the reset state. We can connect the real email service next.',
+    forgotEmail: 'Work email',
+    forgotPlaceholder: 'you@company.com',
+    forgotRequired: 'Enter your work email.',
+    forgotSend: 'Send instructions',
+    forgotSending: 'Preparing...',
+    forgotSuccess: 'If an account with this email exists, reset instructions will be sent here. This is a mock flow for now.',
+    close: 'Close',
+    demoTitle: 'Quick access',
     demoAdmin: 'Demo admin',
     demoEmployee: 'Demo employee',
-    demoHint: 'Quick access without backend',
+    demoHint: 'Current demo flow without backend',
   },
   ru: {
+    signInTab: 'Вход',
+    companyCodeTab: 'Регистрация',
     welcome: 'С возвращением',
-    welcomeDesc: 'Войдите в рабочее пространство HiTeam',
+    welcomeDesc: 'Введите рабочий email или телефон, чтобы войти в пространство HiTeam.',
     emailOrPhone: 'Email или телефон',
     password: 'Пароль',
     showPassword: 'Показать пароль',
@@ -67,13 +105,39 @@ const texts = {
     signIn: 'Войти',
     signingIn: 'Входим...',
     openingWorkspace: 'Открываем рабочее пространство...',
+    companyCodeTitle: 'Вступить по коду компании',
+    companyCodeDesc: 'Если у вас ещё нет аккаунта, введите код компании от администратора и продолжите регистрацию.',
+    companyCodeLabel: 'Код компании',
+    companyCodePlaceholder: 'Например, TEAM-4821',
+    companyCodeAction: 'Продолжить',
+    companyCodeChecking: 'Проверяем код...',
+    companyCodeRequired: 'Введите код компании.',
+    companyFoundLabel: 'Компания найдена',
+    companyFoundBody: 'Мы нашли {companyName}. Продолжите мобильный join flow или вернитесь ко входу, если аккаунт уже есть.',
+    continueInMobile: 'Продолжить в мобильном',
+    alreadyHaveAccount: 'У меня уже есть аккаунт',
+    useAnotherCode: 'Ввести другой код',
+    selectedWorkspace: 'Выбранное пространство',
+    forgotPassword: 'Забыли пароль?',
+    forgotTitle: 'Восстановление пароля',
+    forgotDesc: 'Пока это mock-сценарий. Введите рабочий email и мы покажем состояние восстановления. Реальный email-сервис подключим следующим шагом.',
+    forgotEmail: 'Рабочий email',
+    forgotPlaceholder: 'you@company.com',
+    forgotRequired: 'Введите рабочий email.',
+    forgotSend: 'Отправить инструкцию',
+    forgotSending: 'Готовим...',
+    forgotSuccess: 'Если аккаунт с таким email существует, сюда будет отправлена инструкция по восстановлению. Пока это mock flow.',
+    close: 'Закрыть',
+    demoTitle: 'Быстрый доступ',
     demoAdmin: 'Демо админ',
     demoEmployee: 'Демо сотрудник',
-    demoHint: 'Быстрый вход без backend',
+    demoHint: 'Текущий demo flow без backend',
   },
   ar: {
+    signInTab: 'تسجيل الدخول',
+    companyCodeTab: 'التسجيل',
     welcome: 'مرحباً بعودتك',
-    welcomeDesc: 'سجّل الدخول إلى مساحة عمل HiTeam',
+    welcomeDesc: 'أدخل بريد العمل أو رقم الهاتف للوصول إلى مساحة HiTeam.',
     emailOrPhone: 'البريد الإلكتروني أو الهاتف',
     password: 'كلمة المرور',
     showPassword: 'إظهار كلمة المرور',
@@ -81,19 +145,63 @@ const texts = {
     signIn: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول...',
     openingWorkspace: 'جارٍ فتح مساحة العمل...',
+    companyCodeTitle: 'الانضمام برمز الشركة',
+    companyCodeDesc: 'إذا لم يكن لديك حساب بعد، أدخل رمز الشركة الذي أرسله المسؤول وتابع مسار الانضمام.',
+    companyCodeLabel: 'رمز الشركة',
+    companyCodePlaceholder: 'مثال: TEAM-4821',
+    companyCodeAction: 'متابعة',
+    companyCodeChecking: 'جارٍ التحقق من الرمز...',
+    companyCodeRequired: 'أدخل رمز الشركة.',
+    companyFoundLabel: 'تم العثور على الشركة',
+    companyFoundBody: 'تم العثور على {companyName}. تابع مسار الانضمام عبر الهاتف أو عد لتسجيل الدخول إذا كان لديك حساب بالفعل.',
+    continueInMobile: 'المتابعة عبر الهاتف',
+    alreadyHaveAccount: 'لدي حساب بالفعل',
+    useAnotherCode: 'استخدام رمز آخر',
+    selectedWorkspace: 'مساحة العمل المحددة',
+    forgotPassword: 'هل نسيت كلمة المرور؟',
+    forgotTitle: 'استعادة كلمة المرور',
+    forgotDesc: 'هذا مسار تجريبي حالياً. أدخل بريد العمل وسنُظهر حالة الاستعادة. يمكننا ربط خدمة البريد الفعلية لاحقاً.',
+    forgotEmail: 'بريد العمل',
+    forgotPlaceholder: 'you@company.com',
+    forgotRequired: 'أدخل بريد العمل.',
+    forgotSend: 'إرسال التعليمات',
+    forgotSending: 'جارٍ التحضير...',
+    forgotSuccess: 'إذا كان هذا البريد مرتبطاً بحساب، فستُرسل تعليمات الاستعادة إليه. هذا مسار تجريبي حالياً.',
+    close: 'إغلاق',
+    demoTitle: 'وصول سريع',
     demoAdmin: 'مشرف تجريبي',
     demoEmployee: 'موظف تجريبي',
-    demoHint: 'دخول سريع بدون خلفية',
+    demoHint: 'مسار تجريبي حالي بدون backend',
   },
 };
 
-function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (lang: SupportedLang) => void }) {
+const AUTH_HEADER_GROUP_OFFSET_Y = 20;
+const AUTH_BRAND_OFFSET_Y = -18;
+const AUTH_SWITCHER_OFFSET_Y = -8;
+const AUTH_CONTENT_TOP_GAP = 26;
+const AUTH_CONTENT_MIN_HEIGHT = 430;
+const AUTH_TITLE_BLOCK_OFFSET_Y = 10;
+const AUTH_TITLE_BLOCK_MIN_HEIGHT = 56;
+const AUTH_FIELDS_BLOCK_OFFSET_Y = 60;
+const AUTH_FIELDS_TO_ACTION_GAP = 28;
+const AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM = 10;
+const AUTH_PRIMARY_ACTION_HEIGHT = 48;
+const AUTH_SIGNIN_FORM_ID = 'auth-signin-form';
+const AUTH_COMPANY_CODE_FORM_ID = 'auth-company-code-form';
+
+function LanguagePicker({
+  lang,
+  setLang,
+}: {
+  lang: SupportedLang;
+  setLang: (lang: SupportedLang) => void;
+}) {
   const current = langs.find((item) => item.code === lang)!;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+        <Button className="gap-1.5 text-muted-foreground" size="sm" variant="ghost">
           <Globe className="h-4 w-4" />
           <span className="text-sm">{current.label}</span>
         </Button>
@@ -101,9 +209,9 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (lang
       <DropdownMenuContent align="center">
         {langs.map((item) => (
           <DropdownMenuItem
+            className={cn(item.code === lang && 'font-semibold')}
             key={item.code}
             onClick={() => setLang(item.code)}
-            className={cn(item.code === lang && 'font-semibold')}
           >
             {item.label}
           </DropdownMenuItem>
@@ -114,14 +222,38 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (lang
 }
 
 export function AuthPanel() {
+  const router = useRouter();
   const [lang, setLang] = useState<SupportedLang>('en');
-
+  const [tab, setTab] = useState<AuthTab>('signin');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [companyCode, setCompanyCode] = useState('');
+  const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
+  const [companyLookupError, setCompanyLookupError] = useState('');
+  const [companyLookupResult, setCompanyLookupResult] = useState<CompanyLookupResult | null>(null);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
   const t = texts[lang];
+  const sharedPrimaryActionReserve =
+    AUTH_PRIMARY_ACTION_HEIGHT + AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM + AUTH_FIELDS_TO_ACTION_GAP;
+  const sharedPrimaryActionLabel =
+    tab === 'signin'
+      ? loginLoading
+        ? t.signingIn
+        : t.signIn
+      : companyLookupResult
+        ? t.continueInMobile
+        : companyLookupLoading
+          ? t.companyCodeChecking
+          : t.companyCodeAction;
+  const sharedPrimaryActionDisabled =
+    tab === 'signin' ? loginLoading : companyLookupResult ? false : companyLookupLoading;
 
   useEffect(() => {
     const saved = window.localStorage.getItem('smart-admin-locale');
@@ -163,6 +295,9 @@ export function AuthPanel() {
         body: JSON.stringify({
           identifier,
           password,
+          ...(companyLookupResult?.tenantSlug
+            ? { tenantSlug: companyLookupResult.tenantSlug }
+            : {}),
         }),
       });
 
@@ -177,6 +312,56 @@ export function AuthPanel() {
         setLoginLoading(false);
       }
     }
+  }
+
+  async function handleCompanyCodeSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedCode = companyCode.trim().toUpperCase();
+
+    if (!trimmedCode) {
+      setCompanyLookupError(t.companyCodeRequired);
+      return;
+    }
+
+    setCompanyLookupError('');
+    setCompanyLookupLoading(true);
+
+    try {
+      const payload = await apiRequest<CompanyLookupResult>('/employees/public/join/code/lookup', {
+        method: 'POST',
+        realBackend: true,
+        body: JSON.stringify({ code: trimmedCode }),
+      });
+
+      saveTenantSlug(payload.tenantSlug);
+      setCompanyLookupResult(payload);
+      setCompanyCode(payload.companyCode);
+    } catch (error) {
+      setCompanyLookupResult(null);
+      setCompanyLookupError(error instanceof Error ? error.message : t.companyCodeRequired);
+    } finally {
+      setCompanyLookupLoading(false);
+    }
+  }
+
+  async function handleForgotPasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedEmail = forgotEmail.trim();
+
+    if (!trimmedEmail) {
+      setForgotError(t.forgotRequired);
+      return;
+    }
+
+    setForgotError('');
+    setForgotLoading(true);
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 700);
+    });
+
+    setForgotLoading(false);
+    setForgotSubmitted(true);
   }
 
   function handleDemoAccess(role: 'admin' | 'employee') {
@@ -195,113 +380,413 @@ export function AuthPanel() {
       });
   }
 
+  function handleTabChange(nextTab: string) {
+    setTab(nextTab as AuthTab);
+    setLoginError('');
+    setCompanyLookupError('');
+  }
+
+  function openCompanyJoinFlow() {
+    if (!companyLookupResult) {
+      return;
+    }
+
+    router.push(`/join/company/${encodeURIComponent(companyLookupResult.companyCode)}`);
+  }
+
+  function continueToWorkspaceLogin() {
+    if (!companyLookupResult) {
+      return;
+    }
+
+    setLoginError('');
+    setTab('signin');
+  }
+
+  function resetCompanyLookup() {
+    setCompanyLookupResult(null);
+    setCompanyLookupError('');
+    setCompanyCode('');
+  }
+
+  function handleForgotDialogChange(open: boolean) {
+    setForgotOpen(open);
+
+    if (!open) {
+      setForgotLoading(false);
+      setForgotError('');
+      setForgotSubmitted(false);
+    }
+  }
+
   if (loginLoading) {
     return <SessionLoader label={t.openingWorkspace} />;
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-6">
-      <div className="flex items-center justify-center gap-2.5 font-medium text-lg">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md">
-          <Hand className="size-4" />
-        </div>
-        <BrandWordmark className="text-[1.125rem]" />
-      </div>
-
-      <Card className="border-border/40 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-center text-xl font-bold">{t.welcome}</CardTitle>
-          <CardDescription className="mt-2 text-center">{t.welcomeDesc}</CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4">
-            {loginError ? (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {loginError}
-              </div>
-            ) : null}
-
-            <div className="space-y-1.5">
-              <label htmlFor="login-identifier" className="text-sm font-medium">
-                {t.emailOrPhone}
-              </label>
-              <Input
-                id="login-identifier"
-                type="text"
-                value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
-                placeholder="you@company.com / +7 999 000 00 00"
-                autoComplete="username"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="login-password" className="text-sm font-medium">
-                {t.password}
-              </label>
-              <div className="relative">
-                <Input
-                  id="login-password"
-                  type={passwordVisible ? 'text' : 'password'}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  className="pr-11"
-                  required
-                />
-                <button
-                  type="button"
-                  aria-label={passwordVisible ? t.hidePassword : t.showPassword}
-                  title={passwordVisible ? t.hidePassword : t.showPassword}
-                  className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => setPasswordVisible((current) => !current)}
+    <div className="flex w-full max-w-6xl flex-col gap-8">
+      <div className="overflow-hidden rounded-[34px] border border-white/60 bg-white/80 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+        <div className="grid min-h-[640px] lg:grid-cols-[minmax(0,470px)_minmax(0,1fr)]">
+          <div className="flex items-center justify-center bg-white/92 px-6 py-8 md:px-10 lg:px-12">
+            <div className="flex w-full max-w-sm flex-col">
+              <div
+                className="flex-shrink-0"
+                style={{ transform: `translateY(${AUTH_HEADER_GROUP_OFFSET_Y}px)` }}
+              >
+                <div
+                  className="mb-4 flex justify-center"
+                  style={{ transform: `translateY(${AUTH_BRAND_OFFSET_Y}px)` }}
                 >
-                  {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
+                  <BrandWordmark className="text-[2.25rem] md:text-[2.6rem]" />
+                </div>
 
-            <Button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
-            >
-              {loginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {loginLoading ? t.signingIn : t.signIn}
-            </Button>
-
-            {isDemoModeAvailable() ? (
-              <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/30 p-3">
-                <p className="text-center text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  {t.demoHint}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleDemoAccess('admin')}
-                  >
-                    {t.demoAdmin}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleDemoAccess('employee')}
-                  >
-                    {t.demoEmployee}
-                  </Button>
+                <div
+                  className="rounded-[20px] bg-[#edf3ff] p-1"
+                  style={{ transform: `translateY(${AUTH_SWITCHER_OFFSET_Y}px)` }}
+                >
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      className={cn(
+                        'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
+                        tab === 'signin'
+                          ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.08)]'
+                          : 'bg-transparent text-[#7a88a6] hover:text-foreground',
+                      )}
+                      onClick={() => handleTabChange('signin')}
+                      type="button"
+                    >
+                      {t.signInTab}
+                    </button>
+                    <button
+                      className={cn(
+                        'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
+                        tab === 'company-code'
+                          ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.08)]'
+                          : 'bg-transparent text-[#7a88a6] hover:text-foreground',
+                      )}
+                      onClick={() => handleTabChange('company-code')}
+                      type="button"
+                    >
+                      {t.companyCodeTab}
+                    </button>
+                  </div>
                 </div>
               </div>
-            ) : null}
-          </form>
-        </CardContent>
-      </Card>
+
+              <div
+                className="relative flex-1"
+                style={{ marginTop: AUTH_CONTENT_TOP_GAP, minHeight: AUTH_CONTENT_MIN_HEIGHT }}
+              >
+                {tab === 'signin' ? (
+                  <div className="flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
+                    <div
+                      className="flex-shrink-0 text-center"
+                      style={{
+                        height: AUTH_TITLE_BLOCK_MIN_HEIGHT,
+                        paddingTop: AUTH_TITLE_BLOCK_OFFSET_Y,
+                      }}
+                    >
+                      <h1 className="text-[2rem] font-light tracking-[-0.04em] text-foreground">
+                        {t.welcome}
+                      </h1>
+                    </div>
+
+                    <form className="flex flex-1 flex-col" id={AUTH_SIGNIN_FORM_ID} onSubmit={handleLoginSubmit}>
+                      <div
+                        className="space-y-4"
+                        style={{
+                          marginTop: AUTH_FIELDS_BLOCK_OFFSET_Y,
+                        }}
+                      >
+                        {companyLookupResult ? (
+                          <div className="rounded-[22px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                              {t.selectedWorkspace}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-foreground">
+                              {companyLookupResult.companyName}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {loginError ? (
+                          <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {loginError}
+                          </div>
+                        ) : null}
+
+                        <div>
+                          <Input
+                            aria-label={t.emailOrPhone}
+                            autoComplete="username"
+                            id="login-identifier"
+                            onChange={(event) => setIdentifier(event.target.value)}
+                            placeholder={t.emailOrPhone}
+                            required
+                            type="text"
+                            value={identifier}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Input
+                              aria-label={t.password}
+                              autoComplete="current-password"
+                              className="pr-11"
+                              id="login-password"
+                              onChange={(event) => setPassword(event.target.value)}
+                              placeholder={t.password}
+                              required
+                              type={passwordVisible ? 'text' : 'password'}
+                              value={password}
+                            />
+                            <button
+                              aria-label={passwordVisible ? t.hidePassword : t.showPassword}
+                              className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                              onClick={() => setPasswordVisible((current) => !current)}
+                              title={passwordVisible ? t.hidePassword : t.showPassword}
+                              type="button"
+                            >
+                              {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              className="text-[8px] font-medium leading-none text-[#4f6df5] transition-colors hover:text-[#3553db]"
+                              onClick={() => {
+                                setForgotEmail(identifier.includes('@') ? identifier : '');
+                                setForgotError('');
+                                setForgotSubmitted(false);
+                                setForgotOpen(true);
+                              }}
+                              type="button"
+                            >
+                              {t.forgotPassword}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                    </form>
+
+                    {isDemoModeAvailable() ? (
+                      <div className="mt-4 space-y-3 rounded-[24px] border border-[#d8e5ff] bg-[#f7faff] p-4">
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                            {t.demoTitle}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {t.demoHint}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button onClick={() => handleDemoAccess('admin')} type="button" variant="outline">
+                            {t.demoAdmin}
+                          </Button>
+                          <Button onClick={() => handleDemoAccess('employee')} type="button" variant="outline">
+                            {t.demoEmployee}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
+                    <div
+                      className="flex-shrink-0 text-center"
+                      style={{
+                        height: AUTH_TITLE_BLOCK_MIN_HEIGHT,
+                        paddingTop: AUTH_TITLE_BLOCK_OFFSET_Y,
+                      }}
+                    >
+                      <h2 className="text-[2rem] font-light tracking-[-0.04em] text-foreground">
+                        {t.companyCodeTitle}
+                      </h2>
+                    </div>
+
+                    {companyLookupResult ? (
+                      <div className="rounded-[28px] border border-[#d8e5ff] bg-[#f7faff] p-5">
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-white text-[#4f6df5] shadow-[0_12px_24px_rgba(79,109,245,0.12)]">
+                            <Building2 className="h-5 w-5" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                              {t.companyFoundLabel}
+                            </p>
+                            <p className="text-base font-semibold text-foreground">
+                              {companyLookupResult.companyName}
+                            </p>
+                            <p className="text-sm leading-6 text-muted-foreground">
+                              {t.companyFoundBody.replace('{companyName}', companyLookupResult.companyName)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 rounded-[18px] border border-[#d8e5ff] bg-white px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                            {t.companyCodeLabel}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold tracking-[0.22em] text-foreground uppercase">
+                            {companyLookupResult.companyCode}
+                          </p>
+                        </div>
+
+                        <div className="mt-5 grid gap-2">
+                          <Button className="h-12 rounded-[16px]" onClick={continueToWorkspaceLogin} type="button" variant="outline">
+                            {t.alreadyHaveAccount}
+                          </Button>
+                          <button
+                            className="pt-2 text-sm font-medium text-[#4f6df5] transition-colors hover:text-[#3553db]"
+                            onClick={resetCompanyLookup}
+                            type="button"
+                          >
+                            {t.useAnotherCode}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <form className="flex flex-1 flex-col" id={AUTH_COMPANY_CODE_FORM_ID} onSubmit={handleCompanyCodeSubmit}>
+                        <div
+                          className="space-y-4"
+                          style={{
+                            marginTop: AUTH_FIELDS_BLOCK_OFFSET_Y,
+                          }}
+                        >
+                          {companyLookupError ? (
+                            <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {companyLookupError}
+                            </div>
+                          ) : null}
+
+                          <div>
+                            <Input
+                              aria-label={t.companyCodeLabel}
+                              autoCapitalize="characters"
+                              autoComplete="off"
+                              id="company-code"
+                              onChange={(event) => {
+                                setCompanyCode(event.target.value.toUpperCase());
+                                setCompanyLookupError('');
+                              }}
+                              placeholder={t.companyCodeLabel}
+                              required
+                              type="text"
+                              value={companyCode}
+                            />
+                          </div>
+                        </div>
+
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                <div
+                  className="absolute inset-x-0"
+                  style={{ bottom: AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM }}
+                >
+                  {tab === 'company-code' && companyLookupResult ? (
+                    <Button
+                      className="w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                      onClick={openCompanyJoinFlow}
+                      style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}
+                      type="button"
+                    >
+                      {sharedPrimaryActionLabel}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                      disabled={sharedPrimaryActionDisabled}
+                      form={tab === 'signin' ? AUTH_SIGNIN_FORM_ID : AUTH_COMPANY_CODE_FORM_ID}
+                      style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}
+                      type="submit"
+                    >
+                      {(tab === 'signin' && loginLoading) || (tab === 'company-code' && companyLookupLoading) ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      {sharedPrimaryActionLabel}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative hidden items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#ecf4ff_0%,#dfeaff_100%)] p-10 lg:flex">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.18),transparent_25%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.14),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.18),transparent_32%)]" />
+            <Image
+              alt="HiTeam workspace illustration"
+              className="relative h-auto max-h-[360px] w-auto max-w-[430px] object-contain"
+              height={1400}
+              priority
+              src="/illustration.svg"
+              width={1400}
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="flex justify-center">
         <LanguagePicker lang={lang} setLang={setLang} />
       </div>
+
+      <Dialog onOpenChange={handleForgotDialogChange} open={forgotOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{t.forgotTitle}</DialogTitle>
+            <DialogDescription>{t.forgotDesc}</DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleForgotPasswordSubmit}>
+            {forgotSubmitted ? (
+              <div className="rounded-[18px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3 text-sm leading-6 text-foreground">
+                {t.forgotSuccess}
+              </div>
+            ) : (
+              <>
+                {forgotError ? (
+                  <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {forgotError}
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground" htmlFor="forgot-email">
+                    {t.forgotEmail}
+                  </label>
+                  <Input
+                    autoComplete="email"
+                    id="forgot-email"
+                    onChange={(event) => {
+                      setForgotEmail(event.target.value);
+                      setForgotError('');
+                    }}
+                    placeholder={t.forgotPlaceholder}
+                    type="email"
+                    value={forgotEmail}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => handleForgotDialogChange(false)} type="button" variant="outline">
+                {t.close}
+              </Button>
+              {!forgotSubmitted ? (
+                <Button className="flex-1" disabled={forgotLoading} type="submit">
+                  {forgotLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {forgotLoading ? t.forgotSending : t.forgotSend}
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -30,6 +30,7 @@ import {
 import { useI18n } from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
 
@@ -235,6 +236,14 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       items,
     );
   }, [isManager, items, loading]);
+
+  useEffect(() => {
+    if (!items.length) {
+      return;
+    }
+
+    void warmAnnouncementImages(items);
+  }, [items]);
 
   useEffect(() => {
     let socket: Socket | null = null;

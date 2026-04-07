@@ -1909,31 +1909,6 @@ textarea {
   gap: 26px;
 }
 
-.organization-studio-hero {
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  text-align: center;
-}
-
-.organization-studio-hero h1 {
-  margin: 0;
-  color: var(--foreground);
-  font-family: var(--font-heading), sans-serif;
-  font-size: clamp(2.75rem, 6vw, 4.1rem);
-  font-weight: 400;
-  letter-spacing: -0.05em;
-  line-height: 0.98;
-}
-
-.organization-studio-hero p {
-  max-width: 62ch;
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: 1rem;
-  line-height: 1.55;
-}
-
 .organization-studio-feedback {
   justify-self: center;
   color: var(--foreground);
@@ -1952,9 +1927,9 @@ textarea {
 
 .organization-studio-identity {
   display: grid;
-  grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.6fr);
-  gap: 22px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
 }
@@ -2059,7 +2034,7 @@ textarea {
 
 .organization-studio-sidebar {
   display: grid;
-  gap: 18px;
+  gap: 22px;
   align-content: start;
 }
 
@@ -5396,6 +5371,18 @@ body {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 20px 48px rgba(15, 23, 42, 0.12);
+}
+
+.sidebar-user-menu-locale {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 6px;
+}
+
+.sidebar-user-menu-separator {
+  height: 1px;
+  margin: 0 4px 8px;
+  background: rgba(16, 24, 40, 0.08);
 }
 
 .sidebar-user-menu-item {

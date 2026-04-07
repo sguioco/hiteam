@@ -65,7 +65,7 @@ function isOverdueTask(task: TaskItem, referenceDate: Date) {
 
 export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
-  const { language, t } = useI18n();
+  const { language, t, tp, tc } = useI18n();
   const locale = getDateLocale(language);
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -212,12 +212,12 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
       nextItems.push({
         id: task.id,
         task,
-        title: task.title,
+        title: tc(task.title),
         kind: isTaskMeeting(task) ? 'meeting' : 'task',
         note:
-          meta.meeting?.meetingLocation ||
+          tc(meta.meeting?.meetingLocation ||
           meta.meeting?.meetingLink ||
-          meta.body ||
+          meta.body || '') ||
           dueAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
         status: task.status === 'DONE' ? 'done' : task.status === 'CANCELLED' ? 'cancelled' : overdue ? 'overdue' : 'planned',
       });
@@ -729,7 +729,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
                 overdueTasks.map((task) => {
                   const dueAt = parseTaskDueAt(task);
                   const meta = parseTaskMeta(task.description);
-                  const subtitle = meta.body || task.description || t('calendar.waitingForAction');
+                  const subtitle = tc(meta.body || task.description || '') || t('calendar.waitingForAction');
                   const dateLabel = dueAt
                     ? dueAt.toLocaleDateString(locale, { month: 'long', day: 'numeric' })
                     : t('calendar.noTimeSelected');
@@ -741,7 +741,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
                           <Ionicons color="#f59e0b" name="warning-outline" size={20} />
                         </View>
                         <View className="flex-1">
-                          <Text className="font-body text-[16px] font-semibold text-foreground">{task.title}</Text>
+                          <Text className="font-body text-[16px] font-semibold text-foreground">{tc(task.title)}</Text>
                           <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{subtitle}</Text>
                           <Text className="mt-2 font-body text-xs font-semibold text-[#c17b07]">
                             {t('calendar.overdueFrom', { dateLabel })}
@@ -784,7 +784,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
 
           {rescheduleTaskItem ? (
             <View className="items-center px-2">
-              <Text className="text-center font-body text-[16px] font-semibold text-foreground">{rescheduleTaskItem.title}</Text>
+              <Text className="text-center font-body text-[16px] font-semibold text-foreground">{tc(rescheduleTaskItem.title)}</Text>
               <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
                 {t('calendar.moveToAnotherDayHint')}
               </Text>

@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
+import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
+import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
 import TaskList from '../components/TaskList';
@@ -146,8 +148,10 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     [businessTimeZone],
   );
 
-  const refreshAttendance = useCallback(async () => {
-    setAttendanceLoading(true);
+  const refreshAttendance = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setAttendanceLoading(true);
+    }
     setAttendanceError(null);
 
     try {
@@ -182,9 +186,49 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshAttendance();
+      let cancelled = false;
+
+      void (async () => {
+        const cached = await readScreenCache<TodayScreenCacheValue>(
+          TODAY_SCREEN_CACHE_KEY,
+          TODAY_SCREEN_CACHE_TTL_MS,
+        );
+
+        if (cached && !cancelled) {
+          setAttendanceStatus(cached.value.attendanceStatus);
+          setProfile(cached.value.profile);
+          setShifts(cached.value.shifts);
+          setTasks(cached.value.tasks);
+          setAttendanceLoading(false);
+
+          if (!cached.isStale) {
+            return;
+          }
+        }
+
+        await refreshAttendance({ silent: Boolean(cached) });
+      })();
+
+      return () => {
+        cancelled = true;
+      };
     }, [refreshAttendance]),
   );
+
+  useEffect(() => {
+    const hasCachedSnapshot = Boolean(profile || attendanceStatus || shifts.length || tasks.length);
+
+    if (!hasCachedSnapshot || attendanceLoading) {
+      return;
+    }
+
+    void writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
+      attendanceStatus,
+      profile,
+      shifts,
+      tasks,
+    } satisfies TodayScreenCacheValue);
+  }, [attendanceLoading, attendanceStatus, profile, shifts, tasks]);
 
   const visibleTasks = useMemo(
     () => collapseDuplicateTodayTasks(tasks, businessTimeZone),
