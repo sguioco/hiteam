@@ -13,6 +13,8 @@ const PUBLIC_PREFIXES = [
   "/hi-team/create-organization",
 ];
 
+const PUBLIC_FILE_PATTERN = /\/[^/]+\.[^/]+$/;
+
 function isPublicPath(pathname: string) {
   if (PUBLIC_EXACT_PATHS.has(pathname)) {
     return true;
@@ -28,7 +30,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/") ||
     pathname === "/favicon.ico" ||
-    pathname.match(/\.(?:png|jpg|jpeg|svg|gif|webp|ico|css|js|map|txt|woff|woff2|ttf|otf)$/)
+    PUBLIC_FILE_PATTERN.test(pathname)
   ) {
     return NextResponse.next();
   }

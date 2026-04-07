@@ -420,10 +420,8 @@ export default function OrganizationPageClient({
 
           <div className="organization-studio-identity">
             <label className="organization-studio-name-field">
-              <span className="organization-studio-label">
-                {locale === "ru" ? "Название организации" : "Organization name"}
-              </span>
               <Input
+                aria-label={locale === "ru" ? "Название организации" : "Organization name"}
                 className="organization-studio-name-input"
                 onChange={(e) => updateDraft("companyName", e.target.value)}
                 placeholder={locale === "ru" ? "Название организации" : "Organization name"}

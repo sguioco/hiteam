@@ -2199,6 +2199,13 @@ export async function demoApiRequest<T>(
     return buildDemoAuthBootstrap(currentState, token) as T;
   }
 
+  if (pathname === "/bootstrap/organization" && method === "GET") {
+    return {
+      employeeCount: DEMO_HEADER_EMPLOYEE_COUNT,
+      setup: cloneState(currentState).organization,
+    } as T;
+  }
+
   const readNotificationMatch = pathname.match(
     /^\/notifications\/([^/]+)\/read$/,
   );

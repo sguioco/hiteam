@@ -25,7 +25,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { petersburgHero } from "@/app/landing-hero-font";
+import { Separator } from "@/components/ui/separator";
+import { AuroraText } from "@/components/ui/aurora-text";
+import { LineShadowText } from "@/components/ui/line-shadow-text";
 
 type GlobeOverlayItem =
   | {
@@ -167,20 +169,26 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
   },
 ];
 
-/** `bg-primary` / --primaryrgb(160, 186, 241) (light theme); COBE expects linear RGB 0–1 */
+/** `bg-primary` / --primary rgb(160, 186, 241) (light theme); COBE expects linear RGB 0–1. */
 const LANDING_PRIMARY_COBE_RGB: [number, number, number] = [
   224 / 255,
   202 / 255,
   252 / 255,
 ];
 
-/** COBE uses one baseColor for land + ocean; low mix + low diffuse ⇒ land reads black. ~0.38–0.45 reads as blue land, light ocean. */
+/** COBE uses one baseColor for land + ocean; ~0.38–0.45 keeps the sphere readable on a light hero. */
 const GLOBE_BASE_COLOR_MIX = 0.42;
 const GLOBE_BASE_COLOR: [number, number, number] = [
   (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[0],
   (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[1],
   (1 - GLOBE_BASE_COLOR_MIX) + GLOBE_BASE_COLOR_MIX * LANDING_PRIMARY_COBE_RGB[2],
 ];
+const HERO_OUTLINE_TEXT_STYLE: CSSProperties = {
+  color: "#ffffff",
+  WebkitTextStroke: "1.4px rgba(47,99,255,0.92)",
+  paintOrder: "stroke fill",
+  textShadow: "0 2px 10px rgba(47,99,255,0.16)",
+};
 
 const GLOBE_INITIAL_PHI = 0.52;
 const GLOBE_THETA = 0.33;
@@ -191,6 +199,243 @@ const GLOBE_GLOBAL_OFFSET_Y = 0;
 const GLOBE_POLAROID_OFFSET_Y = 100;
 
 type LandingLocale = "ru" | "en";
+
+type LegalDocumentKey = "consent" | "privacy";
+
+type LegalDocumentSection = {
+  heading: string;
+  paragraphs?: string[];
+  bullets?: string[];
+};
+
+type LegalDocumentContent = {
+  title: string;
+  intro: string;
+  sections: LegalDocumentSection[];
+  note: string;
+  closeLabel: string;
+};
+
+type FooterPanelItem = {
+  label: string;
+  href?: string;
+  className?: string;
+};
+
+type FooterPanel = {
+  title: string;
+  items: FooterPanelItem[];
+  note?: string;
+};
+
+const LEGAL_LINK_CLASS_NAME =
+  "inline p-0 font-medium text-foreground underline decoration-[color:var(--primary)] underline-offset-4 transition hover:text-primary";
+
+const LANDING_LEGAL_COPY: Record<
+  LandingLocale,
+  Record<LegalDocumentKey, LegalDocumentContent>
+> = {
+  ru: {
+    consent: {
+      title: "Согласие на обработку персональных данных",
+      intro:
+        "Отправляя заявку на демо HiTeam, вы соглашаетесь на обработку персональных данных, которые добровольно указываете в форме или передаёте при общении с нашей командой.",
+      sections: [
+        {
+          heading: "Какие данные мы можем обрабатывать",
+          bullets: [
+            "имя и контактные данные, включая адрес электронной почты и номер телефона;",
+            "название компании, должность и комментарии, если вы укажете их в заявке;",
+            "дополнительную информацию, которую вы сообщите при переписке, звонке или демонстрации сервиса.",
+          ],
+        },
+        {
+          heading: "Для каких целей нужны данные",
+          bullets: [
+            "связаться с вами по заявке на демо;",
+            "подготовить релевантную презентацию HiTeam под ваш сценарий работы;",
+            "ответить на вопросы о продукте, тарифах, подключении и поддержке;",
+            "сохранить историю коммуникации по вашему обращению.",
+          ],
+        },
+        {
+          heading: "Какие действия мы выполняем",
+          paragraphs: [
+            "Мы можем собирать, записывать, систематизировать, хранить, уточнять, использовать, передавать ограниченному кругу подрядчиков, которые помогают обрабатывать заявки и поддерживать инфраструктуру, а также обезличивать и удалять данные.",
+          ],
+        },
+        {
+          heading: "Срок действия согласия",
+          paragraphs: [
+            "Согласие действует до достижения целей обработки или до его отзыва, но не дольше, чем это объективно необходимо для работы с вашей заявкой и последующей коммуникации по ней.",
+          ],
+        },
+        {
+          heading: "Как отозвать согласие",
+          paragraphs: [
+            "Вы можете отозвать согласие, направив запрос по контактам HiTeam, указанным на сайте. После получения запроса мы прекратим обработку, если у нас не будет иных законных оснований продолжать её.",
+          ],
+        },
+      ],
+      note:
+        "Это общий шаблон для сайта и demo-формы. Перед публикацией его нужно проверить и дополнить реквизитами оператора и обязательными для вашей юрисдикции сведениями.",
+      closeLabel: "Закрыть",
+    },
+    privacy: {
+      title: "Политика конфиденциальности",
+      intro:
+        "HiTeam уважает конфиденциальность пользователей и обрабатывает персональные данные только в объёме, необходимом для работы сайта, рассмотрения заявок и коммуникации по сервису.",
+      sections: [
+        {
+          heading: "На что распространяется политика",
+          bullets: [
+            "на данные, которые вы оставляете в формах на сайте HiTeam;",
+            "на сведения, которые вы сообщаете при переписке, звонке или демо-встрече с нашей командой;",
+            "на технические данные, которые помогают обеспечивать стабильную и безопасную работу сайта.",
+          ],
+        },
+        {
+          heading: "Как мы используем данные",
+          bullets: [
+            "обрабатываем заявки на демо и обратную связь;",
+            "готовим консультации, презентации и коммерческие предложения;",
+            "поддерживаем безопасность, аналитику и улучшение сервиса;",
+            "исполняем обязательства перед пользователями и партнёрами.",
+          ],
+        },
+        {
+          heading: "Кому данные могут передаваться",
+          paragraphs: [
+            "Мы не продаём персональные данные. Доступ к ним получают только уполномоченные сотрудники HiTeam и подрядчики, которые помогают с хостингом, коммуникациями и технической поддержкой, при условии соблюдения конфиденциальности и мер защиты.",
+          ],
+        },
+        {
+          heading: "Как мы защищаем данные",
+          paragraphs: [
+            "Мы применяем организационные и технические меры защиты: ограничение доступа, разграничение ролей, защищённые каналы передачи данных и внутренние процедуры обработки обращений.",
+          ],
+        },
+        {
+          heading: "Права пользователя",
+          bullets: [
+            "запросить информацию о том, какие данные мы обрабатываем;",
+            "попросить обновить, уточнить или исправить данные;",
+            "отозвать согласие и запросить удаление данных, если это допускается применимым законодательством.",
+          ],
+        },
+        {
+          heading: "Обновление политики",
+          paragraphs: [
+            "Мы можем обновлять эту политику при изменении сервиса, процессов обработки данных или требований законодательства. Актуальная версия публикуется на сайте HiTeam.",
+          ],
+        },
+      ],
+      note:
+        "Это общий шаблон политики конфиденциальности. Перед публикацией его нужно проверить и дополнить реквизитами оператора, перечнем используемых сервисов и обязательными юридическими формулировками.",
+      closeLabel: "Закрыть",
+    },
+  },
+  en: {
+    consent: {
+      title: "Consent to the Processing of Personal Data",
+      intro:
+        "By submitting a HiTeam demo request, you consent to the processing of the personal data you voluntarily provide in the form or share while communicating with our team.",
+      sections: [
+        {
+          heading: "What data we may process",
+          bullets: [
+            "name and contact details, including email address and phone number;",
+            "company name, job title, and comments if you include them in your request;",
+            "any additional information you share during email communication, calls, or the demo itself.",
+          ],
+        },
+        {
+          heading: "Why we use the data",
+          bullets: [
+            "to contact you about your demo request;",
+            "to prepare a relevant HiTeam walkthrough for your workflow;",
+            "to answer questions about the product, pricing, onboarding, and support;",
+            "to keep a communication history related to your request.",
+          ],
+        },
+        {
+          heading: "What processing actions we perform",
+          paragraphs: [
+            "We may collect, record, organize, store, update, use, transfer data to a limited number of service providers that help us process requests and support our infrastructure, as well as anonymize and delete the data.",
+          ],
+        },
+        {
+          heading: "How long the consent remains valid",
+          paragraphs: [
+            "The consent remains valid until the processing purposes are achieved or until it is withdrawn, but not longer than reasonably necessary to handle your request and related communication.",
+          ],
+        },
+        {
+          heading: "How to withdraw consent",
+          paragraphs: [
+            "You may withdraw your consent by contacting HiTeam through the contact details available on the website. Once we receive the request, we will stop processing the data unless we have another lawful basis to continue.",
+          ],
+        },
+      ],
+      note:
+        "This is a general website and demo-form template. Before publishing, it should be reviewed and supplemented with the operator's legal details and any jurisdiction-specific mandatory disclosures.",
+      closeLabel: "Close",
+    },
+    privacy: {
+      title: "Privacy Policy",
+      intro:
+        "HiTeam respects user privacy and processes personal data only to the extent necessary to operate the website, review requests, and communicate about the service.",
+      sections: [
+        {
+          heading: "What this policy covers",
+          bullets: [
+            "data you submit through HiTeam website forms;",
+            "information you share in emails, calls, or demo meetings with our team;",
+            "technical data needed to keep the website stable and secure.",
+          ],
+        },
+        {
+          heading: "How we use the data",
+          bullets: [
+            "to process demo and contact requests;",
+            "to prepare consultations, presentations, and commercial proposals;",
+            "to maintain security, analytics, and service improvements;",
+            "to fulfil our obligations to users and partners.",
+          ],
+        },
+        {
+          heading: "Who may receive the data",
+          paragraphs: [
+            "We do not sell personal data. Access is limited to authorized HiTeam personnel and service providers that support hosting, communications, and technical operations, subject to confidentiality and security obligations.",
+          ],
+        },
+        {
+          heading: "How we protect the data",
+          paragraphs: [
+            "We use organizational and technical safeguards, including access control, role-based permissions, secure data transmission channels, and internal procedures for handling requests.",
+          ],
+        },
+        {
+          heading: "Your rights",
+          bullets: [
+            "to request information about the data we process;",
+            "to ask us to update, clarify, or correct your data;",
+            "to withdraw consent and request deletion where permitted by applicable law.",
+          ],
+        },
+        {
+          heading: "Policy updates",
+          paragraphs: [
+            "We may update this policy when the service, data processing activities, or legal requirements change. The current version is published on the HiTeam website.",
+          ],
+        },
+      ],
+      note:
+        "This is a general privacy policy template. Before publishing, it should be reviewed and supplemented with the operator's legal details, the list of service providers in use, and any mandatory legal wording.",
+      closeLabel: "Close",
+    },
+  },
+};
 
 function detectPreferredLandingLocale(): LandingLocale {
   if (typeof window === "undefined") {
@@ -248,6 +493,17 @@ function buildGlobeAnchorStyle(item: GlobeOverlayItem): GlobeAnchorStyle {
     "--item-rotate":
       item.type === "polaroid" ? `calc((1 - ${shownVar}) * 35deg)` : "0deg",
   } as React.CSSProperties;
+}
+
+function getStablePolaroidDelay(id: string) {
+  let hash = 0;
+
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  }
+
+  const delay = (hash % 2000) / 1000;
+  return `${delay.toFixed(3)}s`;
 }
 
 function projectGlobeLocation(
@@ -338,7 +594,7 @@ function GlobeStatusChip({
       >
         <div
           className={cx(
-            "globe-chip-pulse relative inline-flex w-max items-center whitespace-nowrap rounded-full px-3 py-2 text-[0.62rem] font-semibold tracking-[0.18em] uppercase ring-1 backdrop-blur-sm",
+            "globe-chip-pulse relative inline-flex w-max items-center whitespace-nowrap rounded-none px-3 py-2 text-[0.62rem] font-semibold tracking-[0.18em] uppercase ring-1 backdrop-blur-sm",
             toneStyles.chip,
           )}
         >
@@ -383,12 +639,12 @@ function GlobePolaroidCard({
           className="animate-[polaroidFloat_4s_ease-in-out_infinite]"
           style={{
             transformOrigin: "center bottom",
-            animationDelay: `${Math.random() * 2}s`,
+            animationDelay: getStablePolaroidDelay(item.id),
           }}
         >
-          <div className={cx("globe-polaroid-glow px-2.5 pt-2.5 pb-0 ring-1 rounded-xl", cardClassName)}>
+          <div className={cx("globe-polaroid-glow px-2.5 pt-2.5 pb-0 ring-1 rounded-none", cardClassName)}>
             <div
-              className="overflow-hidden rounded-lg bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
+              className="overflow-hidden rounded-none bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
               style={{ width: `${frameWidth}px` }}
             >
               <img
@@ -452,11 +708,11 @@ function FeatureBadge({
         {icon}
       </div>
       <div>
-        <h3 className="text-xl font-semibold text-white md:text-2xl">
+        <h3 className="text-[1.55rem] leading-[1.05] font-semibold tracking-[-0.04em] text-white md:text-2xl">
           {title}
         </h3>
         {description ? (
-          <p className="mt-2 text-base leading-7 text-white/72 md:text-lg">
+          <p className="mt-2 max-w-[34ch] text-sm leading-6 text-white/72 md:text-lg md:leading-7">
             {description}
           </p>
         ) : null}
@@ -467,7 +723,7 @@ function FeatureBadge({
 
 function CheckItemText({ text }: { text: string }) {
   return (
-    <li className="flex items-start gap-3 text-sm text-white/82 md:text-base">
+    <li className="flex items-start gap-3 text-[0.96rem] leading-7 text-white/82 md:text-base">
       <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-white">
         <svg
           className="h-3.5 w-3.5 text-white"
@@ -498,22 +754,31 @@ function getLandingMockupSrc(
 const GooglePlayButton = ({
   size = "md",
   ...props
-}: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" }) => {
+}: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" | "xl" }) => {
+  const dimensions =
+    size === "xl"
+      ? { height: 80, width: 270 }
+      : size === "lg"
+        ? { height: 44, width: 149 }
+        : { height: 40, width: 135 };
+
   return (
     <a
       aria-label="Get it on Google Play"
       href="#"
       {...props}
       className={cx(
-        "rounded-[7px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
+        size === "xl"
+          ? "rounded-[14px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          : "rounded-[7px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
         props.className ?? "",
       )}
     >
       <svg
         fill="none"
-        height={size === "md" ? 40 : 44}
+        height={dimensions.height}
         viewBox="0 0 135 40"
-        width={size === "md" ? 135 : 149}
+        width={dimensions.width}
       >
         <path
           d="M68.136 21.7511C65.784 21.7511 63.867 23.5401 63.867 26.0041C63.867 28.4531 65.784 30.2571 68.136 30.2571C70.489 30.2571 72.406 28.4531 72.406 26.0041C72.405 23.5401 70.488 21.7511 68.136 21.7511ZM68.136 28.5831C66.847 28.5831 65.736 27.5201 65.736 26.0051C65.736 24.4741 66.848 23.4271 68.136 23.4271C69.425 23.4271 70.536 24.4741 70.536 26.0051C70.536 27.5191 69.425 28.5831 68.136 28.5831ZM58.822 21.7511C56.47 21.7511 54.553 23.5401 54.553 26.0041C54.553 28.4531 56.47 30.2571 58.822 30.2571C61.175 30.2571 63.092 28.4531 63.092 26.0041C63.092 23.5401 61.175 21.7511 58.822 21.7511ZM58.822 28.5831C57.533 28.5831 56.422 27.5201 56.422 26.0051C56.422 24.4741 57.534 23.4271 58.822 23.4271C60.111 23.4271 61.222 24.4741 61.222 26.0051C61.223 27.5191 60.111 28.5831 58.822 28.5831ZM47.744 23.0571V24.8611H52.062C51.933 25.8761 51.595 26.6171 51.079 27.1321C50.451 27.7601 49.468 28.4531 47.744 28.4531C45.086 28.4531 43.008 26.3101 43.008 23.6521C43.008 20.9941 45.086 18.8511 47.744 18.8511C49.178 18.8511 50.225 19.4151 50.998 20.1401L52.271 18.8671C51.191 17.8361 49.758 17.0471 47.744 17.0471C44.103 17.0471 41.042 20.0111 41.042 23.6521C41.042 27.2931 44.103 30.2571 47.744 30.2571C49.709 30.2571 51.192 29.6121 52.351 28.4041C53.543 27.2121 53.914 25.5361 53.914 24.1831C53.914 23.7651 53.882 23.3781 53.817 23.0561H47.744V23.0571ZM93.052 24.4581C92.698 23.5081 91.618 21.7511 89.411 21.7511C87.22 21.7511 85.399 23.4751 85.399 26.0041C85.399 28.3881 87.204 30.2571 89.62 30.2571C91.569 30.2571 92.697 29.0651 93.165 28.3721L91.715 27.4051C91.232 28.1141 90.571 28.5811 89.62 28.5811C88.67 28.5811 87.993 28.1461 87.558 27.2921L93.245 24.9401L93.052 24.4581ZM87.252 25.8761C87.204 24.2321 88.525 23.3951 89.476 23.3951C90.217 23.3951 90.845 23.7661 91.055 24.2971L87.252 25.8761ZM82.629 30.0001H84.497V17.4991H82.629V30.0001ZM79.567 22.7021H79.503C79.084 22.2021 78.278 21.7511 77.264 21.7511C75.137 21.7511 73.188 23.6201 73.188 26.0211C73.188 28.4051 75.137 30.2581 77.264 30.2581C78.279 30.2581 79.084 29.8071 79.503 29.2921H79.567V29.9041C79.567 31.5311 78.697 32.4011 77.296 32.4011C76.152 32.4011 75.443 31.5801 75.153 30.8871L73.526 31.5641C73.993 32.6911 75.233 34.0771 77.296 34.0771C79.487 34.0771 81.34 32.7881 81.34 29.6461V22.0101H79.568V22.7021H79.567ZM77.425 28.5831C76.136 28.5831 75.057 27.5031 75.057 26.0211C75.057 24.5221 76.136 23.4271 77.425 23.4271C78.697 23.4271 79.696 24.5221 79.696 26.0211C79.696 27.5031 78.697 28.5831 77.425 28.5831ZM101.806 17.4991H97.335V30.0001H99.2V25.2641H101.805C103.873 25.2641 105.907 23.7671 105.907 21.3821C105.907 18.9971 103.874 17.4991 101.806 17.4991ZM101.854 23.5241H99.2V19.2391H101.854C103.249 19.2391 104.041 20.3941 104.041 21.3821C104.041 22.3501 103.249 23.5241 101.854 23.5241ZM113.386 21.7291C112.035 21.7291 110.636 22.3241 110.057 23.6431L111.713 24.3341C112.067 23.6431 112.727 23.4171 113.418 23.4171C114.383 23.4171 115.364 23.9961 115.38 25.0251V25.1541C115.042 24.9611 114.318 24.6721 113.434 24.6721C111.649 24.6721 109.831 25.6531 109.831 27.4861C109.831 29.1591 111.295 30.2361 112.935 30.2361C114.189 30.2361 114.881 29.6731 115.315 29.0131H115.379V29.9781H117.181V25.1851C117.182 22.9671 115.524 21.7291 113.386 21.7291ZM113.16 28.5801C112.55 28.5801 111.697 28.2741 111.697 27.5181C111.697 26.5531 112.759 26.1831 113.676 26.1831C114.495 26.1831 114.882 26.3601 115.38 26.6011C115.235 27.7601 114.238 28.5801 113.16 28.5801ZM123.743 22.0021L121.604 27.4221H121.54L119.32 22.0021H117.31L120.639 29.5771L118.741 33.7911H120.687L125.818 22.0021H123.743ZM106.937 30.0001H108.802V17.4991H106.937V30.0001Z"
@@ -623,22 +888,31 @@ const GooglePlayButton = ({
 const AppStoreButton = ({
   size = "md",
   ...props
-}: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" }) => {
+}: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" | "xl" }) => {
+  const dimensions =
+    size === "xl"
+      ? { height: 80, width: 240 }
+      : size === "lg"
+        ? { height: 44, width: 132 }
+        : { height: 40, width: 120 };
+
   return (
     <a
       aria-label="Download on the App Store"
       href="#"
       {...props}
       className={cx(
-        "rounded-[7px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
+        size === "xl"
+          ? "rounded-[14px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          : "rounded-[7px] bg-black ring-1 ring-white/12 ring-inset outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
         props.className ?? "",
       )}
     >
       <svg
         fill="none"
-        height={size === "md" ? 40 : 44}
+        height={dimensions.height}
         viewBox="0 0 120 40"
-        width={size === "md" ? 120 : 132}
+        width={dimensions.width}
       >
         <path
           d="M81.5257 19.2009V21.4919H80.0896V22.9944H81.5257V28.0994C81.5257 29.8425 82.3143 30.5398 84.2981 30.5398C84.6468 30.5398 84.9788 30.4983 85.2693 30.4485V28.9626C85.0203 28.9875 84.8626 29.0041 84.5887 29.0041C83.7005 29.0041 83.3104 28.5891 83.3104 27.6428V22.9944H85.2693V21.4919H83.3104V19.2009H81.5257Z"
@@ -735,6 +1009,7 @@ const AppStoreButton = ({
 };
 
 const Landing = () => {
+  const heroVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const globeContainerRef = useRef<HTMLDivElement>(null);
   const overlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -742,16 +1017,33 @@ const Landing = () => {
   const [locale, setLocale] = useState<LandingLocale>("ru");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [heroVideoSrc, setHeroVideoSrc] = useState("/hero.webm");
   const [demoName, setDemoName] = useState("");
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [demoTermsAccepted, setDemoTermsAccepted] = useState(false);
+  const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocumentKey | null>(
+    null,
+  );
 
   const isDemoFormValid =
     demoName.trim().length > 0 &&
     (demoEmail.trim().length > 0 || demoPhone.trim().length > 0) &&
     demoTermsAccepted;
+
+  // Mobile-only button offsets for the hero CTA row.
+  const heroMobileAboutButtonStyle = {
+    "--hero-mobile-about-offset-y": "90px",
+  } as CSSProperties;
+  const heroMobileDemoButtonStyle = {
+    "--hero-mobile-demo-offset-y": "90px",
+  } as CSSProperties;
+  const heroMobileGlobeStyle = {
+    "--hero-mobile-globe-top": "20rem",
+    "--hero-mobile-globe-scale": "1.7",
+  } as CSSProperties;
 
   const firstFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
   const secondFeatureRowShift = { "--feature-row-offset": "280px" } as CSSProperties;
@@ -762,12 +1054,14 @@ const Landing = () => {
   };
 
   const scrollToSection = (targetId: string) => {
+    setIsMobileNavOpen(false);
+
     const target = document.getElementById(targetId);
     if (!target) {
       return;
     }
 
-    const headerOffset = 112;
+    const headerOffset = window.innerWidth < 768 ? 84 : 112;
     const targetTop =
       target.getBoundingClientRect().top + window.scrollY - headerOffset;
 
@@ -799,6 +1093,61 @@ const Landing = () => {
       window.removeEventListener("focus", syncLocale);
     };
   }, []);
+
+  useEffect(() => {
+    const probe = document.createElement("video");
+    const canPlayWebm =
+      probe.canPlayType('video/webm; codecs="vp9"') !== "" ||
+      probe.canPlayType("video/webm") !== "";
+
+    setHeroVideoSrc(canPlayWebm ? "/hero.webm" : "/hero.mp4");
+  }, []);
+
+  useEffect(() => {
+    const video = heroVideoRef.current;
+    if (!video) {
+      return;
+    }
+
+    video.muted = true;
+    video.defaultMuted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.playbackRate = 1.6;
+
+    const tryPlay = () => {
+      const playback = video.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => {});
+      }
+    };
+
+    const handleEnded = () => {
+      video.currentTime = 0;
+      tryPlay();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        tryPlay();
+      }
+    };
+
+    tryPlay();
+    video.addEventListener("canplay", tryPlay);
+    video.addEventListener("loadeddata", tryPlay);
+    video.addEventListener("ended", handleEnded);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", tryPlay);
+
+    return () => {
+      video.removeEventListener("canplay", tryPlay);
+      video.removeEventListener("loadeddata", tryPlay);
+      video.removeEventListener("ended", handleEnded);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", tryPlay);
+    };
+  }, [heroVideoSrc]);
 
   useEffect(() => {
     if (!canvasRef.current || !globeContainerRef.current) return;
@@ -902,6 +1251,21 @@ const Landing = () => {
   }, []);
 
   useEffect(() => {
+    const syncMobileNavState = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileNavOpen(false);
+      }
+    };
+
+    syncMobileNavState();
+    window.addEventListener("resize", syncMobileNavState);
+
+    return () => {
+      window.removeEventListener("resize", syncMobileNavState);
+    };
+  }, []);
+
+  useEffect(() => {
     const syncHeaderState = () => {
       setIsHeaderScrolled(window.scrollY > 12);
     };
@@ -915,22 +1279,45 @@ const Landing = () => {
   }, []);
 
   const isRu = locale === "ru";
+  const activeLegalCopy =
+    activeLegalDoc === null ? null : LANDING_LEGAL_COPY[locale][activeLegalDoc];
   const navigationLabels = {
     about: isRu ? "О нас" : "About",
     mobile: isRu ? "Мобайл" : "Mobile",
-    pricing: isRu ? "Цены" : "Pricing",
-    questions: isRu ? "Вопросы" : "FAQ",
+    pricing: isRu ? "Тарифы" : "Pricing",
+    questions: "FAQ",
   } as const;
+  const navItems = [
+    { id: "about", label: navigationLabels.about },
+    { id: "mobile", label: navigationLabels.mobile },
+    { id: "questions", label: navigationLabels.questions },
+    { id: "pricing", label: navigationLabels.pricing },
+  ] as const;
+  const heroCopy = isRu
+    ? {
+        aboutCta: "О нас",
+        demoCta: "Заказать демо",
+        line1: "Команда,",
+        line2: "смены и задачи",
+        line3: "в одном приложении",
+      }
+    : {
+        aboutCta: "About",
+        demoCta: "Request demo",
+        line1: "Teams,",
+        line2: "shifts and tasks",
+        line3: "in one app",
+      };
   const heroStats = isRu
     ? [
-        { value: "99.8%", label: "Точность распознавания" },
-        { value: "500+", label: "Компаний доверяют" },
-        { value: "24/7", label: "Поддержка" },
+        { value: "99.8%", label: "точность" },
+        { value: "500+", label: "команд" },
+        { value: "24/7", label: "поддержка" },
       ]
     : [
-        { value: "99.8%", label: "Recognition accuracy" },
-        { value: "500+", label: "Companies trust us" },
-        { value: "24/7", label: "Support" },
+        { value: "99.8%", label: "accuracy" },
+        { value: "500+", label: "teams" },
+        { value: "24/7", label: "support" },
       ];
   const aboutFeatureRows = isRu
     ? [
@@ -1115,33 +1502,49 @@ const Landing = () => {
           q: "Is there a trial period?",
         },
       ];
-  const footerColumns = isRu
+  const footerPanels: FooterPanel[] = isRu
     ? [
         {
-          links: ["Возможности", "Цены", "Интеграции", "API"],
-          title: "Продукт",
-        },
-        {
-          links: ["О нас", "Блог", "Карьера", "Контакты"],
+          items: [
+            { label: "ALTEGIO LLC-FZ" },
+            {
+              className: "max-w-[28ch]",
+              label:
+                "Meydan Grandstand, 6th floor, Meydan Road, Nad Al Sheba, Dubai, U.A.E",
+            },
+          ],
           title: "Компания",
         },
         {
-          links: ["Документация", "Статус", "Обратная связь", "Безопасность"],
-          title: "Поддержка",
+          items: [
+            { href: "mailto:support@support@hiteam", label: "support@support@hiteam" },
+            { href: "tel:+971557195382", label: "+971557195382" },
+          ],
+          note:
+            "Мы обрабатываем только данные, которые вы предоставляете, и разрешения, которые вы даете. Никакие личные данные не доступны вне вашей сферы.",
+          title: "Контакты",
         },
       ]
     : [
         {
-          links: ["Features", "Pricing", "Integrations", "API"],
-          title: "Product",
-        },
-        {
-          links: ["About", "Blog", "Careers", "Contacts"],
+          items: [
+            { label: "ALTEGIO LLC-FZ" },
+            {
+              className: "max-w-[28ch]",
+              label:
+                "Meydan Grandstand, 6th floor, Meydan Road, Nad Al Sheba, Dubai, U.A.E",
+            },
+          ],
           title: "Company",
         },
         {
-          links: ["Documentation", "Status", "Feedback", "Security"],
-          title: "Support",
+          items: [
+            { href: "mailto:support@support@hiteam", label: "support@support@hiteam" },
+            { href: "tel:+971557195382", label: "+971557195382" },
+          ],
+          note:
+            "We only process the data you provide and the permissions you grant. No personal data is available outside your workspace.",
+          title: "Contacts",
         },
       ];
   const footerLegalLinks = isRu
@@ -1278,56 +1681,72 @@ const Landing = () => {
           className={cx(
             "mx-auto w-full transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-auto transform-gpu",
             isHeaderScrolled
-              ? "max-w-[100vw] mt-0 rounded-b-2xl bg-white/50 border-b border-white/60 shadow-[0px_10px_40px_5px_rgba(194,194,194,0.25)] backdrop-blur-xl px-6 py-4 md:px-16 lg:px-24"
-              : "max-w-5xl mt-6 rounded-[40px] bg-white/50 border border-white/60 shadow-[0px_10px_40px_5px_rgba(194,194,194,0.25)] backdrop-blur-xl px-8 py-3 md:px-12 lg:px-16"
+              ? "mt-0 max-w-[100vw] rounded-none border-b border-slate-200 bg-white px-4 py-3 shadow-[0px_10px_32px_rgba(15,23,42,0.08)] sm:px-6 sm:py-4 md:rounded-b-2xl md:px-16 lg:px-24"
+              : "mt-0 max-w-[100vw] rounded-none border-b border-slate-200 bg-white px-4 py-3 shadow-[0px_10px_28px_rgba(15,23,42,0.06)] sm:px-6 md:mt-6 md:max-w-5xl md:rounded-[40px] md:border md:px-12 lg:px-16"
           )}
         >
-          <div className="flex w-full items-center justify-between">
-            <button
-              className="flex items-center"
-              onClick={() =>
-                window.scrollTo({
-                  top: 0,
-                  behavior: "smooth",
-                })
-              }
-              type="button"
-            >
-              <BrandWordmark className="text-[1.95rem] text-foreground" />
-            </button>
+          <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                aria-expanded={isMobileNavOpen}
+                aria-label={isMobileNavOpen ? (isRu ? "Закрыть меню" : "Close menu") : (isRu ? "Открыть меню" : "Open menu")}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-colors hover:border-slate-300 md:hidden"
+                onClick={() => setIsMobileNavOpen((current) => !current)}
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  {isMobileNavOpen ? (
+                    <path
+                      d="M6 6l12 12M18 6L6 18"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                    />
+                  ) : (
+                    <path
+                      d="M4 7h16M4 12h16M4 17h16"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                    />
+                  )}
+                </svg>
+              </button>
+
+              <button
+                className="flex items-center"
+                onClick={() => {
+                  setIsMobileNavOpen(false);
+                  window.scrollTo({
+                    top: 0,
+                    behavior: "smooth",
+                  });
+                }}
+                type="button"
+              >
+                <BrandWordmark className="text-[1.55rem] text-foreground sm:text-[1.75rem] md:text-[1.95rem]" />
+              </button>
+            </div>
 
             <nav className="hidden items-center gap-8 md:flex">
-              <button
-                className="text-sm font-medium text-black transition-colors hover:text-black"
-                onClick={() => scrollToSection("about")}
-                type="button"
-              >
-                {navigationLabels.about}
-              </button>
-              <button
-                className="text-sm font-medium text-black transition-colors hover:text-black"
-                onClick={() => scrollToSection("mobile")}
-                type="button"
-              >
-                {navigationLabels.mobile}
-              </button>
-              <button
-                className="text-sm font-medium text-black transition-colors hover:text-black"
-                onClick={() => scrollToSection("questions")}
-                type="button"
-              >
-                {navigationLabels.questions}
-              </button>
-              <button
-                className="text-sm font-medium text-black transition-colors hover:text-black"
-                onClick={() => scrollToSection("pricing")}
-                type="button"
-              >
-                {navigationLabels.pricing}
-              </button>
+              {navItems.map((item) => (
+                <button
+                  className="text-sm font-medium text-black transition-colors hover:text-black"
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
             </nav>
 
-            <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-3 md:flex">
               <a
                 className="hidden text-sm font-medium text-foreground transition-colors hover:text-primary sm:inline-block"
                 href="/login"
@@ -1336,18 +1755,92 @@ const Landing = () => {
               </a>
               <button
                 type="button"
-                className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white! transition-opacity hover:opacity-90 sm:h-10 sm:px-5 sm:text-sm"
+                onClick={() => setIsDemoModalOpen(true)}
+              >
+                {isRu ? "Начать" : "Start"}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 md:hidden">
+              <a
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-primary"
+                href="/login"
+                onClick={() => setIsMobileNavOpen(false)}
+              >
+                {isRu ? "Войти" : "Sign in"}
+              </a>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-3.5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
                 onClick={() => setIsDemoModalOpen(true)}
               >
                 {isRu ? "Начать" : "Start"}
               </button>
             </div>
           </div>
+
+          <div
+            className={cx(
+              "grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out md:hidden",
+              isMobileNavOpen
+                ? "mt-4 grid-rows-[1fr] opacity-100"
+                : "mt-0 grid-rows-[0fr] opacity-0",
+            )}
+          >
+            <div className="overflow-hidden">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                <div className="flex flex-col">
+                  {navItems.map((item, index) => (
+                    <div key={item.id}>
+                      {index > 0 ? <Separator className="bg-slate-200/90" /> : null}
+                      <button
+                        className="flex w-full items-center justify-between py-3 text-left text-sm font-medium text-slate-900"
+                        onClick={() => scrollToSection(item.id)}
+                        type="button"
+                      >
+                        <span>{item.label}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Separator className="my-3 bg-slate-200/90" />
+                <div className="flex items-start">
+                  <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+                    <button
+                      type="button"
+                      className={cx(
+                        "inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-semibold transition-colors",
+                        locale === "ru"
+                          ? "bg-primary text-white!"
+                          : "text-slate-700 hover:text-slate-900",
+                      )}
+                      onClick={() => updateLocale("ru")}
+                    >
+                      RU
+                    </button>
+                    <button
+                      type="button"
+                      className={cx(
+                        "inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-semibold transition-colors",
+                        locale === "en"
+                          ? "bg-primary text-white!"
+                          : "text-slate-700 hover:text-slate-900",
+                      )}
+                      onClick={() => updateLocale("en")}
+                    >
+                      EN
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
       <section
-        className="relative min-h-[95vh] overflow-hidden px-6 pb-10 pt-24 md:px-16 md:pb-16 md:pt-28 lg:px-24"
+        className="relative min-h-[40rem] overflow-hidden px-4 pb-4 pt-20 sm:min-h-[95svh] sm:px-6 sm:pb-10 sm:pt-24 md:min-h-[95dvh] md:px-16 md:pb-16 md:pt-28 lg:px-24"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
@@ -1355,48 +1848,163 @@ const Landing = () => {
         {/* Background Video */}
         <video
           autoPlay
+          disablePictureInPicture
+          disableRemotePlayback
           loop
           muted
           playsInline
-          className="absolute inset-0 z-0 size-full object-cover opacity-60 mix-blend-multiply transition-opacity duration-1000"
-          style={{ transform: "scale(-1, -1)" }}
-          src="/hero.webm"
+          preload="auto"
+          className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
+          key={heroVideoSrc}
+          onError={() => {
+            if (heroVideoSrc !== "/hero.mp4") {
+              setHeroVideoSrc("/hero.mp4");
+            }
+          }}
+          ref={heroVideoRef}
+          src={heroVideoSrc}
+          style={{
+            transform: "scale(-1, -1)",
+            filter: "brightness(0.9) contrast(1.02) saturate(0.8)",
+          }}
         />
-        <div
-          className={cx(
-            "lp-hero-petersburg mx-auto flex relative z-10 min-h-[calc(95vh-6rem)] max-w-7xl flex-col items-center justify-start gap-10 pt-8 lg:flex-row lg:gap-2 lg:pt-2",
-            petersburgHero.className,
-          )}
-        >
-          <div className="max-w-xl flex-1 lg:max-w-[38rem] lg:flex-[1.1]">
-            <h1 className="mb-10 animate-[fadeInUp_0.6s_0.15s_ease_forwards] flex flex-col text-[clamp(2rem,5vw,3.4rem)] leading-[1.05] tracking-[-0.05em] font-medium uppercase text-foreground opacity-0">
-              <span className="text-[clamp(4rem,10vw,6.8rem)] leading-[0.9] font-medium tracking-[-0.06em]">
-                {isRu ? "ВСЯ" : "ALL"}
-              </span>
-              <span>{isRu ? "работа команды" : "team work"}</span>
-              <span>{isRu ? "на одном экране" : "on one screen"}</span>
-            </h1>
-            <div className="flex gap-10 animate-[fadeInUp_0.6s_0.45s_ease_forwards] opacity-0">
+        <div className="pointer-events-none absolute inset-0 z-[2] bg-white/22" />
+        <div className="pointer-events-none absolute inset-0 z-[3] bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_34%),radial-gradient(circle_at_88%_14%,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_30%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,249,253,0.22)_52%,rgba(238,243,251,0.34)_100%)]" />
+        <div className="relative z-10 mx-auto flex min-h-[50rem] max-w-7xl flex-col items-center justify-start gap-8 pt-6 sm:min-h-[calc(100svh-5rem)] sm:gap-10 sm:pt-8 lg:min-h-[calc(95vh-6rem)] lg:flex-row lg:gap-2 lg:pt-2">
+          <div className="relative z-10 w-full max-w-xl flex-1 lg:max-w-[40rem] lg:flex-[1.06]">
+            <div className={cx(isRu ? "origin-top-left scale-[0.92] transform-gpu sm:scale-100" : "")}>
+              <h1 className="landing-hero-title animate-[fadeInUp_0.6s_0.15s_ease_forwards] opacity-0 text-[clamp(2.14rem,11.5vw,6.35rem)] leading-[1.02] tracking-[-0.065em] font-semibold text-foreground sm:text-[clamp(2.35rem,12vw,6.35rem)] sm:leading-[0.88]">
+                {isRu ? (
+                  <>
+                    <span className="block sm:hidden" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        Команда, смены
+                      </LineShadowText>
+                    </span>
+                    <span className="block whitespace-nowrap sm:hidden">
+                      <span style={HERO_OUTLINE_TEXT_STYLE}>
+                        <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                          и задачи
+                        </LineShadowText>
+                      </span>{" "}
+                      <AuroraText
+                        animated
+                        className="font-semibold leading-[1.06] tracking-[-0.05em]"
+                        colors={["#7c3aed", "#5b5ce2", "#2563eb", "#38bdf8"]}
+                        speed={1.2}
+                      >
+                        в одном
+                      </AuroraText>
+                    </span>
+                    <span className="mt-0 block overflow-visible whitespace-nowrap pb-[0.06em] sm:hidden">
+                      <AuroraText
+                        animated
+                        className="font-semibold leading-[1.06] tracking-[-0.05em]"
+                        colors={["#7c3aed", "#5b5ce2", "#2563eb", "#38bdf8"]}
+                        speed={1.2}
+                      >
+                        приложении
+                      </AuroraText>
+                    </span>
+
+                    <span className="hidden sm:block" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        Команда,
+                      </LineShadowText>
+                    </span>
+                    <span className="hidden sm:block" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        смены
+                      </LineShadowText>
+                    </span>
+                    <span className="hidden sm:block" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        и задачи
+                      </LineShadowText>
+                    </span>
+                    <span className="hidden overflow-visible pb-[0.06em] sm:block sm:mt-1">
+                      <AuroraText
+                        animated
+                        className="font-semibold leading-[1.06] tracking-[-0.05em] sm:leading-[inherit]"
+                        colors={["#7c3aed", "#5b5ce2", "#2563eb", "#38bdf8"]}
+                        speed={1.2}
+                      >
+                        в одном
+                      </AuroraText>
+                    </span>
+                    <span className="hidden overflow-visible pb-[0.06em] sm:block">
+                      <AuroraText
+                        animated
+                        className="font-semibold leading-[1.06] tracking-[-0.05em] sm:leading-[inherit]"
+                        colors={["#7c3aed", "#5b5ce2", "#2563eb", "#38bdf8"]}
+                        speed={1.2}
+                      >
+                        приложении
+                      </AuroraText>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="block" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        {heroCopy.line1}
+                      </LineShadowText>
+                    </span>
+                    <span className="block" style={HERO_OUTLINE_TEXT_STYLE}>
+                      <LineShadowText shadowColor="rgba(47,99,255,0.72)">
+                        {heroCopy.line2}
+                      </LineShadowText>
+                    </span>
+                    <span className="mt-0 block overflow-visible pb-[0.06em] sm:mt-1">
+                      <AuroraText
+                        animated
+                        className="font-semibold leading-[1.06] tracking-[-0.05em] sm:leading-[inherit]"
+                        colors={["#7c3aed", "#5b5ce2", "#2563eb", "#38bdf8"]}
+                        speed={1.2}
+                      >
+                        {heroCopy.line3}
+                      </AuroraText>
+                    </span>
+                  </>
+                )}
+              </h1>
+            </div>
+
+            <div className="mx-auto mt-8 grid w-full max-w-[21rem] animate-[fadeInUp_0.6s_0.42s_ease_forwards] grid-cols-3 gap-3 opacity-0 sm:max-w-[38rem] sm:gap-3">
               {heroStats.map((stat) => (
-                <div key={stat.label}>
-                  <p className="text-2xl font-bold text-foreground">
+                <div
+                  key={stat.label}
+                  className="flex flex-col items-center justify-start px-1 py-1 text-center"
+                >
+                  <p className="tabular-nums text-[1.18rem] leading-none font-semibold tracking-[-0.05em] text-foreground sm:text-[1.95rem] sm:tracking-[-0.06em]">
                     {stat.value}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-2 max-w-[10ch] text-center text-[0.62rem] leading-4 font-medium tracking-[0.02em] text-[#64748b] uppercase sm:mt-3 sm:max-w-[14ch] sm:text-[0.76rem] sm:leading-5 sm:tracking-[-0.01em] sm:normal-case">
                     {stat.label}
                   </p>
                 </div>
               ))}
             </div>
-            <div className="mt-14 animate-[fadeInUp_0.6s_0.6s_ease_forwards] opacity-0">
+
+            <div className="mt-10 grid grid-cols-2 gap-3 animate-[fadeInUp_0.6s_0.56s_ease_forwards] opacity-0 sm:mt-8 sm:flex sm:flex-wrap sm:items-center">
               <button
                 type="button"
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-base font-semibold text-white! shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30"
-                onClick={() => setIsDemoModalOpen(true)}
+                className="inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-about-offset-y)] items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-black shadow-[0_18px_44px_rgba(15,23,42,0.08)] ring-1 ring-white/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:shadow-[0_24px_54px_rgba(15,23,42,0.12)] sm:w-auto sm:translate-y-0 sm:px-6"
+                onClick={() => scrollToSection("about")}
+                style={heroMobileAboutButtonStyle}
               >
-                {isRu ? "Заказать демо" : "Request demo"}
+                {heroCopy.aboutCta}
+              </button>
+              <button
+                type="button"
+                className="group inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-demo-offset-y)] items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-white! shadow-[0_22px_54px_rgba(47,99,255,0.28)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:shadow-[0_28px_62px_rgba(47,99,255,0.34)] sm:w-auto sm:translate-y-0 sm:gap-3 sm:pl-6 sm:pr-3"
+                onClick={() => setIsDemoModalOpen(true)}
+                style={heroMobileDemoButtonStyle}
+              >
+                <span className="sm:hidden">{isRu ? "Начать" : "Start"}</span>
+                <span className="hidden sm:inline">{heroCopy.demoCta}</span>
                 <svg
-                  className="ml-2 h-4 w-4 text-white!"
+                  className="h-4 w-4 text-white! transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1411,14 +2019,17 @@ const Landing = () => {
               </button>
             </div>
           </div>
-          <div className="flex flex-1 justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] lg:flex-[0.9] lg:translate-x-24 lg:justify-end">
-            <div className="relative isolate h-[360px] w-[360px] md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
-              <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.14)_0%,rgba(255,255,255,0)_68%)] blur-3xl" />
-              <div className="absolute inset-[11%] rounded-full bg-white/78 shadow-[0_36px_120px_rgba(148,163,184,0.18)]" />
-              <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.18)] ring-1 ring-white/90" />
+          <div
+            className="pointer-events-none absolute inset-x-0 top-[var(--hero-mobile-globe-top)] z-0 flex justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] sm:top-[13.5rem] lg:pointer-events-auto lg:relative lg:inset-auto lg:z-auto lg:w-full lg:flex-1 lg:translate-x-24 lg:justify-end"
+            style={heroMobileGlobeStyle}
+          >
+            <div className="relative isolate h-[min(82vw,332px)] w-[min(82vw,332px)] scale-[var(--hero-mobile-globe-scale)] transform-gpu opacity-80 sm:h-[420px] sm:w-[420px] sm:scale-100 sm:opacity-100 md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
+              <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(255,255,255,0)_68%)] blur-3xl" />
+              <div className="absolute inset-[11%] rounded-full bg-white/34 shadow-[0_36px_120px_rgba(148,163,184,0.08)]" />
+              <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.12)] ring-1 ring-white/60" />
               <div className="relative size-full" ref={globeContainerRef}>
                 <canvas
-                  className="relative z-10 h-full w-full opacity-0 transition-opacity duration-700 [contain:layout_paint_size]"
+                  className="relative z-10 h-full w-full opacity-100 transition-opacity duration-700 [contain:layout_paint_size]"
                   ref={canvasRef}
                   style={{ maxWidth: "100%", aspectRatio: "1" }}
                 />
@@ -1444,27 +2055,51 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 flex flex-col gap-12 overflow-hidden bg-primary py-16 sm:gap-16 md:gap-20 md:py-24 lg:gap-24"
+        className="scroll-mt-32 relative z-20 -mt-90 flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
         id="about"
       >
-        <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
-          <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-            <h2 className="mt-3 text-[clamp(1.75rem,4vw,3rem)] leading-[1.1] tracking-[-0.04em] font-medium uppercase text-white !font-sans">
-              <span className="whitespace-nowrap">
-                {isRu ? "Удобные " : "Operational "}
-                <span className="italic">
-                  {isRu ? "контроль и аналитика" : "control and analytics"}
-                </span>
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 md:px-16 lg:px-24">
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-left md:items-center md:text-center">
+            <h2
+              className={cx(
+                "mt-0 leading-[1.06] tracking-[-0.04em] font-semibold uppercase text-white !font-sans md:mt-3 md:text-[clamp(1.75rem,4vw,3rem)] md:leading-[1.1]",
+                isRu
+                  ? "text-[clamp(1.5rem,6.6vw,3rem)]"
+                  : "text-[clamp(1.5rem,6.6vw,3rem)]",
+              )}
+            >
+              <span className="block md:hidden">
+                {isRu ? (
+                  <>
+                    <span className="block">Удобные инструменты</span>
+                    <span className="mt-1 block">для операционной</span>
+                    <span className="mt-1 block">деятельности</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="block">Operational control</span>
+                    <span className="mt-1 block">and analytics</span>
+                    <span className="mt-1 block">for daily operations</span>
+                  </>
+                )}
               </span>
-              <br className="hidden md:block" />
-              <span className="whitespace-nowrap">
-                {isRu ? "для операционной деятельности" : "for daily operations"}
+              <span className="hidden md:block">
+                <span className="md:whitespace-nowrap">
+                  {isRu ? "Удобные " : "Operational "}
+                  <span>
+                    {isRu ? "контроль и аналитика" : "control and analytics"}
+                  </span>
+                </span>
+                <br className="hidden md:block" />
+                <span className="md:whitespace-nowrap">
+                  {isRu ? "для операционной деятельности" : "for daily operations"}
+                </span>
               </span>
             </h2>
           </div>
         </div>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-6 sm:gap-16 md:gap-20 md:px-16 lg:gap-24 lg:px-24">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-4 sm:gap-16 sm:px-6 md:gap-20 md:px-16 lg:gap-24 lg:px-24">
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
             style={firstFeatureRowShift}
@@ -1481,7 +2116,7 @@ const Landing = () => {
               </ul>
             </div>
 
-            <div className="relative w-full flex-1 lg:h-[32rem]">
+            <div className="relative hidden min-h-[18rem] w-full max-w-[30rem] flex-1 self-center md:block lg:max-w-none lg:h-[32rem]">
               <AlternateImageMockup className="lg:left-0">
                 <img
                   alt="Dashboard mockup showing application interface"
@@ -1496,6 +2131,7 @@ const Landing = () => {
               </AlternateImageMockup>
             </div>
           </div>
+          <Separator className="bg-white/18 md:hidden" />
 
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
@@ -1513,7 +2149,7 @@ const Landing = () => {
               </ul>
             </div>
 
-            <div className="relative w-full flex-1 lg:h-[32rem]">
+            <div className="relative hidden min-h-[18rem] w-full max-w-[30rem] flex-1 self-center md:block lg:max-w-none lg:h-[32rem]">
               <AlternateImageMockup className="lg:right-0">
                 <img
                   alt="Dashboard mockup showing application interface"
@@ -1528,6 +2164,7 @@ const Landing = () => {
               </AlternateImageMockup>
             </div>
           </div>
+          <Separator className="bg-white/18 md:hidden" />
 
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
@@ -1545,7 +2182,7 @@ const Landing = () => {
               </ul>
             </div>
 
-            <div className="relative w-full flex-1 lg:h-[32rem]">
+            <div className="relative hidden min-h-[18rem] w-full max-w-[30rem] flex-1 self-center md:block lg:max-w-none lg:h-[32rem]">
               <AlternateImageMockup className="lg:left-0">
                 <img
                   alt="Dashboard mockup showing application interface"
@@ -1564,7 +2201,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="mobile"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
@@ -1572,33 +2209,43 @@ const Landing = () => {
       >
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
           <div className="max-w-lg flex-1">
-            <h2 className="mb-6 text-[clamp(1.75rem,4vw,2.8rem)] leading-[1.1] tracking-[-0.05em] font-medium uppercase text-foreground !font-sans">
+            <h2 className="mb-6 text-[clamp(1.75rem,8vw,3rem)] leading-[1.06] tracking-[-0.04em] font-semibold uppercase text-foreground !font-sans">
               {locale === "ru" ? (
                 <>
-                  <span className="italic">Управляйте</span>
+                  <span>Управляйте</span>
                   <br />
-                  командой
+                  <span>командой</span>
                   <br />
-                  прямо с
-                  <br />
-                  <span className="italic">телефона</span>
+                  <span className="whitespace-nowrap">прямо с телефона</span>
                 </>
               ) : (
                 <>
-                  <span className="italic">Manage</span>
+                  <span>Manage</span>
                   <br />
-                  your team
+                  <span>your team</span>
                   <br />
-                  right from
+                  <span>right from</span>
                   <br />
-                  your <span className="italic">phone</span>
+                  <span>your phone</span>
                 </>
               )}
             </h2>
-            <p className="mb-8 text-lg leading-relaxed text-muted-foreground">
+            <p className="mb-8 max-w-[34ch] text-base leading-7 text-muted-foreground md:text-lg md:leading-relaxed">
               {locale === "ru"
-                ? "Сотрудники начинают и завершают смену одним касанием — с автоматическим распознаванием лица и проверкой геолокации. Никаких бумажных журналов."
-                : "Employees start and end their shifts with a single touch — with automatic facial recognition and geolocation checks. No paper logs."}
+                ? (
+                  <>
+                    Сотрудники начинают и завершают смену одним касанием — с автоматическим распознаванием лица и проверкой геолокации.
+                    <br />
+                    Никаких бумажных журналов.
+                  </>
+                )
+                : (
+                  <>
+                    Employees start and end their shifts with a single touch — with automatic facial recognition and geolocation checks.
+                    <br />
+                    No paper logs.
+                  </>
+                )}
             </p>
             <div className="space-y-4">
               {(locale === "ru"
@@ -1633,9 +2280,9 @@ const Landing = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-10 flex flex-wrap gap-3">
-              <AppStoreButton />
-              <GooglePlayButton />
+            <div className="mt-10 flex flex-nowrap justify-center gap-2 sm:justify-start sm:gap-3">
+              <AppStoreButton className="shrink-0" size="md" />
+              <GooglePlayButton className="shrink-0" size="md" />
             </div>
           </div>
 
@@ -1644,7 +2291,7 @@ const Landing = () => {
               {/* Padding bezel keeps inner aspect ratio; uniform border shrinks width more than height vs outer frame */}
               <div className="relative rounded-[3.4rem] bg-foreground/90 p-2.5 shadow-2xl shadow-primary/10">
                 <div className="absolute top-0 left-1/2 z-20 h-[30px] w-[136px] -translate-x-1/2 rounded-b-[1.35rem] bg-foreground/90" />
-                <div className="relative aspect-[9/19.5] w-[288px] overflow-hidden rounded-[2.9rem] bg-background md:w-[332px] lg:w-[372px]">
+                <div className="relative aspect-[9/19.5] w-[min(78vw,288px)] overflow-hidden rounded-[2.9rem] bg-background sm:w-[288px] md:w-[332px] lg:w-[372px]">
                   <img
                     alt={locale === "ru" ? "Скриншот приложения" : "App screenshot"}
                     className="h-full w-full object-cover object-top"
@@ -1658,13 +2305,13 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="questions"
         style={{ background: "#2f63ff" }}
       >
         <div className="mx-auto max-w-3xl">
           <div className="mb-16 text-center">
-            <p className="mb-4 text-sm font-medium tracking-wide text-white/72">
+            <p className="mb-4 text-sm font-medium tracking-[0.18em] text-white/72 uppercase">
               FAQ
             </p>
             <h2 className="text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
@@ -1714,7 +2361,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-6 py-20 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="pricing"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
@@ -1722,33 +2369,31 @@ const Landing = () => {
       >
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto mb-16 max-w-2xl text-center">
-            <p className="mb-4 text-sm font-medium tracking-wide text-primary">
+            <p className="mb-4 text-sm font-medium tracking-[0.18em] text-primary uppercase">
               {isRu ? "Тарифы" : "Pricing"}
             </p>
             <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-foreground md:text-4xl">
               {isRu ? "Простые и прозрачные цены" : "Simple and transparent pricing"}
             </h2>
-            <p className="text-lg leading-relaxed text-muted-foreground">
+            <p className="mx-auto max-w-[32ch] text-base leading-7 text-muted-foreground md:text-lg md:leading-relaxed">
               {isRu
                 ? "Начните бесплатно, масштабируйте по мере роста команды"
                 : "Start free and scale as your team grows"}
             </p>
+            <p className="mt-5 text-[0.7rem] font-medium tracking-[0.18em] text-muted-foreground uppercase md:hidden">
+              {isRu ? "Смахните, чтобы сравнить все тарифы" : "Swipe to compare all plans"}
+            </p>
           </div>
 
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6 md:mx-auto md:grid md:max-w-5xl md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 md:pb-0">
             {pricingPlans.map((plan) => (
               <div
-                className={`relative flex flex-col rounded-2xl border p-8 transition-all duration-300 ${plan.highlighted
-                  ? "scale-[1.03] border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
+                className={`relative flex h-[35rem] w-[84%] min-w-[84%] max-w-[22rem] shrink-0 snap-center flex-col rounded-2xl border p-6 transition-all duration-300 sm:w-[22rem] sm:min-w-[22rem] sm:max-w-[22rem] sm:p-8 md:h-[35rem] md:w-auto md:min-w-0 md:max-w-none ${plan.highlighted
+                  ? "border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
                   : "border-border/60 bg-background hover:border-primary/20 hover:shadow-lg"
                   }`}
                 key={plan.name}
               >
-                {plan.highlighted && (
-                  <span className="absolute top-[-0.75rem] left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
-                    {isRu ? "Популярный" : "Most popular"}
-                  </span>
-                )}
                 <h3 className="mb-2 text-lg font-semibold">{plan.name}</h3>
                 <p
                   className={`mb-6 text-sm ${plan.highlighted ? "text-primary-foreground/70" : "text-muted-foreground"}`}
@@ -1805,7 +2450,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="px-6 py-20 md:px-16 md:py-28 lg:px-24"
+        className="px-4 py-20 sm:px-6 md:px-16 md:py-28 lg:px-24"
         style={{
           background: "#2f63ff",
         }}
@@ -1814,7 +2459,7 @@ const Landing = () => {
           <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
             {isRu ? "Готовы начать?" : "Ready to get started?"}
           </h2>
-          <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-white/78">
+          <p className="mx-auto mb-10 max-w-[34ch] text-base leading-7 text-white/78 md:max-w-xl md:text-lg md:leading-relaxed">
             {isRu
               ? "Присоединяйтесь к 500+ компаниям, которые уже автоматизировали управление персоналом с HiTeam"
               : "Join 500+ companies that already run workforce management with HiTeam"}
@@ -1839,14 +2484,14 @@ const Landing = () => {
       </section>
 
       <footer
-        className="border-t border-border/40 px-6 py-12 md:px-16 lg:px-24"
+        className="border-t border-border/40 px-4 py-12 sm:px-6 md:px-16 lg:px-24"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
       >
         <div className="mx-auto max-w-7xl">
-          <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-4">
-            <div className="col-span-2 md:col-span-1">
+          <div className="mb-12 grid grid-cols-1 gap-8 md:grid-cols-3">
+            <div>
               <div className="mb-4 flex items-center">
                 <BrandWordmark className="text-[1.95rem] text-foreground" />
               </div>
@@ -1856,23 +2501,39 @@ const Landing = () => {
                   : "A modern platform for workforce management and attendance control"}
               </p>
             </div>
-            {footerColumns.map((col) => (
-              <div key={col.title}>
+            {footerPanels.map((panel) => (
+              <div key={panel.title}>
                 <h4 className="mb-4 text-sm font-semibold text-foreground">
-                  {col.title}
+                  {panel.title}
                 </h4>
-                <ul className="space-y-2.5">
-                  {col.links.map((link) => (
-                    <li key={link}>
+                <div className="space-y-3">
+                  {panel.items.map((item) =>
+                    item.href ? (
                       <a
-                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                        href="#"
+                        className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                        href={item.href}
+                        key={item.label}
                       >
-                        {link}
+                        {item.label}
                       </a>
-                    </li>
-                  ))}
-                </ul>
+                    ) : (
+                      <p
+                        className={cx(
+                          "text-sm leading-relaxed text-muted-foreground",
+                          item.className,
+                        )}
+                        key={item.label}
+                      >
+                        {item.label}
+                      </p>
+                    ),
+                  )}
+                  {panel.note ? (
+                    <p className="pt-2 text-sm leading-relaxed text-muted-foreground">
+                      {panel.note}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -1990,7 +2651,7 @@ const Landing = () => {
             </DialogTitle>
             <DialogDescription className="text-base text-center">
               {isRu
-                ? "Оставьте контакты, и мы покажем, как HiTeam будет работать именно у вас"
+                ? "Оставьте контакты, и мы расскажем, как HiTeam будет работать именно у вас"
                 : "Leave your contacts and we will get back to you shortly"}
             </DialogDescription>
           </DialogHeader>
@@ -2037,13 +2698,59 @@ const Landing = () => {
               >
                 {isRu ? (
                   <>
-                    Я даю согласие на обработку персональных данных и подтверждаю, что ознакомлен с{" "}
-                    <a href="#" className="underline hover:text-primary">Политикой конфиденциальности</a>.
+                    Я даю согласие на{" "}
+                    <button
+                      type="button"
+                      className={LEGAL_LINK_CLASS_NAME}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setActiveLegalDoc("consent");
+                      }}
+                    >
+                      обработку персональных данных
+                    </button>{" "}
+                    и подтверждаю, что ознакомлен с{" "}
+                    <button
+                      type="button"
+                      className={LEGAL_LINK_CLASS_NAME}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setActiveLegalDoc("privacy");
+                      }}
+                    >
+                      Политикой конфиденциальности
+                    </button>
+                    .
                   </>
                 ) : (
                   <>
-                    I consent to the processing of personal data and confirm that I have read the{" "}
-                    <a href="#" className="underline hover:text-primary">Privacy Policy</a>.
+                    I consent to the{" "}
+                    <button
+                      type="button"
+                      className={LEGAL_LINK_CLASS_NAME}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setActiveLegalDoc("consent");
+                      }}
+                    >
+                      processing of personal data
+                    </button>{" "}
+                    and confirm that I have read the{" "}
+                    <button
+                      type="button"
+                      className={LEGAL_LINK_CLASS_NAME}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setActiveLegalDoc("privacy");
+                      }}
+                    >
+                      Privacy Policy
+                    </button>
+                    .
                   </>
                 )}
               </label>
@@ -2056,6 +2763,63 @@ const Landing = () => {
           >
             {isRu ? "Получить демо" : "Request demo"}
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={activeLegalDoc !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveLegalDoc(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-[640px]">
+          {activeLegalCopy ? (
+            <>
+              <DialogHeader className="pr-10">
+                <DialogTitle>{activeLegalCopy.title}</DialogTitle>
+                <DialogDescription>{activeLegalCopy.intro}</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 overflow-y-auto pr-2 text-sm leading-6 text-muted-foreground">
+                {activeLegalCopy.sections.map((section) => (
+                  <section key={section.heading} className="space-y-3">
+                    <h3 className="text-base font-semibold text-foreground">
+                      {section.heading}
+                    </h3>
+                    {section.paragraphs?.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                    {section.bullets ? (
+                      <ul className="space-y-2 pl-5">
+                        {section.bullets.map((bullet) => (
+                          <li key={bullet} className="list-disc">
+                            {bullet}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </section>
+                ))}
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {activeLegalCopy.note}
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setActiveLegalDoc(null)}
+                  >
+                    {activeLegalCopy.closeLabel}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

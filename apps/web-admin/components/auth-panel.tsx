@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowRight, Building2, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +38,8 @@ import {
 } from '@/lib/auth';
 import { BrandWordmark } from './brand-wordmark';
 import { SessionLoader } from './session-loader';
+
+gsap.registerPlugin(useGSAP);
 
 type SupportedLang = 'en' | 'ru' | 'ar';
 type AuthTab = 'signin' | 'company-code';
@@ -239,7 +243,11 @@ export function AuthPanel() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
+  const authMotionScopeRef = useRef<HTMLDivElement | null>(null);
+  const switcherTrackRef = useRef<HTMLDivElement | null>(null);
+  const switcherIndicatorRef = useRef<HTMLDivElement | null>(null);
   const t = texts[lang];
+  const hasCompanyLookupResult = Boolean(companyLookupResult);
   const sharedPrimaryActionReserve =
     AUTH_PRIMARY_ACTION_HEIGHT + AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM + AUTH_FIELDS_TO_ACTION_GAP;
   const sharedPrimaryActionLabel =
@@ -254,6 +262,59 @@ export function AuthPanel() {
           : t.companyCodeAction;
   const sharedPrimaryActionDisabled =
     tab === 'signin' ? loginLoading : companyLookupResult ? false : companyLookupLoading;
+
+  useGSAP(
+    () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return;
+      }
+
+      if (switcherTrackRef.current && switcherIndicatorRef.current) {
+        const offset = tab === 'signin' ? 0 : switcherTrackRef.current.clientWidth / 2 - 4;
+        gsap.to(switcherIndicatorRef.current, {
+          x: offset,
+          duration: 0.42,
+          ease: 'power3.out',
+        });
+      }
+
+      const timeline = gsap.timeline({
+        defaults: {
+          ease: 'power3.out',
+        },
+      });
+
+      timeline
+        .fromTo(
+          '.auth-tab-panel',
+          { autoAlpha: 0, y: 18, filter: 'blur(10px)' },
+          { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.52 },
+        )
+        .fromTo(
+          '.auth-panel-heading',
+          { autoAlpha: 0, y: 10 },
+          { autoAlpha: 1, y: 0, duration: 0.4 },
+          0.06,
+        )
+        .fromTo(
+          '.auth-panel-field',
+          { autoAlpha: 0, y: 12 },
+          { autoAlpha: 1, y: 0, duration: 0.38, stagger: 0.06 },
+          0.12,
+        )
+        .fromTo(
+          '.auth-shared-action-button',
+          { autoAlpha: 0, y: 10, scale: 0.985 },
+          { autoAlpha: 1, y: 0, scale: 1, duration: 0.4 },
+          0.18,
+        );
+    },
+    {
+      scope: authMotionScopeRef,
+      dependencies: [tab, hasCompanyLookupResult],
+      revertOnUpdate: true,
+    },
+  );
 
   useEffect(() => {
     const saved = window.localStorage.getItem('smart-admin-locale');
@@ -428,7 +489,7 @@ export function AuthPanel() {
       <div className="overflow-hidden rounded-[34px] border border-white/60 bg-white/80 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl">
         <div className="grid min-h-[640px] lg:grid-cols-[minmax(0,470px)_minmax(0,1fr)]">
           <div className="flex items-center justify-center bg-white/92 px-6 py-8 md:px-10 lg:px-12">
-            <div className="flex w-full max-w-sm flex-col">
+            <div className="flex w-full max-w-sm flex-col" ref={authMotionScopeRef}>
               <div
                 className="flex-shrink-0"
                 style={{ transform: `translateY(${AUTH_HEADER_GROUP_OFFSET_Y}px)` }}
@@ -441,15 +502,20 @@ export function AuthPanel() {
                 </div>
 
                 <div
-                  className="rounded-[20px] bg-[#edf3ff] p-1"
+                  className="relative rounded-[20px] bg-[#edf3ff] p-1"
+                  ref={switcherTrackRef}
                   style={{ transform: `translateY(${AUTH_SWITCHER_OFFSET_Y}px)` }}
                 >
-                  <div className="grid grid-cols-2 gap-1">
+                  <div
+                    className="pointer-events-none absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-[16px] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.08)]"
+                    ref={switcherIndicatorRef}
+                  />
+                  <div className="relative z-10 grid grid-cols-2 gap-1">
                     <button
                       className={cn(
                         'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
                         tab === 'signin'
-                          ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.08)]'
+                          ? 'text-foreground'
                           : 'bg-transparent text-[#7a88a6] hover:text-foreground',
                       )}
                       onClick={() => handleTabChange('signin')}
@@ -461,7 +527,7 @@ export function AuthPanel() {
                       className={cn(
                         'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
                         tab === 'company-code'
-                          ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.08)]'
+                          ? 'text-foreground'
                           : 'bg-transparent text-[#7a88a6] hover:text-foreground',
                       )}
                       onClick={() => handleTabChange('company-code')}
@@ -478,9 +544,9 @@ export function AuthPanel() {
                 style={{ marginTop: AUTH_CONTENT_TOP_GAP, minHeight: AUTH_CONTENT_MIN_HEIGHT }}
               >
                 {tab === 'signin' ? (
-                  <div className="flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
+                  <div className="auth-tab-panel flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
                     <div
-                      className="flex-shrink-0 text-center"
+                      className="auth-panel-heading flex-shrink-0 text-center"
                       style={{
                         height: AUTH_TITLE_BLOCK_MIN_HEIGHT,
                         paddingTop: AUTH_TITLE_BLOCK_OFFSET_Y,
@@ -499,7 +565,7 @@ export function AuthPanel() {
                         }}
                       >
                         {companyLookupResult ? (
-                          <div className="rounded-[22px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3">
+                          <div className="auth-panel-field rounded-[22px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
                               {t.selectedWorkspace}
                             </p>
@@ -510,12 +576,12 @@ export function AuthPanel() {
                         ) : null}
 
                         {loginError ? (
-                          <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                          <div className="auth-panel-field rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                             {loginError}
                           </div>
                         ) : null}
 
-                        <div>
+                        <div className="auth-panel-field">
                           <Input
                             aria-label={t.emailOrPhone}
                             autoComplete="username"
@@ -528,7 +594,7 @@ export function AuthPanel() {
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="auth-panel-field space-y-2">
                           <div className="relative">
                             <Input
                               aria-label={t.password}
@@ -571,7 +637,7 @@ export function AuthPanel() {
                     </form>
 
                     {isDemoModeAvailable() ? (
-                      <div className="mt-4 space-y-3 rounded-[24px] border border-[#d8e5ff] bg-[#f7faff] p-4">
+                      <div className="auth-panel-field mt-4 space-y-3 rounded-[24px] border border-[#d8e5ff] bg-[#f7faff] p-4">
                         <div className="space-y-1">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
                             {t.demoTitle}
@@ -592,9 +658,9 @@ export function AuthPanel() {
                     ) : null}
                   </div>
                 ) : (
-                  <div className="flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
+                  <div className="auth-tab-panel flex min-h-full flex-col" style={{ paddingBottom: sharedPrimaryActionReserve }}>
                     <div
-                      className="flex-shrink-0 text-center"
+                      className="auth-panel-heading flex-shrink-0 text-center"
                       style={{
                         height: AUTH_TITLE_BLOCK_MIN_HEIGHT,
                         paddingTop: AUTH_TITLE_BLOCK_OFFSET_Y,
@@ -606,7 +672,7 @@ export function AuthPanel() {
                     </div>
 
                     {companyLookupResult ? (
-                      <div className="rounded-[28px] border border-[#d8e5ff] bg-[#f7faff] p-5">
+                      <div className="auth-panel-field rounded-[28px] border border-[#d8e5ff] bg-[#f7faff] p-5">
                         <div className="flex items-start gap-4">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-white text-[#4f6df5] shadow-[0_12px_24px_rgba(79,109,245,0.12)]">
                             <Building2 className="h-5 w-5" />
@@ -655,12 +721,12 @@ export function AuthPanel() {
                           }}
                         >
                           {companyLookupError ? (
-                            <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            <div className="auth-panel-field rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                               {companyLookupError}
                             </div>
                           ) : null}
 
-                          <div>
+                          <div className="auth-panel-field">
                             <Input
                               aria-label={t.companyCodeLabel}
                               autoCapitalize="characters"
@@ -689,7 +755,7 @@ export function AuthPanel() {
                 >
                   {tab === 'company-code' && companyLookupResult ? (
                     <Button
-                      className="w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                      className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       onClick={openCompanyJoinFlow}
                       style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}
                       type="button"
@@ -699,7 +765,7 @@ export function AuthPanel() {
                     </Button>
                   ) : (
                     <Button
-                      className="w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+                      className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       disabled={sharedPrimaryActionDisabled}
                       form={tab === 'signin' ? AUTH_SIGNIN_FORM_ID : AUTH_COMPANY_CODE_FORM_ID}
                       style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}

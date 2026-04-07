@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import localFont from 'next/font/local';
-import { Montserrat } from 'next/font/google';
+import { Montserrat, Onest } from 'next/font/google';
 import '@aws-amplify/ui-react-liveness/styles.css';
 import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
@@ -32,6 +32,12 @@ const montserrat = Montserrat({
   variable: '--font-landing',
 });
 
+const onest = Onest({
+  subsets: ['latin', 'cyrillic'],
+  variable: '--font-hero-display',
+  weight: ['500', '600', '700', '800', '900'],
+});
+
 export const metadata: Metadata = {
   title: 'Smart',
   description: 'Operational control center for attendance, scheduling, and workforce workflows.',
@@ -51,7 +57,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="en"
-      className={cn(teodor.variable, montserrat.variable, petersburgHero.variable)}
+      className={cn(
+        teodor.variable,
+        montserrat.variable,
+        onest.variable,
+        petersburgHero.variable,
+      )}
     >
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />

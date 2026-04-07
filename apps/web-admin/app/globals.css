@@ -8,6 +8,7 @@
   --font-sf-base: "Inter", "Segoe UI", "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   --font-sf-stack: var(--font-sf-base);
   --font-brand-stack: var(--font-brand), var(--font-sf-base);
+  --font-hero-display: var(--font-landing);
   --font-heading: var(--font-sf-stack);
   --font-body: var(--font-sf-stack);
   --font-display: var(--font-sf-stack);
@@ -73,6 +74,22 @@
   font-family: var(--font-petersburg-hero), var(--font-landing), var(--font-sf-base) !important;
 }
 
+.landing-shell .landing-hero-script {
+  font-family: var(--font-petersburg-hero), var(--font-landing), var(--font-sf-base) !important;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  display: inline-block;
+  transform: translateY(0.03em) scaleX(0.96);
+  transform-origin: left center;
+}
+
+.landing-shell .landing-hero-title,
+.landing-shell .landing-hero-title span {
+  font-family: var(--font-hero-display), var(--font-landing), var(--font-sf-base) !important;
+}
+
 @theme inline {
   --font-heading: var(--font-sf-stack);
   --font-body: var(--font-sf-stack);
@@ -122,7 +139,34 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-}
+  --animate-aurora: aurora 8s ease-in-out infinite alternate;
+  @keyframes aurora {
+  0% {
+    background-position: 0% 50%;
+    }
+  25% {
+    background-position: 50% 100%;
+    }
+  50% {
+    background-position: 100% 50%;
+    }
+  75% {
+    background-position: 50% 0%;
+    }
+  100% {
+    background-position: 0% 50%;
+    }
+  }
+  --animate-line-shadow: line-shadow 15s linear infinite
+;
+  @keyframes line-shadow {
+  0% {
+    background-position: 0 0;
+    }
+  100% {
+    background-position: 100% -100%;
+    }
+  }}
 
 :root {
   --background-strong: #efe9df;
