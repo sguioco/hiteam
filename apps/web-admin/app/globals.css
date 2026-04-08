@@ -2180,6 +2180,16 @@ textarea {
   font-size: 0.98rem;
 }
 
+@media (min-width: 1024px) {
+  .organization-studio-page {
+    min-height: 100dvh;
+  }
+
+  .organization-studio {
+    min-height: calc(100dvh - 4.5rem);
+  }
+}
+
 .org-setup-head,
 .org-setup-brand {
   display: flex;
