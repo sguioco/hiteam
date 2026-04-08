@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -88,8 +88,9 @@ const AUTH_KEYBOARD_TIMING = {
   duration: 180,
   easing: Easing.out(Easing.quad),
 } as const;
+const AUTH_TRANSITION_BLOCK_MS = 220;
 
-function AuthHeroVideoOverlay({ onReady }: { onReady: () => void }) {
+const AuthHeroVideoOverlay = memo(function AuthHeroVideoOverlay({ onReady }: { onReady: () => void }) {
   const player = useVideoPlayer(require('../../timelapse-mobile.mp4'), (nextPlayer) => {
     nextPlayer.loop = true;
     nextPlayer.muted = true;
@@ -115,6 +116,7 @@ function AuthHeroVideoOverlay({ onReady }: { onReady: () => void }) {
 
   return (
     <VideoView
+      allowsVideoFrameAnalysis={false}
       contentFit="cover"
       nativeControls={false}
       onFirstFrameRender={() => {
@@ -122,10 +124,11 @@ function AuthHeroVideoOverlay({ onReady }: { onReady: () => void }) {
         player.play();
       }}
       player={player}
+      surfaceType={Platform.OS === 'android' ? 'textureView' : undefined}
       style={StyleSheet.absoluteFillObject}
     />
   );
-}
+});
 
 const AuthScreen = () => {
   const router = useRouter();
@@ -147,6 +150,7 @@ const AuthScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [interactionBlocked, setInteractionBlocked] = useState(false);
+  const heroVideoReadyRef = useRef(false);
   const joinProfileFirstNameInputRef = useRef<TextInput | null>(null);
   const joinProfileLastNameInputRef = useRef<TextInput | null>(null);
   const joinProfileEmailInputRef = useRef<TextInput | null>(null);
@@ -156,7 +160,7 @@ const AuthScreen = () => {
   const keyboardProgress = useSharedValue(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const shouldUseHeroVideo = Platform.OS !== 'web';
-  const shouldRenderHeroVideo = shouldUseHeroVideo;
+  const shouldRenderHeroVideo = shouldUseHeroVideo && !interactionBlocked && !keyboardVisible && mode !== 'joinProfile';
 
   const collapsedHeroHeight = Math.min(Math.max(screenHeight * 0.46, 400), 550);
   const compactJoinHeroHeight = Math.min(Math.max(screenHeight * 0.42, 360), 430);
@@ -265,10 +269,19 @@ const AuthScreen = () => {
 
     const timer = setTimeout(() => {
       setInteractionBlocked(false);
-    }, 220);
+    }, AUTH_TRANSITION_BLOCK_MS);
 
     return () => clearTimeout(timer);
   }, [interactionBlocked]);
+
+  useEffect(() => {
+    if (shouldRenderHeroVideo) {
+      return;
+    }
+
+    heroVideoReadyRef.current = false;
+    setVideoReady(false);
+  }, [shouldRenderHeroVideo]);
 
   useEffect(() => {
     if (mode !== 'joinProfile' || joinProfileSubmitted) {
@@ -414,12 +427,15 @@ const AuthScreen = () => {
       setInteractionBlocked(true);
     }
 
-    if (nextMode !== 'joinProfile') {
-      setJoinCompany(null);
-      setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
-      setJoinProfileSubmitted(false);
-    }
-    setMode(nextMode);
+    startTransition(() => {
+      if (nextMode !== 'joinProfile') {
+        setJoinCompany(null);
+        setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
+        setJoinProfileSubmitted(false);
+      }
+
+      setMode(nextMode);
+    });
   }
 
   function focusJoinProfileInput(input: TextInput | null) {
@@ -472,22 +488,28 @@ const AuthScreen = () => {
     setMessage(null);
 
     if (mode === 'joinProfile') {
-      setMode('join');
       setSubmitting(false);
+      setInteractionBlocked(true);
+      startTransition(() => {
+        setMode('join');
+      });
       return;
     }
 
     setInteractionBlocked(true);
-    setMode('landing');
-    setInviteCode('');
-    setIdentifier('');
-    setPassword('');
-    setJoinCompany(null);
-    setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
-    setJoinProfileSubmitted(false);
     setSubmitting(false);
     setKeyboardVisible(false);
     keyboardProgress.value = withTiming(0, AUTH_KEYBOARD_TIMING);
+
+    startTransition(() => {
+      setMode('landing');
+      setInviteCode('');
+      setIdentifier('');
+      setPassword('');
+      setJoinCompany(null);
+      setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
+      setJoinProfileSubmitted(false);
+    });
   }
 
   async function handleJoinTeam() {
@@ -505,9 +527,12 @@ const AuthScreen = () => {
     try {
       const payload = await lookupCompanyByCode(trimmedInviteCode);
       hapticSuccess();
-      setJoinCompany(payload);
-      setJoinProfileSubmitted(false);
-      setMode('joinProfile');
+      setInteractionBlocked(true);
+      startTransition(() => {
+        setJoinCompany(payload);
+        setJoinProfileSubmitted(false);
+        setMode('joinProfile');
+      });
     } catch (error) {
       hapticError();
       setMessage(error instanceof Error ? error.message : t('invite.verificationFailed'));
@@ -645,15 +670,27 @@ const AuthScreen = () => {
   }
 
   function finishJoinProfileFlow() {
-    setJoinProfileSubmitted(false);
-    setJoinCompany(null);
-    setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
-    setJoinProfileCountryCode('+7');
-    setJoinProfileCountryPickerVisible(false);
-    setJoinProfileDatePickerVisible(false);
-    setInviteCode('');
     setMessage(null);
-    setMode('landing');
+    setInteractionBlocked(true);
+    startTransition(() => {
+      setJoinProfileSubmitted(false);
+      setJoinCompany(null);
+      setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
+      setJoinProfileCountryCode('+7');
+      setJoinProfileCountryPickerVisible(false);
+      setJoinProfileDatePickerVisible(false);
+      setInviteCode('');
+      setMode('landing');
+    });
+  }
+
+  function handleHeroVideoReady() {
+    if (heroVideoReadyRef.current) {
+      return;
+    }
+
+    heroVideoReadyRef.current = true;
+    setVideoReady(true);
   }
 
   const passwordToggleLabel = passwordVisible
@@ -861,7 +898,7 @@ const AuthScreen = () => {
                       opacity: videoReady ? 1 : 0,
                     }}
                   >
-                    <AuthHeroVideoOverlay onReady={() => setVideoReady(true)} />
+                    <AuthHeroVideoOverlay onReady={handleHeroVideoReady} />
                   </View>
                 ) : null}
                 <LinearGradient

@@ -1,0 +1,13 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Query {
+  systemInfo: SystemInfo!
+}
+
+type SystemInfo {
+  environment: String!
+  service: String!
+  version: String!
+}
