@@ -27,9 +27,10 @@ import {
   markMyAnnouncementRead,
   updateManagerAnnouncement,
 } from '../../lib/api';
-import { useI18n } from '../../lib/i18n';
+import { getDateLocale, type AppLanguage, useI18n } from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { useLiveTextMap } from '../../lib/use-live-text-map';
 import { warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -40,31 +41,34 @@ type NewsScreenProps = {
 
 const NEWS_SCREEN_CACHE_TTL_MS = 60_000;
 
-function formatDate(value: string, language: 'ru' | 'en') {
+function formatDate(value: string, language: AppLanguage) {
   const parsed = new Date(value);
 
   if (Number.isNaN(parsed.getTime())) {
     return '';
   }
 
+  const locale = getDateLocale(language);
   const diffMs = Date.now() - parsed.getTime();
   const minuteMs = 60_000;
   const hourMs = 60 * minuteMs;
   const dayMs = 24 * hourMs;
 
   if (diffMs < dayMs) {
+    const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+
     if (diffMs < hourMs) {
       const minutes = Math.max(1, Math.floor(diffMs / minuteMs));
-      return language === 'ru' ? `${minutes} МИН назад` : `${minutes} MIN ago`;
+      return formatter.format(-minutes, 'minute');
     }
 
     const hours = Math.max(1, Math.floor(diffMs / hourMs));
-    return language === 'ru' ? `${hours} Ч назад` : `${hours} H ago`;
+    return formatter.format(-hours, 'hour');
   }
 
   const includeYear = parsed.getFullYear() !== new Date().getFullYear();
 
-  return parsed.toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US', {
+  return parsed.toLocaleString(locale, {
     day: 'numeric',
     month: 'long',
     hour: '2-digit',
@@ -75,14 +79,12 @@ function formatDate(value: string, language: 'ru' | 'en') {
 
 function formatMetaLine(
   item: AnnouncementItem,
-  language: 'ru' | 'en',
+  language: AppLanguage,
 ) {
   const authorName = `${item.authorEmployee.firstName} ${item.authorEmployee.lastName}`;
   const relativeOrDate = formatDate(item.createdAt, language);
 
-  return language === 'ru'
-    ? `${relativeOrDate} • ${authorName}`
-    : `${relativeOrDate} by ${authorName}`;
+  return `${relativeOrDate} • ${authorName}`;
 }
 
 function UnreadPulseIndicator() {
@@ -139,35 +141,50 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const [editingTitle, setEditingTitle] = useState('');
   const [editingBody, setEditingBody] = useState('');
   const [editingPinned, setEditingPinned] = useState(false);
+  const announcementTextMap = useLiveTextMap(
+    useMemo(
+      () => items.flatMap((item) => [item.title, item.body]).filter(Boolean),
+      [items],
+    ),
+    language,
+  );
 
   const copy = useMemo(
     () => ({
-      title: language === 'ru' ? 'Новости' : 'News',
-      create: language === 'ru' ? 'Создать' : 'Create',
-      empty: language === 'ru' ? 'Пока новостей нет.' : 'No news yet.',
-      loading: language === 'ru' ? 'Загружаем новости...' : 'Loading news...',
+      title: t('announcements.title'),
+      create: t('announcements.create'),
+      empty: t('announcements.empty'),
+      loading: t('common.loading'),
       countLabel: (count: number) =>
-        language === 'ru' ? `${count} новостей` : `${count} news`,
-      hide: language === 'ru' ? 'Скрыть' : 'Hide',
-      open: language === 'ru' ? 'Открыть' : 'Open',
-      pin: language === 'ru' ? 'Pin' : 'Pin',
-      unpin: language === 'ru' ? 'Unpin' : 'Unpin',
-      edit: language === 'ru' ? 'Edit' : 'Edit',
-      remove: language === 'ru' ? 'Delete' : 'Delete',
-      editTitle: language === 'ru' ? 'Изменить новость' : 'Edit news',
-      save: language === 'ru' ? 'Сохранить' : 'Save',
-      cancel: language === 'ru' ? 'Отмена' : 'Cancel',
-      deleteConfirmTitle: language === 'ru' ? 'Удалить новость?' : 'Delete news?',
-      deleteConfirmBody: language === 'ru'
-        ? 'Вы точно хотите удалить эту новость?'
-        : 'Are you sure you want to delete this news item?',
-      saveError: language === 'ru' ? 'Не удалось сохранить новость.' : 'Unable to save the news item.',
-      deleteError: language === 'ru' ? 'Не удалось удалить новость.' : 'Unable to delete the news item.',
-      titleRequired: language === 'ru' ? 'Введите заголовок новости.' : 'Enter a news title.',
-      bodyRequired: language === 'ru' ? 'Введите текст новости.' : 'Enter the news text.',
+        t('announcements.countLabel', { count }),
+      hide: t('announcements.hide'),
+      open: t('common.open'),
+      pin: t('announcements.pin'),
+      unpin: t('announcements.unpin'),
+      edit: t('announcements.edit'),
+      remove: t('common.remove'),
+      editTitle: t('announcements.editTitle'),
+      save: t('announcements.save'),
+      cancel: t('common.cancel'),
+      deleteConfirmTitle: t('announcements.deleteConfirmTitle'),
+      deleteConfirmBody: t('announcements.deleteConfirmBody'),
+      saveError: t('announcements.saveError'),
+      deleteError: t('announcements.deleteError'),
+      titleRequired: t('announcements.titleRequired'),
+      bodyRequired: t('announcements.bodyRequired'),
+      editorTitlePlaceholder: t('announcements.editorTitlePlaceholder'),
+      editorBodyPlaceholder: t('announcements.editorBodyPlaceholder'),
     }),
-    [language],
+    [t],
   );
+
+  function translateAnnouncementText(text: string) {
+    if (!text) {
+      return text;
+    }
+
+    return announcementTextMap[text.trim()] ?? text;
+  }
 
   const orderedItems = useMemo(() => {
     return [...items].sort((left, right) => {
@@ -325,12 +342,12 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     }
 
     if (!editingTitle.trim()) {
-      Alert.alert('Error', copy.titleRequired);
+      Alert.alert(t('common.error'), copy.titleRequired);
       return;
     }
 
     if (!editingBody.trim()) {
-      Alert.alert('Error', copy.bodyRequired);
+      Alert.alert(t('common.error'), copy.bodyRequired);
       return;
     }
 
@@ -461,7 +478,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
                         <View className="flex-row items-start justify-between gap-3">
                           <Text className={`flex-1 text-[20px] font-extrabold ${isReadMuted ? 'text-[#6c7b91]' : 'text-foreground'}`}>
-                            {item.title}
+                            {translateAnnouncementText(item.title)}
                           </Text>
                           <View className="items-center gap-1">
                             {!isManager && !item.isRead ? <UnreadPulseIndicator /> : <View className="h-2.5 w-2.5" />}
@@ -492,7 +509,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                               ) : null}
 
                               <Text className={`text-[15px] leading-7 ${isReadMuted ? 'text-[#607086]' : 'text-foreground'}`}>
-                                {item.body}
+                                {translateAnnouncementText(item.body)}
                               </Text>
 
                               {isManager ? (
@@ -583,7 +600,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
             <TextInput
               className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
               onChangeText={setEditingTitle}
-              placeholder={copy.title}
+              placeholder={copy.editorTitlePlaceholder}
               style={{ paddingHorizontal: 18, paddingVertical: 16 }}
               value={editingTitle}
             />
@@ -593,7 +610,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
               multiline
               numberOfLines={8}
               onChangeText={setEditingBody}
-              placeholder={copy.open}
+              placeholder={copy.editorBodyPlaceholder}
               textAlignVertical="top"
               value={editingBody}
             />
@@ -663,7 +680,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           <TextInput
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             onChangeText={setEditingTitle}
-            placeholder={copy.title}
+            placeholder={copy.editorTitlePlaceholder}
             style={{ paddingHorizontal: 18, paddingVertical: 16 }}
             value={editingTitle}
           />
@@ -673,7 +690,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
             multiline
             numberOfLines={8}
             onChangeText={setEditingBody}
-            placeholder={copy.open}
+            placeholder={copy.editorBodyPlaceholder}
             textAlignVertical="top"
             value={editingBody}
           />

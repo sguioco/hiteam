@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  Camera,
   Calendar,
   CalendarDays,
   ChevronDown,
@@ -14,7 +15,12 @@ import {
   Plus,
   Users,
 } from "lucide-react";
-import { ApprovalInboxItem, CollaborationTaskBoardResponse, TaskItem } from "@smart/types";
+import {
+  ApprovalInboxItem,
+  AttendanceHistoryResponse,
+  CollaborationTaskBoardResponse,
+  TaskItem,
+} from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,6 +116,8 @@ type ShiftRecord = {
   };
 };
 
+type AttendanceHistoryRow = AttendanceHistoryResponse["rows"][number];
+
 export type ScheduleInitialData = {
   departments: Option[];
   employees: EmployeeApiRecord[];
@@ -132,9 +140,13 @@ type EnrichedShift = {
   employeeNumber: string;
   avatarSrc: string;
   shiftDate: Date;
+  startsAtDate: Date;
+  endsAtDate: Date;
   startsAt: string;
   endsAt: string;
   templateName: string;
+  templateStartsAtLocal: string;
+  templateEndsAtLocal: string;
   locationId: string;
   locationName: string;
   departmentId: string | null;
@@ -155,6 +167,7 @@ type ChangeLogEntry = {
 
 type CalendarTaskEvent = {
   assigneeName: string;
+  completedAt: string | null;
   date: Date;
   description: string;
   employeeId: string | null;
@@ -164,10 +177,15 @@ type CalendarTaskEvent = {
   kind: "task" | "meeting";
   locationId: string | null;
   locationName: string;
+  photoProofs: Array<{
+    id: string;
+    url: string;
+  }>;
   roleId: string | null;
   roleName: string;
   departmentId: string | null;
   departmentName: string;
+  requiresPhoto: boolean;
   time: string;
   title: string;
 };
@@ -176,6 +194,14 @@ type CalendarDayEntryDetail = {
   avatarSrc: string;
   employeeId: string | null;
   id: string;
+  metaLabel?: string;
+  photoProofs?: Array<{
+    id: string;
+    url: string;
+  }>;
+  statusLabel?: string;
+  statusPlacement?: "badge" | "inline";
+  statusTone?: "success" | "gray" | "error";
   title: string;
   subtitle?: string;
 };
@@ -189,6 +215,8 @@ type CalendarDayEntry = {
   kind: "shift" | "task" | "meeting";
   peopleCount: number;
   previewLabel: string;
+  sortTime: string;
+  statusTone?: "success" | "gray" | "error";
   subtitle: string;
   time: string;
   title: string;
@@ -316,8 +344,48 @@ function isTodayLocal(value: Date) {
   return isSameDayLocal(value, new Date());
 }
 
+function startOfDayLocal(value: Date) {
+  const next = cloneDate(value);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
 function parseIsoDate(value: string) {
   return new Date(value);
+}
+
+function buildPlannedShiftBoundary(day: Date, timeValue: string) {
+  const [hoursRaw, minutesRaw] = timeValue.split(":");
+  const hours = Number.parseInt(hoursRaw ?? "0", 10);
+  const minutes = Number.parseInt(minutesRaw ?? "0", 10);
+  const next = startOfDayLocal(day);
+
+  next.setHours(
+    Number.isFinite(hours) ? hours : 0,
+    Number.isFinite(minutes) ? minutes : 0,
+    0,
+    0,
+  );
+
+  return next;
+}
+
+function buildPlannedShiftRange(
+  day: Date,
+  startsAtLocal: string,
+  endsAtLocal: string,
+) {
+  const startsAt = buildPlannedShiftBoundary(day, startsAtLocal);
+  const endsAt = buildPlannedShiftBoundary(day, endsAtLocal);
+
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    endsAt.setDate(endsAt.getDate() + 1);
+  }
+
+  return {
+    startsAt,
+    endsAt,
+  };
 }
 
 function buildTemplateCode(value: string) {
@@ -352,6 +420,128 @@ function formatDateInput(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getActivePhotoProofs(task: TaskItem) {
+  return task.photoProofs.filter(
+    (proof) => !proof.deletedAt && !proof.supersededByProofId && Boolean(proof.url),
+  ) as Array<(typeof task.photoProofs)[number] & { url: string }>;
+}
+
+function buildAttendanceHistoryKey(employeeId: string, day: Date) {
+  return `${employeeId}:${formatDateInput(day)}`;
+}
+
+function buildAttendanceSummary(
+  rows: AttendanceHistoryRow[],
+  locale: "ru" | "en",
+  options?: {
+    plannedStartsAt?: Date;
+    plannedEndsAt?: Date;
+  },
+): {
+  isAbsent: boolean;
+  label: string;
+  metaLabel: string | null;
+  tone: "success" | "gray" | "error";
+} {
+  if (!rows.length) {
+    return {
+      isAbsent: true,
+      label: locale === "ru" ? "Отсутствовал" : "Absent",
+      metaLabel: null,
+      tone: "error" as const,
+    };
+  }
+
+  const sortedRows = rows
+    .slice()
+    .sort(
+      (left, right) =>
+        parseIsoDate(left.startedAt).getTime() - parseIsoDate(right.startedAt).getTime(),
+    );
+  const firstRow = sortedRows[0];
+  const lastCompletedRow = [...sortedRows]
+    .reverse()
+    .find((row) => row.endedAt || row.checkOutEvent?.occurredAt);
+  const startedAt = formatTime(parseIsoDate(firstRow.startedAt), locale === "ru" ? "ru-RU" : "en-US");
+  const endedAtSource =
+    lastCompletedRow?.endedAt ?? lastCompletedRow?.checkOutEvent?.occurredAt ?? null;
+  const endedAt = endedAtSource
+    ? formatTime(parseIsoDate(endedAtSource), locale === "ru" ? "ru-RU" : "en-US")
+    : "—";
+  const actualStartedAt = parseIsoDate(firstRow.startedAt);
+  const actualEndedAt = endedAtSource ? parseIsoDate(endedAtSource) : null;
+  const plannedStartsAt = options?.plannedStartsAt;
+  const plannedEndsAt = options?.plannedEndsAt;
+  const lateMinutes =
+    plannedStartsAt && !Number.isNaN(actualStartedAt.getTime())
+      ? Math.max(
+          0,
+          Math.round((actualStartedAt.getTime() - plannedStartsAt.getTime()) / 60000),
+        )
+      : sortedRows.reduce((sum, row) => sum + row.lateMinutes, 0);
+  const earlyLeaveMinutes =
+    plannedEndsAt && actualEndedAt && !Number.isNaN(actualEndedAt.getTime())
+      ? Math.max(
+          0,
+          Math.round((plannedEndsAt.getTime() - actualEndedAt.getTime()) / 60000),
+        )
+      : sortedRows.reduce((sum, row) => sum + row.earlyLeaveMinutes, 0);
+  const deviations: string[] = [];
+
+  if (lateMinutes > 0) {
+    deviations.push(
+      locale === "ru" ? `опоздание ${lateMinutes} мин` : `${lateMinutes} min late`,
+    );
+  }
+
+  if (earlyLeaveMinutes > 0) {
+    deviations.push(
+      locale === "ru"
+        ? `ранний уход ${earlyLeaveMinutes} мин`
+        : `${earlyLeaveMinutes} min early`,
+    );
+  }
+
+  return {
+    isAbsent: false,
+    label: `${startedAt}-${endedAt}`,
+    metaLabel: deviations.length
+      ? deviations.join(" · ")
+      : locale === "ru"
+        ? "По факту без отклонений"
+        : "Actual time, no deviations",
+    tone: lateMinutes > 0 || earlyLeaveMinutes > 0 ? "error" : "success",
+  };
+}
+
+function getEntryToneTextClass(tone?: "success" | "gray" | "error") {
+  if (tone === "error") {
+    return "text-rose-600";
+  }
+
+  if (tone === "success") {
+    return "text-emerald-600";
+  }
+
+  if (tone === "gray") {
+    return "text-muted-foreground";
+  }
+
+  return null;
+}
+
+function getStatusBadgeClass(tone?: "success" | "gray" | "error") {
+  if (tone === "error") {
+    return "bg-rose-50 text-rose-600";
+  }
+
+  if (tone === "success") {
+    return "bg-emerald-50 text-emerald-700";
+  }
+
+  return "bg-secondary text-muted-foreground";
 }
 
 function parseTemplateWeekDays(weekDaysJson?: string | null) {
@@ -571,6 +761,11 @@ const scheduleCopy = {
     task: "Задача",
     meeting: "Встреча",
     shift: "Смена",
+    doneAt: (time: string) => `Выполнена в ${time}`,
+    notDone: "Не выполнена",
+    viewPhotos: (count: number) => (count === 1 ? "Фото" : `${count} фото`),
+    photoProofs: "Фотоотчёты",
+    photoProofsDescription: "Все фотографии, приложенные к выполнению этой задачи.",
     details: "Открыть детали",
     approve: "Одобрить",
     reject: "Отклонить",
@@ -674,6 +869,11 @@ const scheduleCopy = {
     task: "Task",
     meeting: "Meeting",
     shift: "Shift",
+    doneAt: (time: string) => `Done at ${time}`,
+    notDone: "Not done",
+    viewPhotos: (count: number) => (count === 1 ? "Photo" : `${count} photos`),
+    photoProofs: "Photo proofs",
+    photoProofsDescription: "All photos attached to this completed task.",
     details: "Open details",
     approve: "Approve",
     reject: "Reject",
@@ -733,6 +933,12 @@ export default function Schedule({
   );
   const [taskBoard, setTaskBoard] =
     useState<CollaborationTaskBoardResponse | null>(initialData?.taskBoard ?? null);
+  const [attendanceHistory, setAttendanceHistory] =
+    useState<AttendanceHistoryResponse | null>(null);
+  const [photoProofDialogTask, setPhotoProofDialogTask] = useState<{
+    title: string;
+    proofs: { id: string; url: string }[];
+  } | null>(null);
   const { getTaskBody, getTaskTitle } = useTranslatedTaskCopy(
     taskBoard?.tasks ?? [],
     locale,
@@ -782,6 +988,30 @@ export default function Schedule({
     () => buildCalendarDays(currentDate, period),
     [currentDate, period],
   );
+  const historicalRange = useMemo(() => {
+    const visibleStart = calendarDays[0];
+    const visibleEnd = calendarDays[calendarDays.length - 1];
+
+    if (!visibleStart || !visibleEnd) {
+      return null;
+    }
+
+    const yesterday = addDays(startOfDayLocal(today), -1);
+    const normalizedStart = startOfDayLocal(visibleStart);
+    const normalizedEnd = startOfDayLocal(visibleEnd);
+
+    if (normalizedStart.getTime() > yesterday.getTime()) {
+      return null;
+    }
+
+    const resolvedEnd =
+      normalizedEnd.getTime() < yesterday.getTime() ? normalizedEnd : yesterday;
+
+    return {
+      dateFrom: formatDateInput(normalizedStart),
+      dateTo: formatDateInput(resolvedEnd),
+    };
+  }, [calendarDays, today]);
 
   const selectedEmployee = useMemo(
     () =>
@@ -826,9 +1056,13 @@ export default function Schedule({
           avatarSrc:
             employeeMeta?.avatarSrc || getMockAvatarDataUrl(employeeName || shift.id),
           shiftDate: parseIsoDate(shift.shiftDate),
+          startsAtDate: parseIsoDate(shift.startsAt),
+          endsAtDate: parseIsoDate(shift.endsAt),
           startsAt: formatTime(parseIsoDate(shift.startsAt), localeTag),
           endsAt: formatTime(parseIsoDate(shift.endsAt), localeTag),
           templateName: shift.template.name,
+          templateStartsAtLocal: shift.template.startsAtLocal,
+          templateEndsAtLocal: shift.template.endsAtLocal,
           locationId: shift.location.id,
           locationName: shift.location.name,
           departmentId: employeeMeta?.departmentId ?? null,
@@ -908,6 +1142,7 @@ export default function Schedule({
           description: getTaskBody(task),
           date: dueAt,
           time: formatTime(dueAt, localeTag),
+          completedAt: task.completedAt ?? (task.status === "DONE" ? task.updatedAt : null),
           employeeId: task.assigneeEmployeeId,
           assigneeName,
           employeeNumber: task.assigneeEmployee?.employeeNumber ?? "",
@@ -915,6 +1150,11 @@ export default function Schedule({
           locationName: location,
           departmentId: task.assigneeEmployee?.department?.id ?? null,
           departmentName: department,
+          photoProofs: getActivePhotoProofs(task).map((proof) => ({
+            id: proof.id,
+            url: proof.url,
+          })),
+          requiresPhoto: task.requiresPhoto,
           roleId: null,
           roleName: role,
         };
@@ -967,6 +1207,22 @@ export default function Schedule({
     ui.noRole,
   ]);
 
+  const attendanceHistoryByEmployeeDay = useMemo(() => {
+    const map = new Map<string, AttendanceHistoryRow[]>();
+
+    for (const row of attendanceHistory?.rows ?? []) {
+      const key = buildAttendanceHistoryKey(
+        row.employeeId,
+        startOfDayLocal(parseIsoDate(row.startedAt)),
+      );
+      const rows = map.get(key) ?? [];
+      rows.push(row);
+      map.set(key, rows);
+    }
+
+    return map;
+  }, [attendanceHistory]);
+
   const periodShifts = useMemo(() => {
     const keys = new Set(calendarDays.map((day: Date) => formatDateInput(day)));
     return visibleShifts.filter((shift) =>
@@ -992,53 +1248,43 @@ export default function Schedule({
       .sort((left, right) => left.time.localeCompare(right.time));
 
   const calendarEntriesForDay = (day: Date): CalendarDayEntry[] => {
+    const isPastDay = startOfDayLocal(day).getTime() < startOfDayLocal(today).getTime();
+    const useHistoricalShiftEntries = isPastDay && attendanceHistory !== null;
     const groupedShiftEntries: CalendarDayEntry[] =
       calendarEventFilter === "all" || calendarEventFilter === "shifts"
-        ? Array.from(
-            shiftsForDay(day).reduce<
-              Map<
-                string,
+        ? useHistoricalShiftEntries
+          ? shiftsForDay(day).map((shift) => {
+              const plannedShiftRange = buildPlannedShiftRange(
+                day,
+                shift.templateStartsAtLocal,
+                shift.templateEndsAtLocal,
+              );
+              const attendanceSummary = buildAttendanceSummary(
+                attendanceHistoryByEmployeeDay.get(
+                  buildAttendanceHistoryKey(shift.employeeId, startOfDayLocal(day)),
+                ) ?? [],
+                locale,
                 {
-                  detailItems: CalendarDayEntryDetail[];
-                  employeeIds: string[];
-                  id: string;
-                  peopleCount: number;
-                  subtitle: string;
-                  time: string;
-                  title: string;
-                }
-              >
-            >((map, shift) => {
-              const time = `${shift.startsAt}-${shift.endsAt}`;
-              const subtitle = shift.templateName;
-              const key = [
-                "shift",
-                time,
-                shift.locationId,
-                shift.templateName.toLowerCase(),
-              ].join("|");
-              const existing = map.get(key);
+                  plannedStartsAt: plannedShiftRange.startsAt,
+                  plannedEndsAt: plannedShiftRange.endsAt,
+                },
+              );
+              const plannedShiftTime = `${shift.startsAt}-${shift.endsAt}`;
 
-              if (existing) {
-                existing.peopleCount += 1;
-                existing.employeeIds.push(shift.employeeId);
-                existing.detailItems.push({
-                  avatarSrc: shift.avatarSrc,
-                  employeeId: shift.employeeId,
-                  id: shift.id,
-                  title: shift.employeeName,
-                  subtitle: shift.roleName || "",
-                });
-                return map;
-              }
-
-              map.set(key, {
+              return {
                 id: `shift-${shift.id}`,
-                title: time,
-                time,
-                subtitle,
-                peopleCount: 1,
+                kind: "shift" as const,
+                time: attendanceSummary.isAbsent
+                  ? plannedShiftTime
+                  : attendanceSummary.label,
+                sortTime: shift.startsAt,
+                title: shift.employeeName,
+                subtitle: shift.templateName,
+                statusTone: attendanceSummary.tone,
+                employeeId: shift.employeeId,
                 employeeIds: [shift.employeeId],
+                peopleCount: 1,
+                previewLabel: shift.employeeName,
                 detailItems: [
                   {
                     avatarSrc: shift.avatarSrc,
@@ -1046,26 +1292,89 @@ export default function Schedule({
                     id: shift.id,
                     title: shift.employeeName,
                     subtitle: shift.roleName || "",
+                    statusLabel: attendanceSummary.label,
+                    statusPlacement: attendanceSummary.isAbsent ? "inline" : "badge",
+                    statusTone: attendanceSummary.tone,
+                    metaLabel: attendanceSummary.metaLabel ?? undefined,
                   },
                 ],
-              });
-              return map;
-            }, new Map()),
-          ).map(([, entry]) => ({
-            id: entry.id,
-            kind: "shift" as const,
-            time: entry.time,
-            title: entry.title,
-            subtitle: entry.subtitle,
-            employeeId: entry.employeeIds[0] ?? null,
-            employeeIds: entry.employeeIds,
-            peopleCount: entry.peopleCount,
-            previewLabel:
-              entry.peopleCount === 1 ? (entry.detailItems[0]?.title ?? "") : "",
-            detailItems: entry.detailItems.sort((left, right) =>
-              left.title.localeCompare(right.title, localeTag),
-            ),
-          }))
+              };
+            })
+          : Array.from(
+              shiftsForDay(day).reduce<
+                Map<
+                  string,
+                  {
+                    detailItems: CalendarDayEntryDetail[];
+                    employeeIds: string[];
+                    id: string;
+                    peopleCount: number;
+                    sortTime: string;
+                    subtitle: string;
+                    time: string;
+                    title: string;
+                  }
+                >
+              >((map, shift) => {
+                const time = `${shift.startsAt}-${shift.endsAt}`;
+                const subtitle = shift.templateName;
+                const key = [
+                  "shift",
+                  time,
+                  shift.locationId,
+                  shift.templateName.toLowerCase(),
+                ].join("|");
+                const existing = map.get(key);
+
+                if (existing) {
+                  existing.peopleCount += 1;
+                  existing.employeeIds.push(shift.employeeId);
+                  existing.detailItems.push({
+                    avatarSrc: shift.avatarSrc,
+                    employeeId: shift.employeeId,
+                    id: shift.id,
+                    title: shift.employeeName,
+                    subtitle: shift.roleName || "",
+                  });
+                  return map;
+                }
+
+                map.set(key, {
+                  id: `shift-${shift.id}`,
+                  title: time,
+                  time,
+                  sortTime: shift.startsAt,
+                  subtitle,
+                  peopleCount: 1,
+                  employeeIds: [shift.employeeId],
+                  detailItems: [
+                    {
+                      avatarSrc: shift.avatarSrc,
+                      employeeId: shift.employeeId,
+                      id: shift.id,
+                      title: shift.employeeName,
+                      subtitle: shift.roleName || "",
+                    },
+                  ],
+                });
+                return map;
+              }, new Map()),
+            ).map(([, entry]) => ({
+              id: entry.id,
+              kind: "shift" as const,
+              time: entry.time,
+              sortTime: entry.sortTime,
+              title: entry.title,
+              subtitle: entry.subtitle,
+              employeeId: entry.employeeIds[0] ?? null,
+              employeeIds: entry.employeeIds,
+              peopleCount: entry.peopleCount,
+              previewLabel:
+                entry.peopleCount === 1 ? (entry.detailItems[0]?.title ?? "") : "",
+              detailItems: entry.detailItems.sort((left, right) =>
+                left.title.localeCompare(right.title, localeTag),
+              ),
+            }))
         : [];
 
     const groupedTaskEntries: CalendarDayEntry[] =
@@ -1101,22 +1410,39 @@ export default function Schedule({
               ].join("|");
               const existing = map.get(key);
 
-              if (existing) {
-                existing.peopleCount += 1;
-                if (event.employeeId) {
-                  existing.employeeIds.push(event.employeeId);
+                if (existing) {
+                  existing.peopleCount += 1;
+                  if (event.employeeId) {
+                    existing.employeeIds.push(event.employeeId);
+                  }
+                  existing.detailItems.push({
+                    avatarSrc:
+                      (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
+                      getMockAvatarDataUrl(event.assigneeName || event.id),
+                    employeeId: event.employeeId,
+                    id: event.id,
+                    title: event.assigneeName,
+                    subtitle: event.roleName || "",
+                    statusLabel:
+                      event.kind === "task"
+                        ? event.isDone && event.completedAt
+                          ? ui.doneAt(formatTime(parseIsoDate(event.completedAt), localeTag))
+                          : ui.notDone
+                        : undefined,
+                    statusTone:
+                      event.kind === "task"
+                        ? event.isDone
+                          ? "success"
+                          : isPastDay
+                            ? "error"
+                            : "gray"
+                        : undefined,
+                    metaLabel:
+                      event.locationName !== "—" ? event.locationName : undefined,
+                    photoProofs: event.photoProofs,
+                  });
+                  return map;
                 }
-                existing.detailItems.push({
-                  avatarSrc:
-                    (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
-                    getMockAvatarDataUrl(event.assigneeName || event.id),
-                  employeeId: event.employeeId,
-                  id: event.id,
-                  title: event.assigneeName,
-                  subtitle: "",
-                });
-                return map;
-              }
 
               map.set(key, {
                 id: event.id,
@@ -1135,7 +1461,24 @@ export default function Schedule({
                     employeeId: event.employeeId,
                     id: event.id,
                     title: event.assigneeName,
-                    subtitle: "",
+                    subtitle: event.roleName || "",
+                    statusLabel:
+                      event.kind === "task"
+                        ? event.isDone && event.completedAt
+                          ? ui.doneAt(formatTime(parseIsoDate(event.completedAt), localeTag))
+                          : ui.notDone
+                        : undefined,
+                    statusTone:
+                      event.kind === "task"
+                        ? event.isDone
+                          ? "success"
+                          : isPastDay
+                            ? "error"
+                            : "gray"
+                        : undefined,
+                    metaLabel:
+                      event.locationName !== "—" ? event.locationName : undefined,
+                    photoProofs: event.photoProofs,
                   },
                 ],
               });
@@ -1146,12 +1489,21 @@ export default function Schedule({
             isDone: entry.isDone,
             kind: entry.kind,
             time: entry.time,
+            sortTime: entry.time,
             title: entry.title,
             subtitle: entry.subtitle,
             employeeId: entry.employeeIds[0] ?? null,
             employeeIds: entry.employeeIds,
             peopleCount: entry.peopleCount,
             previewLabel: entry.title,
+            statusTone:
+              entry.kind === "task"
+                ? entry.isDone
+                  ? "success"
+                  : isPastDay
+                    ? "error"
+                    : "gray"
+                : undefined,
             detailItems: entry.detailItems.sort((left, right) =>
               left.title.localeCompare(right.title, localeTag),
             ),
@@ -1164,7 +1516,7 @@ export default function Schedule({
 
       return (
         leftDone - rightDone ||
-        left.time.localeCompare(right.time) ||
+        left.sortTime.localeCompare(right.sortTime) ||
         left.title.localeCompare(right.title, localeTag)
       );
     });
@@ -1302,6 +1654,37 @@ export default function Schedule({
   }, [calendarDays, initialData, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
 
   useEffect(() => {
+    if (!sessionAccessToken || !historicalRange) {
+      setAttendanceHistory(null);
+      return;
+    }
+
+    let cancelled = false;
+    const endpoint = isEmployeeMode
+      ? "/attendance/me/history"
+      : "/attendance/team/history";
+    const query = new URLSearchParams(historicalRange).toString();
+
+    void apiRequest<AttendanceHistoryResponse>(`${endpoint}?${query}`, {
+      token: sessionAccessToken,
+    })
+      .then((snapshot) => {
+        if (!cancelled) {
+          setAttendanceHistory(snapshot);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAttendanceHistory(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [historicalRange, isEmployeeMode, sessionAccessToken]);
+
+  useEffect(() => {
     const dateParam = searchParams.get("date");
     const eventTypeParam = searchParams.get("eventType");
 
@@ -1341,7 +1724,15 @@ export default function Schedule({
 
   const selectedDayEntries = useMemo(
     () => (selectedDay ? calendarEntriesForDay(selectedDay) : []),
-    [selectedDay, periodShifts, periodTaskEvents, calendarEventFilter],
+    [
+      attendanceHistory,
+      attendanceHistoryByEmployeeDay,
+      calendarEventFilter,
+      periodShifts,
+      periodTaskEvents,
+      selectedDay,
+      today,
+    ],
   );
 
   useEffect(() => {
@@ -2030,7 +2421,12 @@ export default function Schedule({
                   <div className="mb-1 flex items-start justify-between">
                     {primaryShiftEntry ? (
                       <div className="mt-0.5 flex min-w-0 flex-1 pr-2">
-                        <span className="truncate text-[10px] font-heading font-semibold leading-tight text-emerald-700">
+                        <span
+                          className={`truncate text-[10px] font-heading font-semibold leading-tight ${
+                            getEntryToneTextClass(primaryShiftEntry.statusTone) ??
+                            "text-emerald-700"
+                          }`}
+                        >
                           {primaryShiftEntry.time}
                         </span>
                       </div>
@@ -2053,7 +2449,10 @@ export default function Schedule({
                     )}
                     <span
                       className={`font-heading text-2xl font-bold leading-none ${
-                        primaryShiftEntry ? "text-emerald-600" : "text-foreground"
+                        primaryShiftEntry
+                          ? getEntryToneTextClass(primaryShiftEntry.statusTone) ??
+                            "text-emerald-600"
+                          : "text-foreground"
                       }`}
                     >
                       {day.getDate()}
@@ -2071,7 +2470,7 @@ export default function Schedule({
                       <div
                         className={`flex items-center gap-1.5 truncate text-[11px] font-semibold leading-snug ${
                           entry.kind === "shift"
-                            ? "text-blue-600"
+                            ? getEntryToneTextClass(entry.statusTone) ?? "text-blue-600"
                             : entry.kind === "task"
                               ? "text-amber-600"
                               : "text-emerald-600"
@@ -2705,7 +3104,14 @@ export default function Schedule({
                         type="button"
                       >
                         <div className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
-                          <span className="shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] font-medium leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
+                          <span
+                            className={`shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] font-medium leading-[0.92] tracking-[-0.08em] uppercase ${
+                              entry.kind === "shift"
+                                ? getEntryToneTextClass(entry.statusTone) ??
+                                  "text-foreground"
+                                : "text-foreground"
+                            }`}
+                          >
                             {entry.time}
                           </span>
                           <span className="shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-muted-foreground">
@@ -2740,7 +3146,7 @@ export default function Schedule({
                         <div className="mt-3 space-y-1">
                           {entry.detailItems.map((item) => (
                             <div
-                              className="flex items-center gap-3 py-1"
+                              className="flex items-start gap-3 py-1"
                               key={item.id}
                             >
                               <img
@@ -2748,14 +3154,65 @@ export default function Schedule({
                                 className="size-9 rounded-full object-cover"
                                 src={item.avatarSrc}
                               />
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="font-heading text-[15px] font-medium text-foreground">
                                   {item.title}
                                 </p>
-                                {item.subtitle ? (
-                                  <p className="text-[13px] text-muted-foreground">
-                                    {item.subtitle}
-                                  </p>
+                                {item.subtitle || item.statusPlacement === "inline" ? (
+                                  <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                    {item.subtitle ? (
+                                      <p className="text-[13px] text-muted-foreground">
+                                        {item.subtitle}
+                                      </p>
+                                    ) : (
+                                      <span />
+                                    )}
+                                    {item.statusPlacement === "inline" && item.statusLabel ? (
+                                      <span
+                                        className={`shrink-0 font-heading text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                                          getEntryToneTextClass(item.statusTone) ??
+                                          "text-muted-foreground"
+                                        }`}
+                                      >
+                                        {item.statusLabel}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                                {(item.statusPlacement !== "inline" && item.statusLabel) ||
+                                item.metaLabel ||
+                                item.photoProofs?.length ? (
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    {item.statusPlacement !== "inline" &&
+                                    item.statusLabel ? (
+                                      <span
+                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${getStatusBadgeClass(item.statusTone)}`}
+                                      >
+                                        {item.statusLabel}
+                                      </span>
+                                    ) : null}
+                                    {item.metaLabel ? (
+                                      <span className="text-[12px] text-muted-foreground">
+                                        {item.metaLabel}
+                                      </span>
+                                    ) : null}
+                                    {item.photoProofs?.length ? (
+                                      <Button
+                                        onClick={() =>
+                                          setPhotoProofDialogTask({
+                                            title: entry.title,
+                                            proofs: item.photoProofs ?? [],
+                                          })
+                                        }
+                                        size="xs"
+                                        type="button"
+                                        variant="outline"
+                                      >
+                                        <Camera className="size-3" />
+                                        {ui.viewPhotos(item.photoProofs.length)}
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
                             </div>
@@ -2792,6 +3249,44 @@ export default function Schedule({
                 {ui.addShiftForDay}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setPhotoProofDialogTask(null);
+          }
+        }}
+        open={Boolean(photoProofDialogTask)}
+      >
+        <DialogContent className="team-tasks-photo-dialog">
+          <DialogHeader className="gap-2 pr-10">
+            <DialogTitle>
+              {photoProofDialogTask?.title ?? ui.photoProofs}
+            </DialogTitle>
+            <DialogDescription>
+              {ui.photoProofsDescription}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="team-tasks-photo-dialog-grid">
+            {photoProofDialogTask?.proofs.map((proof) => (
+              <a
+                className="team-tasks-photo-dialog-card"
+                href={proof.url}
+                key={proof.id}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <img
+                  alt={ui.photoProofs}
+                  className="team-tasks-photo-dialog-image"
+                  src={proof.url}
+                />
+              </a>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

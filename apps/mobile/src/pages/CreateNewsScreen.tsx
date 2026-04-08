@@ -10,7 +10,7 @@ import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { createManagerAnnouncement, loadManagerEmployees, loadManagerGroups } from '../../lib/api';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { useI18n } from '../../lib/i18n';
+import { getDateLocale, useI18n } from '../../lib/i18n';
 import {
   mapApiGroups,
   type EmployeeOption,
@@ -104,6 +104,7 @@ export default function CreateNewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
+  const locale = getDateLocale(language);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -128,10 +129,10 @@ export default function CreateNewsScreen() {
       [...employees].sort((left, right) =>
         `${left.firstName} ${left.lastName}`.localeCompare(
           `${right.firstName} ${right.lastName}`,
-          language === 'ru' ? 'ru' : 'en',
+          locale,
         ),
       ),
-    [employees, language],
+    [employees, locale],
   );
   const selectedGroups = useMemo(
     () => groups.filter((group) => selectedGroupIds.includes(group.id)),
@@ -170,10 +171,10 @@ export default function CreateNewsScreen() {
     return Array.from(selectedById.values()).sort((left, right) =>
       `${left.firstName} ${left.lastName}`.localeCompare(
         `${right.firstName} ${right.lastName}`,
-        language === 'ru' ? 'ru' : 'en',
+        locale,
       ),
     );
-  }, [employeeById, language, selectedEmployeeIds, selectedGroups]);
+  }, [employeeById, locale, selectedEmployeeIds, selectedGroups]);
   const individuallySelectedEmployees = useMemo(
     () => selectedParticipants.filter((employee) => !selectedGroupMemberIdSet.has(employee.id)),
     [selectedGroupMemberIdSet, selectedParticipants],
@@ -431,10 +432,8 @@ export default function CreateNewsScreen() {
       selectedEmployeeIds.length === 0
     ) {
       Alert.alert(
-        'Error',
-        language === 'ru'
-          ? 'Выбери хотя бы одного участника для этой новости.'
-          : 'Select at least one participant for this news item.',
+        t('common.error'),
+        t('manager.createNewsSelectParticipantsError'),
       );
       return;
     }
@@ -465,11 +464,11 @@ export default function CreateNewsScreen() {
       });
 
       hapticSuccess();
-      Alert.alert('Success', t('manager.createNewsCreated'));
+      Alert.alert(t('common.done'), t('manager.createNewsCreated'));
       router.replace('/?tab=news' as never);
     } catch (error) {
       Alert.alert(
-        'Error',
+        t('common.error'),
         error instanceof Error ? error.message : t('manager.createNewsError'),
       );
     } finally {
@@ -561,7 +560,7 @@ export default function CreateNewsScreen() {
                   <View className="flex-row items-center gap-2">
                     <Ionicons color="#111827" name="create-outline" size={16} />
                     <Text className="text-[13px] font-medium text-foreground">
-                      {language === 'ru' ? 'Редактировать' : 'Edit'}
+                      {t('manager.createNewsEditImage')}
                     </Text>
                   </View>
                 </PressableScale>
@@ -588,11 +587,7 @@ export default function CreateNewsScreen() {
 
           <NewsOptionCheckbox
             checked={limitParticipants}
-            label={
-              language === 'ru'
-                ? 'Только для выбранных участников'
-                : 'Only for selected participants'
-            }
+            label={t('manager.createNewsSelectedAudienceOnly')}
             onPress={() => setLimitParticipants((current) => !current)}
           />
 
@@ -653,9 +648,7 @@ export default function CreateNewsScreen() {
                 </View>
               ) : (
                 <Text className="mt-4 text-[14px] leading-6 text-muted-foreground">
-                  {language === 'ru'
-                    ? 'Выбери группу или сотрудника.'
-                    : 'Choose a group or an employee.'}
+                  {t('manager.createNewsChooseAudience')}
                 </Text>
               )}
             </View>

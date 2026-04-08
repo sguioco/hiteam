@@ -3,13 +3,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, Text, View } from 'react-native';
 import { Screen } from '../../components/ui/screen';
-import { languageOptions, useI18n } from '../../lib/i18n';
+import { languageOptions, type AppLanguage, useI18n } from '../../lib/i18n';
 
 export default function LanguageScreen() {
   const router = useRouter();
   const { language, setLanguage, t } = useI18n();
 
-  function handleSelectLanguage(nextLanguage: 'ru' | 'en') {
+  function handleSelectLanguage(nextLanguage: AppLanguage) {
     setLanguage(nextLanguage);
     router.back();
   }

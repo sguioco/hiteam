@@ -22,7 +22,6 @@ import {
 import {
   AlertCircle,
   ArrowDown,
-  ArrowUp,
   CalendarDays,
   Check,
   CheckSquare,
@@ -90,6 +89,10 @@ import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerforman
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
 import { localizePersonName } from "@/lib/transliteration";
+import {
+  getWebAdminTaskPriorityLabel,
+  normalizeWebAdminTaskPriority,
+} from "@/lib/task-priority";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 
 type EmployeeDirectoryItem = {
@@ -346,26 +349,20 @@ function getPriorityOptions(locale: "ru" | "en"): Array<{
 }> {
   return [
     {
-      value: "URGENT",
-      label: "Urgent",
-      description: localize(locale, "Немедленное выполнение", "Immediate action required"),
+      value: "HIGH",
+      label: getWebAdminTaskPriorityLabel("HIGH"),
+      description: localize(locale, "Высокий приоритет", "High priority"),
       icon: <AlertCircle className="size-4 text-[#b42318]" />,
     },
     {
-      value: "HIGH",
-      label: "High",
-      description: localize(locale, "Высокий приоритет", "High priority"),
-      icon: <ArrowUp className="size-4 text-[#d97706]" />,
-    },
-    {
       value: "MEDIUM",
-      label: "Medium",
+      label: getWebAdminTaskPriorityLabel("MEDIUM"),
       description: localize(locale, "Стандартная задача", "Standard priority"),
       icon: <Minus className="size-4 text-[#2563eb]" />,
     },
     {
       value: "LOW",
-      label: "Low",
+      label: getWebAdminTaskPriorityLabel("LOW"),
       description: localize(locale, "Можно выполнить позже", "Can be done later"),
       icon: <ArrowDown className="size-4 text-[#0f9b65]" />,
     },
@@ -725,7 +722,7 @@ function createMockDashboardTasks(
         meetingLink: "https://meet.example.com/attendance-review",
       }) ?? null,
       createMockTaskDate(2, 16, 0),
-      "URGENT",
+      "HIGH",
     ),
     buildTask(
       "mock-task-4a",
@@ -820,7 +817,7 @@ function createMockDashboardTasks(
       localize(locale, "Собрать просроченные подтверждения смен", "Collect overdue shift confirmations"),
       localize(locale, "Есть неподтверждённые слоты за вчера, нужно быстро закрыть вопрос.", "There are unconfirmed slots from yesterday and they need to be resolved quickly."),
       createMockTaskDate(-1, 18, 0),
-      "URGENT",
+      "HIGH",
     ),
   ];
 }
@@ -1603,8 +1600,9 @@ export default function DashboardHome({
           : Boolean(taskDraft.meetingLocation.trim()))));
   const minTaskDateTime = formatDateTimeLocalInput(new Date());
   const selectedPriorityOption =
-    priorityOptions.find((item) => item.value === taskDraft.priority) ??
-    priorityOptions[2];
+    priorityOptions.find(
+      (item) => item.value === normalizeWebAdminTaskPriority(taskDraft.priority),
+    ) ?? priorityOptions[1];
 
   function toggleTaskAssignee(employeeId: string, checked: boolean) {
     setTaskDraft((current) => ({
@@ -1862,7 +1860,7 @@ export default function DashboardHome({
                             priority: v as TaskItem["priority"],
                           }))
                         }
-                        value={taskDraft.priority}
+                        value={normalizeWebAdminTaskPriority(taskDraft.priority)}
                       >
                         <SelectTrigger>
                           {selectedPriorityOption ? (

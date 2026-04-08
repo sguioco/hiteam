@@ -25,7 +25,7 @@ type JoinForm = {
 export default function CompanyJoinScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
-  const { language } = useI18n();
+  const { t } = useI18n();
   const code = Array.isArray(params.code) ? params.code[0] : params.code ?? '';
   const [company, setCompany] = useState<CompanyPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,69 +43,40 @@ export default function CompanyJoinScreen() {
   });
 
   const copy = useMemo(
-    () =>
-      language === 'ru'
-        ? {
-            loading: 'Проверяем код компании...',
-            unavailableTitle: 'Код компании недоступен',
-            backHome: 'На главный экран',
-            title: 'Join with code',
-            company: 'Компания',
-            firstName: 'Имя',
-            lastName: 'Фамилия',
-            email: 'Email',
-            phone: 'Телефон',
-            birthDate: 'Дата рождения',
-            birthDateHint: 'ГГГГ-ММ-ДД',
-            photoTitle: 'Фото',
-            pickPhoto: 'Выбрать фото',
-            takePhoto: 'Сделать фото',
-            cancel: 'Отмена',
-            photoRequired: 'Добавить фото сотрудника*',
-            submit: 'Отправить анкету',
-            submitting: 'Отправляем...',
-            requiredFields: 'Заполните все поля.',
-            invalidEmail: 'Укажите корректный email.',
-            invalidBirthDate: 'Дата рождения должна быть в формате ГГГГ-ММ-ДД.',
-            successTitle: 'Информация отправлена',
-            successBody:
-              'Заявка передана менеджеру. После подтверждения профиля мы отправим вам письмо с продолжением входа.',
-            successCompany: 'Компания: {companyName}',
-            successCode: 'Код: {companyCode}',
-            done: 'Понятно',
-            addPhotoHint: 'Фотография обязательна для подтверждения сотрудника.',
-          }
-        : {
-            loading: 'Checking company code...',
-            unavailableTitle: 'Company code unavailable',
-            backHome: 'Back to start',
-            title: 'Join with code',
-            company: 'Company',
-            firstName: 'First name',
-            lastName: 'Last name',
-            email: 'Email',
-            phone: 'Phone',
-            birthDate: 'Birth date',
-            birthDateHint: 'YYYY-MM-DD',
-            photoTitle: 'Photo',
-            pickPhoto: 'Choose photo',
-            takePhoto: 'Take photo',
-            cancel: 'Cancel',
-            photoRequired: 'Add your photo',
-            submit: 'Submit profile',
-            submitting: 'Submitting...',
-            requiredFields: 'Complete all fields.',
-            invalidEmail: 'Enter a valid email.',
-            invalidBirthDate: 'Birth date must use YYYY-MM-DD.',
-            successTitle: 'Information sent',
-            successBody:
-              'Your profile has been sent to the manager. After approval we will send you an email with the next sign-in step',
-            successCompany: 'Company: {companyName}',
-            successCode: 'Code: {companyCode}',
-            done: 'Done',
-            addPhotoHint: 'A photo is required for employee approval',
-          },
-    [language],
+    () => ({
+      loading: t('joinProfile.loading'),
+      unavailableTitle: t('joinProfile.unavailableTitle'),
+      backHome: t('joinProfile.backHome'),
+      title: t('joinProfile.title'),
+      company: t('joinProfile.company'),
+      firstName: t('joinProfile.firstName'),
+      lastName: t('joinProfile.lastName'),
+      email: t('joinProfile.email'),
+      phone: t('joinProfile.phone'),
+      birthDate: t('joinProfile.birthDate'),
+      birthDateHint: t('joinProfile.birthDateHint'),
+      photoTitle: t('joinProfile.photoTitle'),
+      pickPhoto: t('joinProfile.pickPhoto'),
+      takePhoto: t('joinProfile.takePhoto'),
+      cancel: t('joinProfile.cancel'),
+      photoRequired: t('joinProfile.photoRequired'),
+      submit: t('joinProfile.submit'),
+      submitting: t('joinProfile.submitting'),
+      requiredFields: t('joinProfile.requiredFields'),
+      invalidEmail: t('joinProfile.invalidEmail'),
+      invalidBirthDate: t('joinProfile.invalidBirthDate'),
+      successTitle: t('joinProfile.successTitle'),
+      successBody: t('joinProfile.successBody'),
+      successCompany: t('joinProfile.successCompany', {
+        companyName: '{companyName}',
+      }),
+      successCode: t('joinProfile.successCode', {
+        companyCode: '{companyCode}',
+      }),
+      done: t('joinProfile.done'),
+      addPhotoHint: t('joinProfile.addPhotoHint'),
+    }),
+    [t],
   );
 
   const titleStyle = {

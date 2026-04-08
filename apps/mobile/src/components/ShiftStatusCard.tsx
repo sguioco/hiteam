@@ -9,7 +9,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { useI18n, pluralizeRu } from '../../lib/i18n';
+import { type AppLanguage, useI18n, pluralizeRu } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
 type ShiftStatusCardProps = {
@@ -21,7 +21,7 @@ type ShiftStatusCardProps = {
 };
 
 
-function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: 'ru' | 'en') {
+function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: AppLanguage) {
   if (language === 'ru') {
     const labels =
       unit === 'day'
@@ -49,7 +49,7 @@ function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', lang
   return `${value} ${label}`;
 }
 
-function formatDuration(totalMinutes: number, language: 'ru' | 'en') {
+function formatDuration(totalMinutes: number, language: AppLanguage) {
   const safeMinutes = Math.max(Math.ceil(totalMinutes), 0);
   if (safeMinutes === 0) {
     return language === 'ru' ? 'меньше минуты' : 'less than a minute';

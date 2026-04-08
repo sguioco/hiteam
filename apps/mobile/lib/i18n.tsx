@@ -1,11 +1,31 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
+import { generatedTranslations } from './generated-translations';
 
-export type AppLanguage = 'ru' | 'en';
+export const supportedAppLanguages = [
+  'ru',
+  'en',
+  'ar',
+  'hi',
+  'ur',
+  'bn',
+  'id',
+  'ms',
+  'tl',
+] as const;
+
+export type AppLanguage = (typeof supportedAppLanguages)[number];
 
 export const languageOptions: Array<{ value: AppLanguage; label: string; flag: string }> = [
   { value: 'ru', label: 'Русский', flag: '🇷🇺' },
   { value: 'en', label: 'English', flag: '🇺🇸' },
+  { value: 'ar', label: 'العربية', flag: '🇦🇪' },
+  { value: 'hi', label: 'हिन्दी', flag: '🇮🇳' },
+  { value: 'ur', label: 'اردو', flag: '🇵🇰' },
+  { value: 'bn', label: 'বাংলা', flag: '🇧🇩' },
+  { value: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { value: 'ms', label: 'Bahasa Melayu', flag: '🇲🇾' },
+  { value: 'tl', label: 'Filipino', flag: '🇵🇭' },
 ];
 
 const translations = {
@@ -22,6 +42,7 @@ const translations = {
     'common.loading': 'Загрузка...',
     'common.enableCamera': 'Включить камеру',
     'common.now': 'Сейчас',
+    'common.error': 'Ошибка',
     'nav.today': 'Сегодня',
     'nav.calendar': 'Календарь',
     'nav.news': 'Новости',
@@ -78,6 +99,38 @@ const translations = {
     'invite.verificationFailed': 'Ошибка проверки кода',
     'invite.invitationFoundTitle': 'Приглашение найдено',
     'invite.invitationFoundBody': 'Компания: {companyName}. Перейдите по ссылке из письма для регистрации.',
+
+    'joinProfile.loading': 'Проверяем код компании...',
+    'joinProfile.unavailableTitle': 'Код компании недоступен',
+    'joinProfile.backHome': 'На главный экран',
+    'joinProfile.title': 'Вступить по коду',
+    'joinProfile.company': 'Компания',
+    'joinProfile.firstName': 'Имя',
+    'joinProfile.lastName': 'Фамилия',
+    'joinProfile.email': 'Email',
+    'joinProfile.phone': 'Телефон',
+    'joinProfile.birthDate': 'Дата рождения',
+    'joinProfile.birthDateHint': 'ГГГГ-ММ-ДД',
+    'joinProfile.birthDatePlaceholder': 'Дата рождения*',
+    'joinProfile.countryCodeLabel': 'Код страны',
+    'joinProfile.photoTitle': 'Фото',
+    'joinProfile.pickPhoto': 'Выбрать фото',
+    'joinProfile.takePhoto': 'Сделать фото',
+    'joinProfile.cancel': 'Отмена',
+    'joinProfile.photoRequired': 'Добавить фото сотрудника*',
+    'joinProfile.submit': 'Отправить анкету',
+    'joinProfile.submitting': 'Отправляем...',
+    'joinProfile.requiredFields': 'Заполните все поля.',
+    'joinProfile.invalidEmail': 'Укажите корректный email.',
+    'joinProfile.invalidBirthDate': 'Дата рождения должна быть в формате ГГГГ-ММ-ДД.',
+    'joinProfile.successTitle': 'Информация отправлена',
+    'joinProfile.successBody': 'Заявка передана менеджеру. После подтверждения профиля мы отправим вам письмо с продолжением входа.',
+    'joinProfile.successCompany': 'Компания: {companyName}',
+    'joinProfile.successCode': 'Код: {companyCode}',
+    'joinProfile.successBodyLineOne': 'Ваша анкета отправлена менеджеру {companyName}',
+    'joinProfile.successBodyLineTwo': 'После подтверждения вы получите уведомление',
+    'joinProfile.done': 'Понятно',
+    'joinProfile.addPhotoHint': 'Фотография обязательна для подтверждения сотрудника.',
 
     'language.title': 'Языки',
 
@@ -349,6 +402,10 @@ const translations = {
     'profile.account': 'Аккаунт',
     'profile.tenantId': 'Компания',
     'profile.language': 'Язык',
+    'profile.emailLabel': 'Email',
+    'profile.positionLabel': 'Должность',
+    'profile.departmentLabel': 'Отдел',
+    'profile.phoneLabel': 'Телефон',
     'profile.quickActions': 'Быстрые действия',
     'profile.requests': 'Запросы',
     'profile.notifications': 'Уведомления',
@@ -358,9 +415,91 @@ const translations = {
 
     'announcements.eyebrow': 'Объявления',
     'announcements.title': 'Обновления команды',
+    'announcements.create': 'Создать',
+    'announcements.countLabel': '{count} новостей',
     'announcements.empty': 'Пока нет объявлений',
+    'announcements.hide': 'Скрыть',
     'announcements.loadError': 'Не удалось загрузить объявления.',
+    'announcements.pin': 'Закрепить',
     'announcements.pinned': 'закреплено',
+    'announcements.unpin': 'Открепить',
+    'announcements.edit': 'Изменить',
+    'announcements.editTitle': 'Изменить новость',
+    'announcements.save': 'Сохранить',
+    'announcements.deleteConfirmTitle': 'Удалить новость?',
+    'announcements.deleteConfirmBody': 'Вы точно хотите удалить эту новость?',
+    'announcements.saveError': 'Не удалось сохранить новость.',
+    'announcements.deleteError': 'Не удалось удалить новость.',
+    'announcements.titleRequired': 'Введите заголовок новости.',
+    'announcements.bodyRequired': 'Введите текст новости.',
+    'announcements.editorTitlePlaceholder': 'Заголовок новости',
+    'announcements.editorBodyPlaceholder': 'Текст новости',
+
+    'notifications.title': 'Уведомления',
+    'notifications.assignmentsTitle': 'Новые задачи и встречи',
+    'notifications.assignmentsBody': 'Сообщать, когда вам назначили задачу или встречу.',
+    'notifications.taskTitle': 'До просрочки задачи',
+    'notifications.taskBody': 'Напомнить заранее, чтобы задача не ушла в overdue.',
+    'notifications.meetingTitle': 'До начала встречи',
+    'notifications.meetingBody': 'Выберите, за сколько времени напомнить о встрече.',
+    'notifications.shiftTitle': 'Hi / Bye по смене',
+    'notifications.shiftBody': 'Напоминать за 15 минут до начала и конца смены.',
+    'notifications.minutes15': '15 мин',
+    'notifications.minutes30': '30 мин',
+    'notifications.minutes60': '1 час',
+
+    'workspaceReady.title': 'Разрешите геолокацию',
+    'workspaceReady.locationTitle': 'Подтвердите настройки локации',
+    'workspaceReady.locationStatusMissing': 'Точная геопозиция не включена',
+    'workspaceReady.locationStatusImprecise': 'Включите точную геопозицию',
+    'workspaceReady.locationStatusReady': 'Точная геопозиция включена',
+    'workspaceReady.locationBodyMissingIos': 'Откройте настройки приложения, разрешите доступ к геопозиции и включите «Точная геопозиция».',
+    'workspaceReady.locationBodyMissingAndroid': 'Откройте настройки приложения, разрешите доступ к геолокации и включите точную локацию вместо приблизительной.',
+    'workspaceReady.locationBodyImpreciseIos': 'Доступ к геопозиции уже есть, но «Точная геопозиция» ещё выключена.',
+    'workspaceReady.locationBodyImpreciseAndroid': 'Доступ к геолокации уже есть, но приложение получает только приблизительную локацию.',
+    'workspaceReady.locationBodyReadyIos': 'Приложение уже получает точную геопозицию. Можно продолжать.',
+    'workspaceReady.locationBodyReadyAndroid': 'Приложение уже получает точную локацию. Можно продолжать.',
+    'workspaceReady.openSettings': 'Открыть настройки',
+    'workspaceReady.permissionRequired': 'Пока точная геолокация не предоставлена, продолжить нельзя.',
+    'workspaceReady.upcomingDays': 'Ваше расписание',
+    'workspaceReady.noShift': 'Смена пока не назначена.',
+    'workspaceReady.workingHours': 'Рабочее время',
+    'workspaceReady.finish': 'Приступить',
+
+    'biometricMobile.titleEnroll': 'Подтвердите лицо',
+    'biometricMobile.titleVerify': 'Покажите лицо',
+    'biometricMobile.subtitleEnroll': 'Первый снимок сохранится как эталон для дальнейшей проверки сотрудника.',
+    'biometricMobile.subtitleVerify': 'Сделайте один снимок. Мы сравним его с сохраненным эталоном.',
+    'biometricMobile.modeEnroll': 'Настройка',
+    'biometricMobile.modeVerify': 'Проверка',
+    'biometricMobile.cameraPermission': 'Нужен доступ к фронтальной камере.',
+    'biometricMobile.cameraPermissionCta': 'Разрешить камеру',
+    'biometricMobile.cameraPermissionSettingsCta': 'Открыть настройки',
+    'biometricMobile.reset': 'Повторить',
+    'biometricMobile.capture': 'Сделать снимок',
+    'biometricMobile.submitEnroll': 'Следующий шаг',
+    'biometricMobile.submitVerify': 'Следующий шаг',
+    'biometricMobile.submitReady': 'Снимок готов',
+    'biometricMobile.faceInstruction': 'Смотрите прямо в камеру',
+
+    'attendanceCapture.cameraPromptTitle': 'Разрешите фронтальную камеру',
+    'attendanceCapture.cameraPromptBody': 'Сначала покажем системный запрос. Камера нужна только для живого сканирования лица внутри приложения.',
+    'attendanceCapture.cameraPromptConfirm': 'Продолжить',
+    'attendanceCapture.cameraPromptCancel': 'Позже',
+    'attendanceCapture.locationRunning': 'Проверяем вашу локацию...',
+    'attendanceCapture.locationReady': 'Вы находитесь внутри рабочей зоны.',
+    'attendanceCapture.locationOutsideTitle': 'Вы вне рабочей зоны',
+    'attendanceCapture.locationOutsideBody': 'Переместитесь в отмеченный круг и запустите проверку локации ещё раз.',
+    'attendanceCapture.retryLocation': 'Повторить локацию',
+    'attendanceCapture.verifyingFace': 'Сканируем лицо...',
+    'attendanceCapture.enrollingFace': 'Сохраняем лицо...',
+    'attendanceCapture.faceEnrollComplete': 'Лицо сохранено. Теперь повторите сканирование для отметки.',
+    'attendanceCapture.faceReadyCheckIn': 'Лицо подтверждено. Открываем смену.',
+    'attendanceCapture.faceReadyCheckOut': 'Лицо подтверждено. Завершаем смену.',
+    'attendanceCapture.mapTitle': 'Карта зоны',
+    'attendanceCapture.targetLabel': 'Рабочая локация',
+    'attendanceCapture.currentLabel': 'Вы сейчас',
+    'attendanceCapture.outOfZoneDistance': 'До зоны ещё {distance}',
 
     'inbox.eyebrow': 'Входящие',
     'inbox.title': 'Рабочая лента',
@@ -617,6 +756,13 @@ const translations = {
     'manager.createNewsPhotoCancel': 'Отмена',
     'manager.createNewsPhotoPermissionDenied': 'Доступ к фото не выдан.',
     'manager.createNewsPhotoError': 'Не удалось выбрать фото для новости.',
+    'manager.createNewsEditImage': 'Редактировать',
+    'manager.createNewsSelectedAudienceOnly': 'Только для выбранных участников',
+    'manager.createNewsChooseAudience': 'Выбери группу или сотрудника.',
+    'manager.createNewsSelectParticipantsError': 'Выбери хотя бы одного участника для этой новости.',
+    'manager.createNewsPhotoUse': 'Использовать фото',
+    'manager.createNewsPhotoProcessing': 'Сохраняем...',
+    'manager.createNewsPhotoPrepareError': 'Не удалось подготовить фото новости.',
     'manager.requestType.leave': 'Отпуск',
     'manager.requestType.sickLeave': 'Больничный',
     'manager.requestType.vacationChange': 'Отпуск (изм.)',
@@ -637,6 +783,7 @@ const translations = {
     'common.loading': 'Loading...',
     'common.enableCamera': 'Enable camera',
     'common.now': 'Now',
+    'common.error': 'Error',
     'nav.today': 'Today',
     'nav.calendar': 'Calendar',
     'nav.news': 'News',
@@ -693,6 +840,38 @@ const translations = {
     'invite.verificationFailed': 'Code verification failed',
     'invite.invitationFoundTitle': 'Invitation found',
     'invite.invitationFoundBody': 'Company: {companyName}. Follow the link from the email to register.',
+
+    'joinProfile.loading': 'Checking company code...',
+    'joinProfile.unavailableTitle': 'Company code unavailable',
+    'joinProfile.backHome': 'Back to start',
+    'joinProfile.title': 'Join with code',
+    'joinProfile.company': 'Company',
+    'joinProfile.firstName': 'First name',
+    'joinProfile.lastName': 'Last name',
+    'joinProfile.email': 'Email',
+    'joinProfile.phone': 'Phone',
+    'joinProfile.birthDate': 'Birth date',
+    'joinProfile.birthDateHint': 'YYYY-MM-DD',
+    'joinProfile.birthDatePlaceholder': 'Birth date*',
+    'joinProfile.countryCodeLabel': 'Country code',
+    'joinProfile.photoTitle': 'Photo',
+    'joinProfile.pickPhoto': 'Choose photo',
+    'joinProfile.takePhoto': 'Take photo',
+    'joinProfile.cancel': 'Cancel',
+    'joinProfile.photoRequired': 'Add your photo',
+    'joinProfile.submit': 'Submit profile',
+    'joinProfile.submitting': 'Submitting...',
+    'joinProfile.requiredFields': 'Complete all fields.',
+    'joinProfile.invalidEmail': 'Enter a valid email.',
+    'joinProfile.invalidBirthDate': 'Birth date must use YYYY-MM-DD.',
+    'joinProfile.successTitle': 'Information sent',
+    'joinProfile.successBody': 'Your profile has been sent to the manager. After approval we will send you an email with the next sign-in step.',
+    'joinProfile.successCompany': 'Company: {companyName}',
+    'joinProfile.successCode': 'Code: {companyCode}',
+    'joinProfile.successBodyLineOne': 'Your profile has been sent to the {companyName} manager',
+    'joinProfile.successBodyLineTwo': 'After approval you will be notified',
+    'joinProfile.done': 'Done',
+    'joinProfile.addPhotoHint': 'A photo is required for employee approval.',
 
     'language.title': 'Languages',
 
@@ -965,6 +1144,10 @@ const translations = {
     'profile.account': 'Account',
     'profile.tenantId': 'Company',
     'profile.language': 'Language',
+    'profile.emailLabel': 'Email',
+    'profile.positionLabel': 'Position',
+    'profile.departmentLabel': 'Department',
+    'profile.phoneLabel': 'Phone',
     'profile.quickActions': 'Quick actions',
     'profile.requests': 'Requests',
     'profile.notifications': 'Notifications',
@@ -974,9 +1157,91 @@ const translations = {
 
     'announcements.eyebrow': 'Announcements',
     'announcements.title': 'Team updates',
+    'announcements.create': 'Create',
+    'announcements.countLabel': '{count} news items',
     'announcements.empty': 'No announcements yet.',
+    'announcements.hide': 'Hide',
     'announcements.loadError': 'Unable to load announcements.',
+    'announcements.pin': 'Pin',
     'announcements.pinned': 'pinned',
+    'announcements.unpin': 'Unpin',
+    'announcements.edit': 'Edit',
+    'announcements.editTitle': 'Edit news',
+    'announcements.save': 'Save',
+    'announcements.deleteConfirmTitle': 'Delete news?',
+    'announcements.deleteConfirmBody': 'Are you sure you want to delete this news item?',
+    'announcements.saveError': 'Unable to save the news item.',
+    'announcements.deleteError': 'Unable to delete the news item.',
+    'announcements.titleRequired': 'Enter a news title.',
+    'announcements.bodyRequired': 'Enter the news text.',
+    'announcements.editorTitlePlaceholder': 'News title',
+    'announcements.editorBodyPlaceholder': 'News text',
+
+    'notifications.title': 'Notifications',
+    'notifications.assignmentsTitle': 'New tasks and meetings',
+    'notifications.assignmentsBody': 'Notify when a new task or meeting is assigned to you.',
+    'notifications.taskTitle': 'Before a task becomes overdue',
+    'notifications.taskBody': 'Send a reminder before a task crosses its deadline.',
+    'notifications.meetingTitle': 'Before a meeting starts',
+    'notifications.meetingBody': 'Choose how early the meeting reminder should arrive.',
+    'notifications.shiftTitle': 'Hi / Bye shift reminders',
+    'notifications.shiftBody': 'Remind 15 minutes before shift start and 15 minutes before shift end.',
+    'notifications.minutes15': '15 min',
+    'notifications.minutes30': '30 min',
+    'notifications.minutes60': '1 hour',
+
+    'workspaceReady.title': 'Allow location access',
+    'workspaceReady.locationTitle': 'Confirm location settings',
+    'workspaceReady.locationStatusMissing': 'Precise location is off',
+    'workspaceReady.locationStatusImprecise': 'Enable precise location',
+    'workspaceReady.locationStatusReady': 'Precise location is enabled',
+    'workspaceReady.locationBodyMissingIos': 'Open the app settings, allow location access, and enable Precise Location.',
+    'workspaceReady.locationBodyMissingAndroid': 'Open the app settings, allow location access, and enable precise location instead of approximate.',
+    'workspaceReady.locationBodyImpreciseIos': 'Location access exists, but Precise Location is still disabled.',
+    'workspaceReady.locationBodyImpreciseAndroid': 'Location access exists, but the app still receives only an approximate location.',
+    'workspaceReady.locationBodyReadyIos': 'The app already has access to Precise Location. You can continue.',
+    'workspaceReady.locationBodyReadyAndroid': 'The app already has access to precise location. You can continue.',
+    'workspaceReady.openSettings': 'Open settings',
+    'workspaceReady.permissionRequired': 'Continue stays locked until precise location access is enabled.',
+    'workspaceReady.upcomingDays': 'Your schedule',
+    'workspaceReady.noShift': 'No shift assigned yet.',
+    'workspaceReady.workingHours': 'Working hours',
+    'workspaceReady.finish': 'Continue',
+
+    'biometricMobile.titleEnroll': 'Set up your face',
+    'biometricMobile.titleVerify': 'Show your face',
+    'biometricMobile.subtitleEnroll': 'The first photo will be saved as the reference for future employee checks.',
+    'biometricMobile.subtitleVerify': 'Capture one photo. We will compare it against your saved reference.',
+    'biometricMobile.modeEnroll': 'Setup',
+    'biometricMobile.modeVerify': 'Verify',
+    'biometricMobile.cameraPermission': 'Front camera access is required.',
+    'biometricMobile.cameraPermissionCta': 'Enable camera',
+    'biometricMobile.cameraPermissionSettingsCta': 'Open settings',
+    'biometricMobile.reset': 'Retake',
+    'biometricMobile.capture': 'Capture photo',
+    'biometricMobile.submitEnroll': 'Next step',
+    'biometricMobile.submitVerify': 'Next step',
+    'biometricMobile.submitReady': 'Photo ready',
+    'biometricMobile.faceInstruction': 'Look straight at the camera',
+
+    'attendanceCapture.cameraPromptTitle': 'Allow front camera access',
+    'attendanceCapture.cameraPromptBody': 'We will show the system prompt after your confirmation. Camera access is used only for live face verification inside the app.',
+    'attendanceCapture.cameraPromptConfirm': 'Continue',
+    'attendanceCapture.cameraPromptCancel': 'Later',
+    'attendanceCapture.locationRunning': 'Checking your location...',
+    'attendanceCapture.locationReady': 'You are inside the allowed work area.',
+    'attendanceCapture.locationOutsideTitle': 'You are outside the allowed work area',
+    'attendanceCapture.locationOutsideBody': 'Move into the marked circle and run the location check again.',
+    'attendanceCapture.retryLocation': 'Retry location',
+    'attendanceCapture.verifyingFace': 'Scanning face...',
+    'attendanceCapture.enrollingFace': 'Saving face...',
+    'attendanceCapture.faceEnrollComplete': 'Face saved. Run the scan again to finish attendance.',
+    'attendanceCapture.faceReadyCheckIn': 'Face verified. Starting the shift.',
+    'attendanceCapture.faceReadyCheckOut': 'Face verified. Closing the shift.',
+    'attendanceCapture.mapTitle': 'Work area map',
+    'attendanceCapture.targetLabel': 'Target location',
+    'attendanceCapture.currentLabel': 'Your position',
+    'attendanceCapture.outOfZoneDistance': '{distance} left to the work zone',
 
     'inbox.eyebrow': 'Inbox',
     'inbox.title': 'Workspace feed',
@@ -1233,6 +1498,13 @@ const translations = {
     'manager.createNewsPhotoCancel': 'Cancel',
     'manager.createNewsPhotoPermissionDenied': 'Photo access is not granted.',
     'manager.createNewsPhotoError': 'Unable to choose a news photo.',
+    'manager.createNewsEditImage': 'Edit',
+    'manager.createNewsSelectedAudienceOnly': 'Only for selected participants',
+    'manager.createNewsChooseAudience': 'Choose a group or an employee.',
+    'manager.createNewsSelectParticipantsError': 'Select at least one participant for this news item.',
+    'manager.createNewsPhotoUse': 'Use photo',
+    'manager.createNewsPhotoProcessing': 'Saving...',
+    'manager.createNewsPhotoPrepareError': 'Unable to prepare the news image.',
     'manager.requestType.leave': 'Leave',
     'manager.requestType.sickLeave': 'Sick leave',
     'manager.requestType.vacationChange': 'Vacation chg.',
@@ -1240,7 +1512,8 @@ const translations = {
     'manager.requestType.supply': 'Supply',
     'manager.requestType.shiftChange': 'Shift',
   },
-} as const;
+  ...generatedTranslations,
+} satisfies Record<AppLanguage, Record<string, string>>;
 
 const contentTranslations: Record<string, string> = {
   'Ежедневный обход территории': 'Daily grounds walk',
@@ -1286,17 +1559,59 @@ export function pluralizeRu(value: number, forms: readonly [string, string, stri
 
 const LANGUAGE_STORAGE_PATH = `${FileSystem.documentDirectory}app-language.txt`;
 
-function detectInitialLanguage(): AppLanguage {
-  try {
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase();
-    if (locale.startsWith('ru')) {
-      return 'ru';
-    }
-  } catch {
+function isAppLanguage(value: string): value is AppLanguage {
+  return (supportedAppLanguages as readonly string[]).includes(value);
+}
+
+function getLanguageFromLocale(locale: string): AppLanguage | null {
+  const normalized = locale.toLowerCase();
+
+  if (normalized.startsWith('ru')) {
+    return 'ru';
+  }
+
+  if (normalized.startsWith('ar')) {
+    return 'ar';
+  }
+
+  if (normalized.startsWith('hi')) {
+    return 'hi';
+  }
+
+  if (normalized.startsWith('ur')) {
+    return 'ur';
+  }
+
+  if (normalized.startsWith('bn')) {
+    return 'bn';
+  }
+
+  if (normalized.startsWith('id')) {
+    return 'id';
+  }
+
+  if (normalized.startsWith('ms')) {
+    return 'ms';
+  }
+
+  if (normalized.startsWith('fil') || normalized.startsWith('tl')) {
+    return 'tl';
+  }
+
+  if (normalized.startsWith('en')) {
     return 'en';
   }
 
-  return 'en';
+  return null;
+}
+
+function detectInitialLanguage(): AppLanguage {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    return getLanguageFromLocale(locale) ?? 'en';
+  } catch {
+    return 'en';
+  }
 }
 
 function translate(language: AppLanguage, key: TranslationKey, variables?: Record<string, string | number>) {
@@ -1322,7 +1637,7 @@ export function I18nProvider({ children }: PropsWithChildren) {
         const info = await FileSystem.getInfoAsync(LANGUAGE_STORAGE_PATH);
         if (info.exists) {
           const saved = await FileSystem.readAsStringAsync(LANGUAGE_STORAGE_PATH);
-          if (saved === 'ru' || saved === 'en') {
+          if (isAppLanguage(saved)) {
             setLanguageState(saved);
           }
         }
@@ -1355,7 +1670,10 @@ export function I18nProvider({ children }: PropsWithChildren) {
       },
       tc: (text) => {
         if (language === 'ru') return text;
-        return contentTranslations[text] || text;
+        if (language === 'en') {
+          return contentTranslations[text] || text;
+        }
+        return text;
       },
     };
   }, [language, setLanguage]);
@@ -1381,7 +1699,10 @@ export function useI18n() {
       },
       tc: (text: string) => {
         if (fallbackLanguage === 'ru') return text;
-        return contentTranslations[text] || text;
+        if (fallbackLanguage === 'en') {
+          return contentTranslations[text] || text;
+        }
+        return text;
       },
     };
   }
@@ -1394,5 +1715,24 @@ export function getLanguageLabel(language: AppLanguage) {
 }
 
 export function getDateLocale(language: AppLanguage) {
-  return language === 'ru' ? 'ru-RU' : 'en-US';
+  switch (language) {
+    case 'ru':
+      return 'ru-RU';
+    case 'ar':
+      return 'ar-AE';
+    case 'hi':
+      return 'hi-IN';
+    case 'ur':
+      return 'ur-PK';
+    case 'bn':
+      return 'bn-BD';
+    case 'id':
+      return 'id-ID';
+    case 'ms':
+      return 'ms-MY';
+    case 'tl':
+      return 'fil-PH';
+    default:
+      return 'en-US';
+  }
 }

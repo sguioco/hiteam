@@ -6,6 +6,7 @@ import { PressableScale } from '../../components/ui/pressable-scale';
 import { useI18n } from '../../lib/i18n';
 import { parseTaskMeta } from '../../lib/task-meta';
 import { taskTimeLabel } from '../../lib/task-utils';
+import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 
 type MeetingsListProps = {
   loading?: boolean;
@@ -22,18 +23,10 @@ const meetingTitleStyle = {
   letterSpacing: -0.2,
 } as const;
 
-function normalizeMeetingTitle(title: string) {
-  const normalized = title.replace(/^(Meeting|Встреча):\s*/i, '').trim();
-
-  if (!normalized) {
-    return normalized;
-  }
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
 export default function MeetingsList({ loading = false, tasks }: MeetingsListProps) {
-  const { t, tp, tc } = useI18n();
+  const { t, tp, language } = useI18n();
+  const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
+    useTranslatedTaskCopy(tasks, language);
 
   const formatDuration = (startAt?: string, endAt?: string) => {
     if (!startAt || !endAt) {
@@ -66,9 +59,16 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
               ? new Date(scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : taskTimeLabel(task);
             const durationLabel = formatDuration(meta.meeting?.scheduledAt, meta.meeting?.endAt);
-            const secondary = meta.meeting?.meetingLocation || meta.meeting?.meetingLink || meta.body || t('calendar.statusMeeting');
+            const secondary =
+              getTaskMeetingLocation(task) ||
+              meta.meeting?.meetingLink ||
+              getTaskBody(task) ||
+              t('calendar.statusMeeting');
             const isOnlineMeeting = meta.meeting?.meetingMode === 'online' && Boolean(meta.meeting?.meetingLink);
-            const normalizedTitle = tc(normalizeMeetingTitle(task.title));
+            const normalizedTitle = getTaskTitle(task, {
+              normalize: true,
+              stripMeetingPrefix: true,
+            });
 
             return (
               <Animated.View

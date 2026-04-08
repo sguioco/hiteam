@@ -8,7 +8,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
-import { getLanguageLabel, useI18n } from "../../lib/i18n";
+import { getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
 import { readScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
@@ -123,7 +123,7 @@ const ProfileScreen = () => {
       [
         {
           icon: "mail-outline" as const,
-          label: "Email",
+          label: t("profile.emailLabel"),
           value: profile?.user.email ?? "—",
         },
         {
@@ -133,21 +133,21 @@ const ProfileScreen = () => {
         },
         {
           icon: "briefcase-outline" as const,
-          label: "Position",
+          label: t("profile.positionLabel"),
           value: profile?.position?.name ?? "—",
         },
         {
           icon: "layers-outline" as const,
-          label: "Department",
+          label: t("profile.departmentLabel"),
           value: profile?.department?.name ?? "—",
         },
         {
           icon: "call-outline" as const,
-          label: "Phone",
+          label: t("profile.phoneLabel"),
           value: profile?.phone?.trim() ?? "",
         },
       ].filter((item) => {
-        if (item.label !== "Phone") {
+        if (item.label !== t("profile.phoneLabel")) {
           return true;
         }
 
@@ -269,10 +269,10 @@ const ProfileScreen = () => {
               <PressableScale
                 className="flex-row items-center gap-3 rounded-2xl border border-white/35 bg-white/72 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
                 haptic="selection"
-                onPress={() => router.push("/auth/language")}
+                  onPress={() => router.push("/auth/language")}
               >
                 <Text className="text-lg">
-                  {language === "ru" ? "🇷🇺" : "🇺🇸"}
+                  {languageOptions.find((option) => option.value === language)?.flag ?? "🇺🇸"}
                 </Text>
                 <View className="flex-1">
                   <Text className="font-body text-xs text-muted-foreground">

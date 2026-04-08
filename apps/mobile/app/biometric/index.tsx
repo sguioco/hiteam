@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function BiometricPage() {
   const router = useRouter();
-  const { language, t } = useI18n();
+  const { t } = useI18n();
   const params = useLocalSearchParams<{
     mode?: string;
     intent?: string;
@@ -60,46 +60,23 @@ export default function BiometricPage() {
     void refresh();
   }, []);
 
-  const copy =
-    language === 'ru'
-      ? {
-          titleEnroll: 'Подтвердите лицо',
-          titleVerify: 'Покажите лицо',
-          subtitleEnroll:
-            'Первый снимок сохранится как эталон для дальнейшей проверки сотрудника.',
-          subtitleVerify:
-            'Сделайте один снимок. Мы сравним его с сохраненным эталоном.',
-          modeEnroll: 'Настройка',
-          modeVerify: 'Проверка',
-          cameraPermission: 'Нужен доступ к фронтальной камере.',
-          cameraPermissionCta: 'Разрешить камеру',
-          cameraPermissionSettingsCta: 'Открыть настройки',
-          reset: 'Повторить',
-          capture: 'Сделать снимок',
-          submitEnroll: 'Next step',
-          submitVerify: 'Next step',
-          submitReady: 'Снимок готов',
-          faceInstruction: 'Смотрите прямо в камеру',
-        }
-        : {
-            titleEnroll: 'Setup your face',
-            titleVerify: 'Show your face',
-            subtitleEnroll:
-            'This photo will be saved as the reference for future attendance checks',
-          subtitleVerify:
-            'Capture one photo. We will compare it against your saved reference',
-          modeEnroll: 'Setup',
-          modeVerify: 'Verify',
-          cameraPermission: 'Camera access is required.',
-          cameraPermissionCta: 'Enable camera',
-          cameraPermissionSettingsCta: 'Open settings',
-          reset: 'Retake',
-          capture: 'Capture photo',
-          submitEnroll: 'Next step',
-          submitVerify: 'Next step',
-          submitReady: 'Photo ready',
-          faceInstruction: 'Look straight at the camera',
-        };
+  const copy = {
+    titleEnroll: t('biometricMobile.titleEnroll'),
+    titleVerify: t('biometricMobile.titleVerify'),
+    subtitleEnroll: t('biometricMobile.subtitleEnroll'),
+    subtitleVerify: t('biometricMobile.subtitleVerify'),
+    modeEnroll: t('biometricMobile.modeEnroll'),
+    modeVerify: t('biometricMobile.modeVerify'),
+    cameraPermission: t('biometricMobile.cameraPermission'),
+    cameraPermissionCta: t('biometricMobile.cameraPermissionCta'),
+    cameraPermissionSettingsCta: t('biometricMobile.cameraPermissionSettingsCta'),
+    reset: t('biometricMobile.reset'),
+    capture: t('biometricMobile.capture'),
+    submitEnroll: t('biometricMobile.submitEnroll'),
+    submitVerify: t('biometricMobile.submitVerify'),
+    submitReady: t('biometricMobile.submitReady'),
+    faceInstruction: t('biometricMobile.faceInstruction'),
+  };
 
   const steps = useMemo(() => [copy.faceInstruction], [copy.faceInstruction]);
 

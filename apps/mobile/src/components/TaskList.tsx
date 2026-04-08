@@ -8,6 +8,7 @@ import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { addMyTaskPhotoProof, deleteMyTaskPhotoProof } from '../../lib/api';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
+import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from './BottomSheetModal';
 
@@ -60,20 +61,6 @@ const PHOTO_REPORT_LAYOUT = {
 
 const PHOTO_REPORT_LIMIT = 7;
 
-
-function normalizeTaskTitle(title: string) {
-  const normalized = title
-    .replace(/^(Employee recurring|Повторяющаяся задача сотрудника):\s*/i, '')
-    .replace(/^(Owner recurring|Повторяющаяся задача владельца):\s*/i, '')
-    .trim();
-
-  if (!normalized) {
-    return normalized;
-  }
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
 function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?: any) => string): TaskPhoto[] {
   return task.photoProofs
     .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
@@ -97,8 +84,9 @@ export default function TaskList({
   onToggleTask,
   onTaskUpdate,
 }: TaskListProps) {
-  const { language, t, tp, tc } = useI18n();
+  const { language, t, tp } = useI18n();
   const locale = getDateLocale(language);
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [photoSourceAction, setPhotoSourceAction] = useState<PhotoSourceAction>('add');
@@ -458,7 +446,7 @@ export default function TaskList({
   }
 
   function renderTaskRow(task: TaskItem, index: number, completed = false) {
-    const title = tc(normalizeTaskTitle(task.title));
+    const title = getTaskTitle(task, { normalize: true });
     const isUpdating = updatingTaskIds.includes(task.id);
     const photoCount =
       (taskPhotos[task.id]?.length ?? 0) +

@@ -19,53 +19,46 @@ export default function WorkspaceReadyOnboardingScreen() {
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
   const isIos = Platform.OS === 'ios';
-  const weekdayLabels = language === 'ru' ? ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'] : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-  const copy =
-    language === 'ru'
-      ? {
-          title: 'Разрешите геолокацию',
-          locationTitle: 'Подтвердите настройки локации',
-          locationStatusMissing: isIos ? 'Точная геопозиция не включена' : 'Precise location не включена',
-          locationStatusImprecise: isIos ? 'Включите точную геопозицию' : 'Включите Precise location',
-          locationStatusReady: isIos ? 'Точная геопозиция включена' : 'Precise location включена',
-          locationBodyMissing: isIos
-            ? 'Откройте настройки приложения, разрешите доступ к геопозиции и включите «Точная геопозиция».'
-            : 'Откройте настройки приложения, разрешите доступ к геолокации и включите точную локацию вместо приблизительной.',
-          locationBodyImprecise: isIos
-            ? 'Доступ к геопозиции уже есть, но «Точная геопозиция» ещё выключена.'
-            : 'Доступ к геолокации уже есть, но приложение получает только приблизительную локацию.',
-          locationBodyReady: isIos
-            ? 'Приложение уже получает точную геопозицию. Можно продолжать.'
-            : 'Приложение уже получает точную локацию. Можно продолжать.',
-          openSettings: 'Открыть настройки',
-          permissionRequired: 'Пока точная геолокация не предоставлена, продолжить нельзя.',
-          upcomingDays: 'Ваше расписание',
-          noShift: 'Смена пока не назначена.',
-          workingHours: 'Рабочее время',
-          finish: 'Приступить',
-        }
-      : {
-          title: 'Allow location access',
-          locationTitle: 'Confirm location settings',
-          locationStatusMissing: isIos ? 'Precise Location is off' : 'Precise location not detected',
-          locationStatusImprecise: isIos ? 'Enable Precise Location' : 'Precise location not detected',
-          locationStatusReady: isIos ? 'Precise Location is enabled' : 'Precise location is enabled',
-          locationBodyMissing: isIos
-            ? 'Open the app settings, allow location access, and enable Precise Location.'
-            : 'Open the app settings, allow location access, and enable Precise Location',
-          locationBodyImprecise: isIos
-            ? 'Location access exists, but Precise Location is still disabled.'
-            : 'Location access exists, but the app still receives only an approximate or stale location on Android.',
-          locationBodyReady: isIos
-            ? 'The app already has access to Precise Location. You can continue.'
-            : 'The app already has access to precise location. You can continue.',
-          openSettings: 'Open settings',
-          permissionRequired: 'Continue stays locked until precise location access is enabled.',
-          upcomingDays: 'Your schedule',
-          noShift: 'No shift assigned yet.',
-          workingHours: 'Working hours',
-          finish: 'Continue',
-        };
+  const weekdayLabels = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        new Intl.DateTimeFormat(locale, { weekday: 'short' })
+          .format(new Date(2026, 0, 5 + index))
+          .replace(/\./g, ''),
+      ),
+    [locale],
+  );
+  const copy = useMemo(
+    () => ({
+      title: t('workspaceReady.title'),
+      locationTitle: t('workspaceReady.locationTitle'),
+      locationStatusMissing: t('workspaceReady.locationStatusMissing'),
+      locationStatusImprecise: t('workspaceReady.locationStatusImprecise'),
+      locationStatusReady: t('workspaceReady.locationStatusReady'),
+      locationBodyMissing: t(
+        isIos
+          ? 'workspaceReady.locationBodyMissingIos'
+          : 'workspaceReady.locationBodyMissingAndroid',
+      ),
+      locationBodyImprecise: t(
+        isIos
+          ? 'workspaceReady.locationBodyImpreciseIos'
+          : 'workspaceReady.locationBodyImpreciseAndroid',
+      ),
+      locationBodyReady: t(
+        isIos
+          ? 'workspaceReady.locationBodyReadyIos'
+          : 'workspaceReady.locationBodyReadyAndroid',
+      ),
+      openSettings: t('workspaceReady.openSettings'),
+      permissionRequired: t('workspaceReady.permissionRequired'),
+      upcomingDays: t('workspaceReady.upcomingDays'),
+      noShift: t('workspaceReady.noShift'),
+      workingHours: t('workspaceReady.workingHours'),
+      finish: t('workspaceReady.finish'),
+    }),
+    [isIos, t],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<PreciseLocationAccessStatus>({
@@ -399,7 +392,7 @@ export default function WorkspaceReadyOnboardingScreen() {
             <View className="flex-row items-center justify-center gap-1">
               {weekdayLabels.map((label, index) => {
                 const isActive = scheduleSummary.activeWeekdays.has(index);
-                const isEnglish = language !== 'ru';
+                const usesCompactWeekdayText = label.length >= 4;
 
                 return (
                   <View
@@ -412,9 +405,9 @@ export default function WorkspaceReadyOnboardingScreen() {
                       style={{
                         color: isActive ? '#546cf2' : '#8b94a8',
                         fontFamily: 'Manrope_600SemiBold',
-                        fontSize: isEnglish ? 13 : 15,
+                        fontSize: usesCompactWeekdayText ? 13 : 15,
                         includeFontPadding: false,
-                        lineHeight: isEnglish ? 13 : 16,
+                        lineHeight: usesCompactWeekdayText ? 13 : 16,
                       }}
                     >
                       {label}

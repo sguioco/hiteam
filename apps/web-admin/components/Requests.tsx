@@ -213,7 +213,7 @@ const requestsCopy = {
 const statusConfig = {
   PENDING: {
     badgeClass:
-      "border-[color:rgba(190,122,32,0.14)] bg-[color:var(--soft-warning)] text-[color:var(--warning)]",
+      "border-[color:rgba(40,75,255,0.16)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
     icon: Clock3,
   },
   APPROVED: {
@@ -254,7 +254,7 @@ const requestTypeConfig: Record<
   UNPAID_LEAVE: {
     icon: CalendarDays,
     iconClass: "text-[color:var(--warning)]",
-    iconWrapClass: "bg-[color:var(--soft-warning)]",
+    iconWrapClass: "bg-[color:var(--soft-accent)]",
   },
   SHIFT_CHANGE: {
     icon: ArrowRightLeft,
@@ -269,16 +269,22 @@ const requestTypeConfig: Record<
   SUPPLY: {
     icon: Package,
     iconClass: "text-[color:var(--warning)]",
-    iconWrapClass: "bg-[color:var(--soft-warning)]",
+    iconWrapClass: "bg-[color:var(--soft-accent)]",
   },
   GENERAL: {
     icon: FileText,
     iconClass: "text-[color:var(--muted-foreground)]",
-    iconWrapClass: "bg-[color:var(--panel-muted)]",
+    iconWrapClass: "bg-[color:var(--soft-accent)]",
   },
 };
 
 const REQUESTS_CACHE_TTL_MS = 60_000;
+const requestBlueSurfaceClass =
+  "border border-[#d8e5ff] bg-[linear-gradient(145deg,rgba(237,244,255,0.96),rgba(247,250,255,0.98)_42%,rgba(223,236,255,0.94)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_24px_44px_-32px_rgba(79,109,245,0.42)]";
+const requestBlueInsetClass =
+  "border border-[#d8e5ff] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(243,248,255,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]";
+const requestBluePillClass =
+  "border border-[#d8e5ff] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(243,248,255,0.94))] text-[#6b7b98] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]";
 
 function buildRequestsCacheKey(session: ReturnType<typeof getSession>) {
   return session ? `requests-inbox:${session.user.id}` : null;
@@ -784,7 +790,12 @@ export default function Requests({
 
         <div className="space-y-3">
           {loading ? (
-            <div className="flex min-h-[220px] items-center justify-center rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] text-sm text-[color:var(--muted-foreground)]">
+            <div
+              className={cn(
+                "flex min-h-[220px] items-center justify-center rounded-[24px] text-sm text-[color:var(--muted-foreground)]",
+                requestBlueSurfaceClass,
+              )}
+            >
               <LoaderCircle className="mr-2 size-4 animate-spin" />
               {ui.loading}
             </div>
@@ -846,7 +857,12 @@ export default function Requests({
                           <StatusIcon className="size-3.5" />
                           {displayStatus.label}
                         </span>
-                        <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--muted-foreground)]">
+                        <span
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-[11px] font-medium",
+                            requestBluePillClass,
+                          )}
+                        >
                           {requestTypeLabels[item.request.requestType]}
                         </span>
                       </div>
@@ -873,7 +889,7 @@ export default function Requests({
                       </p>
 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                        <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1">
+                        <span className={cn("rounded-full px-2.5 py-1", requestBluePillClass)}>
                           {ui.period}:{" "}
                           {formatPeriod(
                             item.request.startsOn,
@@ -881,13 +897,13 @@ export default function Requests({
                             localeTag,
                           )}
                         </span>
-                        <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1">
+                        <span className={cn("rounded-full px-2.5 py-1", requestBluePillClass)}>
                           {ui.days}: {item.request.requestedDays}
                         </span>
-                        <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1">
+                        <span className={cn("rounded-full px-2.5 py-1", requestBluePillClass)}>
                           {ui.comments}: {item.request.comments.length}
                         </span>
-                        <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1">
+                        <span className={cn("rounded-full px-2.5 py-1", requestBluePillClass)}>
                           {ui.attachments}: {item.request.attachments.length}
                         </span>
                       </div>
@@ -1036,13 +1052,23 @@ export default function Requests({
                             ).label
                           }
                         </span>
-                        <span className="rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1 text-xs text-[color:var(--muted-foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
+                        <span
+                          className={cn(
+                            "rounded-full px-3 py-1 text-xs",
+                            requestBluePillClass,
+                          )}
+                        >
                           {ui.requestStatusLabel}:{" "}
                           {requestStatusLabels[
                             selectedItem.request.status as keyof typeof requestStatusLabels
                           ] ?? selectedItem.request.status}
                         </span>
-                        <span className="rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1 text-xs text-[color:var(--muted-foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
+                        <span
+                          className={cn(
+                            "rounded-full px-3 py-1 text-xs",
+                            requestBluePillClass,
+                          )}
+                        >
                           {ui.stepLabel} {selectedItem.sequence} {ui.ofLabel}{" "}
                           {selectedItem.request.approvalSteps.length}
                         </span>
@@ -1054,9 +1080,14 @@ export default function Requests({
 
               <div className="space-y-6 px-6 py-6">
                 <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="rounded-[24px] bg-[color:var(--panel-muted)] p-5">
+                  <div className={cn("rounded-[24px] p-5", requestBlueSurfaceClass)}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-sm font-semibold text-[color:var(--foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
+                      <div
+                        className={cn(
+                          "flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-[color:var(--foreground)]",
+                          requestBlueInsetClass,
+                        )}
+                      >
                         {getInitials(
                           selectedItem.request.employee.firstName,
                           selectedItem.request.employee.lastName,
@@ -1075,7 +1106,7 @@ export default function Requests({
                     </div>
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className={cn("rounded-2xl px-4 py-3", requestBlueInsetClass)}>
                         <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                           {ui.period}
                         </p>
@@ -1087,7 +1118,7 @@ export default function Requests({
                           )}
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className={cn("rounded-2xl px-4 py-3", requestBlueInsetClass)}>
                         <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                           {ui.days}
                         </p>
@@ -1097,7 +1128,7 @@ export default function Requests({
                       </div>
                     </div>
 
-                    <div className="mt-4 rounded-2xl bg-white px-4 py-4">
+                    <div className={cn("mt-4 rounded-2xl px-4 py-4", requestBlueInsetClass)}>
                       <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                         {ui.reason}
                       </p>
@@ -1107,8 +1138,8 @@ export default function Requests({
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-[24px] bg-[color:var(--panel-muted)] p-5">
-                    <div className="rounded-2xl bg-white px-4 py-3">
+                  <div className={cn("space-y-3 rounded-[24px] p-5", requestBlueSurfaceClass)}>
+                    <div className={cn("rounded-2xl px-4 py-3", requestBlueInsetClass)}>
                       <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                         {ui.attachments}
                       </p>
@@ -1116,7 +1147,7 @@ export default function Requests({
                         {selectedItem.request.attachments.length}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white px-4 py-3">
+                    <div className={cn("rounded-2xl px-4 py-3", requestBlueInsetClass)}>
                       <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                         {ui.comments}
                       </p>
@@ -1124,7 +1155,7 @@ export default function Requests({
                         {selectedItem.request.comments.length}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white px-4 py-3">
+                    <div className={cn("rounded-2xl px-4 py-3", requestBlueInsetClass)}>
                       <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--muted-foreground)]">
                         {ui.progress}
                       </p>
@@ -1148,7 +1179,10 @@ export default function Requests({
                     <div className="grid gap-3">
                       {selectedItem.request.attachments.map((attachment) => (
                         <a
-                          className="flex items-center justify-between rounded-[20px] border border-[color:var(--border)] bg-white px-4 py-3 text-sm transition hover:border-[color:var(--border-strong)]"
+                          className={cn(
+                            "flex items-center justify-between rounded-[20px] px-4 py-3 text-sm transition hover:border-[color:var(--accent)] hover:bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(237,244,255,0.96))]",
+                            requestBlueInsetClass,
+                          )}
                           href={attachment.storageKey}
                           key={attachment.id}
                           rel="noreferrer"
@@ -1184,7 +1218,7 @@ export default function Requests({
                           ? {
                               label: ui.skipped,
                               className:
-                                "border-[color:var(--border)] bg-[color:var(--panel-muted)] text-[color:var(--muted-foreground)]",
+                                requestBluePillClass,
                             }
                           : {
                               label:
@@ -1198,10 +1232,7 @@ export default function Requests({
                             };
 
                       return (
-                        <article
-                          className="rounded-[20px] border border-[color:var(--border)] bg-white px-4 py-4"
-                          key={step.id}
-                        >
+                        <article className={cn("rounded-[20px] px-4 py-4", requestBlueInsetClass)} key={step.id}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-[color:var(--foreground)]">
@@ -1228,7 +1259,12 @@ export default function Requests({
                           </div>
 
                           {step.comment ? (
-                            <p className="mt-3 rounded-2xl bg-[color:var(--panel-muted)] px-3 py-3 text-sm text-[color:var(--foreground)]">
+                            <p
+                              className={cn(
+                                "mt-3 rounded-2xl px-3 py-3 text-sm text-[color:var(--foreground)]",
+                                requestBluePillClass,
+                              )}
+                            >
                               {step.comment}
                             </p>
                           ) : null}
@@ -1251,10 +1287,7 @@ export default function Requests({
                   <div className="space-y-3">
                     {selectedItem.request.comments.length > 0 ? (
                       selectedItem.request.comments.map((comment) => (
-                        <article
-                          className="rounded-[20px] border border-[color:var(--border)] bg-white px-4 py-4"
-                          key={comment.id}
-                        >
+                        <article className={cn("rounded-[20px] px-4 py-4", requestBlueInsetClass)} key={comment.id}>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-[color:var(--foreground)]">
                               {formatPersonName(
@@ -1272,13 +1305,18 @@ export default function Requests({
                         </article>
                       ))
                     ) : (
-                      <div className="rounded-[20px] border border-dashed border-[color:var(--border-strong)] bg-[color:var(--panel-muted)] px-4 py-8 text-center text-sm text-[color:var(--muted-foreground)]">
+                      <div
+                        className={cn(
+                          "rounded-[20px] border-dashed px-4 py-8 text-center text-sm text-[color:var(--muted-foreground)]",
+                          requestBlueSurfaceClass,
+                        )}
+                      >
                         {ui.noComments}
                       </div>
                     )}
                   </div>
 
-                  <div className="rounded-[24px] bg-[color:var(--panel-muted)] p-4">
+                  <div className={cn("rounded-[24px] p-4", requestBlueSurfaceClass)}>
                     <label className="mb-2 block text-sm font-medium text-[color:var(--foreground)]">
                       {ui.newComment}
                     </label>

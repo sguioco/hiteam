@@ -24,6 +24,7 @@ import {
 } from '@smart/types';
 import { getCurrentDeviceFingerprint, getCurrentDeviceName, getCurrentDevicePlatform } from './device';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
+import type { AppLanguage } from './i18n';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -218,6 +219,18 @@ export async function restorePersistedSession() {
 export async function getDemoAccessToken(): Promise<string> {
   const session = await getDemoSession();
   return session.accessToken;
+}
+
+export async function translateTexts(texts: string[], targetLocale: AppLanguage) {
+  const payload = await authRequest<{ translations?: Record<string, string> }>('/translate', {
+    method: 'POST',
+    body: JSON.stringify({
+      texts,
+      targetLocale,
+    }),
+  });
+
+  return payload.translations ?? {};
 }
 
 export async function signInWithEmail(email: string, password: string, tenantSlug?: string) {

@@ -51,41 +51,26 @@ const sectionBodyStyle = {
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { language, t } = useI18n();
+  const { t } = useI18n();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
 
   const copy = useMemo(
     () =>
-      language === 'ru'
-        ? {
-            title: 'Уведомления',
-            assignmentsTitle: 'Новые задачи и встречи',
-            assignmentsBody: 'Сообщать, когда вам назначили задачу или встречу.',
-            taskTitle: 'До просрочки задачи',
-            taskBody: 'Напомнить заранее, чтобы задача не ушла в overdue.',
-            meetingTitle: 'До начала встречи',
-            meetingBody: 'Выберите, за сколько времени напомнить о meeting.',
-            shiftTitle: 'Hi / Bye по смене',
-            shiftBody: 'Напоминать за 15 минут до начала и конца смены.',
-            minutes15: '15 min',
-            minutes30: '30 min',
-            minutes60: '1 hour',
-          }
-        : {
-            title: t('profile.notifications'),
-            assignmentsTitle: 'New tasks and meetings',
-            assignmentsBody: 'Notify when a new task or meeting is assigned to you.',
-            taskTitle: 'Before a task becomes overdue',
-            taskBody: 'Send a reminder before a task crosses its deadline.',
-            meetingTitle: 'Before a meeting starts',
-            meetingBody: 'Choose how early the meeting reminder should arrive.',
-            shiftTitle: 'Hi / Bye shift reminders',
-            shiftBody: 'Remind 15 minutes before shift start and 15 minutes before shift end.',
-            minutes15: '15 min',
-            minutes30: '30 min',
-            minutes60: '1 hour',
-          },
-    [language, t],
+      ({
+        title: t('notifications.title'),
+        assignmentsTitle: t('notifications.assignmentsTitle'),
+        assignmentsBody: t('notifications.assignmentsBody'),
+        taskTitle: t('notifications.taskTitle'),
+        taskBody: t('notifications.taskBody'),
+        meetingTitle: t('notifications.meetingTitle'),
+        meetingBody: t('notifications.meetingBody'),
+        shiftTitle: t('notifications.shiftTitle'),
+        shiftBody: t('notifications.shiftBody'),
+        minutes15: t('notifications.minutes15'),
+        minutes30: t('notifications.minutes30'),
+        minutes60: t('notifications.minutes60'),
+      }),
+    [t],
   );
 
   useEffect(() => {

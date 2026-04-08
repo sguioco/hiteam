@@ -7,10 +7,11 @@ import { Card } from '../../components/ui/card';
 import { AppGradientBackground } from '../../components/ui/screen';
 import { loadMyAccessStatus } from '../../lib/api';
 import { signOutLocally } from '../../lib/auth-flow';
-import { useI18n } from '../../lib/i18n';
+import { getDateLocale, useI18n } from '../../lib/i18n';
 
 export default function PendingAccessScreen() {
   const { language, t } = useI18n();
+  const locale = getDateLocale(language);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<Awaited<ReturnType<typeof loadMyAccessStatus>> | null>(null);
@@ -49,7 +50,7 @@ export default function PendingAccessScreen() {
           {status?.submittedAt ? (
             <Text className="text-[14px] leading-6 text-muted-foreground">
               {t('pending.submittedAt', {
-                date: new Date(status.submittedAt).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US'),
+                date: new Date(status.submittedAt).toLocaleString(locale),
               })}
             </Text>
           ) : null}

@@ -144,7 +144,7 @@ export function NewsImageCropperModal({
   onClose,
   onApply,
 }: NewsImageCropperModalProps) {
-  const { language } = useI18n();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const cropRef = useRef<CropZoomRefType>(null);
   const [saving, setSaving] = useState(false);
@@ -155,16 +155,13 @@ export function NewsImageCropperModal({
 
   const copy = useMemo(
     () => ({
-      title: language === 'ru' ? 'Фото новости' : 'News photo',
-      cancel: language === 'ru' ? 'Отмена' : 'Cancel',
-      apply: language === 'ru' ? 'Использовать фото' : 'Use photo',
-      saving: language === 'ru' ? 'Сохраняем...' : 'Saving...',
-      error:
-        language === 'ru'
-          ? 'Не удалось подготовить фото новости.'
-          : 'Unable to prepare the news image.',
+      title: t('manager.createNewsPhotoTitle'),
+      cancel: t('common.cancel'),
+      apply: t('manager.createNewsPhotoUse'),
+      saving: t('manager.createNewsPhotoProcessing'),
+      error: t('manager.createNewsPhotoPrepareError'),
     }),
-    [language],
+    [t],
   );
 
   const aspectRatioValue = announcementAspectRatioToNumber(selectedAspectRatio);
@@ -214,7 +211,7 @@ export function NewsImageCropperModal({
       onClose();
     } catch {
       hapticError();
-      Alert.alert('Error', copy.error);
+      Alert.alert(t('common.error'), copy.error);
     } finally {
       setSaving(false);
     }

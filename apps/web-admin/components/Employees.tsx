@@ -68,6 +68,10 @@ import {
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import {
+  getWebAdminTaskPriorityLabel,
+  normalizeWebAdminTaskPriority,
+} from "@/lib/task-priority";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
 
 type EmployeeApiRecord = {
@@ -362,20 +366,16 @@ function getInvitationLabel(
   return runtimeLocalize("Отклонено", "Rejected", locale);
 }
 
-function getTaskPriorityOptions(locale: "ru" | "en") {
+function getTaskPriorityOptions(_locale: "ru" | "en") {
   return [
-    { value: "LOW" as TaskItem["priority"], label: runtimeLocalize("Низкий", "Low", locale) },
+    { value: "LOW" as TaskItem["priority"], label: getWebAdminTaskPriorityLabel("LOW") },
     {
       value: "MEDIUM" as TaskItem["priority"],
-      label: runtimeLocalize("Средний", "Medium", locale),
+      label: getWebAdminTaskPriorityLabel("MEDIUM"),
     },
     {
       value: "HIGH" as TaskItem["priority"],
-      label: runtimeLocalize("Высокий", "High", locale),
-    },
-    {
-      value: "URGENT" as TaskItem["priority"],
-      label: runtimeLocalize("Срочный", "Urgent", locale),
+      label: getWebAdminTaskPriorityLabel("HIGH"),
     },
   ];
 }
@@ -3272,7 +3272,7 @@ const Employees = ({
               <label className="grid gap-2 text-sm font-heading">
                 <span>{runtimeLocalize("Приоритет", "Priority", locale)}</span>
                 <AppSelectField
-                  value={taskDraft.priority}
+                  value={normalizeWebAdminTaskPriority(taskDraft.priority)}
                   onValueChange={(value) =>
                     setTaskDraft((current) => ({
                       ...current,

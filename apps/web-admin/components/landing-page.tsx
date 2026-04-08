@@ -6,13 +6,16 @@ import type {
   FC,
   HTMLAttributes,
 } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import createGlobe from "cobe";
+import { useGSAP } from "@gsap/react";
 import {
   ChartBreakoutSquare,
   MessageChatCircle,
   ZapFast,
 } from "@untitledui/icons";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { BrandWordmark } from "./brand-wordmark";
 import { cx } from "@/lib/utils/cx";
 import {
@@ -28,6 +31,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { AuroraText } from "@/components/ui/aurora-text";
 import { LineShadowText } from "@/components/ui/line-shadow-text";
+
+gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 type GlobeOverlayItem =
   | {
@@ -199,6 +204,8 @@ const GLOBE_GLOBAL_OFFSET_Y = 0;
 const GLOBE_POLAROID_OFFSET_Y = 100;
 
 type LandingLocale = "ru" | "en";
+const LANDING_LOCALE_EVENT = "smart-admin-locale-change";
+const LANDING_DESKTOP_QUERY = "(min-width: 768px)";
 
 type LegalDocumentKey = "consent" | "privacy";
 
@@ -462,6 +469,76 @@ function readStoredLandingLocale(): LandingLocale | null {
 
   const savedLocale = window.localStorage.getItem("smart-admin-locale");
   return savedLocale === "ru" || savedLocale === "en" ? savedLocale : null;
+}
+
+function subscribeToLandingLocale(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const handleChange = () => onStoreChange();
+  window.addEventListener("storage", handleChange);
+  window.addEventListener("focus", handleChange);
+  window.addEventListener(LANDING_LOCALE_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener("focus", handleChange);
+    window.removeEventListener(LANDING_LOCALE_EVENT, handleChange);
+  };
+}
+
+function getLandingLocaleSnapshot(): LandingLocale {
+  return readStoredLandingLocale() ?? detectPreferredLandingLocale();
+}
+
+function getLandingLocaleServerSnapshot(): LandingLocale {
+  return "ru";
+}
+
+function subscribeToHeaderScroll(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const handleScroll = () => onStoreChange();
+  window.addEventListener("scroll", handleScroll, { passive: true });
+
+  return () => {
+    window.removeEventListener("scroll", handleScroll);
+  };
+}
+
+function getHeaderScrolledSnapshot() {
+  return typeof window !== "undefined" ? window.scrollY > 12 : false;
+}
+
+function getHeaderScrolledServerSnapshot() {
+  return false;
+}
+
+function subscribeToDesktopViewport(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const mediaQueryList = window.matchMedia(LANDING_DESKTOP_QUERY);
+  const handleChange = () => onStoreChange();
+  mediaQueryList.addEventListener("change", handleChange);
+
+  return () => {
+    mediaQueryList.removeEventListener("change", handleChange);
+  };
+}
+
+function getDesktopViewportSnapshot() {
+  return typeof window !== "undefined"
+    ? window.matchMedia(LANDING_DESKTOP_QUERY).matches
+    : false;
+}
+
+function getDesktopViewportServerSnapshot() {
+  return false;
 }
 
 type GlobeAnchorStyle = CSSProperties & {
@@ -1009,17 +1086,30 @@ const AppStoreButton = ({
 };
 
 const Landing = () => {
+  const landingRef = useRef<HTMLDivElement>(null);
   const heroVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const globeContainerRef = useRef<HTMLDivElement>(null);
   const overlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const basePhiRef = useRef(GLOBE_INITIAL_PHI);
-  const [locale, setLocale] = useState<LandingLocale>("ru");
+  const locale = useSyncExternalStore(
+    subscribeToLandingLocale,
+    getLandingLocaleSnapshot,
+    getLandingLocaleServerSnapshot,
+  );
+  const isHeaderScrolled = useSyncExternalStore(
+    subscribeToHeaderScroll,
+    getHeaderScrolledSnapshot,
+    getHeaderScrolledServerSnapshot,
+  );
+  const isDesktopViewport = useSyncExternalStore(
+    subscribeToDesktopViewport,
+    getDesktopViewportSnapshot,
+    getDesktopViewportServerSnapshot,
+  );
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
-  const [heroVideoSrc, setHeroVideoSrc] = useState("/hero.webm");
   const [demoName, setDemoName] = useState("");
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
@@ -1027,6 +1117,7 @@ const Landing = () => {
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocumentKey | null>(
     null,
   );
+  const isMobileNavExpanded = isMobileNavOpen && !isDesktopViewport;
 
   const isDemoFormValid =
     demoName.trim().length > 0 &&
@@ -1072,38 +1163,19 @@ const Landing = () => {
   };
 
   const updateLocale = (nextLocale: LandingLocale) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("smart-admin-locale", nextLocale);
+    if (typeof window === "undefined") {
+      return;
     }
 
-    setLocale(nextLocale);
+    window.localStorage.setItem("smart-admin-locale", nextLocale);
+    window.dispatchEvent(new Event(LANDING_LOCALE_EVENT));
   };
 
-  useEffect(() => {
-    const syncLocale = () => {
-      setLocale(readStoredLandingLocale() ?? detectPreferredLandingLocale());
-    };
+  const toggleFaq = (index: number) => {
+    setOpenFaq((current) => (current === index ? null : index));
+  };
 
-    syncLocale();
-    window.addEventListener("storage", syncLocale);
-    window.addEventListener("focus", syncLocale);
-
-    return () => {
-      window.removeEventListener("storage", syncLocale);
-      window.removeEventListener("focus", syncLocale);
-    };
-  }, []);
-
-  useEffect(() => {
-    const probe = document.createElement("video");
-    const canPlayWebm =
-      probe.canPlayType('video/webm; codecs="vp9"') !== "" ||
-      probe.canPlayType("video/webm") !== "";
-
-    setHeroVideoSrc(canPlayWebm ? "/hero.webm" : "/hero.mp4");
-  }, []);
-
-  useEffect(() => {
+  useGSAP(() => {
     const video = heroVideoRef.current;
     if (!video) {
       return;
@@ -1147,9 +1219,9 @@ const Landing = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", tryPlay);
     };
-  }, [heroVideoSrc]);
+  }, { scope: landingRef });
 
-  useEffect(() => {
+  useGSAP(() => {
     if (!canvasRef.current || !globeContainerRef.current) return;
 
     const canvas = canvasRef.current;
@@ -1248,35 +1320,224 @@ const Landing = () => {
       resizeObserver.disconnect();
       globe.destroy();
     };
-  }, []);
+  }, { scope: landingRef });
 
-  useEffect(() => {
-    const syncMobileNavState = () => {
-      if (window.innerWidth >= 768) {
+  useGSAP(() => {
+    const mediaQueryList = window.matchMedia(LANDING_DESKTOP_QUERY);
+    const syncMobileNavState = (event?: MediaQueryListEvent) => {
+      if ((event?.matches ?? mediaQueryList.matches)) {
         setIsMobileNavOpen(false);
       }
     };
 
     syncMobileNavState();
-    window.addEventListener("resize", syncMobileNavState);
+    mediaQueryList.addEventListener("change", syncMobileNavState);
 
     return () => {
-      window.removeEventListener("resize", syncMobileNavState);
+      mediaQueryList.removeEventListener("change", syncMobileNavState);
     };
-  }, []);
+  }, { scope: landingRef });
 
-  useEffect(() => {
-    const syncHeaderState = () => {
-      setIsHeaderScrolled(window.scrollY > 12);
-    };
+  useGSAP(() => {
+    const mm = gsap.matchMedia();
 
-    syncHeaderState();
-    window.addEventListener("scroll", syncHeaderState, { passive: true });
+    mm.add(
+      {
+        isDesktop: "(min-width: 1024px)",
+        reduceMotion: "(prefers-reduced-motion: reduce)",
+      },
+      (context) => {
+        const conditions = (context.conditions ?? {}) as {
+          isDesktop?: boolean;
+          reduceMotion?: boolean;
+        };
+        const { isDesktop = false, reduceMotion = false } = conditions;
+
+        if (reduceMotion) {
+          return;
+        }
+
+        const heroTimeline = gsap.timeline({
+          defaults: {
+            duration: 0.9,
+            ease: "power3.out",
+          },
+        });
+
+        heroTimeline
+          .from("[data-lp-header-shell]", {
+            y: -20,
+            autoAlpha: 0,
+            duration: 0.7,
+          })
+          .from(
+            "[data-lp-hero-video]",
+            {
+              scale: 1.06,
+              autoAlpha: 0,
+              duration: 1.15,
+              ease: "power2.out",
+            },
+            0,
+          )
+          .from(
+            "[data-lp-hero-copy]",
+            {
+              y: 44,
+              autoAlpha: 0,
+            },
+            0.12,
+          )
+          .from(
+            "[data-lp-hero-stats] > *",
+            {
+              y: 26,
+              autoAlpha: 0,
+              duration: 0.7,
+              stagger: 0.08,
+            },
+            0.28,
+          )
+          .from(
+            "[data-lp-hero-actions] > *",
+            {
+              y: 22,
+              autoAlpha: 0,
+              duration: 0.7,
+              stagger: 0.1,
+            },
+            0.38,
+          )
+          .from(
+            "[data-lp-hero-globe]",
+            {
+              x: isDesktop ? 64 : 0,
+              y: 42,
+              scale: 0.94,
+              autoAlpha: 0,
+              duration: 1.05,
+            },
+            0.18,
+          );
+
+        gsap.utils.toArray<HTMLElement>("[data-lp-section-heading]").forEach((heading) => {
+          gsap.from(heading, {
+            y: 42,
+            autoAlpha: 0,
+            duration: 0.9,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: heading,
+              start: "top 82%",
+              once: true,
+            },
+          });
+        });
+
+        gsap.utils.toArray<HTMLElement>("[data-lp-feature-row]").forEach((row, index) => {
+          gsap.from(row, {
+            x: index % 2 === 0 ? -72 : 72,
+            y: 28,
+            autoAlpha: 0,
+            duration: 1,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: row,
+              start: "top 80%",
+              once: true,
+            },
+          });
+        });
+
+        gsap.from("[data-lp-mobile-copy] > *", {
+          y: 34,
+          autoAlpha: 0,
+          duration: 0.82,
+          stagger: 0.1,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: "[data-lp-mobile-copy]",
+            start: "top 78%",
+            once: true,
+          },
+        });
+
+        gsap.from("[data-lp-mobile-device]", {
+          y: 56,
+          autoAlpha: 0,
+          scale: 0.94,
+          rotate: isDesktop ? 2.5 : 0,
+          duration: 1.05,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: "[data-lp-mobile-device]",
+            start: "top 82%",
+            once: true,
+          },
+        });
+
+        if (isDesktop) {
+          gsap.to("[data-lp-mobile-device]", {
+            yPercent: -4,
+            ease: "none",
+            scrollTrigger: {
+              trigger: "#mobile",
+              start: "top bottom",
+              end: "bottom top",
+              scrub: 1.15,
+            },
+          });
+        }
+
+        ScrollTrigger.batch("[data-lp-card]", {
+          start: "top 88%",
+          once: true,
+          onEnter: (batch) => {
+            gsap.fromTo(
+              batch,
+              {
+                y: 32,
+                autoAlpha: 0,
+              },
+              {
+                y: 0,
+                autoAlpha: 1,
+                duration: 0.82,
+                ease: "power3.out",
+                stagger: 0.12,
+                overwrite: true,
+              },
+            );
+          },
+        });
+
+        gsap.from("[data-lp-cta-panel]", {
+          y: 44,
+          autoAlpha: 0,
+          duration: 0.9,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: "[data-lp-cta-panel]",
+            start: "top 82%",
+            once: true,
+          },
+        });
+      },
+      landingRef,
+    );
 
     return () => {
-      window.removeEventListener("scroll", syncHeaderState);
+      mm.revert();
     };
-  }, []);
+  }, { scope: landingRef });
+
+  useGSAP(() => {
+    ScrollTrigger.refresh();
+  }, {
+    dependencies: [locale, openFaq],
+    revertOnUpdate: false,
+    scope: landingRef,
+  });
 
   const isRu = locale === "ru";
   const activeLegalCopy =
@@ -1675,7 +1936,7 @@ const Landing = () => {
   ];
 
   return (
-    <div className="landing-shell min-h-screen bg-background">
+    <div className="landing-shell min-h-screen bg-background" ref={landingRef}>
       <header className="fixed inset-x-0 top-0 z-50 pointer-events-none">
         <div
           className={cx(
@@ -1684,13 +1945,14 @@ const Landing = () => {
               ? "mt-0 max-w-[100vw] rounded-none border-b border-slate-200 bg-white px-4 py-3 shadow-[0px_10px_32px_rgba(15,23,42,0.08)] sm:px-6 sm:py-4 md:rounded-b-2xl md:px-16 lg:px-24"
               : "mt-0 max-w-[100vw] rounded-none border-b border-slate-200 bg-white px-4 py-3 shadow-[0px_10px_28px_rgba(15,23,42,0.06)] sm:px-6 md:mt-6 md:max-w-5xl md:rounded-[40px] md:border md:px-12 lg:px-16"
           )}
+          data-lp-header-shell
         >
           <div className="flex w-full items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-expanded={isMobileNavOpen}
-                aria-label={isMobileNavOpen ? (isRu ? "Закрыть меню" : "Close menu") : (isRu ? "Открыть меню" : "Open menu")}
+                aria-expanded={isMobileNavExpanded}
+                aria-label={isMobileNavExpanded ? (isRu ? "Закрыть меню" : "Close menu") : (isRu ? "Открыть меню" : "Open menu")}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-colors hover:border-slate-300 md:hidden"
                 onClick={() => setIsMobileNavOpen((current) => !current)}
               >
@@ -1700,7 +1962,7 @@ const Landing = () => {
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  {isMobileNavOpen ? (
+                  {isMobileNavExpanded ? (
                     <path
                       d="M6 6l12 12M18 6L6 18"
                       strokeLinecap="round"
@@ -1783,7 +2045,7 @@ const Landing = () => {
           <div
             className={cx(
               "grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out md:hidden",
-              isMobileNavOpen
+              isMobileNavExpanded
                 ? "mt-4 grid-rows-[1fr] opacity-100"
                 : "mt-0 grid-rows-[0fr] opacity-0",
             )}
@@ -1841,6 +2103,7 @@ const Landing = () => {
 
       <section
         className="relative min-h-[40rem] overflow-hidden px-4 pb-4 pt-20 sm:min-h-[95svh] sm:px-6 sm:pb-10 sm:pt-24 md:min-h-[95dvh] md:px-16 md:pb-16 md:pt-28 lg:px-24"
+        data-lp-section="hero"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
@@ -1853,27 +2116,29 @@ const Landing = () => {
           loop
           muted
           playsInline
+          poster="/hero-poster.jpg"
           preload="auto"
           className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
-          key={heroVideoSrc}
-          onError={() => {
-            if (heroVideoSrc !== "/hero.mp4") {
-              setHeroVideoSrc("/hero.mp4");
-            }
-          }}
+          data-lp-hero-video
           ref={heroVideoRef}
-          src={heroVideoSrc}
           style={{
             transform: "scale(-1, -1)",
             filter: "brightness(0.9) contrast(1.02) saturate(0.8)",
           }}
-        />
+        >
+          <source src="/hero.webm" type='video/webm; codecs="vp9"' />
+          <source src="/hero.webm" type="video/webm" />
+          <source src="/hero.mp4" type="video/mp4" />
+        </video>
         <div className="pointer-events-none absolute inset-0 z-[2] bg-white/22" />
         <div className="pointer-events-none absolute inset-0 z-[3] bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_34%),radial-gradient(circle_at_88%_14%,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_30%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,249,253,0.22)_52%,rgba(238,243,251,0.34)_100%)]" />
         <div className="relative z-10 mx-auto flex min-h-[50rem] max-w-7xl flex-col items-center justify-start gap-8 pt-6 sm:min-h-[calc(100svh-5rem)] sm:gap-10 sm:pt-8 lg:min-h-[calc(95vh-6rem)] lg:flex-row lg:gap-2 lg:pt-2">
           <div className="relative z-10 w-full max-w-xl flex-1 lg:max-w-[40rem] lg:flex-[1.06]">
-            <div className={cx(isRu ? "origin-top-left scale-[0.92] transform-gpu sm:scale-100" : "")}>
-              <h1 className="landing-hero-title animate-[fadeInUp_0.6s_0.15s_ease_forwards] opacity-0 text-[clamp(2.14rem,11.5vw,6.35rem)] leading-[1.02] tracking-[-0.065em] font-semibold text-foreground sm:text-[clamp(2.35rem,12vw,6.35rem)] sm:leading-[0.88]">
+            <div
+              className={cx(isRu ? "origin-top-left scale-[0.92] transform-gpu sm:scale-100" : "")}
+              data-lp-hero-copy
+            >
+              <h1 className="landing-hero-title text-[clamp(2.14rem,11.5vw,6.35rem)] leading-[1.02] tracking-[-0.065em] font-semibold text-foreground sm:text-[clamp(2.35rem,12vw,6.35rem)] sm:leading-[0.88]">
                 {isRu ? (
                   <>
                     <span className="block sm:hidden" style={HERO_OUTLINE_TEXT_STYLE}>
@@ -1970,7 +2235,10 @@ const Landing = () => {
               </h1>
             </div>
 
-            <div className="mx-auto mt-8 grid w-full max-w-[21rem] animate-[fadeInUp_0.6s_0.42s_ease_forwards] grid-cols-3 gap-3 opacity-0 sm:max-w-[38rem] sm:gap-3">
+            <div
+              className="mx-auto mt-8 grid w-full max-w-[21rem] grid-cols-3 gap-3 sm:max-w-[38rem] sm:gap-3"
+              data-lp-hero-stats
+            >
               {heroStats.map((stat) => (
                 <div
                   key={stat.label}
@@ -1986,7 +2254,10 @@ const Landing = () => {
               ))}
             </div>
 
-            <div className="mt-10 grid grid-cols-2 gap-3 animate-[fadeInUp_0.6s_0.56s_ease_forwards] opacity-0 sm:mt-8 sm:flex sm:flex-wrap sm:items-center">
+            <div
+              className="mt-10 grid grid-cols-2 gap-3 sm:mt-8 sm:flex sm:flex-wrap sm:items-center"
+              data-lp-hero-actions
+            >
               <button
                 type="button"
                 className="inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-about-offset-y)] items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-black shadow-[0_18px_44px_rgba(15,23,42,0.08)] ring-1 ring-white/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:shadow-[0_24px_54px_rgba(15,23,42,0.12)] sm:w-auto sm:translate-y-0 sm:px-6"
@@ -2020,7 +2291,8 @@ const Landing = () => {
             </div>
           </div>
           <div
-            className="pointer-events-none absolute inset-x-0 top-[var(--hero-mobile-globe-top)] z-0 flex justify-center opacity-0 animate-[fadeIn_1s_0.4s_ease_forwards] sm:top-[13.5rem] lg:pointer-events-auto lg:relative lg:inset-auto lg:z-auto lg:w-full lg:flex-1 lg:translate-x-24 lg:justify-end"
+            className="pointer-events-none absolute inset-x-0 top-[var(--hero-mobile-globe-top)] z-0 flex justify-center sm:top-[13.5rem] lg:pointer-events-auto lg:relative lg:inset-auto lg:z-auto lg:w-full lg:flex-1 lg:translate-x-24 lg:justify-end"
+            data-lp-hero-globe
             style={heroMobileGlobeStyle}
           >
             <div className="relative isolate h-[min(82vw,332px)] w-[min(82vw,332px)] scale-[var(--hero-mobile-globe-scale)] transform-gpu opacity-80 sm:h-[420px] sm:w-[420px] sm:scale-100 sm:opacity-100 md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
@@ -2059,7 +2331,10 @@ const Landing = () => {
         id="about"
       >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 md:px-16 lg:px-24">
-          <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-left md:items-center md:text-center">
+          <div
+            className="mx-auto flex w-full max-w-3xl flex-col items-start text-left md:items-center md:text-center"
+            data-lp-section-heading
+          >
             <h2
               className={cx(
                 "mt-0 leading-[1.06] tracking-[-0.04em] font-semibold uppercase text-white !font-sans md:mt-3 md:text-[clamp(1.75rem,4vw,3rem)] md:leading-[1.1]",
@@ -2102,6 +2377,7 @@ const Landing = () => {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-4 sm:gap-16 sm:px-6 md:gap-20 md:px-16 lg:gap-24 lg:px-24">
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            data-lp-feature-row
             style={firstFeatureRowShift}
           >
             <div className="max-w-xl flex-1 self-center">
@@ -2135,6 +2411,7 @@ const Landing = () => {
 
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            data-lp-feature-row
             style={secondFeatureRowShift}
           >
             <div className="max-w-xl flex-1 self-center lg:order-last">
@@ -2168,6 +2445,7 @@ const Landing = () => {
 
           <div
             className="grid grid-cols-1 gap-10 md:gap-20 lg:relative lg:left-[var(--feature-row-offset)] lg:grid-cols-2 lg:gap-24"
+            data-lp-feature-row
             style={thirdFeatureRowShift}
           >
             <div className="max-w-xl flex-1 self-center">
@@ -2208,7 +2486,7 @@ const Landing = () => {
         }}
       >
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 lg:flex-row lg:gap-20">
-          <div className="max-w-lg flex-1">
+          <div className="max-w-lg flex-1" data-lp-mobile-copy>
             <h2 className="mb-6 text-[clamp(1.75rem,8vw,3rem)] leading-[1.06] tracking-[-0.04em] font-semibold uppercase text-foreground !font-sans">
               {locale === "ru" ? (
                 <>
@@ -2286,7 +2564,7 @@ const Landing = () => {
             </div>
           </div>
 
-          <div className="flex flex-1 justify-center lg:justify-end">
+          <div className="flex flex-1 justify-center lg:justify-end" data-lp-mobile-device>
             <div className="relative lg:translate-x-4">
               {/* Padding bezel keeps inner aspect ratio; uniform border shrinks width more than height vs outer frame */}
               <div className="relative rounded-[3.4rem] bg-foreground/90 p-2.5 shadow-2xl shadow-primary/10">
@@ -2310,7 +2588,7 @@ const Landing = () => {
         style={{ background: "#2f63ff" }}
       >
         <div className="mx-auto max-w-3xl">
-          <div className="mb-16 text-center">
+          <div className="mb-16 text-center" data-lp-section-heading>
             <p className="mb-4 text-sm font-medium tracking-[0.18em] text-white/72 uppercase">
               FAQ
             </p>
@@ -2323,11 +2601,12 @@ const Landing = () => {
             {faqs.map((faq, i) => (
               <div
                 className="overflow-hidden rounded-2xl border border-white/70 bg-white transition-all duration-300 hover:border-white"
+                data-lp-card
                 key={i}
               >
                 <button
                   className="flex w-full items-center justify-between p-5 text-left"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  onClick={() => toggleFaq(i)}
                   type="button"
                 >
                   <span className="pr-4 text-sm font-medium text-foreground">
@@ -2368,7 +2647,7 @@ const Landing = () => {
         }}
       >
         <div className="mx-auto max-w-7xl">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
+          <div className="mx-auto mb-16 max-w-2xl text-center" data-lp-section-heading>
             <p className="mb-4 text-sm font-medium tracking-[0.18em] text-primary uppercase">
               {isRu ? "Тарифы" : "Pricing"}
             </p>
@@ -2392,6 +2671,7 @@ const Landing = () => {
                   ? "border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
                   : "border-border/60 bg-background hover:border-primary/20 hover:shadow-lg"
                   }`}
+                data-lp-card
                 key={plan.name}
               >
                 <h3 className="mb-2 text-lg font-semibold">{plan.name}</h3>
@@ -2455,7 +2735,7 @@ const Landing = () => {
           background: "#2f63ff",
         }}
       >
-        <div className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto max-w-3xl text-center" data-lp-cta-panel>
           <h2 className="mb-6 text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl">
             {isRu ? "Готовы начать?" : "Ready to get started?"}
           </h2>

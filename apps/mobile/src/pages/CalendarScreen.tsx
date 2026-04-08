@@ -19,6 +19,7 @@ import { hapticSelection } from '../../lib/haptics';
 import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { parseTaskMeta } from '../../lib/task-meta';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
+import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { Button } from '../../components/ui/button';
 
@@ -65,7 +66,7 @@ function isOverdueTask(task: TaskItem, referenceDate: Date) {
 
 export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
-  const { language, t, tp, tc } = useI18n();
+  const { language, t, tp } = useI18n();
   const locale = getDateLocale(language);
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -87,6 +88,8 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     minute: today.getMinutes(),
   }));
   const [rescheduleTimePickerVisible, setRescheduleTimePickerVisible] = useState(false);
+  const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
+    useTranslatedTaskCopy(tasks, language);
 
   const year = currentDate.getFullYear();
   const monthIndex = currentDate.getMonth();
@@ -212,12 +215,12 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
       nextItems.push({
         id: task.id,
         task,
-        title: tc(task.title),
+        title: getTaskTitle(task, { normalize: true }),
         kind: isTaskMeeting(task) ? 'meeting' : 'task',
         note:
-          tc(meta.meeting?.meetingLocation ||
+          getTaskMeetingLocation(task) ||
           meta.meeting?.meetingLink ||
-          meta.body || '') ||
+          getTaskBody(task) ||
           dueAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
         status: task.status === 'DONE' ? 'done' : task.status === 'CANCELLED' ? 'cancelled' : overdue ? 'overdue' : 'planned',
       });
@@ -225,7 +228,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     });
 
     return map;
-  }, [locale, tasks, today]);
+  }, [getTaskBody, getTaskMeetingLocation, getTaskTitle, locale, tasks, today]);
 
   const eventDays = useMemo(() => {
     const days = new Set<number>();
@@ -728,8 +731,10 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
               {overdueTasks.length > 0 ? (
                 overdueTasks.map((task) => {
                   const dueAt = parseTaskDueAt(task);
-                  const meta = parseTaskMeta(task.description);
-                  const subtitle = tc(meta.body || task.description || '') || t('calendar.waitingForAction');
+                  const subtitle =
+                    getTaskBody(task) ||
+                    task.description ||
+                    t('calendar.waitingForAction');
                   const dateLabel = dueAt
                     ? dueAt.toLocaleDateString(locale, { month: 'long', day: 'numeric' })
                     : t('calendar.noTimeSelected');
@@ -741,7 +746,9 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
                           <Ionicons color="#f59e0b" name="warning-outline" size={20} />
                         </View>
                         <View className="flex-1">
-                          <Text className="font-body text-[16px] font-semibold text-foreground">{tc(task.title)}</Text>
+                          <Text className="font-body text-[16px] font-semibold text-foreground">
+                            {getTaskTitle(task, { normalize: true })}
+                          </Text>
                           <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{subtitle}</Text>
                           <Text className="mt-2 font-body text-xs font-semibold text-[#c17b07]">
                             {t('calendar.overdueFrom', { dateLabel })}
@@ -784,7 +791,9 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
 
           {rescheduleTaskItem ? (
             <View className="items-center px-2">
-              <Text className="text-center font-body text-[16px] font-semibold text-foreground">{tc(rescheduleTaskItem.title)}</Text>
+              <Text className="text-center font-body text-[16px] font-semibold text-foreground">
+                {getTaskTitle(rescheduleTaskItem, { normalize: true })}
+              </Text>
               <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
                 {t('calendar.moveToAnotherDayHint')}
               </Text>

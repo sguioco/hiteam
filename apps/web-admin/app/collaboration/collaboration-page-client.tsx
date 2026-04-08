@@ -22,6 +22,12 @@ import { getSession } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { createCollaborationSocket } from '../../lib/collaboration-socket';
 import { useI18n } from '../../lib/i18n';
+import {
+  WEB_ADMIN_TASK_PRIORITIES,
+  type WebAdminTaskPriority,
+  getWebAdminTaskPriorityLabel,
+  normalizeWebAdminTaskPriority,
+} from '../../lib/task-priority';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 
 type EmployeeOption = {
@@ -41,7 +47,7 @@ type EmployeeOption = {
 const DEFAULT_TASK_BOARD_FILTERS = {
   search: '',
   status: '',
-  priority: '',
+  priority: '' as '' | WebAdminTaskPriority,
   groupId: '',
   assigneeEmployeeId: '',
   departmentId: '',
@@ -120,7 +126,7 @@ export default function CollaborationPageClient({
     assigneeEmployeeId: '',
     departmentId: '',
     locationId: '',
-    priority: 'MEDIUM',
+    priority: 'MEDIUM' as WebAdminTaskPriority,
     dueAt: '',
     requiresPhoto: false,
     checklist: [''],
@@ -165,7 +171,7 @@ export default function CollaborationPageClient({
     assigneeEmployeeId: '',
     departmentId: '',
     locationId: '',
-    priority: 'MEDIUM',
+    priority: 'MEDIUM' as WebAdminTaskPriority,
     requiresPhoto: false,
     expandOnDemand: false,
     frequency: 'DAILY',
@@ -270,6 +276,15 @@ export default function CollaborationPageClient({
     return value === null ? '—' : `${value.toFixed(1)}h`;
   }
 
+  function formatTaskPriority(priority: TaskItem['priority']) {
+    return getWebAdminTaskPriorityLabel(priority, 'upper');
+  }
+
+  const taskPriorityOptions = WEB_ADMIN_TASK_PRIORITIES.map((priority) => ({
+    value: priority,
+    label: getWebAdminTaskPriorityLabel(priority, 'upper'),
+  }));
+
   function renderTaskSummary(items: TaskItem[], emptyLabel: string) {
     if (!items.length) {
       return <div className="empty-state">{emptyLabel}</div>;
@@ -281,7 +296,7 @@ export default function CollaborationPageClient({
           <article className="mini-panel" key={task.id}>
             <div className="panel-header">
               <div>
-                <span className="section-kicker">{task.priority}</span>
+                <span className="section-kicker">{formatTaskPriority(task.priority)}</span>
                 <h3>{getTaskTitle(task)}</h3>
               </div>
               <span className="status-chip">{task.status}</span>
@@ -394,7 +409,7 @@ export default function CollaborationPageClient({
       assigneeEmployeeId: template.assigneeEmployee?.id ?? '',
       departmentId: template.department?.id ?? '',
       locationId: template.location?.id ?? '',
-      priority: template.priority,
+      priority: normalizeWebAdminTaskPriority(template.priority),
       requiresPhoto: template.requiresPhoto,
       expandOnDemand: template.expandOnDemand,
       frequency: template.frequency,
@@ -1094,13 +1109,13 @@ export default function CollaborationPageClient({
             <AppSelectField
               value={taskBoardFilters.priority}
               emptyLabel={t('collaboration.allPriorities')}
-              onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, priority: value }))}
-              options={[
-                { value: 'LOW', label: 'LOW' },
-                { value: 'MEDIUM', label: 'MEDIUM' },
-                { value: 'HIGH', label: 'HIGH' },
-                { value: 'URGENT', label: 'URGENT' },
-              ]}
+              onValueChange={(value) =>
+                setTaskBoardFilters((current) => ({
+                  ...current,
+                  priority: value as '' | WebAdminTaskPriority,
+                }))
+              }
+              options={taskPriorityOptions}
             />
             <AppSelectField
               value={taskBoardFilters.groupId}
@@ -1159,7 +1174,7 @@ export default function CollaborationPageClient({
                 <article className="mini-panel" key={task.id}>
                   <div className="panel-header">
                     <div>
-                      <span className="section-kicker">{task.priority}</span>
+                      <span className="section-kicker">{formatTaskPriority(task.priority)}</span>
                       <h3>{getTaskTitle(task)}</h3>
                     </div>
                     <span className="status-chip">{task.status}</span>
@@ -1251,14 +1266,14 @@ export default function CollaborationPageClient({
                 />
               )}
               <AppSelectField
-                value={taskDraft.priority}
-                onValueChange={(value) => setTaskDraft((current) => ({ ...current, priority: value }))}
-                options={[
-                  { value: 'LOW', label: 'LOW' },
-                  { value: 'MEDIUM', label: 'MEDIUM' },
-                  { value: 'HIGH', label: 'HIGH' },
-                  { value: 'URGENT', label: 'URGENT' },
-                ]}
+                value={normalizeWebAdminTaskPriority(taskDraft.priority)}
+                onValueChange={(value) =>
+                  setTaskDraft((current) => ({
+                    ...current,
+                    priority: value as WebAdminTaskPriority,
+                  }))
+                }
+                options={taskPriorityOptions}
               />
               <input onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))} placeholder={t('collaboration.dueAt')} type="date" value={taskDraft.dueAt} />
               <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
@@ -1365,14 +1380,14 @@ export default function CollaborationPageClient({
                 />
               )}
               <AppSelectField
-                value={templateDraft.priority}
-                onValueChange={(value) => setTemplateDraft((current) => ({ ...current, priority: value }))}
-                options={[
-                  { value: 'LOW', label: 'LOW' },
-                  { value: 'MEDIUM', label: 'MEDIUM' },
-                  { value: 'HIGH', label: 'HIGH' },
-                  { value: 'URGENT', label: 'URGENT' },
-                ]}
+                value={normalizeWebAdminTaskPriority(templateDraft.priority)}
+                onValueChange={(value) =>
+                  setTemplateDraft((current) => ({
+                    ...current,
+                    priority: value as WebAdminTaskPriority,
+                  }))
+                }
+                options={taskPriorityOptions}
               />
               <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
                 <input
@@ -2017,7 +2032,7 @@ export default function CollaborationPageClient({
                 {overview.recentTasks.map((task) => (
                   <article className="mini-panel" key={task.id}>
                     <div className="panel-header">
-                      <div><span className="section-kicker">{task.priority}</span><h3>{getTaskTitle(task)}</h3></div>
+                      <div><span className="section-kicker">{formatTaskPriority(task.priority)}</span><h3>{getTaskTitle(task)}</h3></div>
                       <span className="status-chip">{task.status}</span>
                     </div>
                     <div className="detail-list">

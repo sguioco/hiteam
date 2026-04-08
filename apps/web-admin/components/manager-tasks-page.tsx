@@ -2,6 +2,7 @@
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
+  AttendanceHistoryResponse,
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
   TaskItem,
@@ -84,6 +85,8 @@ type EmployeeTaskEntry = {
   tasks: TaskItem[];
   stats: EmployeeTaskStats;
 };
+
+type AttendanceHistoryRow = AttendanceHistoryResponse["rows"][number];
 
 type TaskTableRow = {
   id: string;
@@ -352,6 +355,95 @@ function formatResolvedRangeHeading(
   };
 }
 
+function formatTimeOfDay(value: string | null | undefined, locale: string) {
+  if (!value) {
+    return "—";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+
+  return parsed.toLocaleTimeString(locale === "ru" ? "ru-RU" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function getInclusiveDayCount(start: Date, end: Date) {
+  const startValue = startOfDay(start).getTime();
+  const endValue = startOfDay(end).getTime();
+  return Math.max(1, Math.round((endValue - startValue) / 86_400_000) + 1);
+}
+
+function buildHistoricalStatusSummary(
+  rows: AttendanceHistoryRow[],
+  rangeStart: Date,
+  rangeEnd: Date,
+  locale: string,
+): Pick<TaskTableRow, "statusLabel" | "statusActive" | "statusTone" | "statusSort"> {
+  if (!rows.length) {
+    return {
+      statusLabel: localize(locale, "Отсутствовал", "Absent"),
+      statusActive: false,
+      statusTone: "gray",
+      statusSort: 2,
+    };
+  }
+
+  const sortedRows = rows
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime(),
+    );
+  const firstRow = sortedRows[0];
+  const lastCompletedRow = [...sortedRows]
+    .reverse()
+    .find((row) => row.endedAt || row.checkOutEvent?.occurredAt);
+  const hasLate = sortedRows.some((row) => row.lateMinutes > 0);
+  const hasEarlyLeave = sortedRows.some((row) => row.earlyLeaveMinutes > 0);
+  const timeRangeLabel = `${formatTimeOfDay(firstRow?.startedAt ?? null, locale)}-${formatTimeOfDay(
+    lastCompletedRow?.endedAt ??
+      lastCompletedRow?.checkOutEvent?.occurredAt ??
+      firstRow?.startedAt ??
+      null,
+    locale,
+  )}`;
+
+  if (formatDateKey(rangeStart) === formatDateKey(rangeEnd)) {
+    return {
+      statusLabel: timeRangeLabel,
+      statusActive: true,
+      statusTone: hasLate || hasEarlyLeave ? "error" : "success",
+      statusSort: hasLate ? -2 : hasEarlyLeave ? -1 : 0,
+    };
+  }
+
+  const presentDays = sortedRows.reduce((days, row) => {
+    const startedAt = new Date(row.startedAt);
+    if (!Number.isNaN(startedAt.getTime())) {
+      days.add(formatDateKey(startedAt));
+    }
+    return days;
+  }, new Set<string>()).size;
+  const totalDays = getInclusiveDayCount(rangeStart, rangeEnd);
+  const rangeLabel =
+    locale === "ru"
+      ? `${presentDays}/${totalDays} дн.`
+      : `${presentDays}/${totalDays} days`;
+
+  return {
+    statusLabel:
+      presentDays === 1 ? `${rangeLabel} • ${timeRangeLabel}` : rangeLabel,
+    statusActive: true,
+    statusTone: hasLate || hasEarlyLeave ? "error" : "success",
+    statusSort: hasLate ? -2 : hasEarlyLeave ? -1 : 0,
+  };
+}
+
 function priorityLabel(priority: TaskPriority, _locale: string) {
   switch (priority) {
     case "LOW":
@@ -447,6 +539,7 @@ export function ManagerTasksPage({
   const router = useRouter();
   const { locale } = useI18n();
   const session = getSession();
+  const accessToken = session?.accessToken ?? null;
   const tasksCacheKey = useMemo(
     () => buildManagerTasksCacheKey(session),
     [session],
@@ -462,6 +555,12 @@ export function ManagerTasksPage({
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
     initialData?.liveSessions ?? [],
+  );
+  const [attendanceHistory, setAttendanceHistory] =
+    useState<AttendanceHistoryResponse | null>(null);
+  const [attendanceHistoryLoading, setAttendanceHistoryLoading] = useState(false);
+  const [attendanceHistoryError, setAttendanceHistoryError] = useState<string | null>(
+    null,
   );
   const [preset, setPreset] = useState<DatePreset>("today");
   const [dateFrom, setDateFrom] = useState(() => formatDateInput(new Date()));
@@ -601,6 +700,85 @@ export function ManagerTasksPage({
 
     return { rangeStart: start, rangeEnd: end };
   }, [dateFrom, dateTo, today]);
+  const resolvedDateFrom = useMemo(() => formatDateInput(rangeStart), [rangeStart]);
+  const resolvedDateTo = useMemo(() => formatDateInput(rangeEnd), [rangeEnd]);
+  const isHistoricalRange = useMemo(
+    () => rangeEnd.getTime() < today.getTime(),
+    [rangeEnd, today],
+  );
+
+  useEffect(() => {
+    if (!accessChecked) {
+      return;
+    }
+
+    if (!accessToken) {
+      setAttendanceHistory(null);
+      setAttendanceHistoryLoading(false);
+      setAttendanceHistoryError(null);
+      return;
+    }
+
+    if (!isHistoricalRange) {
+      setAttendanceHistory(null);
+      setAttendanceHistoryLoading(false);
+      setAttendanceHistoryError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setAttendanceHistory(null);
+    setAttendanceHistoryLoading(true);
+    setAttendanceHistoryError(null);
+
+    const query = new URLSearchParams({
+      dateFrom: resolvedDateFrom,
+      dateTo: resolvedDateTo,
+    }).toString();
+
+    void apiRequest<AttendanceHistoryResponse>(`/attendance/team/history?${query}`, {
+      token: accessToken,
+    })
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAttendanceHistory(snapshot);
+      })
+      .catch((loadError) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAttendanceHistory(null);
+        setAttendanceHistoryError(
+          loadError instanceof Error
+            ? loadError.message
+            : localize(
+                locale,
+                "Не удалось загрузить итоги посещаемости.",
+                "Unable to load attendance summary.",
+              ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAttendanceHistoryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accessChecked,
+    accessToken,
+    isHistoricalRange,
+    locale,
+    resolvedDateFrom,
+    resolvedDateTo,
+  ]);
 
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -733,20 +911,75 @@ export function ManagerTasksPage({
     return new Map(liveSessions.map((session) => [session.employeeId, session]));
   }, [liveSessions]);
 
+  const attendanceHistoryRowsByEmployeeId = useMemo(() => {
+    const rowsByEmployee = new Map<string, AttendanceHistoryRow[]>();
+
+    for (const row of attendanceHistory?.rows ?? []) {
+      const rows = rowsByEmployee.get(row.employeeId) ?? [];
+      rows.push(row);
+      rowsByEmployee.set(row.employeeId, rows);
+    }
+
+    return rowsByEmployee;
+  }, [attendanceHistory]);
+
   const tableRows = useMemo<TaskTableRow[]>(() => {
     return employeeTaskEntries.map((entry) => {
       const employeeName = getEmployeeName(entry.employee, locale);
       const teams = teamsByEmployeeId.get(entry.employee.id) ?? [];
       const liveSession = liveSessionsByEmployeeId.get(entry.employee.id);
-      const isCheckedIn =
-        liveSession?.status === "on_shift" || liveSession?.status === "on_break";
-      const isLate = Boolean(
-        liveSession &&
-          (liveSession.status === "on_shift" || liveSession.status === "on_break") &&
-          liveSession.lateMinutes > 0,
-      );
+      const historyRows =
+        attendanceHistoryRowsByEmployeeId.get(entry.employee.id) ?? [];
       const isComplete =
         entry.stats.total > 0 && entry.stats.done >= entry.stats.total;
+      const statusSummary: Pick<
+        TaskTableRow,
+        "statusLabel" | "statusActive" | "statusTone" | "statusSort"
+      > = isHistoricalRange
+        ? attendanceHistoryLoading && !attendanceHistory
+          ? {
+              statusLabel: localize(locale, "Загрузка...", "Loading..."),
+              statusActive: false,
+              statusTone: "gray",
+              statusSort: 1,
+            }
+          : attendanceHistoryError && !attendanceHistory
+            ? {
+                statusLabel: localize(locale, "Нет данных", "No data"),
+                statusActive: false,
+                statusTone: "gray",
+                statusSort: 1,
+              }
+            : buildHistoricalStatusSummary(
+                historyRows,
+                rangeStart,
+                rangeEnd,
+                locale,
+              )
+        : (() => {
+            const isCheckedIn =
+              liveSession?.status === "on_shift" || liveSession?.status === "on_break";
+            const isLate = Boolean(
+              liveSession &&
+                (liveSession.status === "on_shift" ||
+                  liveSession.status === "on_break") &&
+                liveSession.lateMinutes > 0,
+            );
+
+            return {
+              statusLabel:
+                isLate
+                  ? localize(locale, "Опаздывает", "Late")
+                  : liveSession?.status === "on_break"
+                    ? localize(locale, "На перерыве", "On break")
+                    : isCheckedIn
+                      ? localize(locale, "На смене", "On shift")
+                      : localize(locale, "Не на смене", "Off shift"),
+              statusActive: isCheckedIn,
+              statusTone: isLate ? "error" : isCheckedIn ? "success" : "gray",
+              statusSort: isLate ? -1 : isCheckedIn ? 0 : 1,
+            };
+          })();
 
       return {
         id: entry.employee.id,
@@ -755,17 +988,7 @@ export function ManagerTasksPage({
         employeeInitials: getEmployeeInitials(entry.employee),
         employeeAvatarUrl:
           entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName),
-        statusLabel:
-          isLate
-            ? localize(locale, "Опаздывает", "Late")
-            : liveSession?.status === "on_break"
-            ? localize(locale, "На перерыве", "On break")
-            : isCheckedIn
-              ? localize(locale, "На смене", "On shift")
-              : localize(locale, "Не на смене", "Off shift"),
-        statusActive: isCheckedIn,
-        statusTone: isLate ? "error" : isCheckedIn ? "success" : "gray",
-        statusSort: isLate ? -1 : isCheckedIn ? 0 : 1,
+        ...statusSummary,
         teams,
         teamsSort: teams.join(" "),
         tasksSort: getTaskAttentionRank(entry.stats),
@@ -774,7 +997,47 @@ export function ManagerTasksPage({
         entry,
       };
     });
-  }, [employeeTaskEntries, liveSessionsByEmployeeId, locale, teamsByEmployeeId]);
+  }, [
+    attendanceHistory,
+    attendanceHistoryError,
+    attendanceHistoryLoading,
+    attendanceHistoryRowsByEmployeeId,
+    employeeTaskEntries,
+    isHistoricalRange,
+    liveSessionsByEmployeeId,
+    locale,
+    rangeEnd,
+    rangeStart,
+    teamsByEmployeeId,
+  ]);
+
+  const statusFilterOptions = useMemo(
+    () => [
+      {
+        value: "all",
+        label: localize(locale, "Все статусы", "All statuses"),
+      },
+      {
+        value: "on_shift",
+        label: isHistoricalRange
+          ? localize(locale, "Был на смене", "Present")
+          : localize(locale, "На смене", "On shift"),
+      },
+      {
+        value: "late",
+        label: isHistoricalRange
+          ? localize(locale, "Есть отклонения", "Has deviations")
+          : localize(locale, "Опаздывает", "Late"),
+      },
+      {
+        value: "off_shift",
+        label: isHistoricalRange
+          ? localize(locale, "Отсутствовал", "Absent")
+          : localize(locale, "Не на смене", "Off shift"),
+      },
+    ],
+    [isHistoricalRange, locale],
+  );
 
   const groupOptions = useMemo(
     () =>
@@ -1042,6 +1305,7 @@ export function ManagerTasksPage({
   );
   const isCustomMultiDayRange =
     preset === "custom" && formatDateKey(rangeStart) !== formatDateKey(rangeEnd);
+  const pageError = error ?? attendanceHistoryError;
 
   function renderTaskStatusIcon(
     task: TaskItem,
@@ -1375,12 +1639,7 @@ export function ManagerTasksPage({
                       <AppSelectField
                         className="team-tasks-filter-select"
                         onValueChange={setStatusFilter}
-                        options={[
-                          { value: "all", label: localize(locale, "Все статусы", "All statuses") },
-                          { value: "on_shift", label: localize(locale, "На смене", "On shift") },
-                          { value: "late", label: localize(locale, "Опаздывает", "Late") },
-                          { value: "off_shift", label: localize(locale, "Не на смене", "Off shift") },
-                        ]}
+                        options={statusFilterOptions}
                         value={statusFilter}
                       />
                     </div>
@@ -1416,10 +1675,10 @@ export function ManagerTasksPage({
           </div>
         </section>
 
-        {error ? (
+        {pageError ? (
           <div className="warning-banner">
             <AlertCircle className="size-4" />
-            <span>{error}</span>
+            <span>{pageError}</span>
           </div>
         ) : null}
 

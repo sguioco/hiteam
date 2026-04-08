@@ -86,10 +86,46 @@ export const countryOptions: CountryOption[] = [
     names: { ru: 'ОАЭ', en: 'United Arab Emirates' },
   },
   {
+    isoCode: 'IN',
+    dialCode: '+91',
+    flag: '🇮🇳',
+    names: { ru: 'Индия', en: 'India' },
+  },
+  {
+    isoCode: 'PK',
+    dialCode: '+92',
+    flag: '🇵🇰',
+    names: { ru: 'Пакистан', en: 'Pakistan' },
+  },
+  {
+    isoCode: 'BD',
+    dialCode: '+880',
+    flag: '🇧🇩',
+    names: { ru: 'Бангладеш', en: 'Bangladesh' },
+  },
+  {
     isoCode: 'ID',
     dialCode: '+62',
     flag: '🇮🇩',
     names: { ru: 'Индонезия', en: 'Indonesia' },
+  },
+  {
+    isoCode: 'MY',
+    dialCode: '+60',
+    flag: '🇲🇾',
+    names: { ru: 'Малайзия', en: 'Malaysia' },
+  },
+  {
+    isoCode: 'PH',
+    dialCode: '+63',
+    flag: '🇵🇭',
+    names: { ru: 'Филиппины', en: 'Philippines' },
+  },
+  {
+    isoCode: 'NP',
+    dialCode: '+977',
+    flag: '🇳🇵',
+    names: { ru: 'Непал', en: 'Nepal' },
   },
   {
     isoCode: 'VN',
@@ -177,8 +213,41 @@ export function getCountryByIsoCode(isoCode: string) {
   return countryOptions.find((country) => country.isoCode === isoCode) ?? countryOptions[0];
 }
 
+function getIntlLocale(language: AppLanguage) {
+  switch (language) {
+    case 'ru':
+      return 'ru-RU';
+    case 'ar':
+      return 'ar-AE';
+    case 'hi':
+      return 'hi-IN';
+    case 'ur':
+      return 'ur-PK';
+    case 'bn':
+      return 'bn-BD';
+    case 'id':
+      return 'id-ID';
+    case 'ms':
+      return 'ms-MY';
+    case 'tl':
+      return 'fil-PH';
+    default:
+      return 'en-US';
+  }
+}
+
 export function getCountryDisplayName(country: CountryOption, language: AppLanguage) {
-  return country.names[language];
+  try {
+    const displayNames = new Intl.DisplayNames([getIntlLocale(language)], {
+      type: 'region',
+    });
+    return (
+      displayNames.of(country.isoCode) ??
+      (language === 'ru' ? country.names.ru : country.names.en)
+    );
+  } catch {
+    return language === 'ru' ? country.names.ru : country.names.en;
+  }
 }
 
 export function searchCountryOptions(query: string, language: AppLanguage) {
@@ -189,7 +258,7 @@ export function searchCountryOptions(query: string, language: AppLanguage) {
   }
 
   return countryOptions.filter((country) => {
-    const localizedName = country.names[language].toLowerCase();
+    const localizedName = getCountryDisplayName(country, language).toLowerCase();
     const englishName = country.names.en.toLowerCase();
     return (
       localizedName.includes(normalizedQuery) ||

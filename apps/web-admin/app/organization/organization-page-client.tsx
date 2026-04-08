@@ -410,177 +410,179 @@ export default function OrganizationPageClient({
 
   return (
     <AdminShell showTopbar={false}>
-      <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 py-10 md:px-10 md:py-12 animate-in fade-in duration-500">
+      <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 pt-10 pb-6 md:px-10 md:pt-12 md:pb-6 animate-in fade-in duration-500">
         <form className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
-          {error ? (
-            <div className="organization-studio-feedback organization-studio-feedback--error">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="organization-studio-identity">
-            <label className="organization-studio-name-field">
-              <Input
-                aria-label={locale === "ru" ? "Название организации" : "Organization name"}
-                className="organization-studio-name-input"
-                onChange={(e) => updateDraft("companyName", e.target.value)}
-                placeholder={locale === "ru" ? "Название организации" : "Organization name"}
-                required
-                value={draft.companyName}
-              />
-              <div className="organization-studio-meta-stack">
-                <span className="organization-studio-meta">
-                  <Users className="h-4 w-4" />
-                  {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
-                </span>
-                {setup.company?.code ? (
-                  <span className="organization-studio-code">
-                    {locale === "ru" ? "Код компании:" : "Company code:"} <strong>{setup.company.code}</strong>
-                  </span>
-                ) : null}
+          <div className="organization-studio-body">
+            {error ? (
+              <div className="organization-studio-feedback organization-studio-feedback--error">
+                {error}
               </div>
-            </label>
-          </div>
+            ) : null}
 
-          <div className="organization-studio-grid">
-            <div className="organization-studio-sidebar">
-              <section className="organization-studio-fieldset organization-studio-logo-field">
-                <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
-                <ImageAdjustField
-                  dialogDescription={locale === "ru"
-                    ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
-                    : "Adjust the logo: you can change scale and X/Y offset before saving."}
-                  dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
-                  onChange={(nextLogoDataUrl) => {
-                    updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
-                    setError(null);
-                  }}
-                  onError={setError}
-                  previewAlt={draft.companyName || "Logo"}
-                  renderTrigger={({ chooseFile, fileName, openEditor, previewSrc }) => (
-                    <div className="organization-studio-logo-trigger">
-                      <button
-                        className="org-logo-preview organization-studio-logo-preview"
-                        onClick={openEditor}
-                        type="button"
-                      >
-                        {previewSrc ? (
-                          <img
-                            alt={draft.companyName || "Logo"}
-                            src={previewSrc}
-                          />
-                        ) : (
-                          <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
-                        )}
-                      </button>
-
-                      <Button
-                        className="organization-studio-logo-action"
-                        onClick={chooseFile}
-                        title={fileName || (locale === "ru" ? "Выбрать логотип" : "Choose logo")}
-                        type="button"
-                        variant="outline"
-                      >
-                        {locale === "ru" ? "Выбрать логотип" : "Choose logo"}
-                      </Button>
-                    </div>
-                  )}
-                  value={draft.companyLogoUrl || null}
-                />
-              </section>
-
-              <section className="organization-studio-fieldset">
-                <div className="organization-studio-label-row">
-                  <span className="organization-studio-label">
-                    {locale === "ru" ? "Радиус геозоны, метры" : "Geofence radius, meters"}
-                  </span>
-                </div>
+            <div className="organization-studio-identity">
+              <label className="organization-studio-name-field">
                 <Input
-                  className="organization-studio-radius-value"
-                  onBlur={handleRadiusInputBlur}
-                  onChange={(e) => handleRadiusInputChange(e.target.value)}
-                  type="number"
-                  value={radiusInput}
+                  aria-label={locale === "ru" ? "Название организации" : "Organization name"}
+                  className="organization-studio-name-input"
+                  onChange={(e) => updateDraft("companyName", e.target.value)}
+                  placeholder={locale === "ru" ? "Название организации" : "Organization name"}
+                  required
+                  value={draft.companyName}
                 />
-                <div className="organization-studio-radius-row">
-                  <Button
-                    className="organization-studio-radius-button"
-                    onClick={() => shiftRadius(-GEOFENCE_STEP_METERS)}
-                    type="button"
-                    variant="outline"
-                  >
-                    -{GEOFENCE_STEP_METERS}
-                  </Button>
-                  <input
-                    className="organization-studio-range"
-                    max={MAX_GEOFENCE_RADIUS_METERS}
-                    min={MIN_GEOFENCE_RADIUS_METERS}
-                    onChange={(event) => handleRadiusInputChange(event.target.value)}
-                    step={GEOFENCE_STEP_METERS}
-                    type="range"
-                    value={draft.geofenceRadiusMeters}
-                  />
-                  <Button
-                    className="organization-studio-radius-button"
-                    onClick={() => shiftRadius(GEOFENCE_STEP_METERS)}
-                    type="button"
-                    variant="outline"
-                  >
-                    +{GEOFENCE_STEP_METERS}
-                  </Button>
-                </div>
-                <div className="organization-studio-radius-caption">
-                  <span>
-                    {locale === "ru" ? "Минимум" : "Minimum"} {MIN_GEOFENCE_RADIUS_METERS} {locale === "ru" ? "м" : "m"}
+                <div className="organization-studio-meta-stack">
+                  <span className="organization-studio-meta">
+                    <Users className="h-4 w-4" />
+                    {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
                   </span>
+                  {setup.company?.code ? (
+                    <span className="organization-studio-code">
+                      {locale === "ru" ? "Код компании:" : "Company code:"} <strong>{setup.company.code}</strong>
+                    </span>
+                  ) : null}
                 </div>
-              </section>
-
-              <section className="organization-studio-fieldset">
-                <div className="organization-studio-label-row">
-                  <span className="organization-studio-label">
-                    {locale === "ru" ? "Часовой пояс" : "Time zone"}
-                  </span>
-                </div>
-                <Select
-                  onValueChange={(value) => updateDraft("timezone", value)}
-                  value={draft.timezone}
-                >
-                  <SelectTrigger className="org-timezone-trigger organization-studio-timezone-trigger">
-                    <SelectValue placeholder="Select a time zone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timeZoneOptions.map((option) => (
-                      <SelectItem key={option.timeZone} value={option.timeZone}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </section>
+              </label>
             </div>
 
-            <div className="organization-studio-main">
-              <div className="organization-studio-map-copy">
-                <span className="organization-studio-label">
-                  {locale === "ru" ? "Адрес организации" : "Organization address"}
-                </span>
+            <div className="organization-studio-grid">
+              <div className="organization-studio-sidebar">
+                <section className="organization-studio-fieldset organization-studio-logo-field">
+                  <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
+                  <ImageAdjustField
+                    dialogDescription={locale === "ru"
+                      ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
+                      : "Adjust the logo: you can change scale and X/Y offset before saving."}
+                    dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
+                    onChange={(nextLogoDataUrl) => {
+                      updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
+                      setError(null);
+                    }}
+                    onError={setError}
+                    previewAlt={draft.companyName || "Logo"}
+                    renderTrigger={({ chooseFile, fileName, openEditor, previewSrc }) => (
+                      <div className="organization-studio-logo-trigger">
+                        <button
+                          className="org-logo-preview organization-studio-logo-preview"
+                          onClick={openEditor}
+                          type="button"
+                        >
+                          {previewSrc ? (
+                            <img
+                              alt={draft.companyName || "Logo"}
+                              src={previewSrc}
+                            />
+                          ) : (
+                            <ImagePlus className="h-8 w-8 text-muted-foreground/60" />
+                          )}
+                        </button>
+
+                        <Button
+                          className="organization-studio-logo-action"
+                          onClick={chooseFile}
+                          title={fileName || (locale === "ru" ? "Выбрать логотип" : "Choose logo")}
+                          type="button"
+                          variant="outline"
+                        >
+                          {locale === "ru" ? "Выбрать логотип" : "Choose logo"}
+                        </Button>
+                      </div>
+                    )}
+                    value={draft.companyLogoUrl || null}
+                  />
+                </section>
+
+                <section className="organization-studio-fieldset">
+                  <div className="organization-studio-label-row">
+                    <span className="organization-studio-label">
+                      {locale === "ru" ? "Радиус геозоны, метры" : "Geofence radius, meters"}
+                    </span>
+                  </div>
+                  <Input
+                    className="organization-studio-radius-value"
+                    onBlur={handleRadiusInputBlur}
+                    onChange={(e) => handleRadiusInputChange(e.target.value)}
+                    type="number"
+                    value={radiusInput}
+                  />
+                  <div className="organization-studio-radius-row">
+                    <Button
+                      className="organization-studio-radius-button"
+                      onClick={() => shiftRadius(-GEOFENCE_STEP_METERS)}
+                      type="button"
+                      variant="outline"
+                    >
+                      -{GEOFENCE_STEP_METERS}
+                    </Button>
+                    <input
+                      className="organization-studio-range"
+                      max={MAX_GEOFENCE_RADIUS_METERS}
+                      min={MIN_GEOFENCE_RADIUS_METERS}
+                      onChange={(event) => handleRadiusInputChange(event.target.value)}
+                      step={GEOFENCE_STEP_METERS}
+                      type="range"
+                      value={draft.geofenceRadiusMeters}
+                    />
+                    <Button
+                      className="organization-studio-radius-button"
+                      onClick={() => shiftRadius(GEOFENCE_STEP_METERS)}
+                      type="button"
+                      variant="outline"
+                    >
+                      +{GEOFENCE_STEP_METERS}
+                    </Button>
+                  </div>
+                  <div className="organization-studio-radius-caption">
+                    <span>
+                      {locale === "ru" ? "Минимум" : "Minimum"} {MIN_GEOFENCE_RADIUS_METERS} {locale === "ru" ? "м" : "m"}
+                    </span>
+                  </div>
+                </section>
+
+                <section className="organization-studio-fieldset">
+                  <div className="organization-studio-label-row">
+                    <span className="organization-studio-label">
+                      {locale === "ru" ? "Часовой пояс" : "Time zone"}
+                    </span>
+                  </div>
+                  <Select
+                    onValueChange={(value) => updateDraft("timezone", value)}
+                    value={draft.timezone}
+                  >
+                    <SelectTrigger className="org-timezone-trigger organization-studio-timezone-trigger">
+                      <SelectValue placeholder="Select a time zone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeZoneOptions.map((option) => (
+                        <SelectItem key={option.timeZone} value={option.timeZone}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </section>
               </div>
-              <div className="organization-studio-map-shell">
-                <LocationMapPicker
-                  address={draft.address}
-                  apiKey={apiKey}
-                  geofenceRadiusMeters={draft.geofenceRadiusMeters}
-                  latitude={draft.latitude}
-                  longitude={draft.longitude}
-                  mode="setup"
-                  searchLabel=""
-                  searchPlaceholder={locale === "ru"
-                    ? "Красный проспект, 24, Новосибирск"
-                    : "1600 Amphitheatre Parkway, Mountain View"}
-                  showCopy={false}
-                  onSelect={handleMapSelect}
-                />
+
+              <div className="organization-studio-main">
+                <div className="organization-studio-map-copy">
+                  <span className="organization-studio-label">
+                    {locale === "ru" ? "Адрес организации" : "Organization address"}
+                  </span>
+                </div>
+                <div className="organization-studio-map-shell">
+                  <LocationMapPicker
+                    address={draft.address}
+                    apiKey={apiKey}
+                    geofenceRadiusMeters={draft.geofenceRadiusMeters}
+                    latitude={draft.latitude}
+                    longitude={draft.longitude}
+                    mode="setup"
+                    searchLabel=""
+                    searchPlaceholder={locale === "ru"
+                      ? "Красный проспект, 24, Новосибирск"
+                      : "1600 Amphitheatre Parkway, Mountain View"}
+                    showCopy={false}
+                    onSelect={handleMapSelect}
+                  />
+                </div>
               </div>
             </div>
           </div>

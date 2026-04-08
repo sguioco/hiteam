@@ -24,7 +24,7 @@ import {
   startBiometricEnrollment,
   submitAttendanceAction,
 } from "../../lib/api";
-import { useI18n } from "../../lib/i18n";
+import { type AppLanguage, useI18n } from "../../lib/i18n";
 import {
   capturePreciseAttendanceLocation,
   isPreciseLocationError,
@@ -77,7 +77,7 @@ function distanceMeters(
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatDistance(distance: number, language: "ru" | "en") {
+function formatDistance(distance: number, language: AppLanguage) {
   if (distance < 1000) {
     return `${Math.round(distance)} ${language === "ru" ? "м" : "m"}`;
   }
@@ -120,72 +120,37 @@ export function AttendanceCaptureScreen({
 
   const isCheckIn = action === "check-in";
   const intent = isCheckIn ? "attendance-check-in" : "attendance-check-out";
-  const copy =
-    language === "ru"
-      ? {
-          title: isCheckIn ? "Say Hi" : "Say Bye",
-          cameraPermission: "Нужен доступ к фронтальной камере.",
-          cameraPermissionCta: "Разрешить камеру",
-          cameraPermissionSettingsCta: "Открыть настройки",
-          cameraPromptTitle: "Разрешите фронтальную камеру",
-          cameraPromptBody:
-            "Сначала покажем системный запрос. Камера нужна только для живого сканирования лица внутри приложения.",
-          cameraPromptConfirm: "Продолжить",
-          cameraPromptCancel: "Позже",
-          locationRunning: "Проверяем вашу локацию...",
-          locationReady: "Вы находитесь внутри рабочей зоны.",
-          locationOutsideTitle: "Вы вне рабочей зоны",
-          locationOutsideBody:
-            "Переместитесь в отмеченный круг и запустите проверку локации ещё раз.",
-          retryLocation: "Повторить локацию",
-          captureFace: isCheckIn ? "Say Hi" : "Say Bye",
-          verifyingFace: "Сканируем лицо...",
-          enrollingFace: "Сохраняем лицо...",
-          faceEnrollComplete:
-            "Лицо сохранено. Теперь повторите сканирование для отметки.",
-          processingAction: isCheckIn
-            ? "Фиксируем приход..."
-            : "Фиксируем уход...",
-          faceReady: isCheckIn
-            ? "Лицо подтверждено. Открываем смену."
-            : "Лицо подтверждено. Завершаем смену.",
-          mapTitle: "Карта зоны",
-          targetLabel: "Рабочая локация",
-          currentLabel: "Вы сейчас",
-          outOfZoneDistance: "До зоны ещё {distance}",
-        }
-      : {
-          title: isCheckIn ? "Say Hi" : "Say Bye",
-          cameraPermission: "Front camera access is required",
-          cameraPermissionCta: "Enable camera",
-          cameraPermissionSettingsCta: "Open settings",
-          cameraPromptTitle: "Allow front camera access",
-          cameraPromptBody:
-            "We will show the system prompt after your confirmation. Camera access is used only for live face verification inside the app.",
-          cameraPromptConfirm: "Continue",
-          cameraPromptCancel: "Later",
-          locationRunning: "Checking your location...",
-          locationReady: "You are inside the allowed work area",
-          locationOutsideTitle: "You are outside the allowed work area",
-          locationOutsideBody:
-            "Move into the marked circle and run the location check again",
-          retryLocation: "Retry location",
-          captureFace: isCheckIn ? "Say Hi" : "Say Bye",
-          verifyingFace: "Scanning face...",
-          enrollingFace: "Saving face...",
-          faceEnrollComplete:
-            "Face saved. Run the scan again to finish attendance",
-          processingAction: isCheckIn
-            ? "Recording arrival..."
-            : "Recording departure...",
-          faceReady: isCheckIn
-            ? "Face verified. Starting the shift."
-            : "Face verified. Closing the shift.",
-          mapTitle: "Work area map",
-          targetLabel: "Target location",
-          currentLabel: "Your position",
-          outOfZoneDistance: "{distance} left to the work zone",
-        };
+  const copy = {
+    title: isCheckIn ? t("workspace.checkIn") : t("departure.sayBye"),
+    cameraPermission: t("biometricMobile.cameraPermission"),
+    cameraPermissionCta: t("biometricMobile.cameraPermissionCta"),
+    cameraPermissionSettingsCta: t("biometricMobile.cameraPermissionSettingsCta"),
+    cameraPromptTitle: t("attendanceCapture.cameraPromptTitle"),
+    cameraPromptBody: t("attendanceCapture.cameraPromptBody"),
+    cameraPromptConfirm: t("attendanceCapture.cameraPromptConfirm"),
+    cameraPromptCancel: t("attendanceCapture.cameraPromptCancel"),
+    locationRunning: t("attendanceCapture.locationRunning"),
+    locationReady: t("attendanceCapture.locationReady"),
+    locationOutsideTitle: t("attendanceCapture.locationOutsideTitle"),
+    locationOutsideBody: t("attendanceCapture.locationOutsideBody"),
+    retryLocation: t("attendanceCapture.retryLocation"),
+    captureFace: isCheckIn ? t("workspace.checkIn") : t("departure.sayBye"),
+    verifyingFace: t("attendanceCapture.verifyingFace"),
+    enrollingFace: t("attendanceCapture.enrollingFace"),
+    faceEnrollComplete: t("attendanceCapture.faceEnrollComplete"),
+    processingAction: isCheckIn
+      ? t("arrival.processing")
+      : t("departure.processing"),
+    faceReady: isCheckIn
+      ? t("attendanceCapture.faceReadyCheckIn")
+      : t("attendanceCapture.faceReadyCheckOut"),
+    mapTitle: t("attendanceCapture.mapTitle"),
+    targetLabel: t("attendanceCapture.targetLabel"),
+    currentLabel: t("attendanceCapture.currentLabel"),
+    outOfZoneDistance: t("attendanceCapture.outOfZoneDistance", {
+      distance: "{distance}",
+    }),
+  };
 
   const shiftTime = useMemo(() => {
     if (!status?.shift) {
