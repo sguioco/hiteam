@@ -13,7 +13,7 @@ import {
   loadMyTasks,
 } from './api';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
-import { writeScreenCache } from './screen-cache';
+import { readScreenCache, writeScreenCache } from './screen-cache';
 import { formatDateKeyInTimeZone } from './timezone';
 
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
@@ -28,11 +28,15 @@ export type TodayScreenCacheValue = {
 };
 
 export const TODAY_SCREEN_CACHE_KEY = 'today-screen:v1';
-export const TODAY_SCREEN_CACHE_TTL_MS = 60_000;
+export const TODAY_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const PROFILE_SCREEN_CACHE_KEY = 'profile-screen';
+export const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const MANAGER_SCREEN_CACHE_KEY = 'manager-screen-v4';
+export const MANAGER_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const NEWS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const WORKSPACE_REFRESH_INTERVAL_MS = 5 * 60_000;
 
-const PROFILE_SCREEN_CACHE_KEY = 'profile-screen';
-const MANAGER_SCREEN_CACHE_KEY = 'manager-screen-v4';
-const WORKSPACE_WARMUP_MIN_INTERVAL_MS = 30_000;
+const WORKSPACE_WARMUP_MIN_INTERVAL_MS = WORKSPACE_REFRESH_INTERVAL_MS;
 
 let lastWorkspaceWarmupAt = 0;
 let workspaceWarmupPromise: Promise<void> | null = null;
@@ -49,11 +53,11 @@ function delay(ms: number) {
   });
 }
 
-function getCalendarScreenCacheKey(date = new Date()) {
+export function getCalendarScreenCacheKey(date = new Date()) {
   return `calendar-screen:${date.getFullYear()}-${date.getMonth()}`;
 }
 
-function getNewsScreenCacheKey(isManager: boolean) {
+export function getNewsScreenCacheKey(isManager: boolean) {
   return `news-screen:${isManager ? 'manager' : 'employee'}`;
 }
 
@@ -170,10 +174,16 @@ async function warmCalendarScreenCache(date = new Date()) {
     }),
   ]);
 
-  await writeScreenCache(getCalendarScreenCacheKey(date), {
+  const payload = {
     shifts,
     tasks,
-  });
+  };
+
+  await Promise.all([
+    writeScreenCache(getCalendarScreenCacheKey(date), payload),
+    writeScreenCache(getCalendarScreenCacheKey(addDays(date, -31)), payload),
+    writeScreenCache(getCalendarScreenCacheKey(addDays(date, 31)), payload),
+  ]);
 }
 
 async function warmNewsScreenCache(isManager: boolean) {
@@ -211,6 +221,20 @@ async function warmManagerScreenCache(profile?: WorkspaceProfile | null) {
 
 export async function warmAnnouncementImages(items: AnnouncementItem[]) {
   await prefetchImageSources(items.map((item) => item.imageUrl));
+}
+
+export async function hydrateWorkspaceCaches(roleCodes: string[]) {
+  const isManager = hasManagerAccess(roleCodes);
+
+  await Promise.allSettled([
+    readScreenCache(TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS),
+    readScreenCache(PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS),
+    readScreenCache(getCalendarScreenCacheKey(), WORKSPACE_REFRESH_INTERVAL_MS),
+    readScreenCache(getNewsScreenCacheKey(isManager), NEWS_SCREEN_CACHE_TTL_MS),
+    isManager
+      ? readScreenCache(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS)
+      : Promise.resolve(null),
+  ]);
 }
 
 export async function warmWorkspaceCaches(roleCodes: string[], options?: { force?: boolean }) {

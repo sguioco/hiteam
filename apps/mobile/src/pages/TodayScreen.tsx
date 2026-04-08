@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -7,7 +7,7 @@ import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
-import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
 import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
 import MeetingsList from '../components/MeetingsList';
@@ -134,11 +134,23 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
-  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResponse | null>(null);
-  const [profile, setProfile] = useState<Awaited<ReturnType<typeof loadMyProfile>> | null>(null);
-  const [shifts, setShifts] = useState<ShiftItem[]>([]);
-  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const initialSnapshot = useMemo(
+    () =>
+      peekScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      ),
+    [],
+  );
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResponse | null>(
+    initialSnapshot?.value.attendanceStatus ?? null,
+  );
+  const [profile, setProfile] = useState<Awaited<ReturnType<typeof loadMyProfile>> | null>(
+    initialSnapshot?.value.profile ?? null,
+  );
+  const [shifts, setShifts] = useState<ShiftItem[]>(initialSnapshot?.value.shifts ?? []);
+  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>(initialSnapshot?.value.tasks ?? []);
+  const [attendanceLoading, setAttendanceLoading] = useState(!initialSnapshot);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<string[]>([]);
@@ -184,36 +196,51 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     }
   }, [t]);
 
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-
-      void (async () => {
-        const cached = await readScreenCache<TodayScreenCacheValue>(
-          TODAY_SCREEN_CACHE_KEY,
-          TODAY_SCREEN_CACHE_TTL_MS,
-        );
-
-        if (cached && !cancelled) {
-          setAttendanceStatus(cached.value.attendanceStatus);
-          setProfile(cached.value.profile);
-          setShifts(cached.value.shifts);
-          setTasks(cached.value.tasks);
-          setAttendanceLoading(false);
-
-          if (!cached.isStale) {
-            return;
-          }
+  useEffect(() => {
+    return subscribeScreenCache<TodayScreenCacheValue>(
+      TODAY_SCREEN_CACHE_KEY,
+      (entry) => {
+        if (!entry) {
+          return;
         }
 
-        await refreshAttendance({ silent: Boolean(cached) });
-      })();
+        setAttendanceStatus(entry.value.attendanceStatus);
+        setProfile(entry.value.profile);
+        setShifts(entry.value.shifts);
+        setTasks(entry.value.tasks);
+        setAttendanceLoading(false);
+      },
+    );
+  }, []);
 
-      return () => {
-        cancelled = true;
-      };
-    }, [refreshAttendance]),
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const cached = await readScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      );
+
+      if (cached && !cancelled) {
+        setAttendanceStatus(cached.value.attendanceStatus);
+        setProfile(cached.value.profile);
+        setShifts(cached.value.shifts);
+        setTasks(cached.value.tasks);
+        setAttendanceLoading(false);
+
+        if (!cached.isStale) {
+          return;
+        }
+      }
+
+      await refreshAttendance({ silent: Boolean(cached ?? initialSnapshot) });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSnapshot, refreshAttendance]);
 
   useEffect(() => {
     const hasCachedSnapshot = Boolean(profile || attendanceStatus || shifts.length || tasks.length);
@@ -388,6 +415,8 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
   }
 
+  const showLoadingState = attendanceLoading && !initialSnapshot && !profile && !attendanceStatus && shifts.length === 0 && tasks.length === 0;
+
   return (
     <>
       <ScrollView
@@ -399,7 +428,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
           <View style={{ marginHorizontal: -16 }}>
             <ShiftStatusCard
               greetingName={profile?.firstName ?? null}
-              loading={attendanceLoading}
+              loading={showLoadingState}
               onPrimaryAction={openAttendanceAction}
               status={effectiveAttendanceStatus}
               topInset={insets.top}
@@ -442,14 +471,14 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
             ) : null}
 
             <TaskList
-              loading={attendanceLoading}
+              loading={showLoadingState}
               onTaskUpdate={handleTaskUpdate}
               onToggleTask={handleToggleTask}
               tasks={todayTasks}
               updatingTaskIds={updatingTaskIds}
             />
-            {attendanceLoading || todayMeetings.length > 0 ? (
-              <MeetingsList loading={attendanceLoading} tasks={todayMeetings} />
+            {showLoadingState || todayMeetings.length > 0 ? (
+              <MeetingsList loading={showLoadingState} tasks={todayMeetings} />
             ) : null}
           </View>
         </View>

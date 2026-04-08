@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import type { AttendanceStatusResponse } from '@smart/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppGradientBackground } from '../../components/ui/screen';
@@ -18,7 +18,7 @@ import PendingAccessScreen from './PendingAccessScreen';
 import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 import { useI18n } from '../../lib/i18n';
-import { warmWorkspaceCaches } from '../../lib/workspace-cache';
+import { hydrateWorkspaceCaches, warmWorkspaceCaches, WORKSPACE_REFRESH_INTERVAL_MS } from '../../lib/workspace-cache';
 
 type Tab = 'calendar' | 'today' | 'manage' | 'news' | 'profile';
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
@@ -109,6 +109,13 @@ const Index = () => {
   const overdueParam = Array.isArray(params.overdue) ? params.overdue[0] : params.overdue;
   const overdueSheetSignal = Number(overdueParam ?? '0') || 0;
   const [activeTab, setActiveTab] = useState<Tab>(routeTab);
+  const [mountedTabs, setMountedTabs] = useState<Record<Tab, boolean>>(() => ({
+    today: routeTab === 'today',
+    calendar: routeTab === 'calendar',
+    manage: routeTab === 'manage',
+    news: routeTab === 'news',
+    profile: routeTab === 'profile',
+  }));
   const [appEntrySignal, setAppEntrySignal] = useState(0);
   const [startShiftPrompt, setStartShiftPrompt] = useState<StartShiftPromptState | null>(null);
   const [startShiftPromptVisible, setStartShiftPromptVisible] = useState(false);
@@ -129,13 +136,34 @@ const Index = () => {
     return t('today.startPromptLead', { duration: formatPromptLead(startShiftPrompt.minutesUntilStart) });
   }, [startShiftPrompt, t]);
 
+  function markTabMounted(tab: Tab) {
+    setMountedTabs((current) => {
+      if (current[tab]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [tab]: true,
+      };
+    });
+  }
+
   useEffect(() => {
     if (!isAuthenticated) {
       setActiveTab('today');
+      setMountedTabs({
+        today: true,
+        calendar: false,
+        manage: false,
+        news: false,
+        profile: false,
+      });
       return;
     }
 
     setActiveTab(resolvedTab);
+    markTabMounted(resolvedTab);
   }, [isAuthenticated, resolvedTab]);
 
   useEffect(() => {
@@ -162,6 +190,23 @@ const Index = () => {
   }, [handWaveRotation]);
 
   useEffect(() => {
+    if (!isAuthenticated || !workspaceAccessAllowed) {
+      return;
+    }
+
+    void hydrateWorkspaceCaches(roleCodes);
+    void warmWorkspaceCaches(roleCodes, { force: true });
+
+    const interval = setInterval(() => {
+      void warmWorkspaceCaches(roleCodes, { force: true });
+    }, WORKSPACE_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, roleCodes, workspaceAccessAllowed]);
+
+  useEffect(() => {
     const triggerAppEntry = () => {
       if (!isAuthenticated || !workspaceAccessAllowed) {
         return;
@@ -182,6 +227,8 @@ const Index = () => {
       appStateRef.current = nextState;
 
       if ((previousState === 'background' || previousState === 'inactive') && nextState === 'active') {
+        void hydrateWorkspaceCaches(roleCodes);
+        void warmWorkspaceCaches(roleCodes, { force: true });
         triggerAppEntry();
       }
     });
@@ -189,7 +236,7 @@ const Index = () => {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, workspaceAccessAllowed]);
+  }, [isAuthenticated, roleCodes, workspaceAccessAllowed]);
 
   useEffect(() => {
     if (!appEntrySignal || !isAuthenticated || !workspaceAccessAllowed) {
@@ -226,6 +273,7 @@ const Index = () => {
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
     const nextTab = tab === 'manage' && !isManager ? 'today' : tab;
+    markTabMounted(nextTab);
     setActiveTab(nextTab);
     router.replace(buildWorkspaceHref(nextTab, options) as never);
   }
@@ -246,24 +294,40 @@ const Index = () => {
     return <PendingAccessScreen />;
   }
 
-  function renderActiveTab() {
-    if (activeTab === 'today') {
-      return <TodayScreen onOpenOverdue={openOverdueInCalendar} />;
+  function renderTabScene(tab: Tab) {
+    if (!mountedTabs[tab]) {
+      return null;
     }
 
-    if (activeTab === 'calendar') {
-      return <CalendarScreen overdueSheetSignal={overdueSheetSignal} />;
+    const isActive = activeTab === tab;
+
+    let content: ReactNode = null;
+
+    if (tab === 'today') {
+      content = <TodayScreen onOpenOverdue={openOverdueInCalendar} />;
+    } else if (tab === 'calendar') {
+      content = <CalendarScreen active={isActive} overdueSheetSignal={overdueSheetSignal} />;
+    } else if (tab === 'manage') {
+      content = isManager ? <ManagerScreen active={isActive} /> : null;
+    } else if (tab === 'news') {
+      content = <NewsScreen />;
+    } else {
+      content = <ProfileScreen active={isActive} />;
     }
 
-    if (activeTab === 'manage' && isManager) {
-      return <ManagerScreen />;
+    if (!content) {
+      return null;
     }
 
-    if (activeTab === 'news') {
-      return <NewsScreen />;
-    }
-
-    return <ProfileScreen />;
+    return (
+      <View
+        key={tab}
+        pointerEvents={isActive ? 'auto' : 'none'}
+        style={[styles.tabScene, isActive ? styles.activeTabScene : styles.hiddenTabScene]}
+      >
+        {content}
+      </View>
+    );
   }
 
   return (
@@ -271,16 +335,13 @@ const Index = () => {
       <StatusBar backgroundColor="transparent" style={activeTab === 'today' ? 'light' : 'dark'} translucent />
       <View className="flex-1">
         <AppGradientBackground />
-        <Animated.View
-          entering={FadeIn.duration(180).withInitialValues({
-            opacity: 0,
-            transform: [{ translateY: 6 }],
-          })}
-          key={activeTab}
-          style={{ flex: 1 }}
-        >
-          {renderActiveTab()}
-        </Animated.View>
+        <View style={{ flex: 1 }}>
+          {renderTabScene('today')}
+          {renderTabScene('calendar')}
+          {isManager ? renderTabScene('manage') : null}
+          {renderTabScene('news')}
+          {renderTabScene('profile')}
+        </View>
         <BottomNav active={activeTab} hasBadge onNavigate={navigateToTab} showManage={isManager} />
       </View>
       <Modal
@@ -377,6 +438,15 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     includeFontPadding: false,
+  },
+  tabScene: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  activeTabScene: {
+    display: 'flex',
+  },
+  hiddenTabScene: {
+    display: 'none',
   },
 });
 

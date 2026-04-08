@@ -9,30 +9,57 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
-import { readScreenCache, writeScreenCache } from "../../lib/screen-cache";
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
+import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
 
-const ProfileScreen = () => {
-  const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+type ProfileScreenProps = {
+  active?: boolean;
+};
+
+const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, t } = useI18n();
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  const initialSnapshot = useMemo(
+    () =>
+      peekScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
+        PROFILE_SCREEN_CACHE_KEY,
+        PROFILE_SCREEN_CACHE_TTL_MS,
+      ),
+    [],
+  );
   const [profile, setProfile] = useState<Awaited<
     ReturnType<typeof loadMyProfile>
-  > | null>(null);
-  const [loading, setLoading] = useState(true);
+  > | null>(initialSnapshot?.value ?? null);
+  const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  useEffect(() => {
+    return subscribeScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
+      PROFILE_SCREEN_CACHE_KEY,
+      (entry) => {
+        if (!entry) {
+          return;
+        }
+
+        setProfile(entry.value);
+        setAvatarLoadFailed(false);
+        setLoading(false);
+      },
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProfile() {
       const cached = await readScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
-        "profile-screen",
+        PROFILE_SCREEN_CACHE_KEY,
         PROFILE_SCREEN_CACHE_TTL_MS,
       );
 
@@ -55,7 +82,7 @@ const ProfileScreen = () => {
         if (!cancelled) {
           setProfile(nextProfile);
           setAvatarLoadFailed(false);
-          void writeScreenCache("profile-screen", nextProfile);
+          void writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
         }
       } catch (nextError) {
         if (!cancelled) {
@@ -171,7 +198,7 @@ const ProfileScreen = () => {
   return (
     <>
       <View className="flex-1 bg-transparent">
-        <StatusBar backgroundColor="transparent" style="dark" translucent />
+        {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
         <ScrollView
           className="flex-1 bg-transparent"
           contentContainerStyle={{

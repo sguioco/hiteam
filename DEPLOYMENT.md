@@ -178,6 +178,33 @@ Do these registrations first:
 
 After that, send me:
 
+## 11. Render Setup For Current Repo
+
+If you are already using Render for the backend consumed by `web-admin`, keep `mobile` on the same API service.
+
+Recommended production layout:
+
+- one Render web service for `apps/api`
+- one PostgreSQL database for that API
+- one Redis instance for that API
+- `web-admin` and `mobile` both use that same API base URL
+
+Use these client environment variables:
+
+- `NEXT_PUBLIC_API_URL=https://your-api-service.onrender.com`
+- `INTERNAL_API_URL=https://your-api-service.onrender.com`
+- `EXPO_PUBLIC_API_URL=https://your-api-service.onrender.com`
+
+Important:
+
+- do not run `prisma db push` in the container startup command
+- run schema changes separately before or during deploy as an explicit maintenance step
+- use `GET /api/v1/health/live` for liveness checks
+- use `GET /api/v1/health/ready` for readiness checks when you want database verification
+
+For this repo, the professional model is not "one backend for web and another for mobile".
+It is "one domain backend (`apps/api`) with multiple clients".
+
 1. GitHub repo link
 2. Railway project link
 3. Vercel project link

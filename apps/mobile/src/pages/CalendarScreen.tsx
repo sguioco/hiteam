@@ -16,7 +16,7 @@ import { TimeWheelPicker, type TimeValue } from '../components/TimeWheelPicker';
 import { loadMyShifts, loadMyTasks, rescheduleMyTask, updateMyTaskStatus } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
-import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { parseTaskMeta } from '../../lib/task-meta';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
@@ -33,10 +33,11 @@ type CalendarDayItem = {
 };
 
 type CalendarScreenProps = {
+  active?: boolean;
   overdueSheetSignal?: number;
 };
 
-const CALENDAR_SCREEN_CACHE_TTL_MS = 60_000;
+const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
@@ -64,7 +65,7 @@ function isOverdueTask(task: TaskItem, referenceDate: Date) {
   return Boolean(dueAt && startOfDay(dueAt).getTime() < startOfDay(referenceDate).getTime());
 }
 
-export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScreenProps) {
+export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, t, tp } = useI18n();
   const locale = getDateLocale(language);
@@ -72,10 +73,6 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
   const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [monthAnimationDirection, setMonthAnimationDirection] = useState<'next' | 'prev'>('next');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [shifts, setShifts] = useState<Awaited<ReturnType<typeof loadMyShifts>>>([]);
-  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>([]);
   const [overdueSheetVisible, setOverdueSheetVisible] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [pendingTaskAction, setPendingTaskAction] = useState<'done' | 'delete' | 'reschedule' | null>(null);
@@ -88,8 +85,6 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     minute: today.getMinutes(),
   }));
   const [rescheduleTimePickerVisible, setRescheduleTimePickerVisible] = useState(false);
-  const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
-    useTranslatedTaskCopy(tasks, language);
 
   const year = currentDate.getFullYear();
   const monthIndex = currentDate.getMonth();
@@ -98,10 +93,39 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const month = currentDate.toLocaleString(locale, { month: 'long', year: 'numeric' });
   const calendarCacheKey = `calendar-screen:${year}-${monthIndex}`;
+  const initialSnapshot = useMemo(
+    () =>
+      peekScreenCache<{
+        shifts: Awaited<ReturnType<typeof loadMyShifts>>;
+        tasks: Awaited<ReturnType<typeof loadMyTasks>>;
+      }>(calendarCacheKey, CALENDAR_SCREEN_CACHE_TTL_MS),
+    [calendarCacheKey],
+  );
+  const [loading, setLoading] = useState(!initialSnapshot);
+  const [error, setError] = useState<string | null>(null);
+  const [shifts, setShifts] = useState<Awaited<ReturnType<typeof loadMyShifts>>>(initialSnapshot?.value.shifts ?? []);
+  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>(initialSnapshot?.value.tasks ?? []);
+  const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
+    useTranslatedTaskCopy(tasks, language);
   const isCurrentMonth = year === today.getFullYear() && monthIndex === today.getMonth();
   const selectedDate = new Date(year, monthIndex, selectedDay);
   const selectedDayKey = formatDateKey(selectedDate);
   const todayStart = useMemo(() => startOfDay(today), [today]);
+
+  useEffect(() => {
+    return subscribeScreenCache<{
+      shifts: Awaited<ReturnType<typeof loadMyShifts>>;
+      tasks: Awaited<ReturnType<typeof loadMyTasks>>;
+    }>(calendarCacheKey, (entry) => {
+      if (!entry) {
+        return;
+      }
+
+      setShifts(entry.value.shifts);
+      setTasks(entry.value.tasks);
+      setLoading(false);
+    });
+  }, [calendarCacheKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +143,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
         if (!cached.isStale) {
           return;
         }
-      } else {
+      } else if (!initialSnapshot) {
         setLoading(true);
       }
 
@@ -160,7 +184,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
     return () => {
       cancelled = true;
     };
-  }, [calendarCacheKey, monthIndex, t, year]);
+  }, [calendarCacheKey, initialSnapshot, monthIndex, t, year]);
 
   useEffect(() => {
     if (selectedDay > daysInMonth) {
@@ -476,7 +500,7 @@ export default function CalendarScreen({ overdueSheetSignal = 0 }: CalendarScree
   return (
     <>
       <View className="flex-1 bg-transparent">
-        <StatusBar backgroundColor="transparent" style="dark" translucent />
+        {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
         <ScrollView
           className="flex-1 bg-transparent"
           contentContainerStyle={{ paddingBottom: 112, paddingHorizontal: 16, paddingTop: insets.top + 12 }}

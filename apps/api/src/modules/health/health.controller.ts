@@ -15,4 +15,17 @@ export class HealthController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Get('live')
+  getLiveness(): { status: string; timestamp: string } {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get('ready')
+  async getReadiness(): Promise<{ status: string; database: string; timestamp: string }> {
+    return this.getHealth();
+  }
 }

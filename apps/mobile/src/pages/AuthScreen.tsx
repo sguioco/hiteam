@@ -160,7 +160,7 @@ const AuthScreen = () => {
   const keyboardProgress = useSharedValue(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const shouldUseHeroVideo = Platform.OS !== 'web';
-  const shouldRenderHeroVideo = shouldUseHeroVideo && !interactionBlocked && !keyboardVisible && mode !== 'joinProfile';
+  const shouldRenderHeroVideo = shouldUseHeroVideo;
 
   const collapsedHeroHeight = Math.min(Math.max(screenHeight * 0.46, 400), 550);
   const compactJoinHeroHeight = Math.min(Math.max(screenHeight * 0.42, 360), 430);
@@ -273,15 +273,6 @@ const AuthScreen = () => {
 
     return () => clearTimeout(timer);
   }, [interactionBlocked]);
-
-  useEffect(() => {
-    if (shouldRenderHeroVideo) {
-      return;
-    }
-
-    heroVideoReadyRef.current = false;
-    setVideoReady(false);
-  }, [shouldRenderHeroVideo]);
 
   useEffect(() => {
     if (mode !== 'joinProfile' || joinProfileSubmitted) {
@@ -735,7 +726,7 @@ const AuthScreen = () => {
         return;
       }
 
-      await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 320);
+      await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 1200);
       signInLocally();
 
       if (biometricPolicy.enrollmentStatus !== 'ENROLLED') {

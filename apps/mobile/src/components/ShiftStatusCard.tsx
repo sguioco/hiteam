@@ -22,10 +22,10 @@ type ShiftStatusCardProps = {
 };
 
 const VIDEO_MASK_COLOR = '#5745f7';
-const VIDEO_MASK_OPACITY = 0.8;
+const VIDEO_MASK_OPACITY = 0.4;
 
 function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
-  const player = useVideoPlayer(require('../../hero.mp4'), (nextPlayer) => {
+  const player = useVideoPlayer(require('../../hero.webm'), (nextPlayer) => {
     nextPlayer.loop = true;
     nextPlayer.muted = true;
     nextPlayer.play();

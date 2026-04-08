@@ -21,9 +21,10 @@ import {
   loadMyProfile,
 } from "../../lib/api";
 import { getDateLocale, useI18n } from "../../lib/i18n";
-import { readScreenCache, writeScreenCache } from "../../lib/screen-cache";
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
 import { formatDateKeyInTimeZone } from "../../lib/timezone";
+import { MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
 
 type ManagerEmployee = Awaited<
   ReturnType<typeof loadManagerEmployees>
@@ -44,11 +45,9 @@ const MOCK_AVATARS = {
 };
 
 type ManagerScreenProps = {
+  active?: boolean;
   standalone?: boolean;
 };
-
-const MANAGER_SCREEN_CACHE_TTL_MS = 60_000;
-
 type TaskPhoto = {
   id: string;
   label: string;
@@ -559,6 +558,7 @@ function buildDemoManagerData() {
 }
 
 export default function ManagerScreen({
+  active = true,
   standalone = false,
 }: ManagerScreenProps) {
   const router = useRouter();
@@ -570,14 +570,23 @@ export default function ManagerScreen({
     language === "ru"
       ? "Откройте список новостей компании и общий статус прочтения."
       : "Open company news and overall readership status.";
-  const managerCacheKey = "manager-screen-v4";
+  const initialSnapshot = useMemo(
+    () =>
+      peekScreenCache<{
+        profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
+        employees: ManagerEmployee[];
+        liveSessions: AttendanceLiveSession[];
+        tasks: TaskItem[];
+      }>(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS),
+    [],
+  );
   const [profile, setProfile] = useState<Awaited<
     ReturnType<typeof loadMyProfile>
-  > | null>(null);
-  const [employees, setEmployees] = useState<ManagerEmployee[]>([]);
-  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>([]);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  > | null>(initialSnapshot?.value.profile ?? null);
+  const [employees, setEmployees] = useState<ManagerEmployee[]>(initialSnapshot?.value.employees ?? []);
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(initialSnapshot?.value.liveSessions ?? []);
+  const [tasks, setTasks] = useState<TaskItem[]>(initialSnapshot?.value.tasks ?? []);
+  const [loading, setLoading] = useState(!initialSnapshot);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(
     null,
   );
@@ -592,13 +601,33 @@ export default function ManagerScreen({
   const businessTimeZone = profile?.primaryLocation?.timezone ?? null;
 
   useEffect(() => {
+    return subscribeScreenCache<{
+      profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
+      employees: ManagerEmployee[];
+      liveSessions: AttendanceLiveSession[];
+      tasks: TaskItem[];
+    }>(MANAGER_SCREEN_CACHE_KEY, (entry) => {
+      if (!entry) {
+        return;
+      }
+
+      setProfile(entry.value.profile ?? null);
+      setEmployees(entry.value.employees);
+      setLiveSessions(entry.value.liveSessions);
+      setTasks(entry.value.tasks);
+      setFailedAvatarEmployeeIds(new Set());
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
     async function loadData() {
       const cached = await readScreenCache<{
         profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
         employees: ManagerEmployee[];
         liveSessions: AttendanceLiveSession[];
         tasks: TaskItem[];
-      }>(managerCacheKey, MANAGER_SCREEN_CACHE_TTL_MS);
+      }>(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS);
 
       if (cached) {
         setProfile(cached.value.profile ?? null);
@@ -690,7 +719,7 @@ export default function ManagerScreen({
       setFailedAvatarEmployeeIds(new Set());
       setLoading(false);
 
-      void writeScreenCache(managerCacheKey, {
+      void writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
         profile: nextProfile,
         employees: nextEmployees,
         liveSessions: nextLiveSessions,
@@ -983,7 +1012,7 @@ export default function ManagerScreen({
   return (
     <>
       <View className="flex-1 bg-transparent">
-        <StatusBar backgroundColor="transparent" style="dark" translucent />
+        {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
         <ScrollView
           className="flex-1 bg-transparent"
           contentContainerStyle={{

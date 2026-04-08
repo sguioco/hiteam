@@ -29,17 +29,15 @@ import {
 } from '../../lib/api';
 import { getDateLocale, type AppLanguage, useI18n } from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
-import { readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { useLiveTextMap } from '../../lib/use-live-text-map';
-import { warmAnnouncementImages } from '../../lib/workspace-cache';
+import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
 
 type NewsScreenProps = {
   standalone?: boolean;
 };
-
-const NEWS_SCREEN_CACHE_TTL_MS = 60_000;
 
 function formatDate(value: string, language: AppLanguage) {
   const parsed = new Date(value);
@@ -132,9 +130,14 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const { language, t } = useI18n();
   const { roleCodes } = useAuthFlowState();
   const isManager = hasManagerAccess(roleCodes);
-  const [items, setItems] = useState<AnnouncementItem[]>([]);
+  const cacheKey = getNewsScreenCacheKey(isManager);
+  const initialSnapshot = useMemo(
+    () => peekScreenCache<AnnouncementItem[]>(cacheKey, NEWS_SCREEN_CACHE_TTL_MS),
+    [cacheKey],
+  );
+  const [items, setItems] = useState<AnnouncementItem[]>(initialSnapshot?.value ?? []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingItem, setEditingItem] = useState<AnnouncementItem | null>(null);
@@ -219,11 +222,22 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   }
 
   useEffect(() => {
+    return subscribeScreenCache<AnnouncementItem[]>(cacheKey, (entry) => {
+      if (!entry) {
+        return;
+      }
+
+      setItems(entry.value);
+      setLoading(false);
+    });
+  }, [cacheKey]);
+
+  useEffect(() => {
     let cancelled = false;
 
     void (async () => {
       const cached = await readScreenCache<AnnouncementItem[]>(
-        `news-screen:${isManager ? 'manager' : 'employee'}`,
+        cacheKey,
         NEWS_SCREEN_CACHE_TTL_MS,
       );
 
@@ -241,7 +255,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     return () => {
       cancelled = true;
     };
-  }, [isManager]);
+  }, [cacheKey, isManager]);
 
   useEffect(() => {
     if (loading) {
@@ -249,10 +263,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     }
 
     void writeScreenCache(
-      `news-screen:${isManager ? 'manager' : 'employee'}`,
+      cacheKey,
       items,
     );
-  }, [isManager, items, loading]);
+  }, [cacheKey, items, loading]);
 
   useEffect(() => {
     if (!items.length) {
