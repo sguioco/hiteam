@@ -112,15 +112,19 @@ services:
       context: .
       dockerfile: apps/web-admin/Dockerfile
       args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_GRAPHQL_URL: ${NEXT_PUBLIC_GRAPHQL_URL:-http://localhost:4000/graphql}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+        NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ${NEXT_PUBLIC_WEB_ADMIN_BASE_URL:-http://localhost:3000}
     env_file:
       - .env.local
     environment:
-      NEXT_PUBLIC_API_URL: https://hiteam-api.onrender.com
-      NEXT_PUBLIC_GRAPHQL_URL: https://hiteam-api.onrender.com/graphql
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_GRAPHQL_URL: ${NEXT_PUBLIC_GRAPHQL_URL:-http://localhost:4000/graphql}
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
-      INTERNAL_API_URL: https://hiteam-api.onrender.com
-      WEB_ADMIN_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ${NEXT_PUBLIC_WEB_ADMIN_BASE_URL:-http://localhost:3000}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://localhost:4000}
+      WEB_ADMIN_BASE_URL: ${WEB_ADMIN_BASE_URL:-http://localhost:3000}
     ports:
       - '3000:3000'
 
