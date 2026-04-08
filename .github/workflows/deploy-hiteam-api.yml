@@ -1,0 +1,28 @@
+name: Deploy Hiteam API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-hiteam-api.yml'
+      - 'apps/api/**'
+      - 'packages/types/**'
+      - 'scripts/run-api-prisma.cjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - '.npmrc'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: /root/hiteam/deploy.sh
