@@ -1728,27 +1728,19 @@ function getValue(dictionary: Dictionary, key: string): string {
   }, dictionary) as string;
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY) as Locale | null;
-    if (saved === "en" || saved === "ru") {
-      setLocaleState(saved);
-      return;
-    }
-
-    const browserLocale = window.navigator.language
-      .toLowerCase()
-      .startsWith("ru")
-      ? "ru"
-      : "en";
-    setLocaleState(browserLocale);
-  }, []);
+export function I18nProvider({
+  children,
+  initialLocale = fallbackLocale,
+}: {
+  children: ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
     document.documentElement.lang = locale;
     window.localStorage.setItem(STORAGE_KEY, locale);
+    document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(

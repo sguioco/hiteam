@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { ImageBackground, Text, View } from 'react-native';
+import { AppState, ImageBackground, Platform, StyleSheet, Text, View } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import type { AttendanceStatusResponse } from '@smart/types';
 import Animated, {
   Easing,
@@ -20,6 +21,51 @@ type ShiftStatusCardProps = {
   onPrimaryAction?: () => void;
 };
 
+const VIDEO_MASK_COLOR = '#5745f7';
+const VIDEO_MASK_OPACITY = 0.8;
+
+function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
+  const player = useVideoPlayer(require('../../hero.mp4'), (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = true;
+    nextPlayer.play();
+  });
+
+  useEffect(() => {
+    player.play();
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        player.play();
+        return;
+      }
+
+      player.pause();
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [player]);
+
+  return (
+    <VideoView
+      contentFit="cover"
+      nativeControls={false}
+      onFirstFrameRender={() => {
+        onReady();
+        player.play();
+      }}
+      player={player}
+      style={[
+        StyleSheet.absoluteFillObject,
+        {
+          transform: [{ scaleY: -1 }, { scale: 1.08 }],
+        },
+      ]}
+    />
+  );
+}
 
 function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: AppLanguage) {
   if (language === 'ru') {
@@ -81,7 +127,9 @@ function formatDuration(totalMinutes: number, language: AppLanguage) {
 
 const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
+  const [videoReady, setVideoReady] = useState(false);
   const locale = language === 'ru' ? 'ru-RU' : 'en-US';
+  const shouldRenderBannerVideo = Platform.OS !== 'web';
   const textGlow = {
     textShadowColor: 'rgba(14, 20, 34, 0.42)',
     textShadowOffset: { width: 0, height: 2 },
@@ -313,6 +361,29 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">
       <View className="absolute inset-0">
         <ImageBackground className="h-full w-full" resizeMode="cover" source={require('../../bg.webp')} />
+        {shouldRenderBannerVideo ? (
+          <View
+            pointerEvents="none"
+            style={{
+              ...StyleSheet.absoluteFillObject,
+              opacity: videoReady ? 1 : 0,
+            }}
+          >
+            <ShiftBannerVideoBackdrop onReady={() => setVideoReady(true)} />
+          </View>
+        ) : null}
+        {shouldRenderBannerVideo ? (
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                backgroundColor: VIDEO_MASK_COLOR,
+                opacity: videoReady ? VIDEO_MASK_OPACITY : 0,
+              },
+            ]}
+          />
+        ) : null}
       </View>
       <View className="absolute inset-0 bg-[#140d2f]/18" />
       <View className="absolute inset-x-0 bottom-0 h-44 bg-[#120a28]/24" />

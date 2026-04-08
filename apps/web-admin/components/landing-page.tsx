@@ -31,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { AuroraText } from "@/components/ui/aurora-text";
 import { LineShadowText } from "@/components/ui/line-shadow-text";
+import { useI18n } from "@/lib/i18n";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -204,7 +205,6 @@ const GLOBE_GLOBAL_OFFSET_Y = 0;
 const GLOBE_POLAROID_OFFSET_Y = 100;
 
 type LandingLocale = "ru" | "en";
-const LANDING_LOCALE_EVENT = "smart-admin-locale-change";
 const LANDING_DESKTOP_QUERY = "(min-width: 768px)";
 
 type LegalDocumentKey = "consent" | "privacy";
@@ -443,58 +443,6 @@ const LANDING_LEGAL_COPY: Record<
     },
   },
 };
-
-function detectPreferredLandingLocale(): LandingLocale {
-  if (typeof window === "undefined") {
-    return "ru";
-  }
-
-  const localeCandidates = [
-    ...(window.navigator.languages ?? []),
-    window.navigator.language,
-    Intl.DateTimeFormat().resolvedOptions().locale,
-  ].filter(Boolean);
-
-  return localeCandidates.some((value) =>
-    value.toLowerCase().startsWith("ru"),
-  )
-    ? "ru"
-    : "en";
-}
-
-function readStoredLandingLocale(): LandingLocale | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const savedLocale = window.localStorage.getItem("smart-admin-locale");
-  return savedLocale === "ru" || savedLocale === "en" ? savedLocale : null;
-}
-
-function subscribeToLandingLocale(onStoreChange: () => void) {
-  if (typeof window === "undefined") {
-    return () => {};
-  }
-
-  const handleChange = () => onStoreChange();
-  window.addEventListener("storage", handleChange);
-  window.addEventListener("focus", handleChange);
-  window.addEventListener(LANDING_LOCALE_EVENT, handleChange);
-
-  return () => {
-    window.removeEventListener("storage", handleChange);
-    window.removeEventListener("focus", handleChange);
-    window.removeEventListener(LANDING_LOCALE_EVENT, handleChange);
-  };
-}
-
-function getLandingLocaleSnapshot(): LandingLocale {
-  return readStoredLandingLocale() ?? detectPreferredLandingLocale();
-}
-
-function getLandingLocaleServerSnapshot(): LandingLocale {
-  return "ru";
-}
 
 function subscribeToHeaderScroll(onStoreChange: () => void) {
   if (typeof window === "undefined") {
@@ -1092,11 +1040,7 @@ const Landing = () => {
   const globeContainerRef = useRef<HTMLDivElement>(null);
   const overlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const basePhiRef = useRef(GLOBE_INITIAL_PHI);
-  const locale = useSyncExternalStore(
-    subscribeToLandingLocale,
-    getLandingLocaleSnapshot,
-    getLandingLocaleServerSnapshot,
-  );
+  const { locale, setLocale } = useI18n();
   const isHeaderScrolled = useSyncExternalStore(
     subscribeToHeaderScroll,
     getHeaderScrolledSnapshot,
@@ -1114,6 +1058,7 @@ const Landing = () => {
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [demoTermsAccepted, setDemoTermsAccepted] = useState(false);
+  const [isGlobeReady, setIsGlobeReady] = useState(false);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocumentKey | null>(
     null,
   );
@@ -1163,12 +1108,7 @@ const Landing = () => {
   };
 
   const updateLocale = (nextLocale: LandingLocale) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem("smart-admin-locale", nextLocale);
-    window.dispatchEvent(new Event(LANDING_LOCALE_EVENT));
+    setLocale(nextLocale);
   };
 
   const toggleFaq = (index: number) => {
@@ -1224,6 +1164,7 @@ const Landing = () => {
   useGSAP(() => {
     if (!canvasRef.current || !globeContainerRef.current) return;
 
+    setIsGlobeReady(false);
     const canvas = canvasRef.current;
     const globeContainer = globeContainerRef.current;
     const devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -1312,13 +1253,14 @@ const Landing = () => {
     };
 
     syncOverlays(basePhiRef.current);
-    canvas.style.opacity = "1";
+    setIsGlobeReady(true);
     frameId = window.requestAnimationFrame(animate);
 
     return () => {
       window.cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
       globe.destroy();
+      setIsGlobeReady(false);
     };
   }, { scope: landingRef });
 
@@ -2017,7 +1959,7 @@ const Landing = () => {
               </a>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white! transition-opacity hover:opacity-90 sm:h-10 sm:px-5 sm:text-sm"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f63ff] px-4 text-xs font-medium !text-white transition-opacity hover:opacity-90 sm:h-10 sm:px-5 sm:text-sm"
                 onClick={() => setIsDemoModalOpen(true)}
               >
                 {isRu ? "Начать" : "Start"}
@@ -2034,7 +1976,7 @@ const Landing = () => {
               </a>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-3.5 text-sm font-medium text-white! transition-opacity hover:opacity-90"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f63ff] px-3.5 text-sm font-medium !text-white transition-opacity hover:opacity-90"
                 onClick={() => setIsDemoModalOpen(true)}
               >
                 {isRu ? "Начать" : "Start"}
@@ -2074,7 +2016,7 @@ const Landing = () => {
                       className={cx(
                         "inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-semibold transition-colors",
                         locale === "ru"
-                          ? "bg-primary text-white!"
+                          ? "bg-[#2f63ff] !text-white"
                           : "text-slate-700 hover:text-slate-900",
                       )}
                       onClick={() => updateLocale("ru")}
@@ -2086,7 +2028,7 @@ const Landing = () => {
                       className={cx(
                         "inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-semibold transition-colors",
                         locale === "en"
-                          ? "bg-primary text-white!"
+                          ? "bg-[#2f63ff] !text-white"
                           : "text-slate-700 hover:text-slate-900",
                       )}
                       onClick={() => updateLocale("en")}
@@ -2132,7 +2074,7 @@ const Landing = () => {
         </video>
         <div className="pointer-events-none absolute inset-0 z-[2] bg-white/22" />
         <div className="pointer-events-none absolute inset-0 z-[3] bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_34%),radial-gradient(circle_at_88%_14%,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_30%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,249,253,0.22)_52%,rgba(238,243,251,0.34)_100%)]" />
-        <div className="relative z-10 mx-auto flex min-h-[50rem] max-w-7xl flex-col items-center justify-start gap-8 pt-6 sm:min-h-[calc(100svh-5rem)] sm:gap-10 sm:pt-8 lg:min-h-[calc(95vh-6rem)] lg:flex-row lg:gap-2 lg:pt-2">
+        <div className="relative z-30 mx-auto flex min-h-[50rem] max-w-7xl flex-col items-center justify-start gap-8 pt-6 sm:min-h-[calc(100svh-5rem)] sm:gap-10 sm:pt-8 lg:min-h-[calc(95vh-6rem)] lg:flex-row lg:gap-2 lg:pt-2">
           <div className="relative z-10 w-full max-w-xl flex-1 lg:max-w-[40rem] lg:flex-[1.06]">
             <div
               className={cx(isRu ? "origin-top-left scale-[0.92] transform-gpu sm:scale-100" : "")}
@@ -2255,12 +2197,12 @@ const Landing = () => {
             </div>
 
             <div
-              className="mt-10 grid grid-cols-2 gap-3 sm:mt-8 sm:flex sm:flex-wrap sm:items-center"
+              className="relative z-40 mt-10 grid grid-cols-2 gap-3 sm:mt-8 sm:flex sm:flex-wrap sm:items-center"
               data-lp-hero-actions
             >
               <button
                 type="button"
-                className="inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-about-offset-y)] items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-black shadow-[0_18px_44px_rgba(15,23,42,0.08)] ring-1 ring-white/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:shadow-[0_24px_54px_rgba(15,23,42,0.12)] sm:w-auto sm:translate-y-0 sm:px-6"
+                className="inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-about-offset-y)] items-center justify-center rounded-full bg-white/96 px-4 text-sm font-semibold text-slate-950 shadow-[0_18px_44px_rgba(15,23,42,0.10)] ring-1 ring-white transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_24px_54px_rgba(15,23,42,0.14)] sm:w-auto sm:translate-y-0 sm:px-6"
                 onClick={() => scrollToSection("about")}
                 style={heroMobileAboutButtonStyle}
               >
@@ -2268,14 +2210,14 @@ const Landing = () => {
               </button>
               <button
                 type="button"
-                className="group inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-demo-offset-y)] items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-white! shadow-[0_22px_54px_rgba(47,99,255,0.28)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:shadow-[0_28px_62px_rgba(47,99,255,0.34)] sm:w-auto sm:translate-y-0 sm:gap-3 sm:pl-6 sm:pr-3"
+                className="group inline-flex h-[52px] w-full translate-y-[var(--hero-mobile-demo-offset-y)] items-center justify-center gap-2 rounded-full bg-[#2f63ff] px-4 text-sm font-semibold !text-white shadow-[0_22px_54px_rgba(47,99,255,0.30)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-0.5 hover:bg-[#2959f2] hover:shadow-[0_28px_62px_rgba(47,99,255,0.36)] sm:w-auto sm:translate-y-0 sm:gap-3 sm:pl-6 sm:pr-3"
                 onClick={() => setIsDemoModalOpen(true)}
                 style={heroMobileDemoButtonStyle}
               >
                 <span className="sm:hidden">{isRu ? "Начать" : "Start"}</span>
                 <span className="hidden sm:inline">{heroCopy.demoCta}</span>
                 <svg
-                  className="h-4 w-4 text-white! transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5"
+                  className="h-4 w-4 !text-white transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -2300,8 +2242,25 @@ const Landing = () => {
               <div className="absolute inset-[11%] rounded-full bg-white/34 shadow-[0_36px_120px_rgba(148,163,184,0.08)]" />
               <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.12)] ring-1 ring-white/60" />
               <div className="relative size-full" ref={globeContainerRef}>
+                <div
+                  className={cx(
+                    "pointer-events-none absolute inset-[8%] z-0 rounded-full transition-opacity duration-500",
+                    isGlobeReady ? "opacity-0" : "opacity-100",
+                  )}
+                >
+                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.96)_0%,rgba(230,240,255,0.94)_20%,rgba(184,212,255,0.92)_44%,rgba(126,168,255,0.88)_70%,rgba(88,129,245,0.82)_100%)] shadow-[inset_-42px_-58px_120px_rgba(38,87,214,0.24),inset_26px_24px_88px_rgba(255,255,255,0.76),0_40px_120px_rgba(88,129,245,0.18)]" />
+                  <div className="absolute inset-[4%] rounded-full border border-white/70" />
+                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/40" />
+                  <div className="absolute inset-x-[7%] inset-y-[10%] rounded-full border border-[#7ea8ff]/28" />
+                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.38)_18%,rgba(255,255,255,0.62)_50%,rgba(255,255,255,0.38)_82%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.2)_22%,rgba(255,255,255,0.34)_50%,rgba(255,255,255,0.2)_78%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.2)_22%,rgba(255,255,255,0.34)_50%,rgba(255,255,255,0.2)_78%,rgba(255,255,255,0)_100%)]" />
+                </div>
                 <canvas
-                  className="relative z-10 h-full w-full opacity-100 transition-opacity duration-700 [contain:layout_paint_size]"
+                  className={cx(
+                    "relative z-10 h-full w-full transition-opacity duration-500 [contain:layout_paint_size]",
+                    isGlobeReady ? "opacity-100" : "opacity-0",
+                  )}
                   ref={canvasRef}
                   style={{ maxWidth: "100%", aspectRatio: "1" }}
                 />
@@ -2716,8 +2675,8 @@ const Landing = () => {
                 <button
                   type="button"
                   className={`mt-auto block w-full rounded-xl py-3 text-center text-sm font-semibold transition-all duration-300 ${plan.highlighted
-                    ? "bg-background text-black!"
-                    : "bg-primary/10 text-primary hover:bg-primary hover:text-white!"
+                    ? "bg-background !text-black"
+                    : "bg-primary/10 text-primary hover:bg-primary hover:!text-white"
                     }`}
                   onClick={() => setIsDemoModalOpen(true)}
                 >

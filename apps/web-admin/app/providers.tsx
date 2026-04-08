@@ -4,9 +4,15 @@ import { ReactNode } from 'react';
 import { LivePageTranslation } from '@/components/live-page-translation';
 import { I18nProvider } from '../lib/i18n';
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({
+  children,
+  initialLocale,
+}: {
+  children: ReactNode;
+  initialLocale: "en" | "ru";
+}) {
   return (
-    <I18nProvider>
+    <I18nProvider initialLocale={initialLocale}>
       {children}
       <LivePageTranslation scope="document" />
     </I18nProvider>

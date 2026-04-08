@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import localFont from 'next/font/local';
 import { Montserrat, Onest } from 'next/font/google';
 import '@aws-amplify/ui-react-liveness/styles.css';
@@ -43,9 +43,25 @@ export const metadata: Metadata = {
   description: 'Operational control center for attendance, scheduling, and workforce workflows.',
 };
 
+function resolveInitialLocale(
+  acceptLanguageHeader: string | null,
+  localeCookie: string | undefined,
+): "en" | "ru" {
+  if (localeCookie === "ru" || localeCookie === "en") {
+    return localeCookie;
+  }
+
+  return acceptLanguageHeader?.toLowerCase().startsWith("ru") ? "ru" : "en";
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const requestHeaders = await headers();
+  const cookieStore = await cookies();
   const isPublicRoute = requestHeaders.get("x-smart-public-route") === "1";
+  const initialLocale = resolveInitialLocale(
+    requestHeaders.get("accept-language"),
+    cookieStore.get("smart-admin-locale")?.value,
+  );
   const initialSession = await getServerSession();
   const initialShellBootstrap = initialSession
     ? isPublicRoute
@@ -56,7 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html
-      lang="en"
+      lang={initialLocale}
       className={cn(
         teodor.variable,
         montserrat.variable,
@@ -66,7 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
-        <Providers>{children}</Providers>
+        <Providers initialLocale={initialLocale}>{children}</Providers>
       </body>
     </html>
   );
