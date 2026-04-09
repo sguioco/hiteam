@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/deploy-hiteam-api.yml'
       - 'apps/api/**'
+      - 'apps/web-admin/**'
+      - 'packages/ui/**'
       - 'packages/types/**'
       - 'scripts/run-api-prisma.cjs'
       - 'package.json'
