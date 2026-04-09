@@ -4,6 +4,7 @@ const SERVER_API_URL =
   process.env.INTERNAL_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:4000";
+const SERVER_API_TIMEOUT_MS = Number(process.env.INTERNAL_API_TIMEOUT_MS ?? 12000);
 
 type ServerApiOptions = RequestInit & {
   token?: string;
@@ -27,7 +28,7 @@ export async function serverApiRequest<T>(
     ...options,
     headers,
     cache: "no-store",
-    signal: options?.signal ?? AbortSignal.timeout(5000),
+    signal: options?.signal ?? AbortSignal.timeout(SERVER_API_TIMEOUT_MS),
   });
 
   if (!response.ok) {

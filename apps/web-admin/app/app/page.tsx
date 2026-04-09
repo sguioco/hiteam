@@ -6,15 +6,22 @@ import { serverApiRequestWithSession } from "@/lib/server-api";
 async function loadInitialDashboardData(
   session: Awaited<ReturnType<typeof requireServerSession>>,
 ): Promise<DashboardInitialData | null> {
-  try {
-    const response = await serverApiRequestWithSession<{
-      initialData: DashboardInitialData;
-      mode: "admin" | "employee";
-    }>(session, "/bootstrap/dashboard");
-    return response.initialData;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await serverApiRequestWithSession<{
+        initialData: DashboardInitialData;
+        mode: "admin" | "employee";
+      }>(session, "/bootstrap/dashboard");
+      return response.initialData;
+    } catch {
+      if (attempt === 1) {
+        return null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
   }
+
+  return null;
 }
 
 export default async function AdminHomePage() {

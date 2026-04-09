@@ -85,6 +85,7 @@ import {
   getMockActionCenterItems,
   type ActionCenterItem,
 } from "@/components/ActionsCenter";
+import { DashboardHomeSkeleton } from "@/components/dashboard/dashboard-home-skeleton";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
@@ -879,6 +880,7 @@ export default function DashboardHome({
     useState<AttendanceFilterKey>("all");
   const [personalHistory, setPersonalHistory] =
     useState<AttendanceHistoryResponse | null>(initialData?.personalHistory ?? null);
+  const [isBootstrapping, setIsBootstrapping] = useState(!initialData);
   const didUseInitialData = useRef(Boolean(initialData));
   function applyDashboardSnapshot(
     snapshot: DashboardCachePayload,
@@ -893,6 +895,7 @@ export default function DashboardHome({
     setScheduleShifts(snapshot.scheduleShifts);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
     setPersonalHistory(snapshot.personalHistory);
+    setIsBootstrapping(false);
 
     if (cacheKey) {
       writeClientCache(cacheKey, snapshot);
@@ -901,15 +904,23 @@ export default function DashboardHome({
 
   async function loadData() {
     const currentSession = getSession();
-    if (!currentSession) return;
-    const snapshot = await apiRequest<{
-      initialData: DashboardCachePayload;
-      mode: "admin" | "employee";
-    }>("/bootstrap/dashboard", {
-      token: currentSession.accessToken,
-    });
+    if (!currentSession) {
+      setIsBootstrapping(false);
+      return;
+    }
 
-    applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
+    try {
+      const snapshot = await apiRequest<{
+        initialData: DashboardCachePayload;
+        mode: "admin" | "employee";
+      }>("/bootstrap/dashboard", {
+        token: currentSession.accessToken,
+      });
+
+      applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
+    } finally {
+      setIsBootstrapping(false);
+    }
   }
 
   useEffect(() => {
@@ -929,6 +940,7 @@ export default function DashboardHome({
       if (dashboardCacheKey) {
         writeClientCache(dashboardCacheKey, initialData);
       }
+      setIsBootstrapping(false);
       return;
     }
 
@@ -946,6 +958,7 @@ export default function DashboardHome({
       }
     }
 
+    setIsBootstrapping(true);
     void loadData();
   }, [dashboardCacheKey, initialData, isEmployeeMode]);
 
@@ -982,6 +995,13 @@ export default function DashboardHome({
       null,
     [employees, session?.user.id],
   );
+  const createAction = isEmployeeMode
+    ? undefined
+    : () => {
+        setTaskDraft(initialTaskDraft);
+        setTaskDayOffConfirmOpen(false);
+        setCreateTaskOpen(true);
+      };
   const managerOnly = isManagerOnlyRole(session?.user.roleCodes ?? []);
   const canUseDesktopAdminTools = hasDesktopAdminAccess(
     session?.user.roleCodes ?? [],
@@ -1613,19 +1633,27 @@ export default function DashboardHome({
     }));
   }
 
+  if (isBootstrapping) {
+    return (
+      <AdminShell
+        initialSession={session}
+        mode={mode}
+        onCreateAction={createAction}
+      >
+        <main className="page-shell manager-page-shell">
+          <section className="manager-home">
+            <DashboardHomeSkeleton />
+          </section>
+        </main>
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell
       initialSession={session}
       mode={mode}
-      onCreateAction={
-        isEmployeeMode
-          ? undefined
-          : () => {
-              setTaskDraft(initialTaskDraft);
-              setTaskDayOffConfirmOpen(false);
-              setCreateTaskOpen(true);
-            }
-      }
+      onCreateAction={createAction}
     >
       <main className="page-shell manager-page-shell">
         <section className="manager-home">

@@ -1468,7 +1468,7 @@ const Landing = () => {
   const heroStats = isRu
     ? [
         { value: "99.8%", label: "точность" },
-        { value: "7+", label: "команд" },
+        { value: "70+", label: "команд" },
         { value: "24/7", label: "поддержка" },
       ]
     : [
@@ -1844,52 +1844,19 @@ const Landing = () => {
           data-lp-header-shell
         >
           <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-expanded={isMobileNavExpanded}
-                aria-label={isMobileNavExpanded ? (isRu ? "Закрыть меню" : "Close menu") : (isRu ? "Открыть меню" : "Open menu")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-colors hover:border-slate-300 md:hidden"
-                onClick={() => setIsMobileNavOpen((current) => !current)}
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  {isMobileNavExpanded ? (
-                    <path
-                      d="M6 6l12 12M18 6L6 18"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                    />
-                  ) : (
-                    <path
-                      d="M4 7h16M4 12h16M4 17h16"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                    />
-                  )}
-                </svg>
-              </button>
-
-              <button
-                className="flex items-center"
-                onClick={() => {
-                  setIsMobileNavOpen(false);
-                  window.scrollTo({
-                    top: 0,
-                    behavior: "smooth",
-                  });
-                }}
-                type="button"
-              >
-                <BrandWordmark className="text-[1.55rem] text-foreground sm:text-[1.75rem] md:text-[1.95rem]" />
-              </button>
-            </div>
+            <button
+              className="flex items-center"
+              onClick={() => {
+                setIsMobileNavOpen(false);
+                window.scrollTo({
+                  top: 0,
+                  behavior: "smooth",
+                });
+              }}
+              type="button"
+            >
+              <BrandWordmark className="text-[1.55rem] text-foreground sm:text-[1.75rem] md:text-[1.95rem]" />
+            </button>
 
             <nav className="hidden items-center gap-8 md:flex">
               {navItems.map((item) => (
@@ -1920,22 +1887,36 @@ const Landing = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 md:hidden">
-              <a
-                className="text-sm font-medium text-slate-900 transition-colors hover:text-primary"
-                href="/login"
-                onClick={() => setIsMobileNavOpen(false)}
+            <button
+              type="button"
+              aria-expanded={isMobileNavExpanded}
+              aria-label={isMobileNavExpanded ? (isRu ? "Закрыть меню" : "Close menu") : (isRu ? "Открыть меню" : "Open menu")}
+              className="inline-flex h-10 w-10 items-center justify-center text-slate-900 transition-colors hover:text-[#2f63ff] md:hidden"
+              onClick={() => setIsMobileNavOpen((current) => !current)}
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {isRu ? "Войти" : "Sign in"}
-              </a>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f63ff] px-3.5 text-sm font-medium !text-white transition-opacity hover:opacity-90"
-                onClick={() => setIsDemoModalOpen(true)}
-              >
-                {isRu ? "Начать" : "Start"}
-              </button>
-            </div>
+                {isMobileNavExpanded ? (
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <path
+                    d="M4 7h16M4 12h16M4 17h16"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                  />
+                )}
+              </svg>
+            </button>
           </div>
 
           <div
@@ -1963,7 +1944,7 @@ const Landing = () => {
                   ))}
                 </div>
                 <Separator className="my-3 bg-slate-200/90" />
-                <div className="flex items-start">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                     <button
                       type="button"
@@ -1988,6 +1969,25 @@ const Landing = () => {
                       onClick={() => updateLocale("en")}
                     >
                       EN
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a
+                      className="text-sm font-medium text-slate-900 transition-colors hover:text-primary"
+                      href="/login"
+                      onClick={() => setIsMobileNavOpen(false)}
+                    >
+                      {isRu ? "Войти" : "Sign in"}
+                    </a>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f63ff] px-3.5 text-sm font-medium !text-white transition-opacity hover:opacity-90"
+                      onClick={() => {
+                        setIsMobileNavOpen(false);
+                        setIsDemoModalOpen(true);
+                      }}
+                    >
+                      {isRu ? "Начать" : "Start"}
                     </button>
                   </div>
                 </div>
@@ -2236,7 +2236,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 relative z-20 -mt-90 flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
+        className="scroll-mt-32 relative z-20 mt-0 flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
         id="about"
       >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 md:px-16 lg:px-24">

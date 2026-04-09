@@ -799,7 +799,7 @@ export function AuthPanel() {
               fetchPriority="high"
               height={880}
               loading="eager"
-              src="/illustration.svg"
+              src="/illustration.svg?v=20260409"
               width={880}
             />
           </div>
