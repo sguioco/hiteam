@@ -2,8 +2,6 @@ import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
 import localFont from 'next/font/local';
 import { Montserrat, Onest } from 'next/font/google';
-import '@aws-amplify/ui-react-liveness/styles.css';
-import '../../../example-unframer-app/src/framer/styles.css';
 import './globals.css';
 import { Providers } from './providers';
 import { petersburgHero } from './landing-hero-font';
@@ -24,15 +22,18 @@ const teodor = localFont({
       weight: '400',
     },
   ],
+  display: 'swap',
   variable: '--font-brand',
 });
 
 const montserrat = Montserrat({
+  display: 'swap',
   subsets: ['latin', 'cyrillic'],
   variable: '--font-landing',
 });
 
 const onest = Onest({
+  display: 'swap',
   subsets: ['latin', 'cyrillic'],
   variable: '--font-hero-display',
   weight: ['500', '600', '700', '800', '900'],

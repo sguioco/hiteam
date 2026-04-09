@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { ArrowRight, Building2, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -37,7 +36,6 @@ import {
   saveTenantSlug,
 } from '@/lib/auth';
 import { BrandWordmark } from './brand-wordmark';
-import { SessionLoader } from './session-loader';
 
 gsap.registerPlugin(useGSAP);
 
@@ -262,6 +260,7 @@ export function AuthPanel() {
           : t.companyCodeAction;
   const sharedPrimaryActionDisabled =
     tab === 'signin' ? loginLoading : companyLookupResult ? false : companyLookupLoading;
+  const workspacePreviewImage = lang === 'ru' ? '/1ru.webp' : '/1en.webp';
 
   useGSAP(
     () => {
@@ -331,6 +330,10 @@ export function AuthPanel() {
 
     window.localStorage.setItem('smart-admin-locale', lang);
   }, [lang]);
+
+  useEffect(() => {
+    router.prefetch('/app');
+  }, [router]);
 
   async function handleLoginSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -480,10 +483,6 @@ export function AuthPanel() {
     }
   }
 
-  if (loginLoading) {
-    return <SessionLoader label={t.openingWorkspace} />;
-  }
-
   return (
     <div className="flex w-full max-w-6xl flex-col gap-8">
       <div className="overflow-hidden rounded-[34px] border border-white/60 bg-white/80 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl">
@@ -514,6 +513,7 @@ export function AuthPanel() {
                     <button
                       className={cn(
                         'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
+                        loginLoading && 'pointer-events-none opacity-60',
                         tab === 'signin'
                           ? 'text-foreground'
                           : 'bg-transparent text-[#7a88a6] hover:text-foreground',
@@ -526,6 +526,7 @@ export function AuthPanel() {
                     <button
                       className={cn(
                         'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
+                        loginLoading && 'pointer-events-none opacity-60',
                         tab === 'company-code'
                           ? 'text-foreground'
                           : 'bg-transparent text-[#7a88a6] hover:text-foreground',
@@ -585,6 +586,7 @@ export function AuthPanel() {
                           <Input
                             aria-label={t.emailOrPhone}
                             autoComplete="username"
+                            disabled={loginLoading}
                             id="login-identifier"
                             onChange={(event) => setIdentifier(event.target.value)}
                             placeholder={t.emailOrPhone}
@@ -600,6 +602,7 @@ export function AuthPanel() {
                               aria-label={t.password}
                               autoComplete="current-password"
                               className="pr-11"
+                              disabled={loginLoading}
                               id="login-password"
                               onChange={(event) => setPassword(event.target.value)}
                               placeholder={t.password}
@@ -609,7 +612,8 @@ export function AuthPanel() {
                             />
                             <button
                               aria-label={passwordVisible ? t.hidePassword : t.showPassword}
-                              className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                              className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                              disabled={loginLoading}
                               onClick={() => setPasswordVisible((current) => !current)}
                               title={passwordVisible ? t.hidePassword : t.showPassword}
                               type="button"
@@ -619,7 +623,8 @@ export function AuthPanel() {
                           </div>
                           <div className="flex justify-end">
                             <button
-                              className="text-[8px] font-medium leading-none text-[#4f6df5] transition-colors hover:text-[#3553db]"
+                              className="text-[8px] font-medium leading-none text-[#4f6df5] transition-colors hover:text-[#3553db] disabled:pointer-events-none disabled:opacity-50"
+                              disabled={loginLoading}
                               onClick={() => {
                                 setForgotEmail(identifier.includes('@') ? identifier : '');
                                 setForgotError('');
@@ -632,6 +637,12 @@ export function AuthPanel() {
                             </button>
                           </div>
                         </div>
+
+                        {loginLoading ? (
+                          <div className="auth-panel-field rounded-[18px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3 text-sm text-[#3553db]">
+                            {t.openingWorkspace}
+                          </div>
+                        ) : null}
                       </div>
 
                     </form>
@@ -731,6 +742,7 @@ export function AuthPanel() {
                               aria-label={t.companyCodeLabel}
                               autoCapitalize="characters"
                               autoComplete="off"
+                              disabled={companyLookupLoading}
                               id="company-code"
                               onChange={(event) => {
                                 setCompanyCode(event.target.value.toUpperCase());
@@ -782,16 +794,83 @@ export function AuthPanel() {
             </div>
           </div>
 
-          <div className="relative hidden items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#ecf4ff_0%,#dfeaff_100%)] p-10 lg:flex">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.18),transparent_25%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.14),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.18),transparent_32%)]" />
-            <Image
-              alt="HiTeam workspace illustration"
-              className="relative h-auto max-h-[360px] w-auto max-w-[430px] object-contain"
-              height={1400}
-              priority
-              src="/illustration.svg"
-              width={1400}
-            />
+          <div className="relative hidden overflow-hidden bg-[linear-gradient(180deg,#eff5ff_0%,#dfe9ff_100%)] p-10 lg:flex">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.18),transparent_25%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.14),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.16),transparent_32%)]" />
+            <div className="relative z-10 flex w-full flex-col justify-between gap-8">
+              <div className="grid gap-3">
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5670b9] shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur">
+                  <span className="h-2 w-2 rounded-full bg-[#2f63ff]" />
+                  HiTeam workspace
+                </div>
+                <div className="max-w-sm space-y-3">
+                  <h2 className="text-[2.4rem] font-semibold leading-[0.94] tracking-[-0.05em] text-slate-950">
+                    {lang === 'ru'
+                      ? 'Вход без визуальной задержки и лишнего шума'
+                      : 'Fast sign-in without visual lag or loading noise'}
+                  </h2>
+                  <p className="max-w-[30ch] text-sm leading-6 text-slate-600">
+                    {lang === 'ru'
+                      ? 'Рабочее пространство должно открываться сразу, без скачков макета, поздних SVG и внезапных смен шрифтов.'
+                      : 'The workspace should open immediately, without layout jumps, late SVGs, or text styles changing after paint.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-[24px] border border-white/70 bg-white/86 p-4 shadow-[0_22px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Live</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-slate-950">184</p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {lang === 'ru' ? 'активных смен' : 'active shifts'}
+                    </p>
+                  </div>
+                  <div className="rounded-[24px] border border-white/70 bg-white/86 p-4 shadow-[0_22px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Flow</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-slate-950">12</p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {lang === 'ru' ? 'запросов ждут' : 'requests pending'}
+                    </p>
+                  </div>
+                  <div className="rounded-[24px] border border-white/70 bg-[linear-gradient(180deg,rgba(47,99,255,0.98),rgba(55,84,215,0.96))] p-4 text-white shadow-[0_22px_50px_rgba(47,99,255,0.26)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Status</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-[-0.05em]">99.8%</p>
+                    <p className="mt-1 text-xs text-white/72">
+                      {lang === 'ru' ? 'точность' : 'accuracy'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-[32px] border border-white/70 bg-white/84 p-3 shadow-[0_30px_80px_rgba(15,23,42,0.1)] backdrop-blur">
+                  <div className="mb-3 flex items-center justify-between px-2">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        {lang === 'ru' ? 'Операционный экран' : 'Operations board'}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-950">
+                        {lang === 'ru' ? 'Админ-панель HiTeam' : 'HiTeam admin workspace'}
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-[#eef4ff] px-3 py-1 text-[11px] font-semibold text-[#3553db]">
+                      <span className="h-2 w-2 rounded-full bg-[#3ea76b]" />
+                      {lang === 'ru' ? 'онлайн' : 'online'}
+                    </div>
+                  </div>
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#f6f9ff]">
+                    <img
+                      alt="HiTeam admin workspace preview"
+                      className="block h-auto w-full"
+                      decoding="async"
+                      fetchPriority="high"
+                      height={740}
+                      loading="eager"
+                      src={workspacePreviewImage}
+                      width={1200}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import '@aws-amplify/ui-react-liveness/styles.css';
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../lib/api';

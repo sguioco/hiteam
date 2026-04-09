@@ -200,6 +200,8 @@ const GLOBE_INITIAL_PHI = 0.52;
 const GLOBE_THETA = 0.33;
 const GLOBE_SCALE = 1;
 const GLOBE_ROTATION_STEP = 0.0025;
+const GLOBE_MAP_SAMPLES = 16000;
+const GLOBE_MAX_DEVICE_PIXEL_RATIO = 1.5;
 const GLOBE_OFFSET_Y = 20;
 const GLOBE_GLOBAL_OFFSET_Y = 0;
 const GLOBE_POLAROID_OFFSET_Y = 100;
@@ -1167,9 +1169,13 @@ const Landing = () => {
     setIsGlobeReady(false);
     const canvas = canvasRef.current;
     const globeContainer = globeContainerRef.current;
-    const devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const devicePixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      GLOBE_MAX_DEVICE_PIXEL_RATIO,
+    );
     let globeSize = Math.max(globeContainer.offsetWidth * devicePixelRatio, 1);
     let frameId = 0;
+    let globeVisible = document.visibilityState === "visible";
 
     const syncOverlays = (currentPhi: number) => {
       const rect = globeContainer.getBoundingClientRect();
@@ -1212,7 +1218,7 @@ const Landing = () => {
       theta: GLOBE_THETA,
       dark: 0,
       diffuse: 0.2,
-      mapSamples: 24000,
+      mapSamples: GLOBE_MAP_SAMPLES,
       mapBrightness: 7,
       mapBaseBrightness: 0,
       scale: GLOBE_SCALE,
@@ -1245,6 +1251,11 @@ const Landing = () => {
     resizeObserver.observe(globeContainer);
 
     const animate = () => {
+      if (!globeVisible) {
+        frameId = 0;
+        return;
+      }
+
       basePhiRef.current += GLOBE_ROTATION_STEP;
       const phi = basePhiRef.current;
       globe.update({ phi, width: globeSize, height: globeSize });
@@ -1252,13 +1263,23 @@ const Landing = () => {
       frameId = window.requestAnimationFrame(animate);
     };
 
+    const handleVisibilityChange = () => {
+      globeVisible = document.visibilityState === "visible";
+
+      if (globeVisible && frameId === 0) {
+        frameId = window.requestAnimationFrame(animate);
+      }
+    };
+
     syncOverlays(basePhiRef.current);
     setIsGlobeReady(true);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     frameId = window.requestAnimationFrame(animate);
 
     return () => {
       window.cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       globe.destroy();
       setIsGlobeReady(false);
     };
@@ -2059,7 +2080,7 @@ const Landing = () => {
           muted
           playsInline
           poster="/hero-poster.jpg"
-          preload="auto"
+          preload="metadata"
           className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
           data-lp-hero-video
           ref={heroVideoRef}
@@ -2069,7 +2090,6 @@ const Landing = () => {
           }}
         >
           <source src="/hero.webm" type='video/webm; codecs="vp9"' />
-          <source src="/hero.webm" type="video/webm" />
           <source src="/hero.mp4" type="video/mp4" />
         </video>
         <div className="pointer-events-none absolute inset-0 z-[2] bg-white/22" />
@@ -2242,12 +2262,7 @@ const Landing = () => {
               <div className="absolute inset-[11%] rounded-full bg-white/34 shadow-[0_36px_120px_rgba(148,163,184,0.08)]" />
               <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.12)] ring-1 ring-white/60" />
               <div className="relative size-full" ref={globeContainerRef}>
-                <div
-                  className={cx(
-                    "pointer-events-none absolute inset-[8%] z-0 rounded-full transition-opacity duration-500",
-                    isGlobeReady ? "opacity-0" : "opacity-100",
-                  )}
-                >
+                <div className="pointer-events-none absolute inset-[8%] z-0 rounded-full">
                   <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.96)_0%,rgba(230,240,255,0.94)_20%,rgba(184,212,255,0.92)_44%,rgba(126,168,255,0.88)_70%,rgba(88,129,245,0.82)_100%)] shadow-[inset_-42px_-58px_120px_rgba(38,87,214,0.24),inset_26px_24px_88px_rgba(255,255,255,0.76),0_40px_120px_rgba(88,129,245,0.18)]" />
                   <div className="absolute inset-[4%] rounded-full border border-white/70" />
                   <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/40" />
@@ -2258,7 +2273,7 @@ const Landing = () => {
                 </div>
                 <canvas
                   className={cx(
-                    "relative z-10 h-full w-full transition-opacity duration-500 [contain:layout_paint_size]",
+                    "relative z-10 h-full w-full transition-opacity duration-300 [contain:layout_paint_size]",
                     isGlobeReady ? "opacity-100" : "opacity-0",
                   )}
                   ref={canvasRef}
