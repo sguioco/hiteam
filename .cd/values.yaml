@@ -5,6 +5,8 @@ sharedInfo:
     name: "hiteam"
     branch: "main"
 
+  runtimeSecretName: ""
+
   pullSecret:
     name: "hiteam-docker-secret"
     dockerConfigJson: ""

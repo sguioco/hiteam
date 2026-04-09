@@ -30,6 +30,10 @@ spec:
           envFrom:
             - secretRef:
                 name: envs-api
+            {{- if .Values.sharedInfo.runtimeSecretName }}
+            - secretRef:
+                name: {{ .Values.sharedInfo.runtimeSecretName }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.api.service.targetPort }}

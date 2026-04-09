@@ -36,16 +36,13 @@ The release workflow fails fast if the first three are missing.
 Edit [`.cd/values.hiteam-main.yaml`](../.cd/values.hiteam-main.yaml) and replace placeholders:
 
 - frontend/backend public hosts
-- `DATABASE_URL`
-- `REDIS_URL`
-- `S3_*`
-- `JWT_*`
-- `SYSTEM_SECRET`
-- `HI_TEAM_INTERNAL_ACCESS_KEY`
-- `COMPRE_FACE_*`
 - ingress hosts and tls secret names
 
-The chart now uses Helm `required` checks for critical runtime values, so ArgoCD will fail on render instead of deploying broken pods with empty secrets.
+The tracked values file is now intended to keep only non-sensitive config.
+
+Sensitive runtime values should go into a separate Kubernetes secret referenced by:
+
+- `sharedInfo.runtimeSecretName`
 
 ## GHCR visibility
 
@@ -93,6 +90,32 @@ Recommended sync settings:
 - create namespace
 
 Or apply [`.cd/argocd-application.hiteam-main.yaml`](../.cd/argocd-application.hiteam-main.yaml) directly.
+
+## Runtime secret
+
+Before the first sync, create the runtime secret in the target namespace.
+
+Example:
+
+```bash
+kubectl create namespace hiteam-main --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n hiteam-main create secret generic hiteam-main-runtime \
+  --from-literal=DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DB_NAME?sslmode=require' \
+  --from-literal=REDIS_URL='redis://svc-redis:6379' \
+  --from-literal=S3_ACCESS_KEY='YOUR_ACCESS_KEY' \
+  --from-literal=S3_SECRET_KEY='YOUR_SECRET_KEY' \
+  --from-literal=GOOGLE_OAUTH_CLIENT_ID='YOUR_GOOGLE_CLIENT_ID' \
+  --from-literal=GOOGLE_OAUTH_CLIENT_SECRET='YOUR_GOOGLE_CLIENT_SECRET' \
+  --from-literal=GOOGLE_OAUTH_STATE_SECRET='YOUR_GOOGLE_STATE_SECRET' \
+  --from-literal=JWT_ACCESS_SECRET='YOUR_JWT_ACCESS_SECRET' \
+  --from-literal=JWT_REFRESH_SECRET='YOUR_JWT_REFRESH_SECRET' \
+  --from-literal=SYSTEM_SECRET='YOUR_SYSTEM_SECRET' \
+  --from-literal=HI_TEAM_INTERNAL_ACCESS_KEY='YOUR_INTERNAL_ACCESS_KEY' \
+  --from-literal=COMPRE_FACE_API_KEY='YOUR_COMPRE_FACE_API_KEY'
+```
+
+If Redis stays in-cluster through this chart, you can omit `REDIS_URL` and let the chart generate it.
 
 ## Legacy VPS deploy
 

@@ -102,6 +102,14 @@ The chart creates:
 
 Values are injected from `values.yaml` and/or ArgoCD Helm parameters.
 
+Sensitive values should not be committed to Git.
+
+Use a separate Kubernetes secret and reference it via:
+
+- `sharedInfo.runtimeSecretName`
+
+That secret is mounted into both `api` and `web-admin` through `envFrom`.
+
 ## Ingress
 
 The chart is prepared for Traefik and cert-manager similar to the existing cluster setup.

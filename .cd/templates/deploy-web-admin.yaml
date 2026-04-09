@@ -30,6 +30,10 @@ spec:
           envFrom:
             - secretRef:
                 name: envs-web-admin
+            {{- if .Values.sharedInfo.runtimeSecretName }}
+            - secretRef:
+                name: {{ .Values.sharedInfo.runtimeSecretName }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.webAdmin.service.targetPort }}
