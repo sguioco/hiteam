@@ -1388,27 +1388,77 @@ const Landing = () => {
           });
         }
 
-        ScrollTrigger.batch("[data-lp-card]", {
-          start: "top 88%",
-          once: true,
-          onEnter: (batch) => {
-            gsap.fromTo(
-              batch,
-              {
-                y: 32,
-                autoAlpha: 0,
+        const faqItems = gsap.utils.toArray<HTMLElement>("[data-lp-faq-item]");
+        if (faqItems.length) {
+          gsap.fromTo(
+            faqItems,
+            {
+              autoAlpha: 0,
+              y: 26,
+              scale: 0.985,
+              filter: "blur(10px)",
+            },
+            {
+              autoAlpha: 1,
+              y: 0,
+              scale: 1,
+              filter: "blur(0px)",
+              duration: 0.72,
+              ease: "power2.out",
+              stagger: 0.08,
+              overwrite: true,
+              scrollTrigger: {
+                trigger: "#questions",
+                start: "top 70%",
+                once: true,
               },
-              {
-                y: 0,
-                autoAlpha: 1,
-                duration: 0.82,
-                ease: "power3.out",
-                stagger: 0.12,
-                overwrite: true,
+            },
+          );
+        }
+
+        const pricingCards = gsap.utils.toArray<HTMLElement>(
+          "[data-lp-pricing-card]",
+        );
+        if (pricingCards.length) {
+          pricingCards.forEach((card) => {
+            gsap.set(card, {
+              transformPerspective: 1200,
+              transformOrigin: "center bottom",
+            });
+          });
+
+          gsap.fromTo(
+            pricingCards,
+            {
+              autoAlpha: 0,
+              y: 38,
+              scale: 0.96,
+              rotateX: isDesktop ? 7 : 0,
+              rotateY: isDesktop ? 4 : 0,
+              filter: "blur(12px)",
+            },
+            {
+              autoAlpha: 1,
+              y: 0,
+              scale: 1,
+              rotateX: 0,
+              rotateY: 0,
+              filter: "blur(0px)",
+              duration: 0.9,
+              ease: "power3.out",
+              stagger: {
+                each: 0.12,
+                from: "center",
               },
-            );
-          },
-        });
+              overwrite: true,
+              scrollTrigger: {
+                trigger: "#pricing",
+                start: "top 72%",
+                once: true,
+              },
+            },
+          );
+        }
 
         gsap.from("[data-lp-cta-panel]", {
           y: 44,
@@ -2514,7 +2564,7 @@ const Landing = () => {
             {faqs.map((faq, i) => (
               <div
                 className="overflow-hidden rounded-2xl border border-white/70 bg-white transition-all duration-300 hover:border-white"
-                data-lp-card
+                data-lp-faq-item
                 key={i}
               >
                 <button
@@ -2584,7 +2634,7 @@ const Landing = () => {
                   ? "border-primary bg-primary text-primary-foreground shadow-2xl shadow-primary/20"
                   : "border-border/60 bg-background hover:border-primary/20 hover:shadow-lg"
                   }`}
-                data-lp-card
+                data-lp-pricing-card
                 key={plan.name}
               >
                 <h3 className="mb-2 text-lg font-semibold">{plan.name}</h3>
