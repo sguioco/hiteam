@@ -14,6 +14,7 @@ import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
+import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 import { EmployeesService } from './employees.service';
 
 @Controller('employees')
@@ -72,6 +73,12 @@ export class EmployeesController {
   @Get('me')
   me(@CurrentUser() user: JwtUser) {
     return this.employeesService.getMe(user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/preferences')
+  updateMyPreferences(@CurrentUser() user: JwtUser, @Body() dto: UpdateMyPreferencesDto) {
+    return this.employeesService.updateMyPreferences(user, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

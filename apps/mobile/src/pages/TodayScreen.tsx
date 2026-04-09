@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { normalizeBannerTheme, useBannerTheme } from '../../lib/banner-theme';
 import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
@@ -134,6 +135,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
+  const { theme: bannerTheme, setTheme } = useBannerTheme();
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<TodayScreenCacheValue>(
@@ -256,6 +258,14 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       tasks,
     } satisfies TodayScreenCacheValue);
   }, [attendanceLoading, attendanceStatus, profile, shifts, tasks]);
+
+  useEffect(() => {
+    const remoteBannerTheme = normalizeBannerTheme(profile?.user.bannerTheme);
+
+    if (remoteBannerTheme && remoteBannerTheme !== bannerTheme) {
+      setTheme(remoteBannerTheme);
+    }
+  }, [bannerTheme, profile?.user.bannerTheme, setTheme]);
 
   const visibleTasks = useMemo(
     () => collapseDuplicateTodayTasks(tasks, businessTimeZone),

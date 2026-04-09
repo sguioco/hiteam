@@ -22,6 +22,7 @@ import {
   TaskTemplateItem,
   WorkGroupItem,
 } from '@smart/types';
+import type { BannerTheme } from './banner-theme';
 import { getCurrentDeviceFingerprint, getCurrentDeviceName, getCurrentDevicePlatform } from './device';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 import type { AppLanguage } from './i18n';
@@ -273,6 +274,7 @@ export async function loadMyProfile(): Promise<{
   user: {
     id: string;
     email: string;
+    bannerTheme: BannerTheme | null;
   };
   devices: Array<{
     id: string;
@@ -282,6 +284,17 @@ export async function loadMyProfile(): Promise<{
   }>;
 }> {
   return authRequest('/employees/me');
+}
+
+export async function updateMyBannerTheme(
+  theme: BannerTheme,
+): Promise<Awaited<ReturnType<typeof loadMyProfile>>> {
+  return authRequest('/employees/me/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      bannerTheme: theme,
+    }),
+  });
 }
 
 export async function loadPublicInvitation(token: string): Promise<{

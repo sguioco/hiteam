@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { HeroUINativeProvider } from 'heroui-native';
 import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
 import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
+import { BannerThemeProvider, loadBannerThemePreference, type BannerTheme } from '../lib/banner-theme';
 import { I18nProvider } from '../lib/i18n';
 import { warmWorkspaceCachesWithinBudget } from '../lib/workspace-cache';
 
@@ -62,6 +63,8 @@ export default function RootLayout() {
   });
   const [bannerReady, setBannerReady] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const [bannerTheme, setBannerTheme] = useState<BannerTheme>('blue');
+  const [bannerThemeReady, setBannerThemeReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +84,29 @@ export default function RootLayout() {
     };
 
     void warmUpAssets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateBannerTheme = async () => {
+      try {
+        const savedTheme = await loadBannerThemePreference();
+        if (!cancelled) {
+          setBannerTheme(savedTheme);
+        }
+      } finally {
+        if (!cancelled) {
+          setBannerThemeReady(true);
+        }
+      }
+    };
+
+    void hydrateBannerTheme();
 
     return () => {
       cancelled = true;
@@ -121,24 +147,26 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!fontsLoaded || !bannerReady || !authReady) {
+    if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady) {
       return;
     }
 
     void SplashScreen.hideAsync();
-  }, [authReady, bannerReady, fontsLoaded]);
+  }, [authReady, bannerReady, bannerThemeReady, fontsLoaded]);
 
-  if (!fontsLoaded || !bannerReady || !authReady) {
+  if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady) {
     return null;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <I18nProvider>
-        <HeroUINativeProvider config={{ toast: false, devInfo: { stylingPrinciples: false } }}>
-          <AppRouterSlot />
-        </HeroUINativeProvider>
-      </I18nProvider>
+      <BannerThemeProvider initialTheme={bannerTheme}>
+        <I18nProvider>
+          <HeroUINativeProvider config={{ toast: false, devInfo: { stylingPrinciples: false } }}>
+            <AppRouterSlot />
+          </HeroUINativeProvider>
+        </I18nProvider>
+      </BannerThemeProvider>
     </GestureHandlerRootView>
   );
 }

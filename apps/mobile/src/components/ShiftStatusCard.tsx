@@ -10,6 +10,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useBannerTheme } from '../../lib/banner-theme';
 import { type AppLanguage, useI18n, pluralizeRu } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
@@ -20,9 +21,6 @@ type ShiftStatusCardProps = {
   topInset?: number;
   onPrimaryAction?: () => void;
 };
-
-const VIDEO_MASK_COLOR = '#5745f7';
-const VIDEO_MASK_OPACITY = 0.4;
 
 function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
   const player = useVideoPlayer(require('../../hero.webm'), (nextPlayer) => {
@@ -127,9 +125,11 @@ function formatDuration(totalMinutes: number, language: AppLanguage) {
 
 const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
+  const { config: bannerTheme } = useBannerTheme();
   const [videoReady, setVideoReady] = useState(false);
   const locale = language === 'ru' ? 'ru-RU' : 'en-US';
   const shouldRenderBannerVideo = Platform.OS !== 'web';
+  const bannerMaskOpacity = videoReady ? bannerTheme.maskOpacity : bannerTheme.fallbackOpacity;
   const textGlow = {
     textShadowColor: 'rgba(14, 20, 34, 0.42)',
     textShadowOffset: { width: 0, height: 2 },
@@ -378,12 +378,38 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
             style={[
               StyleSheet.absoluteFillObject,
               {
-                backgroundColor: VIDEO_MASK_COLOR,
-                opacity: videoReady ? VIDEO_MASK_OPACITY : 0,
+                backgroundColor: bannerTheme.maskColor,
+                opacity: bannerMaskOpacity,
               },
             ]}
           />
         ) : null}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            right: -68,
+            top: -96,
+            height: 280,
+            width: 280,
+            borderRadius: 999,
+            backgroundColor: bannerTheme.glowColor,
+            opacity: videoReady ? 0.22 : 0.18,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: -132,
+            left: -42,
+            height: 220,
+            width: 220,
+            borderRadius: 999,
+            backgroundColor: bannerTheme.accentColor,
+            opacity: videoReady ? 0.12 : 0.1,
+          }}
+        />
       </View>
       <View className="absolute inset-0 bg-[#140d2f]/18" />
       <View className="absolute inset-x-0 bottom-0 h-44 bg-[#120a28]/24" />

@@ -368,6 +368,7 @@ model User {
   passwordHash String
   status       UserStatus @default(INVITED)
   workspaceAccessAllowed Boolean @default(true)
+  bannerTheme  String     @default("blue")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

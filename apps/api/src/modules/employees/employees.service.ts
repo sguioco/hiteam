@@ -26,6 +26,7 @@ import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
+import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 
 type PrismaTx = Prisma.TransactionClient | PrismaService;
 
@@ -186,7 +187,13 @@ export class EmployeesService {
         userId: user.sub,
       },
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            bannerTheme: true,
+          },
+        },
         company: true,
         department: true,
         primaryLocation: true,
@@ -194,6 +201,17 @@ export class EmployeesService {
         devices: true,
       },
     });
+  }
+
+  async updateMyPreferences(user: JwtUser, dto: UpdateMyPreferencesDto) {
+    await this.prisma.user.update({
+      where: { id: user.sub },
+      data: {
+        ...(dto.bannerTheme ? { bannerTheme: dto.bannerTheme } : {}),
+      },
+    });
+
+    return this.getMe(user);
   }
 
   async create(tenantId: string, dto: CreateEmployeeDto) {

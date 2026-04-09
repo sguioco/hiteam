@@ -1060,7 +1060,6 @@ const Landing = () => {
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [demoTermsAccepted, setDemoTermsAccepted] = useState(false);
-  const [isGlobeReady, setIsGlobeReady] = useState(false);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocumentKey | null>(
     null,
   );
@@ -1166,7 +1165,6 @@ const Landing = () => {
   useGSAP(() => {
     if (!canvasRef.current || !globeContainerRef.current) return;
 
-    setIsGlobeReady(false);
     const canvas = canvasRef.current;
     const globeContainer = globeContainerRef.current;
     const devicePixelRatio = Math.min(
@@ -1272,7 +1270,6 @@ const Landing = () => {
     };
 
     syncOverlays(basePhiRef.current);
-    setIsGlobeReady(true);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     frameId = window.requestAnimationFrame(animate);
 
@@ -1281,7 +1278,6 @@ const Landing = () => {
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       globe.destroy();
-      setIsGlobeReady(false);
     };
   }, { scope: landingRef });
 
@@ -2195,29 +2191,26 @@ const Landing = () => {
             style={heroMobileGlobeStyle}
           >
             <div className="relative isolate h-[min(82vw,332px)] w-[min(82vw,332px)] scale-[var(--hero-mobile-globe-scale)] transform-gpu opacity-80 sm:h-[420px] sm:w-[420px] sm:scale-100 sm:opacity-100 md:h-[520px] md:w-[520px] lg:h-[620px] lg:w-[620px]">
-              <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(255,255,255,0)_68%)] blur-3xl" />
-              <div className="absolute inset-[11%] rounded-full bg-white/34 shadow-[0_36px_120px_rgba(148,163,184,0.08)]" />
-              <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.12)] ring-1 ring-white/60" />
+              <div className="absolute inset-[12%] rounded-full bg-[radial-gradient(circle,rgba(102,141,233,0.14)_0%,rgba(255,255,255,0)_66%)] blur-3xl" />
+              <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_34%_26%,rgba(255,255,255,0.72),rgba(248,250,255,0.28)_42%,rgba(255,255,255,0.04)_72%)] shadow-[0_36px_120px_rgba(148,163,184,0.06)]" />
+              <div className="absolute inset-[11%] rounded-full shadow-[inset_-24px_-30px_72px_rgba(148,163,184,0.1)] ring-1 ring-white/55" />
               <div className="relative size-full" ref={globeContainerRef}>
                 <div className="pointer-events-none absolute inset-[8%] z-0 rounded-full">
-                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.98)_0%,rgba(238,244,255,0.96)_18%,rgba(199,217,255,0.92)_42%,rgba(144,177,247,0.84)_68%,rgba(102,141,233,0.8)_100%)] shadow-[inset_-42px_-58px_120px_rgba(38,87,214,0.2),inset_26px_24px_88px_rgba(255,255,255,0.82),0_40px_120px_rgba(88,129,245,0.14)]" />
-                  <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_30%_34%,rgba(255,255,255,0.42)_0%,rgba(255,255,255,0.08)_24%,rgba(255,255,255,0)_58%)]" />
-                  <div className="absolute left-[17%] top-[24%] h-[18%] w-[28%] rounded-[42%_58%_52%_48%/58%_42%_58%_42%] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(104,137,224,0.18))] blur-[2px]" />
-                  <div className="absolute left-[26%] top-[43%] h-[14%] w-[18%] rounded-[54%_46%_60%_40%/45%_55%_45%_55%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(106,140,227,0.16))] blur-[1px]" />
-                  <div className="absolute right-[18%] top-[34%] h-[21%] w-[24%] rounded-[58%_42%_48%_52%/48%_54%_46%_52%] bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(114,146,230,0.18))] blur-[2px]" />
-                  <div className="absolute right-[27%] top-[58%] h-[10%] w-[14%] rounded-[62%_38%_55%_45%/44%_56%_46%_54%] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(110,144,228,0.16))] blur-[1px]" />
-                  <div className="absolute inset-[4%] rounded-full border border-white/70" />
-                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/40" />
-                  <div className="absolute inset-x-[7%] inset-y-[10%] rounded-full border border-[#7ea8ff]/28" />
-                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.38)_18%,rgba(255,255,255,0.62)_50%,rgba(255,255,255,0.38)_82%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.2)_22%,rgba(255,255,255,0.34)_50%,rgba(255,255,255,0.2)_78%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.2)_22%,rgba(255,255,255,0.34)_50%,rgba(255,255,255,0.2)_78%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_24%,rgba(231,237,248,0.82)_52%,rgba(207,220,244,0.62)_78%,rgba(184,201,234,0.38)_100%)] shadow-[inset_-38px_-54px_110px_rgba(86,114,184,0.12),inset_24px_24px_82px_rgba(255,255,255,0.78),0_36px_100px_rgba(148,163,184,0.08)]" />
+                  <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_30%_34%,rgba(255,255,255,0.36)_0%,rgba(255,255,255,0.08)_24%,rgba(255,255,255,0)_58%)]" />
+                  <div className="absolute left-[18%] top-[26%] h-[16%] w-[27%] rounded-[42%_58%_52%_48%/58%_42%_58%_42%] bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(149,171,214,0.14))] blur-[2px]" />
+                  <div className="absolute left-[27%] top-[45%] h-[13%] w-[18%] rounded-[54%_46%_60%_40%/45%_55%_45%_55%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(151,173,216,0.12))] blur-[1px]" />
+                  <div className="absolute right-[18%] top-[35%] h-[19%] w-[23%] rounded-[58%_42%_48%_52%/48%_54%_46%_52%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(153,175,219,0.14))] blur-[2px]" />
+                  <div className="absolute right-[28%] top-[58%] h-[9%] w-[13%] rounded-[62%_38%_55%_45%/44%_56%_46%_54%] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(148,171,216,0.12))] blur-[1px]" />
+                  <div className="absolute inset-[4%] rounded-full border border-white/68" />
+                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/32" />
+                  <div className="absolute inset-x-[7%] inset-y-[10%] rounded-full border border-[#b8caea]/26" />
+                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.34)_18%,rgba(255,255,255,0.54)_50%,rgba(255,255,255,0.34)_82%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.16)_22%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0.16)_78%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.16)_22%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0.16)_78%,rgba(255,255,255,0)_100%)]" />
                 </div>
                 <canvas
-                  className={cx(
-                    "relative z-10 h-full w-full transition-opacity duration-300 [contain:layout_paint_size]",
-                    isGlobeReady ? "opacity-100" : "opacity-0",
-                  )}
+                  className="relative z-10 block h-full w-full [contain:layout_paint_size]"
                   ref={canvasRef}
                   style={{ maxWidth: "100%", aspectRatio: "1" }}
                 />
