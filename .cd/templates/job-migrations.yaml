@@ -29,6 +29,7 @@ spec:
       imagePullSecrets:
         - name: {{ include "hiteam.pullSecretName" . }}
       {{- end }}
+      {{- if or .Values.migrations.waitFor.host .Values.postgres.enabled }}
       initContainers:
         - name: wait-for-database
           image: busybox:1.36.1
@@ -41,6 +42,7 @@ spec:
                 echo "waiting for database";
                 sleep 2;
               done
+      {{- end }}
       containers:
         - name: migrations
           image: {{ required "Set migrations.image or api.image before enabling migrations" (default .Values.api.image .Values.migrations.image) | quote }}
@@ -50,6 +52,10 @@ spec:
           envFrom:
             - secretRef:
                 name: envs-api
+            {{- if .Values.sharedInfo.runtimeSecretName }}
+            - secretRef:
+                name: {{ .Values.sharedInfo.runtimeSecretName }}
+            {{- end }}
           resources:
             {{- with .Values.migrations.resources.requests }}
             requests:

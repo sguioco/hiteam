@@ -46,7 +46,10 @@ webAdmin:
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
 
 migrations:
-  enabled: false
+  enabled: true
+  waitFor:
+    host: "dpg-d719g6ggjchc739c28tg-a.oregon-postgres.render.com"
+    port: 5432
 
 postgres:
   enabled: false

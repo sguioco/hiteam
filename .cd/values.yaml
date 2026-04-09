@@ -73,9 +73,12 @@ migrations:
   enabled: false
   image: ""
   command:
-    - "sh"
-    - "-lc"
-    - "pnpm prisma:push"
+    - "node"
+    - "./node_modules/prisma/build/index.js"
+    - "db"
+    - "push"
+    - "--schema"
+    - "prisma/schema.prisma"
   ttlSecondsAfterFinished: 0
   activeDeadlineSeconds: 900
   waitFor:

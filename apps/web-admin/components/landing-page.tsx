@@ -1468,12 +1468,12 @@ const Landing = () => {
   const heroStats = isRu
     ? [
         { value: "99.8%", label: "точность" },
-        { value: "500+", label: "команд" },
+        { value: "7+", label: "команд" },
         { value: "24/7", label: "поддержка" },
       ]
     : [
         { value: "99.8%", label: "accuracy" },
-        { value: "500+", label: "teams" },
+        { value: "70+", label: "teams" },
         { value: "24/7", label: "support" },
       ];
   const aboutFeatureRows = isRu
@@ -2650,8 +2650,8 @@ const Landing = () => {
           </h2>
           <p className="mx-auto mb-10 max-w-[34ch] text-base leading-7 text-white/78 md:max-w-xl md:text-lg md:leading-relaxed">
             {isRu
-              ? "Присоединяйтесь к 500+ компаниям, которые уже автоматизировали управление персоналом с HiTeam"
-              : "Join 500+ companies that already run workforce management with HiTeam"}
+              ? "Присоединяйтесь к 70+ компаниям, которые уже автоматизировали управление персоналом с HiTeam"
+              : "Join 70+ companies that already run workforce management with HiTeam"}
           </p>
           <div className="flex flex-col justify-center gap-4 sm:flex-row">
             <button
@@ -2963,15 +2963,15 @@ const Landing = () => {
           }
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-[640px]">
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-[640px]">
           {activeLegalCopy ? (
             <>
-              <DialogHeader className="pr-10">
+              <DialogHeader className="shrink-0 pr-10">
                 <DialogTitle>{activeLegalCopy.title}</DialogTitle>
                 <DialogDescription>{activeLegalCopy.intro}</DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-6 overflow-y-auto pr-2 text-sm leading-6 text-muted-foreground">
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-2 text-sm leading-6 text-muted-foreground [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {activeLegalCopy.sections.map((section) => (
                   <section key={section.heading} className="space-y-3">
                     <h3 className="text-base font-semibold text-foreground">
@@ -2993,7 +2993,7 @@ const Landing = () => {
                 ))}
               </div>
 
-              <div className="border-t border-border pt-4">
+              <div className="shrink-0 border-t border-border pt-4">
                 <p className="text-xs leading-5 text-muted-foreground">
                   {activeLegalCopy.note}
                 </p>
