@@ -85,7 +85,6 @@ import {
   getMockActionCenterItems,
   type ActionCenterItem,
 } from "@/components/ActionsCenter";
-import { DashboardHomeSkeleton } from "@/components/dashboard/dashboard-home-skeleton";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
@@ -1633,22 +1632,6 @@ export default function DashboardHome({
     }));
   }
 
-  if (isBootstrapping) {
-    return (
-      <AdminShell
-        initialSession={session}
-        mode={mode}
-        onCreateAction={createAction}
-      >
-        <main className="page-shell manager-page-shell">
-          <section className="manager-home">
-            <DashboardHomeSkeleton />
-          </section>
-        </main>
-      </AdminShell>
-    );
-  }
-
   return (
     <AdminShell
       initialSession={session}
@@ -1657,6 +1640,12 @@ export default function DashboardHome({
     >
       <main className="page-shell manager-page-shell">
         <section className="manager-home">
+          <div
+            aria-hidden={!isBootstrapping}
+            className={`dashboard-top-loader${
+              isBootstrapping ? " is-visible" : ""
+            }`}
+          />
           <Dialog
             onOpenChange={(open) => {
               setCreateTaskOpen(open);

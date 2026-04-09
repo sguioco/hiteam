@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 .turbo
 .next
+.next-dev
 out
 dist
 coverage
@@ -13,9 +14,11 @@ apps/mobile/dist
 apps/mobile/web-build
 apps/api/dist
 apps/web-admin/.next
+apps/web-admin/.next-dev
 *.tsbuildinfo
 *.log
 .DS_Store
+"task management.webm"
 
 .vercel
 .env*.local
