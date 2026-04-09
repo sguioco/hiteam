@@ -225,6 +225,7 @@ function LanguagePicker({
 
 export function AuthPanel() {
   const router = useRouter();
+  const hasAnimatedAuthPanelRef = useRef(false);
   const [lang, setLang] = useState<SupportedLang>('en');
   const [tab, setTab] = useState<AuthTab>('signin');
   const [identifier, setIdentifier] = useState('');
@@ -277,6 +278,11 @@ export function AuthPanel() {
         });
       }
 
+      if (!hasAnimatedAuthPanelRef.current) {
+        hasAnimatedAuthPanelRef.current = true;
+        return;
+      }
+
       const timeline = gsap.timeline({
         defaults: {
           ease: 'power3.out',
@@ -286,26 +292,26 @@ export function AuthPanel() {
       timeline
         .fromTo(
           '.auth-tab-panel',
-          { autoAlpha: 0, y: 18, filter: 'blur(10px)' },
-          { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.52 },
+          { autoAlpha: 0, y: 12 },
+          { autoAlpha: 1, y: 0, duration: 0.34 },
         )
         .fromTo(
           '.auth-panel-heading',
           { autoAlpha: 0, y: 10 },
-          { autoAlpha: 1, y: 0, duration: 0.4 },
-          0.06,
+          { autoAlpha: 1, y: 0, duration: 0.28 },
+          0.02,
         )
         .fromTo(
           '.auth-panel-field',
-          { autoAlpha: 0, y: 12 },
-          { autoAlpha: 1, y: 0, duration: 0.38, stagger: 0.06 },
-          0.12,
+          { autoAlpha: 0, y: 8 },
+          { autoAlpha: 1, y: 0, duration: 0.24, stagger: 0.03 },
+          0.05,
         )
         .fromTo(
           '.auth-shared-action-button',
           { autoAlpha: 0, y: 10, scale: 0.985 },
-          { autoAlpha: 1, y: 0, scale: 1, duration: 0.4 },
-          0.18,
+          { autoAlpha: 1, y: 0, scale: 1, duration: 0.24 },
+          0.08,
         );
     },
     {
@@ -860,7 +866,7 @@ export function AuthPanel() {
                     <img
                       alt="HiTeam admin workspace preview"
                       className="block h-auto w-full"
-                      decoding="async"
+                      decoding="sync"
                       fetchPriority="high"
                       height={740}
                       loading="eager"

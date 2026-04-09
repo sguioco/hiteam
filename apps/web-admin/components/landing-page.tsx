@@ -1320,69 +1320,6 @@ const Landing = () => {
           return;
         }
 
-        const heroTimeline = gsap.timeline({
-          defaults: {
-            duration: 0.9,
-            ease: "power3.out",
-          },
-        });
-
-        heroTimeline
-          .from("[data-lp-header-shell]", {
-            y: -20,
-            autoAlpha: 0,
-            duration: 0.7,
-          })
-          .from(
-            "[data-lp-hero-video]",
-            {
-              scale: 1.06,
-              autoAlpha: 0,
-              duration: 1.15,
-              ease: "power2.out",
-            },
-            0,
-          )
-          .from(
-            "[data-lp-hero-copy]",
-            {
-              y: 44,
-              autoAlpha: 0,
-            },
-            0.12,
-          )
-          .from(
-            "[data-lp-hero-stats] > *",
-            {
-              y: 26,
-              autoAlpha: 0,
-              duration: 0.7,
-              stagger: 0.08,
-            },
-            0.28,
-          )
-          .from(
-            "[data-lp-hero-actions] > *",
-            {
-              y: 22,
-              autoAlpha: 0,
-              duration: 0.7,
-              stagger: 0.1,
-            },
-            0.38,
-          )
-          .from(
-            "[data-lp-hero-globe]",
-            {
-              x: isDesktop ? 64 : 0,
-              y: 42,
-              scale: 0.94,
-              autoAlpha: 0,
-              duration: 1.05,
-            },
-            0.18,
-          );
-
         gsap.utils.toArray<HTMLElement>("[data-lp-section-heading]").forEach((heading) => {
           gsap.from(heading, {
             y: 42,
@@ -2263,7 +2200,12 @@ const Landing = () => {
               <div className="absolute inset-[11%] rounded-full shadow-[inset_-30px_-36px_80px_rgba(148,163,184,0.12)] ring-1 ring-white/60" />
               <div className="relative size-full" ref={globeContainerRef}>
                 <div className="pointer-events-none absolute inset-[8%] z-0 rounded-full">
-                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.96)_0%,rgba(230,240,255,0.94)_20%,rgba(184,212,255,0.92)_44%,rgba(126,168,255,0.88)_70%,rgba(88,129,245,0.82)_100%)] shadow-[inset_-42px_-58px_120px_rgba(38,87,214,0.24),inset_26px_24px_88px_rgba(255,255,255,0.76),0_40px_120px_rgba(88,129,245,0.18)]" />
+                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.98)_0%,rgba(238,244,255,0.96)_18%,rgba(199,217,255,0.92)_42%,rgba(144,177,247,0.84)_68%,rgba(102,141,233,0.8)_100%)] shadow-[inset_-42px_-58px_120px_rgba(38,87,214,0.2),inset_26px_24px_88px_rgba(255,255,255,0.82),0_40px_120px_rgba(88,129,245,0.14)]" />
+                  <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_30%_34%,rgba(255,255,255,0.42)_0%,rgba(255,255,255,0.08)_24%,rgba(255,255,255,0)_58%)]" />
+                  <div className="absolute left-[17%] top-[24%] h-[18%] w-[28%] rounded-[42%_58%_52%_48%/58%_42%_58%_42%] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(104,137,224,0.18))] blur-[2px]" />
+                  <div className="absolute left-[26%] top-[43%] h-[14%] w-[18%] rounded-[54%_46%_60%_40%/45%_55%_45%_55%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(106,140,227,0.16))] blur-[1px]" />
+                  <div className="absolute right-[18%] top-[34%] h-[21%] w-[24%] rounded-[58%_42%_48%_52%/48%_54%_46%_52%] bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(114,146,230,0.18))] blur-[2px]" />
+                  <div className="absolute right-[27%] top-[58%] h-[10%] w-[14%] rounded-[62%_38%_55%_45%/44%_56%_46%_54%] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(110,144,228,0.16))] blur-[1px]" />
                   <div className="absolute inset-[4%] rounded-full border border-white/70" />
                   <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/40" />
                   <div className="absolute inset-x-[7%] inset-y-[10%] rounded-full border border-[#7ea8ff]/28" />
