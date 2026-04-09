@@ -19,6 +19,17 @@ The chart is conservative by default:
 
 That lets you create the chart in Git and review ArgoCD config before switching any production traffic.
 
+## GitOps flow for `hiteam-main`
+
+The intended flow is:
+
+1. Push code to `main`.
+2. GitHub Actions builds and pushes `api` and `web-admin` images to GHCR.
+3. The same workflow updates `.cd/values.hiteam-main.yaml` with the new immutable image tags.
+4. ArgoCD sees the Git change and syncs `hiteam-main`.
+
+That keeps the deployed state in Git, not in a mutable VPS shell script.
+
 ## Recommended first rollout
 
 For the first ArgoCD deployment:
@@ -43,7 +54,7 @@ Only after that should you decide whether to move stateful services into the clu
 
 Typical ArgoCD app fields:
 
-- Repository URL: this repo URL
+- Repository URL: `https://github.com/sguioco/hiteam.git`
 - Target revision: `main`
 - Path: `.cd`
 - Project: `default`
@@ -64,6 +75,12 @@ You must provide:
 
 - `api.image`
 - `webAdmin.image`
+
+The tracked environment-specific file is:
+
+- `.cd/values.hiteam-main.yaml`
+
+That file is meant to be committed and updated by CI so ArgoCD always syncs a Git revision that contains the exact image tags to run.
 
 If the registry is private, also set:
 

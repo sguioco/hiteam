@@ -43,7 +43,7 @@ spec:
               done
       containers:
         - name: migrations
-          image: {{ default .Values.api.image .Values.migrations.image | quote }}
+          image: {{ required "Set migrations.image or api.image before enabling migrations" (default .Values.api.image .Values.migrations.image) | quote }}
           imagePullPolicy: {{ .Values.api.pullPolicy | default "Always" }}
           command:
 {{ toYaml .Values.migrations.command | nindent 12 }}

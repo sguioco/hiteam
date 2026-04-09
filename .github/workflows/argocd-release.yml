@@ -1,0 +1,143 @@
+name: Build Images For ArgoCD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/argocd-release.yml'
+      - 'apps/api/**'
+      - 'apps/web-admin/**'
+      - 'packages/ui/**'
+      - 'packages/types/**'
+      - 'scripts/run-api-prisma.cjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - '.npmrc'
+
+concurrency:
+  group: hiteam-argocd-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      API_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-${{ github.sha }}
+      API_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-latest
+      WEB_ADMIN_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-${{ github.sha }}
+      WEB_ADMIN_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-latest
+      WEB_ADMIN_PUBLIC_API_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_API_URL }}
+      WEB_ADMIN_PUBLIC_GRAPHQL_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL }}
+      WEB_ADMIN_BASE_URL: ${{ vars.ARGOCD_WEB_ADMIN_BASE_URL }}
+      WEB_ADMIN_GOOGLE_MAPS_API_KEY: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate required repo variables
+        run: |
+          set -euo pipefail
+
+          missing=0
+
+          if [ -z "${WEB_ADMIN_PUBLIC_API_URL}" ]; then
+            echo "Missing repo variable ARGOCD_WEB_ADMIN_PUBLIC_API_URL"
+            missing=1
+          fi
+
+          if [ -z "${WEB_ADMIN_PUBLIC_GRAPHQL_URL}" ]; then
+            echo "Missing repo variable ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL"
+            missing=1
+          fi
+
+          if [ -z "${WEB_ADMIN_BASE_URL}" ]; then
+            echo "Missing repo variable ARGOCD_WEB_ADMIN_BASE_URL"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.API_IMAGE }}
+            ${{ env.API_IMAGE_LATEST }}
+
+      - name: Build and push Web Admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web-admin/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.WEB_ADMIN_PUBLIC_API_URL }}
+            NEXT_PUBLIC_GRAPHQL_URL=${{ env.WEB_ADMIN_PUBLIC_GRAPHQL_URL }}
+            NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{ env.WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
+            NEXT_PUBLIC_WEB_ADMIN_BASE_URL=${{ env.WEB_ADMIN_BASE_URL }}
+          tags: |
+            ${{ env.WEB_ADMIN_IMAGE }}
+            ${{ env.WEB_ADMIN_IMAGE_LATEST }}
+
+      - name: Update tracked ArgoCD values
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(".cd/values.hiteam-main.yaml")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = {
+              "api": os.environ["API_IMAGE"],
+              "webAdmin": os.environ["WEB_ADMIN_IMAGE"],
+          }
+
+          for section, image in replacements.items():
+              pattern = rf"(^{section}:\n(?:  .*\n)*?  image: \").*?(\")"
+              new_text, count = re.subn(pattern, rf"\1{image}\2", text, count=1, flags=re.MULTILINE)
+              if count != 1:
+                  raise SystemExit(f"Failed to update image for section {section}")
+              text = new_text
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit image tag update for ArgoCD
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- .cd/values.hiteam-main.yaml; then
+            echo "No ArgoCD values changes to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .cd/values.hiteam-main.yaml
+          git commit -m "chore: release hiteam images ${GITHUB_SHA}"
+          git push

@@ -25,7 +25,7 @@ spec:
       {{- end }}
       containers:
         - name: web-admin
-          image: {{ .Values.webAdmin.image | quote }}
+          image: {{ required "Set webAdmin.image in values.hiteam-main.yaml" .Values.webAdmin.image | quote }}
           imagePullPolicy: {{ .Values.webAdmin.pullPolicy | default "Always" }}
           envFrom:
             - secretRef:
