@@ -1,0 +1,77 @@
+{{- if .Values.redis.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.redisServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.redisServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: {{ .Values.redis.service.type }}
+  selector:
+    app: {{ include "hiteam.redisServiceName" . }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: 6379
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hiteam.redisServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.redisServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "hiteam.redisServiceName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "hiteam.redisServiceName" . }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image | quote }}
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+          ports:
+            - containerPort: 6379
+          resources:
+{{ toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "hiteam.redisServiceName" . }}-data
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "hiteam.redisServiceName" . }}-data
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.redis.persistence.storageClassName }}
+  storageClassName: {{ .Values.redis.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size | quote }}
+{{- end }}

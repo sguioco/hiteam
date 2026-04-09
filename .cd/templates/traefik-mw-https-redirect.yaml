@@ -1,0 +1,14 @@
+{{- if or (and .Values.ingress.frontend.enabled .Values.ingress.frontend.enableHttpRedirect) (and .Values.ingress.backend.enabled .Values.ingress.backend.enableHttpRedirect) }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  redirectScheme:
+    scheme: https
+    port: "443"
+    permanent: true
+{{- end }}

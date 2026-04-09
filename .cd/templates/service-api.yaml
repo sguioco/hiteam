@@ -1,0 +1,18 @@
+{{- if .Values.api.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.apiServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.fullname" . }}-api
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.service.targetPort }}
+      protocol: TCP
+  selector:
+    app: {{ include "hiteam.fullname" . }}-api
+{{- end }}

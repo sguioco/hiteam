@@ -1,0 +1,202 @@
+sharedInfo:
+  revisionHistoryLimit: 2
+
+  project:
+    name: "hiteam"
+    branch: "main"
+
+  pullSecret:
+    name: "hiteam-docker-secret"
+    dockerConfigJson: ""
+
+api:
+  enabled: true
+  image: "ghcr.io/example/hiteam-api:latest"
+  pullPolicy: "Always"
+  replicas: 1
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 4000
+
+  env:
+    PORT: "4000"
+    NODE_ENV: "production"
+    API_PUBLIC_URL: ""
+    FRONTEND_URL: ""
+    WEB_ADMIN_BASE_URL: ""
+    DATABASE_URL: ""
+    REDIS_URL: ""
+    S3_ENDPOINT: ""
+    S3_REGION: "us-east-1"
+    S3_ACCESS_KEY: ""
+    S3_SECRET_KEY: ""
+    S3_BUCKET: ""
+    S3_PUBLIC_BASE_URL: ""
+    GOOGLE_OAUTH_CLIENT_ID: ""
+    GOOGLE_OAUTH_CLIENT_SECRET: ""
+    GOOGLE_OAUTH_REDIRECT_URI: ""
+    GOOGLE_OAUTH_STATE_SECRET: ""
+    JWT_ACCESS_SECRET: ""
+    JWT_REFRESH_SECRET: ""
+    JWT_ACCESS_EXPIRES_IN: "15m"
+    JWT_REFRESH_EXPIRES_IN: "7d"
+    BIOMETRIC_PROVIDER: "compreface"
+    COMPRE_FACE_BASE_URL: ""
+    COMPRE_FACE_API_KEY: ""
+    COMPRE_FACE_SIMILARITY_THRESHOLD: "0.60"
+    AWS_REGION: "us-east-1"
+    AWS_ACCESS_KEY_ID: ""
+    AWS_SECRET_ACCESS_KEY: ""
+    AWS_REKOGNITION_SIMILARITY_THRESHOLD: "90"
+    AWS_BIOMETRIC_ASSUME_ROLE_ARN: ""
+    AWS_BIOMETRIC_SESSION_DURATION_SECONDS: "900"
+    AWS_BIOMETRIC_EXTERNAL_ID: ""
+    LIBRETRANSLATE_URL: ""
+    LIBRETRANSLATE_API_KEY: ""
+    EXPO_ACCESS_TOKEN: ""
+    SYSTEM_SECRET: ""
+    HI_TEAM_INTERNAL_ACCESS_KEY: ""
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+migrations:
+  enabled: false
+  image: ""
+  command:
+    - "sh"
+    - "-lc"
+    - "pnpm prisma:push"
+  ttlSecondsAfterFinished: 0
+  activeDeadlineSeconds: 900
+  waitFor:
+    host: ""
+    port: 5432
+  resources:
+    requests:
+      cpu: ""
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+
+webAdmin:
+  enabled: true
+  image: "ghcr.io/example/hiteam-web-admin:latest"
+  pullPolicy: "Always"
+  replicas: 1
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+
+  env:
+    NEXT_PUBLIC_API_URL: ""
+    NEXT_PUBLIC_GRAPHQL_URL: ""
+    INTERNAL_API_URL: ""
+    WEB_ADMIN_BASE_URL: ""
+    NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ""
+    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ""
+    HI_TEAM_INTERNAL_ACCESS_KEY: ""
+    SYSTEM_SECRET: ""
+    NEXT_PUBLIC_DEMO_MODE: ""
+    NEXT_PUBLIC_DEFAULT_TENANT_SLUG: ""
+    NEXT_PUBLIC_MOBILE_APP_STORE_URL: ""
+    NEXT_PUBLIC_MOBILE_PLAY_STORE_URL: ""
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+postgres:
+  enabled: false
+  image: "postgres:16-alpine"
+  auth:
+    username: "smart"
+    password: "smart"
+    database: "smart"
+  service:
+    type: ClusterIP
+    name: "svc-postgres"
+    port: 5432
+  persistence:
+    enabled: true
+    size: "5Gi"
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+
+redis:
+  enabled: false
+  image: "redis:7-alpine"
+  service:
+    type: ClusterIP
+    name: "svc-redis"
+    port: 6379
+  persistence:
+    enabled: true
+    size: "1Gi"
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+minio:
+  enabled: false
+  image: "minio/minio:latest"
+  mcImage: "minio/mc:latest"
+  rootUser: "minio"
+  rootPassword: "change-me"
+  bucket: "smart-prod"
+  service:
+    type: ClusterIP
+    name: "svc-minio"
+    port: 9000
+  persistence:
+    enabled: true
+    size: "10Gi"
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+ingress:
+  frontend:
+    enabled: false
+    className: "traefik"
+    host: ""
+    tlsSecret: ""
+    enableWwwRedirect: false
+    enableHttpRedirect: true
+
+  backend:
+    enabled: false
+    className: "traefik"
+    host: ""
+    tlsSecret: ""
+    enableHttpRedirect: true

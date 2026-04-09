@@ -1,0 +1,30 @@
+{{- if .Values.minio.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hiteam.fullname" . }}-minio-bucket
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: create-bucket
+          image: {{ .Values.minio.mcImage | quote }}
+          command:
+            - sh
+            - -c
+            - >
+              until /usr/bin/mc alias set local http://{{ include "hiteam.minioServiceName" . }}:{{ .Values.minio.service.port }} {{ .Values.minio.rootUser }} {{ .Values.minio.rootPassword }};
+              do
+                echo "waiting for minio";
+                sleep 2;
+              done;
+              /usr/bin/mc mb -p local/{{ .Values.minio.bucket }} || true;
+              /usr/bin/mc anonymous set download local/{{ .Values.minio.bucket }} || true;
+{{- end }}

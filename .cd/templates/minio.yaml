@@ -1,0 +1,71 @@
+{{- if .Values.minio.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.minioServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.minioServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: {{ .Values.minio.service.type }}
+  selector:
+    app: {{ include "hiteam.minioServiceName" . }}
+  ports:
+    - name: s3
+      port: {{ .Values.minio.service.port }}
+      targetPort: 9000
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "hiteam.minioServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.minioServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  serviceName: {{ include "hiteam.minioServiceName" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "hiteam.minioServiceName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "hiteam.minioServiceName" . }}
+    spec:
+      containers:
+        - name: minio
+          image: {{ .Values.minio.image | quote }}
+          args:
+            - server
+            - /data
+          env:
+            - name: MINIO_ROOT_USER
+              value: {{ .Values.minio.rootUser | quote }}
+            - name: MINIO_ROOT_PASSWORD
+              value: {{ .Values.minio.rootPassword | quote }}
+          ports:
+            - containerPort: 9000
+          resources:
+{{ toYaml .Values.minio.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.minio.persistence.storageClassName }}
+        storageClassName: {{ .Values.minio.persistence.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.persistence.size | quote }}
+{{- end }}

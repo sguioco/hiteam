@@ -35,10 +35,15 @@ jobs:
           command_timeout: 15m
           script: |
             set -euo pipefail
+            export GIT_TERMINAL_PROMPT=0
 
             cd /root/hiteam/repo
-            git fetch origin
+            echo "[sync] remote $(git remote get-url origin)"
+            echo "[sync] fetch"
+            git fetch origin --progress --verbose
+            echo "[sync] reset"
             git reset --hard origin/main
+            echo "[sync] clean"
             git clean -fd
 
             echo "[deploy] revision $(git rev-parse --short HEAD)"

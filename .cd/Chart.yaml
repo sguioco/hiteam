@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hiteam
+description: HiTeam web-admin + api deployment for ArgoCD
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

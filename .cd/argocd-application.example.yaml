@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hiteam-main
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/hiteam.git
+    targetRevision: main
+    path: .cd
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        sharedInfo:
+          project:
+            name: hiteam
+            branch: main
+        api:
+          image: ghcr.io/your-org/hiteam-api:main-CHANGE_ME
+        webAdmin:
+          image: ghcr.io/your-org/hiteam-web-admin:main-CHANGE_ME
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hiteam-main
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

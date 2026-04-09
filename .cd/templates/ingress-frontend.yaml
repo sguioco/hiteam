@@ -1,0 +1,85 @@
+{{- if and .Values.webAdmin.enabled .Values.ingress.frontend.enabled .Values.ingress.frontend.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-frontend-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    {{- if .Values.ingress.frontend.enableWwwRedirect }}
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-www-to-non-www@kubernetescrd"
+    {{- end }}
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.frontend.className | quote }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.frontend.host | quote }}
+        {{- if .Values.ingress.frontend.enableWwwRedirect }}
+        - "www.{{ .Values.ingress.frontend.host }}"
+        {{- end }}
+      secretName: {{ include "hiteam.frontendTlsSecret" . | quote }}
+  rules:
+    - host: {{ .Values.ingress.frontend.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" . }}
+                port:
+                  number: {{ .Values.webAdmin.service.port }}
+    {{- if .Values.ingress.frontend.enableWwwRedirect }}
+    - host: "www.{{ .Values.ingress.frontend.host }}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" . }}
+                port:
+                  number: {{ .Values.webAdmin.service.port }}
+    {{- end }}
+---
+{{- if .Values.ingress.frontend.enableHttpRedirect }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-frontend-ingress-http
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-https-redirect@kubernetescrd"
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.frontend.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.frontend.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" . }}
+                port:
+                  number: {{ .Values.webAdmin.service.port }}
+    {{- if .Values.ingress.frontend.enableWwwRedirect }}
+    - host: "www.{{ .Values.ingress.frontend.host }}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" . }}
+                port:
+                  number: {{ .Values.webAdmin.service.port }}
+    {{- end }}
+{{- end }}
+{{- end }}

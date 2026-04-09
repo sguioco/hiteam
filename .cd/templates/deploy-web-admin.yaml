@@ -1,0 +1,53 @@
+{{- if .Values.webAdmin.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hiteam.fullname" . }}-web-admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.fullname" . }}-web-admin
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  revisionHistoryLimit: {{ .Values.sharedInfo.revisionHistoryLimit | default 2 }}
+  replicas: {{ .Values.webAdmin.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "hiteam.fullname" . }}-web-admin
+  template:
+    metadata:
+      labels:
+        app: {{ include "hiteam.fullname" . }}-web-admin
+    spec:
+      {{- if .Values.sharedInfo.pullSecret.dockerConfigJson }}
+      imagePullSecrets:
+        - name: {{ include "hiteam.pullSecretName" . }}
+      {{- end }}
+      containers:
+        - name: web-admin
+          image: {{ .Values.webAdmin.image | quote }}
+          imagePullPolicy: {{ .Values.webAdmin.pullPolicy | default "Always" }}
+          envFrom:
+            - secretRef:
+                name: envs-web-admin
+          ports:
+            - name: http
+              containerPort: {{ .Values.webAdmin.service.targetPort }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 3
+          resources:
+{{ toYaml .Values.webAdmin.resources | nindent 12 }}
+{{- end }}

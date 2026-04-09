@@ -1,0 +1,18 @@
+{{- if .Values.webAdmin.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.webAdminServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.fullname" . }}-web-admin
+spec:
+  type: {{ .Values.webAdmin.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.webAdmin.service.port }}
+      targetPort: {{ .Values.webAdmin.service.targetPort }}
+      protocol: TCP
+  selector:
+    app: {{ include "hiteam.fullname" . }}-web-admin
+{{- end }}
