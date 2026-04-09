@@ -6,7 +6,7 @@
     "dev": "turbo run dev --parallel --filter=@smart/api --filter=@smart/web-admin",
     "dev:all": "turbo run dev --parallel",
     "dev:mobile": "pnpm --filter @smart/mobile dev",
-    "build": "turbo run build",
+    "build": "turbo run build --filter=!@smart/mobile",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

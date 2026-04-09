@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
+    "prebuild": "pnpm prisma:generate",
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "tsc --noEmit",
+    "pretypecheck": "pnpm prisma:generate",
     "typecheck": "tsc --noEmit",
     "test": "node -e \"console.log('api tests are not configured yet')\"",
     "prisma:generate": "node ../../scripts/run-api-prisma.cjs generate",
