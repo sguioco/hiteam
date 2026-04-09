@@ -19,6 +19,11 @@ export class NotificationsController {
     return this.notificationsService.unreadCount(user.sub);
   }
 
+  @Post('read-all')
+  markAllRead(@CurrentUser() user: JwtUser) {
+    return this.notificationsService.markAllRead(user.sub);
+  }
+
   @Post(':notificationId/read')
   markRead(@CurrentUser() user: JwtUser, @Param('notificationId') notificationId: string) {
     return this.notificationsService.markRead(user.sub, notificationId);

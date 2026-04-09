@@ -1081,6 +1081,9 @@ const Landing = () => {
     "--hero-mobile-globe-top": "20rem",
     "--hero-mobile-globe-scale": "1.7",
   } as CSSProperties;
+  const heroMobileAboutSectionStyle = {
+    "--hero-mobile-about-section-overlap": "-360px",
+  } as CSSProperties;
 
   const firstFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
   const secondFeatureRowShift = { "--feature-row-offset": "280px" } as CSSProperties;
@@ -2236,8 +2239,9 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 relative z-20 mt-0 flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
+        className="scroll-mt-32 relative isolate z-50 mt-[var(--hero-mobile-about-section-overlap)] flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
         id="about"
+        style={heroMobileAboutSectionStyle}
       >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 md:px-16 lg:px-24">
           <div

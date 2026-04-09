@@ -131,4 +131,29 @@ export class NotificationsService {
 
     return updated;
   }
+
+  async markAllRead(userId: string) {
+    const readAt = new Date();
+    const { count } = await this.prisma.notification.updateMany({
+      where: {
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt,
+      },
+    });
+
+    await this.notificationsRealtimeService.fanout({
+      type: 'notification.unread-count',
+      userId,
+      unreadCount: 0,
+    });
+
+    return {
+      updatedCount: count,
+      readAt: readAt.toISOString(),
+    };
+  }
 }

@@ -233,6 +233,8 @@ export function AdminShell({
   const [createOpen, setCreateOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const [pendingReadIds, setPendingReadIds] = useState<string[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const routeLoadingTimerRef = useRef<number | null>(null);
@@ -275,6 +277,21 @@ export function AdminShell({
 
     if (cacheKey) {
       writeClientCache(cacheKey, snapshot);
+    }
+  }
+
+  function persistNotificationsState(
+    nextUnreadCount: number,
+    nextItems: NotificationItem[],
+  ) {
+    setUnreadCount(nextUnreadCount);
+    setNotificationItems(nextItems);
+
+    if (shellNotificationsCacheKey) {
+      writeClientCache(shellNotificationsCacheKey, {
+        unreadCount: nextUnreadCount,
+        notificationItems: nextItems,
+      });
     }
   }
 
@@ -879,6 +896,12 @@ export function AdminShell({
     if (!session) return;
 
     const notification = notificationItems.find((item) => item.id === notificationId);
+    if (!notification || notification.isRead) {
+      return;
+    }
+
+    const previousItems = notificationItems;
+    const previousUnreadCount = unreadCount;
     const nextReadAt = new Date().toISOString();
     const nextItems = notificationItems.map((item) =>
       item.id === notificationId
@@ -890,38 +913,32 @@ export function AdminShell({
         : item,
     );
 
-    await apiRequest(`/notifications/${notificationId}/read`, {
-      method: "POST",
-      token: session.accessToken,
-      body: JSON.stringify({}),
-    });
+    setPendingReadIds((current) =>
+      current.includes(notificationId) ? current : [...current, notificationId],
+    );
+    persistNotificationsState(Math.max(0, unreadCount - 1), nextItems);
 
-    setNotificationItems(nextItems);
-
-    if (notification && !notification.isRead) {
-      const nextUnread = Math.max(0, unreadCount - 1);
-      setUnreadCount(nextUnread);
-      if (shellNotificationsCacheKey) {
-        writeClientCache(shellNotificationsCacheKey, {
-          unreadCount: nextUnread,
-          notificationItems: nextItems,
-        });
-      }
-      return;
-    }
-
-    if (shellNotificationsCacheKey) {
-      writeClientCache(shellNotificationsCacheKey, {
-        unreadCount,
-        notificationItems: nextItems,
+    try {
+      await apiRequest(`/notifications/${notificationId}/read`, {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({}),
       });
+    } catch {
+      persistNotificationsState(previousUnreadCount, previousItems);
+    } finally {
+      setPendingReadIds((current) =>
+        current.filter((itemId) => itemId !== notificationId),
+      );
     }
   }
 
   async function handleMarkAllRead() {
-    if (!session || !unreadNotifications.length) return;
+    if (!session || !unreadNotifications.length || isMarkingAllRead) return;
 
     const unreadIds = unreadNotifications.map((item) => item.id);
+    const previousItems = notificationItems;
+    const previousUnreadCount = unreadCount;
     const nextReadAt = new Date().toISOString();
     const nextItems = notificationItems.map((item) =>
       unreadIds.includes(item.id)
@@ -933,23 +950,21 @@ export function AdminShell({
         : item,
     );
 
-    await Promise.allSettled(
-      unreadIds.map((notificationId) =>
-        apiRequest(`/notifications/${notificationId}/read`, {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({}),
-        }),
-      ),
-    );
+    setIsMarkingAllRead(true);
+    setPendingReadIds(unreadIds);
+    persistNotificationsState(0, nextItems);
 
-    setNotificationItems(nextItems);
-    setUnreadCount(0);
-    if (shellNotificationsCacheKey) {
-      writeClientCache(shellNotificationsCacheKey, {
-        unreadCount: 0,
-        notificationItems: nextItems,
+    try {
+      await apiRequest("/notifications/read-all", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({}),
       });
+    } catch {
+      persistNotificationsState(previousUnreadCount, previousItems);
+    } finally {
+      setIsMarkingAllRead(false);
+      setPendingReadIds([]);
     }
   }
 
@@ -1254,15 +1269,23 @@ export function AdminShell({
                         <div className="flex items-center gap-3">
                           {unreadNotifications.length ? (
                             <button
-                              className="text-xs font-medium text-[color:var(--accent)]"
+                              className="text-xs font-medium text-[color:var(--accent)] disabled:cursor-default disabled:opacity-60"
+                              disabled={isMarkingAllRead}
                               onClick={() => void handleMarkAllRead()}
                               type="button"
                             >
-                              {locale === "ru" ? "Прочитать все" : "Dismiss all"}
+                              {isMarkingAllRead
+                                ? locale === "ru"
+                                  ? "Готово"
+                                  : "Done"
+                                : locale === "ru"
+                                  ? "Прочитать все"
+                                  : "Dismiss all"}
                             </button>
                           ) : null}
                         </div>
                       </div>
+                      <Separator className="bg-[rgba(15,23,42,0.08)]" />
 
                       <div className="grid max-h-[min(70vh,560px)] gap-3 overflow-y-auto scrollbar-hide pr-1">
                         {unreadNotifications.length ? (
@@ -1300,13 +1323,23 @@ export function AdminShell({
                                         ? "Отметить прочитанным"
                                         : "Mark as read"
                                     }
-                                    className="shrink-0 rounded-full px-2 py-1 text-[11px] font-medium text-[color:var(--accent)] transition hover:bg-[rgba(40,75,255,0.08)]"
+                                    className="shrink-0 rounded-full px-2 py-1 text-[11px] font-medium text-[color:var(--accent)] transition hover:bg-[rgba(40,75,255,0.08)] disabled:cursor-default disabled:opacity-60"
+                                    disabled={
+                                      isMarkingAllRead ||
+                                      pendingReadIds.includes(item.id)
+                                    }
                                     onClick={() =>
                                       void handleMarkRead(item.id)
                                     }
                                     type="button"
                                   >
-                                    {locale === "ru" ? "Убрать" : "Dismiss"}
+                                    {pendingReadIds.includes(item.id)
+                                      ? locale === "ru"
+                                        ? "Готово"
+                                        : "Done"
+                                      : locale === "ru"
+                                        ? "Убрать"
+                                        : "Dismiss"}
                                   </button>
                                 </div>
                                 {index < unreadNotifications.length - 1 ? (
