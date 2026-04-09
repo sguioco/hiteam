@@ -2289,7 +2289,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 relative isolate z-50 mt-[var(--hero-mobile-about-section-overlap)] flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
+        className="scroll-mt-40 relative isolate z-50 mt-[var(--hero-mobile-about-section-overlap)] flex flex-col gap-12 overflow-hidden rounded-t-[2.25rem] bg-primary pt-8 pb-16 sm:-mt-28 sm:pt-24 sm:gap-16 md:mt-0 md:rounded-none md:py-24 md:gap-20 lg:gap-24"
         id="about"
         style={heroMobileAboutSectionStyle}
       >
@@ -2442,7 +2442,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-40 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="mobile"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
@@ -2546,7 +2546,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-40 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="questions"
         style={{ background: "#2f63ff" }}
       >
@@ -2603,7 +2603,7 @@ const Landing = () => {
       </section>
 
       <section
-        className="scroll-mt-32 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
+        className="scroll-mt-40 px-4 py-20 sm:px-6 md:px-16 md:py-32 lg:px-24"
         id="pricing"
         style={{
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",

@@ -9,7 +9,7 @@ module.exports = (phase) => {
     output: "standalone",
     // Keep dev artifacts separate so local `next build` / CI commands don't
     // poison an active Windows dev server manifest.
-    distDir: isDevelopmentServer ? ".next/dev" : ".next",
+    distDir: isDevelopmentServer ? ".next-dev" : ".next",
     outputFileTracingRoot: path.join(__dirname, "../../"),
     transpilePackages: ["@smart/ui", "@smart/types"],
   };

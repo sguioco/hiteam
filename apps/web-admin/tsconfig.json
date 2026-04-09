@@ -9,15 +9,34 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"],
-      "@smart/ui": ["../../packages/ui/src/index.ts"],
-      "@smart/types": ["../../packages/types/src/index.ts"]
+      "@/*": [
+        "./*"
+      ],
+      "@smart/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@smart/types": [
+        "../../packages/types/src/index.ts"
+      ]
     },
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "incremental": true,
     "isolatedModules": true
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", ".next/types/app/components/**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    ".next-dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next/types/app/components/**/*.ts"
+  ]
 }
