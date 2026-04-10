@@ -25,7 +25,7 @@ import {
   lookupCompanyByCode,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
-import { getTextDirectionStyle, useI18n } from '../../lib/i18n';
+import { isRTLLanguage, useI18n } from '../../lib/i18n';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { getPreciseLocationAccessStatus } from '../../lib/location';
 import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
@@ -119,7 +119,13 @@ const AuthScreen = () => {
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
-  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
+  const centeredInputDirectionStyle = useMemo(
+    () => ({
+      textAlign: 'center' as const,
+      writingDirection: isRTLLanguage(language) ? 'rtl' as const : 'ltr' as const,
+    }),
+    [language],
+  );
   const [mode, setMode] = useState<AuthMode>('landing');
   const [inviteCode, setInviteCode] = useState('');
   const [identifier, setIdentifier] = useState('');
@@ -1018,7 +1024,7 @@ const AuthScreen = () => {
                                 ref={joinProfileFirstNameInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={[textDirectionStyle, joinProfileInputStyle]}
+                                style={[centeredInputDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.firstName}
                               />
@@ -1040,7 +1046,7 @@ const AuthScreen = () => {
                                 ref={joinProfileLastNameInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={[textDirectionStyle, joinProfileInputStyle]}
+                                style={[centeredInputDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.lastName}
                               />
@@ -1062,7 +1068,7 @@ const AuthScreen = () => {
                                 ref={joinProfileEmailInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={[textDirectionStyle, joinProfileInputStyle]}
+                                style={[centeredInputDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.email}
                               />
@@ -1097,7 +1103,7 @@ const AuthScreen = () => {
                                   ref={joinProfilePhoneInputRef}
                                   selectionColor="#26334a"
                                   showSoftInputOnFocus
-                                  style={[textDirectionStyle, joinProfileInputStyle]}
+                                  style={[centeredInputDirectionStyle, joinProfileInputStyle]}
                                   textAlign="center"
                                   value={joinProfileForm.phone}
                                 />
@@ -1189,7 +1195,7 @@ const AuthScreen = () => {
                               returnKeyType="go"
                               selectionColor="#26334a"
                               showSoftInputOnFocus
-                              style={textDirectionStyle}
+                              style={centeredInputDirectionStyle}
                               textAlign="center"
                               value={inviteCode}
                             />
@@ -1211,11 +1217,15 @@ const AuthScreen = () => {
                                 returnKeyType="next"
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={textDirectionStyle}
+                                style={centeredInputDirectionStyle}
                                 textAlign="center"
                                 value={identifier}
                               />
                               <View className="relative justify-center">
+                                <View
+                                  className="absolute left-0 top-0 h-[58px] w-14"
+                                  pointerEvents="none"
+                                />
                                 <TextInput
                                   autoCapitalize="none"
                                   autoCorrect={false}
@@ -1231,7 +1241,7 @@ const AuthScreen = () => {
                                   secureTextEntry={!passwordVisible}
                                   selectionColor="#26334a"
                                   showSoftInputOnFocus
-                                  style={textDirectionStyle}
+                                  style={centeredInputDirectionStyle}
                                   textAlign="center"
                                   value={password}
                                 />
@@ -1254,12 +1264,14 @@ const AuthScreen = () => {
                         </View>
                       )}
 
-                      {mode !== 'joinProfile' && message ? (
-                        <Text
-                          className="mt-4 text-center text-[14px] leading-[20px] text-[#9e3541]"
-                        >
-                          {message}
-                        </Text>
+                      {mode !== 'joinProfile' ? (
+                        <View className="mt-4 min-h-[40px] items-center justify-center px-2">
+                          {message ? (
+                            <Text className="text-center text-[14px] leading-[20px] text-[#9e3541]">
+                              {message}
+                            </Text>
+                          ) : null}
+                        </View>
                       ) : null}
                     </View>
 

@@ -16,6 +16,7 @@
     "@expo/metro-runtime": "^6.1.2",
     "@gorhom/bottom-sheet": "^5.2.8",
     "@react-native-community/datetimepicker": "^8.4.4",
+    "@react-native-masked-view/masked-view": "0.3.2",
     "@smart/types": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

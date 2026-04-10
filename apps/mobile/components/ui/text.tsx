@@ -3,7 +3,7 @@ import {
   Text as NativeText,
   StyleSheet,
 } from 'react-native';
-import { getTextDirectionStyle, useI18n } from '../../lib/i18n';
+import { isRTLLanguage, useI18n } from '../../lib/i18n';
 
 type AppTextProps = ComponentPropsWithoutRef<typeof NativeText>;
 
@@ -15,7 +15,10 @@ export const Text = forwardRef<ElementRef<typeof NativeText>, AppTextProps>(
       <NativeText
         ref={ref}
         {...props}
-        style={StyleSheet.compose(getTextDirectionStyle(language), style)}
+        style={StyleSheet.compose(
+          { writingDirection: isRTLLanguage(language) ? 'rtl' : 'ltr' },
+          style,
+        )}
       />
     );
   },

@@ -18,6 +18,11 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
   const { t } = useI18n();
   const navShellOffset = 75;
   const navContentOffset = 0;
+  const navLabelStyle = {
+    textAlign: 'center' as const,
+    includeFontPadding: false,
+    width: '100%' as const,
+  };
 
   function NavItem({
     tab,
@@ -55,6 +60,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
             className={`w-full text-center text-[11px] font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`}
             minimumFontScale={0.72}
             numberOfLines={1}
+            style={navLabelStyle}
           >
             {label}
           </Text>
@@ -74,7 +80,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
         className={floating ? 'absolute z-10 items-center' : 'relative -mt-4 flex flex-col items-center'}
         style={
           floating
-            ? { left: 28, top: -18 }
+            ? { left: 24, top: -18, width: 74, alignItems: 'center' }
             : undefined
         }
         onPress={() => {
@@ -106,6 +112,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           className={`mt-1 w-[72px] text-center text-[11px] font-medium ${active === 'today' ? 'text-primary' : 'text-muted-foreground'}`}
           minimumFontScale={0.72}
           numberOfLines={1}
+          style={navLabelStyle}
         >
           {t('nav.today')}
         </Text>
@@ -121,7 +128,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           style={{ minHeight: 106 + insets.bottom }}
         >
           <View className="px-8 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
-            <View className="flex-row items-end gap-6 pl-[50px]" style={{ marginLeft: 40 }}>
+            <View className="flex-row items-end justify-between" style={{ paddingLeft: 84 }}>
               <View className="w-[72px] items-center">
                 <NavItem
                   icon={showManage ? 'eye-outline' : 'newspaper-outline'}

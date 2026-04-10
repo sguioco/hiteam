@@ -463,9 +463,16 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
             <PressableScale className={`w-full overflow-hidden rounded-[24px] shadow-lg ${buttonClasses}`} haptic="success" onPress={onPrimaryAction}>
               <View className={buttonInnerClasses}>
                 <View className={`px-4 py-4 ${buttonOverlayClasses}`}>
-                  <View className="flex-row items-center justify-center gap-2">
+                  <View className="max-w-full flex-row items-center justify-center gap-2 px-2">
                     <Text className="text-base">{shiftMeta.buttonLabel === t('workspace.checkIn') ? '\u{1F44B}' : '\u{1F44B}'}</Text>
-                    <Text className={`text-base ${buttonTextColor}`} style={buttonLabelStyle}>
+                    <Text
+                      adjustsFontSizeToFit
+                      className={`min-w-0 flex-shrink text-base ${buttonTextColor}`}
+                      ellipsizeMode="clip"
+                      minimumFontScale={0.62}
+                      numberOfLines={1}
+                      style={buttonLabelStyle}
+                    >
                       {shiftMeta.buttonLabel}
                     </Text>
                   </View>

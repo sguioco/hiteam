@@ -34,7 +34,15 @@
           "locationWhenInUsePermission": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
         }
       ],
-      "expo-localization"
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["ru", "en", "es", "ar", "hi", "ur", "bn", "id", "ms", "tl"],
+            "android": ["ru", "en", "es", "ar", "hi", "ur", "bn", "id", "ms", "tl"]
+          }
+        }
+      ]
     ],
     "androidNavigationBar": {
       "backgroundColor": "#ffffff",
