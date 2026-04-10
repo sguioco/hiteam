@@ -3,18 +3,17 @@ import { BottomSheet } from "heroui-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { loadMyProfile, updateMyBannerTheme } from "../../lib/api";
-import { normalizeBannerTheme, useBannerTheme } from "../../lib/banner-theme";
+import { loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
-import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS, TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from "../../lib/workspace-cache";
+import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
 
 type ProfileScreenProps = {
   active?: boolean;
@@ -24,9 +23,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, t } = useI18n();
-  const { theme: bannerTheme, setTheme: setBannerTheme, config: bannerThemeConfig, options: bannerThemeOptions } = useBannerTheme();
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
-  const [bannerThemePickerOpen, setBannerThemePickerOpen] = useState(false);
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
@@ -41,7 +38,6 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
-  const [savingBannerTheme, setSavingBannerTheme] = useState<string | null>(null);
 
   useEffect(() => {
     return subscribeScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
@@ -66,6 +62,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
         PROFILE_SCREEN_CACHE_KEY,
         PROFILE_SCREEN_CACHE_TTL_MS,
       );
+      const hasCachedProfile = Boolean(cached?.value);
 
       if (cached && !cancelled) {
         setProfile(cached.value);
@@ -90,10 +87,16 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
         }
       } catch (nextError) {
         if (!cancelled) {
-          setError(
+          const nextMessage =
             nextError instanceof Error
               ? nextError.message
-              : t("today.loadError"),
+              : t("today.loadError");
+
+          setError(
+            hasCachedProfile &&
+              /Unable to reach the API server/i.test(nextMessage)
+              ? null
+              : nextMessage,
           );
         }
       } finally {
@@ -109,14 +112,6 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
       cancelled = true;
     };
   }, [t]);
-
-  useEffect(() => {
-    const remoteBannerTheme = normalizeBannerTheme(profile?.user.bannerTheme);
-
-    if (remoteBannerTheme && remoteBannerTheme !== bannerTheme) {
-      setBannerTheme(remoteBannerTheme);
-    }
-  }, [bannerTheme, profile?.user.bannerTheme, setBannerTheme]);
 
   const fullName = useMemo(() => {
     if (!profile) {
@@ -195,63 +190,8 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
     [profile, t],
   );
 
-  const bannerThemeLabel = useMemo(
-    () => t(bannerThemeConfig.labelKey),
-    [bannerThemeConfig.labelKey, t],
-  );
-
   function handleSignOut() {
     setSignOutConfirmOpen(true);
-  }
-
-  async function handleBannerThemeSelect(nextTheme: typeof bannerTheme) {
-    if (savingBannerTheme) {
-      return;
-    }
-
-    if (nextTheme === bannerTheme) {
-      setBannerThemePickerOpen(false);
-      return;
-    }
-
-    const previousTheme = bannerTheme;
-    setError(null);
-    setSavingBannerTheme(nextTheme);
-    setBannerTheme(nextTheme);
-
-    try {
-      const nextProfile = await updateMyBannerTheme(nextTheme);
-      setProfile(nextProfile);
-      await writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
-
-      const cachedTodayEntry = await readScreenCache<TodayScreenCacheValue>(
-        TODAY_SCREEN_CACHE_KEY,
-        TODAY_SCREEN_CACHE_TTL_MS,
-      );
-
-      if (cachedTodayEntry?.value) {
-        await writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
-          ...cachedTodayEntry.value,
-          profile: nextProfile,
-        });
-      }
-
-      const persistedTheme = normalizeBannerTheme(nextProfile.user.bannerTheme);
-      if (persistedTheme && persistedTheme !== nextTheme) {
-        setBannerTheme(persistedTheme);
-      }
-
-      setBannerThemePickerOpen(false);
-    } catch (nextError) {
-      setBannerTheme(previousTheme);
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("today.loadError"),
-      );
-    } finally {
-      setSavingBannerTheme(null);
-    }
   }
 
   const sheetActionLabelStyle = {
@@ -276,6 +216,15 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-6">
+            {loading && !profile ? (
+              <View className="items-center justify-center rounded-3xl border border-white/35 bg-white/72 px-6 py-10 shadow-sm shadow-[#1f2687]/10">
+                <ActivityIndicator color="#546cf2" size="large" />
+                <Text className="mt-4 font-body text-[14px] text-muted-foreground">
+                  {t("common.loading")}
+                </Text>
+              </View>
+            ) : null}
+
             <Animated.View
               entering={FadeInDown.duration(180).withInitialValues({
                 opacity: 0,
@@ -363,54 +312,19 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
               <PressableScale
                 className="flex-row items-center gap-3 rounded-2xl border border-white/35 bg-white/72 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
                 haptic="selection"
-                  onPress={() => router.push("/auth/language")}
+                onPress={() => router.push("/auth/language")}
               >
-                <Text className="text-lg">
-                  {languageOptions.find((option) => option.value === language)?.flag ?? "🇺🇸"}
-                </Text>
+                <View className="w-6 items-center">
+                  <Text className="text-lg">
+                    {languageOptions.find((option) => option.value === language)?.flag ?? "🇺🇸"}
+                  </Text>
+                </View>
                 <View className="flex-1">
                   <Text className="font-body text-xs text-muted-foreground">
                     {t("profile.language")}
                   </Text>
                   <Text className="font-body text-[15px] text-foreground">
                     {getLanguageLabel(language)}
-                  </Text>
-                </View>
-                <Ionicons color="#6b7a90" name="chevron-forward" size={18} />
-              </PressableScale>
-            </Animated.View>
-
-            <Animated.View
-              entering={FadeInDown.delay(60)
-                .duration(180)
-                .withInitialValues({
-                  opacity: 0,
-                  transform: [{ translateY: 8 }],
-                })}
-            >
-              <PressableScale
-                className="flex-row items-center gap-3 rounded-2xl border border-white/35 bg-white/72 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-                haptic="selection"
-                onPress={() => setBannerThemePickerOpen(true)}
-              >
-                <View
-                  className="h-11 w-11 items-center justify-center rounded-full border"
-                  style={{
-                    backgroundColor: bannerThemeConfig.chipBackgroundColor,
-                    borderColor: bannerThemeConfig.chipBorderColor,
-                  }}
-                >
-                  <View
-                    className="h-6 w-6 rounded-full"
-                    style={{ backgroundColor: bannerThemeConfig.maskColor }}
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-body text-xs text-muted-foreground">
-                    {t("profile.bannerTheme")}
-                  </Text>
-                  <Text className="font-body text-[15px] text-foreground">
-                    {bannerThemeLabel}
                   </Text>
                 </View>
                 <Ionicons color="#6b7a90" name="chevron-forward" size={18} />
@@ -464,86 +378,6 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
           </View>
         </ScrollView>
       </View>
-
-      <BottomSheet
-        isOpen={bannerThemePickerOpen}
-        onOpenChange={setBannerThemePickerOpen}
-      >
-        <BottomSheet.Portal disableFullWindowOverlay={__DEV__}>
-          <BottomSheet.Overlay
-            style={{ backgroundColor: "rgba(6, 14, 28, 0.42)" }}
-          />
-          <BottomSheet.Content
-            backgroundClassName="rounded-t-[34px] bg-[#f7faff]"
-            enableDynamicSizing={false}
-            snapPoints={["48%"]}
-            className="px-5 pb-7 pt-5"
-            contentContainerClassName="pb-2"
-          >
-            <View className="mb-5 items-center">
-              <BottomSheet.Title
-                style={{
-                  color: "#111827",
-                  fontFamily: "Manrope_700Bold",
-                  fontSize: 24,
-                  includeFontPadding: false,
-                  lineHeight: 30,
-                  textAlign: "center",
-                }}
-              >
-                {t("profile.bannerThemePickerTitle")}
-              </BottomSheet.Title>
-            </View>
-
-            <View className="gap-3">
-              {bannerThemeOptions.map((option) => {
-                const isSelected = option.key === bannerTheme;
-
-                return (
-                  <PressableScale
-                    key={option.key}
-                    className="flex-row items-center gap-4 rounded-[24px] border bg-white px-4 py-4"
-                    haptic="selection"
-                    onPress={() => void handleBannerThemeSelect(option.key)}
-                    style={{
-                      borderColor: isSelected ? option.maskColor : "#dfe3ee",
-                      opacity: savingBannerTheme && savingBannerTheme !== option.key ? 0.55 : 1,
-                    }}
-                  >
-                    <View
-                      className="h-12 w-12 items-center justify-center rounded-full border"
-                      style={{
-                        backgroundColor: option.chipBackgroundColor,
-                        borderColor: option.chipBorderColor,
-                      }}
-                    >
-                      <View
-                        className="h-7 w-7 rounded-full"
-                        style={{ backgroundColor: option.maskColor }}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="font-body text-[16px] font-semibold text-foreground">
-                        {t(option.labelKey)}
-                      </Text>
-                      <Text className="font-body text-[13px] text-muted-foreground">
-                        {t("profile.bannerThemeHint")}
-                      </Text>
-                    </View>
-                    {isSelected ? (
-                      <Ionicons color={option.maskColor} name="checkmark-sharp" size={20} />
-                    ) : savingBannerTheme === option.key ? (
-                      <Text className="font-body text-[12px] text-muted-foreground">
-                        {t("common.loading")}
-                      </Text>
-                    ) : null}
-                  </PressableScale>
-                );
-              })}
-            </View>
-          </BottomSheet.Content>
-        </BottomSheet.Portal>
-      </BottomSheet>
 
       <BottomSheet
         isOpen={signOutConfirmOpen}

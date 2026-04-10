@@ -45,6 +45,8 @@ const sectionMetaStyle = {
   letterSpacing: 1,
 } as const;
 
+const taskSkeletonWidths = ['72%', '58%', '66%'] as const;
+
 const PHOTO_REPORT_LAYOUT = {
   withoutPhotos: {
     shellClassName: 'min-h-[420px] relative',
@@ -499,14 +501,28 @@ export default function TaskList({
           <Text className="text-[13px] uppercase text-foreground" style={sectionMetaStyle}>
             {t('today.taskList')}
           </Text>
-          <Text className="text-sm text-muted-foreground" style={sectionMetaStyle}>
-            {loading ? '...' : totalCountLabel}
-          </Text>
+          {loading ? (
+            <View className="h-4 w-10 rounded-full bg-white/80" />
+          ) : (
+            <Text className="text-sm text-muted-foreground" style={sectionMetaStyle}>
+              {totalCountLabel}
+            </Text>
+          )}
         </View>
 
         {loading ? (
           <View className="overflow-hidden rounded-[28px] bg-white/72 px-5 py-5">
-            <Text className="font-body text-sm text-muted-foreground">{t('common.loading')}</Text>
+            <View className="gap-4">
+              {taskSkeletonWidths.map((width, index) => (
+                <View key={`${width}-${index}`} className="flex-row items-center gap-3">
+                  <View className="h-6 w-6 rounded-full bg-[#e2eaf6]" />
+                  <View className="flex-1 gap-2">
+                    <View className="h-3 rounded-full bg-[#e2eaf6]" style={{ width }} />
+                    <View className="h-2 rounded-full bg-[#edf3fb]" style={{ width: index === 0 ? '36%' : '28%' }} />
+                  </View>
+                </View>
+              ))}
+            </View>
           </View>
         ) : tasks.length > 0 ? (
           <View className="overflow-hidden rounded-[28px] bg-white">

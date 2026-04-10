@@ -35,7 +35,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
 
     return (
       <Pressable
-        className="flex min-w-[56px] flex-col items-center gap-1"
+        className="flex w-full flex-col items-center gap-1"
         onPress={() => {
           hapticSelection();
           onNavigate(tab);
@@ -49,7 +49,14 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
       >
         <Animated.View className="items-center gap-1" style={animatedStyle}>
           <Ionicons color={isActive ? '#6d73ff' : '#6b7a90'} name={icon} size={22} />
-          <Text className={`text-[11px] font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>{label}</Text>
+          <Text
+            adjustsFontSizeToFit
+            className={`w-full text-center text-[11px] font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`}
+            minimumFontScale={0.72}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
         </Animated.View>
       </Pressable>
     );
@@ -93,7 +100,12 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
             ) : null}
           </View>
         </Animated.View>
-        <Text className={`mt-1 text-[11px] font-medium ${active === 'today' ? 'text-primary' : 'text-muted-foreground'}`}>
+        <Text
+          adjustsFontSizeToFit
+          className={`mt-1 w-[72px] text-center text-[11px] font-medium ${active === 'today' ? 'text-primary' : 'text-muted-foreground'}`}
+          minimumFontScale={0.72}
+          numberOfLines={1}
+        >
           {t('nav.today')}
         </Text>
       </Pressable>
@@ -108,18 +120,18 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           style={{ minHeight: 106 + insets.bottom }}
         >
           <View className="px-8 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
-            <View className="flex-row items-end gap-10 pl-[50px]" style={{ marginLeft: 40 }}>
-              <View className="w-[64px] items-center">
+            <View className="flex-row items-end gap-6 pl-[50px]" style={{ marginLeft: 40 }}>
+              <View className="w-[72px] items-center">
                 <NavItem
                   icon={showManage ? 'eye-outline' : 'newspaper-outline'}
                   label={showManage ? t('nav.manage') : t('nav.news')}
                   tab={showManage ? 'manage' : 'news'}
                 />
               </View>
-              <View className="w-[64px] items-center">
+              <View className="w-[72px] items-center">
                 <NavItem icon="calendar-outline" label={t('nav.calendar')} tab="calendar" />
               </View>
-              <View className="w-[64px] items-center">
+              <View className="w-[72px] items-center">
                 <NavItem icon="person-outline" label={t('nav.profile')} tab="profile" />
               </View>
             </View>

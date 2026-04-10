@@ -38,15 +38,40 @@ spec:
       labels:
         app: {{ include "hiteam.redisServiceName" . }}
     spec:
+      terminationGracePeriodSeconds: 60
       containers:
         - name: redis
           image: {{ .Values.redis.image | quote }}
           args:
             - redis-server
+            - --dir
+            - /data
             - --appendonly
-            - "yes"
+            - {{ ternary "yes" "no" .Values.redis.config.appendOnly | quote }}
+            - --appendfsync
+            - {{ .Values.redis.config.appendFsync | quote }}
+            {{- range .Values.redis.config.save }}
+            - --save
+            - {{ . | quote }}
+            {{- end }}
           ports:
             - containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: {{ .Values.redis.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.redis.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.redis.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: {{ .Values.redis.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.redis.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.redis.livenessProbe.timeoutSeconds }}
           resources:
 {{ toYaml .Values.redis.resources | nindent 12 }}
           volumeMounts:

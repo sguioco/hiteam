@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { AppState, ImageBackground, Platform, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import type { AttendanceStatusResponse } from '@smart/types';
 import Animated, {
@@ -14,6 +14,9 @@ import { useBannerTheme } from '../../lib/banner-theme';
 import { type AppLanguage, useI18n, pluralizeRu } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
+const HERO_BANNER_VIDEO_SOURCE =
+  Platform.OS === 'ios' ? require('../../hero.mp4') : require('../../hero.webm');
+
 type ShiftStatusCardProps = {
   greetingName?: string | null;
   status: AttendanceStatusResponse | null;
@@ -23,7 +26,7 @@ type ShiftStatusCardProps = {
 };
 
 function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
-  const player = useVideoPlayer(require('../../hero.webm'), (nextPlayer) => {
+  const player = useVideoPlayer(HERO_BANNER_VIDEO_SOURCE, (nextPlayer) => {
     nextPlayer.loop = true;
     nextPlayer.muted = true;
     nextPlayer.play();
@@ -48,6 +51,7 @@ function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
 
   return (
     <VideoView
+      allowsVideoFrameAnalysis={false}
       contentFit="cover"
       nativeControls={false}
       onFirstFrameRender={() => {
@@ -55,6 +59,7 @@ function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
         player.play();
       }}
       player={player}
+      surfaceType={Platform.OS === 'android' ? 'textureView' : undefined}
       style={[
         StyleSheet.absoluteFillObject,
         {
@@ -183,9 +188,9 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
       return {
         title: t('today.cardLoadingTitle'),
         body: t('today.cardLoadingBody'),
-        timing: '...',
+        timing: '',
         locationLabel: status?.location.name ?? '—',
-        statusText: t('common.loading'),
+        statusText: '',
         statusColor: '#dbeafe',
         statusIcon: 'time-outline' as const,
         statusVariant: 'default' as const,
@@ -356,11 +361,20 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 
   const buttonTextColor = shiftMeta.buttonTone === 'danger' ? 'text-white' : 'text-[#1e3358]';
   const greetingLabel = greetingName?.trim() ? t('today.greetingWithName', { name: greetingName.trim() }) : t('today.greetingCard');
+  const showCardPlaceholder = loading && !status;
 
   return (
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">
       <View className="absolute inset-0">
-        <ImageBackground className="h-full w-full" resizeMode="cover" source={require('../../bg.webp')} />
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: '#05070c',
+            },
+          ]}
+        />
         {shouldRenderBannerVideo ? (
           <View
             pointerEvents="none"
@@ -383,33 +397,18 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
               },
             ]}
           />
-        ) : null}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            right: -68,
-            top: -96,
-            height: 280,
-            width: 280,
-            borderRadius: 999,
-            backgroundColor: bannerTheme.glowColor,
-            opacity: videoReady ? 0.22 : 0.18,
-          }}
-        />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: -132,
-            left: -42,
-            height: 220,
-            width: 220,
-            borderRadius: 999,
-            backgroundColor: bannerTheme.accentColor,
-            opacity: videoReady ? 0.12 : 0.1,
-          }}
-        />
+        ) : (
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                backgroundColor: bannerTheme.maskColor,
+                opacity: bannerTheme.fallbackOpacity,
+              },
+            ]}
+          />
+        )}
       </View>
       <View className="absolute inset-0 bg-[#140d2f]/18" />
       <View className="absolute inset-x-0 bottom-0 h-44 bg-[#120a28]/24" />
@@ -426,30 +425,39 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
           <Text className="text-[18px] text-[#f3ecff]" style={[textGlow, shiftLabelStyle]}>
             {t('today.shiftTiming')}
           </Text>
-          <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
-            {shiftMeta.timing}
-          </Text>
-          {shiftMeta.statusVariant === 'late' ? (
-            <View className="mt-2 flex-row items-center gap-2">
-              <View className="relative h-2.5 w-2.5 items-center justify-center">
-                <Animated.View className="absolute h-2.5 w-2.5 rounded-full bg-[#ff5b6d]" style={pulseStyle} />
-                <View className="h-2.5 w-2.5 rounded-full bg-[#ff4d63]" />
-              </View>
-              <Text className="text-[14px] leading-[18px] text-white" style={[textGlow, statusTextStyle]}>
-                {shiftMeta.statusText}
-              </Text>
+          {showCardPlaceholder ? (
+            <View className="mt-3 gap-3">
+              <View className="h-11 w-40 rounded-full bg-white/18" />
+              <View className="h-4 w-32 rounded-full bg-white/14" />
             </View>
           ) : (
-            <View className="mt-2 flex-row items-center gap-2">
-              <Ionicons color={shiftMeta.statusColor} name={shiftMeta.statusIcon} size={16} />
-              <Text className="text-[16px] leading-[21px]" style={[statusTextStyle, { color: shiftMeta.statusColor }]}>
-                {shiftMeta.statusText}
+            <>
+              <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
+                {shiftMeta.timing}
               </Text>
-            </View>
+              {shiftMeta.statusVariant === 'late' ? (
+                <View className="mt-2 flex-row items-center gap-2">
+                  <View className="relative h-2.5 w-2.5 items-center justify-center">
+                    <Animated.View className="absolute h-2.5 w-2.5 rounded-full bg-[#ff5b6d]" style={pulseStyle} />
+                    <View className="h-2.5 w-2.5 rounded-full bg-[#ff4d63]" />
+                  </View>
+                  <Text className="text-[14px] leading-[18px] text-white" style={[textGlow, statusTextStyle]}>
+                    {shiftMeta.statusText}
+                  </Text>
+                </View>
+              ) : (
+                <View className="mt-2 flex-row items-center gap-2">
+                  <Ionicons color={shiftMeta.statusColor} name={shiftMeta.statusIcon} size={16} />
+                  <Text className="text-[16px] leading-[21px]" style={[statusTextStyle, { color: shiftMeta.statusColor }]}>
+                    {shiftMeta.statusText}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </View>
 
-        {shiftMeta.buttonLabel ? (
+        {shiftMeta.buttonLabel && !showCardPlaceholder ? (
           <View className="mt-4">
             <PressableScale className={`w-full overflow-hidden rounded-[24px] shadow-lg ${buttonClasses}`} haptic="success" onPress={onPrimaryAction}>
               <View className={buttonInnerClasses}>

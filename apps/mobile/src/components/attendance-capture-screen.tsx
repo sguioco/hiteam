@@ -163,6 +163,30 @@ export function AttendanceCaptureScreen({
     })} - ${new Date(status.shift.endsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
   }, [status]);
 
+  const cameraStatusText = useMemo(() => {
+    if (!permission?.granted) {
+      return copy.cameraPermission;
+    }
+
+    if (
+      loading ||
+      locationCheck.state === "idle" ||
+      locationCheck.state === "running"
+    ) {
+      return copy.locationRunning;
+    }
+
+    if (locationCheck.state === "ready") {
+      return copy.locationReady;
+    }
+
+    if (locationCheck.state === "outside") {
+      return copy.locationOutsideTitle;
+    }
+
+    return locationCheck.errorMessage ?? copy.retryLocation;
+  }, [copy, loading, locationCheck, permission?.granted]);
+
   const mapRegion = useMemo(() => {
     if (!status?.location || !locationCheck.snapshot) {
       return null;
@@ -615,15 +639,6 @@ export function AttendanceCaptureScreen({
     await captureAndVerifyFace();
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white px-6">
-        <StatusBar style="dark" />
-        <Text style={styles.bodyText}>{t("common.loading")}</Text>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView
       className="flex-1 bg-white"
@@ -641,7 +656,7 @@ export function AttendanceCaptureScreen({
         showsVerticalScrollIndicator={false}
       >
         <View className="flex-1">
-          <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-3">
             <PressableScale
               className="h-8 w-8 items-center justify-center"
               haptic="selection"
@@ -649,15 +664,11 @@ export function AttendanceCaptureScreen({
             >
               <Ionicons color="#24314b" name="chevron-back" size={20} />
             </PressableScale>
-            <View className="w-8" />
-          </View>
-
-          <View className="mt-2 gap-2">
-            <BrandWordmark className="text-center text-[52px] leading-[56px] text-[#26334a]" />
+            <BrandWordmark className="text-[44px] leading-[48px] text-[#26334a]" />
           </View>
 
           <View
-            className="mt-32 overflow-hidden rounded-[28px] bg-[#0f1724]"
+            className="mt-14 overflow-hidden rounded-[28px] bg-[#0f1724]"
             style={{ height: 420 }}
           >
             {permission?.granted ? (
@@ -685,15 +696,7 @@ export function AttendanceCaptureScreen({
                 {status?.shift?.label ?? ""}
               </Text>
               <Text style={styles.cameraShift}>{shiftTime}</Text>
-              <Text style={styles.cameraBody}>
-                {locationCheck.state === "running"
-                  ? copy.locationRunning
-                  : locationCheck.state === "ready"
-                    ? copy.locationReady
-                    : locationCheck.state === "outside"
-                      ? copy.locationOutsideTitle
-                      : copy.cameraPermission}
-              </Text>
+              <Text style={styles.cameraBody}>{cameraStatusText}</Text>
             </View>
           </View>
 

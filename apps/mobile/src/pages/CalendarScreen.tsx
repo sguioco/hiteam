@@ -19,7 +19,7 @@ import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { parseTaskMeta } from '../../lib/task-meta';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
-import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
+import { primeTaskTranslations, useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { Button } from '../../components/ui/button';
 
@@ -161,6 +161,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
         ]);
 
         if (!cancelled) {
+          await primeTaskTranslations(nextTasks, language);
           setShifts(nextShifts);
           setTasks(nextTasks);
           void writeScreenCache(calendarCacheKey, {
@@ -184,7 +185,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
     return () => {
       cancelled = true;
     };
-  }, [calendarCacheKey, initialSnapshot, monthIndex, t, year]);
+  }, [calendarCacheKey, initialSnapshot, language, monthIndex, t, year]);
 
   useEffect(() => {
     if (selectedDay > daysInMonth) {

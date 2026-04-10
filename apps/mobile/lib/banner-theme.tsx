@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
 
-export const bannerThemeValues = ['blue', 'green', 'red', 'black'] as const;
+export const bannerThemeValues = ['blue'] as const;
 
 export type BannerTheme = (typeof bannerThemeValues)[number];
 
@@ -11,8 +11,6 @@ export type BannerThemeConfig = {
   maskColor: string;
   maskOpacity: number;
   fallbackOpacity: number;
-  glowColor: string;
-  accentColor: string;
   chipBackgroundColor: string;
   chipBorderColor: string;
 };
@@ -27,43 +25,8 @@ export const bannerThemeConfigMap: Record<BannerTheme, BannerThemeConfig> = {
     maskColor: '#5745f7',
     maskOpacity: 0.4,
     fallbackOpacity: 0.32,
-    glowColor: '#7da4ff',
-    accentColor: '#c9d8ff',
     chipBackgroundColor: '#eff4ff',
     chipBorderColor: '#cad8ff',
-  },
-  green: {
-    key: 'green',
-    labelKey: 'profile.bannerThemeGreen',
-    maskColor: '#158f66',
-    maskOpacity: 0.34,
-    fallbackOpacity: 0.28,
-    glowColor: '#67d4a8',
-    accentColor: '#d4ffec',
-    chipBackgroundColor: '#ebfff5',
-    chipBorderColor: '#b8efd6',
-  },
-  red: {
-    key: 'red',
-    labelKey: 'profile.bannerThemeRed',
-    maskColor: '#c13c56',
-    maskOpacity: 0.34,
-    fallbackOpacity: 0.28,
-    glowColor: '#ff8798',
-    accentColor: '#ffd3da',
-    chipBackgroundColor: '#fff1f4',
-    chipBorderColor: '#f4c2cb',
-  },
-  black: {
-    key: 'black',
-    labelKey: 'profile.bannerThemeBlack',
-    maskColor: '#070b12',
-    maskOpacity: 0.48,
-    fallbackOpacity: 0.42,
-    glowColor: '#586273',
-    accentColor: '#dbe4f2',
-    chipBackgroundColor: '#eef2f7',
-    chipBorderColor: '#d0d8e5',
   },
 };
 

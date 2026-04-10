@@ -1,7 +1,7 @@
 import type { TaskItem } from '@smart/types';
 import { useMemo } from 'react';
 import type { AppLanguage } from './i18n';
-import { useLiveTextMap } from './use-live-text-map';
+import { primeLiveTextMap, useLiveTextMap } from './use-live-text-map';
 import { parseTaskMeta } from './task-meta';
 
 export function stripTaskMeetingPrefix(title: string) {
@@ -41,6 +41,25 @@ function getTitleVariants(title: string) {
   return Array.from(variants);
 }
 
+export function collectTaskTranslationTexts(tasks: TaskItem[]) {
+  return tasks.flatMap((task) => {
+    const taskMeta = parseTaskMeta(task.description);
+
+    return [
+      ...getTitleVariants(task.title),
+      taskMeta.body,
+      taskMeta.meeting?.meetingLocation ?? '',
+    ].filter(Boolean);
+  });
+}
+
+export async function primeTaskTranslations(
+  tasks: TaskItem[],
+  language: AppLanguage,
+) {
+  await primeLiveTextMap(collectTaskTranslationTexts(tasks), language);
+}
+
 export function useTranslatedTaskCopy(tasks: TaskItem[], language: AppLanguage) {
   const taskMetaById = useMemo(
     () =>
@@ -52,17 +71,8 @@ export function useTranslatedTaskCopy(tasks: TaskItem[], language: AppLanguage) 
 
   const textMap = useLiveTextMap(
     useMemo(
-      () =>
-        tasks.flatMap((task) => {
-          const taskMeta = taskMetaById.get(task.id);
-
-          return [
-            ...getTitleVariants(task.title),
-            taskMeta?.body ?? '',
-            taskMeta?.meeting?.meetingLocation ?? '',
-          ].filter(Boolean);
-        }),
-      [taskMetaById, tasks],
+      () => collectTaskTranslationTexts(tasks),
+      [tasks],
     ),
     language,
   );

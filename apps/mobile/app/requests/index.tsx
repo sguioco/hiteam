@@ -25,6 +25,7 @@ import {
   loadMyTimeOffBalances,
 } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
+import { primeTaskTranslations, useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 
 const requestTypeOptions: RequestType[] = [
   'LEAVE',
@@ -122,6 +123,7 @@ export default function RequestsScreen() {
     reason: '',
     relatedRequestId: '',
   });
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
 
   async function loadData(viewDate = calendarMonth) {
     setLoading(true);
@@ -138,6 +140,7 @@ export default function RequestsScreen() {
           dateTo: dateTo.toISOString().slice(0, 10),
         }),
       ]);
+      await primeTaskTranslations(nextTasks, language);
       setBalances(nextBalances);
       setItems(nextItems);
       setCalendar(nextCalendar);
@@ -504,7 +507,9 @@ export default function RequestsScreen() {
               </Card>
             ) : (
               <Card key={event.id} className="gap-2 bg-surface-muted" inset="compact">
-                <Text className="text-[16px] font-extrabold text-foreground">{event.task.title}</Text>
+                <Text className="text-[16px] font-extrabold text-foreground">
+                  {getTaskTitle(event.task, { normalize: true })}
+                </Text>
                 <Text className="text-[14px] leading-5 text-foreground">
                   {event.task.priority} • {event.task.status}
                 </Text>

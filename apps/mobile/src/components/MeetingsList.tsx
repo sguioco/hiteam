@@ -23,6 +23,8 @@ const meetingTitleStyle = {
   letterSpacing: -0.2,
 } as const;
 
+const meetingSkeletonWidths = ['68%', '54%'] as const;
+
 export default function MeetingsList({ loading = false, tasks }: MeetingsListProps) {
   const { t, tp, language } = useI18n();
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
@@ -47,8 +49,19 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
       </Text>
 
       {loading ? (
-        <View className="overflow-hidden rounded-[28px] bg-white/72 px-5 py-5">
-          <Text className="font-body text-sm text-muted-foreground">{t('common.loading')}</Text>
+        <View className="gap-2">
+          {meetingSkeletonWidths.map((width, index) => (
+            <View
+              key={`${width}-${index}`}
+              className="flex-row items-center gap-3 rounded-2xl border border-white/30 bg-white/70 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+            >
+              <View className="h-10 w-10 rounded-xl bg-[#e7eefc]" />
+              <View className="flex-1 gap-2">
+                <View className="h-3 rounded-full bg-[#e2eaf6]" style={{ width }} />
+                <View className="h-2 rounded-full bg-[#edf3fb]" style={{ width: index === 0 ? '48%' : '34%' }} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : tasks.length > 0 ? (
         <View className="gap-2">

@@ -7,6 +7,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
+  ActivityIndicator,
   Alert,
   AppState,
   Image,
@@ -35,7 +36,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   bootstrapDemoDevice,
   loadBiometricPolicy,
-  loadMyAccessStatus,
   signInWithEmail,
   submitCompanyJoinRequest,
   lookupCompanyByCode,
@@ -710,26 +710,34 @@ const AuthScreen = () => {
       hapticSuccess();
 
       if (!session.user.workspaceAccessAllowed) {
-        signInLocally();
+        startTransition(() => {
+          signInLocally();
+        });
         return;
       }
 
-      await bootstrapDemoDevice();
-      const [biometricPolicy, accessStatus, locationAccessStatus] = await Promise.all([
+      void bootstrapDemoDevice().catch(() => undefined);
+      const workspaceWarmupPromise = warmWorkspaceCachesWithinBudget(
+        session.user.roleCodes,
+        2200,
+      ).catch(() => undefined);
+
+      const [biometricPolicyResult, locationAccessStatusResult] =
+        await Promise.allSettled([
         loadBiometricPolicy(),
-        loadMyAccessStatus(),
         getPreciseLocationAccessStatus(),
       ]);
 
-      if (!accessStatus.workspaceAccessAllowed) {
+      await workspaceWarmupPromise;
+
+      startTransition(() => {
         signInLocally();
-        return;
-      }
+      });
 
-      await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 1200);
-      signInLocally();
-
-      if (biometricPolicy.enrollmentStatus !== 'ENROLLED') {
+      if (
+        biometricPolicyResult.status === 'fulfilled' &&
+        biometricPolicyResult.value.enrollmentStatus !== 'ENROLLED'
+      ) {
         router.replace({
           pathname: '/biometric',
           params: {
@@ -740,7 +748,10 @@ const AuthScreen = () => {
         return;
       }
 
-      if (locationAccessStatus.status !== 'ready') {
+      if (
+        locationAccessStatusResult.status === 'fulfilled' &&
+        locationAccessStatusResult.value.status !== 'ready'
+      ) {
         router.replace('/onboarding/workspace-ready' as never);
       }
     } catch (error) {
@@ -1291,7 +1302,14 @@ const AuthScreen = () => {
                           {mode === 'join' ? (
                             <Text style={actionLabelStyle}>{submitting ? '...' : t('invite.joinButton')}</Text>
                           ) : (
-                            <Text style={actionLabelStyle}>{submitting ? '...' : t('login.signIn')}</Text>
+                            <View className="flex-row items-center justify-center gap-3">
+                              {submitting ? (
+                                <ActivityIndicator color="#f7f1e6" size="small" />
+                              ) : null}
+                              <Text style={actionLabelStyle}>
+                                {submitting ? t('common.loading') : t('login.signIn')}
+                              </Text>
+                            </View>
                           )}
                         </PressableScale>
 

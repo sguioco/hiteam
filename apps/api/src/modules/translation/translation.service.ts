@@ -1,5 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import type { SupportedTranslationLocale } from './dto/translate-texts.dto';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
+import Redis from 'ioredis';
+import {
+  SUPPORTED_TRANSLATION_LOCALES,
+  type SupportedTranslationLocale,
+} from './dto/translate-texts.dto';
 
 type TranslationResponse = Record<string, string>;
 
@@ -7,20 +13,123 @@ type ProviderResult = {
   translatedText: string;
 };
 
+type MemoryCacheEntry = {
+  expiresAt: number;
+  value: string;
+};
+
+const TRANSLATION_CACHE_TTL_SECONDS = 60 * 60 * 24 * 90;
+const TRANSLATION_FAILURE_TTL_SECONDS = 60 * 5;
+
 @Injectable()
-export class TranslationService {
-  private readonly translationCache = new Map<string, string>();
+export class TranslationService implements OnModuleDestroy {
+  private readonly logger = new Logger(TranslationService.name);
+  private readonly translationCache = new Map<string, MemoryCacheEntry>();
   private readonly inFlightCache = new Map<string, Promise<string>>();
+  private readonly redis: Redis | null;
+
+  constructor(private readonly configService: ConfigService) {
+    const redisUrl = this.configService.get<string>('REDIS_URL')?.trim();
+
+    if (!redisUrl) {
+      this.redis = null;
+      return;
+    }
+
+    this.redis = new Redis(redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      family: 0,
+    });
+
+    this.redis.on('error', (error) => {
+      this.logger.warn(
+        `Redis translation cache unavailable, using memory fallback: ${error.message}`,
+      );
+    });
+  }
+
+  async onModuleDestroy() {
+    if (!this.redis) {
+      return;
+    }
+
+    await this.redis.quit().catch(() => undefined);
+  }
 
   private getCacheKey(text: string, targetLocale: SupportedTranslationLocale) {
-    return `${targetLocale}:${text}`;
+    const digest = createHash('sha256').update(text).digest('hex');
+    return `smart:translation:${targetLocale}:${digest}`;
+  }
+
+  private getCachedFromMemory(cacheKey: string) {
+    const cached = this.translationCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.translationCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private async getCachedTranslation(cacheKey: string) {
+    const memoryValue = this.getCachedFromMemory(cacheKey);
+    if (memoryValue !== null) {
+      return memoryValue;
+    }
+
+    if (!this.redis) {
+      return null;
+    }
+
+    try {
+      await this.redis.connect().catch(() => undefined);
+      const redisValue = await this.redis.get(cacheKey);
+      if (!redisValue) {
+        return null;
+      }
+
+      this.translationCache.set(cacheKey, {
+        expiresAt: Date.now() + TRANSLATION_CACHE_TTL_SECONDS * 1000,
+        value: redisValue,
+      });
+      return redisValue;
+    } catch {
+      return null;
+    }
+  }
+
+  private async setCachedTranslation(
+    cacheKey: string,
+    value: string,
+    ttlSeconds: number,
+  ) {
+    this.translationCache.set(cacheKey, {
+      expiresAt: Date.now() + ttlSeconds * 1000,
+      value,
+    });
+
+    if (!this.redis) {
+      return;
+    }
+
+    try {
+      await this.redis.connect().catch(() => undefined);
+      await this.redis.set(cacheKey, value, 'EX', ttlSeconds);
+    } catch {
+      // Keep the memory cache as a fallback.
+    }
   }
 
   private async translateViaLibreTranslate(
     text: string,
     targetLocale: SupportedTranslationLocale,
   ): Promise<ProviderResult | null> {
-    const baseUrl = process.env.LIBRETRANSLATE_URL?.trim();
+    const baseUrl = this.configService.get<string>('LIBRETRANSLATE_URL')?.trim();
     if (!baseUrl) {
       return null;
     }
@@ -35,7 +144,9 @@ export class TranslationService {
         source: 'auto',
         target: targetLocale,
         format: 'text',
-        api_key: process.env.LIBRETRANSLATE_API_KEY?.trim() || undefined,
+        api_key:
+          this.configService.get<string>('LIBRETRANSLATE_API_KEY')?.trim() ||
+          undefined,
       }),
     });
 
@@ -84,6 +195,35 @@ export class TranslationService {
     return { translatedText };
   }
 
+  private async resolveTranslation(
+    text: string,
+    targetLocale: SupportedTranslationLocale,
+  ) {
+    const providers = [
+      () => this.translateViaLibreTranslate(text, targetLocale),
+      () => this.translateViaGoogleGtx(text, targetLocale),
+    ];
+
+    for (const provider of providers) {
+      try {
+        const result = await provider();
+        if (result?.translatedText?.trim()) {
+          return {
+            translatedText: result.translatedText.trim(),
+            translated: true,
+          };
+        }
+      } catch {
+        // Fall through to the next provider.
+      }
+    }
+
+    return {
+      translatedText: text,
+      translated: false,
+    };
+  }
+
   private async translateSingleText(
     text: string,
     targetLocale: SupportedTranslationLocale,
@@ -94,8 +234,8 @@ export class TranslationService {
     }
 
     const cacheKey = this.getCacheKey(normalizedText, targetLocale);
-    const cached = this.translationCache.get(cacheKey);
-    if (cached) {
+    const cached = await this.getCachedTranslation(cacheKey);
+    if (cached !== null) {
       return cached;
     }
 
@@ -105,29 +245,17 @@ export class TranslationService {
     }
 
     const translationPromise = (async () => {
-      let translatedText = normalizedText;
+      const result = await this.resolveTranslation(normalizedText, targetLocale);
 
-      try {
-        const libre = await this.translateViaLibreTranslate(
-          normalizedText,
-          targetLocale,
-        );
-        translatedText = libre?.translatedText ?? translatedText;
-      } catch {
-        try {
-          const google = await this.translateViaGoogleGtx(
-            normalizedText,
-            targetLocale,
-          );
-          translatedText = google?.translatedText ?? translatedText;
-        } catch {
-          translatedText = normalizedText;
-        }
-      }
-
-      this.translationCache.set(cacheKey, translatedText);
+      await this.setCachedTranslation(
+        cacheKey,
+        result.translatedText,
+        result.translated
+          ? TRANSLATION_CACHE_TTL_SECONDS
+          : TRANSLATION_FAILURE_TTL_SECONDS,
+      );
       this.inFlightCache.delete(cacheKey);
-      return translatedText;
+      return result.translatedText;
     })();
 
     this.inFlightCache.set(cacheKey, translationPromise);
@@ -143,12 +271,29 @@ export class TranslationService {
     );
 
     const entries = await Promise.all(
-      uniqueTexts.map(async (text) => [
-        text,
-        await this.translateSingleText(text, targetLocale),
-      ] as const),
+      uniqueTexts.map(
+        async (text) =>
+          [text, await this.translateSingleText(text, targetLocale)] as const,
+      ),
     );
 
     return Object.fromEntries(entries);
+  }
+
+  async prewarmTranslations(
+    texts: Array<string | null | undefined>,
+    locales: readonly SupportedTranslationLocale[] = SUPPORTED_TRANSLATION_LOCALES,
+  ) {
+    const uniqueTexts = Array.from(
+      new Set(texts.map((text) => text?.trim() ?? '').filter(Boolean)),
+    );
+
+    if (uniqueTexts.length === 0) {
+      return;
+    }
+
+    await Promise.allSettled(
+      locales.map((locale) => this.translateTexts(uniqueTexts, locale)),
+    );
   }
 }

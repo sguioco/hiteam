@@ -10,6 +10,7 @@ import { useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
+import { primeTaskTranslations } from '../../lib/use-translated-task-copy';
 import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
@@ -134,7 +135,7 @@ function toAttendanceShift(shift: ShiftItem) {
 const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { theme: bannerTheme, setTheme } = useBannerTheme();
   const initialSnapshot = useMemo(
     () =>
@@ -190,13 +191,14 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       setAttendanceStatus(nextStatus);
       setProfile(nextProfile);
       setShifts(nextShifts);
+      await primeTaskTranslations(nextTasks, language);
       setTasks(nextTasks);
     } catch (error) {
       setAttendanceError(error instanceof Error ? error.message : t('today.loadError'));
     } finally {
       setAttendanceLoading(false);
     }
-  }, [t]);
+  }, [language, t]);
 
   useEffect(() => {
     return subscribeScreenCache<TodayScreenCacheValue>(

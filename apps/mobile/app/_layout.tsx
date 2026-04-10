@@ -72,7 +72,8 @@ export default function RootLayout() {
     const warmUpAssets = async () => {
       try {
         await Asset.loadAsync([
-          require('../bg.webp'),
+          require('../hero.mp4'),
+          require('../hero.webm'),
           require('../timelapse-mobile.mp4'),
           require('../timelapse-poster.jpg'),
         ]);

@@ -27,7 +27,9 @@ import { getCurrentDeviceFingerprint, getCurrentDeviceName, getCurrentDevicePlat
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 import type { AppLanguage } from './i18n';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000');
+const API_REQUEST_TIMEOUT_MS = 20_000;
+const API_REQUEST_RETRY_DELAY_MS = 450;
 
 type AppSession = {
   accessToken: string;
@@ -44,6 +46,74 @@ type AppSession = {
 let cachedSession: AppSession | null = null;
 const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ''}smart-auth-session.json`;
 let unauthorizedHandler: (() => void) | null = null;
+
+function normalizeApiUrl(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function buildApiUrl(path: string) {
+  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function isNetworkError(error: unknown) {
+  return error instanceof Error && /network request failed|fetch failed|load failed/i.test(error.message);
+}
+
+function getApiConnectivityErrorMessage() {
+  return `Unable to reach the API server. Current mobile API URL: ${API_URL}`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchOnceWithTimeout(path: string, options?: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(buildApiUrl(path), {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error) || isNetworkError(error)) {
+      throw new Error(getApiConnectivityErrorMessage());
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchWithTimeout(path: string, options?: RequestInit) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetchOnceWithTimeout(path, options);
+    } catch (error) {
+      lastError = error;
+
+      if (!(isAbortError(error) || isNetworkError(error))) {
+        throw error;
+      }
+
+      if (attempt === 0) {
+        await wait(API_REQUEST_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? new Error(getApiConnectivityErrorMessage())
+    : new Error(getApiConnectivityErrorMessage());
+}
 
 async function readPersistedSession(): Promise<AppSession | null> {
   if (!FileSystem.documentDirectory) {
@@ -93,6 +163,37 @@ function handleUnauthorized() {
   unauthorizedHandler?.();
 }
 
+async function refreshSession(): Promise<AppSession | null> {
+  const session = cachedSession ?? (await readPersistedSession());
+
+  if (!session?.refreshToken) {
+    return null;
+  }
+
+  try {
+    const response = await fetchWithTimeout('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        refreshToken: session.refreshToken,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const nextSession = (await response.json()) as AppSession;
+    cachedSession = nextSession;
+    await persistSession(nextSession);
+    return nextSession;
+  } catch {
+    return null;
+  }
+}
+
 export function getCachedDemoSession() {
   return cachedSession;
 }
@@ -129,7 +230,7 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
 }
 
 async function authenticateSession(payload: { tenantSlug?: string; email: string; password: string }) {
-  const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+  const response = await fetchWithTimeout('/api/v1/auth/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -150,20 +251,36 @@ async function authenticateSession(payload: { tenantSlug?: string; email: string
   return cachedSession;
 }
 
-async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  const session = await getDemoSession();
+async function performAuthorizedRequest(path: string, accessToken: string, options?: RequestInit) {
   const headers = new Headers(options?.headers ?? {});
 
   if (!(options?.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
-  headers.set('Authorization', `Bearer ${session.accessToken}`);
+  headers.set('Authorization', `Bearer ${accessToken}`);
 
-  const response = await fetch(`${API_URL}/api/v1${path}`, {
+  return fetchWithTimeout(`/api/v1${path}`, {
     ...options,
     headers,
   });
+}
+
+async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  let session = await getDemoSession();
+  let response = await performAuthorizedRequest(path, session.accessToken, options);
+
+  if (response.status === 401) {
+    const refreshedSession = await refreshSession();
+
+    if (!refreshedSession) {
+      handleUnauthorized();
+      throw new Error('Unauthorized');
+    }
+
+    session = refreshedSession;
+    response = await performAuthorizedRequest(path, session.accessToken, options);
+  }
 
   if (response.status === 401) {
     handleUnauthorized();
@@ -310,7 +427,7 @@ export async function loadPublicInvitation(token: string): Promise<{
   lastName: string | null;
   phone: string | null;
 }> {
-  const response = await fetch(`${API_URL}/api/v1/employees/invitations/public/${encodeURIComponent(token)}`, {
+  const response = await fetchWithTimeout(`/api/v1/employees/invitations/public/${encodeURIComponent(token)}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -330,7 +447,7 @@ export async function lookupCompanyByCode(code: string): Promise<{
   tenantName: string;
   tenantSlug: string;
 }> {
-  const response = await fetch(`${API_URL}/api/v1/employees/public/join/code/lookup`, {
+  const response = await fetchWithTimeout('/api/v1/employees/public/join/code/lookup', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -359,7 +476,7 @@ export async function submitCompanyJoinRequest(payload: {
   tenantName: string;
   companyName: string;
 }> {
-  const response = await fetch(`${API_URL}/api/v1/employees/public/join/code/submit`, {
+  const response = await fetchWithTimeout('/api/v1/employees/public/join/code/submit', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -391,7 +508,7 @@ export async function registerFromInvitation(
   status: 'APPROVED' | 'PENDING_APPROVAL';
   accessGranted: boolean;
 }> {
-  const response = await fetch(`${API_URL}/api/v1/employees/invitations/public/${encodeURIComponent(token)}/register`, {
+  const response = await fetchWithTimeout(`/api/v1/employees/invitations/public/${encodeURIComponent(token)}/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -418,27 +535,18 @@ export async function loadMyAccessStatus(): Promise<{
 }
 
 export async function bootstrapDemoDevice(): Promise<void> {
-  const session = await getDemoSession();
   const deviceFingerprint = await getCurrentDeviceFingerprint();
   const deviceName = getCurrentDeviceName();
   const platform = getCurrentDevicePlatform();
 
-  const response = await fetch(`${API_URL}/api/v1/devices/register`, {
+  await authRequest<{ success?: boolean }>('/devices/register', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({
       platform,
       deviceFingerprint,
       deviceName,
     }),
   });
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to register current device.'));
-  }
 }
 
 export async function bootstrapPushNotifications(): Promise<void> {
@@ -451,7 +559,6 @@ export async function bootstrapPushNotifications(): Promise<void> {
   }
 
   const Notifications = await import('expo-notifications');
-  const session = await getDemoSession();
   const settings = await Notifications.getPermissionsAsync();
   let status = settings.status;
 
@@ -474,12 +581,8 @@ export async function bootstrapPushNotifications(): Promise<void> {
 
   const pushToken = await Notifications.getExpoPushTokenAsync({ projectId });
 
-  await fetch(`${API_URL}/api/v1/push/register`, {
+  await authRequest('/push/register', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({
       token: pushToken.data,
       platform: Platform.OS === 'ios' ? 'IOS' : 'ANDROID',
@@ -527,14 +630,9 @@ export async function submitAttendanceAction(
     isPaidBreak?: boolean;
   },
 ) {
-  const session = await getDemoSession();
   const deviceFingerprint = await getCurrentDeviceFingerprint();
-  const response = await fetch(`${API_URL}/api/v1/attendance/${action}`, {
+  return authRequest(`/attendance/${action}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({
       latitude: payload.latitude,
       longitude: payload.longitude,
@@ -545,12 +643,6 @@ export async function submitAttendanceAction(
       isPaidBreak: payload.isPaidBreak ?? false,
     }),
   });
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Attendance action failed.'));
-  }
-
-  return response.json();
 }
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {
@@ -558,21 +650,10 @@ export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {
 }
 
 export async function startBiometricEnrollment() {
-  const session = await getDemoSession();
-  const response = await fetch(`${API_URL}/api/v1/biometric/enroll/start`, {
+  return authRequest('/biometric/enroll/start', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({ consentVersion: 'v1' }),
   });
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to start biometric enrollment.'));
-  }
-
-  return response.json();
 }
 
 export async function completeBiometricEnrollment() {
@@ -583,24 +664,13 @@ export async function completeBiometricEnrollmentWithArtifacts(
   artifacts: string[],
   captureMetadata: Record<string, unknown> | null,
 ) {
-  const session = await getDemoSession();
-  const response = await fetch(`${API_URL}/api/v1/biometric/enroll/complete`, {
+  return authRequest('/biometric/enroll/complete', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({
       artifacts,
       captureMetadata,
     }),
   });
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to complete biometric enrollment.'));
-  }
-
-  return response.json();
 }
 
 export async function verifyBiometric(intent = 'attendance') {
@@ -612,25 +682,14 @@ export async function queueVerifyBiometricWithArtifacts(
   artifacts: string[],
   captureMetadata: Record<string, unknown> | null,
 ) {
-  const session = await getDemoSession();
-  const response = await fetch(`${API_URL}/api/v1/biometric/verify/async`, {
+  return authRequest('/biometric/verify/async', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.accessToken}`,
-    },
     body: JSON.stringify({
       intent,
       artifacts,
       captureMetadata,
     }),
   });
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to verify biometric identity.'));
-  }
-
-  return response.json();
 }
 
 export async function loadMyBiometricJob(jobId: string): Promise<BiometricJobItem> {

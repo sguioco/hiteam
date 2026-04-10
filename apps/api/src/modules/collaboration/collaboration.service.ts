@@ -19,6 +19,7 @@ import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { TranslationService } from "../translation/translation.service";
 import { AddTaskCommentDto } from "./dto/add-task-comment.dto";
 import { BulkRemindTasksDto } from "./dto/bulk-remind-tasks.dto";
 import { CollaborationGateway } from "./collaboration.gateway";
@@ -44,6 +45,7 @@ import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-poli
 
 const TASK_PHOTO_PROOF_LIMIT = 7;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
+const TASK_META_MARKER = "[smart-task-meta]";
 
 @Injectable()
 export class CollaborationService {
@@ -53,6 +55,7 @@ export class CollaborationService {
     private readonly notificationsService: NotificationsService,
     private readonly collaborationGateway: CollaborationGateway,
     private readonly storageService: StorageService,
+    private readonly translationService: TranslationService,
   ) {}
 
   async listGroups(userId: string) {
@@ -1464,6 +1467,8 @@ export class CollaborationService {
       },
     });
 
+    this.queueTranslationPrewarm([updated.title, updated.body]);
+
     const notifications = await this.loadAnnouncementNotifications(
       employee.tenantId,
       [announcementId],
@@ -1627,6 +1632,8 @@ export class CollaborationService {
       },
     });
 
+    this.queueTranslationPrewarm([template.title, template.body]);
+
     return template;
   }
 
@@ -1703,6 +1710,8 @@ export class CollaborationService {
         targetEmployeeId: updated.targetEmployeeId,
       },
     });
+
+    this.queueTranslationPrewarm([updated.title, updated.body]);
 
     return updated;
   }
@@ -1966,6 +1975,14 @@ export class CollaborationService {
       },
     });
 
+    this.queueTranslationPrewarm(
+      this.collectTaskTranslationTexts({
+        title: dto.title,
+        description: dto.description,
+        checklist,
+      }),
+    );
+
     for (const task of tasks) {
       if (task.assigneeEmployee?.userId) {
         await this.notificationsService.createForUser({
@@ -2069,6 +2086,14 @@ export class CollaborationService {
       },
     });
 
+    this.queueTranslationPrewarm(
+      this.collectTaskTranslationTexts({
+        title: template.title,
+        description: template.description,
+        checklist,
+      }),
+    );
+
     return template;
   }
 
@@ -2143,6 +2168,14 @@ export class CollaborationService {
         locationId: updated.locationId,
       },
     });
+
+    this.queueTranslationPrewarm(
+      this.collectTaskTranslationTexts({
+        title: updated.title,
+        description: updated.description,
+        checklist,
+      }),
+    );
 
     return updated;
   }
@@ -4140,6 +4173,8 @@ export class CollaborationService {
       },
     });
 
+    this.queueTranslationPrewarm([announcement.title, announcement.body]);
+
     return this.serializeAnnouncementWithImage(announcement);
   }
 
@@ -4286,6 +4321,66 @@ export class CollaborationService {
           .filter(Boolean),
       ),
     );
+  }
+
+  private collectTaskTranslationTexts(input: {
+    title?: string | null;
+    description?: string | null;
+    checklist?: string[] | null;
+  }) {
+    const texts = new Set<string>();
+    const title = input.title?.trim();
+    if (title) {
+      texts.add(title);
+    }
+
+    for (const checklistItem of input.checklist ?? []) {
+      const normalizedChecklistItem = checklistItem.trim();
+      if (normalizedChecklistItem) {
+        texts.add(normalizedChecklistItem);
+      }
+    }
+
+    const description = input.description?.trim() ?? "";
+    if (!description) {
+      return Array.from(texts);
+    }
+
+    const markerIndex = description.lastIndexOf(TASK_META_MARKER);
+    if (markerIndex === -1) {
+      texts.add(description);
+      return Array.from(texts);
+    }
+
+    const body = description.slice(0, markerIndex).trim();
+    if (body) {
+      texts.add(body);
+    }
+
+    const rawMeta = description.slice(markerIndex + TASK_META_MARKER.length).trim();
+    try {
+      const parsed = JSON.parse(rawMeta) as {
+        kind?: string;
+        meetingLocation?: string | null;
+      };
+
+      if (parsed.kind === "meeting") {
+        const meetingLocation = parsed.meetingLocation?.trim();
+        if (meetingLocation) {
+          texts.add(meetingLocation);
+        }
+      } else {
+        texts.add(description);
+      }
+    } catch {
+      texts.add(description);
+    }
+
+    return Array.from(texts);
+  }
+
+  private queueTranslationPrewarm(texts: Array<string | null | undefined>) {
+    void this.translationService.prewarmTranslations(texts).catch(() => undefined);
   }
 
   private async ensureDirectChatThread(
@@ -4739,6 +4834,14 @@ export class CollaborationService {
 
       return createdTasks;
     });
+
+    this.queueTranslationPrewarm(
+      this.collectTaskTranslationTexts({
+        title: template.title,
+        description: template.description,
+        checklist,
+      }),
+    );
 
     for (const task of tasks) {
       if (task.assigneeEmployee?.userId) {

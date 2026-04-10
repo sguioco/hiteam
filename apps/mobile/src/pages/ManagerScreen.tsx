@@ -24,6 +24,10 @@ import { getDateLocale, useI18n } from "../../lib/i18n";
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
 import { formatDateKeyInTimeZone } from "../../lib/timezone";
+import {
+  primeTaskTranslations,
+  useTranslatedTaskCopy,
+} from "../../lib/use-translated-task-copy";
 import { MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
 
 type ManagerEmployee = Awaited<
@@ -599,6 +603,7 @@ export default function ManagerScreen({
     Set<string>
   >(new Set());
   const businessTimeZone = profile?.primaryLocation?.timezone ?? null;
+  const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
 
   useEffect(() => {
     return subscribeScreenCache<{
@@ -711,6 +716,8 @@ export default function ManagerScreen({
           }
         }
       }
+
+      await primeTaskTranslations(nextTasks, language);
 
       setProfile(nextProfile);
       setEmployees(nextEmployees);
@@ -1208,7 +1215,9 @@ export default function ManagerScreen({
                                                 : undefined
                                             }
                                           >
-                                            {task.title}
+                                            {getTaskTitle(task, {
+                                              normalize: true,
+                                            })}
                                           </Text>
                                           {task.requiresPhoto && photoCount > 0 ? (
                                             <Text className="mt-1 text-[13px] leading-5 text-[#7b8798]">

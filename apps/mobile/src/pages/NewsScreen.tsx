@@ -30,7 +30,7 @@ import {
 import { getDateLocale, type AppLanguage, useI18n } from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
-import { useLiveTextMap } from '../../lib/use-live-text-map';
+import { primeLiveTextMap, useLiveTextMap } from '../../lib/use-live-text-map';
 import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -213,6 +213,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       const nextItems = isManager
         ? await loadManagerAnnouncements()
         : await loadMyAnnouncements();
+      await primeLiveTextMap(
+        nextItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
+        language,
+      );
       setItems(nextItems);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('announcements.loadError'));

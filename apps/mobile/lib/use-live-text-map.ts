@@ -5,7 +5,10 @@ import { readScreenCache, writeScreenCache } from './screen-cache';
 
 const translationCache = new Map<string, string>();
 const hydratedLocales = new Set<AppLanguage>();
+const hydrationPromises = new Map<AppLanguage, Promise<void>>();
 const persistedLocaleMaps = new Map<AppLanguage, Record<string, string>>();
+const translationRequestCache = new Map<string, Promise<Record<string, string>>>();
+const TRANSLATION_BATCH_SIZE = 100;
 
 function getCacheKey(locale: AppLanguage, text: string) {
   return `${locale}:${text}`;
@@ -13,6 +16,10 @@ function getCacheKey(locale: AppLanguage, text: string) {
 
 function getTranslationCacheStorageKey(locale: AppLanguage) {
   return `live-translation:${locale}`;
+}
+
+function normalizeTexts(texts: string[]) {
+  return Array.from(new Set(texts.map((text) => text.trim()).filter(Boolean)));
 }
 
 function getResolvedText(locale: AppLanguage, text: string) {
@@ -24,18 +31,29 @@ async function hydrateLocaleCache(locale: AppLanguage) {
     return;
   }
 
-  const cached =
-    await readScreenCache<Record<string, string>>(
-      getTranslationCacheStorageKey(locale),
-    );
-  const localeMap = cached?.value ?? {};
-
-  persistedLocaleMaps.set(locale, localeMap);
-  for (const [source, translated] of Object.entries(localeMap)) {
-    translationCache.set(getCacheKey(locale, source), translated || source);
+  const existingPromise = hydrationPromises.get(locale);
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  hydratedLocales.add(locale);
+  const promise = (async () => {
+    const cached =
+      await readScreenCache<Record<string, string>>(
+        getTranslationCacheStorageKey(locale),
+      );
+    const localeMap = cached?.value ?? {};
+
+    persistedLocaleMaps.set(locale, localeMap);
+    for (const [source, translated] of Object.entries(localeMap)) {
+      translationCache.set(getCacheKey(locale, source), translated || source);
+    }
+
+    hydratedLocales.add(locale);
+    hydrationPromises.delete(locale);
+  })();
+
+  hydrationPromises.set(locale, promise);
+  return promise;
 }
 
 async function persistLocaleCache(locale: AppLanguage) {
@@ -67,11 +85,68 @@ function mergeTranslations(
   void persistLocaleCache(locale);
 }
 
-export function useLiveTextMap(texts: string[], locale: AppLanguage) {
-  const uniqueTexts = useMemo(
-    () => Array.from(new Set(texts.map((text) => text.trim()).filter(Boolean))),
-    [texts],
+async function requestMissingTranslations(
+  locale: AppLanguage,
+  texts: string[],
+) {
+  const missingTexts = normalizeTexts(texts);
+  if (missingTexts.length === 0) {
+    return {};
+  }
+
+  const requestKey = `${locale}:${missingTexts.slice().sort().join('\u0001')}`;
+  const existingRequest = translationRequestCache.get(requestKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const requestPromise = Promise.all(
+    Array.from(
+      { length: Math.ceil(missingTexts.length / TRANSLATION_BATCH_SIZE) },
+      (_, index) =>
+        missingTexts.slice(
+          index * TRANSLATION_BATCH_SIZE,
+          (index + 1) * TRANSLATION_BATCH_SIZE,
+        ),
+    ).map((chunk) => translateTexts(chunk, locale)),
+  )
+    .then((responses) => Object.assign({}, ...responses))
+    .finally(() => {
+      translationRequestCache.delete(requestKey);
+    });
+
+  translationRequestCache.set(requestKey, requestPromise);
+  return requestPromise;
+}
+
+export async function primeLiveTextMap(texts: string[], locale: AppLanguage) {
+  const uniqueTexts = normalizeTexts(texts);
+  if (uniqueTexts.length === 0) {
+    return {};
+  }
+
+  await hydrateLocaleCache(locale);
+
+  const missing = uniqueTexts.filter(
+    (text) => !translationCache.has(getCacheKey(locale, text)),
   );
+
+  if (missing.length > 0) {
+    try {
+      const translations = await requestMissingTranslations(locale, missing);
+      mergeTranslations(locale, translations);
+    } catch {
+      // Keep original strings when the translation API is temporarily unavailable.
+    }
+  }
+
+  return Object.fromEntries(
+    uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
+  );
+}
+
+export function useLiveTextMap(texts: string[], locale: AppLanguage) {
+  const uniqueTexts = useMemo(() => normalizeTexts(texts), [texts]);
   const [textMap, setTextMap] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
@@ -81,63 +156,30 @@ export function useLiveTextMap(texts: string[], locale: AppLanguage) {
   useEffect(() => {
     let cancelled = false;
 
-    void hydrateLocaleCache(locale).then(() => {
-      if (cancelled) {
-        return;
-      }
-
-      setTextMap(
-        Object.fromEntries(
-          uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
-        ),
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [locale, uniqueTexts]);
-
-  useEffect(() => {
     setTextMap(
       Object.fromEntries(
         uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
       ),
     );
 
-    if (uniqueTexts.length === 0) {
-      return;
-    }
-
-    const missing = uniqueTexts.filter(
-      (text) => !translationCache.has(getCacheKey(locale, text)),
-    );
-
-    if (missing.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void translateTexts(missing, locale)
-      .then((translations) => {
+    void primeLiveTextMap(uniqueTexts, locale)
+      .then((resolved) => {
         if (cancelled) {
           return;
         }
 
-        mergeTranslations(locale, translations);
-        setTextMap(
-          Object.fromEntries(
-            uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
-          ),
-        );
+        setTextMap(resolved);
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
 
-        setTextMap((current) => current);
+        setTextMap(
+          Object.fromEntries(
+            uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
+          ),
+        );
       });
 
     return () => {
