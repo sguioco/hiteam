@@ -1,11 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, ExternalLink, Hand, Loader2, Mail, ShieldCheck, Smartphone } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, ExternalLink, Globe, Loader2, Mail, ShieldCheck, Smartphone } from "lucide-react";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "@/lib/browser-storage";
 
 type RegisterOrganizationResponse = {
   tenantId: string;
@@ -19,7 +30,104 @@ type RegisterOrganizationResponse = {
   employeeDeepLink: string;
 };
 
+type SupportedLang = "en" | "ru";
+
+const languages: { code: SupportedLang; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "ru", label: "Русский" },
+];
+
+const texts = {
+  en: {
+    pageTitle: "Hi-Team Internal Setup",
+    pageDescription:
+      "Create an organization, issue the manager setup link, and generate the company code for mobile employee onboarding.",
+    successTitle: "Organization created",
+    successBody:
+      "Send the manager setup link to the manager, and send the company code or mobile join link to employees.",
+    managerLogin: "Manager login",
+    managerTemporaryPassword: "Manager temporary password",
+    employeeCompanyCode: "Employee company code",
+    employeeMobileJoinLink: "Employee mobile join link",
+    employeeDeepLink: "Employee deep link",
+    copied: "Copied",
+    copy: "Copy",
+    createAnother: "Create another organization",
+    internalAccessKey: "Internal access key",
+    organizationName: "Organization name",
+    managerEmail: "Manager email",
+    companyCode: "Company code",
+    organizationPlaceholder: "HiTeam Beauty",
+    managerEmailPlaceholder: "manager@company.com",
+    companyCodePlaceholder: "HITEAM-HQ",
+    creating: "Creating...",
+    createOrganization: "Create organization",
+    copyFailed: "Failed to copy the value.",
+    createFailed: "Organization creation failed.",
+  },
+  ru: {
+    pageTitle: "Внутренняя настройка Hi-Team",
+    pageDescription:
+      "Создай организацию, выпусти ссылку для настройки менеджера и сгенерируй код компании для mobile onboarding сотрудников.",
+    successTitle: "Организация создана",
+    successBody:
+      "Передай ссылку менеджеру для desktop setup, а сотрудникам отправь код компании или mobile join link.",
+    managerLogin: "Вход менеджера",
+    managerTemporaryPassword: "Временный пароль менеджера",
+    employeeCompanyCode: "Код компании для сотрудников",
+    employeeMobileJoinLink: "Ссылка для входа сотрудников в mobile",
+    employeeDeepLink: "Deep link для сотрудников",
+    copied: "Скопировано",
+    copy: "Копировать",
+    createAnother: "Создать ещё одну организацию",
+    internalAccessKey: "Internal access key",
+    organizationName: "Название организации",
+    managerEmail: "Email менеджера",
+    companyCode: "Код компании",
+    organizationPlaceholder: "HiTeam Beauty",
+    managerEmailPlaceholder: "manager@company.com",
+    companyCodePlaceholder: "HITEAM-HQ",
+    creating: "Создаём...",
+    createOrganization: "Создать организацию",
+    copyFailed: "Не удалось скопировать значение.",
+    createFailed: "Не удалось создать организацию.",
+  },
+} as const;
+
+function LanguagePicker({
+  lang,
+  setLang,
+}: {
+  lang: SupportedLang;
+  setLang: (lang: SupportedLang) => void;
+}) {
+  const current = languages.find((language) => language.code === lang) ?? languages[0];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+          <Globe className="h-4 w-4" />
+          <span className="text-sm">{current.label}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center">
+        {languages.map((language) => (
+          <DropdownMenuItem
+            key={language.code}
+            className={language.code === lang ? "font-semibold" : undefined}
+            onClick={() => setLang(language.code)}
+          >
+            {language.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function InternalCreateOrganizationPage() {
+  const [lang, setLang] = useState<SupportedLang>("en");
   const [accessKey, setAccessKey] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
@@ -28,6 +136,25 @@ export default function InternalCreateOrganizationPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegisterOrganizationResponse | null>(null);
   const [copiedField, setCopiedField] = useState<"manager" | "code" | "mobile" | "deep" | null>(null);
+  const t = texts[lang];
+
+  useEffect(() => {
+    const savedLocale = readBrowserStorageItem("smart-admin-locale");
+    if (savedLocale === "ru") {
+      setLang("ru");
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+
+    if (lang === "en") {
+      removeBrowserStorageItem("smart-admin-locale");
+      return;
+    }
+
+    writeBrowserStorageItem("smart-admin-locale", lang);
+  }, [lang]);
 
   async function copyValue(value: string, field: "manager" | "code" | "mobile" | "deep") {
     try {
@@ -35,7 +162,7 @@ export default function InternalCreateOrganizationPage() {
       setCopiedField(field);
       window.setTimeout(() => setCopiedField((current) => (current === field ? null : current)), 1200);
     } catch {
-      setError("Не удалось скопировать значение.");
+      setError(t.copyFailed);
     }
   }
 
@@ -62,7 +189,7 @@ export default function InternalCreateOrganizationPage() {
       const raw = await response.text();
       const payload = (raw ? JSON.parse(raw) : {}) as RegisterOrganizationResponse & { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message || "Organization creation failed.");
+        throw new Error(payload.message || t.createFailed);
       }
 
       setResult(payload);
@@ -70,7 +197,7 @@ export default function InternalCreateOrganizationPage() {
       setManagerEmail("");
       setCompanyCode("");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Organization creation failed.");
+      setError(submitError instanceof Error ? submitError.message : t.createFailed);
     } finally {
       setLoading(false);
     }
@@ -79,19 +206,16 @@ export default function InternalCreateOrganizationPage() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="flex w-full max-w-md flex-col gap-6">
-        <div className="flex items-center justify-center gap-2.5 font-medium text-lg">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md">
-            <Hand className="size-4" />
-          </div>
-          <BrandWordmark className="text-[1.125rem]" />
+        <div className="flex justify-center">
+          <BrandWordmark className="text-[2.25rem] leading-none md:text-[2.5rem]" />
         </div>
 
         <Card className="border-border/40 shadow-lg">
           <CardHeader className="pb-3">
-          <CardTitle className="text-center text-xl font-bold">Hi-Team Internal Setup</CardTitle>
-          <CardDescription className="mt-2 text-center">
-            Create an organization, issue the manager setup link, and generate the company code for mobile employee onboarding.
-          </CardDescription>
+            <CardTitle className="text-center text-xl font-bold">{t.pageTitle}</CardTitle>
+            <CardDescription className="mt-2 text-center">
+              {t.pageDescription}
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -100,10 +224,10 @@ export default function InternalCreateOrganizationPage() {
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
                   <div className="flex items-center gap-2 font-medium">
                     <ShieldCheck className="h-4 w-4" />
-                    Организация создана
+                    {t.successTitle}
                   </div>
                   <p className="mt-2 text-emerald-800">
-                    Передай ссылку менеджеру для desktop setup, а сотрудникам отправь код компании или mobile join link.
+                    {t.successBody}
                   </p>
                 </div>
 
@@ -111,13 +235,13 @@ export default function InternalCreateOrganizationPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      Manager login
+                      {t.managerLogin}
                     </div>
                     <div className="flex gap-2">
                       <Input readOnly value={result.managerSetupUrl} />
                       <Button type="button" variant="outline" onClick={() => void copyValue(result.managerSetupUrl, "manager")}>
                         <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "manager" ? "Copied" : "Copy"}
+                        {copiedField === "manager" ? t.copied : t.copy}
                       </Button>
                       <Button type="button" variant="outline" asChild>
                         <a href={result.managerSetupUrl} target="_blank" rel="noreferrer">
@@ -129,24 +253,24 @@ export default function InternalCreateOrganizationPage() {
 
                   {result.managerTemporaryPassword ? (
                     <div className="space-y-1">
-                      <div className="text-sm font-medium">Manager temporary password</div>
+                      <div className="text-sm font-medium">{t.managerTemporaryPassword}</div>
                       <div className="flex gap-2">
                         <Input readOnly value={result.managerTemporaryPassword} />
                         <Button type="button" variant="outline" onClick={() => void copyValue(result.managerTemporaryPassword ?? "", "manager")}>
                           <Copy className="mr-2 h-4 w-4" />
-                          {copiedField === "manager" ? "Copied" : "Copy"}
+                          {copiedField === "manager" ? t.copied : t.copy}
                         </Button>
                       </div>
                     </div>
                   ) : null}
 
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">Employee company code</div>
+                    <div className="text-sm font-medium">{t.employeeCompanyCode}</div>
                     <div className="flex gap-2">
                       <Input readOnly value={result.companyCode} />
                       <Button type="button" variant="outline" onClick={() => void copyValue(result.companyCode, "code")}>
                         <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "code" ? "Copied" : "Copy"}
+                        {copiedField === "code" ? t.copied : t.copy}
                       </Button>
                     </div>
                   </div>
@@ -154,31 +278,31 @@ export default function InternalCreateOrganizationPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Smartphone className="h-4 w-4 text-muted-foreground" />
-                      Employee mobile join link
+                      {t.employeeMobileJoinLink}
                     </div>
                     <div className="flex gap-2">
                       <Input readOnly value={result.employeeJoinUrl} />
                       <Button type="button" variant="outline" onClick={() => void copyValue(result.employeeJoinUrl, "mobile")}>
                         <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "mobile" ? "Copied" : "Copy"}
+                        {copiedField === "mobile" ? t.copied : t.copy}
                       </Button>
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">Employee deep link</div>
+                    <div className="text-sm font-medium">{t.employeeDeepLink}</div>
                     <div className="flex gap-2">
                       <Input readOnly value={result.employeeDeepLink} />
                       <Button type="button" variant="outline" onClick={() => void copyValue(result.employeeDeepLink, "deep")}>
                         <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "deep" ? "Copied" : "Copy"}
+                        {copiedField === "deep" ? t.copied : t.copy}
                       </Button>
                     </div>
                   </div>
                 </div>
 
                 <Button type="button" variant="outline" onClick={() => setResult(null)}>
-                  Create another organization
+                  {t.createAnother}
                 </Button>
               </div>
             ) : (
@@ -191,7 +315,7 @@ export default function InternalCreateOrganizationPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="internal-access-key" className="text-sm font-medium">
-                    Internal access key
+                    {t.internalAccessKey}
                   </label>
                   <Input
                     id="internal-access-key"
@@ -204,20 +328,20 @@ export default function InternalCreateOrganizationPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="organization-name" className="text-sm font-medium">
-                    Organization name
+                    {t.organizationName}
                   </label>
                   <Input
                     id="organization-name"
                     required
                     value={organizationName}
                     onChange={(event) => setOrganizationName(event.target.value)}
-                    placeholder="HiTeam Beauty"
+                    placeholder={t.organizationPlaceholder}
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label htmlFor="manager-email" className="text-sm font-medium">
-                    Manager email
+                    {t.managerEmail}
                   </label>
                   <Input
                     id="manager-email"
@@ -225,20 +349,20 @@ export default function InternalCreateOrganizationPage() {
                     type="email"
                     value={managerEmail}
                     onChange={(event) => setManagerEmail(event.target.value)}
-                    placeholder="manager@company.com"
+                    placeholder={t.managerEmailPlaceholder}
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label htmlFor="company-code" className="text-sm font-medium">
-                    Company code
+                    {t.companyCode}
                   </label>
                   <Input
                     id="company-code"
                     required
                     value={companyCode}
                     onChange={(event) => setCompanyCode(event.target.value.toUpperCase())}
-                    placeholder="HITEAM-HQ"
+                    placeholder={t.companyCodePlaceholder}
                   />
                 </div>
 
@@ -248,12 +372,16 @@ export default function InternalCreateOrganizationPage() {
                   className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                 >
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {loading ? "Создаём..." : "Создать организацию"}
+                  {loading ? t.creating : t.createOrganization}
                 </Button>
               </form>
             )}
           </CardContent>
         </Card>
+
+        <div className="flex justify-center">
+          <LanguagePicker lang={lang} setLang={setLang} />
+        </div>
       </div>
     </div>
   );

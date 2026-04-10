@@ -662,9 +662,11 @@ export class EmployeesService {
       },
     });
 
-    const avatar = dto.avatarDataUrl
-      ? await this.uploadAvatar(invitation.tenantId, invitation.email, dto.avatarDataUrl)
-      : null;
+    const avatar = await this.uploadOptionalAvatar(
+      invitation.tenantId,
+      invitation.email,
+      dto.avatarDataUrl,
+    );
 
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -834,9 +836,7 @@ export class EmployeesService {
       }
     }
 
-    const avatar = dto.avatarDataUrl
-      ? await this.uploadAvatar(tenantId, invitation.email, dto.avatarDataUrl)
-      : null;
+    const avatar = await this.uploadOptionalAvatar(tenantId, invitation.email, dto.avatarDataUrl);
 
     const updatePayload = {
       firstName: dto.firstName?.trim() ?? invitation.firstName,
@@ -1443,6 +1443,18 @@ export class EmployeesService {
     return this.storageService.uploadDataUrl(storageKey, dataUrl);
   }
 
+  private async uploadOptionalAvatar(tenantId: string, email: string, dataUrl?: string | null) {
+    if (!dataUrl?.trim()) {
+      return null;
+    }
+
+    if (!this.storageService.isConfigured()) {
+      return null;
+    }
+
+    return this.uploadAvatar(tenantId, email, dataUrl);
+  }
+
   private async resolveInvitationCompanyId(tx: PrismaTx, tenantId: string, companyId: string | null | undefined) {
     if (companyId) {
       const company = await tx.company.findFirst({
@@ -1472,7 +1484,7 @@ export class EmployeesService {
       data: {
         tenantId,
         name: 'General Company',
-        code: 'GENERAL',
+        code: `GENERAL-${tenantId.slice(0, 8).toUpperCase()}`,
       },
     });
 
