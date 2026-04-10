@@ -1,0 +1,62 @@
+name: Publish Mobile OTA Update
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-ota.yml'
+      - 'apps/mobile/**'
+      - 'packages/ui/**'
+      - 'packages/types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - '.npmrc'
+
+concurrency:
+  group: hiteam-mobile-ota
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Expo token
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EXPO_TOKEN}" ]; then
+            echo "Missing GitHub secret EXPO_TOKEN"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Typecheck mobile
+        run: pnpm --filter @smart/mobile typecheck
+
+      - name: Publish production OTA update
+        working-directory: apps/mobile
+        run: pnpm dlx eas-cli@latest update --branch production --message "main:${GITHUB_SHA}" --platform all --non-interactive
