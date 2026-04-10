@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
@@ -90,42 +90,51 @@ jobs:
             ${{ env.WEB_ADMIN_IMAGE }}
             ${{ env.WEB_ADMIN_IMAGE_LATEST }}
 
-      - name: Update tracked ArgoCD values
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import os
-          import re
+      - name: Deploy new images via Argo application override
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
 
-          path = Path(".cd/values.hiteam-main.yaml")
-          text = path.read_text(encoding="utf-8")
+            kubectl -n argocd patch application hiteam-main --type merge -p '{
+              "spec": {
+                "source": {
+                  "helm": {
+                    "parameters": [
+                      {"name":"api.image","value":"${{ env.API_IMAGE }}"},
+                      {"name":"webAdmin.image","value":"${{ env.WEB_ADMIN_IMAGE }}"}
+                    ]
+                  }
+                }
+              }
+            }'
 
-          replacements = {
-              "api": os.environ["API_IMAGE"],
-              "webAdmin": os.environ["WEB_ADMIN_IMAGE"],
-          }
+            kubectl -n argocd annotate application hiteam-main argocd.argoproj.io/refresh=hard --overwrite
 
-          for section, image in replacements.items():
-              pattern = rf"(^{section}:\n(?:  .*\n)*?  image: \").*?(\")"
-              new_text, count = re.subn(pattern, rf"\1{image}\2", text, count=1, flags=re.MULTILINE)
-              if count != 1:
-                  raise SystemExit(f"Failed to update image for section {section}")
-              text = new_text
+            for attempt in $(seq 1 120); do
+              sync_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.sync.status}')"
+              health_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.health.status}')"
+              operation_phase="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.operationState.phase}')"
 
-          path.write_text(text, encoding="utf-8")
-          PY
+              echo "[argocd] attempt=${attempt} sync=${sync_status:-unknown} health=${health_status:-unknown} operation=${operation_phase:-none}"
 
-      - name: Commit image tag update for ArgoCD
-        run: |
-          set -euo pipefail
+              if [ "${operation_phase:-}" = "Failed" ] || [ "${operation_phase:-}" = "Error" ]; then
+                kubectl -n argocd get application hiteam-main -o yaml
+                exit 1
+              fi
 
-          if git diff --quiet -- .cd/values.hiteam-main.yaml; then
-            echo "No ArgoCD values changes to commit"
-            exit 0
-          fi
+              if [ "${sync_status:-}" = "Synced" ] && [ "${health_status:-}" = "Healthy" ]; then
+                exit 0
+              fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .cd/values.hiteam-main.yaml
-          git commit -m "chore: release hiteam images ${GITHUB_SHA}"
-          git push
+              sleep 5
+            done
+
+            echo "[argocd] deployment did not become Synced/Healthy in time"
+            kubectl -n argocd get application hiteam-main -o yaml
+            exit 1
