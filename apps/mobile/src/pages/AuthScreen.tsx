@@ -1396,14 +1396,17 @@ const AuthScreen = () => {
                     <Text className="text-[17px] font-semibold text-[#546cf2]">{joinProfileCopy.done}</Text>
                   </PressableScale>
                 </View>
-                <DateTimePicker
-                  display="spinner"
-                  maximumDate={new Date()}
-                  mode="date"
-                  onChange={handleJoinProfileBirthDateChange}
-                  value={parseJoinProfileBirthDate(joinProfileForm.birthDate)}
-                  textColor="#000000"
-                />
+                <View style={styles.datePickerSpinnerWrap}>
+                  <DateTimePicker
+                    display="spinner"
+                    maximumDate={new Date()}
+                    mode="date"
+                    onChange={handleJoinProfileBirthDateChange}
+                    style={styles.datePickerSpinner}
+                    value={parseJoinProfileBirthDate(joinProfileForm.birthDate)}
+                    textColor="#000000"
+                  />
+                </View>
               </Pressable>
             </Pressable>
           </Modal>
@@ -1518,6 +1521,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_500Medium',
     fontSize: 20,
     includeFontPadding: false,
+  },
+  datePickerSpinner: {
+    alignSelf: 'center',
+  },
+  datePickerSpinnerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
 });
 

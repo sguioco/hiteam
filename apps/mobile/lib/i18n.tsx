@@ -71,12 +71,12 @@ const translations = {
     'login.countryPickerTitle': 'Выберите код страны',
     'login.countryPickerSearchPlaceholder': 'Поиск по стране или коду',
     'login.identifierPlaceholder': 'Email или телефон',
-    'login.signInErrorEmpty': 'Заполните номер телефона или email и пароль.',
-    'login.signInErrorEmail': 'Введите корректный email.',
-    'login.signInPhoneHint': 'Вход по номеру подготовлен на интерфейсе. Проверка номера будет подключена на API.',
-    'login.heroSubtitle': 'Ваше рабочее пространство у вас в кармане.',
+    'login.signInErrorEmpty': 'Заполните номер телефона или email и пароль',
+    'login.signInErrorEmail': 'Введите корректный email',
+    'login.signInPhoneHint': 'Вход по номеру подготовлен на интерфейсе. Проверка номера будет подключена на API',
+    'login.heroSubtitle': 'Ваше рабочее пространство у вас в кармане',
     'login.signInTitle': 'Вход в аккаунт',
-    'login.signInBody': 'Введите email или телефон и пароль, чтобы открыть рабочее пространство.',
+    'login.signInBody': 'Введите email или телефон и пароль, чтобы открыть рабочее пространство',
     'login.needInvite': 'Нужен инвайт?',
     'login.joinTeam': 'Вступить в команду',
     'login.logIn': 'Войти',
@@ -98,14 +98,14 @@ const translations = {
     'invite.label': 'Код приглашения',
     'invite.placeholder': 'Например, TEAM-4821',
     'invite.joinWithCodeTitle': 'Вступить по коду',
-    'invite.joinWithCodeBody': 'Введите код, который вам отправил администратор, и мы откроем регистрацию в команду.',
+    'invite.joinWithCodeBody': 'Введите код, который вам отправил администратор, и мы откроем регистрацию в команду',
     'invite.joinButton': 'Вступить',
     'invite.continue': 'Далее',
-    'invite.errorEmpty': 'Введите код приглашения.',
+    'invite.errorEmpty': 'Введите код приглашения',
     'invite.invalidCode': 'Недействительный код приглашения',
     'invite.verificationFailed': 'Ошибка проверки кода',
     'invite.invitationFoundTitle': 'Приглашение найдено',
-    'invite.invitationFoundBody': 'Компания: {companyName}. Перейдите по ссылке из письма для регистрации.',
+    'invite.invitationFoundBody': 'Компания: {companyName}. Перейдите по ссылке из письма для регистрации',
 
     'joinProfile.loading': 'Проверяем код компании...',
     'joinProfile.unavailableTitle': 'Код компании недоступен',
@@ -131,7 +131,7 @@ const translations = {
     'joinProfile.invalidEmail': 'Укажите корректный email.',
     'joinProfile.invalidBirthDate': 'Дата рождения должна быть в формате ГГГГ-ММ-ДД.',
     'joinProfile.successTitle': 'Информация отправлена',
-    'joinProfile.successBody': 'Заявка передана менеджеру. После подтверждения профиля мы отправим вам письмо с продолжением входа.',
+    'joinProfile.successBody': 'Заявка передана менеджеру. После подтверждения профиля мы отправим вам письмо с продолжением входа',
     'joinProfile.successCompany': 'Компания: {companyName}',
     'joinProfile.successCode': 'Код: {companyCode}',
     'joinProfile.successBodyLineOne': 'Ваша анкета отправлена менеджеру {companyName}',
@@ -143,7 +143,7 @@ const translations = {
 
     'profile.title': 'Профиль',
     'profile.signOutTitle': 'Выйти?',
-    'profile.signOutBody': 'Вы будете перенаправлены на экран входа.',
+    'profile.signOutBody': 'Вы будете перенаправлены на экран входа',
     'profile.signOut': 'Выйти',
     'profile.cancel': 'Отмена',
     'profile.roles': 'Роли',
@@ -157,7 +157,7 @@ const translations = {
     'workspace.attendanceLoadingTitle': 'Подготавливаем рабочий экран',
     'workspace.attendanceAssignedTitle': 'Вы назначены на {locationName}',
     'workspace.attendanceLoadingSubtitle': 'Загружаем статус посещаемости...',
-    'workspace.attendanceUnavailableSubtitle': 'Attendance заработает после запуска API и базы данных.',
+    'workspace.attendanceUnavailableSubtitle': 'Attendance заработает после запуска API и базы данных',
     'workspace.checkIn': 'Say Hi',
     'workspace.checkOut': 'Say Goodbye',
     'workspace.startBreak': 'Начать перерыв',
@@ -167,7 +167,7 @@ const translations = {
     'workspace.inboxTitle': 'Рабочая лента',
     'workspace.itemsNeedAttention': 'Требуют внимания',
     'workspace.unreadChats': 'Непрочитанные чаты',
-    'workspace.inboxSummary': 'Открытых задач: {pendingTasks}. Закреплённых объявлений: {pinnedAnnouncements}.',
+    'workspace.inboxSummary': 'Открытых задач: {pendingTasks}. Закреплённых объявлений: {pinnedAnnouncements}',
     'workspace.openInbox': 'Открыть входящие',
     'workspace.leaveEyebrow': 'Отпуск',
     'workspace.leaveTitle': 'Баланс выходных',
@@ -1756,7 +1756,10 @@ export function I18nProvider({
     }
 
     if (didDirectionChange) {
-      await applyLanguageLayoutDirection(next, { reloadOnChange: true });
+      const layout = await applyLanguageLayoutDirection(next, { reloadOnChange: true });
+      if (!layout.didChange) {
+        setLanguageState(next);
+      }
       return;
     }
 

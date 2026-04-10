@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsDateString, IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { PublicCompanyCodeDto } from './public-company-code.dto';
 
 export class PublicCompanyJoinDto extends PublicCompanyCodeDto {
@@ -20,7 +20,7 @@ export class PublicCompanyJoinDto extends PublicCompanyCodeDto {
   @IsDateString()
   birthDate!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  avatarDataUrl!: string;
+  avatarDataUrl?: string;
 }

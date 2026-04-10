@@ -350,95 +350,112 @@ export class EmployeesService {
       throw new ConflictException('Такой email уже зарегистрирован в компании.');
     }
 
-    const avatar = await this.uploadAvatar(company.tenantId, email, dto.avatarDataUrl);
+    let avatar: Awaited<ReturnType<typeof this.uploadOptionalAvatar>> = null;
+
+    try {
+      avatar = await this.uploadOptionalAvatar(company.tenantId, email, dto.avatarDataUrl);
+    } catch (error) {
+      this.logger.warn(
+        `submitJoinRequestByCompanyCode avatar upload failed for ${email} in tenant ${company.tenantId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
 
     const inviterUserId = await this.ensureSystemInviter(company.tenantId);
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
-    const invitation = await this.prisma.employeeInvitation.upsert({
-      where: {
-        tenantId_email: {
-          tenantId: company.tenantId,
-          email,
+    try {
+      const invitation = await this.prisma.employeeInvitation.upsert({
+        where: {
+          tenantId_email: {
+            tenantId: company.tenantId,
+            email,
+          },
         },
-      },
-      create: {
-        tenantId: company.tenantId,
-        companyId: company.id,
-        email,
-        invitedByUserId: inviterUserId,
-        tokenHash: this.hashToken(token),
-        expiresAt,
-        status: EmployeeInvitationStatus.PENDING_APPROVAL,
-        submittedAt: new Date(),
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        birthDate: new Date(dto.birthDate),
-        phone: dto.phone.trim(),
-        avatarStorageKey: avatar.key,
-        avatarUrl: avatar.url,
-      },
-      update: {
-        companyId: company.id,
-        invitedByUserId: inviterUserId,
-        tokenHash: this.hashToken(token),
-        expiresAt,
-        status: EmployeeInvitationStatus.PENDING_APPROVAL,
-        submittedAt: new Date(),
-        approvedAt: null,
-        approvedByUserId: null,
-        rejectedAt: null,
-        rejectedReason: null,
-        userId: null,
-        employeeId: null,
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        middleName: null,
-        birthDate: new Date(dto.birthDate),
-        gender: null,
-        phone: dto.phone.trim(),
-        avatarStorageKey: avatar.key,
-        avatarUrl: avatar.url,
-      },
-    });
-
-    const recipients = await this.listApprovalRecipientIds(company.tenantId);
-    await Promise.all(
-      recipients.map((userId) =>
-        this.notificationsService.createForUser({
+        create: {
           tenantId: company.tenantId,
-          userId,
-          type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
-          title: 'Новая заявка на присоединение по коду компании',
-          body: `${dto.firstName.trim()} ${dto.lastName.trim()} отправил(а) заявку для ${company.name}.`,
-          actionUrl: '/app/employees',
-          metadata: { invitationId: invitation.id, email, companyCode: company.code },
-        }),
-      ),
-    );
+          companyId: company.id,
+          email,
+          invitedByUserId: inviterUserId,
+          tokenHash: this.hashToken(token),
+          expiresAt,
+          status: EmployeeInvitationStatus.PENDING_APPROVAL,
+          submittedAt: new Date(),
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          birthDate: new Date(dto.birthDate),
+          phone: dto.phone.trim(),
+          avatarStorageKey: avatar?.key ?? null,
+          avatarUrl: avatar?.url ?? null,
+        },
+        update: {
+          companyId: company.id,
+          invitedByUserId: inviterUserId,
+          tokenHash: this.hashToken(token),
+          expiresAt,
+          status: EmployeeInvitationStatus.PENDING_APPROVAL,
+          submittedAt: new Date(),
+          approvedAt: null,
+          approvedByUserId: null,
+          rejectedAt: null,
+          rejectedReason: null,
+          userId: null,
+          employeeId: null,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          middleName: null,
+          birthDate: new Date(dto.birthDate),
+          gender: null,
+          phone: dto.phone.trim(),
+          avatarStorageKey: avatar?.key ?? null,
+          avatarUrl: avatar?.url ?? null,
+        },
+      });
 
-    await this.auditService.log({
-      tenantId: company.tenantId,
-      actorUserId: inviterUserId,
-      entityType: 'employee_invitation',
-      entityId: invitation.id,
-      action: 'employee.public_join_requested',
-      metadata: {
-        email,
-        companyCode: company.code,
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        birthDate: dto.birthDate,
-      },
-    });
+      const recipients = await this.listApprovalRecipientIds(company.tenantId);
+      await Promise.all(
+        recipients.map((userId) =>
+          this.notificationsService.createForUser({
+            tenantId: company.tenantId,
+            userId,
+            type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
+            title: 'Новая заявка на присоединение по коду компании',
+            body: `${dto.firstName.trim()} ${dto.lastName.trim()} отправил(а) заявку для ${company.name}.`,
+            actionUrl: '/app/employees',
+            metadata: { invitationId: invitation.id, email, companyCode: company.code },
+          }),
+        ),
+      );
 
-    return {
-      id: invitation.id,
-      status: invitation.status,
-      tenantName: company.tenant.name,
-      companyName: company.name,
-    };
+      await this.auditService.log({
+        tenantId: company.tenantId,
+        actorUserId: inviterUserId,
+        entityType: 'employee_invitation',
+        entityId: invitation.id,
+        action: 'employee.public_join_requested',
+        metadata: {
+          email,
+          companyCode: company.code,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          birthDate: dto.birthDate,
+        },
+      });
+
+      return {
+        id: invitation.id,
+        status: invitation.status,
+        tenantName: company.tenant.name,
+        companyName: company.name,
+      };
+    } catch (error) {
+      this.logger.error(
+        `submitJoinRequestByCompanyCode failed for ${email} in tenant ${company.tenantId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Не удалось отправить заявку на вступление.');
+    }
   }
 
   async createInvitation(tenantId: string, actorUserId: string, dto: CreateEmployeeInvitationDto) {

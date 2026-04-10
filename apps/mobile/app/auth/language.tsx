@@ -18,12 +18,8 @@ export default function LanguageScreen() {
   const directionalIconStyle = getDirectionalIconStyle(language);
 
   async function handleSelectLanguage(nextLanguage: AppLanguage) {
-    const keepsDirection = isRTLLanguage(nextLanguage) === isRTLLanguage(language);
     await setLanguage(nextLanguage);
-
-    if (keepsDirection) {
-      router.back();
-    }
+    router.back();
   }
 
   return (
