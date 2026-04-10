@@ -569,11 +569,11 @@ export default function ManagerJoinPageClient({
             <section className="border-b border-border/30 bg-transparent p-6 lg:border-b-0 lg:border-r lg:border-r-border/30">
               <div className="mx-auto flex h-full max-w-[360px] flex-col justify-between gap-6">
                 <div className="space-y-4">
-                  <div>
-                    <h1 className="text-center text-2xl font-bold lg:text-left">
+                  <div className="text-center">
+                    <h1 className="text-[2rem] font-light tracking-[-0.04em] text-foreground">
                       {locale === "ru" ? "Настройка организации" : "Organization setup"}
                     </h1>
-                    <p className="mt-3 text-center text-sm leading-6 text-muted-foreground lg:text-left">
+                    <p className="mx-auto mt-3 max-w-[420px] text-sm leading-6 text-muted-foreground">
                       {locale === "ru"
                         ? "Сначала создайте профиль менеджера. Сразу после этого вы попадёте в настройки организации, где зададите название, логотип, адрес, точку на карте и радиус."
                         : "First create the manager profile. Right after that you will land in organization settings, where you can set the name, logo, address, map point, and radius."}

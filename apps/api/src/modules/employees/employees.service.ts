@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -32,6 +34,8 @@ type PrismaTx = Prisma.TransactionClient | PrismaService;
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -668,88 +672,99 @@ export class EmployeesService {
       dto.avatarDataUrl,
     );
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          tenantId: invitation.tenantId,
-          email: invitation.email,
-          passwordHash,
-          status: UserStatus.ACTIVE,
-          workspaceAccessAllowed: shouldAutoApprove,
-        },
+    let result: { user: { id: string }; invitation: { id: string } };
+
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            tenantId: invitation.tenantId,
+            email: invitation.email,
+            passwordHash,
+            status: UserStatus.ACTIVE,
+            workspaceAccessAllowed: shouldAutoApprove,
+          },
+        });
+
+        await tx.userRole.create({
+          data: {
+            userId: user.id,
+            roleId: assignedRole.id,
+            scopeType: 'tenant',
+            scopeId: invitation.tenantId,
+          },
+        });
+
+        const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
+        const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
+        const approvedShiftTemplate = invitation.approvedShiftTemplateId
+          ? await tx.shiftTemplate.findFirst({
+              where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
+            })
+          : null;
+        const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
+        const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, invitation.tenantId);
+
+        const employee = await tx.employee.create({
+          data: {
+            tenantId: invitation.tenantId,
+            userId: user.id,
+            companyId,
+            departmentId,
+            primaryLocationId,
+            positionId,
+            employeeNumber: await this.generateEmployeeNumber(tx, invitation.tenantId),
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            middleName: dto.middleName?.trim() || null,
+            birthDate: new Date(dto.birthDate),
+            gender: dto.gender,
+            phone: dto.phone.trim(),
+            avatarStorageKey: avatar?.key ?? null,
+            avatarUrl: avatar?.url ?? null,
+            status: shouldAutoApprove ? EmployeeStatus.ACTIVE : EmployeeStatus.INACTIVE,
+            hireDate: new Date(),
+          },
+        });
+
+        if (invitation.approvedGroupId) {
+          await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
+        }
+
+        if (invitation.approvedShiftTemplateId) {
+          await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
+        }
+
+        const updatedInvitation = await tx.employeeInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            userId: user.id,
+            employeeId: employee.id,
+            status: shouldAutoApprove ? EmployeeInvitationStatus.APPROVED : EmployeeInvitationStatus.PENDING_APPROVAL,
+            submittedAt: new Date(),
+            approvedAt: shouldAutoApprove ? invitation.approvedAt ?? new Date() : null,
+            approvedByUserId: shouldAutoApprove ? invitation.approvedByUserId ?? null : null,
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            middleName: dto.middleName?.trim() || null,
+            birthDate: new Date(dto.birthDate),
+            gender: dto.gender,
+            phone: dto.phone.trim(),
+            avatarStorageKey: avatar?.key ?? null,
+            avatarUrl: avatar?.url ?? null,
+          },
+        });
+
+        return { user, invitation: updatedInvitation };
       });
+    } catch (error) {
+      this.logger.error(
+        `registerFromInvitation failed for invitation ${invitation.id} in tenant ${invitation.tenantId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
 
-      await tx.userRole.create({
-        data: {
-          userId: user.id,
-          roleId: assignedRole.id,
-          scopeType: 'tenant',
-          scopeId: invitation.tenantId,
-        },
-      });
-
-      const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
-      const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
-      const approvedShiftTemplate = invitation.approvedShiftTemplateId
-        ? await tx.shiftTemplate.findFirst({
-            where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
-          })
-        : null;
-      const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
-      const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, invitation.tenantId);
-
-      const employee = await tx.employee.create({
-        data: {
-          tenantId: invitation.tenantId,
-          userId: user.id,
-          companyId,
-          departmentId,
-          primaryLocationId,
-          positionId,
-          employeeNumber: await this.generateEmployeeNumber(tx, invitation.tenantId),
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          middleName: dto.middleName?.trim() || null,
-          birthDate: new Date(dto.birthDate),
-          gender: dto.gender,
-          phone: dto.phone.trim(),
-          avatarStorageKey: avatar?.key ?? null,
-          avatarUrl: avatar?.url ?? null,
-          status: shouldAutoApprove ? EmployeeStatus.ACTIVE : EmployeeStatus.INACTIVE,
-          hireDate: new Date(),
-        },
-      });
-
-      if (invitation.approvedGroupId) {
-        await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
-      }
-
-      if (invitation.approvedShiftTemplateId) {
-        await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
-      }
-
-      const updatedInvitation = await tx.employeeInvitation.update({
-        where: { id: invitation.id },
-        data: {
-          userId: user.id,
-          employeeId: employee.id,
-          status: shouldAutoApprove ? EmployeeInvitationStatus.APPROVED : EmployeeInvitationStatus.PENDING_APPROVAL,
-          submittedAt: new Date(),
-          approvedAt: shouldAutoApprove ? invitation.approvedAt ?? new Date() : null,
-          approvedByUserId: shouldAutoApprove ? invitation.approvedByUserId ?? null : null,
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          middleName: dto.middleName?.trim() || null,
-          birthDate: new Date(dto.birthDate),
-          gender: dto.gender,
-          phone: dto.phone.trim(),
-          avatarStorageKey: avatar?.key ?? null,
-          avatarUrl: avatar?.url ?? null,
-        },
-      });
-
-      return { user, invitation: updatedInvitation };
-    });
+      throw new InternalServerErrorException('Failed to create the manager profile.');
+    }
 
     if (!shouldAutoApprove) {
       await this.notificationsService.createForUser({
