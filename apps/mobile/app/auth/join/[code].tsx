@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Text } from '../../../components/ui/text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +9,7 @@ import { Card } from '../../../components/ui/card';
 import { PressableScale } from '../../../components/ui/pressable-scale';
 import { hapticError, hapticSelection, hapticSuccess } from '../../../lib/haptics';
 import { lookupCompanyByCode, submitCompanyJoinRequest } from '../../../lib/api';
-import { useI18n } from '../../../lib/i18n';
+import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../../lib/i18n';
 
 type CompanyPayload = Awaited<ReturnType<typeof lookupCompanyByCode>>;
 
@@ -25,7 +26,9 @@ type JoinForm = {
 export default function CompanyJoinScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
+  const textDirectionStyle = getTextDirectionStyle(language);
   const code = Array.isArray(params.code) ? params.code[0] : params.code ?? '';
   const [company, setCompany] = useState<CompanyPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -372,7 +375,7 @@ export default function CompanyJoinScreen() {
             router.back();
           }}
         >
-          <Text className="text-[34px] leading-[34px] text-[#26334a]">‹</Text>
+          <Text className="text-[34px] leading-[34px] text-[#26334a]" style={directionalIconStyle}>‹</Text>
         </Pressable>
 
         <View className="gap-3">
@@ -394,7 +397,7 @@ export default function CompanyJoinScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
             placeholder={`${copy.firstName}*`}
             placeholderTextColor="#8a92ab"
-            style={inputStyle}
+            style={[textDirectionStyle, inputStyle]}
             value={form.firstName}
           />
           <Text style={fieldLabelStyle}>{copy.lastName}*</Text>
@@ -403,7 +406,7 @@ export default function CompanyJoinScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
             placeholder={`${copy.lastName}*`}
             placeholderTextColor="#8a92ab"
-            style={inputStyle}
+            style={[textDirectionStyle, inputStyle]}
             value={form.lastName}
           />
           <Text style={fieldLabelStyle}>{copy.email}*</Text>
@@ -414,7 +417,7 @@ export default function CompanyJoinScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, email: value }))}
             placeholder={`${copy.email}*`}
             placeholderTextColor="#8a92ab"
-            style={inputStyle}
+            style={[textDirectionStyle, inputStyle]}
             value={form.email}
           />
           <Text style={fieldLabelStyle}>{copy.phone}*</Text>
@@ -424,7 +427,7 @@ export default function CompanyJoinScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
             placeholder={`${copy.phone}*`}
             placeholderTextColor="#8a92ab"
-            style={inputStyle}
+            style={[textDirectionStyle, inputStyle]}
             value={form.phone}
           />
           <Text style={fieldLabelStyle}>{copy.birthDate}*</Text>
@@ -433,7 +436,7 @@ export default function CompanyJoinScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
             placeholder={`${copy.birthDateHint}*`}
             placeholderTextColor="#8a92ab"
-            style={inputStyle}
+            style={[textDirectionStyle, inputStyle]}
             value={form.birthDate}
           />
 
@@ -474,3 +477,4 @@ export default function CompanyJoinScreen() {
     </SafeAreaView>
   );
 }
+

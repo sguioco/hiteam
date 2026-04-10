@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Linking, Text, View } from 'react-native';
+import { Linking, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
 import type { TaskItem } from '@smart/types';
 import { PressableScale } from '../../components/ui/pressable-scale';
@@ -73,14 +74,15 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
               : taskTimeLabel(task);
             const durationLabel = formatDuration(meta.meeting?.scheduledAt, meta.meeting?.endAt);
             const secondary =
-              getTaskMeetingLocation(task) ||
+              getTaskMeetingLocation(task, { hideSourceBeforeReady: true }) ||
               meta.meeting?.meetingLink ||
-              getTaskBody(task) ||
-              t('calendar.statusMeeting');
+              getTaskBody(task, { hideSourceBeforeReady: true }) ||
+              '';
             const isOnlineMeeting = meta.meeting?.meetingMode === 'online' && Boolean(meta.meeting?.meetingLink);
             const normalizedTitle = getTaskTitle(task, {
               normalize: true,
               stripMeetingPrefix: true,
+              hideSourceBeforeReady: true,
             });
 
             return (
@@ -106,12 +108,20 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
                     <Ionicons color="#6d73ff" name="videocam-outline" size={20} />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-[16px] text-foreground" style={meetingTitleStyle}>
-                      {normalizedTitle}
-                    </Text>
-                    <Text className="mt-1 font-body text-xs text-muted-foreground" numberOfLines={2}>
-                      {secondary}
-                    </Text>
+                    {normalizedTitle ? (
+                      <Text className="text-[16px] text-foreground" style={meetingTitleStyle}>
+                        {normalizedTitle}
+                      </Text>
+                    ) : (
+                      <View className="mt-1 h-4 w-[62%] rounded-full bg-[#e2eaf6]" />
+                    )}
+                    {secondary ? (
+                      <Text className="mt-1 font-body text-xs text-muted-foreground" numberOfLines={2}>
+                        {secondary}
+                      </Text>
+                    ) : (
+                      <View className="mt-2 h-3 w-[48%] rounded-full bg-[#edf3fb]" />
+                    )}
                     {timeLabel ? (
                       <View className="mt-1 flex-row items-center gap-1.5">
                         <Ionicons color="#6b7a90" name="time-outline" size={12} />
@@ -135,3 +145,4 @@ export default function MeetingsList({ loading = false, tasks }: MeetingsListPro
     </View>
   );
 }
+

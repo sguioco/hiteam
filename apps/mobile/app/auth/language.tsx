@@ -1,17 +1,29 @@
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { Screen } from '../../components/ui/screen';
-import { languageOptions, type AppLanguage, useI18n } from '../../lib/i18n';
+import {
+  getDirectionalIconStyle,
+  isRTLLanguage,
+  languageOptions,
+  type AppLanguage,
+  useI18n,
+} from '../../lib/i18n';
 
 export default function LanguageScreen() {
   const router = useRouter();
   const { language, setLanguage, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
 
-  function handleSelectLanguage(nextLanguage: AppLanguage) {
-    setLanguage(nextLanguage);
-    router.back();
+  async function handleSelectLanguage(nextLanguage: AppLanguage) {
+    const keepsDirection = isRTLLanguage(nextLanguage) === isRTLLanguage(language);
+    await setLanguage(nextLanguage);
+
+    if (keepsDirection) {
+      router.back();
+    }
   }
 
   return (
@@ -23,7 +35,7 @@ export default function LanguageScreen() {
           className="h-10 w-10 items-center justify-center"
           onPress={() => router.back()}
         >
-          <Ionicons color="#24314b" name="chevron-back" size={20} />
+          <Ionicons color="#24314b" name="chevron-back" size={20} style={directionalIconStyle} />
         </Pressable>
 
         <Text className="flex-1 pr-10 text-center text-[26px] font-extrabold tracking-[-0.5px] text-[#24314b]">
@@ -31,21 +43,26 @@ export default function LanguageScreen() {
         </Text>
       </View>
 
-      <View className="gap-3">
-        {languageOptions.map((option) => {
+      <View className="border-t border-[#d6ddeb]">
+        {languageOptions.map((option, index) => {
           const isActive = option.value === language;
+          const showSeparator = index < languageOptions.length - 1;
 
           return (
             <Pressable
               key={option.value}
-              className={`min-h-[88px] flex-row items-center justify-between rounded-[22px] border bg-white px-5 ${
-                isActive ? 'border-[#546cf2]' : 'border-[#dfe3ee]'
+              className={`min-h-[76px] flex-row items-center justify-between px-1 py-4 ${
+                showSeparator ? 'border-b border-[#d6ddeb]' : ''
               }`}
-              onPress={() => handleSelectLanguage(option.value)}
+              onPress={() => {
+                void handleSelectLanguage(option.value);
+              }}
             >
               <View className="flex-row items-center gap-4">
                 <Text className="text-[24px]">{option.flag}</Text>
-                <Text className="text-[18px] font-semibold text-[#24314b]">{option.label}</Text>
+                <Text className={`text-[18px] font-semibold ${isActive ? 'text-[#24314b]' : 'text-[#4e5a71]'}`}>
+                  {option.label}
+                </Text>
               </View>
               {isActive ? (
                 <Ionicons color="#3f5ae0" name="checkmark-sharp" size={20} />
@@ -57,3 +74,4 @@ export default function LanguageScreen() {
     </Screen>
   );
 }
+

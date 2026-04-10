@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { normalizeBannerTheme, useBannerTheme } from '../../lib/banner-theme';
-import { useI18n } from '../../lib/i18n';
+import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
@@ -136,6 +137,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
   const { theme: bannerTheme, setTheme } = useBannerTheme();
   const initialSnapshot = useMemo(
     () =>
@@ -208,6 +210,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
           return;
         }
 
+        void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
         setAttendanceStatus(entry.value.attendanceStatus);
         setProfile(entry.value.profile);
         setShifts(entry.value.shifts);
@@ -215,7 +218,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         setAttendanceLoading(false);
       },
     );
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,6 +230,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       );
 
       if (cached && !cancelled) {
+        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
         setAttendanceStatus(cached.value.attendanceStatus);
         setProfile(cached.value.profile);
         setShifts(cached.value.shifts);
@@ -477,7 +481,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
                   <Text className="flex-1 font-body text-sm text-foreground">
                     {t('today.overdueBanner', { count: overdueCount })}
                   </Text>
-                  <Ionicons color="#f59e0b" name="chevron-forward" size={16} />
+                  <Ionicons color="#f59e0b" name="chevron-forward" size={16} style={directionalIconStyle} />
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -500,3 +504,4 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 };
 
 export default TodayScreen;
+

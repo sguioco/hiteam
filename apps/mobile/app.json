@@ -33,7 +33,8 @@
         {
           "locationWhenInUsePermission": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "androidNavigationBar": {
       "backgroundColor": "#ffffff",
@@ -43,6 +44,7 @@
       "typedRoutes": true
     },
     "extra": {
+      "supportsRTL": true,
       "router": {},
       "eas": {
         "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"

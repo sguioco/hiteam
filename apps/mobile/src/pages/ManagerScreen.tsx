@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -20,7 +21,7 @@ import {
   loadManagerTasks,
   loadMyProfile,
 } from "../../lib/api";
-import { getDateLocale, useI18n } from "../../lib/i18n";
+import { getDateLocale, getDirectionalIconStyle, useI18n } from "../../lib/i18n";
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
 import { formatDateKeyInTimeZone } from "../../lib/timezone";
@@ -568,6 +569,7 @@ export default function ManagerScreen({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
   const newsActionTitle = language === "ru" ? "Новости" : "News";
   const newsActionHint =
@@ -616,6 +618,7 @@ export default function ManagerScreen({
         return;
       }
 
+      void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
       setProfile(entry.value.profile ?? null);
       setEmployees(entry.value.employees);
       setLiveSessions(entry.value.liveSessions);
@@ -623,7 +626,7 @@ export default function ManagerScreen({
       setFailedAvatarEmployeeIds(new Set());
       setLoading(false);
     });
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     async function loadData() {
@@ -635,6 +638,7 @@ export default function ManagerScreen({
       }>(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS);
 
       if (cached) {
+        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
         setProfile(cached.value.profile ?? null);
         setEmployees(cached.value.employees);
         setLiveSessions(cached.value.liveSessions);
@@ -735,7 +739,7 @@ export default function ManagerScreen({
     }
 
     void loadData();
-  }, []);
+  }, [language]);
 
   const liveSessionByEmployeeId = useMemo(
     () =>
@@ -1044,7 +1048,7 @@ export default function ManagerScreen({
                     haptic="selection"
                     onPress={() => router.back()}
                   >
-                    <Ionicons color="#1f2937" name="arrow-back" size={20} />
+                    <Ionicons color="#1f2937" name="arrow-back" size={20} style={directionalIconStyle} />
                   </PressableScale>
                 ) : null}
                 <View>
@@ -1201,24 +1205,30 @@ export default function ManagerScreen({
                                       locale,
                                     ).length;
                                     const canOpenPhotos = photoCount > 0;
+                                    const title = getTaskTitle(task, {
+                                      normalize: true,
+                                      hideSourceBeforeReady: true,
+                                    });
                                     const rowContent = (
                                       <View className="flex-row items-start gap-3 px-1 py-2">
                                         <View className="w-6 items-center pt-0.5">
                                           {renderTaskLeading(task, photoCount)}
                                         </View>
                                         <View className="flex-1">
-                                          <Text
-                                            className={`text-[16px] leading-6 ${isDone ? "line-through" : "text-foreground"}`}
-                                            style={
-                                              isDone
-                                                ? { color: "#22c55e" }
-                                                : undefined
-                                            }
-                                          >
-                                            {getTaskTitle(task, {
-                                              normalize: true,
-                                            })}
-                                          </Text>
+                                          {title ? (
+                                            <Text
+                                              className={`text-[16px] leading-6 ${isDone ? "line-through" : "text-foreground"}`}
+                                              style={
+                                                isDone
+                                                  ? { color: "#22c55e" }
+                                                  : undefined
+                                              }
+                                            >
+                                              {title}
+                                            </Text>
+                                          ) : (
+                                            <View className="mt-1 h-4 w-[64%] rounded-full bg-[#e2eaf6]" />
+                                          )}
                                           {task.requiresPhoto && photoCount > 0 ? (
                                             <Text className="mt-1 text-[13px] leading-5 text-[#7b8798]">
                                               {t("today.photosSaved", {
@@ -1463,3 +1473,4 @@ export default function ManagerScreen({
     </>
   );
 }
+

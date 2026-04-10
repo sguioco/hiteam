@@ -6,24 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import {
-  ActivityIndicator,
-  Alert,
-  AppState,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableWithoutFeedback,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, {
   Easing,
   Extrapolation,
@@ -41,7 +25,7 @@ import {
   lookupCompanyByCode,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
-import { useI18n } from '../../lib/i18n';
+import { getTextDirectionStyle, useI18n } from '../../lib/i18n';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { getPreciseLocationAccessStatus } from '../../lib/location';
 import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
@@ -135,6 +119,7 @@ const AuthScreen = () => {
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
+  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const [mode, setMode] = useState<AuthMode>('landing');
   const [inviteCode, setInviteCode] = useState('');
   const [identifier, setIdentifier] = useState('');
@@ -720,6 +705,7 @@ const AuthScreen = () => {
       const workspaceWarmupPromise = warmWorkspaceCachesWithinBudget(
         session.user.roleCodes,
         2200,
+        { language },
       ).catch(() => undefined);
 
       const [biometricPolicyResult, locationAccessStatusResult] =
@@ -1032,7 +1018,7 @@ const AuthScreen = () => {
                                 ref={joinProfileFirstNameInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={joinProfileInputStyle}
+                                style={[textDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.firstName}
                               />
@@ -1054,7 +1040,7 @@ const AuthScreen = () => {
                                 ref={joinProfileLastNameInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={joinProfileInputStyle}
+                                style={[textDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.lastName}
                               />
@@ -1076,7 +1062,7 @@ const AuthScreen = () => {
                                 ref={joinProfileEmailInputRef}
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
-                                style={joinProfileInputStyle}
+                                style={[textDirectionStyle, joinProfileInputStyle]}
                                 textAlign="center"
                                 value={joinProfileForm.email}
                               />
@@ -1111,7 +1097,7 @@ const AuthScreen = () => {
                                   ref={joinProfilePhoneInputRef}
                                   selectionColor="#26334a"
                                   showSoftInputOnFocus
-                                  style={joinProfileInputStyle}
+                                  style={[textDirectionStyle, joinProfileInputStyle]}
                                   textAlign="center"
                                   value={joinProfileForm.phone}
                                 />
@@ -1203,6 +1189,7 @@ const AuthScreen = () => {
                               returnKeyType="go"
                               selectionColor="#26334a"
                               showSoftInputOnFocus
+                              style={textDirectionStyle}
                               textAlign="center"
                               value={inviteCode}
                             />
@@ -1224,6 +1211,7 @@ const AuthScreen = () => {
                                 returnKeyType="next"
                                 selectionColor="#26334a"
                                 showSoftInputOnFocus
+                                style={textDirectionStyle}
                                 textAlign="center"
                                 value={identifier}
                               />
@@ -1243,6 +1231,7 @@ const AuthScreen = () => {
                                   secureTextEntry={!passwordVisible}
                                   selectionColor="#26334a"
                                   showSoftInputOnFocus
+                                  style={textDirectionStyle}
                                   textAlign="center"
                                   value={password}
                                 />
@@ -1521,3 +1510,4 @@ const styles = StyleSheet.create({
 });
 
 export default AuthScreen;
+

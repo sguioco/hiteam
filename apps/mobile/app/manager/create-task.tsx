@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +8,12 @@ import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { createManagerTask, createManagerTaskTemplate, loadManagerEmployees } from '../../lib/api';
 import { hapticSelection } from '../../lib/haptics';
-import { getDateLocale, useI18n } from '../../lib/i18n';
+import {
+  getDateLocale,
+  getDirectionalIconStyle,
+  getTextDirectionStyle,
+  useI18n,
+} from '../../lib/i18n';
 import {
   buildDepartmentFallbackGroups,
   type EmployeeOption,
@@ -96,6 +102,8 @@ export default function CreateTaskScreen() {
   const router = useRouter();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
+  const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
+  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const params = useLocalSearchParams<{ employeeId?: string | string[]; employeeName?: string | string[] }>();
   const preselectedEmployeeId = normalizeParam(params.employeeId);
   const today = useMemo(() => new Date(), []);
@@ -375,7 +383,7 @@ export default function CreateTaskScreen() {
 
         <View className="flex-row items-center gap-3">
           <PressableScale className="h-8 w-8 items-center justify-center" haptic="selection" onPress={() => router.back()}>
-            <Ionicons color="#1f2937" name="arrow-back" size={22} />
+            <Ionicons color="#1f2937" name="arrow-back" size={22} style={directionalIconStyle} />
           </PressableScale>
           <Text className="flex-1 text-[24px] font-extrabold text-foreground">{t('manager.createTaskTitle')}</Text>
         </View>
@@ -385,7 +393,7 @@ export default function CreateTaskScreen() {
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             onChangeText={setTitle}
             placeholder={t('manager.createTaskTitlePlaceholder')}
-            style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+            style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
             value={title}
           />
 
@@ -471,6 +479,7 @@ export default function CreateTaskScreen() {
               numberOfLines={5}
               onChangeText={setDescription}
               placeholder={t('manager.createTaskDescriptionPlaceholder')}
+              style={textDirectionStyle}
               textAlignVertical="top"
               value={description}
             />
@@ -676,3 +685,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+

@@ -3,14 +3,20 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppGradientBackground } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { createManagerAnnouncement, loadManagerEmployees, loadManagerGroups } from '../../lib/api';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { getDateLocale, useI18n } from '../../lib/i18n';
+import {
+  getDateLocale,
+  getDirectionalIconStyle,
+  getTextDirectionStyle,
+  useI18n,
+} from '../../lib/i18n';
 import {
   mapApiGroups,
   type EmployeeOption,
@@ -105,6 +111,8 @@ export default function CreateNewsScreen() {
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
+  const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
+  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -492,7 +500,7 @@ export default function CreateNewsScreen() {
               haptic="selection"
               onPress={() => router.back()}
             >
-              <Ionicons color="#1f2937" name="arrow-back" size={22} />
+              <Ionicons color="#1f2937" name="arrow-back" size={22} style={directionalIconStyle} />
             </PressableScale>
             <Text className="flex-1 text-[24px] font-extrabold text-foreground">
               {t('manager.createNewsTitle')}
@@ -509,7 +517,7 @@ export default function CreateNewsScreen() {
             keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
             onChangeText={setTitle}
             placeholder={t('manager.createNewsTitlePlaceholder')}
-            style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+            style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
             value={title}
           />
 
@@ -521,6 +529,7 @@ export default function CreateNewsScreen() {
             numberOfLines={8}
             onChangeText={setBody}
             placeholder={t('manager.createNewsBodyPlaceholder')}
+            style={textDirectionStyle}
             textAlignVertical="top"
             value={body}
           />
@@ -830,3 +839,4 @@ const styles = StyleSheet.create({
     right: 0,
   },
 });
+

@@ -1,6 +1,7 @@
 import { Image, type ImageSourcePropType } from 'react-native';
 import type { AnnouncementItem, AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { hasManagerAccess } from './auth-flow';
+import type { AppLanguage } from './i18n';
 import {
   loadAttendanceStatus,
   loadMyChats,
@@ -19,6 +20,8 @@ import {
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 import { readScreenCache, writeScreenCache } from './screen-cache';
 import { formatDateKeyInTimeZone } from './timezone';
+import { primeLiveTextMap } from './use-live-text-map';
+import { primeTaskTranslations } from './use-translated-task-copy';
 
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>;
@@ -165,6 +168,10 @@ function collectTaskPhotoUris(tasks: TaskItem[]) {
   );
 }
 
+function collectAnnouncementTexts(items: AnnouncementItem[]) {
+  return items.flatMap((item) => [item.title, item.body]).filter(Boolean);
+}
+
 async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
   const nextProfile = profile ?? (await loadMyProfile());
 
@@ -174,7 +181,7 @@ async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
   return nextProfile;
 }
 
-export async function warmTodayScreenCache(profile?: WorkspaceProfile | null) {
+export async function warmTodayScreenCache(profile?: WorkspaceProfile | null, language?: AppLanguage) {
   const nextProfile = profile ?? (await loadMyProfile());
   const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
   const [attendanceStatus, shifts, tasks] = await Promise.all([
@@ -193,13 +200,17 @@ export async function warmTodayScreenCache(profile?: WorkspaceProfile | null) {
     tasks,
   };
 
+  if (language) {
+    await primeTaskTranslations(tasks, language);
+  }
+
   await writeScreenCache(TODAY_SCREEN_CACHE_KEY, payload);
   await prefetchImageSources([buildProfileAvatarSource(nextProfile), ...collectTaskPhotoUris(tasks)]);
 
   return payload;
 }
 
-async function warmCalendarScreenCache(date = new Date()) {
+async function warmCalendarScreenCache(date = new Date(), language?: AppLanguage) {
   const { rangeStart, rangeEnd } = buildCalendarDateRange(date);
   const [shifts, tasks] = await Promise.all([
     loadMyShifts(),
@@ -214,6 +225,10 @@ async function warmCalendarScreenCache(date = new Date()) {
     tasks,
   };
 
+  if (language) {
+    await primeTaskTranslations(tasks, language);
+  }
+
   await Promise.all([
     writeScreenCache(getCalendarScreenCacheKey(date), payload),
     writeScreenCache(getCalendarScreenCacheKey(addDays(date, -31)), payload),
@@ -221,8 +236,12 @@ async function warmCalendarScreenCache(date = new Date()) {
   ]);
 }
 
-async function warmNewsScreenCache(isManager: boolean) {
+async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {
   const items = isManager ? await loadManagerAnnouncements() : await loadMyAnnouncements();
+
+  if (language) {
+    await primeLiveTextMap(collectAnnouncementTexts(items), language);
+  }
 
   await writeScreenCache(getNewsScreenCacheKey(isManager), items);
   await prefetchImageSources(items.map((item) => item.imageUrl));
@@ -230,7 +249,7 @@ async function warmNewsScreenCache(isManager: boolean) {
   return items;
 }
 
-export async function warmRequestsScreenCache(date = new Date()) {
+export async function warmRequestsScreenCache(date = new Date(), language?: AppLanguage) {
   const { dateFrom, dateTo } = buildRequestsDateRange(date);
   const [balances, items, calendar, tasks] = await Promise.all([
     loadMyTimeOffBalances(),
@@ -249,6 +268,10 @@ export async function warmRequestsScreenCache(date = new Date()) {
     tasks,
   };
 
+  if (language) {
+    await primeTaskTranslations(tasks, language);
+  }
+
   await writeScreenCache(getRequestsScreenCacheKey(date), payload);
   await prefetchImageSources(collectTaskPhotoUris(tasks));
 
@@ -261,7 +284,7 @@ export async function warmChatsScreenCache() {
   return threads;
 }
 
-async function warmManagerScreenCache(profile?: WorkspaceProfile | null) {
+async function warmManagerScreenCache(profile?: WorkspaceProfile | null, language?: AppLanguage) {
   const nextProfile = profile ?? (await loadMyProfile());
   const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
   const [employees, liveSessions, tasks] = await Promise.all([
@@ -272,6 +295,10 @@ async function warmManagerScreenCache(profile?: WorkspaceProfile | null) {
       dateTo: nextDateKey,
     }),
   ]);
+
+  if (language) {
+    await primeTaskTranslations(tasks, language);
+  }
 
   await writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
     profile: nextProfile,
@@ -289,10 +316,10 @@ export async function warmAnnouncementImages(items: AnnouncementItem[]) {
   await prefetchImageSources(items.map((item) => item.imageUrl));
 }
 
-export async function hydrateWorkspaceCaches(roleCodes: string[]) {
+export async function hydrateWorkspaceCaches(roleCodes: string[], language?: AppLanguage) {
   const isManager = hasManagerAccess(roleCodes);
 
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     readScreenCache(TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS),
     readScreenCache(PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS),
     readScreenCache(getCalendarScreenCacheKey(), WORKSPACE_REFRESH_INTERVAL_MS),
@@ -303,9 +330,42 @@ export async function hydrateWorkspaceCaches(roleCodes: string[]) {
       ? readScreenCache(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS)
       : Promise.resolve(null),
   ]);
+
+  if (!language) {
+    return;
+  }
+
+  const taskBuckets = results.flatMap((result) => {
+    const tasks =
+      result.status === 'fulfilled' &&
+      result.value &&
+      typeof result.value === 'object' &&
+      'value' in result.value &&
+      result.value.value &&
+      typeof result.value.value === 'object' &&
+      'tasks' in result.value.value &&
+      Array.isArray(result.value.value.tasks)
+        ? result.value.value.tasks
+        : [];
+
+    return tasks;
+  });
+  const newsItems =
+    results[3]?.status === 'fulfilled' && results[3].value
+      ? results[3].value.value
+      : [];
+
+  await Promise.allSettled([
+    taskBuckets.length > 0
+      ? primeTaskTranslations(taskBuckets, language)
+      : Promise.resolve(),
+    Array.isArray(newsItems) && newsItems.length > 0
+      ? primeLiveTextMap(collectAnnouncementTexts(newsItems), language)
+      : Promise.resolve(),
+  ]);
 }
 
-export async function warmWorkspaceCaches(roleCodes: string[], options?: { force?: boolean }) {
+export async function warmWorkspaceCaches(roleCodes: string[], options?: { force?: boolean; language?: AppLanguage }) {
   if (workspaceWarmupPromise) {
     return workspaceWarmupPromise;
   }
@@ -319,12 +379,12 @@ export async function warmWorkspaceCaches(roleCodes: string[], options?: { force
     const profile = await warmProfileScreenCache().catch(() => null);
 
     await Promise.allSettled([
-      warmTodayScreenCache(profile),
-      warmCalendarScreenCache(),
-      warmNewsScreenCache(isManager),
-      warmRequestsScreenCache(),
+      warmTodayScreenCache(profile, options?.language),
+      warmCalendarScreenCache(new Date(), options?.language),
+      warmNewsScreenCache(isManager, options?.language),
+      warmRequestsScreenCache(new Date(), options?.language),
       warmChatsScreenCache(),
-      isManager ? warmManagerScreenCache(profile) : Promise.resolve(),
+      isManager ? warmManagerScreenCache(profile, options?.language) : Promise.resolve(),
     ]);
 
     lastWorkspaceWarmupAt = Date.now();
@@ -335,8 +395,15 @@ export async function warmWorkspaceCaches(roleCodes: string[], options?: { force
   return workspaceWarmupPromise;
 }
 
-export async function warmWorkspaceCachesWithinBudget(roleCodes: string[], budgetMs = 320) {
-  const warmup = warmWorkspaceCaches(roleCodes, { force: true });
+export async function warmWorkspaceCachesWithinBudget(
+  roleCodes: string[],
+  budgetMs = 320,
+  options?: { language?: AppLanguage },
+) {
+  const warmup = warmWorkspaceCaches(roleCodes, {
+    force: true,
+    language: options?.language,
+  });
 
   if (!warmup) {
     return;

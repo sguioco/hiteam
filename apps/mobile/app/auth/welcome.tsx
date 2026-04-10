@@ -1,12 +1,14 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { Screen } from '../../components/ui/screen';
-import { useI18n } from '../../lib/i18n';
+import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
 
   return (
     <Screen safeAreaClassName="bg-[#f4f5f9]" contentClassName="flex-grow px-6 pb-8 pt-4">
@@ -16,7 +18,7 @@ export default function WelcomeScreen() {
         className="h-9 w-9 items-center justify-center"
         onPress={() => router.back()}
       >
-        <Text className="text-[34px] leading-[34px] text-[#24314b]">‹</Text>
+        <Text className="text-[34px] leading-[34px] text-[#24314b]" style={directionalIconStyle}>‹</Text>
       </Pressable>
 
       <View className="mt-10">
@@ -35,7 +37,7 @@ export default function WelcomeScreen() {
             <Text className="text-[18px] font-bold text-[#25324c]">{t('welcome.invitationOnly')}</Text>
             <Text className="mt-1 text-[16px] leading-[22px] text-[#7f879d]">{t('welcome.invitationOnlyHint')}</Text>
           </View>
-          <Text className="text-[28px] text-[#546cf2]">›</Text>
+          <Text className="text-[28px] text-[#546cf2]" style={directionalIconStyle}>›</Text>
         </Pressable>
       </View>
 
@@ -48,3 +50,4 @@ export default function WelcomeScreen() {
     </Screen>
   );
 }
+

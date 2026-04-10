@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './text';
 
 type ToggleGroupType = 'single';
 
@@ -109,3 +110,4 @@ const styles = StyleSheet.create({
     color: '#24314b',
   },
 });
+

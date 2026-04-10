@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -73,3 +74,4 @@ export default function PendingAccessScreen() {
     </SafeAreaView>
   );
 }
+

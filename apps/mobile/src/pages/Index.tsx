@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import type { Socket } from 'socket.io-client';
 import type { AttendanceStatusResponse } from '@smart/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppGradientBackground } from '../../components/ui/screen';
 import { hasManagerAccess, useAuthFlowState } from '../../lib/auth-flow';
 import { loadAttendanceStatus, loadMyShifts } from '../../lib/api';
+import { createCollaborationSocket } from '../../lib/collaboration-socket';
+import { createNotificationsSocket } from '../../lib/notifications-socket';
 import BottomNav from '../components/BottomNav';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import AuthScreen from './AuthScreen';
@@ -103,7 +107,7 @@ function formatPromptLead(minutesUntilStart: number) {
 const Index = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string | string[]; overdue?: string | string[] }>();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { isAuthenticated, roleCodes, workspaceAccessAllowed } = useAuthFlowState();
   const routeTab = normalizeTab(params.tab);
   const overdueParam = Array.isArray(params.overdue) ? params.overdue[0] : params.overdue;
@@ -194,17 +198,17 @@ const Index = () => {
       return;
     }
 
-    void hydrateWorkspaceCaches(roleCodes);
-    void warmWorkspaceCaches(roleCodes, { force: true });
+    void hydrateWorkspaceCaches(roleCodes, language);
+    void warmWorkspaceCaches(roleCodes, { force: true, language });
 
     const interval = setInterval(() => {
-      void warmWorkspaceCaches(roleCodes, { force: true });
+      void warmWorkspaceCaches(roleCodes, { force: true, language });
     }, WORKSPACE_REFRESH_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isAuthenticated, roleCodes, workspaceAccessAllowed]);
+  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
 
   useEffect(() => {
     const triggerAppEntry = () => {
@@ -227,8 +231,8 @@ const Index = () => {
       appStateRef.current = nextState;
 
       if ((previousState === 'background' || previousState === 'inactive') && nextState === 'active') {
-        void hydrateWorkspaceCaches(roleCodes);
-        void warmWorkspaceCaches(roleCodes, { force: true });
+        void hydrateWorkspaceCaches(roleCodes, language);
+        void warmWorkspaceCaches(roleCodes, { force: true, language });
         triggerAppEntry();
       }
     });
@@ -236,7 +240,65 @@ const Index = () => {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, roleCodes, workspaceAccessAllowed]);
+  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !workspaceAccessAllowed) {
+      return;
+    }
+
+    let active = true;
+    let notificationsSocket: Socket | null = null;
+    let collaborationSocket: Socket | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleWorkspaceRefresh = () => {
+      if (refreshTimer) {
+        return;
+      }
+
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void hydrateWorkspaceCaches(roleCodes, language);
+        void warmWorkspaceCaches(roleCodes, { force: true, language });
+      }, 180);
+    };
+
+    void Promise.allSettled([
+      createNotificationsSocket(),
+      createCollaborationSocket(),
+    ]).then(([notificationsResult, collaborationResult]) => {
+      if (!active) {
+        if (notificationsResult.status === 'fulfilled') {
+          notificationsResult.value.disconnect();
+        }
+        if (collaborationResult.status === 'fulfilled') {
+          collaborationResult.value.disconnect();
+        }
+        return;
+      }
+
+      if (notificationsResult.status === 'fulfilled') {
+        notificationsSocket = notificationsResult.value;
+        notificationsSocket.on('notifications:new', scheduleWorkspaceRefresh);
+        notificationsSocket.on('notifications:unread-count', scheduleWorkspaceRefresh);
+      }
+
+      if (collaborationResult.status === 'fulfilled') {
+        collaborationSocket = collaborationResult.value;
+        collaborationSocket.on('workspace:refresh', scheduleWorkspaceRefresh);
+      }
+    });
+
+    return () => {
+      active = false;
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      notificationsSocket?.disconnect();
+      collaborationSocket?.disconnect();
+    };
+  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
 
   useEffect(() => {
     if (!appEntrySignal || !isAuthenticated || !workspaceAccessAllowed) {
@@ -264,12 +326,12 @@ const Index = () => {
     };
 
     void refreshStartShiftPrompt();
-    void warmWorkspaceCaches(roleCodes);
+    void warmWorkspaceCaches(roleCodes, { language });
 
     return () => {
       cancelled = true;
     };
-  }, [appEntrySignal, isAuthenticated, roleCodes, workspaceAccessAllowed]);
+  }, [appEntrySignal, isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
     const nextTab = tab === 'manage' && !isManager ? 'today' : tab;
@@ -451,3 +513,4 @@ const styles = StyleSheet.create({
 });
 
 export default Index;
+

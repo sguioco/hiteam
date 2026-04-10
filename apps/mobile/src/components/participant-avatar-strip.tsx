@@ -1,4 +1,5 @@
-import { Image, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 
 export type ParticipantAvatarItem = {
   avatar?: any;
@@ -66,3 +67,4 @@ export function ParticipantAvatarStrip({
     </View>
   );
 }
+

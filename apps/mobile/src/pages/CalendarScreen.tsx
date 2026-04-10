@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, {
   FadeInLeft,
   FadeInRight,
@@ -14,7 +15,7 @@ import type { TaskItem } from '@smart/types';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { TimeWheelPicker, type TimeValue } from '../components/TimeWheelPicker';
 import { loadMyShifts, loadMyTasks, rescheduleMyTask, updateMyTaskStatus } from '../../lib/api';
-import { getDateLocale, useI18n } from '../../lib/i18n';
+import { getDateLocale, getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { parseTaskMeta } from '../../lib/task-meta';
@@ -68,6 +69,7 @@ function isOverdueTask(task: TaskItem, referenceDate: Date) {
 export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, t, tp } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -121,11 +123,12 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
         return;
       }
 
+      void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
       setShifts(entry.value.shifts);
       setTasks(entry.value.tasks);
       setLoading(false);
     });
-  }, [calendarCacheKey]);
+  }, [calendarCacheKey, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +140,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
       }>(calendarCacheKey, CALENDAR_SCREEN_CACHE_TTL_MS);
 
       if (cached && !cancelled) {
+        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
         setShifts(cached.value.shifts);
         setTasks(cached.value.tasks);
         setLoading(false);
@@ -240,12 +244,15 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
       nextItems.push({
         id: task.id,
         task,
-        title: getTaskTitle(task, { normalize: true }),
+        title: getTaskTitle(task, {
+          normalize: true,
+          hideSourceBeforeReady: true,
+        }),
         kind: isTaskMeeting(task) ? 'meeting' : 'task',
         note:
-          getTaskMeetingLocation(task) ||
+          getTaskMeetingLocation(task, { hideSourceBeforeReady: true }) ||
           meta.meeting?.meetingLink ||
-          getTaskBody(task) ||
+          getTaskBody(task, { hideSourceBeforeReady: true }) ||
           dueAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
         status: task.status === 'DONE' ? 'done' : task.status === 'CANCELLED' ? 'cancelled' : overdue ? 'overdue' : 'planned',
       });
@@ -284,6 +291,17 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
         return leftDueAt - rightDueAt;
       });
   }, [tasks, today]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    void writeScreenCache(calendarCacheKey, {
+      shifts,
+      tasks,
+    });
+  }, [calendarCacheKey, loading, shifts, tasks]);
 
   const selectedShift = shiftByDateKey.get(selectedDayKey) ?? null;
   const selectedItems = itemsByDateKey.get(selectedDayKey) ?? [];
@@ -511,7 +529,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
             <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
               <View className="mb-5 flex-row items-center justify-between">
                 <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(-1)}>
-                  <Ionicons color="#27364b" name="chevron-back" size={20} />
+                  <Ionicons color="#27364b" name="chevron-back" size={20} style={directionalIconStyle} />
                 </PressableScale>
                 <View className="min-w-[140px] overflow-hidden">
                   <Animated.Text
@@ -534,7 +552,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
                   </Animated.Text>
                 </View>
                 <PressableScale className="rounded-xl p-2" haptic="selection" onPress={() => changeMonth(1)}>
-                  <Ionicons color="#27364b" name="chevron-forward" size={20} />
+                  <Ionicons color="#27364b" name="chevron-forward" size={20} style={directionalIconStyle} />
                 </PressableScale>
               </View>
 
@@ -622,7 +640,7 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
                     <Text className="font-display text-lg font-bold text-foreground">{t('calendar.overdueManagerTitle', { count: overdueTasks.length })}</Text>
                     <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{t('calendar.overdueManagerBody')}</Text>
                   </View>
-                  <Ionicons color="#f59e0b" name="chevron-forward" size={18} />
+                  <Ionicons color="#f59e0b" name="chevron-forward" size={18} style={directionalIconStyle} />
                 </View>
               </PressableScale>
             ) : null}
@@ -701,8 +719,16 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
                         />
                       </View>
                       <View className="flex-1">
-                        <Text className="font-body text-[15px] font-medium text-foreground">{item.title}</Text>
-                        <Text className="mt-1 font-body text-sm text-muted-foreground">{item.note}</Text>
+                        {item.title ? (
+                          <Text className="font-body text-[15px] font-medium text-foreground">{item.title}</Text>
+                        ) : (
+                          <View className="mt-1 h-4 w-[64%] rounded-full bg-[#e2eaf6]" />
+                        )}
+                        {item.note ? (
+                          <Text className="mt-1 font-body text-sm text-muted-foreground">{item.note}</Text>
+                        ) : (
+                          <View className="mt-2 h-3 w-[46%] rounded-full bg-[#edf3fb]" />
+                        )}
                       </View>
                       <Text
                         className="font-body text-xs font-semibold"
@@ -756,10 +782,13 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
               {overdueTasks.length > 0 ? (
                 overdueTasks.map((task) => {
                   const dueAt = parseTaskDueAt(task);
-                  const subtitle =
-                    getTaskBody(task) ||
-                    task.description ||
-                    t('calendar.waitingForAction');
+                  const title = getTaskTitle(task, {
+                    normalize: true,
+                    hideSourceBeforeReady: true,
+                  });
+                  const subtitle = getTaskBody(task, {
+                    hideSourceBeforeReady: true,
+                  });
                   const dateLabel = dueAt
                     ? dueAt.toLocaleDateString(locale, { month: 'long', day: 'numeric' })
                     : t('calendar.noTimeSelected');
@@ -771,10 +800,18 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
                           <Ionicons color="#f59e0b" name="warning-outline" size={20} />
                         </View>
                         <View className="flex-1">
-                          <Text className="font-body text-[16px] font-semibold text-foreground">
-                            {getTaskTitle(task, { normalize: true })}
-                          </Text>
-                          <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{subtitle}</Text>
+                          {title ? (
+                            <Text className="font-body text-[16px] font-semibold text-foreground">
+                              {title}
+                            </Text>
+                          ) : (
+                            <View className="mt-1 h-4 w-[66%] rounded-full bg-[#e2eaf6]" />
+                          )}
+                          {subtitle ? (
+                            <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">{subtitle}</Text>
+                          ) : (
+                            <View className="mt-2 h-3 w-[48%] rounded-full bg-[#edf3fb]" />
+                          )}
                           <Text className="mt-2 font-body text-xs font-semibold text-[#c17b07]">
                             {t('calendar.overdueFrom', { dateLabel })}
                           </Text>
@@ -816,9 +853,20 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
 
           {rescheduleTaskItem ? (
             <View className="items-center px-2">
-              <Text className="text-center font-body text-[16px] font-semibold text-foreground">
-                {getTaskTitle(rescheduleTaskItem, { normalize: true })}
-              </Text>
+              {(() => {
+                const title = getTaskTitle(rescheduleTaskItem, {
+                  normalize: true,
+                  hideSourceBeforeReady: true,
+                });
+
+                return title ? (
+                  <Text className="text-center font-body text-[16px] font-semibold text-foreground">
+                    {title}
+                  </Text>
+                ) : (
+                  <View className="mt-1 h-4 w-[62%] rounded-full bg-[#e2eaf6]" />
+                );
+              })()}
               <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
                 {t('calendar.moveToAnotherDayHint')}
               </Text>
@@ -910,3 +958,4 @@ export default function CalendarScreen({ active = true, overdueSheetSignal = 0 }
     </>
   );
 }
+

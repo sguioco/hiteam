@@ -3,12 +3,13 @@ import { BottomSheet } from "heroui-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
-import { getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
+import { getDirectionalIconStyle, getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
@@ -23,6 +24,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const initialSnapshot = useMemo(
     () =>
@@ -327,7 +329,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
                     {getLanguageLabel(language)}
                   </Text>
                 </View>
-                <Ionicons color="#6b7a90" name="chevron-forward" size={18} />
+                <Ionicons color="#6b7a90" name="chevron-forward" size={18} style={directionalIconStyle} />
               </PressableScale>
             </Animated.View>
 
@@ -352,7 +354,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
                 <Text className="flex-1 font-body text-[15px] text-foreground">
                   {t("profile.notifications")}
                 </Text>
-                <Ionicons color="#6b7a90" name="chevron-forward" size={18} />
+                <Ionicons color="#6b7a90" name="chevron-forward" size={18} style={directionalIconStyle} />
               </PressableScale>
             </Animated.View>
 
@@ -444,3 +446,4 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
 };
 
 export default ProfileScreen;
+

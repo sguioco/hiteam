@@ -1,4 +1,5 @@
-import { Text, type TextProps } from 'react-native';
+import { type TextProps } from 'react-native';
+import { Text } from '../../components/ui/text';
 
 export function BrandWordmark(props: TextProps) {
   return (
@@ -8,3 +9,4 @@ export function BrandWordmark(props: TextProps) {
     </Text>
   );
 }
+

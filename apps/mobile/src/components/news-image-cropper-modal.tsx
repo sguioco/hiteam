@@ -2,14 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { AnnouncementImageAspectRatio } from '@smart/types';
 import { Ionicons } from '@expo/vector-icons';
 import { manipulateAsync, SaveFormat, type Action } from 'expo-image-manipulator';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CropZoom, type CropZoomRefType } from 'react-native-zoom-toolkit';
 import BottomSheetModal from './BottomSheetModal';
@@ -321,3 +315,4 @@ export function NewsImageCropperModal({
     </BottomSheetModal>
   );
 }
+

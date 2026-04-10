@@ -1,19 +1,22 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
 import { Screen } from '../../components/ui/screen';
-import { useI18n } from '../../lib/i18n';
+import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../lib/i18n';
 import { hapticError, hapticSuccess } from '../../lib/haptics';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export default function InviteScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
+  const textDirectionStyle = getTextDirectionStyle(language);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [invitationCompanyName, setInvitationCompanyName] = useState<string | null>(null);
@@ -69,7 +72,7 @@ export default function InviteScreen() {
             haptic="selection"
             onPress={() => router.back()}
           >
-            <Text className="text-[34px] leading-[34px] text-[#24314b]">‹</Text>
+            <Text className="text-[34px] leading-[34px] text-[#24314b]" style={directionalIconStyle}>‹</Text>
           </PressableScale>
 
           <Text className="mb-8 text-center text-[20px] font-bold text-[#24314b]">{t('invite.joinCompany')}</Text>
@@ -83,6 +86,7 @@ export default function InviteScreen() {
             onChangeText={setCode}
             placeholder={t('invite.placeholder')}
             placeholderTextColor="#8b91a5"
+            style={textDirectionStyle}
             value={code}
           />
 
@@ -156,3 +160,4 @@ export default function InviteScreen() {
     </>
   );
 }
+

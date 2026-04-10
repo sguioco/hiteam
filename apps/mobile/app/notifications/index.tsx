@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Switch, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
@@ -11,7 +12,7 @@ import {
   saveNotificationPreferences,
   type NotificationPreferences,
 } from '../../lib/notification-preferences';
-import { useI18n } from '../../lib/i18n';
+import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 
 type ReminderOption = 15 | 30 | 60;
 
@@ -51,7 +52,8 @@ const sectionBodyStyle = {
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
 
   const copy = useMemo(
@@ -132,7 +134,7 @@ export default function NotificationsScreen() {
       <View className="mb-2">
         <View className="flex-row items-center">
           <PressableScale haptic="selection" onPress={() => router.back()}>
-            <Ionicons color="#26334a" name="arrow-back" size={22} />
+            <Ionicons color="#26334a" name="arrow-back" size={22} style={directionalIconStyle} />
           </PressableScale>
           <Text
             style={{
@@ -237,3 +239,4 @@ export default function NotificationsScreen() {
     </Screen>
   );
 }
+

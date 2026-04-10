@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Alert, Image, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, ScrollView, TextInput, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, {
   Easing,
   FadeInUp,
@@ -27,10 +28,16 @@ import {
   markMyAnnouncementRead,
   updateManagerAnnouncement,
 } from '../../lib/api';
-import { getDateLocale, type AppLanguage, useI18n } from '../../lib/i18n';
+import {
+  getDateLocale,
+  getTextDirectionStyle,
+  type AppLanguage,
+  useI18n,
+} from '../../lib/i18n';
 import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
-import { primeLiveTextMap, useLiveTextMap } from '../../lib/use-live-text-map';
+import { shouldHideTranslatedSourceText } from '../../lib/live-translation-policy';
+import { hasResolvedLiveText, primeLiveTextMap, useLiveTextMap } from '../../lib/use-live-text-map';
 import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -128,6 +135,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
+  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const { roleCodes } = useAuthFlowState();
   const isManager = hasManagerAccess(roleCodes);
   const cacheKey = getNewsScreenCacheKey(isManager);
@@ -186,7 +194,20 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       return text;
     }
 
-    return announcementTextMap[text.trim()] ?? text;
+    const normalized = text.trim();
+    const translated = announcementTextMap[normalized] ?? text;
+
+    if (shouldHideTranslatedSourceText(normalized, language)) {
+      if (!hasResolvedLiveText(language, normalized)) {
+        return '';
+      }
+
+      if (translated.trim() === normalized) {
+        return '';
+      }
+    }
+
+    return translated;
   }
 
   const orderedItems = useMemo(() => {
@@ -231,10 +252,14 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         return;
       }
 
+      void primeLiveTextMap(
+        entry.value.flatMap((item) => [item.title, item.body]).filter(Boolean),
+        language,
+      ).catch(() => undefined);
       setItems(entry.value);
       setLoading(false);
     });
-  }, [cacheKey]);
+  }, [cacheKey, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,6 +271,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       );
 
       if (cached && !cancelled) {
+        void primeLiveTextMap(
+          cached.value.flatMap((item) => [item.title, item.body]).filter(Boolean),
+          language,
+        ).catch(() => undefined);
         setItems(cached.value);
         setLoading(false);
         if (!cached.isStale) {
@@ -259,7 +288,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, isManager]);
+  }, [cacheKey, isManager, language]);
 
   useEffect(() => {
     if (loading) {
@@ -495,9 +524,17 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                         </Text>
 
                         <View className="flex-row items-start justify-between gap-3">
-                          <Text className={`flex-1 text-[20px] font-extrabold ${isReadMuted ? 'text-[#6c7b91]' : 'text-foreground'}`}>
-                            {translateAnnouncementText(item.title)}
-                          </Text>
+                          {(() => {
+                            const title = translateAnnouncementText(item.title);
+
+                            return title ? (
+                              <Text className={`flex-1 text-[20px] font-extrabold ${isReadMuted ? 'text-[#6c7b91]' : 'text-foreground'}`}>
+                                {title}
+                              </Text>
+                            ) : (
+                              <View className="mt-1 h-5 flex-1 rounded-full bg-[#e2eaf6]" />
+                            );
+                          })()}
                           <View className="items-center gap-1">
                             {!isManager && !item.isRead ? <UnreadPulseIndicator /> : <View className="h-2.5 w-2.5" />}
                             <Ionicons
@@ -526,9 +563,20 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 />
                               ) : null}
 
-                              <Text className={`text-[15px] leading-7 ${isReadMuted ? 'text-[#607086]' : 'text-foreground'}`}>
-                                {translateAnnouncementText(item.body)}
-                              </Text>
+                              {(() => {
+                                const body = translateAnnouncementText(item.body);
+
+                                return body ? (
+                                  <Text className={`text-[15px] leading-7 ${isReadMuted ? 'text-[#607086]' : 'text-foreground'}`}>
+                                    {body}
+                                  </Text>
+                                ) : (
+                                  <View className="gap-2">
+                                    <View className="h-3 rounded-full bg-[#e2eaf6]" style={{ width: '88%' }} />
+                                    <View className="h-3 rounded-full bg-[#edf3fb]" style={{ width: '72%' }} />
+                                  </View>
+                                );
+                              })()}
 
                               {isManager ? (
                                 <View className="flex-row flex-wrap items-center gap-4">
@@ -619,7 +667,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
               className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
               onChangeText={setEditingTitle}
               placeholder={copy.editorTitlePlaceholder}
-              style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+              style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
               value={editingTitle}
             />
 
@@ -629,6 +677,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
               numberOfLines={8}
               onChangeText={setEditingBody}
               placeholder={copy.editorBodyPlaceholder}
+              style={textDirectionStyle}
               textAlignVertical="top"
               value={editingBody}
             />
@@ -699,7 +748,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             onChangeText={setEditingTitle}
             placeholder={copy.editorTitlePlaceholder}
-            style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+            style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
             value={editingTitle}
           />
 
@@ -709,6 +758,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
             numberOfLines={8}
             onChangeText={setEditingBody}
             placeholder={copy.editorBodyPlaceholder}
+            style={textDirectionStyle}
             textAlignVertical="top"
             value={editingBody}
           />
@@ -739,3 +789,4 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     </>
   );
 }
+

@@ -14,6 +14,15 @@ function getCacheKey(locale: AppLanguage, text: string) {
   return `${locale}:${text}`;
 }
 
+export function hasResolvedLiveText(locale: AppLanguage, text: string) {
+  const normalized = text.trim();
+  if (!normalized) {
+    return true;
+  }
+
+  return translationCache.has(getCacheKey(locale, normalized));
+}
+
 function getTranslationCacheStorageKey(locale: AppLanguage) {
   return `live-translation:${locale}`;
 }

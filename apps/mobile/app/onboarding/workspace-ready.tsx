@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, Platform, Text, View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import * as Linking from 'expo-linking';
 import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
@@ -435,3 +436,4 @@ export default function WorkspaceReadyOnboardingScreen() {
     </Screen>
   );
 }
+

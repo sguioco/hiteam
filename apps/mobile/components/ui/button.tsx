@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Text, type PressableProps } from 'react-native';
+import { type PressableProps } from 'react-native';
+import { Text } from './text';
 import { cn } from '../../lib/cn';
 import { PressableScale } from './pressable-scale';
 
@@ -80,3 +81,4 @@ export function Button({
     </PressableScale>
   );
 }
+

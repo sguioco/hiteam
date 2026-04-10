@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Updates from 'expo-updates';
+import { DevSettings, I18nManager, Platform, type StyleProp, type TextStyle } from 'react-native';
 import { generatedTranslations } from './generated-translations';
 
 export const supportedAppLanguages = [
   'ru',
   'en',
+  'es',
   'ar',
   'hi',
   'ur',
@@ -16,9 +19,12 @@ export const supportedAppLanguages = [
 
 export type AppLanguage = (typeof supportedAppLanguages)[number];
 
+const rtlAppLanguages = new Set<AppLanguage>(['ar', 'ur']);
+
 export const languageOptions: Array<{ value: AppLanguage; label: string; flag: string }> = [
   { value: 'ru', label: 'Русский', flag: '🇷🇺' },
   { value: 'en', label: 'English', flag: '🇺🇸' },
+  { value: 'es', label: 'Español', flag: '🇪🇸' },
   { value: 'ar', label: 'العربية', flag: '🇦🇪' },
   { value: 'hi', label: 'हिन्दी', flag: '🇮🇳' },
   { value: 'ur', label: 'اردو', flag: '🇵🇰' },
@@ -1526,6 +1532,7 @@ const translations = {
     'manager.requestType.supply': 'Supply',
     'manager.requestType.shiftChange': 'Shift',
   },
+  es: {},
   ...generatedTranslations,
 } satisfies Record<AppLanguage, Record<string, string>>;
 
@@ -1544,7 +1551,8 @@ type TranslationKey = string;
 
 type I18nContextValue = {
   language: AppLanguage;
-  setLanguage: (language: AppLanguage) => void;
+  isRTL: boolean;
+  setLanguage: (language: AppLanguage) => Promise<void>;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
   tp: (count: number, ruForms: [string, string, string], enForms: [string, string]) => string;
   tc: (text: string) => string;
@@ -1588,6 +1596,10 @@ function getLanguageFromLocale(locale: string): AppLanguage | null {
     return 'ar';
   }
 
+  if (normalized.startsWith('es')) {
+    return 'es';
+  }
+
   if (normalized.startsWith('hi')) {
     return 'hi';
   }
@@ -1628,6 +1640,76 @@ function detectInitialLanguage(): AppLanguage {
   }
 }
 
+export async function loadPersistedLanguagePreference() {
+  try {
+    const info = await FileSystem.getInfoAsync(LANGUAGE_STORAGE_PATH);
+    if (info.exists) {
+      const saved = await FileSystem.readAsStringAsync(LANGUAGE_STORAGE_PATH);
+      if (isAppLanguage(saved)) {
+        return saved;
+      }
+    }
+  } catch {
+    // Fallback to inferred locale below.
+  }
+
+  return detectInitialLanguage();
+}
+
+export function isRTLLanguage(language: AppLanguage) {
+  return rtlAppLanguages.has(language);
+}
+
+export function getTextDirectionStyle(language: AppLanguage): StyleProp<TextStyle> {
+  return isRTLLanguage(language)
+    ? {
+        textAlign: 'right',
+        writingDirection: 'rtl',
+      }
+    : {
+        textAlign: 'left',
+        writingDirection: 'ltr',
+      };
+}
+
+export function getDirectionalIconStyle(language: AppLanguage) {
+  return isRTLLanguage(language)
+    ? {
+        transform: [{ scaleX: -1 as const }],
+      }
+    : undefined;
+}
+
+export async function applyLanguageLayoutDirection(
+  language: AppLanguage,
+  options?: { reloadOnChange?: boolean },
+) {
+  const shouldUseRTL = isRTLLanguage(language);
+
+  if (Platform.OS === 'web') {
+    return { didChange: false, isRTL: shouldUseRTL };
+  }
+
+  I18nManager.allowRTL(shouldUseRTL);
+  I18nManager.swapLeftAndRightInRTL(true);
+
+  const didChange = I18nManager.isRTL !== shouldUseRTL;
+
+  if (didChange) {
+    I18nManager.forceRTL(shouldUseRTL);
+
+    if (options?.reloadOnChange ?? true) {
+      if (__DEV__) {
+        DevSettings.reload();
+      } else {
+        await Updates.reloadAsync();
+      }
+    }
+  }
+
+  return { didChange, isRTL: shouldUseRTL };
+}
+
 function translate(language: AppLanguage, key: TranslationKey, variables?: Record<string, string | number>) {
   const languageTable = translations[language] as Record<string, string>;
   const englishTable = translations.en as Record<string, string>;
@@ -1642,38 +1724,47 @@ function translate(language: AppLanguage, key: TranslationKey, variables?: Recor
   });
 }
 
-export function I18nProvider({ children }: PropsWithChildren) {
-  const [language, setLanguageState] = useState<AppLanguage>(detectInitialLanguage);
+export function I18nProvider({
+  children,
+  initialLanguage,
+}: PropsWithChildren<{ initialLanguage?: AppLanguage }>) {
+  const [language, setLanguageState] = useState<AppLanguage>(
+    initialLanguage ?? detectInitialLanguage,
+  );
 
   useEffect(() => {
+    if (initialLanguage) {
+      setLanguageState(initialLanguage);
+      return;
+    }
+
     async function loadLanguage() {
-      try {
-        const info = await FileSystem.getInfoAsync(LANGUAGE_STORAGE_PATH);
-        if (info.exists) {
-          const saved = await FileSystem.readAsStringAsync(LANGUAGE_STORAGE_PATH);
-          if (isAppLanguage(saved)) {
-            setLanguageState(saved);
-          }
-        }
-      } catch {
-        // Fallback to default
-      }
+      setLanguageState(await loadPersistedLanguagePreference());
     }
     loadLanguage();
-  }, []);
+  }, [initialLanguage]);
 
   const setLanguage = useCallback(async (next: AppLanguage) => {
-    setLanguageState(next);
+    const didDirectionChange = isRTLLanguage(next) !== isRTLLanguage(language);
+
     try {
       await FileSystem.writeAsStringAsync(LANGUAGE_STORAGE_PATH, next);
     } catch {
       // Best effort save
     }
-  }, []);
+
+    if (didDirectionChange) {
+      await applyLanguageLayoutDirection(next, { reloadOnChange: true });
+      return;
+    }
+
+    setLanguageState(next);
+  }, [language]);
 
   const value = useMemo<I18nContextValue>(() => {
     return {
       language,
+      isRTL: isRTLLanguage(language),
       setLanguage,
       t: (key, variables) => translate(language, key, variables),
       tp: (count, ruForms, enForms) => {
@@ -1702,7 +1793,8 @@ export function useI18n() {
     const fallbackLanguage = detectInitialLanguage();
     return {
       language: fallbackLanguage,
-      setLanguage: () => undefined,
+      isRTL: isRTLLanguage(fallbackLanguage),
+      setLanguage: async () => undefined,
       t: (key: TranslationKey, variables?: Record<string, string | number>) =>
         translate(fallbackLanguage, key, variables),
       tp: (count: number, ruForms: [string, string, string], enForms: [string, string]) => {
@@ -1732,6 +1824,8 @@ export function getDateLocale(language: AppLanguage) {
   switch (language) {
     case 'ru':
       return 'ru-RU';
+    case 'es':
+      return 'es-ES';
     case 'ar':
       return 'ar-AE';
     case 'hi':

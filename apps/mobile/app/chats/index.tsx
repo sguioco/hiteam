@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import type { Socket } from 'socket.io-client';
 import { ChatThreadItem } from '@smart/types';
 import { Badge } from '../../components/ui/badge';
@@ -177,3 +178,4 @@ export default function ChatsScreen() {
     </Screen>
   );
 }
+

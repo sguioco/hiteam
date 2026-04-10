@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './text';
 import { cn } from '../../lib/cn';
 
 const badgeVariants = cva('self-start flex-row items-center gap-1.5 rounded-full border px-3 py-1', {
@@ -44,3 +45,4 @@ export function Badge({ children, className, label, textClassName, variant }: Ba
     </View>
   );
 }
+

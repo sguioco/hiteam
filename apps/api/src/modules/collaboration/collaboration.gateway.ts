@@ -86,6 +86,10 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     this.server.to(this.userRoom(userId)).emit('chat:thread-updated', payload);
   }
 
+  emitWorkspaceRefresh(userId: string, payload: unknown) {
+    this.server.to(this.userRoom(userId)).emit('workspace:refresh', payload);
+  }
+
   private userRoom(userId: string) {
     return `user:${userId}`;
   }

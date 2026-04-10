@@ -3,7 +3,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import {
   EmployeeRequestItem,
   MyTimeOffBalancesResponse,
@@ -25,7 +26,7 @@ import {
   loadMyTimeOffBalances,
 } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
-import { peekScreenCache, readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { primeTaskTranslations, useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import {
   getRequestsScreenCacheKey,
@@ -191,6 +192,21 @@ export default function RequestsScreen() {
   }
 
   useEffect(() => {
+    return subscribeScreenCache<RequestsScreenCacheValue>(
+      requestsCacheKey,
+      (entry) => {
+        if (!entry) {
+          return;
+        }
+
+        void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
+        applyCachePayload(entry.value);
+        setLoading(false);
+      },
+    );
+  }, [language, requestsCacheKey]);
+
+  useEffect(() => {
     let active = true;
 
     void readScreenCache<RequestsScreenCacheValue>(
@@ -218,6 +234,19 @@ export default function RequestsScreen() {
       active = false;
     };
   }, [calendarMonth, language, requestsCacheKey]);
+
+  useEffect(() => {
+    if (loading || !balances || !calendar) {
+      return;
+    }
+
+    void writeScreenCache(requestsCacheKey, {
+      balances,
+      items,
+      calendar,
+      tasks,
+    } satisfies RequestsScreenCacheValue);
+  }, [balances, calendar, items, loading, requestsCacheKey, tasks]);
 
   async function pickAttachments() {
     setError(null);
@@ -570,9 +599,20 @@ export default function RequestsScreen() {
               </Card>
             ) : (
               <Card key={event.id} className="gap-2 bg-surface-muted" inset="compact">
-                <Text className="text-[16px] font-extrabold text-foreground">
-                  {getTaskTitle(event.task, { normalize: true })}
-                </Text>
+                {(() => {
+                  const title = getTaskTitle(event.task, {
+                    normalize: true,
+                    hideSourceBeforeReady: true,
+                  });
+
+                  return title ? (
+                    <Text className="text-[16px] font-extrabold text-foreground">
+                      {title}
+                    </Text>
+                  ) : (
+                    <View className="h-4 w-[62%] rounded-full bg-[#e2eaf6]" />
+                  );
+                })()}
                 <Text className="text-[14px] leading-5 text-foreground">
                   {event.task.priority} • {event.task.status}
                 </Text>
@@ -659,3 +699,4 @@ export default function RequestsScreen() {
     </Screen>
   );
 }
+

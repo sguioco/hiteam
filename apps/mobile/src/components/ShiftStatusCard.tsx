@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { AppState, Platform, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import type { AttendanceStatusResponse } from '@smart/types';
 import Animated, {
@@ -480,3 +481,4 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 };
 
 export default ShiftStatusCard;
+

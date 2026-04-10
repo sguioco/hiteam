@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Image, Linking, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Linking, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BiometricJobItem, BiometricPolicyResponse } from '@smart/types';
 import { PressableScale } from '../../components/ui/pressable-scale';
@@ -399,3 +400,4 @@ export default function BiometricPage() {
     </SafeAreaView>
   );
 }
+

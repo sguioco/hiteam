@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Text } from '../../../components/ui/text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
 import { loadPublicInvitation, registerFromInvitation, signInWithEmail } from '../../../lib/api';
 import { signInLocally } from '../../../lib/auth-flow';
-import { useI18n } from '../../../lib/i18n';
+import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../../lib/i18n';
 
 type InvitationPayload = Awaited<ReturnType<typeof loadPublicInvitation>>;
 
@@ -19,7 +20,9 @@ export default function RegisterInvitationScreen() {
     biometricMessage?: string;
     biometricTick?: string;
   }>();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const directionalIconStyle = getDirectionalIconStyle(language);
+  const textDirectionStyle = getTextDirectionStyle(language);
   const token = Array.isArray(params.token) ? params.token[0] : params.token ?? '';
   const [invitation, setInvitation] = useState<InvitationPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -196,7 +199,7 @@ export default function RegisterInvitationScreen() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
         <Pressable className="mb-5 h-9 w-9 items-center justify-center" onPress={() => router.back()}>
-          <Text className="text-[34px] leading-[34px] text-[#24314b]">‹</Text>
+          <Text className="text-[34px] leading-[34px] text-[#24314b]" style={directionalIconStyle}>‹</Text>
         </Pressable>
 
         <View className="gap-3">
@@ -218,6 +221,7 @@ export default function RegisterInvitationScreen() {
             placeholder={t('register.password')}
             placeholderTextColor="#8a92ab"
             secureTextEntry
+            style={textDirectionStyle}
             value={form.password}
           />
           <TextInput
@@ -225,6 +229,7 @@ export default function RegisterInvitationScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
             placeholder={t('register.firstName')}
             placeholderTextColor="#8a92ab"
+            style={textDirectionStyle}
             value={form.firstName}
           />
           <TextInput
@@ -232,6 +237,7 @@ export default function RegisterInvitationScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
             placeholder={t('register.lastName')}
             placeholderTextColor="#8a92ab"
+            style={textDirectionStyle}
             value={form.lastName}
           />
           <TextInput
@@ -239,6 +245,7 @@ export default function RegisterInvitationScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, middleName: value }))}
             placeholder={t('register.middleName')}
             placeholderTextColor="#8a92ab"
+            style={textDirectionStyle}
             value={form.middleName}
           />
           <TextInput
@@ -246,6 +253,7 @@ export default function RegisterInvitationScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
             placeholder={t('register.birthDatePlaceholder')}
             placeholderTextColor="#8a92ab"
+            style={textDirectionStyle}
             value={form.birthDate}
           />
           <TextInput
@@ -253,6 +261,7 @@ export default function RegisterInvitationScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
             placeholder={t('register.phone')}
             placeholderTextColor="#8a92ab"
+            style={textDirectionStyle}
             value={form.phone}
           />
 
@@ -284,3 +293,4 @@ export default function RegisterInvitationScreen() {
     </SafeAreaView>
   );
 }
+

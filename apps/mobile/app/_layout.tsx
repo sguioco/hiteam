@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot, SplashScreen, usePathname, useRouter } from 'expo-router';
-import { LogBox, View } from 'react-native';
+import { LogBox, Platform, View } from 'react-native';
 import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,7 +11,14 @@ import { HeroUINativeProvider } from 'heroui-native';
 import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
 import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
 import { BannerThemeProvider, loadBannerThemePreference, type BannerTheme } from '../lib/banner-theme';
-import { I18nProvider } from '../lib/i18n';
+import {
+  applyLanguageLayoutDirection,
+  I18nProvider,
+  isRTLLanguage,
+  loadPersistedLanguagePreference,
+  useI18n,
+  type AppLanguage,
+} from '../lib/i18n';
 import { warmWorkspaceCachesWithinBudget } from '../lib/workspace-cache';
 
 void SplashScreen.preventAutoHideAsync();
@@ -25,6 +32,7 @@ function AppRouterSlot() {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated } = useAuthFlowState();
+  const { language } = useI18n();
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -44,8 +52,13 @@ function AppRouterSlot() {
     }
   }, [isAuthenticated, pathname, router]);
 
+  const direction = isRTLLanguage(language) ? 'rtl' : 'ltr';
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+    <View
+      {...(Platform.OS === 'web' ? { dir: direction } : {})}
+      style={{ flex: 1, backgroundColor: '#ffffff' }}
+    >
       <Slot />
     </View>
   );
@@ -65,6 +78,8 @@ export default function RootLayout() {
   const [authReady, setAuthReady] = useState(false);
   const [bannerTheme, setBannerTheme] = useState<BannerTheme>('blue');
   const [bannerThemeReady, setBannerThemeReady] = useState(false);
+  const [initialLanguage, setInitialLanguage] = useState<AppLanguage | null>(null);
+  const [languageReady, setLanguageReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +132,30 @@ export default function RootLayout() {
   useEffect(() => {
     let cancelled = false;
 
+    const hydrateLanguage = async () => {
+      const language = await loadPersistedLanguagePreference();
+      const layout = await applyLanguageLayoutDirection(language, {
+        reloadOnChange: true,
+      });
+
+      if (layout.didChange || cancelled) {
+        return;
+      }
+
+      setInitialLanguage(language);
+      setLanguageReady(true);
+    };
+
+    void hydrateLanguage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const hydrateAuth = async () => {
       try {
         const session = await restorePersistedSession();
@@ -130,8 +169,10 @@ export default function RootLayout() {
           workspaceAccessAllowed: session?.user.workspaceAccessAllowed ?? false,
         });
 
-        if (session?.user.workspaceAccessAllowed) {
-          await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240);
+        if (session?.user.workspaceAccessAllowed && initialLanguage) {
+          await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240, {
+            language: initialLanguage,
+          });
         }
       } finally {
         if (!cancelled) {
@@ -145,24 +186,24 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialLanguage]);
 
   useEffect(() => {
-    if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady) {
+    if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady || !languageReady) {
       return;
     }
 
     void SplashScreen.hideAsync();
-  }, [authReady, bannerReady, bannerThemeReady, fontsLoaded]);
+  }, [authReady, bannerReady, bannerThemeReady, fontsLoaded, languageReady]);
 
-  if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady) {
+  if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady || !languageReady || !initialLanguage) {
     return null;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BannerThemeProvider initialTheme={bannerTheme}>
-        <I18nProvider>
+        <I18nProvider initialLanguage={initialLanguage}>
           <HeroUINativeProvider config={{ toast: false, devInfo: { stylingPrinciples: false } }}>
             <AppRouterSlot />
           </HeroUINativeProvider>

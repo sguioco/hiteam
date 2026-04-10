@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +17,12 @@ import {
   type GroupOption,
   mergeGroupOptions,
 } from '../../lib/manager-group-options';
-import { getDateLocale, useI18n } from '../../lib/i18n';
+import {
+  getDateLocale,
+  getDirectionalIconStyle,
+  getTextDirectionStyle,
+  useI18n,
+} from '../../lib/i18n';
 import { SmartMeetingMeta, appendTaskMeta } from '../../lib/task-meta';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
@@ -72,6 +78,8 @@ export default function CreateMeetingScreen() {
   const params = useLocalSearchParams<{ employeeId?: string | string[]; employeeName?: string | string[] }>();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
+  const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
+  const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const preselectedEmployeeId = normalizeParam(params.employeeId);
   const preselectedEmployeeName = normalizeParam(params.employeeName);
   const today = useMemo(() => new Date(), []);
@@ -397,7 +405,7 @@ export default function CreateMeetingScreen() {
             haptic="selection"
             onPress={() => (step === 'confirm' ? setStep('details') : router.back())}
           >
-            <Ionicons color="#1f2937" name="arrow-back" size={22} />
+            <Ionicons color="#1f2937" name="arrow-back" size={22} style={directionalIconStyle} />
           </PressableScale>
 
           <Text className="flex-1 text-[24px] font-extrabold text-foreground">{step === 'details' ? t('manager.createMeetingTitle') : t('manager.meetingConfirmTitle')}</Text>
@@ -416,7 +424,7 @@ export default function CreateMeetingScreen() {
                 className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
                 onChangeText={setTitle}
                 placeholder={t('manager.meetingTopic')}
-                style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+                style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
                 value={title}
               />
 
@@ -519,7 +527,7 @@ export default function CreateMeetingScreen() {
                 className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
                 onChangeText={mode === 'online' ? setLink : setLocation}
                 placeholder={mode === 'online' ? t('manager.meetingLinkPastePlaceholder') : t('manager.meetingLocation')}
-                style={{ paddingHorizontal: 18, paddingVertical: 16 }}
+                style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
                 value={mode === 'online' ? link : location}
               />
 
@@ -791,3 +799,4 @@ export default function CreateMeetingScreen() {
     </>
   );
 }
+

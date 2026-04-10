@@ -3,6 +3,7 @@ import { ArrayMaxSize, IsArray, IsIn, IsString } from 'class-validator';
 const SUPPORTED_TRANSLATION_LOCALES = [
   'ru',
   'en',
+  'es',
   'ar',
   'hi',
   'ur',

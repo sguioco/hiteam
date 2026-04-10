@@ -1,11 +1,14 @@
 import { TextInput, type TextInputProps } from 'react-native';
 import { cn } from '../../lib/cn';
+import { getTextDirectionStyle, useI18n } from '../../lib/i18n';
 
 type InputProps = TextInputProps & {
   invalid?: boolean;
 };
 
 export function Input({ className, invalid, ...props }: InputProps) {
+  const { language } = useI18n();
+
   return (
     <TextInput
       className={cn(
@@ -14,6 +17,7 @@ export function Input({ className, invalid, ...props }: InputProps) {
         className,
       )}
       placeholderTextColor="#98a2b3"
+      style={getTextDirectionStyle(language)}
       {...props}
     />
   );

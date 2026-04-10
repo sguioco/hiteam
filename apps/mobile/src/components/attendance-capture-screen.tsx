@@ -2,14 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  AppState,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { AppState, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
 import type { BiometricJobItem, BiometricPolicyResponse } from "@smart/types";
@@ -24,7 +18,11 @@ import {
   startBiometricEnrollment,
   submitAttendanceAction,
 } from "../../lib/api";
-import { type AppLanguage, useI18n } from "../../lib/i18n";
+import {
+  getDirectionalIconStyle,
+  type AppLanguage,
+  useI18n,
+} from "../../lib/i18n";
 import {
   capturePreciseAttendanceLocation,
   isPreciseLocationError,
@@ -90,6 +88,10 @@ export function AttendanceCaptureScreen({
 }: AttendanceCaptureScreenProps) {
   const router = useRouter();
   const { language, t } = useI18n();
+  const directionalIconStyle = useMemo(
+    () => getDirectionalIconStyle(language),
+    [language],
+  );
   const cameraRef = useRef<CameraView | null>(null);
   const permissionRefreshTimerRef = useRef<ReturnType<
     typeof setTimeout
@@ -662,7 +664,7 @@ export function AttendanceCaptureScreen({
               haptic="selection"
               onPress={() => router.back()}
             >
-              <Ionicons color="#24314b" name="chevron-back" size={20} />
+              <Ionicons color="#24314b" name="chevron-back" size={20} style={directionalIconStyle} />
             </PressableScale>
             <BrandWordmark className="text-[44px] leading-[48px] text-[#26334a]" />
           </View>
@@ -967,3 +969,4 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
+

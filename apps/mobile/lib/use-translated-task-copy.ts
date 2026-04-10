@@ -1,7 +1,8 @@
 import type { TaskItem } from '@smart/types';
 import { useMemo } from 'react';
 import type { AppLanguage } from './i18n';
-import { primeLiveTextMap, useLiveTextMap } from './use-live-text-map';
+import { shouldHideTranslatedSourceText } from './live-translation-policy';
+import { hasResolvedLiveText, primeLiveTextMap, useLiveTextMap } from './use-live-text-map';
 import { parseTaskMeta } from './task-meta';
 
 export function stripTaskMeetingPrefix(title: string) {
@@ -77,12 +78,33 @@ export function useTranslatedTaskCopy(tasks: TaskItem[], language: AppLanguage) 
     language,
   );
 
-  function translateText(text: string) {
+  function translateText(
+    text: string,
+    options?: {
+      hideSourceBeforeReady?: boolean;
+    },
+  ) {
     if (!text) {
       return text;
     }
 
-    return textMap[text.trim()] ?? text;
+    const normalized = text.trim();
+    const translated = textMap[normalized] ?? text;
+    const shouldHideSource =
+      options?.hideSourceBeforeReady &&
+      shouldHideTranslatedSourceText(normalized, language);
+
+    if (shouldHideSource) {
+      if (!hasResolvedLiveText(language, normalized)) {
+        return '';
+      }
+
+      if (translated.trim() === normalized) {
+        return '';
+      }
+    }
+
+    return translated;
   }
 
   function getTaskMeta(task: TaskItem) {
@@ -94,6 +116,7 @@ export function useTranslatedTaskCopy(tasks: TaskItem[], language: AppLanguage) 
     options?: {
       normalize?: boolean;
       stripMeetingPrefix?: boolean;
+      hideSourceBeforeReady?: boolean;
     },
   ) {
     let value = options?.normalize
@@ -104,15 +127,27 @@ export function useTranslatedTaskCopy(tasks: TaskItem[], language: AppLanguage) 
       value = stripTaskMeetingPrefix(value);
     }
 
-    return translateText(value);
+    return translateText(value, {
+      hideSourceBeforeReady: options?.hideSourceBeforeReady,
+    });
   }
 
-  function getTaskBody(task: TaskItem) {
-    return translateText(getTaskMeta(task).body);
+  function getTaskBody(
+    task: TaskItem,
+    options?: {
+      hideSourceBeforeReady?: boolean;
+    },
+  ) {
+    return translateText(getTaskMeta(task).body, options);
   }
 
-  function getTaskMeetingLocation(task: TaskItem) {
-    return translateText(getTaskMeta(task).meeting?.meetingLocation ?? '');
+  function getTaskMeetingLocation(
+    task: TaskItem,
+    options?: {
+      hideSourceBeforeReady?: boolean;
+    },
+  ) {
+    return translateText(getTaskMeta(task).meeting?.meetingLocation ?? '', options);
   }
 
   return {

@@ -2006,6 +2006,8 @@ export class CollaborationService {
       }
     }
 
+    await this.emitWorkspaceRefreshForTasks(tasks, "task.created");
+
     return tasks.map((task) => this.serializeTaskWithPhotoProofUrls(task));
   }
 
@@ -3365,6 +3367,8 @@ export class CollaborationService {
       },
     });
 
+    await this.emitWorkspaceRefreshForTasks([updated], "task.status_updated");
+
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
 
@@ -3460,6 +3464,8 @@ export class CollaborationService {
         to: nextDueAt.toISOString(),
       },
     });
+
+    await this.emitWorkspaceRefreshForTasks([updated], "task.rescheduled");
 
     return {
       task: this.serializeTaskWithPhotoProofUrls(updated),
@@ -3678,6 +3684,8 @@ export class CollaborationService {
       },
     });
 
+    await this.emitWorkspaceRefreshForTasks([updated], "task.photo_proof_added");
+
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
 
@@ -3786,6 +3794,8 @@ export class CollaborationService {
         proofId,
       },
     });
+
+    await this.emitWorkspaceRefreshForTasks([updated], "task.photo_proof_deleted");
 
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
@@ -4869,6 +4879,8 @@ export class CollaborationService {
       }
     }
 
+    await this.emitWorkspaceRefreshForTasks(tasks, "task_template.generated");
+
     if (actorUserId) {
       await this.auditService.log({
         tenantId: manager.tenantId,
@@ -5750,6 +5762,14 @@ export class CollaborationService {
       },
     });
 
+    await this.emitWorkspaceRefreshForAudience({
+      tenantId: employee.tenantId,
+      managerUserId: template.managerEmployee.userId ?? null,
+      assigneeUserId: userId,
+      groupId: template.group?.id ?? null,
+      reason: "task_completion.status_updated",
+    });
+
     return this.buildRecurringTaskItem(
       template,
       employee,
@@ -5892,6 +5912,8 @@ export class CollaborationService {
         toDueAt: nextDueAt.toISOString(),
       },
     });
+
+    await this.emitWorkspaceRefreshForTasks([movedTask], "task.rescheduled_from_recurring");
 
     return {
       task: this.serializeTaskWithPhotoProofUrls(movedTask),
@@ -6463,6 +6485,17 @@ export class CollaborationService {
       },
     });
 
+    await this.emitWorkspaceRefreshForAudience({
+      tenantId: employee.tenantId,
+      managerUserId: template.managerEmployee.userId ?? null,
+      assigneeUserId: userId,
+      groupId: template.group?.id ?? null,
+      reason:
+        dto.action === "replace"
+          ? "task_completion.photo_proof_replaced"
+          : "task_completion.photo_proof_added",
+    });
+
     return this.buildRecurringTaskItem(
       template,
       employee,
@@ -6615,12 +6648,149 @@ export class CollaborationService {
       },
     });
 
+    await this.emitWorkspaceRefreshForAudience({
+      tenantId: employee.tenantId,
+      managerUserId: template.managerEmployee.userId ?? null,
+      assigneeUserId: userId,
+      groupId: template.group?.id ?? null,
+      reason: "task_completion.photo_proof_deleted",
+    });
+
     return this.buildRecurringTaskItem(
       template,
       employee,
       updatedCompletion,
       occurrenceDate,
     );
+  }
+
+  private async emitWorkspaceRefreshForTasks(
+    tasks: Array<{
+      tenantId: string;
+      groupId: string | null;
+      managerEmployee?: { userId?: string | null } | null;
+      assigneeEmployee?: { userId?: string | null } | null;
+    }>,
+    reason: string,
+  ) {
+    const userIds = new Set<string>();
+    const tenantIds = new Set<string>();
+    const groupIds = new Set<string>();
+
+    for (const task of tasks) {
+      tenantIds.add(task.tenantId);
+
+      if (task.managerEmployee?.userId) {
+        userIds.add(task.managerEmployee.userId);
+      }
+
+      if (task.assigneeEmployee?.userId) {
+        userIds.add(task.assigneeEmployee.userId);
+      }
+
+      if (task.groupId) {
+        groupIds.add(task.groupId);
+      }
+    }
+
+    if (groupIds.size > 0) {
+      const memberships = await this.prisma.workGroupMembership.findMany({
+        where: {
+          groupId: {
+            in: Array.from(groupIds),
+          },
+          employee: {
+            tenantId: {
+              in: Array.from(tenantIds),
+            },
+          },
+        },
+        select: {
+          employee: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      for (const membership of memberships) {
+        if (membership.employee.userId) {
+          userIds.add(membership.employee.userId);
+        }
+      }
+    }
+
+    this.emitWorkspaceRefresh(Array.from(userIds), reason);
+  }
+
+  private async emitWorkspaceRefreshForAudience(params: {
+    tenantId: string;
+    groupId?: string | null;
+    managerUserId?: string | null;
+    assigneeUserId?: string | null;
+    reason: string;
+  }) {
+    const audience = await this.resolveWorkspaceRefreshAudience(params);
+    this.emitWorkspaceRefresh(audience, params.reason);
+  }
+
+  private emitWorkspaceRefresh(userIds: string[], reason: string) {
+    if (userIds.length === 0) {
+      return;
+    }
+
+    const refreshedAt = new Date().toISOString();
+
+    for (const userId of userIds) {
+      this.collaborationGateway.emitWorkspaceRefresh(userId, {
+        reason,
+        refreshedAt,
+      });
+    }
+  }
+
+  private async resolveWorkspaceRefreshAudience(params: {
+    tenantId: string;
+    groupId?: string | null;
+    managerUserId?: string | null;
+    assigneeUserId?: string | null;
+  }) {
+    const userIds = new Set<string>();
+
+    if (params.managerUserId) {
+      userIds.add(params.managerUserId);
+    }
+
+    if (params.assigneeUserId) {
+      userIds.add(params.assigneeUserId);
+    }
+
+    if (params.groupId) {
+      const memberships = await this.prisma.workGroupMembership.findMany({
+        where: {
+          groupId: params.groupId,
+          employee: {
+            tenantId: params.tenantId,
+          },
+        },
+        select: {
+          employee: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      for (const membership of memberships) {
+        if (membership.employee.userId) {
+          userIds.add(membership.employee.userId);
+        }
+      }
+    }
+
+    return Array.from(userIds);
   }
 
   private taskInclude() {

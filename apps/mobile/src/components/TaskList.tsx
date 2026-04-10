@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { ActionSheetIOS, ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/ui/text';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
 import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
@@ -448,7 +449,10 @@ export default function TaskList({
   }
 
   function renderTaskRow(task: TaskItem, index: number, completed = false) {
-    const title = getTaskTitle(task, { normalize: true });
+    const title = getTaskTitle(task, {
+      normalize: true,
+      hideSourceBeforeReady: true,
+    });
     const isUpdating = updatingTaskIds.includes(task.id);
     const photoCount =
       (taskPhotos[task.id]?.length ?? 0) +
@@ -471,14 +475,18 @@ export default function TaskList({
         >
           {renderLeading(task)}
           <View className="flex-1 justify-center">
-            <Text
-              className={`text-[18px] leading-[23px] ${
-                completed ? 'text-[#7f8ba3] line-through' : 'text-[#172033]'
-              }`}
-              style={completed ? completedTitleStyle : taskTitleStyle}
-            >
-              {title}
-            </Text>
+            {title ? (
+              <Text
+                className={`text-[18px] leading-[23px] ${
+                  completed ? 'text-[#7f8ba3] line-through' : 'text-[#172033]'
+                }`}
+                style={completed ? completedTitleStyle : taskTitleStyle}
+              >
+                {title}
+              </Text>
+            ) : (
+              <View className="mt-1 h-4 w-[72%] rounded-full bg-[#e2eaf6]" />
+            )}
             {task.requiresPhoto ? (
               <Text className={`mt-1 text-[11px] ${completed ? 'text-[#8fa1bb]' : 'text-[#94a3b8]'}`}>
                 {completed && photoCount > 0
@@ -778,3 +786,4 @@ export default function TaskList({
     </>
   );
 }
+
