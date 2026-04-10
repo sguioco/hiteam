@@ -10,7 +10,7 @@ sharedInfo:
     dockerConfigJson: ""
 
 api:
-  image: "ghcr.io/sguioco/hiteam-api:main-7c46303ccae12e9e4ab1b50313b877799d1820ca"
+  image: "ghcr.io/sguioco/hiteam-api:main-a1c7c069597ef6859145eb55e3545310f08c5f9a"
   env:
     API_PUBLIC_URL: "https://api.85.237.211.182.nip.io"
     FRONTEND_URL: "https://hiteam.85.237.211.182.nip.io"
@@ -34,7 +34,7 @@ api:
     COMPRE_FACE_API_KEY: ""
 
 webAdmin:
-  image: "ghcr.io/sguioco/hiteam-web-admin:main-7c46303ccae12e9e4ab1b50313b877799d1820ca"
+  image: "ghcr.io/sguioco/hiteam-web-admin:main-a1c7c069597ef6859145eb55e3545310f08c5f9a"
   env:
     NEXT_PUBLIC_API_URL: "https://api.85.237.211.182.nip.io"
     NEXT_PUBLIC_GRAPHQL_URL: "https://api.85.237.211.182.nip.io/graphql"
