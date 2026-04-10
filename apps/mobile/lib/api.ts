@@ -142,7 +142,11 @@ async function persistSession(session: AppSession) {
     return;
   }
 
-  await FileSystem.writeAsStringAsync(SESSION_STORAGE_PATH, JSON.stringify(session));
+  try {
+    await FileSystem.writeAsStringAsync(SESSION_STORAGE_PATH, JSON.stringify(session));
+  } catch {
+    // Best effort session persistence; in-memory session remains active for the current runtime.
+  }
 }
 
 async function clearPersistedSession() {
