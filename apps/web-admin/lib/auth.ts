@@ -1,4 +1,9 @@
 import { toAdminHref } from './admin-routes';
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from './browser-storage';
 import { isDemoAccessToken, isDemoModeEnabled } from './demo-mode';
 
 export const DESKTOP_ADMIN_ROLES = [
@@ -77,6 +82,36 @@ function syncSessionCookie(session: AuthSession | null) {
   }).catch(() => undefined);
 }
 
+function persistSessionSnapshot(session: AuthSession | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!session) {
+    removeBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
+    return;
+  }
+
+  writeBrowserStorageItem(SESSION_KEY, JSON.stringify(session), {
+    includeSessionFallback: true,
+  });
+}
+
+function persistTenantSlugValue(value: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!value) {
+    removeBrowserStorageItem(TENANT_SLUG_KEY, { includeSessionFallback: true });
+    return;
+  }
+
+  writeBrowserStorageItem(TENANT_SLUG_KEY, value, {
+    includeSessionFallback: true,
+  });
+}
+
 function readWindowBootstrapSession(): AuthSession | null {
   if (typeof window === 'undefined') {
     return null;
@@ -97,7 +132,7 @@ function readWindowBootstrapSession(): AuthSession | null {
 export function saveSession(session: AuthSession): void {
   if (typeof window === 'undefined') return;
   window.__SMART_INITIAL_SESSION__ = session;
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  persistSessionSnapshot(session);
   syncSessionCookie(session);
   window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, { detail: session }));
 }
@@ -105,10 +140,10 @@ export function saveSession(session: AuthSession): void {
 export function getSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
   const bootstrappedSession = readWindowBootstrapSession();
-  const raw = window.localStorage.getItem(SESSION_KEY);
+  const raw = readBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
   if (!raw) {
     if (bootstrappedSession) {
-      window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+      persistSessionSnapshot(bootstrappedSession);
       return bootstrappedSession;
     }
 
@@ -119,7 +154,7 @@ export function getSession(): AuthSession | null {
     const session = JSON.parse(raw) as AuthSession;
 
     if (isDemoAccessToken(session.accessToken) && !isDemoModeEnabled() && !isLocalDevHost()) {
-      window.localStorage.removeItem(SESSION_KEY);
+      removeBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
       return bootstrappedSession;
     }
 
@@ -132,17 +167,17 @@ export function getSession(): AuthSession | null {
         session.user.tenantId !== bootstrappedSession.user.tenantId
       )
     ) {
-      window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+      persistSessionSnapshot(bootstrappedSession);
       return bootstrappedSession;
     }
 
     return session;
   } catch {
-    window.localStorage.removeItem(SESSION_KEY);
+    removeBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
   }
 
   if (bootstrappedSession) {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(bootstrappedSession));
+    persistSessionSnapshot(bootstrappedSession);
     return bootstrappedSession;
   }
 
@@ -152,7 +187,7 @@ export function getSession(): AuthSession | null {
 export function clearSession(): void {
   if (typeof window === 'undefined') return;
   window.__SMART_INITIAL_SESSION__ = null;
-  window.localStorage.removeItem(SESSION_KEY);
+  removeBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
   syncSessionCookie(null);
 }
 
@@ -168,11 +203,11 @@ export function saveTenantSlug(tenantSlug: string): void {
   const normalized = normalizeTenantSlug(tenantSlug);
 
   if (!normalized) {
-    window.localStorage.removeItem(TENANT_SLUG_KEY);
+    persistTenantSlugValue(null);
     return;
   }
 
-  window.localStorage.setItem(TENANT_SLUG_KEY, normalized);
+  persistTenantSlugValue(normalized);
 }
 
 export function getTenantSlug(): string {
@@ -190,7 +225,9 @@ export function getTenantSlug(): string {
     return hostnameTenant;
   }
 
-  const storedTenant = window.localStorage.getItem(TENANT_SLUG_KEY);
+  const storedTenant = readBrowserStorageItem(TENANT_SLUG_KEY, {
+    includeSessionFallback: true,
+  });
   if (storedTenant?.trim()) {
     return normalizeTenantSlug(storedTenant);
   }
@@ -211,7 +248,7 @@ export async function persistSession(session: AuthSession): Promise<void> {
   }
 
   window.__SMART_INITIAL_SESSION__ = session;
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  persistSessionSnapshot(session);
 
   const response = await fetch('/api/session', {
     method: 'POST',
@@ -236,7 +273,7 @@ export async function destroySession(): Promise<void> {
   }
 
   window.__SMART_INITIAL_SESSION__ = null;
-  window.localStorage.removeItem(SESSION_KEY);
+  removeBrowserStorageItem(SESSION_KEY, { includeSessionFallback: true });
   await fetch('/api/session', {
     method: 'DELETE',
     credentials: 'same-origin',

@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { writeBrowserStorageItem } from "./browser-storage";
 
 export type Locale = "en" | "ru";
 
@@ -1739,7 +1740,7 @@ export function I18nProvider({
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    window.localStorage.setItem(STORAGE_KEY, locale);
+    writeBrowserStorageItem(STORAGE_KEY, locale);
     document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale]);
 

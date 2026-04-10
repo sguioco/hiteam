@@ -9,6 +9,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from '@/lib/browser-storage';
 import { AuthSession, persistSession, resolveHomeRoute } from '@/lib/auth';
 import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
 import { BrandWordmark } from './brand-wordmark';
@@ -152,7 +157,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   const t = texts[lang];
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('smart-admin-locale');
+    const saved = readBrowserStorageItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
     }
@@ -160,11 +165,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
 
   useEffect(() => {
     if (lang === 'en') {
-      window.localStorage.removeItem('smart-admin-locale');
+      removeBrowserStorageItem('smart-admin-locale');
       return;
     }
 
-    window.localStorage.setItem('smart-admin-locale', lang);
+    writeBrowserStorageItem('smart-admin-locale', lang);
   }, [lang]);
 
   async function handleSubmit(event: React.FormEvent) {

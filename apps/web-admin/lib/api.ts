@@ -1,4 +1,5 @@
 import { AuthSession, expireSession, getSession, saveSession } from "./auth";
+import { readBrowserStorageItem, writeBrowserStorageItem } from "./browser-storage";
 import { readClientCache, writeClientCache } from "./client-cache";
 import {
   demoApiDownload,
@@ -31,7 +32,7 @@ function readCacheNamespaceVersion(scope: "tenant" | "user", id?: string | null)
     return 0;
   }
 
-  return Number(window.localStorage.getItem(`${API_CACHE_NAMESPACE_PREFIX}${scope}:${id}`) ?? "0") || 0;
+  return Number(readBrowserStorageItem(`${API_CACHE_NAMESPACE_PREFIX}${scope}:${id}`) ?? "0") || 0;
 }
 
 function bumpCacheNamespaceVersion(scope: "tenant" | "user", id?: string | null) {
@@ -40,8 +41,8 @@ function bumpCacheNamespaceVersion(scope: "tenant" | "user", id?: string | null)
   }
 
   const storageKey = `${API_CACHE_NAMESPACE_PREFIX}${scope}:${id}`;
-  const current = Number(window.localStorage.getItem(storageKey) ?? "0") || 0;
-  window.localStorage.setItem(storageKey, String(current + 1));
+  const current = Number(readBrowserStorageItem(storageKey) ?? "0") || 0;
+  writeBrowserStorageItem(storageKey, String(current + 1));
 }
 
 function normalizeMethod(method?: string) {

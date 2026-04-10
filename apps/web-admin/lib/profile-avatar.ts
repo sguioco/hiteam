@@ -1,3 +1,9 @@
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
+
 export const PROFILE_AVATAR_STORAGE_KEY = "smart-admin-profile-avatar";
 export const PROFILE_AVATAR_UPDATED_EVENT = "smart-admin-profile-avatar-updated";
 
@@ -6,7 +12,7 @@ export function readStoredProfileAvatar() {
     return null;
   }
 
-  return window.localStorage.getItem(PROFILE_AVATAR_STORAGE_KEY);
+  return readBrowserStorageItem(PROFILE_AVATAR_STORAGE_KEY);
 }
 
 export function writeStoredProfileAvatar(value: string | null) {
@@ -15,9 +21,9 @@ export function writeStoredProfileAvatar(value: string | null) {
   }
 
   if (value) {
-    window.localStorage.setItem(PROFILE_AVATAR_STORAGE_KEY, value);
+    writeBrowserStorageItem(PROFILE_AVATAR_STORAGE_KEY, value);
   } else {
-    window.localStorage.removeItem(PROFILE_AVATAR_STORAGE_KEY);
+    removeBrowserStorageItem(PROFILE_AVATAR_STORAGE_KEY);
   }
 
   window.dispatchEvent(

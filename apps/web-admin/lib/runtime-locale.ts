@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserStorageItem } from "./browser-storage";
+
 export type RuntimeLocale = "ru" | "en";
 
 export function getRuntimeLocale(): RuntimeLocale {
@@ -14,7 +16,7 @@ export function getRuntimeLocale(): RuntimeLocale {
   }
 
   if (typeof window !== "undefined") {
-    const saved = window.localStorage.getItem("smart-admin-locale");
+    const saved = readBrowserStorageItem("smart-admin-locale");
     if (saved === "ru" || saved === "en") {
       return saved;
     }

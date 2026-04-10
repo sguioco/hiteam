@@ -1,6 +1,10 @@
 "use client";
 
 import type { Locale } from "./i18n";
+import {
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
 
 const STORAGE_KEY = "smart-admin-live-translation-cache-v1";
 const memoryCache = new Map<string, string>();
@@ -15,14 +19,10 @@ function persistCache() {
     return;
   }
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(Object.fromEntries(memoryCache.entries())),
-    );
-  } catch {
-    // Ignore storage quota and serialization errors.
-  }
+  writeBrowserStorageItem(
+    STORAGE_KEY,
+    JSON.stringify(Object.fromEntries(memoryCache.entries())),
+  );
 }
 
 export function hydrateClientTranslationCache() {
@@ -33,7 +33,7 @@ export function hydrateClientTranslationCache() {
   hydrated = true;
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readBrowserStorageItem(STORAGE_KEY);
     if (!raw) {
       return;
     }

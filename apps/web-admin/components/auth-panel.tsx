@@ -22,6 +22,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from '@/lib/browser-storage';
 import { getDemoSessionForRole, resetDemoState } from '@/lib/demo-api';
 import {
   disableDemoMode,
@@ -318,7 +323,7 @@ export function AuthPanel() {
   );
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('smart-admin-locale');
+    const saved = readBrowserStorageItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
     }
@@ -326,11 +331,11 @@ export function AuthPanel() {
 
   useEffect(() => {
     if (lang === 'en') {
-      window.localStorage.removeItem('smart-admin-locale');
+      removeBrowserStorageItem('smart-admin-locale');
       return;
     }
 
-    window.localStorage.setItem('smart-admin-locale', lang);
+    writeBrowserStorageItem('smart-admin-locale', lang);
   }, [lang]);
 
   useEffect(() => {

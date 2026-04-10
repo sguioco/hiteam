@@ -9,6 +9,10 @@ import {
   isDemoAccessToken,
   isDemoModeEnabled,
 } from "./demo-mode";
+import {
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
 import { getMockAvatarDataUrl, resolveMockAvatarGender } from "./mock-avatar";
 import { appendTaskMeta } from "./task-meta";
 
@@ -812,7 +816,7 @@ function loadState(): DemoState {
     return memoryState;
   }
 
-  const raw = window.localStorage.getItem(DEMO_STATE_KEY);
+  const raw = readBrowserStorageItem(DEMO_STATE_KEY);
   if (!raw) {
     memoryState = createInitialState();
     return memoryState;
@@ -870,7 +874,7 @@ function loadState(): DemoState {
 function saveState(state: DemoState) {
   memoryState = cloneState(state);
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(DEMO_STATE_KEY, JSON.stringify(memoryState));
+    writeBrowserStorageItem(DEMO_STATE_KEY, JSON.stringify(memoryState));
   }
 }
 
@@ -2931,7 +2935,7 @@ export async function demoApiDownload(
 export function resetDemoState() {
   memoryState = createInitialState();
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(DEMO_STATE_KEY, JSON.stringify(memoryState));
+    writeBrowserStorageItem(DEMO_STATE_KEY, JSON.stringify(memoryState));
   }
 }
 

@@ -1,4 +1,9 @@
 import type { AuthSession } from "./auth";
+import {
+  readBrowserStorageItem,
+  removeBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
 
 const DEMO_MODE_STORAGE_KEY = "smart-admin-demo-mode";
 
@@ -27,18 +32,18 @@ export function isDemoModeEnabled() {
 
   return (
     process.env.NEXT_PUBLIC_DEMO_MODE === "true" ||
-    window.localStorage.getItem(DEMO_MODE_STORAGE_KEY) === "true"
+    readBrowserStorageItem(DEMO_MODE_STORAGE_KEY) === "true"
   );
 }
 
 export function enableDemoMode() {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(DEMO_MODE_STORAGE_KEY, "true");
+  writeBrowserStorageItem(DEMO_MODE_STORAGE_KEY, "true");
 }
 
 export function disableDemoMode() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(DEMO_MODE_STORAGE_KEY);
+  removeBrowserStorageItem(DEMO_MODE_STORAGE_KEY);
 }
 
 export function createDemoSession(role: "admin" | "employee"): AuthSession {
