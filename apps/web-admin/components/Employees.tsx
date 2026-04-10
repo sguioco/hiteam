@@ -89,6 +89,11 @@ type EmployeeApiRecord = {
   user?: {
     id: string;
     email: string;
+    roles?: Array<{
+      role?: {
+        code: string;
+      } | null;
+    }> | null;
   } | null;
   company?: {
     id: string;
@@ -287,6 +292,30 @@ function getAvatarSrc(
   );
 }
 
+function resolveEmployeeRoleLabel(
+  employee: EmployeeApiRecord,
+  locale: "ru" | "en",
+) {
+  const roleCodes =
+    employee.user?.roles
+      ?.map((assignment) => assignment.role?.code)
+      .filter((code): code is string => Boolean(code)) ?? [];
+
+  if (roleCodes.includes("tenant_owner")) {
+    return runtimeLocalize("Владелец", "Owner", locale);
+  }
+
+  if (roleCodes.includes("operations_admin") || roleCodes.includes("hr_admin")) {
+    return runtimeLocalize("Администратор", "Administrator", locale);
+  }
+
+  if (roleCodes.includes("manager")) {
+    return runtimeLocalize("Менеджер", "Manager", locale);
+  }
+
+  return employee.position?.name ?? runtimeLocalize("Сотрудник", "Employee", locale);
+}
+
 function normalizeEmployeeStatus(status?: string | null): EmployeeStatus {
   switch ((status || "").toUpperCase()) {
     case "TERMINATED":
@@ -326,9 +355,9 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
   const locale = getRuntimeLocale();
   const tableStatusLabel =
     status === "active"
-      ? runtimeLocalize("На смене", "On shift", locale)
+      ? runtimeLocalize("Активен", "Active", locale)
       : status === "inactive"
-        ? runtimeLocalize("Вне смены", "Off shift", locale)
+        ? runtimeLocalize("Неактивен", "Inactive", locale)
         : status === "vacation"
           ? runtimeLocalize("Отпуск", "Vacation", locale)
           : status === "sick"
@@ -346,8 +375,8 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
 }
 
 function getStatusLabel(status: EmployeeStatus, locale: "ru" | "en") {
-  if (status === "active") return runtimeLocalize("На смене", "On shift", locale);
-  if (status === "inactive") return runtimeLocalize("Вне смены", "Off shift", locale);
+  if (status === "active") return runtimeLocalize("Активен", "Active", locale);
+  if (status === "inactive") return runtimeLocalize("Неактивен", "Inactive", locale);
   if (status === "vacation") return runtimeLocalize("Отпуск", "Vacation", locale);
   if (status === "sick") return runtimeLocalize("Больничный", "Sick leave", locale);
   return runtimeLocalize("Уволен", "Dismissed", locale);
@@ -504,6 +533,7 @@ const Employees = ({
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
+  const [createGroupMembers, setCreateGroupMembers] = useState<string[]>([]);
   const [createGroupSubmitting, setCreateGroupSubmitting] = useState(false);
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
 
@@ -629,6 +659,10 @@ const Employees = ({
         ...current,
         shiftTemplateId: newTemplate.id,
       }));
+      setAssignShiftDraft((current) => ({
+        ...current,
+        templateId: newTemplate.id,
+      }));
       setCreateTemplateOpen(false);
       setTemplateDraft({
         name: "",
@@ -663,11 +697,22 @@ const Employees = ({
 
       if (res && res.length > 0) {
         setScheduleTemplates(res);
-        const created = res.find((t) => t.name === templateDraft.name.trim());
+        const created =
+          res.find(
+            (t) =>
+              t.name === templateDraft.name.trim() &&
+              t.startsAtLocal === templateDraft.startsAtLocal &&
+              t.endsAtLocal === templateDraft.endsAtLocal,
+          ) ??
+          res.find((t) => t.name === templateDraft.name.trim());
         if (created) {
           setReviewForm((current) => ({
             ...current,
             shiftTemplateId: created.id,
+          }));
+          setAssignShiftDraft((current) => ({
+            ...current,
+            templateId: created.id,
           }));
         }
       }
@@ -744,9 +789,7 @@ const Employees = ({
           status: normalizeEmployeeStatus(employee.status),
           activeTasks: tasksByEmployeeId.get(employee.id) ?? 0,
           phone: employee.phone ?? "—",
-          position:
-            employee.position?.name ??
-            runtimeLocalize("Сотрудник", "Employee", locale),
+          position: resolveEmployeeRoleLabel(employee, locale),
           hireDate: employee.hireDate,
           attendance: null,
           avatarUrl: employee.avatarUrl ?? null,
@@ -1147,12 +1190,14 @@ const Employees = ({
         body: JSON.stringify({
           name: createGroupName.trim(),
           description: createGroupDescription.trim() || undefined,
+          memberEmployeeIds: Array.from(new Set(createGroupMembers)),
         }),
       });
 
       setCreateGroupOpen(false);
       setCreateGroupName("");
       setCreateGroupDescription("");
+      setCreateGroupMembers([]);
       setPageMessage(runtimeLocalize("Группа добавлена.", "Group added.", locale));
       await loadDirectory();
     } catch (requestError) {
@@ -2360,19 +2405,20 @@ const Employees = ({
             setCreateGroupError(null);
             setCreateGroupName("");
             setCreateGroupDescription("");
+            setCreateGroupMembers([]);
           }
         }}
         open={createGroupOpen}
       >
-        <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+        <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {runtimeLocalize("Добавить группу", "Add group", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Создайте новую группу внутри организации. Сотрудников можно будет добавить сразу после создания.",
-                "Create a new group inside the organization. Employees can be added right after creation.",
+                "Создайте новую группу внутри организации и сразу добавьте в неё сотрудников.",
+                "Create a new group inside the organization and add employees to it right away.",
                 locale,
               )}
             </DialogDescription>
@@ -2407,6 +2453,56 @@ const Employees = ({
                 value={createGroupDescription}
               />
             </label>
+            <div className="text-xs font-heading text-muted-foreground">
+              {runtimeLocalize("Состав группы", "Group members", locale)}
+            </div>
+            {employees.length > 0 ? (
+              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                {employees.map((employee) => (
+                  <label
+                    className="flex items-center justify-between rounded-2xl border border-border bg-secondary/20 px-4 py-3"
+                    key={employee.id}
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        alt={employee.name}
+                        className="h-10 w-10 rounded-full object-cover"
+                        src={
+                          employee.avatarUrl ||
+                          getMockAvatarDataUrl(employee.name)
+                        }
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-heading font-medium text-foreground">
+                          {employee.name}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {employee.position} • {employee.location}
+                        </p>
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={createGroupMembers.includes(employee.id)}
+                      onCheckedChange={(checked) =>
+                        setCreateGroupMembers((current) =>
+                          checked === true
+                            ? Array.from(new Set([...current, employee.id]))
+                            : current.filter((id) => id !== employee.id),
+                        )
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-5 text-sm text-muted-foreground">
+                {runtimeLocalize(
+                  "В организации пока нет сотрудников для добавления в группу.",
+                  "There are no employees in the organization yet to add to the group.",
+                  locale,
+                )}
+              </div>
+            )}
             {createGroupError ? (
               <div className="error-box">{createGroupError}</div>
             ) : null}
@@ -3707,12 +3803,17 @@ const Employees = ({
             <label className="grid gap-2 text-sm font-heading">
               <span>{runtimeLocalize("Шаблон смены", "Shift template", locale)}</span>
               <Select
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  if (value === CREATE_SHIFT_TEMPLATE_OPTION) {
+                    setCreateTemplateOpen(true);
+                    return;
+                  }
+
                   setAssignShiftDraft((current) => ({
                     ...current,
                     templateId: value,
-                  }))
-                }
+                  }));
+                }}
                 value={assignShiftDraft.templateId}
               >
                 <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
@@ -3724,8 +3825,30 @@ const Employees = ({
                       {template.name} ({template.startsAtLocal}-{template.endsAtLocal})
                     </SelectItem>
                   ))}
+                  <SelectItem value={CREATE_SHIFT_TEMPLATE_OPTION}>
+                    {runtimeLocalize("+ Создать шаблон смены", "+ Create shift template", locale)}
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              {scheduleTemplates.length === 0 ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-3 text-sm text-muted-foreground">
+                  <span>
+                    {runtimeLocalize(
+                      "Пока нет ни одного шаблона смены. Сначала создай шаблон, потом он сразу появится в списке.",
+                      "There are no shift templates yet. Create one first and it will appear in the list immediately.",
+                      locale,
+                    )}
+                  </span>
+                  <Button
+                    className="shrink-0 rounded-xl font-heading"
+                    onClick={() => setCreateTemplateOpen(true)}
+                    type="button"
+                    variant="outline"
+                  >
+                    {runtimeLocalize("Создать", "Create", locale)}
+                  </Button>
+                </div>
+              ) : null}
             </label>
             <label className="grid gap-2 text-sm font-heading">
               <span>{runtimeLocalize("Дата", "Date", locale)}</span>

@@ -13,7 +13,7 @@ import {
   removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
-import { AuthSession, persistSession, resolveHomeRoute } from '@/lib/auth';
+import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
 import { Globe, Hand, Loader2 } from 'lucide-react';
 import { BrandWordmark } from './brand-wordmark';
 import {
@@ -152,7 +152,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
       });
       await persistSession(session);
       navigationStarted = true;
-      window.location.replace(resolveHomeRoute(session.user.roleCodes));
+      window.location.replace(await resolvePostLoginRoute(session));
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {

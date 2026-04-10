@@ -661,6 +661,8 @@ const initialTemplateDraft: CreateTemplateDraft = {
   weekDays: [1, 2, 3, 4, 5],
 };
 
+const EMPTY_SELECT_VALUE = "__empty_select__";
+
 const scheduleCopy = {
   ru: {
     title: "Календарь",
@@ -716,6 +718,7 @@ const scheduleCopy = {
     shiftCreated: "Смена создана.",
     templateValidation: "Укажите название, время смены и рабочие дни.",
     templateCreated: "Шаблон смены создан.",
+    noShiftTemplates: "Нет шаблонов смен",
     massAssignValidation: "Выберите шаблон и диапазон дат.",
     templateNotFound: "Шаблон не найден.",
     templateDefaultsMissing: "Сначала настройте хотя бы одну локацию и должность.",
@@ -824,6 +827,7 @@ const scheduleCopy = {
     shiftCreated: "Shift created.",
     templateValidation: "Fill in the name, shift time, and workdays.",
     templateCreated: "Shift template created.",
+    noShiftTemplates: "No shift templates",
     massAssignValidation: "Select a template and date range.",
     templateNotFound: "Template not found.",
     templateDefaultsMissing: "Set up at least one location and one role first.",
@@ -2930,20 +2934,35 @@ export default function Schedule({
               value={massAssignDraft.templateId}
             >
               <SelectTrigger>
-                <SelectTriggerLabel>
-                  {massAssignDraft.templateId
-                    ? templates.find(
-                        (template) => template.id === massAssignDraft.templateId,
-                      )?.name
-                    : ui.shiftTemplate}
+                <SelectTriggerLabel
+                  className={
+                    templates.find(
+                      (template) => template.id === massAssignDraft.templateId,
+                    )?.name
+                      ? undefined
+                      : "text-muted-foreground"
+                  }
+                >
+                  {templates.find(
+                    (template) => template.id === massAssignDraft.templateId,
+                  )?.name ??
+                    (templates.length > 0
+                      ? ui.selectTemplate
+                      : ui.noShiftTemplates)}
                 </SelectTriggerLabel>
               </SelectTrigger>
               <SelectContent>
-                {templates.map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    {template.name}
+                {templates.length > 0 ? (
+                  templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem disabled value={EMPTY_SELECT_VALUE}>
+                    {ui.noShiftTemplates}
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
 

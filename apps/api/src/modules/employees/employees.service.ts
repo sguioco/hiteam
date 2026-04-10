@@ -58,7 +58,15 @@ export class EmployeesService {
           : undefined,
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
         company: true,
         department: true,
         primaryLocation: true,
@@ -83,7 +91,15 @@ export class EmployeesService {
     return this.prisma.employee.findFirstOrThrow({
       where: { tenantId, id: employeeId },
       include: {
-        user: true,
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
         company: true,
         department: true,
         primaryLocation: true,
@@ -655,6 +671,10 @@ export class EmployeesService {
     const roleCode = isFirstUser ? 'tenant_owner' : 'employee';
     const roleName = isFirstUser ? 'Tenant Owner' : 'Employee';
     const shouldAutoApprove = isFirstUser || isPreApproved;
+
+    if (isFirstUser && !dto.avatarDataUrl?.trim() && !invitation.avatarUrl) {
+      throw new BadRequestException('Добавьте фото профиля.');
+    }
 
     const assignedRole = await this.prisma.role.upsert({
       where: { code: roleCode },

@@ -46,7 +46,6 @@ import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
 import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
-import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { localizePersonName } from "../lib/transliteration";
 import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
 import {
@@ -103,10 +102,10 @@ function isActive(pathname: string, href: string) {
 }
 
 function resolveSidebarRoleLabel(roleCodes: string[], locale: Locale) {
-  if (
-    roleCodes.includes("tenant_owner") ||
-    roleCodes.includes("operations_admin")
-  ) {
+  if (roleCodes.includes("tenant_owner")) {
+    return locale === "ru" ? "Владелец" : "Owner";
+  }
+  if (roleCodes.includes("operations_admin")) {
     return locale === "ru" ? "Администратор" : "Administrator";
   }
   if (roleCodes.includes("hr_admin")) {
@@ -255,6 +254,21 @@ export function AdminShell({
     { value: "ru", label: "Русский", icon: "/ru.png" },
     { value: "en", label: "English", icon: "/en.png" },
   ];
+  const profileAvatarScope = session?.user.email ?? initialSession?.user.email ?? null;
+
+  useEffect(() => {
+    if (
+      mode !== "admin" ||
+      !ready ||
+      !session ||
+      organization?.configured !== false ||
+      pathname === toAdminHref("/organization")
+    ) {
+      return;
+    }
+
+    router.replace(toAdminHref("/organization"));
+  }, [mode, organization, pathname, ready, router, session]);
 
   function applyHeaderSnapshot(
     snapshot: ShellHeaderCachePayload,
@@ -363,7 +377,7 @@ export function AdminShell({
       );
     }
 
-    setStoredAvatarUrl(readStoredProfileAvatar());
+    setStoredAvatarUrl(readStoredProfileAvatar(currentSession.user.email));
 
     if (mode === "employee") {
       if (!employeeOnlySession) {
@@ -426,16 +440,34 @@ export function AdminShell({
   }, [initialSession, initialShellBootstrap, mode, router]);
 
   useEffect(() => {
-    setStoredAvatarUrl(readStoredProfileAvatar());
+    setStoredAvatarUrl(readStoredProfileAvatar(profileAvatarScope));
 
     function handleAvatarUpdated(event: Event) {
-      const customEvent = event as CustomEvent<string | null>;
-      setStoredAvatarUrl(customEvent.detail ?? readStoredProfileAvatar());
+      const customEvent = event as CustomEvent<{
+        scope?: string | null;
+        value?: string | null;
+      }>;
+      const nextScope = customEvent.detail?.scope ?? null;
+      if (
+        nextScope !== null &&
+        profileAvatarScope !== null &&
+        nextScope !== profileAvatarScope.trim().toLowerCase()
+      ) {
+        return;
+      }
+      setStoredAvatarUrl(readStoredProfileAvatar(profileAvatarScope));
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key === null || event.key === "smart-admin-profile-avatar") {
-        setStoredAvatarUrl(readStoredProfileAvatar());
+      const scopedKey = profileAvatarScope
+        ? `smart-admin-profile-avatar:${profileAvatarScope.trim().toLowerCase()}`
+        : "smart-admin-profile-avatar";
+      if (
+        event.key === null ||
+        event.key === "smart-admin-profile-avatar" ||
+        event.key === scopedKey
+      ) {
+        setStoredAvatarUrl(readStoredProfileAvatar(profileAvatarScope));
       }
     }
 
@@ -452,7 +484,7 @@ export function AdminShell({
       );
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [profileAvatarScope]);
 
   useEffect(() => {
     if (!session) return;
@@ -856,7 +888,10 @@ export function AdminShell({
   const sidebarAvatarSrc =
     resolvedProfileAvatarUrl && !profileAvatarFailed
       ? resolvedProfileAvatarUrl
-      : getMockAvatarDataUrl(displayProfileName);
+      : null;
+  const sidebarAvatarFallback = getDisplayInitials(
+    displayProfileName || session?.user.email || "HiTeam",
+  );
 
   function resolveNotificationHref(actionUrl: string | null) {
     if (!actionUrl) return notificationsHref;
@@ -1167,12 +1202,16 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                <img
-                  alt={displayProfileName}
-                  className="h-full w-full rounded-full object-cover"
-                  onError={() => setProfileAvatarFailed(true)}
-                  src={sidebarAvatarSrc}
-                />
+                {sidebarAvatarSrc ? (
+                  <img
+                    alt={displayProfileName}
+                    className="h-full w-full rounded-full object-cover"
+                    onError={() => setProfileAvatarFailed(true)}
+                    src={sidebarAvatarSrc}
+                  />
+                ) : (
+                  <span>{sidebarAvatarFallback}</span>
+                )}
               </div>
               <div className="sidebar-user-copy">
                 <strong>{displayProfileName}</strong>

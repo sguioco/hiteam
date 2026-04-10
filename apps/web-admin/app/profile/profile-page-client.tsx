@@ -28,8 +28,9 @@ export default function ProfilePageClient({
     isEmployeeOnlyRole(initialSession.user.roleCodes),
   );
   const [session, setSession] = useState<AuthSession>(initialSession);
+  const avatarScope = session.user.email;
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
-    initialEmployee?.avatarUrl ?? readStoredProfileAvatar(),
+    initialEmployee?.avatarUrl ?? readStoredProfileAvatar(initialSession.user.email),
   );
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [employee, setEmployee] = useState<ProfileEmployee | null>(initialEmployee ?? null);
@@ -49,9 +50,9 @@ export default function ProfilePageClient({
       didUseInitialEmployee.current = false;
       if (initialEmployee.avatarUrl) {
         setAvatarPreview(initialEmployee.avatarUrl);
-        writeStoredProfileAvatar(initialEmployee.avatarUrl);
+        writeStoredProfileAvatar(initialEmployee.avatarUrl, s.user.email);
       } else {
-        setAvatarPreview(readStoredProfileAvatar());
+        setAvatarPreview(readStoredProfileAvatar(s.user.email));
       }
       return;
     }
@@ -65,14 +66,14 @@ export default function ProfilePageClient({
 
         if (employee?.avatarUrl) {
           setAvatarPreview(employee.avatarUrl);
-          writeStoredProfileAvatar(employee.avatarUrl);
+          writeStoredProfileAvatar(employee.avatarUrl, s.user.email);
           return;
         }
 
-        setAvatarPreview(readStoredProfileAvatar());
+        setAvatarPreview(readStoredProfileAvatar(s.user.email));
       })
       .catch(() => {
-        setAvatarPreview(readStoredProfileAvatar());
+        setAvatarPreview(readStoredProfileAvatar(s.user.email));
       });
   }, [initialEmployee]);
 
@@ -83,7 +84,7 @@ export default function ProfilePageClient({
 
   function handleAvatarChange(nextAvatarDataUrl: string | null) {
     setAvatarPreview(nextAvatarDataUrl);
-    writeStoredProfileAvatar(nextAvatarDataUrl);
+    writeStoredProfileAvatar(nextAvatarDataUrl, avatarScope);
   }
 
   const user = session.user;

@@ -37,7 +37,7 @@ import {
 import {
   AuthSession,
   persistSession,
-  resolveHomeRoute,
+  resolvePostLoginRoute,
   saveTenantSlug,
 } from '@/lib/auth';
 import { primeWorkspaceExperienceWithinBudget } from '@/lib/workspace-warmup';
@@ -356,7 +356,7 @@ export function AuthPanel() {
         const session = getDemoSessionForRole(demoRole);
         await persistSession(session);
         navigationStarted = true;
-        window.location.replace(resolveHomeRoute(session.user.roleCodes));
+        window.location.replace(await resolvePostLoginRoute(session));
         return;
       }
 
@@ -376,7 +376,7 @@ export function AuthPanel() {
       await persistSession(session);
       await primeWorkspaceExperienceWithinBudget(session, 700);
       navigationStarted = true;
-      window.location.replace(resolveHomeRoute(session.user.roleCodes));
+      window.location.replace(await resolvePostLoginRoute(session));
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
@@ -443,8 +443,8 @@ export function AuthPanel() {
     resetDemoState();
     const session = getDemoSessionForRole(role);
     void persistSession(session)
-      .then(() => {
-        window.location.replace(resolveHomeRoute(session.user.roleCodes));
+      .then(async () => {
+        window.location.replace(await resolvePostLoginRoute(session));
       })
       .catch((error) => {
         setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');

@@ -86,6 +86,10 @@ function findCountryOptionIdByCode(countryCode: string) {
   return COUNTRY_CODE_OPTIONS.find((option) => option.code === countryCode)?.id ?? "";
 }
 
+function isExistingManagerAccountError(message: string) {
+  return /already used|already registered|уже использован|уже зарегистрирован/i.test(message);
+}
+
 async function compressImageToDataUrl(
   file: File,
   options?: { maxSide?: number; quality?: number },
@@ -456,9 +460,19 @@ export default function ManagerJoinPageClient({
     event.preventDefault();
     if (!invitation) return;
 
-    setSubmitting(true);
     setError(null);
     setSuccess(null);
+
+    if (!avatarDataUrl) {
+      setError(
+        locale === "ru"
+          ? "Добавьте фото профиля"
+          : "Add a profile photo",
+      );
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
       const registration = await apiRequest<{ accessGranted?: boolean }>(`/employees/invitations/public/${token}/register`, {
@@ -510,12 +524,19 @@ export default function ManagerJoinPageClient({
       );
       setTimeout(() => router.replace(toAdminHref("/organization")), 600);
     } catch (submitError) {
+      const fallbackMessage =
+        locale === "ru"
+          ? "Произошла ошибка при настройке."
+          : "An error occurred during setup.";
+      const nextMessage =
+        submitError instanceof Error ? submitError.message : fallbackMessage;
+
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : locale === "ru"
-            ? "Произошла ошибка при настройке."
-            : "An error occurred during setup.",
+        isExistingManagerAccountError(nextMessage)
+          ? locale === "ru"
+            ? "Аккаунт уже создан. Войдите в систему и завершите настройку организации."
+            : "The account has already been created. Sign in to finish organization setup."
+          : nextMessage,
       );
     } finally {
       setSubmitting(false);
@@ -542,14 +563,17 @@ export default function ManagerJoinPageClient({
       <main className="auth-gate">
         <div className="auth-gate-card max-w-[520px] text-left">
           <h1 className="text-2xl font-bold">
-            {locale === "ru" ? "Настройка уже начата" : "Setup already started"}
+            {locale === "ru" ? "Аккаунт уже создан" : "Account already created"}
           </h1>
           <p className="mt-3 text-sm text-gray-500">
             {locale === "ru"
-              ? `Для ${invitation.email} профиль уже заполнен. Войдите в систему и завершите настройку организации.`
-              : `The profile for ${invitation.email} has already been completed. Sign in to finish organization setup.`}
+              ? `Для ${invitation.email} аккаунт уже создан. Войдите в систему и завершите настройку организации.`
+              : `The account for ${invitation.email} has already been created. Sign in to finish organization setup.`}
           </p>
-          <Link className="solid-button mt-6 inline-flex" href="/login">
+          <Link
+            className="solid-button mt-6 inline-flex"
+            href={`/login?tenant=${encodeURIComponent(invitation.tenantSlug)}`}
+          >
             {locale === "ru" ? "Войти" : "Sign in"}
           </Link>
         </div>
@@ -782,7 +806,7 @@ export default function ManagerJoinPageClient({
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
-                  <label htmlFor="manager-photo" className="text-sm font-medium">{locale === "ru" ? "Фото" : "Photo"}</label>
+                  <label htmlFor="manager-photo" className="text-sm font-medium">{locale === "ru" ? "Фото" : "Photo"}{requiredMark}</label>
                   <div className="flex min-h-[88px] items-center gap-3 rounded-[20px] border border-border/60 bg-muted/15 p-3">
                     <button
                       type="button"
@@ -821,8 +845,8 @@ export default function ManagerJoinPageClient({
                         >
                           {locale === "ru" ? "Выберите файл" : "Choose file"}
                         </label>
-                        <span className="truncate text-sm text-muted-foreground">
-                          {avatarFileName || (locale === "ru" ? "Файл не выбран" : "No file selected")}
+                        <span className={`truncate text-sm ${avatarFileName ? "text-muted-foreground" : "text-red-600"}`}>
+                          {avatarFileName || (locale === "ru" ? "Фото обязательно" : "Photo is required")}
                         </span>
                       </div>
                     </div>

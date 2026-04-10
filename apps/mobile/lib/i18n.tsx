@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Updates from 'expo-updates';
 import { DevSettings, I18nManager, Platform, type StyleProp, type TextStyle } from 'react-native';
@@ -1685,8 +1686,9 @@ export async function applyLanguageLayoutDirection(
   options?: { reloadOnChange?: boolean },
 ) {
   const shouldUseRTL = isRTLLanguage(language);
+  const isExpoGoRuntime = Constants.executionEnvironment === 'storeClient';
 
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || isExpoGoRuntime) {
     return { didChange: false, isRTL: shouldUseRTL };
   }
 

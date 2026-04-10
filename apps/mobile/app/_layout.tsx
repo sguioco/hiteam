@@ -8,7 +8,6 @@ import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-g
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { HeroUINativeProvider } from 'heroui-native';
-import { TopChromeBlur } from '../components/ui/top-chrome-blur';
 import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
 import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
 import { BannerThemeProvider, loadBannerThemePreference, type BannerTheme } from '../lib/banner-theme';
@@ -54,8 +53,6 @@ function AppRouterSlot() {
   }, [isAuthenticated, pathname, router]);
 
   const direction = isRTLLanguage(language) ? 'rtl' : 'ltr';
-  const showTopChromeBlur =
-    isAuthenticated || (pathname !== '/' && !pathname.startsWith('/auth'));
 
   return (
     <View
@@ -63,7 +60,6 @@ function AppRouterSlot() {
       style={{ flex: 1, backgroundColor: '#ffffff' }}
     >
       <Slot />
-      {showTopChromeBlur ? <TopChromeBlur /> : null}
     </View>
   );
 }
