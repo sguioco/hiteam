@@ -62,6 +62,7 @@ import {
   type ShellHeaderCachePayload,
   type ShellNotificationsCachePayload,
 } from "../lib/shell-bootstrap";
+import { primeWorkspaceExperience } from "../lib/workspace-warmup";
 
 type NavItem = {
   href: string;
@@ -372,6 +373,7 @@ export function AdminShell({
 
       setSession(currentSession);
       setReady(true);
+      void primeWorkspaceExperience(currentSession).catch(() => undefined);
 
       if (shouldRefreshHeader || shouldRefreshNotifications) {
         void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
@@ -401,6 +403,7 @@ export function AdminShell({
 
     setSession(currentSession);
     setReady(true);
+    void primeWorkspaceExperience(currentSession).catch(() => undefined);
 
     if (shouldRefreshHeader || shouldRefreshNotifications) {
       void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {

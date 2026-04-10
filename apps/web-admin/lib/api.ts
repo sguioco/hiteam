@@ -61,6 +61,7 @@ function resolveCacheTtlMs(path: string, options?: ApiRequestOptions) {
     return options.cacheTtlMs;
   }
 
+  if (/\/auth\/me$/.test(path)) return 20_000;
   if (/\/auth\/bootstrap$/.test(path)) return 20_000;
   if (/\/bootstrap\/tasks$/.test(path)) return 20_000;
   if (/\/bootstrap\/attendance(?:\?|$)/.test(path)) return 15_000;
@@ -73,13 +74,28 @@ function resolveCacheTtlMs(path: string, options?: ApiRequestOptions) {
   if (/\/bootstrap\/biometric(?:\?|$)/.test(path)) return 20_000;
   if (/\/notifications\/me\/unread-count$/.test(path)) return 15_000;
   if (/\/notifications\/me$/.test(path)) return 20_000;
+  if (/\/devices\/me$/.test(path)) return 60_000;
+  if (/\/push\/me$/.test(path)) return 60_000;
   if (/\/attendance\/(?:me\/status|team\/live)$/.test(path)) return 10_000;
+  if (/\/attendance\/(?:me\/history|team\/history|team\/audit)(?:\?|$)/.test(path)) return 20_000;
   if (/\/attendance\/team\/anomalies$/.test(path)) return 20_000;
   if (/\/collaboration\/(?:overview|analytics)$/.test(path)) return 45_000;
+  if (/\/collaboration\/announcements(?:\/(?:archive|me))?(?:\?|$)/.test(path)) return 30_000;
+  if (/\/collaboration\/announcement-templates(?:\?|$)/.test(path)) return 45_000;
+  if (/\/collaboration\/task-templates(?:\?|$)/.test(path)) return 45_000;
+  if (/\/collaboration\/tasks(?:\/me)?(?:\?|$)/.test(path)) return 20_000;
+  if (/\/collaboration\/(?:inbox\/me|inbox-summary\/me)(?:\?|$)/.test(path)) return 20_000;
+  if (/\/collaboration\/chats(?:\/[^/]+)?(?:\?|$)/.test(path)) return 20_000;
+  if (/\/requests\/me(?:\/(?:balances|calendar))?(?:\?|$)/.test(path)) return 30_000;
+  if (/\/requests\/(?:inbox|policies|balances)(?:\?|$)/.test(path)) return 45_000;
+  if (/\/biometric\/(?:policy|jobs\/(?:me|team))(?:\?|$)/.test(path)) return 20_000;
   if (/^\/employees(?:\/.*)?$/.test(path)) return 2 * 60_000;
+  if (/\/schedule\/me(?:\?|$)/.test(path)) return 30_000;
   if (/\/org\/setup$/.test(path)) return 10 * 60_000;
+  if (/\/org\/(?:companies|departments|locations|positions)(?:\?|$)/.test(path)) return 10 * 60_000;
   if (/\/schedule\/templates$/.test(path)) return 10 * 60_000;
   if (/\/schedule\/shifts$/.test(path)) return 60_000;
+  if (/\/payroll\/(?:summary|policy|holidays)(?:\?|$)/.test(path)) return 60_000;
   if (/\/(?:diagnostics|observability)\/summary$/.test(path)) return 15_000;
   return 60_000;
 }

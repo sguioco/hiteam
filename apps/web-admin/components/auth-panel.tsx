@@ -35,6 +35,7 @@ import {
   resolveHomeRoute,
   saveTenantSlug,
 } from '@/lib/auth';
+import { primeWorkspaceExperienceWithinBudget } from '@/lib/workspace-warmup';
 import { BrandWordmark } from './brand-wordmark';
 
 gsap.registerPlugin(useGSAP);
@@ -368,6 +369,7 @@ export function AuthPanel() {
 
       disableDemoMode();
       await persistSession(session);
+      await primeWorkspaceExperienceWithinBudget(session, 700);
       navigationStarted = true;
       window.location.replace(resolveHomeRoute(session.user.roleCodes));
     } catch (error) {

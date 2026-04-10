@@ -4,19 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/argocd-release.yml'
-      - 'apps/api/**'
-      - 'apps/web-admin/**'
-      - 'packages/ui/**'
-      - 'packages/types/**'
-      - 'scripts/run-api-prisma.cjs'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'turbo.json'
-      - 'tsconfig.base.json'
-      - '.npmrc'
 
 concurrency:
   group: hiteam-argocd-release

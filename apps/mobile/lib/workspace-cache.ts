@@ -3,14 +3,18 @@ import type { AnnouncementItem, AttendanceStatusResponse, TaskItem } from '@smar
 import { hasManagerAccess } from './auth-flow';
 import {
   loadAttendanceStatus,
+  loadMyChats,
   loadManagerAnnouncements,
   loadManagerEmployees,
   loadManagerLiveSessions,
   loadManagerTasks,
   loadMyAnnouncements,
   loadMyProfile,
+  loadMyRequestCalendar,
+  loadMyRequests,
   loadMyShifts,
   loadMyTasks,
+  loadMyTimeOffBalances,
 } from './api';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 import { readScreenCache, writeScreenCache } from './screen-cache';
@@ -19,6 +23,10 @@ import { formatDateKeyInTimeZone } from './timezone';
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>;
 type TodayTasks = Awaited<ReturnType<typeof loadMyTasks>>;
+type RequestsBalances = Awaited<ReturnType<typeof loadMyTimeOffBalances>>;
+type RequestsItems = Awaited<ReturnType<typeof loadMyRequests>>;
+type RequestsCalendar = Awaited<ReturnType<typeof loadMyRequestCalendar>>;
+type ChatThreads = Awaited<ReturnType<typeof loadMyChats>>;
 
 export type TodayScreenCacheValue = {
   attendanceStatus: AttendanceStatusResponse | null;
@@ -34,7 +42,17 @@ export const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const MANAGER_SCREEN_CACHE_KEY = 'manager-screen-v4';
 export const MANAGER_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const NEWS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const REQUESTS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const CHATS_SCREEN_CACHE_KEY = 'chats-screen:v1';
+export const CHATS_SCREEN_CACHE_TTL_MS = 60_000;
 export const WORKSPACE_REFRESH_INTERVAL_MS = 5 * 60_000;
+
+export type RequestsScreenCacheValue = {
+  balances: RequestsBalances;
+  items: RequestsItems;
+  calendar: RequestsCalendar;
+  tasks: TodayTasks;
+};
 
 const WORKSPACE_WARMUP_MIN_INTERVAL_MS = WORKSPACE_REFRESH_INTERVAL_MS;
 
@@ -61,6 +79,10 @@ export function getNewsScreenCacheKey(isManager: boolean) {
   return `news-screen:${isManager ? 'manager' : 'employee'}`;
 }
 
+export function getRequestsScreenCacheKey(date = new Date()) {
+  return `requests-screen:${date.getFullYear()}-${date.getMonth()}`;
+}
+
 function buildTodayDateRange(timeZone?: string | null) {
   const now = new Date();
   return {
@@ -75,6 +97,19 @@ function buildCalendarDateRange(date = new Date()) {
   return {
     rangeStart: new Date(year, monthIndex - 1, 1),
     rangeEnd: new Date(year, monthIndex + 1, 0),
+  };
+}
+
+function buildRequestsDateRange(date = new Date()) {
+  const year = date.getFullYear();
+  const monthIndex = date.getMonth();
+  const rangeStart = new Date(year, monthIndex, 1);
+  const rangeEnd = new Date(year, monthIndex + 1, 0);
+  return {
+    rangeStart,
+    rangeEnd,
+    dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, '0')}-${`${rangeStart.getDate()}`.padStart(2, '0')}`,
+    dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, '0')}-${`${rangeEnd.getDate()}`.padStart(2, '0')}`,
   };
 }
 
@@ -195,6 +230,37 @@ async function warmNewsScreenCache(isManager: boolean) {
   return items;
 }
 
+export async function warmRequestsScreenCache(date = new Date()) {
+  const { dateFrom, dateTo } = buildRequestsDateRange(date);
+  const [balances, items, calendar, tasks] = await Promise.all([
+    loadMyTimeOffBalances(),
+    loadMyRequests(),
+    loadMyRequestCalendar(dateFrom, dateTo),
+    loadMyTasks({
+      dateFrom,
+      dateTo,
+    }),
+  ]);
+
+  const payload: RequestsScreenCacheValue = {
+    balances,
+    items,
+    calendar,
+    tasks,
+  };
+
+  await writeScreenCache(getRequestsScreenCacheKey(date), payload);
+  await prefetchImageSources(collectTaskPhotoUris(tasks));
+
+  return payload;
+}
+
+export async function warmChatsScreenCache() {
+  const threads = await loadMyChats();
+  await writeScreenCache(CHATS_SCREEN_CACHE_KEY, threads);
+  return threads;
+}
+
 async function warmManagerScreenCache(profile?: WorkspaceProfile | null) {
   const nextProfile = profile ?? (await loadMyProfile());
   const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
@@ -231,6 +297,8 @@ export async function hydrateWorkspaceCaches(roleCodes: string[]) {
     readScreenCache(PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS),
     readScreenCache(getCalendarScreenCacheKey(), WORKSPACE_REFRESH_INTERVAL_MS),
     readScreenCache(getNewsScreenCacheKey(isManager), NEWS_SCREEN_CACHE_TTL_MS),
+    readScreenCache(getRequestsScreenCacheKey(), REQUESTS_SCREEN_CACHE_TTL_MS),
+    readScreenCache(CHATS_SCREEN_CACHE_KEY, CHATS_SCREEN_CACHE_TTL_MS),
     isManager
       ? readScreenCache(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS)
       : Promise.resolve(null),
@@ -254,6 +322,8 @@ export async function warmWorkspaceCaches(roleCodes: string[], options?: { force
       warmTodayScreenCache(profile),
       warmCalendarScreenCache(),
       warmNewsScreenCache(isManager),
+      warmRequestsScreenCache(),
+      warmChatsScreenCache(),
       isManager ? warmManagerScreenCache(profile) : Promise.resolve(),
     ]);
 

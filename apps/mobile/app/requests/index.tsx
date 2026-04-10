@@ -25,7 +25,13 @@ import {
   loadMyTimeOffBalances,
 } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
+import { peekScreenCache, readScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { primeTaskTranslations, useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
+import {
+  getRequestsScreenCacheKey,
+  REQUESTS_SCREEN_CACHE_TTL_MS,
+  type RequestsScreenCacheValue,
+} from '../../lib/workspace-cache';
 
 const requestTypeOptions: RequestType[] = [
   'LEAVE',
@@ -103,13 +109,32 @@ export default function RequestsScreen() {
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
   const today = useMemo(() => new Date(), []);
-  const [balances, setBalances] = useState<MyTimeOffBalancesResponse | null>(null);
-  const [items, setItems] = useState<EmployeeRequestItem[]>([]);
-  const [calendar, setCalendar] = useState<RequestsCalendarResponse | null>(null);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const requestsCacheKey = useMemo(
+    () => getRequestsScreenCacheKey(calendarMonth),
+    [calendarMonth],
+  );
+  const initialCacheEntry = useMemo(
+    () => peekScreenCache<RequestsScreenCacheValue>(
+      requestsCacheKey,
+      REQUESTS_SCREEN_CACHE_TTL_MS,
+    ),
+    [requestsCacheKey],
+  );
+  const [balances, setBalances] = useState<MyTimeOffBalancesResponse | null>(
+    initialCacheEntry?.value.balances ?? null,
+  );
+  const [items, setItems] = useState<EmployeeRequestItem[]>(
+    initialCacheEntry?.value.items ?? [],
+  );
+  const [calendar, setCalendar] = useState<RequestsCalendarResponse | null>(
+    initialCacheEntry?.value.calendar ?? null,
+  );
+  const [tasks, setTasks] = useState<TaskItem[]>(
+    initialCacheEntry?.value.tasks ?? [],
+  );
   const [selectedDayKey, setSelectedDayKey] = useState(() => formatDateKey(new Date()));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialCacheEntry);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +150,17 @@ export default function RequestsScreen() {
   });
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
 
-  async function loadData(viewDate = calendarMonth) {
-    setLoading(true);
+  function applyCachePayload(payload: RequestsScreenCacheValue) {
+    setBalances(payload.balances);
+    setItems(payload.items);
+    setCalendar(payload.calendar);
+    setTasks(payload.tasks);
+  }
+
+  async function loadData(viewDate = calendarMonth, options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -141,10 +175,14 @@ export default function RequestsScreen() {
         }),
       ]);
       await primeTaskTranslations(nextTasks, language);
-      setBalances(nextBalances);
-      setItems(nextItems);
-      setCalendar(nextCalendar);
-      setTasks(nextTasks);
+      const payload: RequestsScreenCacheValue = {
+        balances: nextBalances,
+        items: nextItems,
+        calendar: nextCalendar,
+        tasks: nextTasks,
+      };
+      applyCachePayload(payload);
+      await writeScreenCache(getRequestsScreenCacheKey(viewDate), payload);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('requests.loadError'));
     } finally {
@@ -153,8 +191,33 @@ export default function RequestsScreen() {
   }
 
   useEffect(() => {
-    void loadData();
-  }, [calendarMonth]);
+    let active = true;
+
+    void readScreenCache<RequestsScreenCacheValue>(
+      requestsCacheKey,
+      REQUESTS_SCREEN_CACHE_TTL_MS,
+    ).then((cached) => {
+      if (!active) {
+        return;
+      }
+
+      if (cached) {
+        applyCachePayload(cached.value);
+        setLoading(false);
+        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
+
+        if (!cached.isStale) {
+          return;
+        }
+      }
+
+      void loadData(calendarMonth, { silent: Boolean(cached) });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [calendarMonth, language, requestsCacheKey]);
 
   async function pickAttachments() {
     setError(null);

@@ -12,13 +12,18 @@ import { Screen } from '../../components/ui/screen';
 import { loadMyChats, markMyChatRead, sendMyChatMessage } from '../../lib/api';
 import { createCollaborationSocket } from '../../lib/collaboration-socket';
 import { useI18n } from '../../lib/i18n';
+import { peekScreenCache, readScreenCache, writeScreenCache } from '../../lib/screen-cache';
+import { CHATS_SCREEN_CACHE_KEY, CHATS_SCREEN_CACHE_TTL_MS } from '../../lib/workspace-cache';
 
 export default function ChatsScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const searchParams = useLocalSearchParams<{ threadId?: string }>();
-  const [threads, setThreads] = useState<ChatThreadItem[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState('');
+  const cachedThreads = peekScreenCache<ChatThreadItem[]>(CHATS_SCREEN_CACHE_KEY, CHATS_SCREEN_CACHE_TTL_MS);
+  const [threads, setThreads] = useState<ChatThreadItem[]>(cachedThreads?.value ?? []);
+  const [selectedThreadId, setSelectedThreadId] = useState(
+    () => searchParams.threadId || cachedThreads?.value[0]?.id || '',
+  );
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -27,13 +32,35 @@ export default function ChatsScreen() {
       const data = await loadMyChats();
       setThreads(data);
       setSelectedThreadId((current) => current || searchParams.threadId || data[0]?.id || '');
+      await writeScreenCache(CHATS_SCREEN_CACHE_KEY, data);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('chats.loadError'));
     }
   }
 
   useEffect(() => {
-    void loadData();
+    let active = true;
+
+    void readScreenCache<ChatThreadItem[]>(CHATS_SCREEN_CACHE_KEY, CHATS_SCREEN_CACHE_TTL_MS).then((cached) => {
+      if (!active) {
+        return;
+      }
+
+      if (cached?.value) {
+        setThreads(cached.value);
+        setSelectedThreadId((current) => current || searchParams.threadId || cached.value[0]?.id || '');
+
+        if (!cached.isStale) {
+          return;
+        }
+      }
+
+      void loadData();
+    });
+
+    return () => {
+      active = false;
+    };
   }, [searchParams.threadId]);
 
   useEffect(() => {
