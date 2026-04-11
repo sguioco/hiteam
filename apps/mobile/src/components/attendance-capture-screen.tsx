@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { AppState, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from '../../components/ui/text';
+import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
 import type { BiometricJobItem, BiometricPolicyResponse } from "@smart/types";
@@ -113,6 +113,7 @@ export function AttendanceCaptureScreen({
   const [biometricVerificationId, setBiometricVerificationId] = useState<
     string | null
   >(null);
+  const [capturedArtifact, setCapturedArtifact] = useState<string | null>(null);
   const [locationCheck, setLocationCheck] = useState<LocationCheckState>({
     state: "idle",
     snapshot: null,
@@ -126,7 +127,9 @@ export function AttendanceCaptureScreen({
     title: isCheckIn ? t("workspace.checkIn") : t("departure.sayBye"),
     cameraPermission: t("biometricMobile.cameraPermission"),
     cameraPermissionCta: t("biometricMobile.cameraPermissionCta"),
-    cameraPermissionSettingsCta: t("biometricMobile.cameraPermissionSettingsCta"),
+    cameraPermissionSettingsCta: t(
+      "biometricMobile.cameraPermissionSettingsCta",
+    ),
     cameraPromptTitle: t("attendanceCapture.cameraPromptTitle"),
     cameraPromptBody: t("attendanceCapture.cameraPromptBody"),
     cameraPromptConfirm: t("attendanceCapture.cameraPromptConfirm"),
@@ -519,7 +522,9 @@ export function AttendanceCaptureScreen({
         throw new Error(t("biometric.captureMissingData"));
       }
 
-      const artifacts = [`data:image/jpeg;base64,${picture.base64}`];
+      const frozenArtifact = `data:image/jpeg;base64,${picture.base64}`;
+      setCapturedArtifact(frozenArtifact);
+      const artifacts = [frozenArtifact];
       const captureMetadata = {
         mode:
           biometricPolicy?.enrollmentStatus === "ENROLLED"
@@ -538,6 +543,7 @@ export function AttendanceCaptureScreen({
           captureMetadata,
         );
         setMessage(copy.faceEnrollComplete);
+        setCapturedArtifact(null);
         setBiometricVerificationId(null);
         setBiometricPolicy(await loadBiometricPolicy());
         return;
@@ -562,6 +568,7 @@ export function AttendanceCaptureScreen({
       setBiometricVerificationId(result.result.verificationId);
       setMessage(copy.faceReady);
     } catch (nextError) {
+      setCapturedArtifact(null);
       setError(
         nextError instanceof Error
           ? nextError.message
@@ -609,6 +616,7 @@ export function AttendanceCaptureScreen({
           errorMessage: null,
         });
       }
+      setCapturedArtifact(null);
       setError(nextMessage);
       completionGuardRef.current = false;
     } finally {
@@ -645,19 +653,28 @@ export function AttendanceCaptureScreen({
         contentContainerStyle={{
           flexGrow: 1,
           paddingHorizontal: 24,
-          paddingBottom: 32,
+          paddingBottom: 12,
           paddingTop: 24,
         }}
         showsVerticalScrollIndicator={false}
       >
         <View className="flex-1">
-          <View className="flex-row items-center gap-3">
+          <View
+            className="relative items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
             <PressableScale
-              className="h-8 w-8 items-center justify-center"
+              className="absolute left-0 z-10 h-8 w-8 items-center justify-center"
               haptic="selection"
               onPress={() => router.back()}
+              style={{ top: 8 }}
             >
-              <Ionicons color="#24314b" name="chevron-back" size={20} style={directionalIconStyle} />
+              <Ionicons
+                color="#24314b"
+                name="chevron-back"
+                size={20}
+                style={directionalIconStyle}
+              />
             </PressableScale>
             <BrandWordmark className="text-[44px] leading-[48px] text-[#26334a]" />
           </View>
@@ -667,12 +684,20 @@ export function AttendanceCaptureScreen({
             style={{ height: 420 }}
           >
             {permission?.granted ? (
-              <CameraView
-                facing="front"
-                mode="picture"
-                ref={cameraRef}
-                style={StyleSheet.absoluteFillObject}
-              />
+              capturedArtifact ? (
+                <Image
+                  resizeMode="cover"
+                  source={{ uri: capturedArtifact }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              ) : (
+                <CameraView
+                  facing="front"
+                  mode="picture"
+                  ref={cameraRef}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )
             ) : (
               <View className="flex-1 items-center justify-center px-6">
                 <Text
@@ -962,4 +987,3 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
-

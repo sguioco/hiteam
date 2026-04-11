@@ -23,50 +23,40 @@ export default async function EmployeeCardPage({
     ["tenant_owner", "hr_admin", "operations_admin"].includes(roleCode),
   );
 
-  let initialData: EmployeeDetailPageInitialData | null = null;
+  const [employee, history, anomalies, biometricHistory, managerAccess] =
+    await Promise.all([
+      serverApiRequestWithSession<EmployeeDetails>(
+        session,
+        `/employees/${employeeId}`,
+      ).catch(() => null),
+      serverApiRequestWithSession<AttendanceHistoryResponse>(
+        session,
+        `/attendance/employees/${employeeId}/history`,
+      ).catch(() => null),
+      serverApiRequestWithSession<AttendanceAnomalyResponse>(
+        session,
+        `/attendance/team/anomalies?employeeId=${employeeId}`,
+      ).catch(() => null),
+      serverApiRequestWithSession<EmployeeBiometricHistoryResponse>(
+        session,
+        `/biometric/employees/${employeeId}/history`,
+      ).catch(() => null),
+      canManageRoles
+        ? serverApiRequestWithSession<EmployeeManagerAccess>(
+            session,
+            `/employees/${employeeId}/manager-access`,
+          ).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
-  try {
-    const [employee, history, anomalies, biometricHistory, managerAccess] =
-      await Promise.all([
-        serverApiRequestWithSession<EmployeeDetails>(session, `/employees/${employeeId}`),
-        serverApiRequestWithSession<AttendanceHistoryResponse>(
-          session,
-          `/attendance/employees/${employeeId}/history`,
-        ),
-        serverApiRequestWithSession<AttendanceAnomalyResponse>(
-          session,
-          `/attendance/team/anomalies?employeeId=${employeeId}`,
-        ),
-        serverApiRequestWithSession<EmployeeBiometricHistoryResponse>(
-          session,
-          `/biometric/employees/${employeeId}/history`,
-        ),
-        canManageRoles
-          ? serverApiRequestWithSession<EmployeeManagerAccess>(
-              session,
-              `/employees/${employeeId}/manager-access`,
-            )
-          : Promise.resolve(null),
-      ]);
-
-    initialData = {
-      employeeId,
-      employee,
-      history,
-      anomalies,
-      biometricHistory,
-      managerAccess,
-    };
-  } catch {
-    initialData = {
-      employeeId,
-      employee: null,
-      history: null,
-      anomalies: null,
-      biometricHistory: null,
-      managerAccess: null,
-    };
-  }
+  const initialData: EmployeeDetailPageInitialData = {
+    employeeId,
+    employee,
+    history,
+    anomalies,
+    biometricHistory,
+    managerAccess,
+  };
 
   return <EmployeeCardPageClient initialData={initialData} />;
 }
