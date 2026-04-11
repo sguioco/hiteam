@@ -7,17 +7,16 @@ import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
-import type { BiometricJobItem, BiometricPolicyResponse } from "@smart/types";
+import type { BiometricPolicyResponse } from "@smart/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
   completeBiometricEnrollmentWithArtifacts,
   loadAttendanceStatus,
   loadBiometricPolicy,
-  loadMyBiometricJob,
-  queueVerifyBiometricWithArtifacts,
   startBiometricEnrollment,
   submitAttendanceAction,
+  verifyBiometricWithArtifacts,
 } from "../../lib/api";
 import {
   getDirectionalIconStyle,
@@ -429,23 +428,6 @@ export function AttendanceCaptureScreen({
     return result.granted;
   }
 
-  async function pollJob(jobId: string) {
-    for (let index = 0; index < 12; index += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-      const job = await loadMyBiometricJob(jobId);
-
-      if (job.status === "COMPLETED") {
-        return job;
-      }
-
-      if (job.status === "FAILED") {
-        throw new Error(job.errorMessage ?? t("biometric.verificationFailed"));
-      }
-    }
-
-    throw new Error(t("biometric.processingStale"));
-  }
-
   async function runLocationCheck(baseStatus = status) {
     if (!baseStatus?.location) {
       return null;
@@ -627,23 +609,25 @@ export function AttendanceCaptureScreen({
         return;
       }
 
-      const queuedJob = (await queueVerifyBiometricWithArtifacts(
+      const verificationResult = await verifyBiometricWithArtifacts(
         intent,
         artifacts,
         captureMetadata,
-      )) as BiometricJobItem;
-      const result = await pollJob(queuedJob.id);
-      if (result.result?.result !== "PASSED" || !result.result.verificationId) {
+      );
+      if (
+        verificationResult.result !== "PASSED" ||
+        !verificationResult.verificationId
+      ) {
         throw new Error(
-          result.result?.result === "FAILED"
+          verificationResult.result === "FAILED"
             ? t("biometric.verificationFailed")
             : t("biometric.verificationCompleted", {
-                result: result.result?.result ?? result.status,
+                result: verificationResult.result,
               }),
         );
       }
 
-      setBiometricVerificationId(result.result.verificationId);
+      setBiometricVerificationId(verificationResult.verificationId);
       setMessage(copy.faceReady);
     } catch (nextError) {
       setCapturedArtifact(null);

@@ -789,6 +789,26 @@ export async function verifyBiometric(intent = "attendance") {
   return queueVerifyBiometricWithArtifacts(intent, [], null);
 }
 
+export async function verifyBiometricWithArtifacts(
+  intent = "attendance",
+  artifacts: string[],
+  captureMetadata: Record<string, unknown> | null,
+) {
+  return authRequest<{
+    verificationId: string;
+    result: "PASSED" | "FAILED" | "REVIEW";
+    livenessScore: number | null;
+    matchScore: number | null;
+  }>("/biometric/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      intent,
+      artifacts,
+      captureMetadata,
+    }),
+  });
+}
+
 export async function queueVerifyBiometricWithArtifacts(
   intent = "attendance",
   artifacts: string[],
