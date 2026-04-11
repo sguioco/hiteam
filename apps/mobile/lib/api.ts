@@ -1,7 +1,7 @@
-import { Platform } from 'react-native';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
-import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from "react-native";
+import * as Device from "expo-device";
+import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
@@ -21,15 +21,23 @@ import {
   TaskItem,
   TaskTemplateItem,
   WorkGroupItem,
-} from '@smart/types';
-import type { BannerTheme } from './banner-theme';
-import { getCurrentDeviceFingerprint, getCurrentDeviceName, getCurrentDevicePlatform } from './device';
-import { resolveEmployeeAvatarSource } from './employee-avatar';
-import type { AppLanguage } from './i18n';
+} from "@smart/types";
+import type { BannerTheme } from "./banner-theme";
+import {
+  getCurrentDeviceFingerprint,
+  getCurrentDeviceName,
+  getCurrentDevicePlatform,
+} from "./device";
+import { resolveEmployeeAvatarSource } from "./employee-avatar";
+import type { AppLanguage } from "./i18n";
 
-const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000');
+const API_URL = normalizeApiUrl(
+  process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000",
+);
 const API_REQUEST_TIMEOUT_MS = 20_000;
+const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
 const API_REQUEST_RETRY_DELAY_MS = 450;
+const DEVICE_BOOTSTRAP_TTL_MS = 60 * 60_000;
 
 type AppSession = {
   accessToken: string;
@@ -44,27 +52,49 @@ type AppSession = {
 };
 
 let cachedSession: AppSession | null = null;
-const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ''}smart-auth-session.json`;
+const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ""}smart-auth-session.json`;
 let unauthorizedHandler: (() => void) | null = null;
+let deviceBootstrapPromise: Promise<void> | null = null;
+let lastDeviceBootstrapAt = 0;
 
 function normalizeApiUrl(value: string) {
-  return value.trim().replace(/\/+$/, '');
+  return value.trim().replace(/\/+$/, "");
 }
 
 function buildApiUrl(path: string) {
-  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function isNetworkError(error: unknown) {
-  return error instanceof Error && /network request failed|fetch failed|load failed/i.test(error.message);
+  return (
+    error instanceof Error &&
+    /network request failed|fetch failed|load failed/i.test(error.message)
+  );
 }
 
 function getApiConnectivityErrorMessage() {
   return `Unable to reach the API server. Current mobile API URL: ${API_URL}`;
+}
+
+function resolveRequestTimeoutMs(path: string) {
+  if (
+    /\/biometric\/(?:verify\/async|enroll\/complete|jobs\/)/.test(path) ||
+    /\/employees\/public\/join\/code\/submit$/.test(path) ||
+    /\/employees\/invitations\/public\/.+\/register$/.test(path)
+  ) {
+    return EXTENDED_API_REQUEST_TIMEOUT_MS;
+  }
+
+  return API_REQUEST_TIMEOUT_MS;
+}
+
+function resetDeviceBootstrapState() {
+  deviceBootstrapPromise = null;
+  lastDeviceBootstrapAt = 0;
 }
 
 function wait(ms: number) {
@@ -72,8 +102,9 @@ function wait(ms: number) {
 }
 
 async function fetchOnceWithTimeout(path: string, options?: RequestInit) {
+  const timeoutMs = resolveRequestTimeoutMs(path);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(buildApiUrl(path), {
@@ -143,7 +174,10 @@ async function persistSession(session: AppSession) {
   }
 
   try {
-    await FileSystem.writeAsStringAsync(SESSION_STORAGE_PATH, JSON.stringify(session));
+    await FileSystem.writeAsStringAsync(
+      SESSION_STORAGE_PATH,
+      JSON.stringify(session),
+    );
   } catch {
     // Best effort session persistence; in-memory session remains active for the current runtime.
   }
@@ -163,6 +197,7 @@ async function clearPersistedSession() {
 
 function handleUnauthorized() {
   cachedSession = null;
+  resetDeviceBootstrapState();
   void clearPersistedSession();
   unauthorizedHandler?.();
 }
@@ -175,10 +210,10 @@ async function refreshSession(): Promise<AppSession | null> {
   }
 
   try {
-    const response = await fetchWithTimeout('/api/v1/auth/refresh', {
-      method: 'POST',
+    const response = await fetchWithTimeout("/api/v1/auth/refresh", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         refreshToken: session.refreshToken,
@@ -216,14 +251,14 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
     };
 
     if (Array.isArray(parsed.message) && parsed.message.length > 0) {
-      return parsed.message.join(', ');
+      return parsed.message.join(", ");
     }
 
-    if (typeof parsed.message === 'string' && parsed.message.trim()) {
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
       return parsed.message;
     }
 
-    if (typeof parsed.error === 'string' && parsed.error.trim()) {
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
       return parsed.error;
     }
   } catch {
@@ -233,11 +268,15 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
   return text;
 }
 
-async function authenticateSession(payload: { tenantSlug?: string; email: string; password: string }) {
-  const response = await fetchWithTimeout('/api/v1/auth/login', {
-    method: 'POST',
+async function authenticateSession(payload: {
+  tenantSlug?: string;
+  email: string;
+  password: string;
+}) {
+  const response = await fetchWithTimeout("/api/v1/auth/login", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       email: payload.email,
@@ -247,22 +286,27 @@ async function authenticateSession(payload: { tenantSlug?: string; email: string
   });
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to sign in.'));
+    throw new Error(await readErrorMessage(response, "Unable to sign in."));
   }
 
   cachedSession = (await response.json()) as AppSession;
+  resetDeviceBootstrapState();
   await persistSession(cachedSession);
   return cachedSession;
 }
 
-async function performAuthorizedRequest(path: string, accessToken: string, options?: RequestInit) {
+async function performAuthorizedRequest(
+  path: string,
+  accessToken: string,
+  options?: RequestInit,
+) {
   const headers = new Headers(options?.headers ?? {});
 
   if (!(options?.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
+    headers.set("Content-Type", "application/json");
   }
 
-  headers.set('Authorization', `Bearer ${accessToken}`);
+  headers.set("Authorization", `Bearer ${accessToken}`);
 
   return fetchWithTimeout(`/api/v1${path}`, {
     ...options,
@@ -272,27 +316,40 @@ async function performAuthorizedRequest(path: string, accessToken: string, optio
 
 async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
   let session = await getDemoSession();
-  let response = await performAuthorizedRequest(path, session.accessToken, options);
+  let response = await performAuthorizedRequest(
+    path,
+    session.accessToken,
+    options,
+  );
 
   if (response.status === 401) {
     const refreshedSession = await refreshSession();
 
     if (!refreshedSession) {
       handleUnauthorized();
-      throw new Error('Unauthorized');
+      throw new Error("Unauthorized");
     }
 
     session = refreshedSession;
-    response = await performAuthorizedRequest(path, session.accessToken, options);
+    response = await performAuthorizedRequest(
+      path,
+      session.accessToken,
+      options,
+    );
   }
 
   if (response.status === 401) {
     handleUnauthorized();
-    throw new Error('Unauthorized');
+    throw new Error("Unauthorized");
   }
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, `Request failed with status ${response.status}`));
+    throw new Error(
+      await readErrorMessage(
+        response,
+        `Request failed with status ${response.status}`,
+      ),
+    );
   }
 
   if (response.status === 204) {
@@ -313,11 +370,12 @@ export async function getDemoSession(): Promise<AppSession> {
     return restoredSession;
   }
 
-  throw new Error('Not authenticated. Sign in again.');
+  throw new Error("Not authenticated. Sign in again.");
 }
 
 export function resetDemoSession() {
   cachedSession = null;
+  resetDeviceBootstrapState();
   void clearPersistedSession();
 }
 
@@ -343,19 +401,29 @@ export async function getDemoAccessToken(): Promise<string> {
   return session.accessToken;
 }
 
-export async function translateTexts(texts: string[], targetLocale: AppLanguage) {
-  const payload = await authRequest<{ translations?: Record<string, string> }>('/translate', {
-    method: 'POST',
-    body: JSON.stringify({
-      texts,
-      targetLocale,
-    }),
-  });
+export async function translateTexts(
+  texts: string[],
+  targetLocale: AppLanguage,
+) {
+  const payload = await authRequest<{ translations?: Record<string, string> }>(
+    "/translate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        texts,
+        targetLocale,
+      }),
+    },
+  );
 
   return payload.translations ?? {};
 }
 
-export async function signInWithEmail(email: string, password: string, tenantSlug?: string) {
+export async function signInWithEmail(
+  email: string,
+  password: string,
+  tenantSlug?: string,
+) {
   return authenticateSession({
     tenantSlug,
     email,
@@ -400,18 +468,18 @@ export async function loadMyProfile(): Promise<{
   devices: Array<{
     id: string;
     deviceName: string;
-    platform: 'IOS' | 'ANDROID' | 'WEB';
+    platform: "IOS" | "ANDROID" | "WEB";
     isPrimary: boolean;
   }>;
 }> {
-  return authRequest('/employees/me');
+  return authRequest("/employees/me");
 }
 
 export async function updateMyBannerTheme(
   theme: BannerTheme,
 ): Promise<Awaited<ReturnType<typeof loadMyProfile>>> {
-  return authRequest('/employees/me/preferences', {
-    method: 'PATCH',
+  return authRequest("/employees/me/preferences", {
+    method: "PATCH",
     body: JSON.stringify({
       bannerTheme: theme,
     }),
@@ -431,15 +499,20 @@ export async function loadPublicInvitation(token: string): Promise<{
   lastName: string | null;
   phone: string | null;
 }> {
-  const response = await fetchWithTimeout(`/api/v1/employees/invitations/public/${encodeURIComponent(token)}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithTimeout(
+    `/api/v1/employees/invitations/public/${encodeURIComponent(token)}`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to load invitation.'));
+    throw new Error(
+      await readErrorMessage(response, "Unable to load invitation."),
+    );
   }
 
   return response.json();
@@ -451,16 +524,21 @@ export async function lookupCompanyByCode(code: string): Promise<{
   tenantName: string;
   tenantSlug: string;
 }> {
-  const response = await fetchWithTimeout('/api/v1/employees/public/join/code/lookup', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithTimeout(
+    "/api/v1/employees/public/join/code/lookup",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code }),
     },
-    body: JSON.stringify({ code }),
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to verify company code.'));
+    throw new Error(
+      await readErrorMessage(response, "Unable to verify company code."),
+    );
   }
 
   return response.json();
@@ -476,20 +554,25 @@ export async function submitCompanyJoinRequest(payload: {
   avatarDataUrl: string;
 }): Promise<{
   id: string;
-  status: 'PENDING_APPROVAL';
+  status: "PENDING_APPROVAL";
   tenantName: string;
   companyName: string;
 }> {
-  const response = await fetchWithTimeout('/api/v1/employees/public/join/code/submit', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithTimeout(
+    "/api/v1/employees/public/join/code/submit",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to submit join request.'));
+    throw new Error(
+      await readErrorMessage(response, "Unable to submit join request."),
+    );
   }
 
   return response.json();
@@ -503,25 +586,30 @@ export async function registerFromInvitation(
     lastName: string;
     middleName?: string;
     birthDate: string;
-    gender: 'male' | 'female';
+    gender: "male" | "female";
     phone: string;
     avatarDataUrl?: string;
   },
 ): Promise<{
   invitationId: string;
-  status: 'APPROVED' | 'PENDING_APPROVAL';
+  status: "APPROVED" | "PENDING_APPROVAL";
   accessGranted: boolean;
 }> {
-  const response = await fetchWithTimeout(`/api/v1/employees/invitations/public/${encodeURIComponent(token)}/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithTimeout(
+    `/api/v1/employees/invitations/public/${encodeURIComponent(token)}/register`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Unable to complete registration.'));
+    throw new Error(
+      await readErrorMessage(response, "Unable to complete registration."),
+    );
   }
 
   return response.json();
@@ -529,49 +617,65 @@ export async function registerFromInvitation(
 
 export async function loadMyAccessStatus(): Promise<{
   workspaceAccessAllowed: boolean;
-  invitationStatus: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED';
+  invitationStatus: "APPROVED" | "PENDING_APPROVAL" | "REJECTED";
   submittedAt?: string | null;
   approvedAt?: string | null;
   rejectedAt?: string | null;
   rejectedReason?: string | null;
 }> {
-  return authRequest('/employees/me/access-status');
+  return authRequest("/employees/me/access-status");
 }
 
-export async function bootstrapDemoDevice(): Promise<void> {
-  const deviceFingerprint = await getCurrentDeviceFingerprint();
-  const deviceName = getCurrentDeviceName();
-  const platform = getCurrentDevicePlatform();
+export async function bootstrapDemoDevice(force = false): Promise<void> {
+  if (!force && Date.now() - lastDeviceBootstrapAt < DEVICE_BOOTSTRAP_TTL_MS) {
+    return;
+  }
 
-  await authRequest<{ success?: boolean }>('/devices/register', {
-    method: 'POST',
-    body: JSON.stringify({
-      platform,
-      deviceFingerprint,
-      deviceName,
-    }),
+  if (deviceBootstrapPromise) {
+    return deviceBootstrapPromise;
+  }
+
+  deviceBootstrapPromise = (async () => {
+    const deviceFingerprint = await getCurrentDeviceFingerprint();
+    const deviceName = getCurrentDeviceName();
+    const platform = getCurrentDevicePlatform();
+
+    await authRequest<{ success?: boolean }>("/devices/register", {
+      method: "POST",
+      body: JSON.stringify({
+        platform,
+        deviceFingerprint,
+        deviceName,
+      }),
+    });
+
+    lastDeviceBootstrapAt = Date.now();
+  })().finally(() => {
+    deviceBootstrapPromise = null;
   });
+
+  return deviceBootstrapPromise;
 }
 
 export async function bootstrapPushNotifications(): Promise<void> {
-  if (Constants.appOwnership === 'expo') {
+  if (Constants.appOwnership === "expo") {
     return;
   }
 
-  if (Platform.OS === 'web' || !Device.isDevice) {
+  if (Platform.OS === "web" || !Device.isDevice) {
     return;
   }
 
-  const Notifications = await import('expo-notifications');
+  const Notifications = await import("expo-notifications");
   const settings = await Notifications.getPermissionsAsync();
   let status = settings.status;
 
-  if (status !== 'granted') {
+  if (status !== "granted") {
     const requested = await Notifications.requestPermissionsAsync();
     status = requested.status;
   }
 
-  if (status !== 'granted') {
+  if (status !== "granted") {
     return;
   }
 
@@ -585,17 +689,17 @@ export async function bootstrapPushNotifications(): Promise<void> {
 
   const pushToken = await Notifications.getExpoPushTokenAsync({ projectId });
 
-  await authRequest('/push/register', {
-    method: 'POST',
+  await authRequest("/push/register", {
+    method: "POST",
     body: JSON.stringify({
       token: pushToken.data,
-      platform: Platform.OS === 'ios' ? 'IOS' : 'ANDROID',
+      platform: Platform.OS === "ios" ? "IOS" : "ANDROID",
     }),
   });
 }
 
 export async function loadAttendanceStatus(): Promise<AttendanceStatusResponse> {
-  return authRequest<AttendanceStatusResponse>('/attendance/me/status');
+  return authRequest<AttendanceStatusResponse>("/attendance/me/status");
 }
 
 export async function loadMyShifts(): Promise<
@@ -618,10 +722,14 @@ export async function loadMyShifts(): Promise<
     };
   }>
 > {
-  return authRequest('/schedule/me');
+  return authRequest("/schedule/me");
 }
 
-export type AttendanceActionName = 'check-in' | 'check-out' | 'break/start' | 'break/end';
+export type AttendanceActionName =
+  | "check-in"
+  | "check-out"
+  | "break/start"
+  | "break/end";
 
 export async function submitAttendanceAction(
   action: AttendanceActionName,
@@ -636,27 +744,27 @@ export async function submitAttendanceAction(
 ) {
   const deviceFingerprint = await getCurrentDeviceFingerprint();
   return authRequest(`/attendance/${action}`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({
       latitude: payload.latitude,
       longitude: payload.longitude,
       accuracyMeters: payload.accuracyMeters,
       biometricVerificationId: payload.biometricVerificationId,
       deviceFingerprint,
-      notes: payload.notes ?? 'Mobile attendance action',
+      notes: payload.notes ?? "Mobile attendance action",
       isPaidBreak: payload.isPaidBreak ?? false,
     }),
   });
 }
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {
-  return authRequest<BiometricPolicyResponse>('/biometric/policy');
+  return authRequest<BiometricPolicyResponse>("/biometric/policy");
 }
 
 export async function startBiometricEnrollment() {
-  return authRequest('/biometric/enroll/start', {
-    method: 'POST',
-    body: JSON.stringify({ consentVersion: 'v1' }),
+  return authRequest("/biometric/enroll/start", {
+    method: "POST",
+    body: JSON.stringify({ consentVersion: "v1" }),
   });
 }
 
@@ -668,8 +776,8 @@ export async function completeBiometricEnrollmentWithArtifacts(
   artifacts: string[],
   captureMetadata: Record<string, unknown> | null,
 ) {
-  return authRequest('/biometric/enroll/complete', {
-    method: 'POST',
+  return authRequest("/biometric/enroll/complete", {
+    method: "POST",
     body: JSON.stringify({
       artifacts,
       captureMetadata,
@@ -677,17 +785,17 @@ export async function completeBiometricEnrollmentWithArtifacts(
   });
 }
 
-export async function verifyBiometric(intent = 'attendance') {
+export async function verifyBiometric(intent = "attendance") {
   return queueVerifyBiometricWithArtifacts(intent, [], null);
 }
 
 export async function queueVerifyBiometricWithArtifacts(
-  intent = 'attendance',
+  intent = "attendance",
   artifacts: string[],
   captureMetadata: Record<string, unknown> | null,
 ) {
-  return authRequest('/biometric/verify/async', {
-    method: 'POST',
+  return authRequest("/biometric/verify/async", {
+    method: "POST",
     body: JSON.stringify({
       intent,
       artifacts,
@@ -696,26 +804,31 @@ export async function queueVerifyBiometricWithArtifacts(
   });
 }
 
-export async function loadMyBiometricJob(jobId: string): Promise<BiometricJobItem> {
+export async function loadMyBiometricJob(
+  jobId: string,
+): Promise<BiometricJobItem> {
   return authRequest<BiometricJobItem>(`/biometric/jobs/${jobId}`);
 }
 
 export async function loadMyTimeOffBalances(): Promise<MyTimeOffBalancesResponse> {
-  return authRequest<MyTimeOffBalancesResponse>('/requests/me/balances');
+  return authRequest<MyTimeOffBalancesResponse>("/requests/me/balances");
 }
 
 export async function loadMyRequests(): Promise<EmployeeRequestItem[]> {
-  return authRequest<EmployeeRequestItem[]>('/requests/me');
+  return authRequest<EmployeeRequestItem[]>("/requests/me");
 }
 
-export async function loadMyRequestCalendar(dateFrom: string, dateTo: string): Promise<RequestsCalendarResponse> {
+export async function loadMyRequestCalendar(
+  dateFrom: string,
+  dateTo: string,
+): Promise<RequestsCalendarResponse> {
   return authRequest<RequestsCalendarResponse>(
     `/requests/me/calendar?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
   );
 }
 
 export async function createMyRequest(payload: {
-  requestType: EmployeeRequestItem['requestType'];
+  requestType: EmployeeRequestItem["requestType"];
   title: string;
   reason?: string;
   startsOn: string;
@@ -728,15 +841,15 @@ export async function createMyRequest(payload: {
     dataUrl: string;
   }>;
 }) {
-  return authRequest<EmployeeRequestItem>('/requests', {
-    method: 'POST',
+  return authRequest<EmployeeRequestItem>("/requests", {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function addRequestComment(requestId: string, body: string) {
   return authRequest(`/requests/${requestId}/comments`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ body }),
   });
 }
@@ -749,24 +862,29 @@ export async function loadMyTasks(query?: {
   const searchParams = new URLSearchParams();
 
   if (query?.date) {
-    searchParams.set('date', query.date);
+    searchParams.set("date", query.date);
   }
 
   if (query?.dateFrom) {
-    searchParams.set('dateFrom', query.dateFrom);
+    searchParams.set("dateFrom", query.dateFrom);
   }
 
   if (query?.dateTo) {
-    searchParams.set('dateTo', query.dateTo);
+    searchParams.set("dateTo", query.dateTo);
   }
 
   const suffix = searchParams.toString();
-  return authRequest<TaskItem[]>(`/collaboration/tasks/me${suffix ? `?${suffix}` : ''}`);
+  return authRequest<TaskItem[]>(
+    `/collaboration/tasks/me${suffix ? `?${suffix}` : ""}`,
+  );
 }
 
-export async function updateMyTaskStatus(taskId: string, status: TaskItem['status']) {
+export async function updateMyTaskStatus(
+  taskId: string,
+  status: TaskItem["status"],
+) {
   return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/status`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ status }),
   });
 }
@@ -774,22 +892,25 @@ export async function updateMyTaskStatus(taskId: string, status: TaskItem['statu
 export async function addMyTaskPhotoProof(
   taskId: string,
   payload: {
-    action: 'add' | 'replace';
+    action: "add" | "replace";
     fileName: string;
     dataUrl: string;
     targetProofId?: string;
   },
 ) {
   return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/photo-proofs`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteMyTaskPhotoProof(taskId: string, proofId: string) {
-  return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/photo-proofs/${proofId}`, {
-    method: 'DELETE',
-  });
+  return authRequest<TaskItem>(
+    `/collaboration/tasks/${taskId}/photo-proofs/${proofId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export type RescheduleMyTaskResponse = {
@@ -797,35 +918,48 @@ export type RescheduleMyTaskResponse = {
   replacedTaskId: string | null;
 };
 
-export async function rescheduleMyTask(taskId: string, dueAt: string, comment?: string) {
-  return authRequest<RescheduleMyTaskResponse>(`/collaboration/tasks/${taskId}/reschedule`, {
-    method: 'POST',
-    body: JSON.stringify({
-      dueAt,
-      ...(comment ? { comment } : {}),
-    }),
-  });
+export async function rescheduleMyTask(
+  taskId: string,
+  dueAt: string,
+  comment?: string,
+) {
+  return authRequest<RescheduleMyTaskResponse>(
+    `/collaboration/tasks/${taskId}/reschedule`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        dueAt,
+        ...(comment ? { comment } : {}),
+      }),
+    },
+  );
 }
 
-export async function toggleMyTaskChecklistItem(taskId: string, itemId: string) {
-  return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/checklist/${itemId}/toggle`, {
-    method: 'POST',
-  });
+export async function toggleMyTaskChecklistItem(
+  taskId: string,
+  itemId: string,
+) {
+  return authRequest<TaskItem>(
+    `/collaboration/tasks/${taskId}/checklist/${itemId}/toggle`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function addMyTaskComment(taskId: string, body: string) {
   return authRequest<TaskItem>(`/collaboration/tasks/${taskId}/comments`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ body }),
   });
 }
 
 export async function loadMyAnnouncements(): Promise<AnnouncementItem[]> {
-  return authRequest<AnnouncementItem[]>('/collaboration/announcements/me');
+  return authRequest<AnnouncementItem[]>("/collaboration/announcements/me");
 }
 
 export async function loadManagerAnnouncements(): Promise<AnnouncementItem[]> {
-  return authRequest<AnnouncementItem[]>('/collaboration/announcements');
+  return authRequest<AnnouncementItem[]>("/collaboration/announcements");
 }
 
 export async function createManagerAnnouncement(input: {
@@ -844,18 +978,26 @@ export async function createManagerAnnouncement(input: {
     new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean)),
   );
   const normalizedTargetEmployeeIds = Array.from(
-    new Set([input.targetEmployeeId, ...(input.targetEmployeeIds ?? [])].filter(Boolean)),
+    new Set(
+      [input.targetEmployeeId, ...(input.targetEmployeeIds ?? [])].filter(
+        Boolean,
+      ),
+    ),
   );
 
-  return authRequest<AnnouncementItem>('/collaboration/announcements', {
-    method: 'POST',
+  return authRequest<AnnouncementItem>("/collaboration/announcements", {
+    method: "POST",
     body: JSON.stringify({
-      audience: input.audience ?? 'ALL',
+      audience: input.audience ?? "ALL",
       title: input.title,
       body: input.body,
       isPinned: input.isPinned ?? false,
-      ...(normalizedGroupIds.length === 1 ? { groupId: normalizedGroupIds[0] } : {}),
-      ...(normalizedGroupIds.length > 1 ? { groupIds: normalizedGroupIds } : {}),
+      ...(normalizedGroupIds.length === 1
+        ? { groupId: normalizedGroupIds[0] }
+        : {}),
+      ...(normalizedGroupIds.length > 1
+        ? { groupIds: normalizedGroupIds }
+        : {}),
       ...(normalizedTargetEmployeeIds.length === 1
         ? { targetEmployeeId: normalizedTargetEmployeeIds[0] }
         : {}),
@@ -863,7 +1005,9 @@ export async function createManagerAnnouncement(input: {
         ? { targetEmployeeIds: normalizedTargetEmployeeIds }
         : {}),
       ...(input.imageDataUrl ? { imageDataUrl: input.imageDataUrl } : {}),
-      ...(input.imageAspectRatio ? { imageAspectRatio: input.imageAspectRatio } : {}),
+      ...(input.imageAspectRatio
+        ? { imageAspectRatio: input.imageAspectRatio }
+        : {}),
     }),
   });
 }
@@ -879,69 +1023,82 @@ export async function updateManagerAnnouncement(
     removeImage?: boolean;
   },
 ) {
-  return authRequest<AnnouncementItem>(`/collaboration/announcements/${announcementId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  });
+  return authRequest<AnnouncementItem>(
+    `/collaboration/announcements/${announcementId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export async function deleteManagerAnnouncement(announcementId: string) {
-  return authRequest<{ success: boolean }>(`/collaboration/announcements/${announcementId}`, {
-    method: 'DELETE',
-  });
+  return authRequest<{ success: boolean }>(
+    `/collaboration/announcements/${announcementId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
-export async function markMyAnnouncementRead(
-  announcementId: string,
-): Promise<{
+export async function markMyAnnouncementRead(announcementId: string): Promise<{
   success: boolean;
   notificationId?: string | null;
   readAt?: string | null;
 }> {
   return authRequest(`/collaboration/announcements/${announcementId}/read`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export async function loadMyInbox(): Promise<EmployeeInboxResponse> {
-  return authRequest<EmployeeInboxResponse>('/collaboration/inbox/me');
+  return authRequest<EmployeeInboxResponse>("/collaboration/inbox/me");
 }
 
 export async function loadMyInboxSummary(): Promise<EmployeeInboxSummary> {
-  return authRequest<EmployeeInboxSummary>('/collaboration/inbox-summary/me');
+  return authRequest<EmployeeInboxSummary>("/collaboration/inbox-summary/me");
 }
 
 export async function loadMyChats(): Promise<ChatThreadItem[]> {
-  return authRequest<ChatThreadItem[]>('/collaboration/chats');
+  return authRequest<ChatThreadItem[]>("/collaboration/chats");
 }
 
 export async function markMyChatRead(threadId: string) {
   return authRequest(`/collaboration/chats/${threadId}/read`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export async function sendMyChatMessage(threadId: string, body: string) {
-  return authRequest<ChatThreadItem>(`/collaboration/chats/${threadId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ body }),
-  });
+  return authRequest<ChatThreadItem>(
+    `/collaboration/chats/${threadId}/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    },
+  );
 }
 
 export async function markMyNotificationRead(notificationId: string) {
   return authRequest(`/notifications/${notificationId}/read`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export async function loadManagerLiveSessions(): Promise<AttendanceLiveSession[]> {
-  const response = await authRequest<AttendanceLiveSession[] | { sessions: AttendanceLiveSession[] }>('/attendance/team/live');
+export async function loadManagerLiveSessions(): Promise<
+  AttendanceLiveSession[]
+> {
+  const response = await authRequest<
+    AttendanceLiveSession[] | { sessions: AttendanceLiveSession[] }
+  >("/attendance/team/live");
   return Array.isArray(response) ? response : (response.sessions ?? []);
 }
 
 export async function loadManagerApprovalInbox(): Promise<ApprovalInboxItem[]> {
-  const response = await authRequest<ApprovalInboxItem[] | { items: ApprovalInboxItem[] }>('/requests/inbox');
+  const response = await authRequest<
+    ApprovalInboxItem[] | { items: ApprovalInboxItem[] }
+  >("/requests/inbox");
   return Array.isArray(response) ? response : (response.items ?? []);
 }
 
@@ -953,21 +1110,21 @@ export async function loadManagerTasks(query?: {
   const searchParams = new URLSearchParams();
 
   if (query?.date) {
-    searchParams.set('date', query.date);
+    searchParams.set("date", query.date);
   }
 
   if (query?.dateFrom) {
-    searchParams.set('dateFrom', query.dateFrom);
+    searchParams.set("dateFrom", query.dateFrom);
   }
 
   if (query?.dateTo) {
-    searchParams.set('dateTo', query.dateTo);
+    searchParams.set("dateTo", query.dateTo);
   }
 
   const suffix = searchParams.toString();
   const response = await authRequest<
     TaskItem[] | { items?: TaskItem[]; tasks?: TaskItem[] }
-  >(`/collaboration/tasks${suffix ? `?${suffix}` : ''}`);
+  >(`/collaboration/tasks${suffix ? `?${suffix}` : ""}`);
 
   if (Array.isArray(response)) {
     return response;
@@ -976,41 +1133,47 @@ export async function loadManagerTasks(query?: {
   return response.tasks ?? response.items ?? [];
 }
 
-export async function loadManagerAttendanceHistory(employeeId: string, dateFrom: string, dateTo: string) {
+export async function loadManagerAttendanceHistory(
+  employeeId: string,
+  dateFrom: string,
+  dateTo: string,
+) {
   return authRequest<AttendanceHistoryResponse>(
     `/attendance/employees/${employeeId}/history?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
   );
 }
 
-export async function loadManagerEmployees(): Promise<Array<{
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  employeeNumber: string;
-  gender?: string | null;
-  department: {
+export async function loadManagerEmployees(): Promise<
+  Array<{
     id: string;
-    name: string;
-  } | null;
-  position: {
-    id: string;
-    name: string;
-  } | null;
-  primaryLocation: {
-    id: string;
-    name: string;
-    timezone?: string | null;
-  } | null;
-  avatar?: any;
-}>> {
-  const response = await authRequest<any>('/employees');
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeNumber: string;
+    gender?: string | null;
+    department: {
+      id: string;
+      name: string;
+    } | null;
+    position: {
+      id: string;
+      name: string;
+    } | null;
+    primaryLocation: {
+      id: string;
+      name: string;
+      timezone?: string | null;
+    } | null;
+    avatar?: any;
+  }>
+> {
+  const response = await authRequest<any>("/employees");
   const items = Array.isArray(response) ? response : (response.items ?? []);
   return items.map((emp: any) => ({
     id: emp.id,
     firstName: emp.firstName,
     lastName: emp.lastName,
-    email: emp.user?.email ?? '',
+    email: emp.user?.email ?? "",
     employeeNumber: emp.employeeNumber,
     gender: emp.gender ?? null,
     department: emp.department
@@ -1032,21 +1195,23 @@ export async function loadManagerEmployees(): Promise<Array<{
           timezone: emp.primaryLocation.timezone ?? null,
         }
       : null,
-      avatar: resolveEmployeeAvatarSource({
-        avatar: emp.avatar,
-        avatarUrl: emp.avatarUrl,
-        email: emp.user?.email,
-        employeeNumber: emp.employeeNumber,
-        firstName: emp.firstName,
-        gender: emp.gender,
-        id: emp.id,
-        lastName: emp.lastName,
-      }),
+    avatar: resolveEmployeeAvatarSource({
+      avatar: emp.avatar,
+      avatarUrl: emp.avatarUrl,
+      email: emp.user?.email,
+      employeeNumber: emp.employeeNumber,
+      firstName: emp.firstName,
+      gender: emp.gender,
+      id: emp.id,
+      lastName: emp.lastName,
+    }),
   }));
 }
 
 export async function loadManagerGroups(): Promise<WorkGroupItem[]> {
-  const response = await authRequest<WorkGroupItem[] | { groups: WorkGroupItem[] }>('/collaboration/groups');
+  const response = await authRequest<
+    WorkGroupItem[] | { groups: WorkGroupItem[] }
+  >("/collaboration/groups");
   if (Array.isArray(response)) {
     return response;
   }
@@ -1057,14 +1222,14 @@ export async function loadManagerGroups(): Promise<WorkGroupItem[]> {
 export async function createManagerTask(payload: {
   title: string;
   description?: string;
-  priority?: TaskItem['priority'];
+  priority?: TaskItem["priority"];
   requiresPhoto?: boolean;
   dueAt?: string;
   assigneeEmployeeId?: string;
   groupId?: string;
 }) {
-  return authRequest<TaskItem>('/collaboration/tasks', {
-    method: 'POST',
+  return authRequest<TaskItem>("/collaboration/tasks", {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
@@ -1072,10 +1237,10 @@ export async function createManagerTask(payload: {
 export async function createManagerTaskTemplate(payload: {
   title: string;
   description?: string;
-  priority?: TaskItem['priority'];
+  priority?: TaskItem["priority"];
   requiresPhoto?: boolean;
   expandOnDemand?: boolean;
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
   weekDays?: number[];
   dayOfMonth?: number;
   startDate: string;
@@ -1089,18 +1254,20 @@ export async function createManagerTaskTemplate(payload: {
   checklist?: string[];
   isActive?: boolean;
 }) {
-  return authRequest<TaskTemplateItem>('/collaboration/task-templates', {
-    method: 'POST',
+  return authRequest<TaskTemplateItem>("/collaboration/task-templates", {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function loadEmployeesList(): Promise<{ id: string; firstName: string; lastName: string; }[]> {
-  const response = await authRequest<any>('/employees');
+export async function loadEmployeesList(): Promise<
+  { id: string; firstName: string; lastName: string }[]
+> {
+  const response = await authRequest<any>("/employees");
   const items = Array.isArray(response) ? response : (response.items ?? []);
   return items.map((emp: any) => ({
     id: emp.id,
     firstName: emp.firstName,
-    lastName: emp.lastName
+    lastName: emp.lastName,
   }));
 }

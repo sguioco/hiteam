@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import { SaveFormat, manipulateAsync } from "expo-image-manipulator";
 import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -28,6 +29,12 @@ import {
   isPreciseLocationError,
   type AttendanceLocationSnapshot,
 } from "../../lib/location";
+import { peekScreenCache, readScreenCache } from "../../lib/screen-cache";
+import {
+  TODAY_SCREEN_CACHE_KEY,
+  TODAY_SCREEN_CACHE_TTL_MS,
+  type TodayScreenCacheValue,
+} from "../../lib/workspace-cache";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { BrandWordmark } from "./brand-wordmark";
 
@@ -88,6 +95,14 @@ export function AttendanceCaptureScreen({
 }: AttendanceCaptureScreenProps) {
   const router = useRouter();
   const { language, t } = useI18n();
+  const initialTodaySnapshot = useMemo(
+    () =>
+      peekScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      ),
+    [],
+  );
   const directionalIconStyle = useMemo(
     () => getDirectionalIconStyle(language),
     [language],
@@ -99,7 +114,9 @@ export function AttendanceCaptureScreen({
   const completionGuardRef = useRef(false);
   const locationCheckRequestRef = useRef(0);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    !initialTodaySnapshot?.value.attendanceStatus,
+  );
   const [faceProcessing, setFaceProcessing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -107,7 +124,7 @@ export function AttendanceCaptureScreen({
   const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
   const [status, setStatus] = useState<Awaited<
     ReturnType<typeof loadAttendanceStatus>
-  > | null>(null);
+  > | null>(initialTodaySnapshot?.value.attendanceStatus ?? null);
   const [biometricPolicy, setBiometricPolicy] =
     useState<BiometricPolicyResponse | null>(null);
   const [biometricVerificationId, setBiometricVerificationId] = useState<
@@ -274,12 +291,25 @@ export function AttendanceCaptureScreen({
     return nextStatus;
   }
 
-  async function refresh() {
-    setLoading(true);
+  function hasFreshLocationCheck(state: LocationCheckState) {
+    if (state.state !== "ready") {
+      return false;
+    }
+
+    const capturedAtMs = Date.parse(state.snapshot.capturedAt);
+    return Number.isFinite(capturedAtMs)
+      ? Date.now() - capturedAtMs <= 30_000
+      : false;
+  }
+
+  async function refresh(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      await bootstrapDemoDevice();
+      void bootstrapDemoDevice().catch(() => undefined);
       const [nextStatus, nextBiometricPolicy] = await Promise.all([
         loadAttendanceStatus(),
         loadBiometricPolicy(),
@@ -306,8 +336,30 @@ export function AttendanceCaptureScreen({
   }
 
   useEffect(() => {
-    void refresh();
-  }, []);
+    let cancelled = false;
+
+    void (async () => {
+      const cached =
+        initialTodaySnapshot ??
+        (await readScreenCache<TodayScreenCacheValue>(
+          TODAY_SCREEN_CACHE_KEY,
+          TODAY_SCREEN_CACHE_TTL_MS,
+        ));
+
+      const cachedStatus = cached?.value.attendanceStatus ?? null;
+      if (cachedStatus && !cancelled) {
+        setStatus(cachedStatus);
+        setLoading(false);
+        void runLocationCheck(cachedStatus);
+      }
+
+      await refresh({ silent: Boolean(cachedStatus) });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialTodaySnapshot]);
 
   async function syncCameraPermission() {
     try {
@@ -488,12 +540,15 @@ export function AttendanceCaptureScreen({
   }
 
   async function captureAndVerifyFace() {
-    const nextStatus = applyLatestStatus(await loadAttendanceStatus());
+    const nextStatus =
+      status ?? applyLatestStatus(await loadAttendanceStatus());
     if (!nextStatus) {
       return;
     }
 
-    const nextLocationCheck = await runLocationCheck(nextStatus);
+    const nextLocationCheck = hasFreshLocationCheck(locationCheck)
+      ? locationCheck
+      : await runLocationCheck(nextStatus);
     if (nextLocationCheck?.state !== "ready") {
       return;
     }
@@ -515,16 +570,39 @@ export function AttendanceCaptureScreen({
     try {
       const picture = await cameraRef.current.takePictureAsync({
         base64: true,
-        quality: 0.8,
+        quality: 0.55,
         skipProcessing: true,
       });
       if (!picture.base64) {
         throw new Error(t("biometric.captureMissingData"));
       }
 
-      const frozenArtifact = `data:image/jpeg;base64,${picture.base64}`;
+      let artifactDataUrl = `data:image/jpeg;base64,${picture.base64}`;
+      let frozenArtifact = artifactDataUrl;
+
+      if (picture.uri) {
+        try {
+          const optimizedPicture = await manipulateAsync(
+            picture.uri,
+            [{ resize: { width: 960 } }],
+            {
+              base64: true,
+              compress: 0.65,
+              format: SaveFormat.JPEG,
+            },
+          );
+
+          if (optimizedPicture.base64) {
+            artifactDataUrl = `data:image/jpeg;base64,${optimizedPicture.base64}`;
+            frozenArtifact = optimizedPicture.uri || artifactDataUrl;
+          }
+        } catch {
+          // Keep the original capture if local compression fails.
+        }
+      }
+
       setCapturedArtifact(frozenArtifact);
-      const artifacts = [frozenArtifact];
+      const artifacts = [artifactDataUrl];
       const captureMetadata = {
         mode:
           biometricPolicy?.enrollmentStatus === "ENROLLED"
@@ -660,14 +738,13 @@ export function AttendanceCaptureScreen({
       >
         <View className="flex-1">
           <View
-            className="relative items-center justify-center"
+            className="relative w-full items-center justify-center"
             style={{ minHeight: 48 }}
           >
             <PressableScale
-              className="absolute left-0 z-10 h-8 w-8 items-center justify-center"
+              className="absolute left-0 top-0 z-10 h-10 w-10 items-center justify-center"
               haptic="selection"
               onPress={() => router.back()}
-              style={{ top: 8 }}
             >
               <Ionicons
                 color="#24314b"

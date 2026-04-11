@@ -1,6 +1,6 @@
-import * as Location from 'expo-location';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import * as Location from "expo-location";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 export type AttendanceLocationSnapshot = {
   latitude: number;
@@ -9,24 +9,29 @@ export type AttendanceLocationSnapshot = {
   capturedAt: string;
 };
 
+const RECENT_ATTENDANCE_LOCATION_MAX_AGE_MS = 30_000;
+let lastAttendanceLocationSnapshot: AttendanceLocationSnapshot | null = null;
+
 export type PreciseLocationAccessStatus = {
-  status: 'missing' | 'imprecise' | 'ready';
+  status: "missing" | "imprecise" | "ready";
   accuracyMeters: number | null;
 };
 
 export class PreciseLocationError extends Error {
   constructor(
     public readonly code:
-      | 'LOCATION_PERMISSION_REQUIRED'
-      | 'PRECISE_LOCATION_REQUIRED'
-      | 'LOCATION_ACCURACY_TOO_LOW'
-      | 'LOCATION_CAPTURE_FAILED',
+      | "LOCATION_PERMISSION_REQUIRED"
+      | "PRECISE_LOCATION_REQUIRED"
+      | "LOCATION_ACCURACY_TOO_LOW"
+      | "LOCATION_CAPTURE_FAILED",
   ) {
     super(code);
   }
 }
 
-export function isPreciseLocationError(error: unknown): error is PreciseLocationError {
+export function isPreciseLocationError(
+  error: unknown,
+): error is PreciseLocationError {
   return error instanceof PreciseLocationError;
 }
 
@@ -36,8 +41,10 @@ export async function getPreciseLocationAccessStatus(options?: {
   const requestIfNeeded = options?.requestIfNeeded ?? true;
   let permission = await Location.getForegroundPermissionsAsync();
   const isExpoGoAndroid =
-    Platform.OS === 'android' &&
-    (__DEV__ || Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient');
+    Platform.OS === "android" &&
+    (__DEV__ ||
+      Constants.appOwnership === "expo" ||
+      Constants.executionEnvironment === "storeClient");
 
   if (!permission.granted && permission.canAskAgain && requestIfNeeded) {
     permission = await Location.requestForegroundPermissionsAsync();
@@ -45,33 +52,37 @@ export async function getPreciseLocationAccessStatus(options?: {
 
   if (!permission.granted) {
     return {
-      status: 'missing',
+      status: "missing",
       accuracyMeters: null,
     };
   }
 
   try {
-    if (Platform.OS === 'android' && permission.android?.accuracy !== 'fine' && requestIfNeeded) {
+    if (
+      Platform.OS === "android" &&
+      permission.android?.accuracy !== "fine" &&
+      requestIfNeeded
+    ) {
       permission = await Location.requestForegroundPermissionsAsync();
     }
 
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       if (isExpoGoAndroid && permission.granted) {
         return {
-          status: 'ready',
+          status: "ready",
           accuracyMeters: null,
         };
       }
 
-      if (permission.android?.accuracy === 'fine') {
+      if (permission.android?.accuracy === "fine") {
         return {
-          status: 'ready',
+          status: "ready",
           accuracyMeters: null,
         };
       }
 
       return {
-        status: 'imprecise',
+        status: "imprecise",
         accuracyMeters: null,
       };
     }
@@ -80,34 +91,49 @@ export async function getPreciseLocationAccessStatus(options?: {
       accuracy: Location.Accuracy.BestForNavigation,
       mayShowUserSettingsDialog: false,
     });
-    const accuracyMeters = Math.round(location.coords.accuracy ?? Number.POSITIVE_INFINITY);
+    const accuracyMeters = Math.round(
+      location.coords.accuracy ?? Number.POSITIVE_INFINITY,
+    );
 
     if (!Number.isFinite(accuracyMeters)) {
       return {
-        status: 'imprecise',
+        status: "imprecise",
         accuracyMeters: null,
       };
     }
 
-    if (Platform.OS === 'ios' && accuracyMeters > 500) {
+    if (Platform.OS === "ios" && accuracyMeters > 500) {
       return {
-        status: 'imprecise',
+        status: "imprecise",
         accuracyMeters,
       };
     }
     return {
-      status: 'ready',
+      status: "ready",
       accuracyMeters,
     };
   } catch {
     return {
-      status: 'imprecise',
+      status: "imprecise",
       accuracyMeters: null,
     };
   }
 }
 
-export async function capturePreciseAttendanceLocation(maxAccuracyMeters = 50): Promise<AttendanceLocationSnapshot> {
+export async function capturePreciseAttendanceLocation(
+  maxAccuracyMeters = 50,
+): Promise<AttendanceLocationSnapshot> {
+  if (lastAttendanceLocationSnapshot) {
+    const capturedAtMs = Date.parse(lastAttendanceLocationSnapshot.capturedAt);
+    if (
+      Number.isFinite(capturedAtMs) &&
+      Date.now() - capturedAtMs <= RECENT_ATTENDANCE_LOCATION_MAX_AGE_MS &&
+      lastAttendanceLocationSnapshot.accuracyMeters <= maxAccuracyMeters
+    ) {
+      return lastAttendanceLocationSnapshot;
+    }
+  }
+
   let permission = await Location.getForegroundPermissionsAsync();
 
   if (!permission.granted) {
@@ -115,48 +141,85 @@ export async function capturePreciseAttendanceLocation(maxAccuracyMeters = 50): 
   }
 
   if (!permission.granted) {
-    throw new PreciseLocationError('LOCATION_PERMISSION_REQUIRED');
+    throw new PreciseLocationError("LOCATION_PERMISSION_REQUIRED");
   }
 
   let location: Location.LocationObject;
 
   try {
-    if (Platform.OS === 'android' && permission.android?.accuracy !== 'fine') {
+    if (Platform.OS === "android" && permission.android?.accuracy !== "fine") {
       permission = await Location.requestForegroundPermissionsAsync();
     }
 
+    const lastKnownLocation = await Location.getLastKnownPositionAsync({
+      maxAge: RECENT_ATTENDANCE_LOCATION_MAX_AGE_MS,
+      requiredAccuracy: maxAccuracyMeters,
+    }).catch(() => null);
+
+    if (lastKnownLocation?.coords) {
+      const lastKnownAccuracy = Math.round(
+        lastKnownLocation.coords.accuracy ?? Number.POSITIVE_INFINITY,
+      );
+
+      if (
+        Number.isFinite(lastKnownAccuracy) &&
+        lastKnownAccuracy <= maxAccuracyMeters
+      ) {
+        const snapshot = {
+          latitude: lastKnownLocation.coords.latitude,
+          longitude: lastKnownLocation.coords.longitude,
+          accuracyMeters: lastKnownAccuracy,
+          capturedAt: new Date(lastKnownLocation.timestamp).toISOString(),
+        };
+        lastAttendanceLocationSnapshot = snapshot;
+        return snapshot;
+      }
+    }
+
     location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.BestForNavigation,
+      accuracy: Location.Accuracy.Highest,
       mayShowUserSettingsDialog: true,
     });
   } catch {
-    throw new PreciseLocationError('LOCATION_CAPTURE_FAILED');
+    throw new PreciseLocationError("LOCATION_CAPTURE_FAILED");
   }
 
-  const accuracyMeters = Math.round(location.coords.accuracy ?? Number.POSITIVE_INFINITY);
+  const accuracyMeters = Math.round(
+    location.coords.accuracy ?? Number.POSITIVE_INFINITY,
+  );
 
   // Expo does not expose the iOS "Precise Location" toggle directly.
   // In practice, iOS reduced accuracy usually reports a very large uncertainty radius.
-  if (Platform.OS === 'ios' && Number.isFinite(accuracyMeters) && accuracyMeters > 500) {
-    throw new PreciseLocationError('PRECISE_LOCATION_REQUIRED');
+  if (
+    Platform.OS === "ios" &&
+    Number.isFinite(accuracyMeters) &&
+    accuracyMeters > 500
+  ) {
+    throw new PreciseLocationError("PRECISE_LOCATION_REQUIRED");
   }
 
-  if (Platform.OS === 'android') {
-    const reportedFine = permission.android?.accuracy === 'fine';
+  if (Platform.OS === "android") {
+    const reportedFine = permission.android?.accuracy === "fine";
 
-    if (!reportedFine && (!Number.isFinite(accuracyMeters) || accuracyMeters > 150)) {
-      throw new PreciseLocationError('PRECISE_LOCATION_REQUIRED');
+    if (
+      !reportedFine &&
+      (!Number.isFinite(accuracyMeters) || accuracyMeters > 150)
+    ) {
+      throw new PreciseLocationError("PRECISE_LOCATION_REQUIRED");
     }
   }
 
   if (!Number.isFinite(accuracyMeters) || accuracyMeters > maxAccuracyMeters) {
-    throw new PreciseLocationError('LOCATION_ACCURACY_TOO_LOW');
+    throw new PreciseLocationError("LOCATION_ACCURACY_TOO_LOW");
   }
 
-  return {
+  const snapshot = {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
     accuracyMeters,
     capturedAt: new Date(location.timestamp).toISOString(),
   };
+
+  lastAttendanceLocationSnapshot = snapshot;
+  return snapshot;
 }
