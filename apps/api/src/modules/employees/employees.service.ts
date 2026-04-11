@@ -32,6 +32,11 @@ import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 
 type PrismaTx = Prisma.TransactionClient | PrismaService;
 
+const EMPLOYEE_REVIEW_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 20_000,
+} as const;
+
 @Injectable()
 export class EmployeesService {
   private readonly logger = new Logger(EmployeesService.name);
@@ -1090,7 +1095,7 @@ export class EmployeesService {
             rejectedReason: null,
           },
         });
-      });
+      }, EMPLOYEE_REVIEW_TRANSACTION_OPTIONS);
 
       await this.auditService.log({
         tenantId,
@@ -1193,7 +1198,7 @@ export class EmployeesService {
           rejectedReason: null,
         },
       });
-    });
+    }, EMPLOYEE_REVIEW_TRANSACTION_OPTIONS);
 
     await this.notificationsService.createForUser({
       tenantId,

@@ -405,7 +405,7 @@ function getTaskPriorityOptions(_locale: "ru" | "en") {
 
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
   if (locale === "en") {
-    return day === 0
+    return day === 7
       ? "Su"
       : day === 1
         ? "Mo"
@@ -420,7 +420,7 @@ function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
                 : "Sa";
   }
 
-  return day === 0
+  return day === 7
     ? "Вс"
     : day === 1
       ? "Пн"
@@ -2887,7 +2887,7 @@ const Employees = ({
                 </p>
               </div>
               <div className="grid grid-cols-7 gap-1">
-                {[1, 2, 3, 4, 5, 6, 0].map((day, index) => {
+                {[1, 2, 3, 4, 5, 6, 7].map((day) => {
                     const label = getWeekdayShortLabel(day, locale);
                     const active = templateDraft.weekDays.includes(day);
 
@@ -3481,7 +3481,7 @@ const Employees = ({
                   <label className="col-span-full grid gap-2 text-sm font-heading">
                     <span>{runtimeLocalize("Дни недели", "Weekdays", locale)}</span>
                     <div className="flex flex-wrap gap-2">
-                      {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                      {[1, 2, 3, 4, 5, 6, 7].map((day) => {
                         const label = getWeekdayShortLabel(day, locale);
                         const isSelected = taskDraft.weekDays.includes(day);
                         return (

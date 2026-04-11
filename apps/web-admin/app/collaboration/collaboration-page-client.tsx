@@ -1738,7 +1738,7 @@ export default function CollaborationPageClient({
                 <div className="section-stack compact-stack">
                   <span className="section-kicker">{t('collaboration.weekdays')}</span>
                   <div className="action-stack action-stack-inline">
-                    {[1, 2, 3, 4, 5, 6, 0].map((day) => (
+                    {[1, 2, 3, 4, 5, 6, 7].map((day) => (
                       <button
                         className={
                           announcementTemplateDraft.weekDays.includes(day) ? 'solid-button' : 'ghost-button'
@@ -1752,7 +1752,7 @@ export default function CollaborationPageClient({
                         }
                         type="button"
                       >
-                        {day === 0 ? 'Sun' : day === 6 ? 'Sat' : `D${day}`}
+                        {day === 7 ? 'Sun' : day === 6 ? 'Sat' : `D${day}`}
                       </button>
                     ))}
                   </div>

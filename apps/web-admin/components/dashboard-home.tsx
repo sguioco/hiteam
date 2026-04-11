@@ -371,7 +371,7 @@ function getPriorityOptions(locale: "ru" | "en"): Array<{
 
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
   if (locale === "en") {
-    return day === 0
+    return day === 7
       ? "Su"
       : day === 1
         ? "Mo"
@@ -386,7 +386,7 @@ function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
                 : "Sa";
   }
 
-  return day === 0
+  return day === 7
     ? "Вс"
     : day === 1
       ? "Пн"
@@ -2017,7 +2017,7 @@ export default function DashboardHome({
                               <label className="col-span-full grid gap-2 text-sm font-heading">
                                 <span>{localize(locale, "Дни недели", "Weekdays")}</span>
                                 <div className="flex flex-wrap gap-2">
-                                  {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                                  {[1, 2, 3, 4, 5, 6, 7].map((day) => {
                                     const label = getWeekdayShortLabel(day, locale);
                                     const isSelected =
                                       taskDraft.weekDays.includes(day);
