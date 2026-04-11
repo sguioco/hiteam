@@ -163,6 +163,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   async completeEnrollment(userId: string, dto: CompleteEnrollmentDto) {
     const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
     const awsProviderEnabled = this.biometricProviderService.isAwsRekognitionEnabled();
+    const comprefaceEnabled = this.biometricProviderService.isCompreFaceEnabled();
     const awsSessionId =
       typeof dto.captureMetadata?.awsLivenessSessionId === 'string'
         ? dto.captureMetadata.awsLivenessSessionId
@@ -193,7 +194,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
             dto.captureMetadata ?? null,
           )
         : null;
-    const templateRef = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? dto.templateRef;
+    const inlineTemplateRef =
+      comprefaceEnabled && this.isInlineBiometricReference(dto.artifacts?.[0])
+        ? dto.artifacts?.[0] ?? null
+        : null;
+    const templateRef = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? dto.templateRef ?? inlineTemplateRef;
     const livenessScore = awsLivenessResult?.confidence ?? dto.livenessScore ?? null;
     if (!templateRef) {
       throw new BadRequestException('Unable to create a biometric reference image for enrollment.');
@@ -228,7 +233,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       entityId: profile.id,
       action: 'biometric.enrollment_completed',
       metadata: {
-        templateRef,
+        templateRef: this.normalizeBiometricReferenceForAudit(templateRef),
         livenessScore,
         captureMetadata: dto.captureMetadata ?? null,
         artifactKeys: uploadedArtifacts.map((item) => item.storageKey),
@@ -576,11 +581,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
             dto.captureMetadata ?? null,
           )
         : null;
-    const targetArtifactKey = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? null;
+    const targetArtifactRef = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? dto.artifacts?.[0] ?? null;
     const templateRef = employee.biometricProfile.templateRef;
     const [sourceBytes, targetBytes, providerLivenessScore] = await Promise.all([
-      templateRef ? this.storageService.getObjectBuffer(templateRef).catch(() => null) : Promise.resolve(null),
-      targetArtifactKey ? this.storageService.getObjectBuffer(targetArtifactKey).catch(() => null) : Promise.resolve(null),
+      this.resolveBiometricReferenceBytes(templateRef),
+      this.resolveBiometricReferenceBytes(targetArtifactRef),
       Promise.resolve(awsLivenessResult?.confidence ?? null),
     ]);
     if (awsProviderEnabled && (!sourceBytes || !targetBytes)) {
@@ -850,9 +855,9 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
             enrolledAt: employee.biometricProfile.enrolledAt?.toISOString() ?? null,
             lastVerifiedAt: employee.biometricProfile.lastVerifiedAt?.toISOString() ?? null,
             provider: employee.biometricProfile.provider,
-            templateRef: employee.biometricProfile.templateRef,
+            templateRef: this.normalizeBiometricReferenceForAudit(employee.biometricProfile.templateRef),
             templateUrl: employee.biometricProfile.templateRef
-              ? this.storageService.getObjectUrl(employee.biometricProfile.templateRef)
+              ? this.resolveBiometricReferenceUrl(employee.biometricProfile.templateRef)
               : null,
           }
         : null,
@@ -1068,6 +1073,51 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     });
 
     return storageKey;
+  }
+
+  private async resolveBiometricReferenceBytes(reference: string | null | undefined) {
+    if (!reference) {
+      return null;
+    }
+
+    if (this.isInlineBiometricReference(reference)) {
+      return this.parseInlineBiometricReference(reference);
+    }
+
+    return this.storageService.getObjectBuffer(reference).catch(() => null);
+  }
+
+  private resolveBiometricReferenceUrl(reference: string | null | undefined) {
+    if (!reference) {
+      return null;
+    }
+
+    if (this.isInlineBiometricReference(reference)) {
+      return reference;
+    }
+
+    return this.storageService.getObjectUrl(reference);
+  }
+
+  private normalizeBiometricReferenceForAudit(reference: string | null) {
+    if (!reference) {
+      return null;
+    }
+
+    return this.isInlineBiometricReference(reference) ? 'inline-data-url' : reference;
+  }
+
+  private isInlineBiometricReference(reference: string | null | undefined): reference is string {
+    return typeof reference === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(reference);
+  }
+
+  private parseInlineBiometricReference(reference: string) {
+    const match = reference.match(/^data:(.+);base64,(.+)$/);
+    if (!match) {
+      return null;
+    }
+
+    return Buffer.from(match[2], 'base64');
   }
 
   private buildBullConnection(redisUrl: string) {

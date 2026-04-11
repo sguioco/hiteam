@@ -36,6 +36,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Smart uses the camera so you can capture photos during onboarding and work tasks.",
+          "photosPermission": "Smart needs access to your photo library so you can attach images during onboarding and work tasks."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift."
