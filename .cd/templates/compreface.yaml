@@ -1,0 +1,75 @@
+{{- if .Values.compreface.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.comprefaceServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.comprefaceServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: {{ .Values.compreface.service.type }}
+  selector:
+    app: {{ include "hiteam.comprefaceServiceName" . }}
+  ports:
+    - name: http
+      port: {{ .Values.compreface.service.port }}
+      targetPort: 80
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "hiteam.comprefaceServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.comprefaceServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  serviceName: {{ include "hiteam.comprefaceServiceName" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "hiteam.comprefaceServiceName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "hiteam.comprefaceServiceName" . }}
+    spec:
+      containers:
+        - name: compreface
+          image: {{ .Values.compreface.image | quote }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: {{ .Values.compreface.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.compreface.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.compreface.probes.readiness.timeoutSeconds }}
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: {{ .Values.compreface.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.compreface.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.compreface.probes.liveness.timeoutSeconds }}
+          resources:
+{{ toYaml .Values.compreface.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.compreface.persistence.storageClassName }}
+        storageClassName: {{ .Values.compreface.persistence.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.compreface.persistence.size | quote }}
+{{- end }}

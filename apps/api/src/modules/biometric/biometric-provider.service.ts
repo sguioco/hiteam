@@ -23,6 +23,7 @@ export class BiometricProviderService {
   private readonly comprefaceBaseUrl: string | null;
   private readonly comprefaceApiKey: string | null;
   private readonly comprefaceSimilarityThreshold: number;
+  private readonly comprefaceTimeoutMs: number;
 
   constructor(private readonly configService: ConfigService) {
     this.provider = this.configService.get<string>(
@@ -41,9 +42,16 @@ export class BiometricProviderService {
         "0.60",
       ),
     );
+    const rawCompreFaceTimeoutMs = Number(
+      this.configService.get<string>("COMPRE_FACE_TIMEOUT_MS", "10000"),
+    );
     this.comprefaceSimilarityThreshold = Number.isFinite(rawCompreFaceThreshold)
       ? Math.min(Math.max(rawCompreFaceThreshold, 0), 1)
       : 0.6;
+    this.comprefaceTimeoutMs =
+      Number.isFinite(rawCompreFaceTimeoutMs) && rawCompreFaceTimeoutMs > 0
+        ? Math.round(rawCompreFaceTimeoutMs)
+        : 10_000;
     this.client = new RekognitionClient({
       region: this.configService.get<string>("AWS_REGION", "us-east-1"),
       credentials:
@@ -285,18 +293,33 @@ export class BiometricProviderService {
     }
 
     let response: Response;
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort(
+        new Error(
+          `CompreFace request timed out after ${this.comprefaceTimeoutMs}ms.`,
+        ),
+      );
+    }, this.comprefaceTimeoutMs);
+
     try {
       response = await fetch(`${this.comprefaceBaseUrl}${path}`, {
         ...init,
         headers,
+        signal: abortController.signal,
       });
     } catch (error) {
       const details =
         error instanceof Error ? (error.stack ?? error.message) : String(error);
-      this.logger.error(`CompreFace request failed for ${path}`, details);
+      this.logger.error(
+        `CompreFace request failed for ${this.comprefaceBaseUrl}${path}`,
+        details,
+      );
       throw new ServiceUnavailableException(
         "Face verification service is temporarily unavailable. Please try again in a minute.",
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     if (!response.ok) {

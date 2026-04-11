@@ -48,6 +48,7 @@ api:
     COMPRE_FACE_BASE_URL: ""
     COMPRE_FACE_API_KEY: ""
     COMPRE_FACE_SIMILARITY_THRESHOLD: "0.60"
+    COMPRE_FACE_TIMEOUT_MS: "10000"
     AWS_REGION: "us-east-1"
     AWS_ACCESS_KEY_ID: ""
     AWS_SECRET_ACCESS_KEY: ""
@@ -205,6 +206,34 @@ minio:
       cpu: "500m"
       memory: "1Gi"
 
+compreface:
+  enabled: false
+  image: "exadel/compreface:latest"
+  service:
+    type: ClusterIP
+    name: "svc-compreface"
+    port: 8000
+  persistence:
+    enabled: true
+    size: "10Gi"
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1500m"
+      memory: "3Gi"
+  probes:
+    readiness:
+      initialDelaySeconds: 45
+      periodSeconds: 10
+      timeoutSeconds: 3
+    liveness:
+      initialDelaySeconds: 90
+      periodSeconds: 20
+      timeoutSeconds: 3
+
 ingress:
   frontend:
     enabled: false
@@ -215,6 +244,20 @@ ingress:
     enableHttpRedirect: true
 
   backend:
+    enabled: false
+    className: "traefik"
+    host: ""
+    tlsSecret: ""
+    enableHttpRedirect: true
+
+  storage:
+    enabled: false
+    className: "traefik"
+    host: ""
+    tlsSecret: ""
+    enableHttpRedirect: true
+
+  compreface:
     enabled: false
     className: "traefik"
     host: ""

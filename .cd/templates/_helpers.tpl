@@ -30,6 +30,10 @@
 {{- default "svc-minio" .Values.minio.service.name -}}
 {{- end -}}
 
+{{- define "hiteam.comprefaceServiceName" -}}
+{{- default "svc-compreface" .Values.compreface.service.name -}}
+{{- end -}}
+
 {{- define "hiteam.pullSecretName" -}}
 {{- .Values.sharedInfo.pullSecret.name -}}
 {{- end -}}
@@ -117,6 +121,18 @@
 {{- define "hiteam.s3PublicBaseUrl" -}}
 {{- if .Values.api.env.S3_PUBLIC_BASE_URL -}}
 {{- .Values.api.env.S3_PUBLIC_BASE_URL -}}
+{{- else if and .Values.ingress.storage.enabled .Values.ingress.storage.host -}}
+{{- printf "https://%s/%s" .Values.ingress.storage.host (include "hiteam.s3Bucket" .) -}}
+{{- else -}}
+{{- "" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "hiteam.compreFaceBaseUrl" -}}
+{{- if .Values.api.env.COMPRE_FACE_BASE_URL -}}
+{{- .Values.api.env.COMPRE_FACE_BASE_URL -}}
+{{- else if .Values.compreface.enabled -}}
+{{- printf "http://%s:%v" (include "hiteam.comprefaceServiceName" .) .Values.compreface.service.port -}}
 {{- else -}}
 {{- "" -}}
 {{- end -}}
@@ -169,5 +185,21 @@
 {{- .Values.ingress.backend.tlsSecret -}}
 {{- else -}}
 {{- printf "%s-backend-tls" (include "hiteam.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "hiteam.storageTlsSecret" -}}
+{{- if .Values.ingress.storage.tlsSecret -}}
+{{- .Values.ingress.storage.tlsSecret -}}
+{{- else -}}
+{{- printf "%s-storage-tls" (include "hiteam.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "hiteam.comprefaceTlsSecret" -}}
+{{- if .Values.ingress.compreface.tlsSecret -}}
+{{- .Values.ingress.compreface.tlsSecret -}}
+{{- else -}}
+{{- printf "%s-compreface-tls" (include "hiteam.fullname" .) -}}
 {{- end -}}
 {{- end -}}

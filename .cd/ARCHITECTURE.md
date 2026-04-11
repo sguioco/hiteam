@@ -5,7 +5,7 @@ This chart is intended for ArgoCD and Kubernetes deployment of:
 - `api` (`apps/api`)
 - `web-admin` (`apps/web-admin`)
 - optional `migrations` Job
-- optional in-cluster `postgres`, `redis`, and `minio`
+- optional in-cluster `postgres`, `redis`, `minio`, and `compreface`
 - Traefik ingresses and redirect middlewares
 
 ## Safety-first defaults
@@ -13,7 +13,7 @@ This chart is intended for ArgoCD and Kubernetes deployment of:
 The chart is conservative by default:
 
 - it does not affect the current VPS/docker-compose setup
-- `postgres`, `redis`, and `minio` are disabled by default
+- `postgres`, `redis`, `minio`, and `compreface` are disabled by default
 - `migrations` are disabled by default
 - ingresses are disabled by default
 

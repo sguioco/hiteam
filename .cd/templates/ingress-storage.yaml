@@ -1,0 +1,55 @@
+{{- if and .Values.minio.enabled .Values.ingress.storage.enabled .Values.ingress.storage.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-storage-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.storage.className | quote }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.storage.host | quote }}
+      secretName: {{ include "hiteam.storageTlsSecret" . | quote }}
+  rules:
+    - host: {{ .Values.ingress.storage.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.minioServiceName" . }}
+                port:
+                  number: {{ .Values.minio.service.port }}
+---
+{{- if .Values.ingress.storage.enableHttpRedirect }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-storage-ingress-http
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-https-redirect@kubernetescrd"
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.storage.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.storage.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.minioServiceName" . }}
+                port:
+                  number: {{ .Values.minio.service.port }}
+{{- end }}
+{{- end }}

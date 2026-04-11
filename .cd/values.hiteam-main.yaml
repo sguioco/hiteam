@@ -17,11 +17,11 @@ api:
     WEB_ADMIN_BASE_URL: "https://hiteam.85.237.211.182.nip.io"
     DATABASE_URL: ""
     REDIS_URL: ""
-    S3_ENDPOINT: "http://85.237.211.182:9010"
+    S3_ENDPOINT: ""
     S3_ACCESS_KEY: ""
     S3_SECRET_KEY: ""
     S3_BUCKET: "smart-local"
-    S3_PUBLIC_BASE_URL: "http://85.237.211.182:9010/smart-local"
+    S3_PUBLIC_BASE_URL: ""
     GOOGLE_OAUTH_CLIENT_ID: ""
     GOOGLE_OAUTH_CLIENT_SECRET: ""
     GOOGLE_OAUTH_REDIRECT_URI: "https://api.85.237.211.182.nip.io/api/v1/org/google-business/callback"
@@ -30,8 +30,9 @@ api:
     JWT_REFRESH_SECRET: ""
     SYSTEM_SECRET: ""
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
-    COMPRE_FACE_BASE_URL: "http://85.237.211.182:8010"
+    COMPRE_FACE_BASE_URL: ""
     COMPRE_FACE_API_KEY: ""
+    COMPRE_FACE_TIMEOUT_MS: "10000"
 
 webAdmin:
   image: "ghcr.io/sguioco/hiteam-web-admin:main-544e9d3f25b021446875ad2a149285e2a8c76330"
@@ -84,7 +85,13 @@ redis:
       memory: "768Mi"
 
 minio:
-  enabled: false
+  enabled: true
+  rootUser: "minio"
+  rootPassword: "miniosecret"
+  bucket: "smart-local"
+
+compreface:
+  enabled: true
 
 ingress:
   frontend:
@@ -96,3 +103,11 @@ ingress:
     enabled: true
     host: "api.85.237.211.182.nip.io"
     tlsSecret: "hiteam-main-tls-api"
+  storage:
+    enabled: true
+    host: "storage.85.237.211.182.nip.io"
+    tlsSecret: "hiteam-main-tls-storage"
+  compreface:
+    enabled: true
+    host: "compreface.85.237.211.182.nip.io"
+    tlsSecret: "hiteam-main-tls-compreface"

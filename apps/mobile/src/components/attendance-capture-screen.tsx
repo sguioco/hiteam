@@ -11,10 +11,8 @@ import type { BiometricPolicyResponse } from "@smart/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
-  completeBiometricEnrollmentWithArtifacts,
   loadAttendanceStatus,
   loadBiometricPolicy,
-  startBiometricEnrollment,
   submitAttendanceAction,
   verifyBiometricWithArtifacts,
 } from "../../lib/api";
@@ -597,15 +595,19 @@ export function AttendanceCaptureScreen({
       };
 
       if (biometricPolicy?.enrollmentStatus !== "ENROLLED") {
-        await startBiometricEnrollment();
-        await completeBiometricEnrollmentWithArtifacts(
-          artifacts,
-          captureMetadata,
-        );
-        setMessage(copy.faceEnrollComplete);
         setCapturedArtifact(null);
-        setBiometricVerificationId(null);
-        setBiometricPolicy(await loadBiometricPolicy());
+        setError(
+          language === "ru"
+            ? "Биометрия не настроена. Завершите первичную регистрацию лица перед отметкой."
+            : "Biometric enrollment is not configured yet. Complete the initial face setup before attendance.",
+        );
+        router.replace({
+          pathname: "/biometric" as never,
+          params: {
+            mode: "enroll",
+            returnTo: "/today",
+          },
+        });
         return;
       }
 
@@ -726,9 +728,15 @@ export function AttendanceCaptureScreen({
             style={{ minHeight: 48 }}
           >
             <PressableScale
-              className="absolute left-0 top-0 z-10 h-10 w-10 items-center justify-center"
+              className="h-10 w-10 items-center justify-center"
               haptic="selection"
               onPress={() => router.back()}
+              style={{
+                left: 0,
+                position: "absolute",
+                top: 4,
+                zIndex: 10,
+              }}
             >
               <Ionicons
                 color="#24314b"

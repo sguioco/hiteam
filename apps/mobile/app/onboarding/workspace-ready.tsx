@@ -7,7 +7,7 @@ import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { Screen } from '../../components/ui/screen';
 import { BrandWordmark } from '../../src/components/brand-wordmark';
-import { loadMyShifts } from '../../lib/api';
+import { loadBiometricPolicy, loadMyShifts } from '../../lib/api';
 import { updateAuthFlowState } from '../../lib/auth-flow';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { getPreciseLocationAccessStatus, type PreciseLocationAccessStatus } from '../../lib/location';
@@ -297,6 +297,18 @@ export default function WorkspaceReadyOnboardingScreen() {
     try {
       if (locationStatus.status !== 'ready') {
         setError(copy.permissionRequired);
+        return;
+      }
+      const biometricPolicy = await loadBiometricPolicy();
+      if (biometricPolicy.enrollmentStatus !== 'ENROLLED') {
+        updateAuthFlowState({ workspaceSetupStep: 'biometric' });
+        router.replace({
+          pathname: '/biometric' as never,
+          params: {
+            mode: 'enroll',
+            returnTo: '/onboarding/workspace-ready',
+          },
+        });
         return;
       }
       await markLocationOnboardingComplete();

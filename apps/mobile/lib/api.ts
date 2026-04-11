@@ -786,7 +786,7 @@ export async function completeBiometricEnrollmentWithArtifacts(
 }
 
 export async function verifyBiometric(intent = "attendance") {
-  return queueVerifyBiometricWithArtifacts(intent, [], null);
+  return verifyBiometricWithArtifacts(intent, [], null);
 }
 
 export async function verifyBiometricWithArtifacts(

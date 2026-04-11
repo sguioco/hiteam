@@ -1,0 +1,55 @@
+{{- if and .Values.compreface.enabled .Values.ingress.compreface.enabled .Values.ingress.compreface.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-compreface-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.compreface.className | quote }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.compreface.host | quote }}
+      secretName: {{ include "hiteam.comprefaceTlsSecret" . | quote }}
+  rules:
+    - host: {{ .Values.ingress.compreface.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.comprefaceServiceName" . }}
+                port:
+                  number: {{ .Values.compreface.service.port }}
+---
+{{- if .Values.ingress.compreface.enableHttpRedirect }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hiteam.fullname" . }}-compreface-ingress-http
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-https-redirect@kubernetescrd"
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  ingressClassName: {{ .Values.ingress.compreface.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.compreface.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.comprefaceServiceName" . }}
+                port:
+                  number: {{ .Values.compreface.service.port }}
+{{- end }}
+{{- end }}
