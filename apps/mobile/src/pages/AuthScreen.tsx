@@ -46,6 +46,7 @@ type JoinProfileForm = {
 };
 
 const FORM_FOOTER_BOTTOM_OFFSET = -34;
+const JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH = 96;
 const JOIN_PROFILE_COUNTRY_CODES = [
   { code: '+7', country: 'Russia / Kazakhstan' },
   { code: '+1', country: 'United States / Canada' },
@@ -190,6 +191,7 @@ const AuthScreen = () => {
       lastName: t('joinProfile.lastName'),
       email: t('joinProfile.email'),
       phone: t('joinProfile.phone'),
+      birthDate: t('joinProfile.birthDate'),
       birthDateHint: t('joinProfile.birthDateHint'),
       birthDatePlaceholder: t('joinProfile.birthDatePlaceholder'),
       countryCodeLabel: t('joinProfile.countryCodeLabel'),
@@ -1075,12 +1077,13 @@ const AuthScreen = () => {
                               />
                               <View className="min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-2">
                                 <PressableScale
-                                  className="h-[46px] min-w-[96px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
+                                  className="h-[46px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
                                   haptic="selection"
                                   onPress={() => {
                                     Keyboard.dismiss();
                                     setJoinProfileCountryPickerVisible(true);
                                   }}
+                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
                                 >
                                   <Text className="text-[15px] text-[#24314b]" style={joinProfileInputStyle}>
                                     {joinProfileCountryCode}
@@ -1108,6 +1111,10 @@ const AuthScreen = () => {
                                   textAlign="center"
                                   value={joinProfileForm.phone}
                                 />
+                                <View
+                                  pointerEvents="none"
+                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
+                                />
                               </View>
                               <PressableScale
                                 className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
@@ -1118,10 +1125,23 @@ const AuthScreen = () => {
                                 }}
                               >
                                 <Text className="text-[16px] text-[#24314b]" style={joinProfileInputStyle}>
-                                  {joinProfileForm.birthDate || joinProfileCopy.birthDatePlaceholder}
+                                  {joinProfileCopy.birthDate}
                                 </Text>
-                                <Text className="text-[14px] text-[#7f8da1]" style={joinProfileBodyStyle}>
-                                  {joinProfileCopy.birthDateHint}
+                                <Text
+                                  className="text-[14px]"
+                                  style={[
+                                    joinProfileBodyStyle,
+                                    joinProfileForm.birthDate
+                                      ? {
+                                          color: '#24314b',
+                                          fontFamily: 'Manrope_700Bold',
+                                          fontSize: 16,
+                                          lineHeight: 20,
+                                        }
+                                      : null,
+                                  ]}
+                                >
+                                  {joinProfileForm.birthDate || joinProfileCopy.birthDateHint}
                                 </Text>
                               </PressableScale>
 

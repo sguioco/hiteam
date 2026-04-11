@@ -42,6 +42,7 @@ import { toAdminHref } from "../lib/admin-routes";
 import { apiRequest } from "../lib/api";
 import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
+import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
