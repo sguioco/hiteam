@@ -1276,6 +1276,12 @@ function buildDemoShowcaseTaskBoardForCurrentUser(
 
 function buildBootstrapTasks(state: DemoState) {
   const snapshot = cloneState(state);
+  const biometricStatusByEmployeeId = new Map(
+    snapshot.biometricEmployees.map((item) => [
+      item.employeeId,
+      item.enrollmentStatus,
+    ]),
+  );
 
   return {
     tasks: snapshot.tasks,
@@ -1285,6 +1291,10 @@ function buildBootstrapTasks(state: DemoState) {
       lastName: employee.lastName,
       employeeNumber: employee.employeeNumber,
       avatarUrl: employee.avatarUrl,
+      biometricProfile: {
+        enrollmentStatus:
+          biometricStatusByEmployeeId.get(employee.id) ?? "NOT_STARTED",
+      },
       department: employee.department,
       primaryLocation: employee.primaryLocation,
       position: employee.position,
@@ -1932,7 +1942,7 @@ function buildBiometricReviewResponse(
         (item) => item.pendingReview,
       ).length,
       notEnrolled: state.biometricEmployees.filter(
-        (item) => item.enrollmentStatus === "NOT_STARTED",
+        (item) => item.enrollmentStatus !== "ENROLLED",
       ).length,
     },
     items,

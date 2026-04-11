@@ -240,7 +240,7 @@ const SelectItem = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex min-h-[38px] w-full cursor-default select-none items-center rounded-[20px] border border-transparent px-3 py-2 pr-10 text-sm outline-none transition-[background-color,color,transform] duration-150 focus:bg-[rgba(15,23,42,0.04)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[state=checked]:bg-[color:var(--accent)] data-[state=checked]:text-white data-[state=checked]:[&_[data-select-description]]:text-white/70 data-[state=checked]:[&_[data-select-icon]]:bg-white/18 data-[state=checked]:[&_[data-select-icon]]:text-white",
+      "relative flex min-h-[38px] w-full cursor-default select-none items-center rounded-[20px] border border-transparent px-3 py-2 pr-10 text-sm outline-none transition-[background-color,color,transform] duration-150 focus:bg-[rgba(15,23,42,0.04)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[state=checked]:bg-[color:var(--accent)] data-[state=checked]:text-white data-[state=checked]:[&_[data-select-description]]:text-white/70 data-[state=checked]:[&_[data-select-icon]]:bg-white/18 data-[state=checked]:[&_[data-select-icon]]:text-white data-[state=checked]:[&_[data-select-icon]_svg]:!text-white",
       className,
     )}
     ref={ref}

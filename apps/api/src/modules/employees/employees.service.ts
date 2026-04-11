@@ -71,6 +71,11 @@ export class EmployeesService {
         department: true,
         primaryLocation: true,
         position: true,
+        biometricProfile: {
+          select: {
+            enrollmentStatus: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -338,6 +343,9 @@ export class EmployeesService {
   async submitJoinRequestByCompanyCode(dto: PublicCompanyJoinDto) {
     const company = await this.findCompanyByJoinCode(dto.code);
     const email = dto.email.toLowerCase().trim();
+    const firstName = dto.firstName.trim();
+    const lastName = dto.lastName.trim();
+    const phone = dto.phone.trim();
 
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -361,11 +369,10 @@ export class EmployeesService {
       );
     }
 
-    const inviterUserId = await this.ensureSystemInviter(company.tenantId);
-    const token = randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-
     try {
+      const inviterUserId = await this.ensureSystemInviter(company.tenantId);
+      const token = randomBytes(24).toString('hex');
+      const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
       const invitation = await this.prisma.employeeInvitation.upsert({
         where: {
           tenantId_email: {
@@ -382,10 +389,10 @@ export class EmployeesService {
           expiresAt,
           status: EmployeeInvitationStatus.PENDING_APPROVAL,
           submittedAt: new Date(),
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
+          firstName,
+          lastName,
           birthDate: new Date(dto.birthDate),
-          phone: dto.phone.trim(),
+          phone,
           avatarStorageKey: avatar?.key ?? null,
           avatarUrl: avatar?.url ?? null,
         },
@@ -402,46 +409,62 @@ export class EmployeesService {
           rejectedReason: null,
           userId: null,
           employeeId: null,
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
+          firstName,
+          lastName,
           middleName: null,
           birthDate: new Date(dto.birthDate),
           gender: null,
-          phone: dto.phone.trim(),
+          phone,
           avatarStorageKey: avatar?.key ?? null,
           avatarUrl: avatar?.url ?? null,
         },
       });
 
       const recipients = await this.listApprovalRecipientIds(company.tenantId);
-      await Promise.all(
-        recipients.map((userId) =>
-          this.notificationsService.createForUser({
-            tenantId: company.tenantId,
-            userId,
-            type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
-            title: 'Новая заявка на присоединение по коду компании',
-            body: `${dto.firstName.trim()} ${dto.lastName.trim()} отправил(а) заявку для ${company.name}.`,
-            actionUrl: '/app/employees',
-            metadata: { invitationId: invitation.id, email, companyCode: company.code },
-          }),
-        ),
-      );
+      if (recipients.length > 0) {
+        const notificationResults = await Promise.allSettled(
+          recipients.map((userId) =>
+            this.notificationsService.createForUser({
+              tenantId: company.tenantId,
+              userId,
+              type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
+              title: 'Новая заявка на присоединение по коду компании',
+              body: `${firstName} ${lastName} отправил(а) заявку для ${company.name}.`,
+              actionUrl: '/app/employees',
+              metadata: { invitationId: invitation.id, email, companyCode: company.code },
+            }),
+          ),
+        );
+        const failedNotifications = notificationResults.filter((result) => result.status === 'rejected');
 
-      await this.auditService.log({
-        tenantId: company.tenantId,
-        actorUserId: inviterUserId,
-        entityType: 'employee_invitation',
-        entityId: invitation.id,
-        action: 'employee.public_join_requested',
-        metadata: {
-          email,
-          companyCode: company.code,
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          birthDate: dto.birthDate,
-        },
-      });
+        if (failedNotifications.length > 0) {
+          this.logger.warn(
+            `submitJoinRequestByCompanyCode notifications partially failed for ${email} in tenant ${company.tenantId}: ${failedNotifications.length}/${notificationResults.length}`,
+          );
+        }
+      }
+
+      try {
+        await this.auditService.log({
+          tenantId: company.tenantId,
+          actorUserId: inviterUserId,
+          entityType: 'employee_invitation',
+          entityId: invitation.id,
+          action: 'employee.public_join_requested',
+          metadata: {
+            email,
+            companyCode: company.code,
+            firstName,
+            lastName,
+            birthDate: dto.birthDate,
+          },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `submitJoinRequestByCompanyCode audit log failed for ${email} in tenant ${company.tenantId}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
 
       return {
         id: invitation.id,
@@ -1384,17 +1407,31 @@ export class EmployeesService {
       return existing.id;
     }
 
-    const created = await this.prisma.user.create({
-      data: {
-        tenantId,
-        email,
-        passwordHash: await bcrypt.hash(randomBytes(16).toString('hex'), 10),
-        status: UserStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    try {
+      const created = await this.prisma.user.create({
+        data: {
+          tenantId,
+          email,
+          passwordHash: await bcrypt.hash(randomBytes(16).toString('hex'), 10),
+          status: UserStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
 
-    return created.id;
+      return created.id;
+    } catch (error) {
+      this.logger.warn(
+        `ensureSystemInviter create failed for tenant ${tenantId}, trying fallback actor`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      const fallback = await this.findFallbackInvitationActor(tenantId);
+      if (fallback) {
+        return fallback;
+      }
+
+      throw error;
+    }
   }
 
   private async ensureEmployeeRole(tx: PrismaTx) {
@@ -1481,6 +1518,43 @@ export class EmployeesService {
     });
 
     return users.map((user) => user.id);
+  }
+
+  private async findFallbackInvitationActor(tenantId: string) {
+    const privilegedUser = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        status: UserStatus.ACTIVE,
+        email: { not: { startsWith: 'system+' } },
+        roles: {
+          some: {
+            role: {
+              code: {
+                in: ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'],
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (privilegedUser) {
+      return privilegedUser.id;
+    }
+
+    const activeUser = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        status: UserStatus.ACTIVE,
+        email: { not: { startsWith: 'system+' } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return activeUser?.id ?? null;
   }
 
   private async markInvitationExpired(invitationId: string) {

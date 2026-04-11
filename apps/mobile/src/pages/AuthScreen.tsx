@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { ActivityIndicator, Alert, AppState, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, {
   Easing,
@@ -30,6 +30,7 @@ import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { getPreciseLocationAccessStatus } from '../../lib/location';
 import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
 import { PressableScale } from '../../components/ui/pressable-scale';
+import BottomSheetModal from '../components/BottomSheetModal';
 import { BrandWordmark } from '../components/brand-wordmark';
 
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
@@ -1143,9 +1144,7 @@ const AuthScreen = () => {
                                     haptic="selection"
                                     onPress={openJoinProfilePhotoChooser}
                                   >
-                                    <Text className="text-center" style={joinProfileBodyStyle}>
-                                      {joinProfileCopy.photoRequired}
-                                    </Text>
+                                    <Ionicons color="#8a92ab" name="camera-outline" size={34} />
                                   </PressableScale>
                                 )}
                               </View>
@@ -1341,75 +1340,65 @@ const AuthScreen = () => {
             </Animated.View>
           </View>
         </TouchableWithoutFeedback>
-        <Modal
-          animationType="slide"
-          onRequestClose={() => setJoinProfileCountryPickerVisible(false)}
-          transparent
+        <BottomSheetModal
+          onClose={() => setJoinProfileCountryPickerVisible(false)}
+          sheetClassName="rounded-t-[28px] border border-white bg-white px-5 pt-5"
+          solidBackground
           visible={joinProfileCountryPickerVisible}
         >
-          <Pressable
-            onPress={() => setJoinProfileCountryPickerVisible(false)}
-            style={styles.modalOverlay}
-          >
-            <Pressable onPress={() => undefined} style={styles.modalSheet}>
-              <Text style={styles.modalTitle}>{t('login.countryPickerTitle')}</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {JOIN_PROFILE_COUNTRY_CODES.map((option) => (
-                  <PressableScale
-                    className="flex-row items-center justify-between rounded-[18px] px-4 py-4"
-                    haptic="selection"
-                    key={option.code}
-                    onPress={() => {
-                      setJoinProfileCountryCode(option.code);
-                      setJoinProfileCountryPickerVisible(false);
-                      setMessage(null);
-                    }}
-                  >
-                    <View className="gap-1">
-                      <Text style={styles.countryCodeValue}>{option.code}</Text>
-                      <Text style={styles.countryCodeLabel}>{option.country}</Text>
-                    </View>
-                    {joinProfileCountryCode === option.code ? <Text style={styles.countryCodeCheck}>✓</Text> : null}
-                  </PressableScale>
-                ))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
+          <View style={{ maxHeight: screenHeight * 0.58, paddingBottom: Math.max(insets.bottom, 20) }}>
+            <Text style={styles.modalTitle}>{t('login.countryPickerTitle')}</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {JOIN_PROFILE_COUNTRY_CODES.map((option) => (
+                <PressableScale
+                  className="flex-row items-center justify-between rounded-[18px] px-4 py-4"
+                  haptic="selection"
+                  key={option.code}
+                  onPress={() => {
+                    setJoinProfileCountryCode(option.code);
+                    setJoinProfileCountryPickerVisible(false);
+                    setMessage(null);
+                  }}
+                >
+                  <View className="gap-1">
+                    <Text style={styles.countryCodeValue}>{option.code}</Text>
+                    <Text style={styles.countryCodeLabel}>{option.country}</Text>
+                  </View>
+                  {joinProfileCountryCode === option.code ? <Text style={styles.countryCodeCheck}>✓</Text> : null}
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </View>
+        </BottomSheetModal>
         {Platform.OS === 'ios' ? (
-          <Modal
-            animationType="slide"
-            transparent
+          <BottomSheetModal
+            onClose={() => setJoinProfileDatePickerVisible(false)}
+            sheetClassName="rounded-t-[28px] border border-white bg-white px-5 pt-5"
+            solidBackground
             visible={joinProfileDatePickerVisible}
-            onRequestClose={() => setJoinProfileDatePickerVisible(false)}
           >
-            <Pressable
-              onPress={() => setJoinProfileDatePickerVisible(false)}
-              style={styles.modalOverlay}
-            >
-              <Pressable onPress={() => undefined} style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}>
-                <View className="mb-4 flex-row items-center justify-between">
-                  <Text style={[styles.modalTitle, { marginBottom: 0 }]}>
-                    {joinProfileCopy.birthDatePlaceholder.replace('*', '')}
-                  </Text>
-                  <PressableScale haptic="selection" onPress={() => setJoinProfileDatePickerVisible(false)}>
-                    <Text className="text-[17px] font-semibold text-[#546cf2]">{joinProfileCopy.done}</Text>
-                  </PressableScale>
-                </View>
-                <View style={styles.datePickerSpinnerWrap}>
-                  <DateTimePicker
-                    display="spinner"
-                    maximumDate={new Date()}
-                    mode="date"
-                    onChange={handleJoinProfileBirthDateChange}
-                    style={styles.datePickerSpinner}
-                    value={parseJoinProfileBirthDate(joinProfileForm.birthDate)}
-                    textColor="#000000"
-                  />
-                </View>
-              </Pressable>
-            </Pressable>
-          </Modal>
+            <View style={{ paddingBottom: insets.bottom + 20 }}>
+              <View className="mb-4 flex-row items-center justify-between">
+                <Text style={[styles.modalTitle, { marginBottom: 0 }]}>
+                  {joinProfileCopy.birthDatePlaceholder.replace('*', '')}
+                </Text>
+                <PressableScale haptic="selection" onPress={() => setJoinProfileDatePickerVisible(false)}>
+                  <Text className="text-[17px] font-semibold text-[#546cf2]">{joinProfileCopy.done}</Text>
+                </PressableScale>
+              </View>
+              <View style={styles.datePickerSpinnerWrap}>
+                <DateTimePicker
+                  display="spinner"
+                  maximumDate={new Date()}
+                  mode="date"
+                  onChange={handleJoinProfileBirthDateChange}
+                  style={styles.datePickerSpinner}
+                  value={parseJoinProfileBirthDate(joinProfileForm.birthDate)}
+                  textColor="#000000"
+                />
+              </View>
+            </View>
+          </BottomSheetModal>
         ) : (
           joinProfileDatePickerVisible && (
             <DateTimePicker
@@ -1482,20 +1471,6 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     marginBottom: 0,
     marginTop: 26,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 24, 44, 0.26)',
-  },
-  modalSheet: {
-    maxHeight: '58%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
   },
   modalTitle: {
     marginBottom: 14,

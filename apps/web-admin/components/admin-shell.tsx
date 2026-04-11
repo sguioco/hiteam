@@ -805,14 +805,6 @@ export function AdminShell({
           href: profileHref,
           label: locale === "ru" ? "Профиль" : "Profile",
         },
-        ...(canUseDesktopAdminTools
-          ? [
-              {
-                href: toAdminHref("/diagnostics"),
-                label: locale === "ru" ? "Диагностика" : "Diagnostics",
-              },
-            ]
-          : []),
       ];
   const prefetchRoutes = useMemo(() => {
     const routes = new Set<string>();

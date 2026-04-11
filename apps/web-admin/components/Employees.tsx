@@ -67,7 +67,6 @@ import {
   getEmployeeWorkdayStatus,
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import {
   getWebAdminTaskPriorityLabel,
   normalizeWebAdminTaskPriority,
@@ -284,12 +283,7 @@ function getAvatarSrc(
     "avatarUrl" | "firstName" | "lastName" | "middleName"
   >,
 ) {
-  return (
-    employee.avatarUrl ||
-    getMockAvatarDataUrl(
-      buildEmployeeName(employee) || employee.lastName || "employee",
-    )
-  );
+  return employee.avatarUrl ?? null;
 }
 
 function resolveEmployeeRoleLabel(
@@ -447,13 +441,13 @@ function getBiometricStatusLabel(
 ) {
   switch (enrollmentStatus) {
     case "ENROLLED":
-      return runtimeLocalize("Биометрия подключена", "Biometrics connected", locale);
+      return runtimeLocalize("Зарегистрирован", "Registered", locale);
     case "PENDING":
-      return runtimeLocalize("Ожидает завершения", "Pending completion", locale);
+      return runtimeLocalize("Регистрация не завершена", "Registration pending", locale);
     case "FAILED":
-      return runtimeLocalize("Ошибка биометрии", "Biometric error", locale);
+      return runtimeLocalize("Ошибка регистрации", "Registration failed", locale);
     default:
-      return runtimeLocalize("Не настроена", "Not configured", locale);
+      return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
   }
 }
 
@@ -941,6 +935,10 @@ const Employees = ({
       locale,
     );
   }, [locale, selectedEmployeeBiometric]);
+  const biometricConnectedSince =
+    selectedEmployeeBiometric?.profile?.enrolledAt ?? null;
+  const biometricLastVerifiedAt =
+    selectedEmployeeBiometric?.profile?.lastVerifiedAt ?? null;
 
   const employeeJoinCode = organizationSetup?.company?.code ?? "";
   const employeeJoinLink =
@@ -1786,10 +1784,7 @@ const Employees = ({
                           className="shrink-0"
                           initials={getEmployeeInitials(employee.name)}
                           size="sm"
-                          src={
-                            employee.avatarUrl ||
-                            getMockAvatarDataUrl(employee.name)
-                          }
+                          src={employee.avatarUrl ?? null}
                         />
                         <div className="min-w-0 space-y-0.5">
                           <p className="truncate text-base font-medium text-[color:var(--foreground)]">
@@ -2464,13 +2459,12 @@ const Employees = ({
                     key={employee.id}
                   >
                     <div className="flex items-center gap-3">
-                      <img
+                      <Avatar
                         alt={employee.name}
-                        className="h-10 w-10 rounded-full object-cover"
-                        src={
-                          employee.avatarUrl ||
-                          getMockAvatarDataUrl(employee.name)
-                        }
+                        className="shrink-0"
+                        initials={getEmployeeInitials(employee.name)}
+                        size="md"
+                        src={employee.avatarUrl ?? null}
                       />
                       <div className="min-w-0">
                         <p className="truncate font-heading font-medium text-foreground">
@@ -2944,14 +2938,15 @@ const Employees = ({
             <>
               <div className="border-b border-[color:var(--border)] bg-[linear-gradient(180deg,rgba(40,75,255,0.12)_0%,rgba(255,255,255,0.98)_78%)] px-6 pb-5 pt-6">
                 <div className="flex items-start gap-4">
-                  <img
+                  <Avatar
                     alt={selectedEmployee.name}
-                    className="h-16 w-16 shrink-0 rounded-full object-cover shadow-[0_12px_32px_rgba(40,75,255,0.16)]"
+                    className="shrink-0 shadow-[0_12px_32px_rgba(40,75,255,0.16)]"
+                    initials={getEmployeeInitials(selectedEmployee.name)}
+                    size="2xl"
                     src={
                       selectedEmployeeDetails
                         ? getAvatarSrc(selectedEmployeeDetails)
-                        : selectedEmployee.avatarUrl ||
-                          getMockAvatarDataUrl(selectedEmployee.name)
+                        : selectedEmployee.avatarUrl ?? null
                     }
                   />
                   <DialogHeader className="gap-2 pr-10">
@@ -3096,8 +3091,8 @@ const Employees = ({
                         {biometricPreviewUrl ? (
                           <img
                             alt={runtimeLocalize(
-                              "Биометрический профиль",
-                              "Biometric profile",
+                              "Эталонная биометрия",
+                              "Reference biometric",
                               locale,
                             )}
                             className="h-40 w-full rounded-xl object-cover"
@@ -3106,8 +3101,8 @@ const Employees = ({
                         ) : (
                           <div className="flex h-40 items-center justify-center rounded-xl bg-secondary/50 text-center text-xs font-heading text-muted-foreground">
                             {runtimeLocalize(
-                              "Биометрический снимок не найден",
-                              "Biometric snapshot not found",
+                              "Эталонное фото ещё не загружено",
+                              "Reference photo is not available yet",
                               locale,
                             )}
                           </div>
@@ -3159,22 +3154,21 @@ const Employees = ({
                           {runtimeLocalize("Последняя верификация", "Last verification", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
-                          {selectedEmployeeBiometric?.profile?.lastVerifiedAt
+                          {biometricLastVerifiedAt
                             ? new Date(
-                                selectedEmployeeBiometric.profile
-                                  .lastVerifiedAt,
+                                biometricLastVerifiedAt,
                               ).toLocaleString(getRuntimeLocaleTag(locale))
                             : "—"}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Подключено с", "Connected since", locale)}
+                          {runtimeLocalize("Дата регистрации", "Registered at", locale)}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
-                          {selectedEmployeeBiometric?.profile?.enrolledAt
+                          {biometricConnectedSince
                             ? new Date(
-                                selectedEmployeeBiometric.profile.enrolledAt,
+                                biometricConnectedSince,
                               ).toLocaleString(getRuntimeLocaleTag(locale))
                             : "—"}
                         </p>
@@ -3664,13 +3658,12 @@ const Employees = ({
                       key={employee.id}
                     >
                       <div className="flex items-center gap-3">
-                        <img
+                        <Avatar
                           alt={employee.name}
-                          className="h-10 w-10 rounded-full object-cover"
-                          src={
-                            employee.avatarUrl ||
-                            getMockAvatarDataUrl(employee.name)
-                          }
+                          className="shrink-0"
+                          initials={getEmployeeInitials(employee.name)}
+                          size="md"
+                          src={employee.avatarUrl ?? null}
                         />
                         <div className="min-w-0">
                           <p className="truncate font-heading font-medium text-foreground">

@@ -44,7 +44,6 @@ import { getSession, hasManagerAccess } from "@/lib/auth";
 import { toAdminHref } from "@/lib/admin-routes";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
@@ -55,6 +54,9 @@ export type EmployeeDirectoryItem = {
   lastName: string;
   employeeNumber: string;
   avatarUrl?: string | null;
+  biometricProfile?: {
+    enrollmentStatus: "NOT_STARTED" | "PENDING" | "ENROLLED" | "FAILED";
+  } | null;
   department?: {
     id: string;
     name: string;
@@ -93,7 +95,7 @@ type TaskTableRow = {
   employeeName: string;
   employeeSubtitle: string | null;
   employeeInitials: string;
-  employeeAvatarUrl: string;
+  employeeAvatarUrl: string | null;
   statusLabel: string;
   statusActive: boolean;
   statusTone: "success" | "gray" | "error";
@@ -514,6 +516,12 @@ function getEmployeeSubtitle(
   employee: Pick<EmployeeDirectoryItem, "department" | "position" | "primaryLocation">,
 ) {
   return employee.position?.name ?? employee.department?.name ?? employee.primaryLocation?.name ?? null;
+}
+
+function hasCompletedEmployeeRegistration(
+  employee: Pick<EmployeeDirectoryItem, "biometricProfile">,
+) {
+  return employee.biometricProfile?.enrollmentStatus === "ENROLLED";
 }
 
 const TASKS_CACHE_TTL_MS = 60_000;
@@ -957,6 +965,7 @@ export function ManagerTasksPage({
                 locale,
               )
         : (() => {
+            const isRegistered = hasCompletedEmployeeRegistration(entry.employee);
             const isCheckedIn =
               liveSession?.status === "on_shift" || liveSession?.status === "on_break";
             const isLate = Boolean(
@@ -968,16 +977,24 @@ export function ManagerTasksPage({
 
             return {
               statusLabel:
-                isLate
+                !isRegistered
+                  ? localize(locale, "Не зарегистрирован", "Not registered")
+                  : isLate
                   ? localize(locale, "Опаздывает", "Late")
                   : liveSession?.status === "on_break"
                     ? localize(locale, "На перерыве", "On break")
                     : isCheckedIn
-                      ? localize(locale, "На смене", "On shift")
-                      : localize(locale, "Не на смене", "Off shift"),
-              statusActive: isCheckedIn,
-              statusTone: isLate ? "error" : isCheckedIn ? "success" : "gray",
-              statusSort: isLate ? -1 : isCheckedIn ? 0 : 1,
+                    ? localize(locale, "На смене", "On shift")
+                    : localize(locale, "Не на смене", "Off shift"),
+              statusActive: isRegistered ? isCheckedIn : false,
+              statusTone: !isRegistered
+                ? "gray"
+                : isLate
+                  ? "error"
+                  : isCheckedIn
+                    ? "success"
+                    : "gray",
+              statusSort: !isRegistered ? 2 : isLate ? -1 : isCheckedIn ? 0 : 1,
             };
           })();
 
@@ -986,8 +1003,7 @@ export function ManagerTasksPage({
         employeeName,
         employeeSubtitle: getEmployeeSubtitle(entry.employee),
         employeeInitials: getEmployeeInitials(entry.employee),
-        employeeAvatarUrl:
-          entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName),
+        employeeAvatarUrl: entry.employee.avatarUrl ?? null,
         ...statusSummary,
         teams,
         teamsSort: teams.join(" "),

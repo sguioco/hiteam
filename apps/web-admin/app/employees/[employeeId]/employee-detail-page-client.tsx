@@ -102,12 +102,14 @@ function formatDevicePlatform(platform: string, locale: string) {
 function getEnrollmentStatusLabel(status: string | null | undefined, locale: string) {
   switch (status) {
     case 'ENROLLED':
-      return locale === 'ru' ? 'Подтверждено' : 'Verified';
+      return locale === 'ru' ? 'Зарегистрирован' : 'Registered';
     case 'PENDING':
-      return locale === 'ru' ? 'В процессе' : 'Pending';
+      return locale === 'ru' ? 'Регистрация не завершена' : 'Registration pending';
+    case 'FAILED':
+      return locale === 'ru' ? 'Ошибка регистрации' : 'Registration failed';
     case 'NOT_STARTED':
     default:
-      return locale === 'ru' ? 'Не подтверждено' : 'Not verified';
+      return locale === 'ru' ? 'Не зарегистрирован' : 'Not registered';
   }
 }
 
@@ -117,6 +119,8 @@ function getEnrollmentStatusClassName(status: string | null | undefined) {
       return 'text-green-600';
     case 'PENDING':
       return 'text-amber-600';
+    case 'FAILED':
+      return 'text-red-600';
     case 'NOT_STARTED':
     default:
       return 'text-muted-foreground';
@@ -245,6 +249,8 @@ export default function EmployeeCardPageClient({
   const selectedVerificationArtifacts = selectedVerification?.artifacts.filter((artifact) => artifact.url) ?? [];
   const biometricStatusLabel = getEnrollmentStatusLabel(biometricHistory?.profile?.enrollmentStatus, locale);
   const biometricStatusClassName = getEnrollmentStatusClassName(biometricHistory?.profile?.enrollmentStatus);
+  const biometricEnrolledAt = biometricHistory?.profile?.enrolledAt ?? null;
+  const biometricLastVerifiedAt = biometricHistory?.profile?.lastVerifiedAt ?? null;
   const primaryBiometricUrl = useMemo(() => {
     if (biometricHistory?.profile?.templateUrl) {
       return biometricHistory.profile.templateUrl;
@@ -572,24 +578,26 @@ export default function EmployeeCardPageClient({
           {/* ─── Biometric ─── */}
           {tab === 'biometric' && (
             <>
-              {biometricHistory?.profile && (
+              {biometricHistory && (
                 <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                   <div className="p-4">
                     <div className="mb-3 flex items-center justify-center gap-2 text-center">
                       <ScanFace className="size-4 text-accent" />
                       <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                        {locale === 'ru' ? 'Основная биометрия' : 'Primary biometric'}
+                        {locale === 'ru' ? 'Эталонная биометрия' : 'Reference biometric'}
                       </h3>
                     </div>
                     {primaryBiometricUrl ? (
                       <img
-                        alt={locale === 'ru' ? 'Основное лицо сотрудника' : 'Primary employee face'}
+                        alt={locale === 'ru' ? 'Эталонное лицо сотрудника' : 'Reference employee face'}
                         className="h-72 w-full rounded-2xl object-cover"
                         src={primaryBiometricUrl}
                       />
                     ) : (
                       <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
-                        {locale === 'ru' ? 'Основное лицо ещё не загружено в хранилище.' : 'Primary face is not available in storage yet.'}
+                        {locale === 'ru'
+                          ? 'Сотрудник ещё не завершил первичную регистрацию лица.'
+                          : 'The employee has not completed initial face registration yet.'}
                       </div>
                     )}
                   </div>
@@ -600,15 +608,15 @@ export default function EmployeeCardPageClient({
                         <dd className={`font-semibold ${biometricStatusClassName}`}>{biometricStatusLabel}</dd>
                       </div>
                       <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 px-4 py-3">
-                        <dt className="text-muted-foreground">{locale === 'ru' ? 'Зарегистрирован' : 'Enrolled at'}</dt>
+                        <dt className="text-muted-foreground">{locale === 'ru' ? 'Дата регистрации' : 'Registered at'}</dt>
                         <dd className="font-medium text-foreground">
-                          {biometricHistory.profile.enrolledAt ? formatDate(biometricHistory.profile.enrolledAt) : '—'}
+                          {biometricEnrolledAt ? formatDate(biometricEnrolledAt) : '—'}
                         </dd>
                       </div>
                       <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 px-4 py-3">
                         <dt className="text-muted-foreground">{locale === 'ru' ? 'Последняя проверка' : 'Last verified'}</dt>
                         <dd className="font-medium text-foreground">
-                          {biometricHistory.profile.lastVerifiedAt ? formatDate(biometricHistory.profile.lastVerifiedAt) : '—'}
+                          {biometricLastVerifiedAt ? formatDate(biometricLastVerifiedAt) : '—'}
                         </dd>
                       </div>
                     </dl>

@@ -44,15 +44,60 @@ export const metadata: Metadata = {
   description: 'Operational control center for attendance, scheduling, and workforce workflows.',
 };
 
+function parsePreferredLocaleFromAcceptLanguage(
+  acceptLanguageHeader: string | null,
+): "en" | "ru" | null {
+  if (!acceptLanguageHeader) {
+    return null;
+  }
+
+  const tokens = acceptLanguageHeader
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const token of tokens) {
+    const locale = token.split(";")[0]?.trim();
+    if (!locale) {
+      continue;
+    }
+
+    if (locale === "ru" || locale.startsWith("ru-")) {
+      return "ru";
+    }
+
+    if (locale === "en" || locale.startsWith("en-")) {
+      return "en";
+    }
+  }
+
+  return null;
+}
+
 function resolveInitialLocale(
   acceptLanguageHeader: string | null,
   localeCookie: string | undefined,
+  isPublicRoute: boolean,
 ): "en" | "ru" {
+  const browserLocale = parsePreferredLocaleFromAcceptLanguage(acceptLanguageHeader);
+
+  if (isPublicRoute) {
+    if (browserLocale) {
+      return browserLocale;
+    }
+
+    if (localeCookie === "ru" || localeCookie === "en") {
+      return localeCookie;
+    }
+
+    return "en";
+  }
+
   if (localeCookie === "ru" || localeCookie === "en") {
     return localeCookie;
   }
 
-  return acceptLanguageHeader?.toLowerCase().startsWith("ru") ? "ru" : "en";
+  return browserLocale ?? "en";
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +107,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const initialLocale = resolveInitialLocale(
     requestHeaders.get("accept-language"),
     cookieStore.get("smart-admin-locale")?.value,
+    isPublicRoute,
   );
   const initialSession = await getServerSession();
   const initialShellBootstrap = initialSession

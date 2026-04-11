@@ -191,6 +191,7 @@ const AUTH_FIELDS_BLOCK_OFFSET_Y = 60;
 const AUTH_FIELDS_TO_ACTION_GAP = 28;
 const AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM = 10;
 const AUTH_PRIMARY_ACTION_HEIGHT = 48;
+const AUTH_ILLUSTRATION_SCALE = 1.3;
 const AUTH_SIGNIN_FORM_ID = 'auth-signin-form';
 const AUTH_COMPANY_CODE_FORM_ID = 'auth-company-code-form';
 
@@ -493,9 +494,10 @@ export function AuthPanel() {
 
   return (
     <div className="flex w-full max-w-6xl flex-col gap-8">
-      <div className="overflow-hidden rounded-[34px] border border-white/60 bg-white/80 shadow-[0_30px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-        <div className="grid min-h-[640px] lg:grid-cols-[minmax(0,470px)_minmax(0,1fr)]">
-          <div className="flex items-center justify-center bg-white/92 px-6 py-8 md:px-10 lg:px-12">
+      <div className="relative overflow-hidden rounded-[34px] border border-white/60 bg-[linear-gradient(180deg,#eff5ff_0%,#dfe9ff_100%)] shadow-[0_30px_90px_rgba(79,109,245,0.12)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.16),transparent_24%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.12),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.14),transparent_34%)]" />
+        <div className="relative z-10 grid min-h-[640px] lg:grid-cols-[minmax(0,470px)_minmax(0,1fr)]">
+          <div className="flex items-center justify-center px-6 py-8 md:px-10 lg:px-12">
             <div className="flex w-full max-w-sm flex-col" ref={authMotionScopeRef}>
               <div
                 className="flex-shrink-0"
@@ -797,18 +799,20 @@ export function AuthPanel() {
             </div>
           </div>
 
-          <div className="relative hidden overflow-hidden bg-[linear-gradient(180deg,#eff5ff_0%,#dfe9ff_100%)] p-10 lg:flex lg:items-center lg:justify-center">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.16),transparent_24%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.12),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.14),transparent_34%)]" />
-            <img
-              alt={lang === 'ru' ? 'Иллюстрация входа HiTeam' : 'HiTeam sign-in illustration'}
-              className="relative z-10 block h-auto w-full max-w-[520px] object-contain"
-              decoding="sync"
-              fetchPriority="high"
-              height={880}
-              loading="eager"
-              src="/illustration.svg?v=20260409"
-              width={880}
-            />
+          <div className="relative hidden overflow-hidden border-l border-white/60 bg-white p-10 lg:flex lg:items-center lg:justify-center">
+            <div className="flex w-full max-w-[520px] items-center justify-center">
+              <img
+                alt={lang === 'ru' ? 'Иллюстрация входа HiTeam' : 'HiTeam sign-in illustration'}
+                className="block h-auto w-full max-w-[520px] origin-center object-contain transform-gpu"
+                decoding="sync"
+                fetchPriority="high"
+                height={880}
+                loading="eager"
+                src="/illustration.svg?v=20260409"
+                style={{ transform: `scale(${AUTH_ILLUSTRATION_SCALE})` }}
+                width={880}
+              />
+            </div>
           </div>
         </div>
       </div>

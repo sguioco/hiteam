@@ -7,7 +7,6 @@ import {
   Search,
   ScanFace,
   Users,
-  XCircle,
 } from 'lucide-react';
 import { BiometricReviewResponse } from '@smart/types';
 import type { SortDescriptor } from 'react-aria-components';
@@ -148,11 +147,6 @@ export default function BiometricReviewPageClient({
     });
   }, [result]);
 
-  const failedCount = useMemo(
-    () => reviews?.items.filter((item) => item.latestVerification?.result === 'FAILED').length ?? 0,
-    [reviews],
-  );
-
   const employeeDirectoryById = useMemo(
     () =>
       new Map(
@@ -252,27 +246,27 @@ function getEnrollmentStatusLabel(
   if (locale === 'ru') {
     switch (status) {
       case 'ENROLLED':
-        return 'Проверен';
+        return 'Зарегистрирован';
       case 'NOT_STARTED':
-        return 'Не проверен';
+        return 'Не зарегистрирован';
       case 'PENDING':
-        return 'В ожидании';
+        return 'Регистрация не завершена';
       case 'FAILED':
       default:
-        return 'Ошибка';
+        return 'Ошибка регистрации';
     }
   }
 
   switch (status) {
     case 'ENROLLED':
-      return 'Verified';
+      return 'Registered';
     case 'NOT_STARTED':
-      return 'Not verified';
+      return 'Not registered';
     case 'PENDING':
-      return 'Pending';
+      return 'Registration pending';
     case 'FAILED':
     default:
-      return 'Failed';
+      return 'Registration failed';
   }
 }
 
@@ -280,16 +274,15 @@ function getEnrollmentStatusLabel(
     <AdminShell>
       <main className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
-        <div className="grid grid-cols-2 rounded-xl border bg-card sm:grid-cols-4">
+        <div className="grid grid-cols-1 rounded-xl border bg-card sm:grid-cols-3">
           {[
             { label: locale === 'ru' ? 'Всего' : 'Total', value: reviews?.totals.employees ?? 0, icon: Users },
-            { label: locale === 'ru' ? 'Зарегистрированы' : 'Enrolled', value: reviews?.totals.enrolled ?? 0, icon: CheckCircle2, color: 'text-green-600' },
-            { label: locale === 'ru' ? 'Не пройдено' : 'Failed', value: failedCount, icon: XCircle, color: 'text-red-600' },
-            { label: locale === 'ru' ? 'Не зарегистрированы' : 'Not enrolled', value: reviews?.totals.notEnrolled ?? 0, icon: ScanFace },
+            { label: locale === 'ru' ? 'Зарегистрированы' : 'Registered', value: reviews?.totals.enrolled ?? 0, icon: CheckCircle2, color: 'text-green-600' },
+            { label: locale === 'ru' ? 'Не зарегистрированы' : 'Not registered', value: reviews?.totals.notEnrolled ?? 0, icon: ScanFace },
           ].map((metric, index) => {
             const Icon = metric.icon;
             return (
-              <div key={metric.label} className={`flex flex-col gap-1 border-b px-5 py-4 sm:border-b-0 ${index !== 0 ? 'sm:border-l' : ''}`}>
+              <div key={metric.label} className={`flex flex-col gap-1 border-b px-5 py-4 last:border-b-0 sm:border-b-0 ${index !== 0 ? 'sm:border-l' : ''}`}>
                 <div className="flex items-center gap-2">
                   <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     {metric.label}

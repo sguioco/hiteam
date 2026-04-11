@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../../../components/ui/text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -443,7 +444,11 @@ export default function CompanyJoinScreen() {
           <View className="gap-3 rounded-[22px] border border-[#d6dceb] bg-[#f9fbff] p-4">
             <Text style={fieldLabelStyle}>{copy.photoTitle}</Text>
             <Pressable
-              className="items-center justify-center rounded-[26px]"
+              className={`items-center justify-center rounded-[26px] ${
+                form.avatarPreviewUri
+                  ? 'h-32 w-32 overflow-hidden'
+                  : 'h-32 w-32 border border-dashed border-[#c6d1e4] bg-white'
+              }`}
               onPress={openPhotoChooser}
             >
               {form.avatarPreviewUri ? (
@@ -453,9 +458,7 @@ export default function CompanyJoinScreen() {
                   source={{ uri: form.avatarPreviewUri }}
                 />
               ) : (
-                <View className="h-32 w-32 items-center justify-center rounded-[26px] border border-dashed border-[#c6d1e4] bg-white px-4">
-                  <Text className="text-center" style={bodyStyle}>{copy.photoRequired}</Text>
-                </View>
+                <Ionicons color="#8a92ab" name="camera-outline" size={34} />
               )}
             </Pressable>
           </View>
