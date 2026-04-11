@@ -213,6 +213,16 @@ compreface:
     type: ClusterIP
     name: "svc-compreface"
     port: 8000
+  env:
+    adminJavaOpts: "-Xmx512m"
+    apiJavaOpts: "-Xmx1536m"
+    saveImagesToDb: "true"
+    maxFileSize: "5MB"
+    maxRequestSize: "10MB"
+    uwsgiProcesses: "1"
+    uwsgiThreads: "1"
+    connectionTimeout: "10000"
+    readTimeout: "60000"
   persistence:
     enabled: true
     size: "10Gi"
@@ -223,7 +233,7 @@ compreface:
       memory: "1Gi"
     limits:
       cpu: "1500m"
-      memory: "3Gi"
+      memory: "4Gi"
   probes:
     readiness:
       initialDelaySeconds: 45

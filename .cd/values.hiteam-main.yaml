@@ -92,6 +92,23 @@ minio:
 
 compreface:
   enabled: true
+  env:
+    adminJavaOpts: "-Xmx512m"
+    apiJavaOpts: "-Xmx1536m"
+    saveImagesToDb: "true"
+    maxFileSize: "5MB"
+    maxRequestSize: "10MB"
+    uwsgiProcesses: "1"
+    uwsgiThreads: "1"
+    connectionTimeout: "10000"
+    readTimeout: "60000"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1500m"
+      memory: "4Gi"
 
 ingress:
   frontend:

@@ -42,6 +42,25 @@ spec:
       containers:
         - name: compreface
           image: {{ .Values.compreface.image | quote }}
+          env:
+            - name: ADMIN_JAVA_OPTS
+              value: {{ .Values.compreface.env.adminJavaOpts | quote }}
+            - name: API_JAVA_OPTS
+              value: {{ .Values.compreface.env.apiJavaOpts | quote }}
+            - name: SAVE_IMAGES_TO_DB
+              value: {{ .Values.compreface.env.saveImagesToDb | quote }}
+            - name: MAX_FILE_SIZE
+              value: {{ .Values.compreface.env.maxFileSize | quote }}
+            - name: MAX_REQUEST_SIZE
+              value: {{ .Values.compreface.env.maxRequestSize | quote }}
+            - name: UWSGI_PROCESSES
+              value: {{ .Values.compreface.env.uwsgiProcesses | quote }}
+            - name: UWSGI_THREADS
+              value: {{ .Values.compreface.env.uwsgiThreads | quote }}
+            - name: CONNECTION_TIMEOUT
+              value: {{ .Values.compreface.env.connectionTimeout | quote }}
+            - name: READ_TIMEOUT
+              value: {{ .Values.compreface.env.readTimeout | quote }}
           ports:
             - containerPort: 80
           readinessProbe:
