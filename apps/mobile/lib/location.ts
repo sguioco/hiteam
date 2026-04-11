@@ -30,13 +30,16 @@ export function isPreciseLocationError(error: unknown): error is PreciseLocation
   return error instanceof PreciseLocationError;
 }
 
-export async function getPreciseLocationAccessStatus(): Promise<PreciseLocationAccessStatus> {
+export async function getPreciseLocationAccessStatus(options?: {
+  requestIfNeeded?: boolean;
+}): Promise<PreciseLocationAccessStatus> {
+  const requestIfNeeded = options?.requestIfNeeded ?? true;
   let permission = await Location.getForegroundPermissionsAsync();
   const isExpoGoAndroid =
     Platform.OS === 'android' &&
     (__DEV__ || Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient');
 
-  if (!permission.granted && permission.canAskAgain) {
+  if (!permission.granted && permission.canAskAgain && requestIfNeeded) {
     permission = await Location.requestForegroundPermissionsAsync();
   }
 
@@ -48,7 +51,7 @@ export async function getPreciseLocationAccessStatus(): Promise<PreciseLocationA
   }
 
   try {
-    if (Platform.OS === 'android' && permission.android?.accuracy !== 'fine') {
+    if (Platform.OS === 'android' && permission.android?.accuracy !== 'fine' && requestIfNeeded) {
       permission = await Location.requestForegroundPermissionsAsync();
     }
 

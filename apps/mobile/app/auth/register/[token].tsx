@@ -41,7 +41,7 @@ export default function RegisterInvitationScreen() {
 
   useEffect(() => {
     if (params.biometricEnrollmentStatus === 'ENROLLED') {
-      signInLocally();
+      signInLocally({ workspaceSetupStep: 'location' });
       router.replace('/onboarding/workspace-ready' as never);
     }
   }, [params.biometricEnrollmentStatus, router]);
@@ -129,6 +129,7 @@ export default function RegisterInvitationScreen() {
       });
 
       await signInWithEmail(invitation.email, form.password.trim(), invitation.tenantSlug);
+      signInLocally({ workspaceSetupStep: 'biometric' });
       setMessage(t('register.startBiometric'));
       router.push({
         pathname: '/biometric',

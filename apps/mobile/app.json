@@ -9,6 +9,7 @@
     "ios": {
       "bundleIdentifier": "com.smart.mobile",
       "infoPlist": {
+        "NSCameraUsageDescription": "Smart uses the front camera to verify your identity before you can enter the workspace.",
         "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -28,6 +29,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Smart uses the front camera to verify your identity before you can enter the workspace."
+        }
+      ],
       [
         "expo-location",
         {

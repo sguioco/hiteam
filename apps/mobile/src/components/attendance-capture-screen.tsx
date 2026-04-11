@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { AppState, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
@@ -215,9 +215,7 @@ export function AttendanceCaptureScreen({
 
   const primaryButtonLabel = useMemo(() => {
     if (!permission?.granted) {
-      return permission && !permission.canAskAgain
-        ? copy.cameraPermissionSettingsCta
-        : copy.cameraPermissionCta;
+      return copy.cameraPermissionCta;
     }
 
     if (submitting) {
@@ -368,14 +366,9 @@ export function AttendanceCaptureScreen({
       return true;
     }
 
-    if (permission && !permission.canAskAgain) {
-      await Linking.openSettings();
-      return false;
-    }
-
     const result = await requestPermission();
-    if (!result.granted && !result.canAskAgain) {
-      await Linking.openSettings();
+    if (!result.granted) {
+      setError(t("biometric.permissionRequired"));
     }
 
     return result.granted;

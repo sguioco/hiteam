@@ -3,6 +3,7 @@ import { getCachedDemoSession, hasCachedDemoSession, resetDemoSession } from './
 import type { AppLanguage } from './i18n';
 
 export type AuthMethod = 'phone' | 'email';
+export type WorkspaceSetupStep = 'biometric' | 'location' | null;
 
 export type CountryOption = {
   isoCode: string;
@@ -20,6 +21,7 @@ type AuthFlowState = {
   isAuthenticated: boolean;
   roleCodes: string[];
   workspaceAccessAllowed: boolean;
+  workspaceSetupStep: WorkspaceSetupStep;
 };
 
 const MANAGER_ROLE_CODES = ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'] as const;
@@ -143,6 +145,7 @@ let state: AuthFlowState = {
   isAuthenticated: hasCachedDemoSession(),
   roleCodes: getCachedDemoSession()?.user.roleCodes ?? [],
   workspaceAccessAllowed: getCachedDemoSession()?.user.workspaceAccessAllowed ?? false,
+  workspaceSetupStep: null,
 };
 
 const listeners = new Set<() => void>();
@@ -184,17 +187,23 @@ export function useAuthFlowState() {
   return useSyncExternalStore(subscribe, getAuthFlowState, getAuthFlowState);
 }
 
-export function signInLocally() {
+export function signInLocally(options?: { workspaceSetupStep?: WorkspaceSetupStep }) {
   updateAuthFlowState({
     isAuthenticated: true,
     roleCodes: getCachedDemoSession()?.user.roleCodes ?? [],
     workspaceAccessAllowed: getCachedDemoSession()?.user.workspaceAccessAllowed ?? false,
+    workspaceSetupStep: options?.workspaceSetupStep ?? null,
   });
 }
 
 export function signOutLocally() {
   resetDemoSession();
-  updateAuthFlowState({ isAuthenticated: false, roleCodes: [], workspaceAccessAllowed: false });
+  updateAuthFlowState({
+    isAuthenticated: false,
+    roleCodes: [],
+    workspaceAccessAllowed: false,
+    workspaceSetupStep: null,
+  });
 }
 
 export function hasManagerAccess(roleCodes: string[]) {

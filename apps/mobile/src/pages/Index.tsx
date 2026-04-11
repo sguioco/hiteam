@@ -108,7 +108,7 @@ const Index = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string | string[]; overdue?: string | string[] }>();
   const { language, t } = useI18n();
-  const { isAuthenticated, roleCodes, workspaceAccessAllowed } = useAuthFlowState();
+  const { isAuthenticated, roleCodes, workspaceAccessAllowed, workspaceSetupStep } = useAuthFlowState();
   const routeTab = normalizeTab(params.tab);
   const overdueParam = Array.isArray(params.overdue) ? params.overdue[0] : params.overdue;
   const overdueSheetSignal = Number(overdueParam ?? '0') || 0;
@@ -126,6 +126,7 @@ const Index = () => {
   const appStateRef = useRef(AppState.currentState);
   const handWaveRotation = useSharedValue(0);
   const isManager = hasManagerAccess(roleCodes);
+  const hasWorkspaceEntry = isAuthenticated && workspaceAccessAllowed && workspaceSetupStep === null;
   const resolvedTab = routeTab === 'manage' && !isManager ? 'today' : routeTab;
 
   const handWaveStyle = useAnimatedStyle(() => ({
@@ -154,7 +155,7 @@ const Index = () => {
   }
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!hasWorkspaceEntry) {
       setActiveTab('today');
       setMountedTabs({
         today: true,
@@ -168,13 +169,13 @@ const Index = () => {
 
     setActiveTab(resolvedTab);
     markTabMounted(resolvedTab);
-  }, [isAuthenticated, resolvedTab]);
+  }, [hasWorkspaceEntry, resolvedTab]);
 
   useEffect(() => {
-    if (isAuthenticated && workspaceAccessAllowed && routeTab === 'manage' && !isManager) {
+    if (hasWorkspaceEntry && routeTab === 'manage' && !isManager) {
       router.replace(buildWorkspaceHref('today') as never);
     }
-  }, [isAuthenticated, isManager, routeTab, router, workspaceAccessAllowed]);
+  }, [hasWorkspaceEntry, isManager, routeTab, router]);
 
   useEffect(() => {
     const wave = () => {
@@ -194,7 +195,7 @@ const Index = () => {
   }, [handWaveRotation]);
 
   useEffect(() => {
-    if (!isAuthenticated || !workspaceAccessAllowed) {
+    if (!hasWorkspaceEntry) {
       return;
     }
 
@@ -208,23 +209,20 @@ const Index = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
+  }, [hasWorkspaceEntry, language, roleCodes]);
 
   useEffect(() => {
-    const triggerAppEntry = () => {
-      if (!isAuthenticated || !workspaceAccessAllowed) {
-        return;
-      }
+    if (!hasWorkspaceEntry) {
+      setStartShiftPrompt(null);
+      setStartShiftPromptVisible(false);
+      return;
+    }
 
+    const triggerAppEntry = () => {
       setAppEntrySignal((current) => current + 1);
     };
 
-    if (isAuthenticated && workspaceAccessAllowed) {
-      triggerAppEntry();
-    } else {
-      setStartShiftPrompt(null);
-      setStartShiftPromptVisible(false);
-    }
+    triggerAppEntry();
 
     const subscription = AppState.addEventListener('change', (nextState) => {
       const previousState = appStateRef.current;
@@ -240,10 +238,10 @@ const Index = () => {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
+  }, [hasWorkspaceEntry, language, roleCodes]);
 
   useEffect(() => {
-    if (!isAuthenticated || !workspaceAccessAllowed) {
+    if (!hasWorkspaceEntry) {
       return;
     }
 
@@ -298,10 +296,10 @@ const Index = () => {
       notificationsSocket?.disconnect();
       collaborationSocket?.disconnect();
     };
-  }, [isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
+  }, [hasWorkspaceEntry, language, roleCodes]);
 
   useEffect(() => {
-    if (!appEntrySignal || !isAuthenticated || !workspaceAccessAllowed) {
+    if (!appEntrySignal || !hasWorkspaceEntry) {
       return;
     }
 
@@ -331,7 +329,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [appEntrySignal, isAuthenticated, language, roleCodes, workspaceAccessAllowed]);
+  }, [appEntrySignal, hasWorkspaceEntry, language, roleCodes]);
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
     const nextTab = tab === 'manage' && !isManager ? 'today' : tab;
@@ -354,6 +352,17 @@ const Index = () => {
 
   if (!workspaceAccessAllowed) {
     return <PendingAccessScreen />;
+  }
+
+  if (workspaceSetupStep !== null) {
+    return (
+      <SafeAreaView className="flex-1 bg-white" edges={['left', 'right']}>
+        <StatusBar style="dark" />
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-[16px] font-semibold text-[#24314b]">{t('common.loading')}</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   function renderTabScene(tab: Tab) {

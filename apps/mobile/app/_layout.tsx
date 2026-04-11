@@ -20,6 +20,12 @@ import {
   type AppLanguage,
 } from '../lib/i18n';
 import { warmWorkspaceCachesWithinBudget } from '../lib/workspace-cache';
+import {
+  getWorkspaceSetupHref,
+  isWorkspaceSetupRoute,
+  matchesWorkspaceSetupStep,
+  resolveWorkspaceSetupStep,
+} from '../lib/workspace-setup';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -31,12 +37,17 @@ LogBox.ignoreLogs([
 function AppRouterSlot() {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated } = useAuthFlowState();
+  const { isAuthenticated, workspaceAccessAllowed, workspaceSetupStep } = useAuthFlowState();
   const { language } = useI18n();
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      updateAuthFlowState({ isAuthenticated: false, roleCodes: [], workspaceAccessAllowed: false });
+      updateAuthFlowState({
+        isAuthenticated: false,
+        roleCodes: [],
+        workspaceAccessAllowed: false,
+        workspaceSetupStep: null,
+      });
     });
 
     return () => {
@@ -46,11 +57,27 @@ function AppRouterSlot() {
 
   useEffect(() => {
     const isPublicRoute = pathname === '/' || pathname.startsWith('/auth');
+    const isSetupRoute = isWorkspaceSetupRoute(pathname);
 
     if (!isAuthenticated && !isPublicRoute) {
       router.replace('/');
+      return;
     }
-  }, [isAuthenticated, pathname, router]);
+
+    if (
+      isAuthenticated &&
+      workspaceAccessAllowed &&
+      workspaceSetupStep &&
+      !matchesWorkspaceSetupStep(pathname, workspaceSetupStep)
+    ) {
+      router.replace(getWorkspaceSetupHref(workspaceSetupStep) as never);
+      return;
+    }
+
+    if (isAuthenticated && workspaceAccessAllowed && !workspaceSetupStep && isSetupRoute) {
+      router.replace('/today' as never);
+    }
+  }, [isAuthenticated, pathname, router, workspaceAccessAllowed, workspaceSetupStep]);
 
   const direction = isRTLLanguage(language) ? 'rtl' : 'ltr';
 
@@ -159,6 +186,10 @@ export default function RootLayout() {
     const hydrateAuth = async () => {
       try {
         const session = await restorePersistedSession();
+        const workspaceSetupStep =
+          session?.user.workspaceAccessAllowed
+            ? await resolveWorkspaceSetupStep()
+            : null;
         if (cancelled) {
           return;
         }
@@ -167,9 +198,10 @@ export default function RootLayout() {
           isAuthenticated: Boolean(session),
           roleCodes: session?.user.roleCodes ?? [],
           workspaceAccessAllowed: session?.user.workspaceAccessAllowed ?? false,
+          workspaceSetupStep,
         });
 
-        if (session?.user.workspaceAccessAllowed && initialLanguage) {
+        if (session?.user.workspaceAccessAllowed && !workspaceSetupStep && initialLanguage) {
           await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240, {
             language: initialLanguage,
           });

@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Image, Linking, StyleSheet, View } from 'react-native';
+import { AppState, Image, StyleSheet, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BiometricJobItem, BiometricPolicyResponse } from '@smart/types';
@@ -15,6 +15,7 @@ import {
   queueVerifyBiometricWithArtifacts,
   startBiometricEnrollment,
 } from '../../lib/api';
+import { updateAuthFlowState } from '../../lib/auth-flow';
 import { useI18n } from '../../lib/i18n';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -70,7 +71,6 @@ export default function BiometricPage() {
     modeVerify: t('biometricMobile.modeVerify'),
     cameraPermission: t('biometricMobile.cameraPermission'),
     cameraPermissionCta: t('biometricMobile.cameraPermissionCta'),
-    cameraPermissionSettingsCta: t('biometricMobile.cameraPermissionSettingsCta'),
     reset: t('biometricMobile.reset'),
     capture: t('biometricMobile.capture'),
     submitEnroll: t('biometricMobile.submitEnroll'),
@@ -101,30 +101,12 @@ export default function BiometricPage() {
     lineHeight: 24,
   } as const;
 
-  const metaLabelStyle = {
-    color: '#7a8094',
-    fontFamily: 'Manrope_500Medium',
-    fontSize: 13,
-    includeFontPadding: false,
-    letterSpacing: 1.2,
-    lineHeight: 18,
-    textTransform: 'uppercase',
-  } as const;
-
   const actionLabelStyle = {
     color: '#f7f1e6',
     fontFamily: 'Manrope_600SemiBold',
     fontSize: 20,
     includeFontPadding: false,
     lineHeight: 24,
-  } as const;
-
-  const secondaryActionLabelStyle = {
-    color: '#24314b',
-    fontFamily: 'Manrope_600SemiBold',
-    fontSize: 18,
-    includeFontPadding: false,
-    lineHeight: 22,
   } as const;
 
   const errorStyle = {
@@ -136,17 +118,13 @@ export default function BiometricPage() {
   } as const;
 
   async function ensurePermission() {
-    if (permission?.granted) return true;
-
-    if (permission && !permission.canAskAgain) {
-      await Linking.openSettings();
-      return false;
+    if (permission?.granted) {
+      return true;
     }
 
     const result = await requestPermission();
-
-    if (!result.granted && !result.canAskAgain) {
-      await Linking.openSettings();
+    if (!result.granted) {
+      setMessage(t('biometric.permissionRequired'));
     }
 
     return result.granted;
@@ -249,6 +227,9 @@ export default function BiometricPage() {
         await startBiometricEnrollment();
         await completeBiometricEnrollmentWithArtifacts(artifacts, captureMetadata);
         if (params.returnTo) {
+          if (params.returnTo === '/onboarding/workspace-ready') {
+            updateAuthFlowState({ workspaceSetupStep: 'location' });
+          }
           router.replace({
             pathname: params.returnTo as never,
             params: {
@@ -292,9 +273,7 @@ export default function BiometricPage() {
   }
 
   const primaryActionLabel = !permission?.granted
-    ? permission && !permission.canAskAgain
-      ? copy.cameraPermissionSettingsCta
-      : copy.cameraPermissionCta
+    ? copy.cameraPermissionCta
     : canSubmit
       ? mode === 'enroll'
         ? copy.submitEnroll
@@ -306,11 +285,6 @@ export default function BiometricPage() {
 
   async function handlePrimaryAction() {
     if (!permission?.granted) {
-      if (permission && !permission.canAskAgain) {
-        await Linking.openSettings();
-        return;
-      }
-
       await ensurePermission();
       return;
     }

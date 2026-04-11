@@ -19,7 +19,6 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   bootstrapDemoDevice,
-  loadBiometricPolicy,
   signInWithEmail,
   submitCompanyJoinRequest,
   lookupCompanyByCode,
@@ -27,11 +26,11 @@ import {
 import { signInLocally } from '../../lib/auth-flow';
 import { isRTLLanguage, useI18n } from '../../lib/i18n';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { getPreciseLocationAccessStatus } from '../../lib/location';
 import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { BrandWordmark } from '../components/brand-wordmark';
+import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
 type JoinCompanyPayload = Awaited<ReturnType<typeof lookupCompanyByCode>>;
@@ -704,51 +703,23 @@ const AuthScreen = () => {
       hapticSuccess();
 
       if (!session.user.workspaceAccessAllowed) {
-        startTransition(() => {
-          signInLocally();
-        });
+        signInLocally({ workspaceSetupStep: null });
         return;
       }
 
       void bootstrapDemoDevice().catch(() => undefined);
-      const workspaceWarmupPromise = warmWorkspaceCachesWithinBudget(
-        session.user.roleCodes,
-        2200,
-        { language },
-      ).catch(() => undefined);
+      const workspaceSetupStep = await resolveWorkspaceSetupStep();
 
-      const [biometricPolicyResult, locationAccessStatusResult] =
-        await Promise.allSettled([
-        loadBiometricPolicy(),
-        getPreciseLocationAccessStatus(),
-      ]);
+      signInLocally({ workspaceSetupStep });
 
-      await workspaceWarmupPromise;
-
-      startTransition(() => {
-        signInLocally();
-      });
-
-      if (
-        biometricPolicyResult.status === 'fulfilled' &&
-        biometricPolicyResult.value.enrollmentStatus !== 'ENROLLED'
-      ) {
-        router.replace({
-          pathname: '/biometric',
-          params: {
-            mode: 'enroll',
-            returnTo: '/onboarding/workspace-ready',
-          },
-        });
+      if (workspaceSetupStep) {
+        router.replace(getWorkspaceSetupHref(workspaceSetupStep) as never);
         return;
       }
 
-      if (
-        locationAccessStatusResult.status === 'fulfilled' &&
-        locationAccessStatusResult.value.status !== 'ready'
-      ) {
-        router.replace('/onboarding/workspace-ready' as never);
-      }
+      void warmWorkspaceCachesWithinBudget(session.user.roleCodes, 2200, {
+        language,
+      }).catch(() => undefined);
     } catch (error) {
       hapticError();
       setMessage(error instanceof Error ? error.message : t('login.signInErrorEmpty'));

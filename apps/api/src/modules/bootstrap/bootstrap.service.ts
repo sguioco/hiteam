@@ -139,6 +139,7 @@ export class BootstrapService {
 
     const [
       employeeRecords,
+      liveSessions,
       overview,
       pendingInvitations,
       scheduleShifts,
@@ -146,6 +147,7 @@ export class BootstrapService {
       organizationSetup,
     ] = await Promise.all([
       this.employeesService.list(user.tenantId, {}),
+      this.attendanceService.liveTeam(user.tenantId).catch(() => []),
       this.collaborationService.managerOverview(user.sub),
       this.employeesService.listPendingInvitations(user.tenantId),
       this.scheduleService.listShifts(user.tenantId)
@@ -160,6 +162,7 @@ export class BootstrapService {
 
     return {
       employeeRecords,
+      liveSessions,
       overview,
       pendingInvitations,
       scheduleShifts,

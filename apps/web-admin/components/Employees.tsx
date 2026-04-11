@@ -23,6 +23,7 @@ import {
   Clock,
 } from "lucide-react";
 import {
+  AttendanceLiveSession,
   CollaborationOverviewResponse,
   EmployeeBiometricHistoryResponse,
   TaskItem,
@@ -85,6 +86,9 @@ type EmployeeApiRecord = {
   phone?: string | null;
   avatarUrl?: string | null;
   status?: string | null;
+  biometricProfile?: {
+    enrollmentStatus?: "NOT_STARTED" | "PENDING" | "ENROLLED" | "FAILED" | null;
+  } | null;
   user?: {
     id: string;
     email: string;
@@ -174,6 +178,7 @@ type OrganizationSetupResponse = {
 
 type EmployeesDirectorySnapshot = {
   employeeRecords: EmployeeApiRecord[];
+  liveSessions: AttendanceLiveSession[];
   overview: CollaborationOverviewResponse | null;
   pendingInvitations: InvitationRecord[];
   scheduleShifts: EmployeeScheduleShift[];
@@ -184,7 +189,14 @@ type EmployeesDirectorySnapshot = {
 
 export type EmployeesInitialData = EmployeesDirectorySnapshot;
 
-type EmployeeStatus = "active" | "inactive" | "vacation" | "sick" | "dismissed";
+type EmployeeStatus =
+  | "late"
+  | "on_shift"
+  | "on_break"
+  | "off_shift"
+  | "not_registered"
+  | "inactive"
+  | "dismissed";
 type ViewMode = "employees" | "groups";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
 type TaskDialogState =
@@ -218,18 +230,22 @@ type EmployeeRowView = {
 };
 
 const statusStyles: Record<EmployeeStatus, string> = {
-  active: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
+  late: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
+  on_shift: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
+  on_break: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
+  off_shift: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
+  not_registered: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   inactive: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
-  vacation: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
-  sick: "bg-[color:var(--soft-warning)] text-[color:var(--warning)]",
   dismissed: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
 };
 
 const statusToneByEmployeeStatus: Record<EmployeeStatus, string> = {
-  active: "is-success",
+  late: "is-error",
+  on_shift: "is-success",
+  on_break: "is-gray",
+  off_shift: "is-gray",
+  not_registered: "is-gray",
   inactive: "is-gray",
-  vacation: "is-gray",
-  sick: "is-error",
   dismissed: "is-error",
 };
 
@@ -310,22 +326,46 @@ function resolveEmployeeRoleLabel(
   return employee.position?.name ?? runtimeLocalize("Сотрудник", "Employee", locale);
 }
 
-function normalizeEmployeeStatus(status?: string | null): EmployeeStatus {
-  switch ((status || "").toUpperCase()) {
+function hasCompletedEmployeeRegistration(
+  employee: Pick<EmployeeApiRecord, "biometricProfile">,
+) {
+  return employee.biometricProfile?.enrollmentStatus === "ENROLLED";
+}
+
+function resolveEmployeeStatus(
+  employee: Pick<EmployeeApiRecord, "status" | "biometricProfile">,
+  liveSession?: AttendanceLiveSession,
+): EmployeeStatus {
+  switch ((employee.status || "").toUpperCase()) {
     case "TERMINATED":
     case "DISMISSED":
       return "dismissed";
     case "INACTIVE":
-    case "CHECKED_OUT":
       return "inactive";
-    case "VACATION":
-      return "vacation";
-    case "SICK":
-    case "SICK_LEAVE":
-      return "sick";
     default:
-      return "active";
+      break;
   }
+
+  if (!hasCompletedEmployeeRegistration(employee)) {
+    return "not_registered";
+  }
+
+  const isCheckedIn =
+    liveSession?.status === "on_shift" || liveSession?.status === "on_break";
+
+  if (isCheckedIn && (liveSession?.lateMinutes ?? 0) > 0) {
+    return "late";
+  }
+
+  if (liveSession?.status === "on_break") {
+    return "on_break";
+  }
+
+  if (isCheckedIn) {
+    return "on_shift";
+  }
+
+  return "off_shift";
 }
 
 function formatHireDate(value?: string | null) {
@@ -347,16 +387,7 @@ function getEmployeeInitials(name: string) {
 
 function renderEmployeeStatusBadge(status: EmployeeStatus) {
   const locale = getRuntimeLocale();
-  const tableStatusLabel =
-    status === "active"
-      ? runtimeLocalize("Активен", "Active", locale)
-      : status === "inactive"
-        ? runtimeLocalize("Неактивен", "Inactive", locale)
-        : status === "vacation"
-          ? runtimeLocalize("Отпуск", "Vacation", locale)
-          : status === "sick"
-            ? runtimeLocalize("Больничный", "Sick leave", locale)
-            : runtimeLocalize("Уволен", "Dismissed", locale);
+  const tableStatusLabel = getStatusLabel(status, locale);
 
   return (
     <span
@@ -369,10 +400,12 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
 }
 
 function getStatusLabel(status: EmployeeStatus, locale: "ru" | "en") {
-  if (status === "active") return runtimeLocalize("Активен", "Active", locale);
+  if (status === "late") return runtimeLocalize("Опаздывает", "Late", locale);
+  if (status === "on_shift") return runtimeLocalize("На смене", "On shift", locale);
+  if (status === "on_break") return runtimeLocalize("На перерыве", "On break", locale);
+  if (status === "off_shift") return runtimeLocalize("Не на смене", "Off shift", locale);
+  if (status === "not_registered") return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
   if (status === "inactive") return runtimeLocalize("Неактивен", "Inactive", locale);
-  if (status === "vacation") return runtimeLocalize("Отпуск", "Vacation", locale);
-  if (status === "sick") return runtimeLocalize("Больничный", "Sick leave", locale);
   return runtimeLocalize("Уволен", "Dismissed", locale);
 }
 
@@ -494,6 +527,9 @@ const Employees = ({
 
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>(
     initialData?.employeeRecords ?? [],
+  );
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
+    initialData?.liveSessions ?? [],
   );
   const [overview, setOverview] =
     useState<CollaborationOverviewResponse | null>(initialData?.overview ?? null);
@@ -768,10 +804,15 @@ const Employees = ({
     return map;
   }, [overview]);
 
+  const liveSessionsByEmployeeId = useMemo(() => {
+    return new Map(liveSessions.map((session) => [session.employeeId, session] as const));
+  }, [liveSessions]);
+
   const employees = useMemo<EmployeeRowView[]>(() => {
     return employeeRecords
       .map((employee) => {
         const group = groupByEmployeeId.get(employee.id);
+        const liveSession = liveSessionsByEmployeeId.get(employee.id);
         return {
           id: employee.id,
           name: buildEmployeeName(employee),
@@ -780,7 +821,7 @@ const Employees = ({
           groupId: group?.id ?? null,
           group: group?.name ?? null,
           location: employee.primaryLocation?.name ?? "—",
-          status: normalizeEmployeeStatus(employee.status),
+          status: resolveEmployeeStatus(employee, liveSession),
           activeTasks: tasksByEmployeeId.get(employee.id) ?? 0,
           phone: employee.phone ?? "—",
           position: resolveEmployeeRoleLabel(employee, locale),
@@ -790,7 +831,13 @@ const Employees = ({
         };
       })
       .sort((left, right) => left.name.localeCompare(right.name, locale));
-  }, [employeeRecords, groupByEmployeeId, locale, tasksByEmployeeId]);
+  }, [
+    employeeRecords,
+    groupByEmployeeId,
+    liveSessionsByEmployeeId,
+    locale,
+    tasksByEmployeeId,
+  ]);
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -818,11 +865,13 @@ const Employees = ({
     });
     const direction = sortDescriptor.direction === "descending" ? -1 : 1;
     const statusOrder: Record<EmployeeStatus, number> = {
-      active: 0,
-      inactive: 1,
-      vacation: 2,
-      sick: 3,
-      dismissed: 4,
+      late: 0,
+      on_shift: 1,
+      on_break: 2,
+      off_shift: 3,
+      not_registered: 4,
+      inactive: 5,
+      dismissed: 6,
     };
 
     return [...filteredEmployees].sort((left, right) => {
@@ -951,6 +1000,7 @@ const Employees = ({
     cacheKey?: string | null,
   ) {
     setEmployeeRecords(snapshot.employeeRecords);
+    setLiveSessions(snapshot.liveSessions ?? []);
     setOverview(snapshot.overview);
     setPendingInvitations(snapshot.pendingInvitations);
     setScheduleShifts(snapshot.scheduleShifts);
@@ -999,6 +1049,7 @@ const Employees = ({
             ),
       );
       setEmployeeRecords([]);
+      setLiveSessions([]);
       setOverview(null);
       setPendingInvitations([]);
       setScheduleShifts([]);

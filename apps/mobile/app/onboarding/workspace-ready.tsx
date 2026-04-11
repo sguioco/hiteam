@@ -3,12 +3,12 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppState, Platform, View } from 'react-native';
 import { Text } from '../../components/ui/text';
-import * as Linking from 'expo-linking';
 import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { Screen } from '../../components/ui/screen';
 import { BrandWordmark } from '../../src/components/brand-wordmark';
 import { loadMyShifts } from '../../lib/api';
+import { updateAuthFlowState } from '../../lib/auth-flow';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { getPreciseLocationAccessStatus, type PreciseLocationAccessStatus } from '../../lib/location';
 import { markLocationOnboardingComplete } from '../../lib/onboarding';
@@ -51,7 +51,7 @@ export default function WorkspaceReadyOnboardingScreen() {
           ? 'workspaceReady.locationBodyReadyIos'
           : 'workspaceReady.locationBodyReadyAndroid',
       ),
-      openSettings: t('workspaceReady.openSettings'),
+      requestLocation: t('workspaceReady.requestLocation'),
       permissionRequired: t('workspaceReady.permissionRequired'),
       upcomingDays: t('workspaceReady.upcomingDays'),
       noShift: t('workspaceReady.noShift'),
@@ -70,7 +70,6 @@ export default function WorkspaceReadyOnboardingScreen() {
   const appStateRef = useRef(AppState.currentState);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasAutoForwardedRef = useRef(false);
 
   const titleStyle = {
     color: '#26334a',
@@ -130,8 +129,8 @@ export default function WorkspaceReadyOnboardingScreen() {
     fontWeight: Platform.OS === 'android' ? '600' : '400',
   } as const;
 
-  async function syncLocationPermission() {
-    setLocationStatus(await getPreciseLocationAccessStatus());
+  async function syncLocationPermission(requestIfNeeded = false) {
+    setLocationStatus(await getPreciseLocationAccessStatus({ requestIfNeeded }));
   }
 
   function scheduleLocationRefresh() {
@@ -283,7 +282,12 @@ export default function WorkspaceReadyOnboardingScreen() {
     setError(null);
 
     try {
-      await Linking.openSettings();
+      const nextLocationStatus = await getPreciseLocationAccessStatus();
+      setLocationStatus(nextLocationStatus);
+
+      if (nextLocationStatus.status !== 'ready') {
+        setError(copy.permissionRequired);
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : copy.permissionRequired);
     }
@@ -296,6 +300,7 @@ export default function WorkspaceReadyOnboardingScreen() {
         return;
       }
       await markLocationOnboardingComplete();
+      updateAuthFlowState({ workspaceSetupStep: null });
       router.replace('/today' as never);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : copy.permissionRequired);
@@ -363,7 +368,7 @@ export default function WorkspaceReadyOnboardingScreen() {
             haptic="medium"
             onPress={() => void handleVerifyLocation()}
           >
-            <Text style={actionLabelStyle}>{copy.openSettings}</Text>
+            <Text style={actionLabelStyle}>{copy.requestLocation}</Text>
           </PressableScale>
         )}
         {error ? <Text style={[errorStyle, { textAlign: 'center' }]}>{error}</Text> : null}
