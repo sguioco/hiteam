@@ -44,8 +44,10 @@ type LocationMapPickerProps = {
   showCopy?: boolean;
 };
 
-const DEFAULT_LATITUDE = 55.0302;
-const DEFAULT_LONGITUDE = 82.9204;
+const DEFAULT_LATITUDE = 20;
+const DEFAULT_LONGITUDE = 0;
+const DEFAULT_MAP_ZOOM = 2;
+const SELECTED_LOCATION_ZOOM = 16;
 const SCRIPT_ID = "smart-google-maps-api";
 
 function parseCoordinate(value: string, fallback: number) {
@@ -302,7 +304,7 @@ export function LocationMapPicker({
         if (!mapRef.current) {
           mapRef.current = new maps.Map(mapNodeRef.current, {
             center,
-            zoom: 15,
+            zoom: hasCoordinates ? SELECTED_LOCATION_ZOOM : DEFAULT_MAP_ZOOM,
             disableDefaultUI: true,
             gestureHandling: "greedy",
             clickableIcons: false,
@@ -316,6 +318,7 @@ export function LocationMapPicker({
             map: mapRef.current,
             position: center,
             draggable: isSetupMode,
+            visible: hasCoordinates,
           });
 
           if (isSetupMode) {
@@ -324,6 +327,7 @@ export function LocationMapPicker({
               const lng = event.latLng?.lng?.();
               if (typeof lat !== "number" || typeof lng !== "number") return;
 
+              markerRef.current?.setVisible(true);
               markerRef.current?.setPosition({ lat, lng });
               onSelectRef.current({
                 address: searchValue || address,
@@ -338,6 +342,7 @@ export function LocationMapPicker({
               const lng = event.latLng?.lng?.();
               if (typeof lat !== "number" || typeof lng !== "number") return;
 
+              markerRef.current?.setVisible(true);
               onSelectRef.current({
                 address: searchValue || address,
                 latitude: lat.toFixed(6),
@@ -358,10 +363,11 @@ export function LocationMapPicker({
         };
 
         markerRef.current?.setDraggable(isSetupMode);
+        markerRef.current?.setVisible(hasCoordinates);
         markerRef.current?.setPosition(center);
         mapRef.current?.setCenter(center);
         syncGeofenceCircle();
-        focusMap(center, hasCoordinates ? 16 : 13);
+        focusMap(center, hasCoordinates ? SELECTED_LOCATION_ZOOM : DEFAULT_MAP_ZOOM);
         setStatus("ready");
 
         if (geocoderRef.current && hasCoordinates) {

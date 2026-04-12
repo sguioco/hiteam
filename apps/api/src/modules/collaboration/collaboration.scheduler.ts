@@ -29,4 +29,15 @@ export class CollaborationScheduler {
       this.logger.debug('Recurring announcement template sweep completed.');
     }
   }
+
+  @Cron('* * * * *')
+  async publishScheduledAnnouncements() {
+    const publishedCount =
+      await this.collaborationService.publishDueScheduledAnnouncements();
+    if (publishedCount > 0) {
+      this.logger.debug(
+        `Scheduled announcement sweep published ${publishedCount} announcement(s).`,
+      );
+    }
+  }
 }

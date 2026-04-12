@@ -221,6 +221,10 @@ const Index = () => {
     void warmWorkspaceCaches(roleCodes, { force: true, language });
 
     const interval = setInterval(() => {
+      if (appStateRef.current !== 'active') {
+        return;
+      }
+
       void warmWorkspaceCaches(roleCodes, { force: true, language });
     }, WORKSPACE_REFRESH_INTERVAL_MS);
 

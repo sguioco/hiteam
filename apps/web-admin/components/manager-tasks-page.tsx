@@ -47,6 +47,7 @@ import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -598,6 +599,54 @@ export function ManagerTasksPage({
     setLiveSessions(snapshot.liveSessions);
   }
 
+  async function loadTasksSnapshot(options?: {
+    force?: boolean;
+    silent?: boolean;
+  }) {
+    if (!session) {
+      if (!options?.silent) {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const snapshot = await apiRequest<ManagerTasksCachePayload>("/bootstrap/tasks", {
+        token: session.accessToken,
+        skipClientCache: options?.force ?? false,
+      });
+      setError(null);
+      applyCachedSnapshot(snapshot);
+    } catch (loadError) {
+      if (options?.silent) {
+        return;
+      }
+
+      setTasks([]);
+      setEmployees([]);
+      setGroups([]);
+      setLiveSessions([]);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : localize(
+              locale,
+              "Не удалось загрузить задачи команды.",
+              "Unable to load team tasks.",
+            ),
+      );
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
+    }
+  }
+
   useEffect(() => {
     const session = getSession();
 
@@ -645,41 +694,32 @@ export function ManagerTasksPage({
       setLoading(true);
     }
 
-    setError(null);
+    void loadTasksSnapshot({
+      force: true,
+      silent: Boolean(cached),
+    }).finally(() => {
+      if (cancelled) {
+        return;
+      }
 
-    void apiRequest<ManagerTasksCachePayload>("/bootstrap/tasks", {
-      token: session.accessToken,
-    })
-      .then((snapshot) => {
-        if (cancelled) return;
-        applyCachedSnapshot(snapshot);
-      })
-      .catch((loadError) => {
-        if (cancelled) return;
-        setTasks([]);
-        setEmployees([]);
-        setGroups([]);
-        setLiveSessions([]);
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : localize(
-                locale,
-                "Не удалось загрузить задачи команды.",
-                "Unable to load team tasks.",
-              ),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
     };
   }, [accessChecked, initialData, locale, tasksCacheKey]);
+
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: accessChecked && Boolean(session),
+    onRefresh: async () => {
+      await loadTasksSnapshot({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   useEffect(() => {
     if (!tasksCacheKey || loading) {

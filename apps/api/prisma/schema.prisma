@@ -1206,8 +1206,16 @@ model Announcement {
   title              String
   body               String
   isPinned           Boolean              @default(false)
+  linkUrl            String?
+  attachmentLocationAddress   String?
+  attachmentLocationPlaceId   String?
+  attachmentLocationLatitude  Float?
+  attachmentLocationLongitude Float?
+  attachmentsJson    String?
   imageStorageKey    String?
   imageAspectRatio   String?
+  scheduledFor       DateTime?
+  publishedAt        DateTime?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { JwtUser } from '../../common/interfaces/jwt-user.interface';
+import { AuditService } from '../audit/audit.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { BiometricService } from '../biometric/biometric.service';
 import { CollaborationService } from '../collaboration/collaboration.service';
@@ -83,6 +84,7 @@ function startOfSixMonthWindow(reference: Date) {
 @Injectable()
 export class BootstrapService {
   constructor(
+    private readonly auditService: AuditService,
     private readonly attendanceService: AttendanceService,
     private readonly biometricService: BiometricService,
     private readonly collaborationService: CollaborationService,
@@ -314,6 +316,7 @@ export class BootstrapService {
       groups,
       scheduleShifts,
       personalHistory,
+      dailyActivity,
     ] = await Promise.all([
       this.attendanceService.liveTeam(user.tenantId).catch(() => []),
       this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null),
@@ -328,6 +331,7 @@ export class BootstrapService {
         })
         .catch(() => []),
       this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
+      this.auditService.listCompanyActivity(user.tenantId).catch(() => []),
     ]);
 
     return {
@@ -342,6 +346,7 @@ export class BootstrapService {
         scheduleShifts,
         canCheckWorkdays,
         personalHistory,
+        dailyActivity,
       },
     };
   }

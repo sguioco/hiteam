@@ -48,7 +48,7 @@ export const NEWS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const REQUESTS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const CHATS_SCREEN_CACHE_KEY = 'chats-screen:v1';
 export const CHATS_SCREEN_CACHE_TTL_MS = 60_000;
-export const WORKSPACE_REFRESH_INTERVAL_MS = 5 * 60_000;
+export const WORKSPACE_REFRESH_INTERVAL_MS = 10_000;
 
 export type RequestsScreenCacheValue = {
   balances: RequestsBalances;

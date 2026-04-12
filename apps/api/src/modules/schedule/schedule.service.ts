@@ -144,7 +144,16 @@ export class ScheduleService {
       entityType: 'shift',
       entityId: shift.id,
       action: 'schedule.shift_created',
-      metadata: { employeeId: employee.id, templateId: template.id, shiftDate: shiftDate.toISOString() },
+      metadata: {
+        employeeId: employee.id,
+        employeeIds: [employee.id],
+        employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+        templateId: template.id,
+        templateName: template.name,
+        shiftDate: shiftDate.toISOString(),
+        startsAt: shift.startsAt.toISOString(),
+        endsAt: shift.endsAt.toISOString(),
+      },
     });
 
     return shift;

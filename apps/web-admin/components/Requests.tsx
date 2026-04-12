@@ -48,6 +48,7 @@ import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
 import { localizePersonName } from "@/lib/transliteration";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
 
 type FilterStatus = "all" | "PENDING" | "APPROVED" | "REJECTED";
@@ -419,10 +420,12 @@ export default function Requests({
         },
   );
 
-  async function loadInbox() {
-    setLoading(true);
-    setError(null);
-    setMessage(null);
+  async function loadInbox(options?: { force?: boolean; silent?: boolean }) {
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+      setMessage(null);
+    }
 
     const isDemoSession = isDemoAccessToken(session?.accessToken);
 
@@ -436,7 +439,9 @@ export default function Requests({
 
       const data = await apiRequest<ApprovalInboxItem[]>("/requests/inbox", {
         token: session.accessToken,
+        skipClientCache: options?.force ?? false,
       });
+      setError(null);
       setItems(data);
       setIsMockMode(false);
     } catch (loadError) {
@@ -449,12 +454,16 @@ export default function Requests({
             : `${ui.loadFailed} ${ui.demoData}`,
         );
       } else {
-        setItems([]);
-        setIsMockMode(false);
-        setError(loadError instanceof Error ? loadError.message : ui.loadFailed);
+        if (!options?.silent) {
+          setItems([]);
+          setIsMockMode(false);
+          setError(loadError instanceof Error ? loadError.message : ui.loadFailed);
+        }
       }
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -483,7 +492,10 @@ export default function Requests({
       }
     }
 
-    void loadInbox();
+    void loadInbox({
+      force: true,
+      silent: Boolean(cached),
+    });
   }, [locale, requestsCacheKey]);
 
   useEffect(() => {
@@ -493,6 +505,17 @@ export default function Requests({
 
     writeClientCache(requestsCacheKey, items);
   }, [isMockMode, items, loading, requestsCacheKey]);
+
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: Boolean(session),
+    onRefresh: async () => {
+      await loadInbox({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   const counts = useMemo(
     () => ({

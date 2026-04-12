@@ -26,6 +26,7 @@ import { AttendanceAuditMap } from "@/components/AttendanceAuditMap";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "today" | "period";
@@ -369,6 +370,7 @@ export default function Attendance({
 }) {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const locale = getRuntimeLocale();
+  const session = getSession();
   const [viewMode, setViewMode] = useState<ViewMode>("today");
   const [search, setSearch] = useState("");
   const [todayFilter, setTodayFilter] = useState<TodayFilter>("all");
@@ -409,7 +411,6 @@ export default function Attendance({
     { key: "all", label: runtimeLocalize("Все", "All", locale) },
     { key: "online", label: runtimeLocalize("На месте", "On site", locale) },
     { key: "late", label: runtimeLocalize("Опоздали", "Late", locale) },
-    { key: "break", label: runtimeLocalize("Перерыв", "Break", locale) },
     { key: "offline", label: runtimeLocalize("Нет отметки", "No punch", locale) },
   ];
   const periodPresets: Array<{ key: Preset; label: string }> = [
@@ -422,6 +423,67 @@ export default function Attendance({
     viewMode === "today" ? formatDateKey(todayDate) : rangeFrom || rangeTo;
   const activeDateTo =
     viewMode === "today" ? formatDateKey(todayDate) : rangeTo || rangeFrom;
+
+  async function loadAttendanceSnapshot(options?: {
+    force?: boolean;
+    silent?: boolean;
+  }) {
+    const session = getSession();
+    if (!session) {
+      if (!options?.silent) {
+        setHistory(null);
+        setAnomalies(null);
+        setLiveSessions([]);
+        setAudit(null);
+        setIsLoading(false);
+        setError(runtimeLocalize("Сессия не найдена. Войди заново.", "Session not found. Sign in again.", locale));
+      }
+      return;
+    }
+
+    if (!options?.silent) {
+      setIsLoading(true);
+      setError(null);
+    }
+
+    try {
+      const query = new URLSearchParams({
+        dateFrom: activeDateFrom,
+        dateTo: activeDateTo,
+      }).toString();
+      const snapshot = await apiRequest<AttendanceInitialData>(
+        `/bootstrap/attendance?${query}`,
+        {
+          token: session.accessToken,
+          skipClientCache: options?.force ?? false,
+        },
+      );
+
+      setEmployees(snapshot.employees);
+      setHistory(snapshot.history);
+      setAnomalies(snapshot.anomalies);
+      setLiveSessions(snapshot.liveSessions);
+      setAudit(snapshot.audit);
+      setError(null);
+    } catch (requestError) {
+      if (!options?.silent) {
+        setEmployees([]);
+        setHistory(null);
+        setAnomalies(null);
+        setLiveSessions([]);
+        setAudit(null);
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : runtimeLocalize("Не удалось загрузить посещаемость.", "Failed to load attendance.", locale),
+        );
+      }
+    } finally {
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!activeDateFrom || !activeDateTo) return;
@@ -440,68 +502,27 @@ export default function Attendance({
 
     let cancelled = false;
 
-    async function loadAttendance() {
-      const session = getSession();
-      if (!session) {
-        if (!cancelled) {
-          setHistory(null);
-          setAnomalies(null);
-          setLiveSessions([]);
-          setAudit(null);
-          setIsLoading(false);
-          setError(runtimeLocalize("Сессия не найдена. Войди заново.", "Session not found. Sign in again.", locale));
-        }
+    void loadAttendanceSnapshot({ force: true }).finally(() => {
+      if (cancelled) {
         return;
       }
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const query = new URLSearchParams({
-          dateFrom: activeDateFrom,
-          dateTo: activeDateTo,
-        }).toString();
-        const snapshot = await apiRequest<AttendanceInitialData>(
-          `/bootstrap/attendance?${query}`,
-          {
-            token: session.accessToken,
-          },
-        );
-
-        if (!cancelled) {
-          setEmployees(snapshot.employees);
-          setHistory(snapshot.history);
-          setAnomalies(snapshot.anomalies);
-          setLiveSessions(snapshot.liveSessions);
-          setAudit(snapshot.audit);
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setEmployees([]);
-          setHistory(null);
-          setAnomalies(null);
-          setLiveSessions([]);
-          setAudit(null);
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : runtimeLocalize("Не удалось загрузить посещаемость.", "Failed to load attendance.", locale),
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadAttendance();
+    });
 
     return () => {
       cancelled = true;
     };
   }, [activeDateFrom, activeDateTo, initialData]);
+
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: Boolean(session),
+    onRefresh: async () => {
+      await loadAttendanceSnapshot({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   useEffect(() => {
     if (!audit?.items.length) {

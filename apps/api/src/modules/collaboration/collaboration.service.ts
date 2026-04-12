@@ -44,6 +44,7 @@ import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
 import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
 
 const TASK_PHOTO_PROOF_LIMIT = 7;
+const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
 const TASK_META_MARKER = "[smart-task-meta]";
 
@@ -1044,6 +1045,27 @@ export class CollaborationService {
     });
   }
 
+  private collectAnnouncementRefreshUserIds(
+    authorUserId: string | null | undefined,
+    notifications: Awaited<
+      ReturnType<CollaborationService["loadAnnouncementNotifications"]>
+    >,
+  ) {
+    const userIds = new Set<string>();
+
+    if (authorUserId) {
+      userIds.add(authorUserId);
+    }
+
+    for (const notification of notifications) {
+      if (notification.userId) {
+        userIds.add(notification.userId);
+      }
+    }
+
+    return Array.from(userIds);
+  }
+
   private attachManagerAnnouncementStats<
     T extends {
       id: string;
@@ -1079,14 +1101,142 @@ export class CollaborationService {
   private serializeAnnouncementWithImage<
     T extends {
       imageStorageKey?: string | null;
+      attachmentsJson?: string | null;
+      attachmentLocationAddress?: string | null;
+      attachmentLocationPlaceId?: string | null;
+      attachmentLocationLatitude?: number | null;
+      attachmentLocationLongitude?: number | null;
+      groupTargets?: Array<{ groupId: string }>;
+      employeeTargets?: Array<{ employeeId: string }>;
     },
-  >(announcement: T): T & { imageUrl: string | null } {
+  >(
+    announcement: T,
+  ): T & {
+    attachmentLocation: {
+      address: string;
+      latitude: number;
+      longitude: number;
+      placeId: string | null;
+    } | null;
+    attachments: Array<{
+      id: string;
+      fileName: string;
+      contentType: string | null;
+      sizeBytes: number | null;
+      url: string;
+    }>;
+    groupIds: string[];
+    imageUrl: string | null;
+    targetEmployeeIds: string[];
+  } {
+    const attachments = this.parseAnnouncementAttachments(
+      announcement.attachmentsJson ?? null,
+    ).map((attachment) => ({
+      id: attachment.id,
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes,
+      url: this.storageService.getObjectUrl(attachment.storageKey),
+    }));
+
+    const attachmentLocation =
+      announcement.attachmentLocationAddress &&
+      typeof announcement.attachmentLocationLatitude === "number" &&
+      typeof announcement.attachmentLocationLongitude === "number"
+        ? {
+            address: announcement.attachmentLocationAddress,
+            latitude: announcement.attachmentLocationLatitude,
+            longitude: announcement.attachmentLocationLongitude,
+            placeId: announcement.attachmentLocationPlaceId ?? null,
+          }
+        : null;
+
     return {
       ...announcement,
+      attachmentLocation,
+      attachments,
+      groupIds:
+        announcement.groupTargets?.map((target) => target.groupId) ?? [],
       imageUrl: announcement.imageStorageKey
         ? this.storageService.getObjectUrl(announcement.imageStorageKey)
         : null,
-    } as T & { imageUrl: string | null };
+      targetEmployeeIds:
+        announcement.employeeTargets?.map((target) => target.employeeId) ?? [],
+    } as T & {
+      attachmentLocation: {
+        address: string;
+        latitude: number;
+        longitude: number;
+        placeId: string | null;
+      } | null;
+      attachments: Array<{
+        id: string;
+        fileName: string;
+        contentType: string | null;
+        sizeBytes: number | null;
+        url: string;
+      }>;
+      groupIds: string[];
+      imageUrl: string | null;
+      targetEmployeeIds: string[];
+    };
+  }
+
+  private parseAnnouncementAttachments(
+    raw: string | null,
+  ): Array<{
+    id: string;
+    fileName: string;
+    contentType: string | null;
+    sizeBytes: number | null;
+    storageKey: string;
+  }> {
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .filter(
+          (
+            item,
+          ): item is {
+            id?: string;
+            fileName: string;
+            contentType?: string | null;
+            sizeBytes?: number | null;
+            storageKey: string;
+          } =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof item.storageKey === "string" &&
+            typeof item.fileName === "string",
+        )
+        .map((item, index) => ({
+          id: item.id?.trim() || `attachment-${index + 1}`,
+          fileName: item.fileName,
+          contentType: item.contentType ?? null,
+          sizeBytes:
+            typeof item.sizeBytes === "number" ? item.sizeBytes : null,
+          storageKey: item.storageKey,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  private parseScheduledAnnouncementDate(value?: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   private parseAnnouncementAuditMetadata(raw: string | null) {
@@ -1119,6 +1269,8 @@ export class CollaborationService {
         department: true,
         location: true,
         targetEmployee: true,
+        groupTargets: true,
+        employeeTargets: true,
       },
       orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
@@ -1216,40 +1368,57 @@ export class CollaborationService {
     const announcements = await this.prisma.announcement.findMany({
       where: {
         tenantId: employee.tenantId,
-        OR: [
-          { audience: AnnouncementAudience.ALL },
+        AND: [
           {
-            audience: AnnouncementAudience.EMPLOYEE,
-            targetEmployeeId: employee.id,
-          },
-          {
-            audience: AnnouncementAudience.DEPARTMENT,
-            departmentId: employee.departmentId,
-          },
-          {
-            audience: AnnouncementAudience.LOCATION,
-            locationId: employee.primaryLocationId,
-          },
-          {
-            audience: AnnouncementAudience.GROUP,
-            groupId: groupIds.length > 0 ? { in: groupIds } : undefined,
-          },
-          {
-            employeeTargets: {
-              some: {
-                employeeId: employee.id,
+            OR: [
+              { audience: AnnouncementAudience.ALL },
+              {
+                audience: AnnouncementAudience.EMPLOYEE,
+                targetEmployeeId: employee.id,
               },
-            },
+              {
+                audience: AnnouncementAudience.DEPARTMENT,
+                departmentId: employee.departmentId,
+              },
+              {
+                audience: AnnouncementAudience.LOCATION,
+                locationId: employee.primaryLocationId,
+              },
+              {
+                audience: AnnouncementAudience.GROUP,
+                groupId: groupIds.length > 0 ? { in: groupIds } : undefined,
+              },
+              {
+                employeeTargets: {
+                  some: {
+                    employeeId: employee.id,
+                  },
+                },
+              },
+              {
+                groupTargets:
+                  groupIds.length > 0
+                    ? {
+                        some: {
+                          groupId: { in: groupIds },
+                        },
+                      }
+                    : undefined,
+              },
+            ],
           },
           {
-            groupTargets:
-              groupIds.length > 0
-                ? {
-                    some: {
-                      groupId: { in: groupIds },
-                    },
-                  }
-                : undefined,
+            OR: [
+              {
+                publishedAt: {
+                  lte: new Date(),
+                },
+              },
+              {
+                publishedAt: null,
+                scheduledFor: null,
+              },
+            ],
           },
         ],
       },
@@ -1259,6 +1428,8 @@ export class CollaborationService {
         department: true,
         location: true,
         targetEmployee: true,
+        groupTargets: true,
+        employeeTargets: true,
       },
       orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
       take: 50,
@@ -1438,6 +1609,8 @@ export class CollaborationService {
         department: true,
         location: true,
         targetEmployee: true,
+        groupTargets: true,
+        employeeTargets: true,
       },
     });
 
@@ -1475,6 +1648,11 @@ export class CollaborationService {
       current.createdAt,
     );
 
+    this.emitWorkspaceRefresh(
+      this.collectAnnouncementRefreshUserIds(employee.userId, notifications),
+      "announcement.updated",
+    );
+
     return this.attachManagerAnnouncementStats([updated], notifications)[0];
   }
 
@@ -1493,6 +1671,12 @@ export class CollaborationService {
     if (!current) {
       throw new NotFoundException("Announcement not found.");
     }
+
+    const notifications = await this.loadAnnouncementNotifications(
+      employee.tenantId,
+      [announcementId],
+      current.createdAt,
+    );
 
     await this.prisma.notification.deleteMany({
       where: {
@@ -1519,6 +1703,11 @@ export class CollaborationService {
         isPinned: current.isPinned,
       },
     });
+
+    this.emitWorkspaceRefresh(
+      this.collectAnnouncementRefreshUserIds(employee.userId, notifications),
+      "announcement.deleted",
+    );
 
     return { success: true };
   }
@@ -1834,6 +2023,92 @@ export class CollaborationService {
     return generatedCount;
   }
 
+  async publishDueScheduledAnnouncements() {
+    const now = new Date();
+    const dueAnnouncements = await this.prisma.announcement.findMany({
+      where: {
+        publishedAt: null,
+        scheduledFor: {
+          lte: now,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    let publishedCount = 0;
+
+    for (const dueAnnouncement of dueAnnouncements) {
+      const publishedAt = new Date();
+      const claim = await this.prisma.announcement.updateMany({
+        where: {
+          id: dueAnnouncement.id,
+          publishedAt: null,
+          scheduledFor: {
+            lte: now,
+          },
+        },
+        data: {
+          publishedAt,
+        },
+      });
+
+      if (claim.count === 0) {
+        continue;
+      }
+
+      const announcement = await this.prisma.announcement.findUnique({
+        where: {
+          id: dueAnnouncement.id,
+        },
+        include: {
+          authorEmployee: true,
+          group: true,
+          department: true,
+          location: true,
+          targetEmployee: true,
+          groupTargets: true,
+          employeeTargets: true,
+        },
+      });
+
+      if (!announcement) {
+        continue;
+      }
+
+      const normalizedGroupIds =
+        announcement.groupTargets.length > 0
+          ? announcement.groupTargets.map((target) => target.groupId)
+          : announcement.groupId
+            ? [announcement.groupId]
+            : [];
+      const normalizedTargetEmployeeIds =
+        announcement.employeeTargets.length > 0
+          ? announcement.employeeTargets.map((target) => target.employeeId)
+          : announcement.targetEmployeeId
+            ? [announcement.targetEmployeeId]
+            : [];
+
+      await this.completeAnnouncementPublication({
+        actorUserId: announcement.authorEmployee?.userId ?? undefined,
+        announcement,
+        auditAction: "announcement.published",
+        authorEmployeeId: announcement.authorEmployeeId,
+        authorUserId: announcement.authorEmployee?.userId ?? null,
+        departmentId: announcement.departmentId,
+        locationId: announcement.locationId,
+        normalizedGroupIds,
+        normalizedTargetEmployeeIds,
+        reason: "announcement.published",
+        tenantId: announcement.tenantId,
+      });
+      publishedCount += 1;
+    }
+
+    return publishedCount;
+  }
+
   async createTask(userId: string, dto: CreateTaskDto) {
     const manager = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
@@ -1970,8 +2245,17 @@ export class CollaborationService {
       action: "task.created",
       metadata: {
         taskCount: tasks.length,
+        title: dto.title,
         groupId: dto.groupId ?? null,
+        groupName: tasks[0]?.group?.name ?? null,
         assigneeEmployeeId: dto.assigneeEmployeeId ?? null,
+        assigneeEmployeeIds: Array.from(
+          new Set(
+            tasks
+              .map((task) => task.assigneeEmployeeId)
+              .filter((value): value is string => Boolean(value)),
+          ),
+        ),
       },
     });
 
@@ -4023,6 +4307,7 @@ export class CollaborationService {
       tenantId: string;
       firstName: string;
       lastName: string;
+      userId?: string | null;
     },
     dto: {
       audience: AnnouncementAudience;
@@ -4035,8 +4320,20 @@ export class CollaborationService {
       title: string;
       body: string;
       isPinned?: boolean;
+      linkUrl?: string;
+      attachmentLocation?: {
+        address: string;
+        placeId?: string;
+        latitude: number;
+        longitude: number;
+      };
+      attachments?: Array<{
+        fileName: string;
+        dataUrl: string;
+      }>;
       imageDataUrl?: string;
       imageAspectRatio?: string;
+      scheduledFor?: string;
     },
     actorUserId?: string,
     metadata?: Record<string, unknown>,
@@ -4057,6 +4354,12 @@ export class CollaborationService {
       throw new BadRequestException("Unsupported announcement image aspect ratio.");
     }
 
+    if ((dto.attachments?.length ?? 0) > ANNOUNCEMENT_ATTACHMENT_LIMIT) {
+      throw new BadRequestException(
+        `Announcement supports up to ${ANNOUNCEMENT_ATTACHMENT_LIMIT} attachments.`,
+      );
+    }
+
     const normalizedGroupIds = this.normalizeAnnouncementScopeIds(
       dto.groupId,
       dto.groupIds,
@@ -4065,6 +4368,11 @@ export class CollaborationService {
       dto.targetEmployeeId,
       dto.targetEmployeeIds,
     );
+    const scheduledFor = this.parseScheduledAnnouncementDate(dto.scheduledFor);
+    const shouldSchedule = Boolean(
+      scheduledFor && scheduledFor.getTime() > Date.now(),
+    );
+    const normalizedLinkUrl = dto.linkUrl?.trim() || null;
 
     let announcement = await this.prisma.announcement.create({
       data: {
@@ -4081,6 +4389,14 @@ export class CollaborationService {
         title: dto.title,
         body: dto.body,
         isPinned: dto.isPinned ?? false,
+        linkUrl: normalizedLinkUrl,
+        attachmentLocationAddress: dto.attachmentLocation?.address?.trim() || null,
+        attachmentLocationPlaceId:
+          dto.attachmentLocation?.placeId?.trim() || null,
+        attachmentLocationLatitude: dto.attachmentLocation?.latitude ?? null,
+        attachmentLocationLongitude: dto.attachmentLocation?.longitude ?? null,
+        scheduledFor: shouldSchedule ? scheduledFor : null,
+        publishedAt: shouldSchedule ? null : new Date(),
         ...(normalizedGroupIds.length > 0
           ? {
               groupTargets: {
@@ -4106,6 +4422,8 @@ export class CollaborationService {
         department: true,
         location: true,
         targetEmployee: true,
+        groupTargets: true,
+        employeeTargets: true,
       },
     });
 
@@ -4128,64 +4446,191 @@ export class CollaborationService {
           department: true,
           location: true,
           targetEmployee: true,
+          groupTargets: true,
+          employeeTargets: true,
         },
       });
     }
 
-    const recipients = await this.resolveAnnouncementRecipients(
-      author.tenantId,
-      dto.audience,
-      normalizedGroupIds[0],
-      normalizedTargetEmployeeIds[0],
+    if (dto.attachments?.length) {
+      const uploadedAttachments = await Promise.all(
+        dto.attachments.map((attachment, index) =>
+          this.uploadAnnouncementAttachment(
+            author.tenantId,
+            announcement.id,
+            attachment.fileName,
+            attachment.dataUrl,
+            index,
+          ),
+        ),
+      );
+
+      announcement = await this.prisma.announcement.update({
+        where: { id: announcement.id },
+        data: {
+          attachmentsJson: JSON.stringify(uploadedAttachments),
+        },
+        include: {
+          authorEmployee: true,
+          group: true,
+          department: true,
+          location: true,
+          targetEmployee: true,
+          groupTargets: true,
+          employeeTargets: true,
+        },
+      });
+    }
+
+    if (shouldSchedule) {
+      await this.auditService.log({
+        tenantId: author.tenantId,
+        actorUserId,
+        entityType: "announcement",
+        entityId: announcement.id,
+        action: "announcement.created",
+        metadata: {
+          title: announcement.title,
+          isPinned: announcement.isPinned,
+          audience: announcement.audience,
+          groupId: announcement.groupId,
+          targetEmployeeId: announcement.targetEmployeeId,
+          groupIds: normalizedGroupIds,
+          targetEmployeeIds: normalizedTargetEmployeeIds,
+          departmentId: announcement.departmentId,
+          locationId: announcement.locationId,
+          linkUrl: announcement.linkUrl,
+          scheduledFor: scheduledFor?.toISOString() ?? null,
+          hasAttachmentLocation: Boolean(announcement.attachmentLocationAddress),
+          attachmentCount: dto.attachments?.length ?? 0,
+          ...metadata,
+        },
+      });
+
+      this.queueTranslationPrewarm([announcement.title, announcement.body]);
+      this.emitWorkspaceRefresh(
+        [author.userId ?? actorUserId ?? ""].filter(Boolean),
+        "announcement.scheduled",
+      );
+
+      return this.serializeAnnouncementWithImage(announcement);
+    }
+
+    return this.completeAnnouncementPublication({
+      actorUserId,
+      announcement,
+      auditAction: metadata?.templateId
+        ? "announcement.generated"
+        : "announcement.created",
+      authorEmployeeId: author.id,
+      authorUserId: author.userId ?? actorUserId ?? null,
+      departmentId: dto.departmentId ?? null,
+      locationId: dto.locationId ?? null,
+      metadata,
       normalizedGroupIds,
       normalizedTargetEmployeeIds,
-      dto.departmentId,
-      dto.locationId,
-      author.id,
+      reason: metadata?.templateId
+        ? "announcement.generated"
+        : "announcement.created",
+      tenantId: author.tenantId,
+    });
+  }
+
+  private async completeAnnouncementPublication(
+    params: {
+      actorUserId?: string;
+      announcement: Prisma.AnnouncementGetPayload<{
+        include: {
+          authorEmployee: true;
+          group: true;
+          department: true;
+          location: true;
+          targetEmployee: true;
+          groupTargets: true;
+          employeeTargets: true;
+        };
+      }>;
+      auditAction: string;
+      authorEmployeeId: string;
+      authorUserId?: string | null;
+      departmentId?: string | null;
+      locationId?: string | null;
+      metadata?: Record<string, unknown>;
+      normalizedGroupIds: string[];
+      normalizedTargetEmployeeIds: string[];
+      reason: string;
+      tenantId: string;
+    },
+  ) {
+    const recipients = await this.resolveAnnouncementRecipients(
+      params.tenantId,
+      params.announcement.audience,
+      params.normalizedGroupIds[0],
+      params.normalizedTargetEmployeeIds[0],
+      params.normalizedGroupIds,
+      params.normalizedTargetEmployeeIds,
+      params.departmentId,
+      params.locationId,
+      params.authorEmployeeId,
     );
+
+    const refreshUserIds = new Set<string>();
+    if (params.authorUserId) {
+      refreshUserIds.add(params.authorUserId);
+    }
 
     for (const recipient of recipients) {
       if (!recipient.userId) continue;
 
+      refreshUserIds.add(recipient.userId);
       await this.notificationsService.createForUser({
-        tenantId: author.tenantId,
+        tenantId: params.tenantId,
         userId: recipient.userId,
         type: NotificationType.OPERATIONS_ALERT,
-        title: `Announcement: ${announcement.title}`,
-        body: announcement.body,
+        title: `Announcement: ${params.announcement.title}`,
+        body: params.announcement.body,
         actionUrl: "/employee/announcements",
         metadata: {
-          announcementId: announcement.id,
-          ...metadata,
+          announcementId: params.announcement.id,
+          ...params.metadata,
         },
       });
     }
 
     await this.auditService.log({
-      tenantId: author.tenantId,
-      actorUserId,
+      tenantId: params.tenantId,
+      actorUserId: params.actorUserId,
       entityType: "announcement",
-      entityId: announcement.id,
-      action: metadata?.templateId
-        ? "announcement.generated"
-        : "announcement.created",
+      entityId: params.announcement.id,
+      action: params.auditAction,
       metadata: {
-        title: announcement.title,
-        isPinned: announcement.isPinned,
-        audience: announcement.audience,
-        groupId: announcement.groupId,
-        targetEmployeeId: announcement.targetEmployeeId,
-        groupIds: normalizedGroupIds,
-        targetEmployeeIds: normalizedTargetEmployeeIds,
-        departmentId: announcement.departmentId,
-        locationId: announcement.locationId,
-        ...metadata,
+        title: params.announcement.title,
+        isPinned: params.announcement.isPinned,
+        audience: params.announcement.audience,
+        groupId: params.announcement.groupId,
+        targetEmployeeId: params.announcement.targetEmployeeId,
+        groupIds: params.normalizedGroupIds,
+        targetEmployeeIds: params.normalizedTargetEmployeeIds,
+        departmentId: params.announcement.departmentId,
+        locationId: params.announcement.locationId,
+        linkUrl: params.announcement.linkUrl,
+        scheduledFor: params.announcement.scheduledFor?.toISOString() ?? null,
+        publishedAt: params.announcement.publishedAt?.toISOString() ?? null,
+        hasAttachmentLocation: Boolean(params.announcement.attachmentLocationAddress),
+        attachmentCount: this.parseAnnouncementAttachments(
+          params.announcement.attachmentsJson ?? null,
+        ).length,
+        ...params.metadata,
       },
     });
 
-    this.queueTranslationPrewarm([announcement.title, announcement.body]);
+    this.queueTranslationPrewarm([
+      params.announcement.title,
+      params.announcement.body,
+    ]);
+    this.emitWorkspaceRefresh(Array.from(refreshUserIds), params.reason);
 
-    return this.serializeAnnouncementWithImage(announcement);
+    return this.serializeAnnouncementWithImage(params.announcement);
   }
 
   private async uploadAnnouncementImage(
@@ -4205,6 +4650,28 @@ export class CollaborationService {
     if (mimeType.includes("png")) return "png";
     if (mimeType.includes("webp")) return "webp";
     return "jpg";
+  }
+
+  private async uploadAnnouncementAttachment(
+    tenantId: string,
+    announcementId: string,
+    fileName: string,
+    dataUrl: string,
+    index: number,
+  ) {
+    const sanitizedFileName =
+      fileName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120) ||
+      `attachment-${index + 1}`;
+    const storageKey = `tenants/${tenantId}/announcements/${announcementId}/attachments/${Date.now()}-${index}-${sanitizedFileName}`;
+    const uploaded = await this.storageService.uploadDataUrl(storageKey, dataUrl);
+
+    return {
+      id: `${Date.now()}-${index}`,
+      fileName,
+      storageKey: uploaded.key,
+      contentType: uploaded.contentType,
+      sizeBytes: uploaded.sizeBytes,
+    };
   }
 
   private async validateAnnouncementTarget(

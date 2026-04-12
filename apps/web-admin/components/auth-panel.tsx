@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, Building2, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -36,6 +36,7 @@ import {
 } from '@/lib/demo-mode';
 import {
   AuthSession,
+  clearSession,
   persistSession,
   resolvePostLoginRoute,
   saveTenantSlug,
@@ -229,6 +230,7 @@ function LanguagePicker({
 
 export function AuthPanel() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const hasAnimatedAuthPanelRef = useRef(false);
   const [lang, setLang] = useState<SupportedLang>('en');
   const [tab, setTab] = useState<AuthTab>('signin');
@@ -342,6 +344,14 @@ export function AuthPanel() {
   useEffect(() => {
     router.prefetch('/app');
   }, [router]);
+
+  useEffect(() => {
+    if (searchParams.get('force') !== '1') {
+      return;
+    }
+
+    clearSession();
+  }, [searchParams]);
 
   async function handleLoginSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

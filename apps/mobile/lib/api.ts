@@ -991,8 +991,20 @@ export async function createManagerAnnouncement(input: {
   groupIds?: string[];
   targetEmployeeId?: string;
   targetEmployeeIds?: string[];
+  linkUrl?: string;
+  attachmentLocation?: {
+    address: string;
+    latitude: number;
+    longitude: number;
+    placeId?: string;
+  };
+  attachments?: Array<{
+    dataUrl: string;
+    fileName: string;
+  }>;
   imageDataUrl?: string;
   imageAspectRatio?: AnnouncementImageAspectRatio;
+  scheduledFor?: string;
 }) {
   const normalizedGroupIds = Array.from(
     new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean)),
@@ -1024,10 +1036,18 @@ export async function createManagerAnnouncement(input: {
       ...(normalizedTargetEmployeeIds.length > 1
         ? { targetEmployeeIds: normalizedTargetEmployeeIds }
         : {}),
+      ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
+      ...(input.attachmentLocation
+        ? { attachmentLocation: input.attachmentLocation }
+        : {}),
+      ...(input.attachments?.length
+        ? { attachments: input.attachments }
+        : {}),
       ...(input.imageDataUrl ? { imageDataUrl: input.imageDataUrl } : {}),
       ...(input.imageAspectRatio
         ? { imageAspectRatio: input.imageAspectRatio }
         : {}),
+      ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
     }),
   });
 }

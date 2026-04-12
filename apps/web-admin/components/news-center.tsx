@@ -1,17 +1,25 @@
 "use client";
 
 import {
+  AnnouncementAttachmentItem,
+  AnnouncementAttachmentLocation,
   AnnouncementImageAspectRatio,
   WorkGroupItem,
   AnnouncementItem,
   AnnouncementReadReceipt,
 } from "@smart/types";
+import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import {
+  CalendarClock,
   ChevronDown,
   Eye,
+  ExternalLink,
   FileText,
   ImagePlus,
+  Link2,
+  MapPin,
   Pencil,
+  Paperclip,
   Pin,
   Trash2,
   X,
@@ -28,7 +36,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/application/date-picker/date-picker";
 import { ImageAdjustField } from "@/components/image-adjust-field";
+import { LocationMapPicker } from "@/components/location-map-picker";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { AppSelectField } from "@/components/ui/select";
@@ -39,14 +49,34 @@ import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { Locale, useI18n } from "@/lib/i18n";
 import { localizePersonName } from "@/lib/transliteration";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type NewsCenterProps = {
   mode: "manager" | "employee";
 };
 
+type NewsAttachmentDraft = Pick<
+  AnnouncementAttachmentItem,
+  "contentType" | "fileName" | "sizeBytes"
+> & {
+  dataUrl: string;
+};
+
+type NewsLocationDraft = Omit<
+  AnnouncementAttachmentLocation,
+  "latitude" | "longitude" | "placeId"
+> & {
+  latitude: string;
+  longitude: string;
+  placeId: string;
+};
+
 type NewsDraft = {
+  attachmentLocation: NewsLocationDraft | null;
+  attachments: NewsAttachmentDraft[];
   title: string;
   body: string;
+  linkUrl: string;
   isPinned: boolean;
   limitParticipants: boolean;
   participantScope: "GROUP" | "EMPLOYEE";
@@ -55,11 +85,17 @@ type NewsDraft = {
   imageDataUrl: string | null;
   imageAspectRatio: AnnouncementImageAspectRatio;
   imageFileName: string;
+  scheduleEnabled: boolean;
+  scheduledDate: string;
+  scheduledTime: string;
 };
 
 const EMPTY_DRAFT: NewsDraft = {
+  attachmentLocation: null,
+  attachments: [],
   title: "",
   body: "",
+  linkUrl: "",
   isPinned: false,
   limitParticipants: false,
   participantScope: "GROUP",
@@ -68,9 +104,15 @@ const EMPTY_DRAFT: NewsDraft = {
   imageDataUrl: null,
   imageAspectRatio: "16:9",
   imageFileName: "",
+  scheduleEnabled: false,
+  scheduledDate: "",
+  scheduledTime: "09:00",
 };
 
 const NEWS_CACHE_TTL_MS = 60_000;
+const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
+const ANNOUNCEMENT_DOCUMENT_ACCEPT =
+  ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.zip,.rar,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-zip-compressed";
 
 type NewsCenterCachePayload = {
   items: AnnouncementItem[];
@@ -128,6 +170,82 @@ function formatDate(value: string, locale: Locale) {
   });
 }
 
+function formatDateInput(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getAnnouncementDisplayTimestamp(
+  item: Pick<AnnouncementItem, "createdAt" | "publishedAt">,
+) {
+  return item.publishedAt ?? item.createdAt;
+}
+
+function formatAbsoluteDateTime(value: string, locale: Locale) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+
+  return parsed.toLocaleString(locale === "ru" ? "ru-RU" : "en-US", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    year: parsed.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+  });
+}
+
+function formatAttachmentSize(sizeBytes: number | null, locale: Locale) {
+  if (!sizeBytes || sizeBytes <= 0) {
+    return null;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    const value = Math.max(1, Math.round(sizeBytes / 1024));
+    return locale === "ru" ? `${value} КБ` : `${value} KB`;
+  }
+
+  const value = sizeBytes / (1024 * 1024);
+  return locale === "ru"
+    ? `${value.toFixed(1)} МБ`
+    : `${value.toFixed(1)} MB`;
+}
+
+function normalizeAnnouncementLink(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+}
+
+function buildScheduledAnnouncementIso(dateValue: string, timeValue: string) {
+  if (!dateValue) {
+    return null;
+  }
+
+  const parsed = new Date(`${dateValue}T${timeValue || "09:00"}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+async function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Unable to read file."));
+    };
+    reader.onerror = () => reject(new Error("Unable to read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function formatEmployeeName(
   employee:
     | {
@@ -149,13 +267,13 @@ function formatEmployeeName(
 }
 
 function formatNewsMetaLine(
-  item: Pick<AnnouncementItem, "authorEmployee" | "createdAt">,
+  item: Pick<AnnouncementItem, "authorEmployee" | "createdAt" | "publishedAt">,
   locale: Locale,
 ) {
   const authorName =
     formatEmployeeName(item.authorEmployee, locale) ??
     (locale === "ru" ? "Неизвестно" : "Unknown");
-  const relativeOrDate = formatDate(item.createdAt, locale);
+  const relativeOrDate = formatDate(getAnnouncementDisplayTimestamp(item), locale);
 
   return locale === "ru"
     ? `${relativeOrDate} • ${authorName}`
@@ -341,6 +459,7 @@ export function NewsCenter({
   const { locale } = useI18n();
   const session = getSession();
   const cacheKey = buildNewsCacheKey(session, mode);
+  const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [items, setItems] = useState<AnnouncementItem[]>(initialData?.items ?? []);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
@@ -377,13 +496,15 @@ export function NewsCenter({
     setGroups(snapshot.groups);
   }
 
-  async function loadItems() {
+  async function loadItems(options?: { force?: boolean; silent?: boolean }) {
     if (!session) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const path = isManagerView
@@ -391,16 +512,22 @@ export function NewsCenter({
         : "/collaboration/announcements/me";
       const nextItems = await apiRequest<AnnouncementItem[]>(path, {
         token: session.accessToken,
+        skipClientCache: options?.force ?? false,
       });
+      setError(null);
       setItems(nextItems);
     } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : localize(locale, "Не удалось загрузить новости.", "Unable to load news."),
-      );
+      if (!options?.silent) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : localize(locale, "Не удалось загрузить новости.", "Unable to load news."),
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -424,7 +551,10 @@ export function NewsCenter({
       }
     }
 
-    void loadItems();
+    void loadItems({
+      force: true,
+      silent: Boolean(cached),
+    });
   }, [cacheKey, initialData, isManagerView]);
 
   useEffect(() => {
@@ -495,6 +625,17 @@ export function NewsCenter({
     } satisfies NewsCenterCachePayload);
   }, [cacheKey, employees, groups, items, loading]);
 
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: Boolean(session),
+    onRefresh: async () => {
+      await loadItems({
+        force: true,
+        silent: true,
+      });
+    },
+  });
+
   const orderedItems = useMemo(() => {
     return [...items].sort((left, right) => {
       if (!isManagerView && Boolean(left.isRead) !== Boolean(right.isRead)) {
@@ -505,9 +646,74 @@ export function NewsCenter({
         return left.isPinned ? -1 : 1;
       }
 
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return (
+        new Date(getAnnouncementDisplayTimestamp(right)).getTime() -
+        new Date(getAnnouncementDisplayTimestamp(left)).getTime()
+      );
     });
   }, [isManagerView, items]);
+
+  async function handleDraftAttachmentSelection(fileList: FileList | null) {
+    if (!fileList?.length) {
+      return;
+    }
+
+    const remainingSlots = Math.max(
+      0,
+      ANNOUNCEMENT_ATTACHMENT_LIMIT - draft.attachments.length,
+    );
+    if (remainingSlots === 0) {
+      setError(
+        localize(
+          locale,
+          `Можно прикрепить максимум ${ANNOUNCEMENT_ATTACHMENT_LIMIT} документов.`,
+          `You can attach up to ${ANNOUNCEMENT_ATTACHMENT_LIMIT} documents.`,
+        ),
+      );
+      return;
+    }
+
+    const selectedFiles = Array.from(fileList).slice(0, remainingSlots);
+
+    try {
+      const nextAttachments = await Promise.all(
+        selectedFiles.map(async (file) => ({
+          contentType: file.type || null,
+          dataUrl: await readFileAsDataUrl(file),
+          fileName: file.name,
+          sizeBytes: Number.isFinite(file.size) ? file.size : null,
+        })),
+      );
+
+      setDraft((current) => ({
+        ...current,
+        attachments: [...current.attachments, ...nextAttachments].slice(
+          0,
+          ANNOUNCEMENT_ATTACHMENT_LIMIT,
+        ),
+      }));
+
+      if (selectedFiles.length !== fileList.length) {
+        setError(
+          localize(
+            locale,
+            `Лишние файлы пропущены. Лимит: ${ANNOUNCEMENT_ATTACHMENT_LIMIT}.`,
+            `Extra files were skipped. Limit: ${ANNOUNCEMENT_ATTACHMENT_LIMIT}.`,
+          ),
+        );
+      }
+    } catch (attachmentError) {
+      setError(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : localize(
+              locale,
+              "Не удалось прочитать выбранные файлы.",
+              "Unable to read the selected files.",
+            ),
+      );
+    }
+  }
 
   async function handleCreate() {
     const session = getSession();
@@ -536,6 +742,31 @@ export function NewsCenter({
           locale,
           "Выбери группу или сотрудника для этой новости.",
           "Choose a group or employee for this news item.",
+        ),
+      );
+      return;
+    }
+
+    if (draft.scheduleEnabled && !draft.scheduledDate) {
+      setError(
+        localize(
+          locale,
+          "Укажи дату запланированной публикации.",
+          "Choose a scheduled publication date.",
+        ),
+      );
+      return;
+    }
+
+    const scheduledFor = draft.scheduleEnabled
+      ? buildScheduledAnnouncementIso(draft.scheduledDate, draft.scheduledTime)
+      : null;
+    if (draft.scheduleEnabled && !scheduledFor) {
+      setError(
+        localize(
+          locale,
+          "Не удалось распознать дату или время публикации.",
+          "Unable to parse the selected publication date or time.",
         ),
       );
       return;
@@ -581,13 +812,51 @@ export function NewsCenter({
                 imageAspectRatio: draft.imageAspectRatio,
               }
             : {}),
+          ...(normalizeAnnouncementLink(draft.linkUrl)
+            ? {
+                linkUrl: normalizeAnnouncementLink(draft.linkUrl),
+              }
+            : {}),
+          ...(draft.attachmentLocation
+            ? {
+                attachmentLocation: {
+                  address: draft.attachmentLocation.address,
+                  latitude: Number(draft.attachmentLocation.latitude),
+                  longitude: Number(draft.attachmentLocation.longitude),
+                  ...(draft.attachmentLocation.placeId
+                    ? { placeId: draft.attachmentLocation.placeId }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(draft.attachments.length
+            ? {
+                attachments: draft.attachments.map((attachment) => ({
+                  dataUrl: attachment.dataUrl,
+                  fileName: attachment.fileName,
+                })),
+              }
+            : {}),
+          ...(scheduledFor
+            ? {
+                scheduledFor,
+              }
+            : {}),
         }),
       });
 
       setItems((current) => [created, ...current]);
       setDraft(EMPTY_DRAFT);
       setCreateOpen(false);
-      setFeedback(localize(locale, "Новость опубликована.", "News item published."));
+      setFeedback(
+        created.scheduledFor && !created.publishedAt
+          ? localize(
+              locale,
+              "Новость запланирована.",
+              "News item scheduled.",
+            )
+          : localize(locale, "Новость опубликована.", "News item published."),
+      );
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -602,8 +871,18 @@ export function NewsCenter({
   function startEditing(item: AnnouncementItem) {
     setEditingId(item.id);
     setEditingDraft({
+      attachmentLocation: item.attachmentLocation
+        ? {
+            address: item.attachmentLocation.address,
+            latitude: String(item.attachmentLocation.latitude),
+            longitude: String(item.attachmentLocation.longitude),
+            placeId: item.attachmentLocation.placeId ?? "",
+          }
+        : null,
+      attachments: [],
       title: item.title,
       body: item.body,
+      linkUrl: item.linkUrl ?? "",
       isPinned: item.isPinned,
       limitParticipants: false,
       participantScope: "GROUP",
@@ -612,6 +891,17 @@ export function NewsCenter({
       imageDataUrl: null,
       imageAspectRatio: item.imageAspectRatio ?? "16:9",
       imageFileName: "",
+      scheduleEnabled: Boolean(item.scheduledFor && !item.publishedAt),
+      scheduledDate: item.scheduledFor
+        ? formatDateInput(new Date(item.scheduledFor))
+        : "",
+      scheduledTime: item.scheduledFor
+        ? new Date(item.scheduledFor).toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })
+        : "09:00",
     });
     setExpandedId(item.id);
   }
@@ -902,8 +1192,8 @@ export function NewsCenter({
                 <DialogDescription>
                   {localize(
                     locale,
-                    "Заголовок, текст, фото, получатели и отметка важности. После публикации новость сразу появится у сотрудников.",
-                    "Add a title, body, photo, recipients, and optional importance flag. After publishing, the news item will appear immediately for employees.",
+                    "Добавь заголовок, текст, фото, документы, ссылку, геолокацию, получателей и при необходимости отложенную публикацию.",
+                    "Add a title, body, photo, documents, a link, geolocation, recipients, and an optional scheduled publication.",
                   )}
                 </DialogDescription>
               </DialogHeader>
@@ -1038,6 +1328,247 @@ export function NewsCenter({
                   viewportAspectRatio={getAnnouncementImageAspectRatioValue(draft.imageAspectRatio)}
                   viewportSize={360}
                 />
+                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
+                    <Link2 className="size-4 text-sky-700" />
+                    {localize(locale, "Ссылка", "Link")}
+                  </div>
+                  <Input
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        linkUrl: event.target.value,
+                      }))
+                    }
+                    placeholder={localize(
+                      locale,
+                      "https://example.com или домен без https",
+                      "https://example.com or a domain without https",
+                    )}
+                    value={draft.linkUrl}
+                  />
+                </div>
+
+                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
+                    <Paperclip className="size-4 text-sky-700" />
+                    {localize(locale, "Документы", "Documents")}
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-[20px] border border-dashed border-[rgba(148,163,184,0.35)] bg-slate-50/70 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50/70">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                      <FileText className="size-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+                        {localize(locale, "Добавить файлы", "Add files")}
+                      </span>
+                      <span className="mt-1 block text-sm text-[color:var(--muted-foreground)]">
+                        {localize(
+                          locale,
+                          "PDF, Excel, Word, CSV, TXT, ZIP и другие документы.",
+                          "PDF, Excel, Word, CSV, TXT, ZIP, and other documents.",
+                        )}
+                      </span>
+                    </span>
+                    <input
+                      accept={ANNOUNCEMENT_DOCUMENT_ACCEPT}
+                      className="hidden"
+                      multiple
+                      onChange={(event) => {
+                        void handleDraftAttachmentSelection(event.target.files);
+                        event.currentTarget.value = "";
+                      }}
+                      type="file"
+                    />
+                  </label>
+
+                  {draft.attachments.length ? (
+                    <div className="grid gap-2">
+                      {draft.attachments.map((attachment, index) => (
+                        <div
+                          className="flex items-center justify-between gap-3 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70 px-3 py-3"
+                          key={`${attachment.fileName}-${index}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
+                              {attachment.fileName}
+                            </div>
+                            <div className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                              {formatAttachmentSize(attachment.sizeBytes, locale) ??
+                                localize(locale, "Документ", "Document")}
+                            </div>
+                          </div>
+                          <Button
+                            className="text-rose-700"
+                            onClick={() =>
+                              setDraft((current) => ({
+                                ...current,
+                                attachments: current.attachments.filter(
+                                  (_, attachmentIndex) => attachmentIndex !== index,
+                                ),
+                              }))
+                            }
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <X className="size-4" />
+                            {localize(locale, "Убрать", "Remove")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
+                      <MapPin className="size-4 text-sky-700" />
+                      {localize(locale, "Геолокация", "Geolocation")}
+                    </div>
+                    {draft.attachmentLocation ? (
+                      <Button
+                        className="text-rose-700"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            attachmentLocation: null,
+                          }))
+                        }
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <X className="size-4" />
+                        {localize(locale, "Очистить", "Clear")}
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {localize(
+                      locale,
+                      "Можно выбрать адрес через Google Maps или поставить точку по текущему местоположению.",
+                      "Pick an address via Google Maps or place a point using the current location.",
+                    )}
+                  </div>
+                  <div className="[&_.org-map-canvas]:min-h-[260px]">
+                    <LocationMapPicker
+                      address={draft.attachmentLocation?.address ?? ""}
+                      apiKey={mapsApiKey}
+                      latitude={draft.attachmentLocation?.latitude ?? ""}
+                      longitude={draft.attachmentLocation?.longitude ?? ""}
+                      onSelect={(next) =>
+                        setDraft((current) => ({
+                          ...current,
+                          attachmentLocation: {
+                            address:
+                              next.address ??
+                              next.details?.formattedAddress ??
+                              current.attachmentLocation?.address ??
+                              "",
+                            latitude: next.latitude,
+                            longitude: next.longitude,
+                            placeId:
+                              next.googlePlaceId ??
+                              current.attachmentLocation?.placeId ??
+                              "",
+                          },
+                        }))
+                      }
+                      searchLabel={localize(locale, "Точка для новости", "News location")}
+                      searchPlaceholder={localize(
+                        locale,
+                        "Например, Новосибирск, Красный проспект 25",
+                        "For example, Novosibirsk, Krasny Avenue 25",
+                      )}
+                      showCopy={false}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
+                  <label className="flex items-start gap-3">
+                    <Checkbox
+                      checked={draft.scheduleEnabled}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({
+                          ...current,
+                          scheduleEnabled: Boolean(checked),
+                          scheduledDate:
+                            Boolean(checked) && !current.scheduledDate
+                              ? formatDateInput(new Date())
+                              : current.scheduledDate,
+                        }))
+                      }
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
+                        <CalendarClock className="size-4 text-sky-700" />
+                        {localize(
+                          locale,
+                          "Запланированная публикация",
+                          "Scheduled publication",
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {draft.scheduleEnabled
+                          ? localize(
+                              locale,
+                              "Новость появится у сотрудников в выбранные дату и время.",
+                              "The news will appear for employees at the selected date and time.",
+                            )
+                          : localize(
+                              locale,
+                              "Если выключено, новость публикуется сразу.",
+                              "When disabled, the news is published immediately.",
+                            )}
+                      </div>
+                    </div>
+                  </label>
+
+                  {draft.scheduleEnabled ? (
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),180px]">
+                      <DatePicker
+                        buttonClassName="h-11 w-full justify-between rounded-[16px]"
+                        minValue={today(getLocalTimeZone())}
+                        onChange={(value) =>
+                          setDraft((current) => ({
+                            ...current,
+                            scheduledDate: value
+                              ? formatDateInput(value.toDate(getLocalTimeZone()))
+                              : "",
+                          }))
+                        }
+                        placeholder={localize(locale, "Выбери дату", "Choose date")}
+                        value={draft.scheduledDate ? parseDate(draft.scheduledDate) : null}
+                      />
+                      <Input
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            scheduledTime: event.target.value,
+                          }))
+                        }
+                        type="time"
+                        value={draft.scheduledTime}
+                      />
+                    </div>
+                  ) : null}
+
+                  {draft.scheduleEnabled && draft.scheduledDate ? (
+                    <div className="text-xs text-[color:var(--muted-foreground)]">
+                      {localize(locale, "Публикация:", "Publish at:")}{" "}
+                      {formatAbsoluteDateTime(
+                        buildScheduledAnnouncementIso(
+                          draft.scheduledDate,
+                          draft.scheduledTime,
+                        ) ?? new Date().toISOString(),
+                        locale,
+                      )}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
                   <label className="flex items-start gap-3">
                     <Checkbox
@@ -1557,6 +2088,12 @@ export function NewsCenter({
                             <span className="text-sm text-[color:var(--muted-foreground)]">
                               {formatNewsMetaLine(item, locale)}
                             </span>
+                            {item.scheduledFor && !item.publishedAt ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[rgba(37,99,235,0.16)] bg-sky-50/80 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                <CalendarClock className="size-3.5" />
+                                {localize(locale, "Запланировано", "Scheduled")}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="relative mt-2 flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-start gap-3">
@@ -1663,6 +2200,16 @@ export function NewsCenter({
                           </div>
                         ) : (
                           <div className={`grid gap-4 ${!isManagerView ? "pl-6" : ""}`}>
+                            {item.scheduledFor && !item.publishedAt ? (
+                              <div className="rounded-[18px] border border-[rgba(37,99,235,0.16)] bg-sky-50/70 px-4 py-3 text-sm text-sky-700">
+                                <div className="font-medium">
+                                  {localize(locale, "Публикация запланирована", "Publication scheduled")}
+                                </div>
+                                <div className="mt-1 text-sky-700/80">
+                                  {formatAbsoluteDateTime(item.scheduledFor, locale)}
+                                </div>
+                              </div>
+                            ) : null}
                             {item.imageUrl ? (
                               <div className="flex items-start gap-4">
                                 <img
@@ -1679,6 +2226,88 @@ export function NewsCenter({
                                 {item.body}
                               </p>
                             )}
+
+                            {item.attachments?.length ? (
+                              <div className="grid gap-2">
+                                {item.attachments.map((attachment) => (
+                                  <a
+                                    className="flex items-center justify-between gap-3 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70 px-4 py-3 transition hover:border-sky-200 hover:bg-sky-50/70"
+                                    download={attachment.fileName}
+                                    href={attachment.url}
+                                    key={attachment.id}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                                        <FileText className="size-5" />
+                                      </span>
+                                      <span className="min-w-0">
+                                        <span className="block truncate text-sm font-medium text-[color:var(--foreground)]">
+                                          {attachment.fileName}
+                                        </span>
+                                        <span className="mt-1 block text-xs text-[color:var(--muted-foreground)]">
+                                          {formatAttachmentSize(
+                                            attachment.sizeBytes,
+                                            locale,
+                                          ) ??
+                                            localize(locale, "Документ", "Document")}
+                                        </span>
+                                      </span>
+                                    </div>
+                                    <ExternalLink className="size-4 shrink-0 text-[color:var(--muted-foreground)]" />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {item.linkUrl ? (
+                              <a
+                                className="flex items-center justify-between gap-3 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70 px-4 py-3 transition hover:border-sky-200 hover:bg-sky-50/70"
+                                href={normalizeAnnouncementLink(item.linkUrl) ?? item.linkUrl}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                                    <Link2 className="size-5" />
+                                  </span>
+                                  <span className="truncate text-sm font-medium text-[color:var(--foreground)]">
+                                    {item.linkUrl}
+                                  </span>
+                                </div>
+                                <ExternalLink className="size-4 shrink-0 text-[color:var(--muted-foreground)]" />
+                              </a>
+                            ) : null}
+
+                            {item.attachmentLocation ? (
+                              <div className="overflow-hidden rounded-[22px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70">
+                                <div className="flex items-start gap-3 px-4 py-4">
+                                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                                    <MapPin className="size-5" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-[color:var(--foreground)]">
+                                      {localize(locale, "Геолокация", "Geolocation")}
+                                    </div>
+                                    <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                                      {item.attachmentLocation.address}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="[&_.org-map-canvas]:min-h-[260px]">
+                                  <LocationMapPicker
+                                    address={item.attachmentLocation.address}
+                                    apiKey={mapsApiKey}
+                                    latitude={String(item.attachmentLocation.latitude)}
+                                    longitude={String(item.attachmentLocation.longitude)}
+                                    mode="preview"
+                                    onSelect={() => undefined}
+                                    showCopy={false}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         )}
  

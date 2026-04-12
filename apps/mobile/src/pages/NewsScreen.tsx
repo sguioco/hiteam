@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Alert, Image, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, ScrollView, TextInput, View } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { Text } from '../../components/ui/text';
 import Animated, {
   Easing,
@@ -46,6 +47,55 @@ type NewsScreenProps = {
   standalone?: boolean;
 };
 
+function localizeText(language: AppLanguage, ru: string, en: string) {
+  return language === 'ru' ? ru : en;
+}
+
+function normalizeAnnouncementLink(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) {
+    return null;
+  }
+
+  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+}
+
+function formatAttachmentSize(sizeBytes: number | null, language: AppLanguage) {
+  if (!sizeBytes || sizeBytes <= 0) {
+    return localizeText(language, 'Документ', 'Document');
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    const kiloBytes = Math.max(1, Math.round(sizeBytes / 1024));
+    return localizeText(language, `${kiloBytes} КБ`, `${kiloBytes} KB`);
+  }
+
+  const megaBytes = sizeBytes / (1024 * 1024);
+  return localizeText(language, `${megaBytes.toFixed(1)} МБ`, `${megaBytes.toFixed(1)} MB`);
+}
+
+function formatAbsoluteDateTime(value: string, language: AppLanguage) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return parsed.toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    year: parsed.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+  });
+}
+
+function getAnnouncementDisplayTimestamp(item: Pick<AnnouncementItem, 'createdAt' | 'publishedAt'>) {
+  return item.publishedAt ?? item.createdAt;
+}
+
 function formatDate(value: string, language: AppLanguage) {
   const parsed = new Date(value);
 
@@ -87,7 +137,7 @@ function formatMetaLine(
   language: AppLanguage,
 ) {
   const authorName = `${item.authorEmployee.firstName} ${item.authorEmployee.lastName}`;
-  const relativeOrDate = formatDate(item.createdAt, language);
+  const relativeOrDate = formatDate(getAnnouncementDisplayTimestamp(item), language);
 
   return `${relativeOrDate} • ${authorName}`;
 }
@@ -220,7 +270,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         return left.isPinned ? -1 : 1;
       }
 
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return (
+        new Date(getAnnouncementDisplayTimestamp(right)).getTime() -
+        new Date(getAnnouncementDisplayTimestamp(left)).getTime()
+      );
     });
   }, [isManager, items]);
   const isEmptyState = !loading && !error && orderedItems.length === 0;
@@ -526,6 +579,14 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                           {formatMetaLine(item, language)}
                         </Text>
 
+                        {item.scheduledFor && !item.publishedAt ? (
+                          <View className="self-start rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-1">
+                            <Text className="text-[12px] font-semibold text-[#1d4ed8]">
+                              {localizeText(language, 'Запланировано', 'Scheduled')}
+                            </Text>
+                          </View>
+                        ) : null}
+
                         <View className="flex-row items-start justify-between gap-3">
                           {(() => {
                             const title = translateAnnouncementText(item.title);
@@ -552,6 +613,17 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                         {isExpanded ? (
                           <Animated.View layout={LinearTransition.duration(180)}>
                             <View className="gap-4">
+                              {item.scheduledFor && !item.publishedAt ? (
+                                <View className="rounded-[20px] border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3">
+                                  <Text className="text-[14px] font-semibold text-[#1d4ed8]">
+                                    {localizeText(language, 'Публикация запланирована', 'Publication scheduled')}
+                                  </Text>
+                                  <Text className="mt-1 text-[13px] text-[#1d4ed8]">
+                                    {formatAbsoluteDateTime(item.scheduledFor, language)}
+                                  </Text>
+                                </View>
+                              ) : null}
+
                               {item.imageUrl ? (
                                 <Image
                                   resizeMode="cover"
@@ -580,6 +652,100 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                   </View>
                                 );
                               })()}
+
+                              {item.attachments?.length ? (
+                                <View className="gap-2">
+                                  {item.attachments.map((attachment) => (
+                                    <PressableScale
+                                      className="rounded-[20px] border border-white/30 bg-[#f8fbff] px-4 py-3 shadow-sm shadow-[#1f2687]/10"
+                                      haptic="selection"
+                                      key={attachment.id}
+                                      onPress={() => void Linking.openURL(attachment.url)}
+                                    >
+                                      <View className="flex-row items-center justify-between gap-3">
+                                        <View className="flex-row items-center gap-3">
+                                          <View className="h-10 w-10 items-center justify-center rounded-full bg-white">
+                                            <Ionicons color="#334155" name="document-outline" size={18} />
+                                          </View>
+                                          <View className="flex-1">
+                                            <Text className="text-[14px] font-semibold text-foreground">
+                                              {attachment.fileName}
+                                            </Text>
+                                            <Text className="mt-1 text-[12px] text-muted-foreground">
+                                              {formatAttachmentSize(attachment.sizeBytes, language)}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                        <Ionicons color="#64748b" name="open-outline" size={18} />
+                                      </View>
+                                    </PressableScale>
+                                  ))}
+                                </View>
+                              ) : null}
+
+                              {item.linkUrl ? (
+                                <PressableScale
+                                  className="rounded-[20px] border border-white/30 bg-[#f8fbff] px-4 py-3 shadow-sm shadow-[#1f2687]/10"
+                                  haptic="selection"
+                                  onPress={() => {
+                                    const link = normalizeAnnouncementLink(item.linkUrl);
+                                    if (link) {
+                                      void Linking.openURL(link);
+                                    }
+                                  }}
+                                >
+                                  <View className="flex-row items-center justify-between gap-3">
+                                    <View className="flex-row items-center gap-3">
+                                      <View className="h-10 w-10 items-center justify-center rounded-full bg-white">
+                                        <Ionicons color="#334155" name="link-outline" size={18} />
+                                      </View>
+                                      <Text className="flex-1 text-[14px] font-semibold text-foreground">
+                                        {item.linkUrl}
+                                      </Text>
+                                    </View>
+                                    <Ionicons color="#64748b" name="open-outline" size={18} />
+                                  </View>
+                                </PressableScale>
+                              ) : null}
+
+                              {item.attachmentLocation ? (
+                                <View className="overflow-hidden rounded-[20px] border border-white/30 bg-[#f8fbff] shadow-sm shadow-[#1f2687]/10">
+                                  <View className="px-4 py-3">
+                                    <Text className="text-[14px] font-semibold text-foreground">
+                                      {localizeText(language, 'Геолокация', 'Geolocation')}
+                                    </Text>
+                                    <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                                      {item.attachmentLocation.address}
+                                    </Text>
+                                  </View>
+                                  <MapView
+                                    initialRegion={{
+                                      latitude: item.attachmentLocation.latitude,
+                                      longitude: item.attachmentLocation.longitude,
+                                      latitudeDelta: 0.01,
+                                      longitudeDelta: 0.01,
+                                    }}
+                                    region={{
+                                      latitude: item.attachmentLocation.latitude,
+                                      longitude: item.attachmentLocation.longitude,
+                                      latitudeDelta: 0.01,
+                                      longitudeDelta: 0.01,
+                                    }}
+                                    pitchEnabled={false}
+                                    rotateEnabled={false}
+                                    scrollEnabled={false}
+                                    style={{ height: 220, width: '100%' }}
+                                    zoomEnabled={false}
+                                  >
+                                    <Marker
+                                      coordinate={{
+                                        latitude: item.attachmentLocation.latitude,
+                                        longitude: item.attachmentLocation.longitude,
+                                      }}
+                                    />
+                                  </MapView>
+                                </View>
+                              ) : null}
 
                               {isManager ? (
                                 <View className="flex-row flex-wrap items-center gap-4">

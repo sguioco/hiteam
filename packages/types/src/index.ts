@@ -488,6 +488,21 @@ export type AnnouncementAudience = 'ALL' | 'GROUP' | 'EMPLOYEE' | 'DEPARTMENT' |
 export type AnnouncementTemplateFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 export type AnnouncementImageAspectRatio = '1:1' | '16:9' | '4:3';
 
+export type AnnouncementAttachmentItem = {
+  id: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  url: string;
+};
+
+export type AnnouncementAttachmentLocation = {
+  address: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string | null;
+};
+
 export type AnnouncementItem = {
   id: string;
   audience: AnnouncementAudience;
@@ -496,8 +511,13 @@ export type AnnouncementItem = {
   isPinned: boolean;
   groupIds?: string[];
   targetEmployeeIds?: string[];
+  linkUrl?: string | null;
+  attachmentLocation?: AnnouncementAttachmentLocation | null;
+  attachments?: AnnouncementAttachmentItem[];
   imageUrl?: string | null;
   imageAspectRatio?: AnnouncementImageAspectRatio | null;
+  scheduledFor?: string | null;
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   notificationId?: string | null;

@@ -6,7 +6,7 @@ import type {
   FC,
   HTMLAttributes,
 } from "react";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import createGlobe from "cobe";
 import { useGSAP } from "@gsap/react";
 import {
@@ -208,6 +208,25 @@ const GLOBE_POLAROID_OFFSET_Y = 100;
 
 type LandingLocale = "ru" | "en";
 const LANDING_DESKTOP_QUERY = "(min-width: 768px)";
+
+function resolveLandingBrowserLocale(): LandingLocale | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const localeCandidates = [
+    ...(Array.isArray(window.navigator.languages) ? window.navigator.languages : []),
+    window.navigator.language,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+
+  if (localeCandidates.some((value) => value === "ru" || value.startsWith("ru-"))) {
+    return "ru";
+  }
+
+  return "en";
+}
 
 type LegalDocumentKey = "consent" | "privacy";
 
@@ -1041,6 +1060,7 @@ const Landing = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const globeContainerRef = useRef<HTMLDivElement>(null);
   const overlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const browserLocaleSyncedRef = useRef(false);
   const basePhiRef = useRef(GLOBE_INITIAL_PHI);
   const { locale, setLocale } = useI18n();
   const isHeaderScrolled = useSyncExternalStore(
@@ -1088,6 +1108,19 @@ const Landing = () => {
   const firstFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
   const secondFeatureRowShift = { "--feature-row-offset": "280px" } as CSSProperties;
   const thirdFeatureRowShift = { "--feature-row-offset": "-280px" } as CSSProperties;
+
+  useEffect(() => {
+    if (browserLocaleSyncedRef.current) {
+      return;
+    }
+
+    browserLocaleSyncedRef.current = true;
+    const browserLocale = resolveLandingBrowserLocale();
+
+    if (browserLocale && browserLocale !== locale) {
+      setLocale(browserLocale);
+    }
+  }, [locale, setLocale]);
 
   const setOverlayRef = (id: string) => (node: HTMLDivElement | null) => {
     overlayRefs.current[id] = node;

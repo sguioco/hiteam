@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { Text } from '../../components/ui/text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppGradientBackground } from '../../components/ui/screen';
@@ -45,10 +61,76 @@ type CreateNewsSubmitButtonProps = {
   submitting: boolean;
 };
 
+type NewsDocumentDraft = {
+  dataUrl: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+};
+
+type NewsLocationDraft = {
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
 const CREATE_NEWS_SUBMIT_BUTTON_OFFSET = 20;
 const CREATE_NEWS_SUBMIT_BUTTON_HEIGHT = 56;
 const CREATE_NEWS_SUBMIT_BUTTON_BASE_BOTTOM = 0;
 const CREATE_NEWS_SUBMIT_BUTTON_SIDE_PADDING = 20;
+const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
+
+function localizeText(language: string, ru: string, en: string) {
+  return language === 'ru' ? ru : en;
+}
+
+function normalizeAnnouncementLink(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+}
+
+function formatAttachmentSize(sizeBytes: number | null, language: string) {
+  if (!sizeBytes || sizeBytes <= 0) {
+    return localizeText(language, 'Документ', 'Document');
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return localizeText(
+      language,
+      `${Math.max(1, Math.round(sizeBytes / 1024))} КБ`,
+      `${Math.max(1, Math.round(sizeBytes / 1024))} KB`,
+    );
+  }
+
+  const megaBytes = sizeBytes / (1024 * 1024);
+  return localizeText(
+    language,
+    `${megaBytes.toFixed(1)} МБ`,
+    `${megaBytes.toFixed(1)} MB`,
+  );
+}
+
+function formatDateLabel(date: Date, language: string) {
+  return date.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatTimeLabel(date: Date) {
+  return date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
 
 function NewsOptionCheckbox({ checked, label, onPress }: NewsOptionCheckboxProps) {
   return (
@@ -127,6 +209,19 @@ export default function CreateNewsScreen() {
   const [limitParticipants, setLimitParticipants] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [attachments, setAttachments] = useState<NewsDocumentDraft[]>([]);
+  const [locationAttachment, setLocationAttachment] =
+    useState<NewsLocationDraft | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    const next = new Date();
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+    return next;
+  });
+  const [showScheduleDatePicker, setShowScheduleDatePicker] = useState(false);
+  const [showScheduleTimePicker, setShowScheduleTimePicker] = useState(false);
 
   const imageAspectRatio = useMemo(
     () => announcementAspectRatioToNumber(imageDraft?.aspectRatio),
@@ -423,6 +518,193 @@ export default function CreateNewsScreen() {
     );
   }
 
+  async function handlePickDocuments() {
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: true,
+      copyToCacheDirectory: true,
+      type: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv',
+        'text/plain',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip',
+        'application/x-zip-compressed',
+      ],
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const remainingSlots = Math.max(
+      0,
+      ANNOUNCEMENT_ATTACHMENT_LIMIT - attachments.length,
+    );
+    if (remainingSlots === 0) {
+      Alert.alert(
+        localizeText(language, 'Ошибка', 'Error'),
+        localizeText(
+          language,
+          `Можно прикрепить максимум ${ANNOUNCEMENT_ATTACHMENT_LIMIT} документов.`,
+          `You can attach up to ${ANNOUNCEMENT_ATTACHMENT_LIMIT} documents.`,
+        ),
+      );
+      return;
+    }
+
+    const nextAssets = result.assets.slice(0, remainingSlots);
+
+    try {
+      const nextAttachments = await Promise.all(
+        nextAssets.map(async (asset) => {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const mimeType = asset.mimeType ?? 'application/octet-stream';
+          return {
+            dataUrl: `data:${mimeType};base64,${base64}`,
+            fileName: asset.name,
+            mimeType,
+            sizeBytes: typeof asset.size === 'number' ? asset.size : null,
+          } satisfies NewsDocumentDraft;
+        }),
+      );
+
+      setAttachments((current) =>
+        [...current, ...nextAttachments].slice(0, ANNOUNCEMENT_ATTACHMENT_LIMIT),
+      );
+
+      if (nextAssets.length !== result.assets.length) {
+        Alert.alert(
+          localizeText(language, 'Внимание', 'Notice'),
+          localizeText(
+            language,
+            `Лишние файлы пропущены. Лимит: ${ANNOUNCEMENT_ATTACHMENT_LIMIT}.`,
+            `Extra files were skipped. Limit: ${ANNOUNCEMENT_ATTACHMENT_LIMIT}.`,
+          ),
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        localizeText(language, 'Ошибка', 'Error'),
+        error instanceof Error
+          ? error.message
+          : localizeText(
+              language,
+              'Не удалось прочитать выбранные файлы.',
+              'Unable to read the selected files.',
+            ),
+      );
+    }
+  }
+
+  async function handleAttachCurrentLocation() {
+    setLocationLoading(true);
+
+    try {
+      let permission = await Location.getForegroundPermissionsAsync();
+      if (!permission.granted) {
+        permission = await Location.requestForegroundPermissionsAsync();
+      }
+
+      if (!permission.granted) {
+        throw new Error(
+          localizeText(
+            language,
+            'Разреши доступ к геолокации, чтобы прикрепить точку.',
+            'Allow location access to attach a map point.',
+          ),
+        );
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      let address = localizeText(language, 'Текущая геолокация', 'Current location');
+      try {
+        const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (geo) {
+          address = [
+            geo.name,
+            geo.street,
+            geo.city,
+            geo.region,
+            geo.country,
+          ]
+            .filter(Boolean)
+            .join(', ');
+        }
+      } catch {
+        // Keep coordinate-only attachment if reverse geocoding fails.
+      }
+
+      setLocationAttachment({
+        address,
+        latitude,
+        longitude,
+      });
+    } catch (error) {
+      Alert.alert(
+        localizeText(language, 'Ошибка', 'Error'),
+        error instanceof Error
+          ? error.message
+          : localizeText(
+              language,
+              'Не удалось определить геолокацию.',
+              'Unable to determine the location.',
+            ),
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  }
+
+  function handleScheduleDateChange(
+    event: DateTimePickerEvent,
+    pickedDate?: Date,
+  ) {
+    setShowScheduleDatePicker(Platform.OS === 'ios');
+
+    if (event.type === 'dismissed' || !pickedDate) {
+      return;
+    }
+
+    setScheduledAt((current) => {
+      const next = new Date(current);
+      next.setFullYear(
+        pickedDate.getFullYear(),
+        pickedDate.getMonth(),
+        pickedDate.getDate(),
+      );
+      return next;
+    });
+  }
+
+  function handleScheduleTimeChange(
+    event: DateTimePickerEvent,
+    pickedTime?: Date,
+  ) {
+    setShowScheduleTimePicker(Platform.OS === 'ios');
+
+    if (event.type === 'dismissed' || !pickedTime) {
+      return;
+    }
+
+    setScheduledAt((current) => {
+      const next = new Date(current);
+      next.setHours(pickedTime.getHours(), pickedTime.getMinutes(), 0, 0);
+      return next;
+    });
+  }
+
   async function handleSubmit() {
     if (!title.trim()) {
       Alert.alert('Error', t('manager.createNewsTitleRequired'));
@@ -442,6 +724,18 @@ export default function CreateNewsScreen() {
       Alert.alert(
         t('common.error'),
         t('manager.createNewsSelectParticipantsError'),
+      );
+      return;
+    }
+
+    if (scheduleEnabled && scheduledAt.getTime() <= Date.now()) {
+      Alert.alert(
+        localizeText(language, 'Ошибка', 'Error'),
+        localizeText(
+          language,
+          'Запланированное время должно быть в будущем.',
+          'Scheduled time must be in the future.',
+        ),
       );
       return;
     }
@@ -469,10 +763,46 @@ export default function CreateNewsScreen() {
               imageDataUrl: imageDraft.dataUrl,
             }
           : {}),
+        ...(normalizeAnnouncementLink(linkUrl)
+          ? {
+              linkUrl: normalizeAnnouncementLink(linkUrl) ?? undefined,
+            }
+          : {}),
+        ...(attachments.length
+          ? {
+              attachments: attachments.map((attachment) => ({
+                dataUrl: attachment.dataUrl,
+                fileName: attachment.fileName,
+              })),
+            }
+          : {}),
+        ...(locationAttachment
+          ? {
+              attachmentLocation: {
+                address: locationAttachment.address,
+                latitude: locationAttachment.latitude,
+                longitude: locationAttachment.longitude,
+              },
+            }
+          : {}),
+        ...(scheduleEnabled
+          ? {
+              scheduledFor: scheduledAt.toISOString(),
+            }
+          : {}),
       });
 
       hapticSuccess();
-      Alert.alert(t('common.done'), t('manager.createNewsCreated'));
+      Alert.alert(
+        t('common.done'),
+        scheduleEnabled
+          ? localizeText(
+              language,
+              'Новость запланирована.',
+              'News item scheduled.',
+            )
+          : t('manager.createNewsCreated'),
+      );
       router.replace('/?tab=news' as never);
     } catch (error) {
       Alert.alert(
@@ -594,6 +924,231 @@ export default function CreateNewsScreen() {
             </PressableScale>
           )}
 
+          <View className="gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
+            <View className="flex-row items-center gap-2">
+              <Ionicons color="#334155" name="link-outline" size={18} />
+              <Text className="text-[14px] font-semibold text-foreground">
+                {localizeText(language, 'Ссылка', 'Link')}
+              </Text>
+            </View>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
+              keyboardType={Platform.OS === 'android' ? 'visible-password' : 'url'}
+              onChangeText={setLinkUrl}
+              placeholder={localizeText(
+                language,
+                'https://example.com или домен без https',
+                'https://example.com or a domain without https',
+              )}
+              style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
+              value={linkUrl}
+            />
+          </View>
+
+          <View className="gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
+            <View className="flex-row items-center gap-2">
+              <Ionicons color="#334155" name="document-attach-outline" size={18} />
+              <Text className="text-[14px] font-semibold text-foreground">
+                {localizeText(language, 'Документы', 'Documents')}
+              </Text>
+            </View>
+            <PressableScale
+              className="rounded-[22px] border border-dashed border-black/12 bg-[#f8fbff] px-4 py-4"
+              haptic="selection"
+              onPress={() => void handlePickDocuments()}
+            >
+              <View className="flex-row items-center gap-3">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-[#eef3ff]">
+                  <Ionicons color="#334155" name="attach-outline" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[14px] font-semibold text-foreground">
+                    {localizeText(language, 'Добавить файлы', 'Add files')}
+                  </Text>
+                  <Text className="mt-1 text-[13px] text-muted-foreground">
+                    {localizeText(
+                      language,
+                      'PDF, Excel, Word, CSV, TXT и архивы.',
+                      'PDF, Excel, Word, CSV, TXT, and archives.',
+                    )}
+                  </Text>
+                </View>
+              </View>
+            </PressableScale>
+
+            {attachments.length ? (
+              <View className="gap-2">
+                {attachments.map((attachment, index) => (
+                  <View
+                    className="flex-row items-center justify-between gap-3 rounded-[18px] border border-[#e7ecf5] bg-[#f8fbff] px-3 py-3"
+                    key={`${attachment.fileName}-${index}`}
+                  >
+                    <View className="flex-1">
+                      <Text className="text-[14px] font-semibold text-foreground">
+                        {attachment.fileName}
+                      </Text>
+                      <Text className="mt-1 text-[12px] text-muted-foreground">
+                        {formatAttachmentSize(attachment.sizeBytes, language)}
+                      </Text>
+                    </View>
+                    <PressableScale
+                      className="rounded-full border border-[#f4b8b8] px-3 py-2"
+                      haptic="selection"
+                      onPress={() =>
+                        setAttachments((current) =>
+                          current.filter((_, attachmentIndex) => attachmentIndex !== index),
+                        )
+                      }
+                    >
+                      <Text className="text-[12px] font-semibold text-[#dc2626]">
+                        {localizeText(language, 'Убрать', 'Remove')}
+                      </Text>
+                    </PressableScale>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          <View className="gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="flex-row items-center gap-2">
+                <Ionicons color="#334155" name="location-outline" size={18} />
+                <Text className="text-[14px] font-semibold text-foreground">
+                  {localizeText(language, 'Геолокация', 'Geolocation')}
+                </Text>
+              </View>
+              {locationAttachment ? (
+                <PressableScale
+                  className="rounded-full border border-[#f4b8b8] px-3 py-2"
+                  haptic="selection"
+                  onPress={() => setLocationAttachment(null)}
+                >
+                  <Text className="text-[12px] font-semibold text-[#dc2626]">
+                    {localizeText(language, 'Очистить', 'Clear')}
+                  </Text>
+                </PressableScale>
+              ) : null}
+            </View>
+            <PressableScale
+              className="rounded-[22px] border border-dashed border-black/12 bg-[#f8fbff] px-4 py-4"
+              haptic="selection"
+              onPress={() => void handleAttachCurrentLocation()}
+            >
+              <View className="flex-row items-center gap-3">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-[#eef3ff]">
+                  <Ionicons
+                    color="#334155"
+                    name={locationLoading ? 'radio-outline' : 'navigate-outline'}
+                    size={20}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[14px] font-semibold text-foreground">
+                    {locationLoading
+                      ? localizeText(language, 'Определяем точку...', 'Locating...')
+                      : localizeText(language, 'Прикрепить мою точку', 'Attach my location')}
+                  </Text>
+                  <Text className="mt-1 text-[13px] text-muted-foreground">
+                    {localizeText(
+                      language,
+                      'Покажем аккуратную карту внизу новости.',
+                      'A map preview will be shown inside the news item.',
+                    )}
+                  </Text>
+                </View>
+              </View>
+            </PressableScale>
+
+            {locationAttachment ? (
+              <View className="overflow-hidden rounded-[22px] border border-[#e7ecf5] bg-[#f8fbff]">
+                <View className="px-4 py-3">
+                  <Text className="text-[14px] font-semibold text-foreground">
+                    {locationAttachment.address}
+                  </Text>
+                </View>
+                <MapView
+                  initialRegion={{
+                    latitude: locationAttachment.latitude,
+                    longitude: locationAttachment.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  region={{
+                    latitude: locationAttachment.latitude,
+                    longitude: locationAttachment.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  pitchEnabled={false}
+                  rotateEnabled={false}
+                  scrollEnabled={false}
+                  style={{ height: 220, width: '100%' }}
+                  zoomEnabled={false}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: locationAttachment.latitude,
+                      longitude: locationAttachment.longitude,
+                    }}
+                  />
+                </MapView>
+              </View>
+            ) : null}
+          </View>
+
+          <View className="gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
+            <NewsOptionCheckbox
+              checked={scheduleEnabled}
+              label={localizeText(
+                language,
+                'Запланировать публикацию',
+                'Schedule publication',
+              )}
+              onPress={() => setScheduleEnabled((current) => !current)}
+            />
+
+            {scheduleEnabled ? (
+              <View className="gap-3">
+                <View className="flex-row gap-3">
+                  <PressableScale
+                    className="flex-1 rounded-[18px] border border-[#d8e2f0] bg-[#f8fbff] px-4 py-4"
+                    haptic="selection"
+                    onPress={() => setShowScheduleDatePicker(true)}
+                  >
+                    <Text className="text-[12px] font-semibold uppercase tracking-[1.2px] text-muted-foreground">
+                      {localizeText(language, 'Дата', 'Date')}
+                    </Text>
+                    <Text className="mt-2 text-[15px] font-semibold text-foreground">
+                      {formatDateLabel(scheduledAt, language)}
+                    </Text>
+                  </PressableScale>
+                  <PressableScale
+                    className="flex-1 rounded-[18px] border border-[#d8e2f0] bg-[#f8fbff] px-4 py-4"
+                    haptic="selection"
+                    onPress={() => setShowScheduleTimePicker(true)}
+                  >
+                    <Text className="text-[12px] font-semibold uppercase tracking-[1.2px] text-muted-foreground">
+                      {localizeText(language, 'Время', 'Time')}
+                    </Text>
+                    <Text className="mt-2 text-[15px] font-semibold text-foreground">
+                      {formatTimeLabel(scheduledAt)}
+                    </Text>
+                  </PressableScale>
+                </View>
+                <Text className="text-[13px] leading-6 text-muted-foreground">
+                  {localizeText(
+                    language,
+                    `Публикация: ${formatDateLabel(scheduledAt, language)} в ${formatTimeLabel(scheduledAt)}`,
+                    `Publish at ${formatDateLabel(scheduledAt, language)} ${formatTimeLabel(scheduledAt)}`,
+                  )}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
           <NewsOptionCheckbox
             checked={limitParticipants}
             label={t('manager.createNewsSelectedAudienceOnly')}
@@ -684,6 +1239,23 @@ export default function CreateNewsScreen() {
           />
         </View>
       </View>
+
+      {showScheduleDatePicker ? (
+        <DateTimePicker
+          minimumDate={new Date()}
+          mode="date"
+          onChange={handleScheduleDateChange}
+          value={scheduledAt}
+        />
+      ) : null}
+
+      {showScheduleTimePicker ? (
+        <DateTimePicker
+          mode="time"
+          onChange={handleScheduleTimeChange}
+          value={scheduledAt}
+        />
+      ) : null}
 
       <NewsImageCropperModal
         onApply={(draft) => setImageDraft(draft)}

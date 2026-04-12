@@ -1,12 +1,34 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { AuthSession } from "./auth";
 import { isEmployeeOnlyRole } from "./auth";
+import { isDemoAccessToken } from "./demo-mode";
+import { serverApiRequestWithSession } from "./server-api";
 import { decodeSessionCookie, SESSION_COOKIE_NAME } from "./session-cookie";
 
-export async function getServerSession(): Promise<AuthSession | null> {
+const readValidatedServerSession = cache(async (): Promise<AuthSession | null> => {
   const cookieStore = await cookies();
-  return decodeSessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = decodeSessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+
+  if (!session) {
+    return null;
+  }
+
+  if (isDemoAccessToken(session.accessToken)) {
+    return session;
+  }
+
+  try {
+    await serverApiRequestWithSession(session, "/auth/me");
+    return session;
+  } catch {
+    return null;
+  }
+});
+
+export async function getServerSession(): Promise<AuthSession | null> {
+  return readValidatedServerSession();
 }
 
 export async function requireServerSession(): Promise<AuthSession> {

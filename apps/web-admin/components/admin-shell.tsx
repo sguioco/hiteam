@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BarChart3,
   Bell,
   BriefcaseBusiness,
   Building2,
@@ -17,9 +16,7 @@ import {
   ListTodo,
   ScanFace,
   Settings2,
-  Sparkles,
   UsersRound,
-  Wallet,
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -206,10 +203,14 @@ export function AdminShell({
       if (bootstrap.mode !== mode) return null;
       return bootstrap;
     })();
+  const hasValidatedServerSession = Boolean(initialSession);
+  const hasValidatedInitialShell = Boolean(initialSession && initialShellBootstrap);
   const pathname = usePathname();
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
-  const [session, setSession] = useState<AuthSession | null>(initialSession);
+  const [session, setSession] = useState<AuthSession | null>(
+    hasValidatedServerSession ? initialSession : null,
+  );
   const [unreadCount, setUnreadCount] = useState(
     initialShellBootstrap?.notifications?.unreadCount ?? 0,
   );
@@ -227,7 +228,7 @@ export function AdminShell({
     initialShellBootstrap?.header?.accountProfile ?? null,
   );
   const [storedAvatarUrl, setStoredAvatarUrl] = useState<string | null>(null);
-  const [ready, setReady] = useState(Boolean(initialSession));
+  const [ready, setReady] = useState(hasValidatedServerSession);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
     {},
   );
@@ -321,124 +322,156 @@ export function AdminShell({
   }
 
   useEffect(() => {
-    const currentSession = initialSession ?? getSession();
+    let cancelled = false;
 
-    if (!currentSession) {
-      redirectToLogin();
-      return;
-    }
+    async function bootstrapShell() {
+      const currentSession = initialSession ?? getSession();
 
-    if (!getSession()) {
-      saveSession(currentSession);
-    }
-
-    const resolvedHomeRoute = resolveHomeRoute(currentSession.user.roleCodes);
-    const employeeOnlySession = isEmployeeOnlyRole(currentSession.user.roleCodes);
-    const headerCacheKey = buildShellHeaderCacheKey(currentSession, mode);
-    const notificationsCacheKey =
-      buildShellNotificationsCacheKey(currentSession);
-    const cachedHeader = readClientCache<ShellHeaderCachePayload>(
-      headerCacheKey,
-      SHELL_HEADER_CACHE_TTL_MS,
-    );
-    const cachedNotifications =
-      readClientCache<ShellNotificationsCachePayload>(
-        notificationsCacheKey,
-        SHELL_NOTIFICATIONS_CACHE_TTL_MS,
-      );
-    const effectiveHeader =
-      cachedHeader ??
-      (initialShellBootstrap?.header
-        ? {
-            value: initialShellBootstrap.header,
-            storedAt: Date.now(),
-            isStale: false,
-          }
-        : null);
-    const effectiveNotifications =
-      cachedNotifications ??
-      (initialShellBootstrap?.notifications
-        ? {
-            value: initialShellBootstrap.notifications,
-            storedAt: Date.now(),
-            isStale: false,
-          }
-        : null);
-    const shouldRefreshHeader = !effectiveHeader || effectiveHeader.isStale;
-    const shouldRefreshNotifications =
-      !effectiveNotifications || effectiveNotifications.isStale;
-
-    if (effectiveHeader) {
-      applyHeaderSnapshot(effectiveHeader.value, headerCacheKey);
-    }
-
-    if (effectiveNotifications) {
-      applyNotificationsSnapshot(
-        effectiveNotifications.value,
-        notificationsCacheKey,
-      );
-    }
-
-    setStoredAvatarUrl(readStoredProfileAvatar(currentSession.user.email));
-
-    if (mode === "employee") {
-      if (!employeeOnlySession) {
-        router.replace(resolvedHomeRoute);
+      if (!currentSession) {
+        redirectToLogin();
         return;
       }
 
-      setSession(currentSession);
-      setReady(true);
-      void primeWorkspaceExperience(currentSession).catch(() => undefined);
-
-      if (shouldRefreshHeader || shouldRefreshNotifications) {
-        void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
-          token: currentSession.accessToken,
-        })
-          .then((snapshot) => {
-            if (snapshot.header) {
-              applyHeaderSnapshot(snapshot.header, headerCacheKey);
-            }
-
-            if (snapshot.notifications) {
-              applyNotificationsSnapshot(
-                snapshot.notifications,
-                notificationsCacheKey,
-              );
-            }
-          })
-          .catch(() => undefined);
+      if (!getSession()) {
+        saveSession(currentSession);
       }
-      return;
-    }
 
-    if (employeeOnlySession) {
-      router.replace(resolvedHomeRoute);
-      return;
-    }
+      const resolvedHomeRoute = resolveHomeRoute(currentSession.user.roleCodes);
+      const employeeOnlySession = isEmployeeOnlyRole(currentSession.user.roleCodes);
+      const headerCacheKey = buildShellHeaderCacheKey(currentSession, mode);
+      const notificationsCacheKey =
+        buildShellNotificationsCacheKey(currentSession);
+      const cachedHeader = readClientCache<ShellHeaderCachePayload>(
+        headerCacheKey,
+        SHELL_HEADER_CACHE_TTL_MS,
+      );
+      const cachedNotifications =
+        readClientCache<ShellNotificationsCachePayload>(
+          notificationsCacheKey,
+          SHELL_NOTIFICATIONS_CACHE_TTL_MS,
+        );
+      const effectiveHeader =
+        cachedHeader ??
+        (initialShellBootstrap?.header
+          ? {
+              value: initialShellBootstrap.header,
+              storedAt: Date.now(),
+              isStale: false,
+            }
+          : null);
+      const effectiveNotifications =
+        cachedNotifications ??
+        (initialShellBootstrap?.notifications
+          ? {
+              value: initialShellBootstrap.notifications,
+              storedAt: Date.now(),
+              isStale: false,
+            }
+          : null);
+      const shouldRefreshHeader = !effectiveHeader || effectiveHeader.isStale;
+      const shouldRefreshNotifications =
+        !effectiveNotifications || effectiveNotifications.isStale;
 
-    setSession(currentSession);
-    setReady(true);
-    void primeWorkspaceExperience(currentSession).catch(() => undefined);
+      const finalizeSuccess = () => {
+        if (cancelled) {
+          return;
+        }
 
-    if (shouldRefreshHeader || shouldRefreshNotifications) {
-      void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
-        token: currentSession.accessToken,
-      })
-        .then((snapshot) => {
-          if (snapshot.header) {
-            applyHeaderSnapshot(snapshot.header, headerCacheKey);
+        setStoredAvatarUrl(readStoredProfileAvatar(currentSession.user.email));
+
+        if (mode === "employee") {
+          if (!employeeOnlySession) {
+            router.replace(resolvedHomeRoute);
+            return;
           }
+        } else if (employeeOnlySession) {
+          router.replace(resolvedHomeRoute);
+          return;
+        }
 
-          if (snapshot.notifications) {
-            applyNotificationsSnapshot(
-              snapshot.notifications,
-              notificationsCacheKey,
-            );
-          }
-        })
-        .catch(() => undefined);
+        setSession(currentSession);
+        setReady(true);
+        void primeWorkspaceExperience(currentSession).catch(() => undefined);
+      };
+
+      if (effectiveHeader) {
+        applyHeaderSnapshot(effectiveHeader.value, headerCacheKey);
+      }
+
+      if (effectiveNotifications) {
+        applyNotificationsSnapshot(
+          effectiveNotifications.value,
+          notificationsCacheKey,
+        );
+      }
+
+      if (initialShellBootstrap) {
+        finalizeSuccess();
+
+        if (shouldRefreshHeader || shouldRefreshNotifications) {
+          void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
+            token: currentSession.accessToken,
+          })
+            .then((snapshot) => {
+              if (snapshot.header) {
+                applyHeaderSnapshot(snapshot.header, headerCacheKey);
+              }
+
+              if (snapshot.notifications) {
+                applyNotificationsSnapshot(
+                  snapshot.notifications,
+                  notificationsCacheKey,
+                );
+              }
+            })
+            .catch(() => undefined);
+        }
+
+        return;
+      }
+
+      try {
+        const snapshot = await apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
+          token: currentSession.accessToken,
+          skipClientCache: true,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (snapshot.header) {
+          applyHeaderSnapshot(snapshot.header, headerCacheKey);
+        }
+
+        if (snapshot.notifications) {
+          applyNotificationsSnapshot(
+            snapshot.notifications,
+            notificationsCacheKey,
+          );
+        }
+
+        finalizeSuccess();
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        if (!getSession()) {
+          setSession(null);
+          setReady(false);
+          return;
+        }
+
+        finalizeSuccess();
+      }
     }
+
+    void bootstrapShell();
+
+    return () => {
+      cancelled = true;
+    };
   }, [initialSession, initialShellBootstrap, mode, router]);
 
   useEffect(() => {
@@ -733,21 +766,6 @@ export function AdminShell({
       icon: BriefcaseBusiness,
     });
 
-    if (!managerOnly) {
-      items.push(
-        {
-          href: toAdminHref("/requests"),
-          label: locale === "ru" ? "Запросы" : "Requests",
-          icon: Sparkles,
-        },
-        {
-          href: toAdminHref("/analytics"),
-          label: locale === "ru" ? "Аналитика" : "Analytics",
-          icon: BarChart3,
-        },
-      );
-    }
-
     return items;
   }, [employeeOnly, homeHref, locale, managerOnly, newsHref, scheduleHref, session?.user.roleCodes, t, tasksHref]);
 
@@ -760,7 +778,20 @@ export function AdminShell({
           false,
       ]),
     );
-    setExpandedItems((current) => ({ ...nextExpanded, ...current }));
+    setExpandedItems((current) => {
+      const merged = { ...nextExpanded, ...current };
+      const currentKeys = Object.keys(current);
+      const mergedKeys = Object.keys(merged);
+
+      if (
+        currentKeys.length === mergedKeys.length &&
+        mergedKeys.every((key) => current[key] === merged[key])
+      ) {
+        return current;
+      }
+
+      return merged;
+    });
   }, [navItems, pathname]);
 
   const demoSidebarProfile = resolveDemoSidebarProfile(session?.user.email, locale);
@@ -791,23 +822,27 @@ export function AdminShell({
   const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
   const unreadNotifications = notificationItems.filter((item) => !item.isRead);
   const readNotifications = notificationItems.filter((item) => item.isRead);
-  const accountMenuItems = employeeOnly
-    ? [
-      {
-        href: profileHref,
-        label: locale === "ru" ? "Профиль" : "Profile",
-      },
-    ]
-    : [
-        {
-          href: toAdminHref("/organization"),
-          label: locale === "ru" ? "Организация" : "Organization",
-        },
-        {
-          href: profileHref,
-          label: locale === "ru" ? "Профиль" : "Profile",
-        },
-      ];
+  const accountMenuItems = useMemo(
+    () =>
+      employeeOnly
+        ? [
+            {
+              href: profileHref,
+              label: locale === "ru" ? "Профиль" : "Profile",
+            },
+          ]
+        : [
+            {
+              href: toAdminHref("/organization"),
+              label: locale === "ru" ? "Организация" : "Organization",
+            },
+            {
+              href: profileHref,
+              label: locale === "ru" ? "Профиль" : "Profile",
+            },
+          ],
+    [employeeOnly, locale, profileHref],
+  );
   const prefetchRoutes = useMemo(() => {
     const routes = new Set<string>();
 

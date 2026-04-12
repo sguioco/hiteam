@@ -74,6 +74,7 @@ import {
 } from "@/lib/task-priority";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
 import { navigateWithClickSupport } from "@/lib/navigation";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type EmployeeApiRecord = {
   id: string;
@@ -513,6 +514,7 @@ const Employees = ({
   initialData?: EmployeesInitialData | null;
 }) => {
   const router = useRouter();
+  const activeSession = getSession();
   const locale = getRuntimeLocale();
   const taskPriorityOptions = useMemo(() => getTaskPriorityOptions(locale), [locale]);
   const [search, setSearch] = useState("");
@@ -1058,22 +1060,27 @@ const Employees = ({
     }
   }
 
-  async function loadDirectory() {
+  async function loadDirectory(options?: { force?: boolean; silent?: boolean }) {
     const session = getSession();
     if (!session) {
-      setDirectoryLoading(false);
-      setInvitationsLoading(false);
+      if (!options?.silent) {
+        setDirectoryLoading(false);
+        setInvitationsLoading(false);
+      }
       return;
     }
 
-    setDirectoryLoading(true);
-    setDirectoryError(null);
+    if (!options?.silent) {
+      setDirectoryLoading(true);
+      setDirectoryError(null);
+    }
 
     try {
       const snapshot = await apiRequest<EmployeesDirectorySnapshot>(
         "/bootstrap/employees",
         {
           token: session.accessToken,
+          skipClientCache: options?.force ?? false,
         },
       );
 
@@ -1081,27 +1088,32 @@ const Employees = ({
         snapshot,
         buildEmployeesDirectoryCacheKey(session),
       );
+      setDirectoryError(null);
     } catch (requestError) {
-      setDirectoryError(
-        requestError instanceof Error
-          ? requestError.message
-          : runtimeLocalize(
-              "Не удалось загрузить сотрудников.",
-              "Failed to load employees.",
-              locale,
-            ),
-      );
-      setEmployeeRecords([]);
-      setLiveSessions([]);
-      setOverview(null);
-      setPendingInvitations([]);
-      setScheduleShifts([]);
-      setScheduleTemplates([]);
-      setOrganizationSetup(null);
-      setCanCheckWorkdays(false);
+      if (!options?.silent) {
+        setDirectoryError(
+          requestError instanceof Error
+            ? requestError.message
+            : runtimeLocalize(
+                "Не удалось загрузить сотрудников.",
+                "Failed to load employees.",
+                locale,
+              ),
+        );
+        setEmployeeRecords([]);
+        setLiveSessions([]);
+        setOverview(null);
+        setPendingInvitations([]);
+        setScheduleShifts([]);
+        setScheduleTemplates([]);
+        setOrganizationSetup(null);
+        setCanCheckWorkdays(false);
+      }
     } finally {
-      setDirectoryLoading(false);
-      setInvitationsLoading(false);
+      if (!options?.silent) {
+        setDirectoryLoading(false);
+        setInvitationsLoading(false);
+      }
     }
   }
 
@@ -1118,21 +1130,42 @@ const Employees = ({
     }
 
     const session = getSession();
-    if (session) {
-      const cachedDirectory = readClientCache<EmployeesDirectorySnapshot>(
-        buildEmployeesDirectoryCacheKey(session),
-        EMPLOYEES_DIRECTORY_CACHE_TTL_MS,
-      );
+    const cachedDirectory = session
+      ? readClientCache<EmployeesDirectorySnapshot>(
+          buildEmployeesDirectoryCacheKey(session),
+          EMPLOYEES_DIRECTORY_CACHE_TTL_MS,
+        )
+      : null;
 
-      if (cachedDirectory) {
-        applyDirectorySnapshot(cachedDirectory.value);
-        setDirectoryLoading(false);
-        setInvitationsLoading(false);
-      }
+    if (cachedDirectory) {
+      applyDirectorySnapshot(cachedDirectory.value);
+      setDirectoryLoading(false);
+      setInvitationsLoading(false);
     }
 
-    void loadDirectory();
+    if (session && !cachedDirectory) {
+      setDirectoryLoading(true);
+      setInvitationsLoading(true);
+    }
+
+    if (session) {
+      void loadDirectory({
+        force: true,
+        silent: Boolean(cachedDirectory),
+      });
+    }
   }, [initialData]);
+
+  useWorkspaceAutoRefresh({
+    session: activeSession,
+    enabled: Boolean(activeSession),
+    onRefresh: async () => {
+      await loadDirectory({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   useEffect(() => {
     const session = getSession();

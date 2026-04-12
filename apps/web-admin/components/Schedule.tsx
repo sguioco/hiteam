@@ -51,6 +51,7 @@ import { createMockScheduleData } from "@/lib/mock-admin-data";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type TabKey =
   | "schedules"
@@ -1558,7 +1559,7 @@ export default function Schedule({
       .slice(0, 20);
   }, [enrichedShifts, templates, ui.createdShift, ui.createdTemplate, localeTag, visibleTaskEvents, ui.meeting, ui.task]);
 
-  async function loadData() {
+  async function loadData(options?: { force?: boolean; silent?: boolean }) {
     const visibleStart = calendarDays[0];
     const visibleEnd = calendarDays[calendarDays.length - 1];
     const bootstrapQuery = new URLSearchParams({
@@ -1584,8 +1585,10 @@ export default function Schedule({
       return;
     }
 
-    setLoading(true);
-    setMessage(null);
+    if (!options?.silent) {
+      setLoading(true);
+      setMessage(null);
+    }
 
     try {
       const snapshot = await apiRequest<{
@@ -1593,6 +1596,7 @@ export default function Schedule({
         mode: "admin" | "employee";
       }>(`/bootstrap/schedule?${bootstrapQuery}`, {
         token: session.accessToken,
+        skipClientCache: options?.force ?? false,
       });
 
       if (!snapshot.initialData) {
@@ -1608,24 +1612,29 @@ export default function Schedule({
       setPositions(snapshot.initialData.positions);
       setRequests(snapshot.initialData.requests);
       setTaskBoard(snapshot.initialData.taskBoard);
-      setLoading(false);
+      setMessage(null);
       return;
     } catch (error) {
-      setTemplates([]);
-      setShifts([]);
-      setEmployees([]);
-      setLocations([]);
-      setDepartments([]);
-      setPositions([]);
-      setRequests([]);
-      setTaskBoard(null);
-      setIsMockMode(false);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : ui.scheduleLoadError,
-      );
-      setLoading(false);
+      if (!options?.silent) {
+        setTemplates([]);
+        setShifts([]);
+        setEmployees([]);
+        setLocations([]);
+        setDepartments([]);
+        setPositions([]);
+        setRequests([]);
+        setTaskBoard(null);
+        setIsMockMode(false);
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : ui.scheduleLoadError,
+        );
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -1643,8 +1652,19 @@ export default function Schedule({
       return;
     }
 
-    void loadData();
+    void loadData({ force: true });
   }, [calendarDays, initialData, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
+
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: Boolean(session),
+    onRefresh: async () => {
+      await loadData({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   useEffect(() => {
     if (!sessionAccessToken || !historicalRange) {

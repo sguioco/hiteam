@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { BiometricModule } from '../biometric/biometric.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
@@ -11,6 +12,7 @@ import { BootstrapService } from './bootstrap.service';
 
 @Module({
   imports: [
+    AuditModule,
     AttendanceModule,
     BiometricModule,
     CollaborationModule,

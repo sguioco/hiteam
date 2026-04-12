@@ -66,7 +66,6 @@ import {
   type AuthSession,
   hasDesktopAdminAccess,
   isEmployeeOnlyRole,
-  isManagerOnlyRole,
 } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
@@ -82,10 +81,14 @@ import { useI18n } from "@/lib/i18n";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { appendTaskMeta, parseTaskMeta } from "@/lib/task-meta";
 import {
-  ActionCenter,
   getMockActionCenterItems,
   type ActionCenterItem,
 } from "@/components/ActionsCenter";
+import {
+  DailyActivityPanel,
+  type DashboardActivityItem,
+} from "@/components/dashboard/DailyActivityPanel";
+import { TodayAttendancePanel } from "@/components/dashboard/TodayAttendancePanel";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
@@ -96,6 +99,7 @@ import {
 } from "@/lib/task-priority";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { navigateWithClickSupport } from "@/lib/navigation";
+import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type EmployeeDirectoryItem = {
   id: string;
@@ -159,6 +163,7 @@ type DashboardCachePayload = {
   scheduleShifts: EmployeeScheduleShift[];
   canCheckWorkdays: boolean;
   personalHistory: AttendanceHistoryResponse | null;
+  dailyActivity?: DashboardActivityItem[];
 };
 
 export type DashboardInitialData = DashboardCachePayload;
@@ -880,6 +885,9 @@ export default function DashboardHome({
   const [canCheckWorkdays, setCanCheckWorkdays] = useState(
     initialData?.canCheckWorkdays ?? false,
   );
+  const [dailyActivity, setDailyActivity] = useState<DashboardActivityItem[]>(
+    initialData?.dailyActivity ?? [],
+  );
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
   const [selectedCalendarEvent, setSelectedCalendarEvent] =
     useState<PersonalCalendarEvent | null>(null);
@@ -902,6 +910,7 @@ export default function DashboardHome({
     setScheduleShifts(snapshot.scheduleShifts);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
     setPersonalHistory(snapshot.personalHistory);
+    setDailyActivity(snapshot.dailyActivity ?? []);
     setIsBootstrapping(false);
 
     if (cacheKey) {
@@ -909,11 +918,17 @@ export default function DashboardHome({
     }
   }
 
-  async function loadData() {
+  async function loadData(options?: { force?: boolean; silent?: boolean }) {
     const currentSession = getSession();
     if (!currentSession) {
-      setIsBootstrapping(false);
+      if (!options?.silent) {
+        setIsBootstrapping(false);
+      }
       return;
+    }
+
+    if (!options?.silent) {
+      setIsBootstrapping(true);
     }
 
     try {
@@ -922,11 +937,14 @@ export default function DashboardHome({
         mode: "admin" | "employee";
       }>("/bootstrap/dashboard", {
         token: currentSession.accessToken,
+        skipClientCache: options?.force ?? false,
       });
 
       applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
     } finally {
-      setIsBootstrapping(false);
+      if (!options?.silent) {
+        setIsBootstrapping(false);
+      }
     }
   }
 
@@ -966,8 +984,19 @@ export default function DashboardHome({
     }
 
     setIsBootstrapping(true);
-    void loadData();
+    void loadData({ force: true });
   }, [dashboardCacheKey, initialData, isEmployeeMode]);
+
+  useWorkspaceAutoRefresh({
+    session,
+    enabled: Boolean(session),
+    onRefresh: async () => {
+      await loadData({
+        force: true,
+        silent: true,
+      });
+    },
+  });
 
   useEffect(() => {
     if (!session) return;
@@ -1009,7 +1038,6 @@ export default function DashboardHome({
         setTaskDayOffConfirmOpen(false);
         setCreateTaskOpen(true);
       };
-  const managerOnly = isManagerOnlyRole(session?.user.roleCodes ?? []);
   const canUseDesktopAdminTools = hasDesktopAdminAccess(
     session?.user.roleCodes ?? [],
   );
@@ -1094,10 +1122,6 @@ export default function DashboardHome({
   ]);
   const hasDayOffAssignee = selectedAssigneeDayStatuses.some(
     (item) => !item.isWorkday,
-  );
-  const pendingRequests = requests.filter((item) => item.status === "PENDING");
-  const signOffItems = pendingRequests.filter(
-    (item) => item.request.attachments.length > 0,
   );
   const actionCenterItems = useMemo(
     () => buildActionCenterItems(requests, employees, locale),
@@ -2369,19 +2393,19 @@ export default function DashboardHome({
             </aside>
 
             <div className="dashboard-main-card">
-              {managerOnly || isEmployeeMode ? (
+              {isEmployeeMode ? (
                 <ManagerPerformancePanel
                   history={personalHistory}
                   locale={locale}
                   tasks={personalTasks}
                 />
               ) : (
-                <div className="dashboard-actions-center-shell">
-                  <ActionCenter
-                    items={isDemoSession ? undefined : actionCenterItems}
+                <div className="dashboard-activity-shell">
+                  <DailyActivityPanel
+                    items={dailyActivity}
                     locale={locale}
-                    useMockData={isDemoSession}
                   />
+                  <TodayAttendancePanel locale={locale} />
                 </div>
               )}
             </div>
