@@ -369,7 +369,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     return attendanceStatus;
   }, [attendanceStatus, shifts]);
 
-  async function openAttendanceAction() {
+  function openAttendanceAction() {
     if (!effectiveAttendanceStatus) {
       return;
     }
@@ -378,7 +378,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       effectiveAttendanceStatus.attendanceState === 'not_checked_in' &&
       effectiveAttendanceStatus.allowedActions.includes('check_in')
     ) {
-      router.push(await resolveAttendanceActionHref('check-in'));
+      router.push(resolveAttendanceActionHref('check-in'));
       return;
     }
 
@@ -387,7 +387,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         effectiveAttendanceStatus.attendanceState === 'on_break') &&
       effectiveAttendanceStatus.allowedActions.includes('check_out')
     ) {
-      router.push(await resolveAttendanceActionHref('check-out'));
+      router.push(resolveAttendanceActionHref('check-out'));
     }
   }
 

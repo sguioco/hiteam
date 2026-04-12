@@ -30,6 +30,7 @@ import { peekScreenCache, readScreenCache, writeScreenCache } from "../../lib/sc
 import {
   TODAY_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_TTL_MS,
+  warmTodayScreenCache,
   type TodayScreenCacheValue,
 } from "../../lib/workspace-cache";
 import { PressableScale } from "../../components/ui/pressable-scale";
@@ -420,20 +421,6 @@ export function AttendanceCaptureScreen({
     }
   }, [cameraPromptOpen, permission?.granted]);
 
-  useEffect(() => {
-    if (
-      completionGuardRef.current ||
-      !biometricVerificationId ||
-      locationCheck.state !== "ready" ||
-      !locationCheck.snapshot
-    ) {
-      return;
-    }
-
-    completionGuardRef.current = true;
-    void finalizeAttendance(biometricVerificationId, locationCheck.snapshot);
-  }, [biometricVerificationId, locationCheck]);
-
   async function ensurePermission() {
     if (permission?.granted) {
       return true;
@@ -643,8 +630,12 @@ export function AttendanceCaptureScreen({
         );
       }
 
+      completionGuardRef.current = true;
       setBiometricVerificationId(verificationResult.verificationId);
-      setMessage(copy.faceReady);
+      finalizeAttendanceInBackground(
+        verificationResult.verificationId,
+        nextLocationCheck.snapshot,
+      );
     } catch (nextError) {
       setCapturedArtifact(null);
       setError(
@@ -657,65 +648,52 @@ export function AttendanceCaptureScreen({
     }
   }
 
-  async function finalizeAttendance(
+  function finalizeAttendanceInBackground(
     verificationId: string,
     snapshot: AttendanceLocationSnapshot,
   ) {
-    setSubmitting(true);
-    setError(null);
+    const currentStatus =
+      status ?? initialTodaySnapshot?.value.attendanceStatus ?? null;
+    const optimisticRecordedAt = new Date().toISOString();
+    const optimisticStatus = buildOptimisticAttendanceStatus(currentStatus, {
+      sessionId:
+        currentStatus?.activeSession?.id ??
+        `pending-${action}-${optimisticRecordedAt}`,
+      recordedAt: optimisticRecordedAt,
+    });
 
-    try {
-      const attendanceResult = await submitAttendanceAction(action, {
-        ...snapshot,
-        biometricVerificationId: verificationId,
-        notes: isCheckIn
-          ? "Mobile attendance check-in"
-          : "Mobile attendance check-out",
-      });
-
-      const currentStatus =
-        status ?? initialTodaySnapshot?.value.attendanceStatus ?? null;
-      const optimisticStatus = buildOptimisticAttendanceStatus(
-        currentStatus,
-        attendanceResult as {
-          sessionId: string;
-          recordedAt: string;
-        },
-      );
-
-      if (optimisticStatus) {
-        setStatus(optimisticStatus);
-        await syncTodayScreenCache(optimisticStatus);
-      }
-
-      router.replace("/today" as never);
-    } catch (nextError) {
-      const nextMessage =
-        nextError instanceof Error ? nextError.message : t("today.actionError");
-      if (
-        nextMessage.includes("outside the allowed work area") &&
-        status?.location &&
-        snapshot
-      ) {
-        const nextDistanceMeters = distanceMeters(
-          snapshot.latitude,
-          snapshot.longitude,
-          status.location.latitude,
-          status.location.longitude,
-        );
-        setLocationCheck({
-          state: "outside",
-          snapshot,
-          distanceMeters: nextDistanceMeters,
-          errorMessage: null,
-        });
-      }
-      setCapturedArtifact(null);
-      setError(nextMessage);
-      completionGuardRef.current = false;
-    } finally {
-      setSubmitting(false);
+    if (optimisticStatus) {
+      setStatus(optimisticStatus);
+      void syncTodayScreenCache(optimisticStatus);
     }
+
+    router.replace("/today" as never);
+
+    void submitAttendanceAction(action, {
+      ...snapshot,
+      biometricVerificationId: verificationId,
+      notes: isCheckIn
+        ? "Mobile attendance check-in"
+        : "Mobile attendance check-out",
+    })
+      .then((attendanceResult) => {
+        const reconciledStatus = optimisticStatus
+          ? buildOptimisticAttendanceStatus(optimisticStatus, attendanceResult as {
+              sessionId: string;
+              recordedAt: string;
+            })
+          : null;
+
+        if (reconciledStatus) {
+          void syncTodayScreenCache(reconciledStatus);
+        }
+
+        return warmTodayScreenCache(undefined, language);
+      })
+      .catch(() => warmTodayScreenCache(undefined, language))
+      .finally(() => {
+        completionGuardRef.current = false;
+      });
   }
 
   function buildOptimisticAttendanceStatus(

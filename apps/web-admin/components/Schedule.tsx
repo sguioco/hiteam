@@ -622,17 +622,6 @@ function buildCalendarDays(cursor: Date, period: PeriodMode) {
   ];
 }
 
-function formatCalendarCount(
-  count: number,
-  one: string,
-  few: string,
-  many: string,
-) {
-  if (count === 1) return `${count} ${one}`;
-  if (count >= 2 && count <= 4) return `${count} ${few}`;
-  return `${count} ${many}`;
-}
-
 function getScheduleEventTone(kind: "shift" | "task" | "meeting") {
   if (kind === "meeting") return "is-meeting";
   if (kind === "task") return "is-task";
@@ -2395,126 +2384,106 @@ export default function Schedule({
 
         {activeTab === "schedules" ? (
           <>
-            <section className="grid grid-cols-7 gap-2">
-            {ui.dayHeaders.map((label) => (
-              <div className="py-2 text-center" key={label}>
-                <span className="text-[10px] font-heading font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                  {label}
-                </span>
-              </div>
-            ))}
-            {calendarDays.map((day) => {
-              const dayEntries = calendarEntriesForDay(day);
-              const primaryShiftEntry =
-                dayEntries.find((entry) => entry.kind === "shift") ?? null;
-              const dayEmployees = new Set(
-                dayEntries.flatMap((entry) => entry.employeeIds).filter(Boolean),
-              ).size;
+            <section className="overflow-hidden rounded-[30px] border border-border/80 bg-white/78 shadow-[0_18px_50px_rgba(31,38,135,0.08)] backdrop-blur-sm">
+              <div className="grid grid-cols-7 border-b border-border/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(246,249,255,0.84))]">
+                {ui.dayHeaders.map((label, index) => {
+                  const isLastColumn = index === ui.dayHeaders.length - 1;
 
-              return (
-                <button
-                  className={`flex min-h-[140px] flex-col rounded-2xl border p-2 text-left transition-all duration-200 hover:shadow-md ${
-                    isTodayLocal(day)
-                      ? "border-accent bg-accent/5 ring-1 ring-accent/20"
-                      : "border-border bg-card hover:border-accent/30"
-                  } ${isSameMonthLocal(day, currentDate) ? "" : "opacity-40"}`}
-                  key={day.toISOString()}
-                  onClick={() => setSelectedDay(day)}
-                  type="button"
-                >
-                  <div className="mb-1 flex items-start justify-between">
-                    {primaryShiftEntry ? (
-                      <div className="mt-0.5 flex min-w-0 flex-1 pr-2">
+                  return (
+                    <div
+                      className={`py-3 text-center ${isLastColumn ? "" : "border-r border-border/80"}`}
+                      key={label}
+                    >
+                      <span className="text-[10px] font-heading font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-7">
+                {calendarDays.map((day, index) => {
+                  const dayEntries = calendarEntriesForDay(day);
+                  const isLastColumn = index % 7 === 6;
+                  const isLastRow = index >= calendarDays.length - 7;
+
+                  return (
+                    <button
+                      className={`flex min-h-[148px] flex-col rounded-none p-2 text-left transition-colors duration-200 ${
+                        !isLastColumn ? "border-r border-border/80" : ""
+                      } ${!isLastRow ? "border-b border-border/80" : ""} ${
+                        isTodayLocal(day)
+                          ? "bg-[rgba(74,120,255,0.08)] shadow-[inset_0_0_0_1px_rgba(74,120,255,0.24)]"
+                          : "bg-transparent hover:bg-secondary/25"
+                      } ${isSameMonthLocal(day, currentDate) ? "" : "opacity-40"}`}
+                      key={day.toISOString()}
+                      onClick={() => setSelectedDay(day)}
+                      type="button"
+                    >
+                      <div className="mb-1 flex items-start justify-end">
                         <span
-                          className={`truncate text-[10px] font-heading font-semibold leading-tight ${
-                            getEntryToneTextClass(primaryShiftEntry.statusTone) ??
-                            "text-emerald-700"
+                          className={`font-heading text-2xl font-bold leading-none ${
+                            isTodayLocal(day) ? "text-[color:var(--accent)]" : "text-foreground"
                           }`}
                         >
-                          {primaryShiftEntry.time}
+                          {day.getDate()}
                         </span>
                       </div>
-                    ) : dayEntries.length && selectedEmployeeId === "all" ? (
-                      <div className="mt-0.5 flex flex-col gap-0">
-                        <span className="text-[9px] font-heading font-semibold leading-tight text-muted-foreground">
-                          {formatCalendarCount(
-                            dayEntries.length,
-                            locale === "ru" ? "событие" : "event",
-                            locale === "ru" ? "события" : "events",
-                            locale === "ru" ? "событий" : "events",
-                          )}
-                        </span>
-                        <span className="text-[9px] font-heading leading-tight text-muted-foreground">
-                          {dayEmployees} {ui.peopleShort}
-                        </span>
-                      </div>
-                    ) : (
-                      <div />
-                    )}
-                    <span
-                      className={`font-heading text-2xl font-bold leading-none ${
-                        primaryShiftEntry
-                          ? getEntryToneTextClass(primaryShiftEntry.statusTone) ??
-                            "text-emerald-600"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </span>
-                  </div>
 
-                  <div
-                    className={`space-y-0.5 ${
-                      dayEntries.length === 0
-                        ? "flex flex-1 items-center justify-center"
-                        : "mt-auto"
-                    }`}
-                  >
-                    {dayEntries.slice(0, 3).map((entry) => (
                       <div
-                        className={`flex items-center gap-1.5 truncate text-[11px] font-semibold leading-snug ${
-                          entry.kind === "shift"
-                            ? getEntryToneTextClass(entry.statusTone) ?? "text-blue-600"
-                            : entry.kind === "task"
-                              ? "text-amber-600"
-                              : "text-emerald-600"
-                        } ${entry.isDone ? "opacity-55" : ""}`}
-                        key={entry.id}
+                        className={`space-y-0.5 ${
+                          dayEntries.length === 0
+                            ? "flex flex-1 items-center justify-center"
+                            : "mt-auto"
+                        }`}
                       >
-                        <span className="truncate">{entry.time}</span>
-                        {entry.previewLabel ? (
-                          <span
-                            className={`truncate font-normal opacity-70 ${
-                              entry.isDone ? "line-through" : ""
-                            }`}
+                        {dayEntries.slice(0, 3).map((entry) => (
+                          <div
+                            className={`flex items-center gap-1.5 truncate text-[11px] font-semibold leading-snug ${
+                              entry.kind === "shift"
+                                ? getEntryToneTextClass(entry.statusTone) ?? "text-blue-600"
+                                : entry.kind === "task"
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                            } ${entry.isDone ? "opacity-55" : ""}`}
+                            key={entry.id}
                           >
-                            {entry.previewLabel}
-                          </span>
+                            <span className="truncate">{entry.time}</span>
+                            {entry.previewLabel ? (
+                              <span
+                                className={`truncate font-normal opacity-70 ${
+                                  entry.isDone ? "line-through" : ""
+                                }`}
+                              >
+                                {entry.previewLabel}
+                              </span>
+                            ) : null}
+                            {entry.peopleCount > 1 ? (
+                              <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-white/78 px-1.5 py-0.5 text-[9px] font-semibold text-foreground/75">
+                                <Users className="size-2.5" />
+                                {entry.peopleCount}
+                              </span>
+                            ) : null}
+                          </div>
+                        ))}
+
+                        {dayEntries.length > 3 ? (
+                          <p className="text-[9px] font-heading text-muted-foreground">
+                            +{dayEntries.length - 3} {ui.more}
+                          </p>
                         ) : null}
-                        {entry.peopleCount > 1 ? (
-                          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-1.5 py-0.5 text-[9px] font-semibold text-foreground/75">
-                            <Users className="size-2.5" />
-                            {entry.peopleCount}
-                          </span>
+
+                        {dayEntries.length === 0 ? (
+                          <p className="text-center text-[9px] font-heading italic text-muted-foreground/50">
+                            {ui.noCalendarItems}
+                          </p>
                         ) : null}
                       </div>
-                    ))}
-
-                    {dayEntries.length > 3 ? (
-                      <p className="text-[9px] font-heading text-muted-foreground">
-                        +{dayEntries.length - 3} {ui.more}
-                      </p>
-                    ) : null}
-
-                    {dayEntries.length === 0 ? (
-                      <p className="text-center text-[9px] font-heading italic text-muted-foreground/50">
-                        {ui.noCalendarItems}
-                      </p>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
+              </div>
             </section>
           </>
         ) : null}
@@ -3122,9 +3091,9 @@ export default function Schedule({
                         onClick={() => toggleDayEntry(entry.id)}
                         type="button"
                       >
-                        <div className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
+                        <div className="min-w-0 flex flex-1 items-center gap-3">
                           <span
-                            className={`shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] font-medium leading-[0.92] tracking-[-0.08em] uppercase ${
+                            className={`shrink-0 pb-[0.08em] font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] font-medium leading-[0.92] tracking-[-0.08em] uppercase ${
                               entry.kind === "shift"
                                 ? getEntryToneTextClass(entry.statusTone) ??
                                   "text-foreground"
@@ -3133,14 +3102,14 @@ export default function Schedule({
                           >
                             {entry.time}
                           </span>
-                          <span className="shrink-0 font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-muted-foreground">
+                          <span className="shrink-0 pb-[0.08em] font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-muted-foreground">
                             {entry.kind === "shift"
                               ? ui.shift
                               : entry.kind === "meeting"
                                 ? ui.meeting
                                 : ui.task}
                           </span>
-                          <h2 className="truncate font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
+                          <h2 className="min-w-0 flex-1 truncate pb-[0.12em] pr-[0.14em] -mb-[0.12em] -mr-[0.14em] font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.98] tracking-[-0.08em] uppercase text-foreground">
                             {entry.kind === "shift" ? entry.subtitle : entry.title}
                           </h2>
                         </div>

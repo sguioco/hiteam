@@ -210,8 +210,8 @@ export class EmployeesService {
     return this.getManagerAccess(tenantId, employeeId);
   }
 
-  getMe(user: JwtUser) {
-    return this.prisma.employee.findFirst({
+  async getMe(user: JwtUser) {
+    const employee = await this.prisma.employee.findFirst({
       where: {
         tenantId: user.tenantId,
         userId: user.sub,
@@ -229,8 +229,31 @@ export class EmployeesService {
         primaryLocation: true,
         position: true,
         devices: true,
+        invitation: {
+          select: {
+            avatarStorageKey: true,
+            avatarUrl: true,
+          },
+        },
       },
     });
+
+    if (!employee) {
+      return null;
+    }
+
+    const { invitation, ...employeeProfile } = employee;
+    const resolvedAvatarUrl =
+      employee.avatarUrl ??
+      (employee.avatarStorageKey ? this.storageService.getObjectUrl(employee.avatarStorageKey) : null) ??
+      invitation?.avatarUrl ??
+      (invitation?.avatarStorageKey ? this.storageService.getObjectUrl(invitation.avatarStorageKey) : null) ??
+      null;
+
+    return {
+      ...employeeProfile,
+      avatarUrl: resolvedAvatarUrl,
+    };
   }
 
   async updateMyPreferences(user: JwtUser, dto: UpdateMyPreferencesDto) {
@@ -770,6 +793,9 @@ export class EmployeesService {
         const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
         const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, invitation.tenantId);
 
+        const employeeAvatarStorageKey = avatar?.key ?? invitation.avatarStorageKey ?? null;
+        const employeeAvatarUrl = avatar?.url ?? invitation.avatarUrl ?? null;
+
         const employee = await tx.employee.create({
           data: {
             tenantId: invitation.tenantId,
@@ -785,8 +811,8 @@ export class EmployeesService {
             birthDate: new Date(dto.birthDate),
             gender: dto.gender,
             phone: dto.phone.trim(),
-            avatarStorageKey: avatar?.key ?? null,
-            avatarUrl: avatar?.url ?? null,
+            avatarStorageKey: employeeAvatarStorageKey,
+            avatarUrl: employeeAvatarUrl,
             status: shouldAutoApprove ? EmployeeStatus.ACTIVE : EmployeeStatus.INACTIVE,
             hireDate: new Date(),
           },
@@ -815,8 +841,8 @@ export class EmployeesService {
             birthDate: new Date(dto.birthDate),
             gender: dto.gender,
             phone: dto.phone.trim(),
-            avatarStorageKey: avatar?.key ?? null,
-            avatarUrl: avatar?.url ?? null,
+            avatarStorageKey: employeeAvatarStorageKey,
+            avatarUrl: employeeAvatarUrl,
           },
         });
 

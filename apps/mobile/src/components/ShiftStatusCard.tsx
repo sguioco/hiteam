@@ -26,6 +26,8 @@ type ShiftStatusCardProps = {
   onPrimaryAction?: () => void;
 };
 
+type DurationGrammarCase = 'nominative' | 'accusative';
+
 function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
   const player = useVideoPlayer(HERO_BANNER_VIDEO_SOURCE, (nextPlayer) => {
     nextPlayer.loop = true;
@@ -71,14 +73,21 @@ function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
   );
 }
 
-function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', language: AppLanguage) {
+function formatDurationPart(
+  value: number,
+  unit: 'day' | 'hour' | 'minute',
+  language: AppLanguage,
+  grammarCase: DurationGrammarCase = 'nominative',
+) {
   if (language === 'ru') {
     const labels =
       unit === 'day'
         ? (['день', 'дня', 'дней'] as const)
         : unit === 'hour'
           ? (['час', 'часа', 'часов'] as const)
-          : (['минута', 'минуты', 'минут'] as const);
+          : grammarCase === 'accusative'
+            ? (['минуту', 'минуты', 'минут'] as const)
+            : (['минута', 'минуты', 'минут'] as const);
 
     return `${value} ${pluralizeRu(value, labels)}`;
   }
@@ -99,7 +108,11 @@ function formatDurationPart(value: number, unit: 'day' | 'hour' | 'minute', lang
   return `${value} ${label}`;
 }
 
-function formatDuration(totalMinutes: number, language: AppLanguage) {
+function formatDuration(
+  totalMinutes: number,
+  language: AppLanguage,
+  grammarCase: DurationGrammarCase = 'nominative',
+) {
   const safeMinutes = Math.max(Math.ceil(totalMinutes), 0);
   if (safeMinutes === 0) {
     return language === 'ru' ? 'меньше минуты' : 'less than a minute';
@@ -111,19 +124,19 @@ function formatDuration(totalMinutes: number, language: AppLanguage) {
   const parts: string[] = [];
 
   if (days > 0) {
-    parts.push(formatDurationPart(days, 'day', language));
+    parts.push(formatDurationPart(days, 'day', language, grammarCase));
   }
 
   if (hours > 0) {
-    parts.push(formatDurationPart(hours, 'hour', language));
+    parts.push(formatDurationPart(hours, 'hour', language, grammarCase));
   }
 
   if (days === 0 && minutes > 0) {
-    parts.push(formatDurationPart(minutes, 'minute', language));
+    parts.push(formatDurationPart(minutes, 'minute', language, grammarCase));
   }
 
   if (parts.length === 0) {
-    return formatDurationPart(minutes, 'minute', language);
+    return formatDurationPart(minutes, 'minute', language, grammarCase);
   }
 
   return parts.slice(0, 2).join(' ');
@@ -236,9 +249,18 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 
   const shiftMeta = useMemo(() => {
     const now = new Date();
+    const nextCheckInShift = status?.shift ?? status?.nextShift ?? null;
+    const nextCheckInShiftStart = nextCheckInShift
+      ? new Date(nextCheckInShift.startsAt)
+      : null;
     const canCheckIn =
       status?.attendanceState === 'not_checked_in' &&
-      status.allowedActions.includes('check_in');
+      status.allowedActions.includes('check_in') &&
+      Boolean(
+        nextCheckInShiftStart &&
+          !Number.isNaN(nextCheckInShiftStart.getTime()) &&
+          now.getTime() >= nextCheckInShiftStart.getTime() - 2 * 60 * 60 * 1000,
+      );
 
     if (loading) {
       return {
@@ -269,7 +291,9 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
             minute: '2-digit',
           })}`,
           locationLabel: status.nextShift.locationName,
-          statusText: t('today.startsIn', { duration: formatDuration(minutesBeforeStart, language) }),
+          statusText: t('today.startsIn', {
+            duration: formatDuration(minutesBeforeStart, language, 'accusative'),
+          }),
           statusColor: '#86efac',
           statusIcon: 'time-outline' as const,
           statusVariant: 'default' as const,
@@ -363,12 +387,14 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         body: t('today.cardReadyBody'),
         timing,
         locationLabel: status.location.name,
-        statusText: t('today.startsIn', { duration: formatDuration(minutesBeforeStart, language) }),
+        statusText: t('today.startsIn', {
+          duration: formatDuration(minutesBeforeStart, language, 'accusative'),
+        }),
         statusColor: '#86efac',
         statusIcon: 'time-outline' as const,
         statusVariant: 'default' as const,
-        buttonLabel: t('workspace.checkIn'),
-        buttonTone: 'success' as const,
+        buttonLabel: canCheckIn ? t('workspace.checkIn') : null,
+        buttonTone: canCheckIn ? ('success' as const) : ('neutral' as const),
       };
     }
 
@@ -383,8 +409,8 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         statusColor: '#fb7185',
         statusIcon: 'alert-circle-outline' as const,
         statusVariant: 'late' as const,
-        buttonLabel: t('workspace.checkIn'),
-        buttonTone: 'success' as const,
+        buttonLabel: canCheckIn ? t('workspace.checkIn') : null,
+        buttonTone: canCheckIn ? ('success' as const) : ('neutral' as const),
       };
     }
 

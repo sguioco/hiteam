@@ -223,6 +223,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
     });
   }, [isManager, items]);
+  const isEmptyState = !loading && !error && orderedItems.length === 0;
 
   async function loadData(options?: { silent?: boolean }) {
     if (!options?.silent) {
@@ -444,19 +445,21 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   }
 
   const content = (
-    <>
-      <View className="flex-row items-center justify-between gap-3 px-1">
-        <Text className="flex-1 text-[30px] font-extrabold text-foreground">
+    <View className={isEmptyState ? 'flex-1 gap-5' : 'gap-5'}>
+      <View className="relative min-h-[44px] justify-center px-1">
+        <Text className="px-20 text-center text-[30px] text-foreground">
           {copy.title}
         </Text>
         {isManager ? (
-          <Button
-            className="rounded-full border-white/80 bg-white/80 px-5"
-            label={`+ ${copy.create}`}
-            onPress={() => router.push('/manager/create-news')}
-            textClassName="text-[13px] tracking-[1.2px]"
-            variant="secondary"
-          />
+          <View className="absolute bottom-0 right-1 top-0 justify-center">
+            <Button
+              className="rounded-full border-white/80 bg-white/80 px-5"
+              label={`+ ${copy.create}`}
+              onPress={() => router.push('/manager/create-news')}
+              textClassName="text-[13px] tracking-[1.2px]"
+              variant="secondary"
+            />
+          </View>
         ) : null}
       </View>
 
@@ -631,17 +634,17 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           </View>
         </>
       ) : (
-        <Card>
-          <Text className="text-[15px] leading-6 text-muted-foreground">{copy.empty}</Text>
-        </Card>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-[17px] leading-6 text-[#5f728b]">{copy.empty}</Text>
+        </View>
       )}
-    </>
+    </View>
   );
 
   if (standalone) {
     return (
       <>
-        <Screen contentClassName="pb-10 pt-3" withGradient>{content}</Screen>
+        <Screen contentClassName={isEmptyState ? 'flex-grow pb-10 pt-3' : 'pb-10 pt-3'} withGradient>{content}</Screen>
         <BottomSheetModal
           onClose={() => setEditingItem(null)}
           sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
@@ -714,13 +717,14 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       <ScrollView
         className="flex-1 bg-transparent"
         contentContainerStyle={{
+          flexGrow: 1,
           paddingBottom: 124,
           paddingHorizontal: 16,
           paddingTop: insets.top + 12,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-5">{content}</View>
+        {content}
       </ScrollView>
 
       <BottomSheetModal

@@ -433,9 +433,7 @@ const Index = () => {
               onPress={() => {
                 closeStartShiftPrompt();
                 navigateToTab('today');
-                void resolveAttendanceActionHref('check-in').then((href) => {
-                  router.push(href);
-                });
+                router.push(resolveAttendanceActionHref('check-in'));
               }}
             >
               <Text style={styles.primaryButtonLabel}>{t('today.startPromptConfirm')}</Text>
