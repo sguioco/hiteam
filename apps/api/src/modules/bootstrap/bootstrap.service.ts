@@ -81,6 +81,27 @@ function startOfSixMonthWindow(reference: Date) {
   return next;
 }
 
+async function withTimeoutFallback<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 @Injectable()
 export class BootstrapService {
   constructor(
@@ -331,7 +352,11 @@ export class BootstrapService {
         })
         .catch(() => []),
       this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
-      this.auditService.listCompanyActivity(user.tenantId).catch(() => []),
+      withTimeoutFallback(
+        this.auditService.listCompanyActivity(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
     ]);
 
     return {

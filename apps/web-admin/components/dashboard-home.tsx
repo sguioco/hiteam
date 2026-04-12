@@ -941,6 +941,19 @@ export default function DashboardHome({
       });
 
       applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
+    } catch (error) {
+      if (!options?.silent) {
+        setMessageAction(null);
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : localize(
+                locale,
+                "Не удалось загрузить дашборд.",
+                "Failed to load the dashboard.",
+              ),
+        );
+      }
     } finally {
       if (!options?.silent) {
         setIsBootstrapping(false);

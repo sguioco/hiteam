@@ -21,6 +21,7 @@ type ApiRequestOptions = RequestInit & {
   realBackend?: boolean;
   cacheTtlMs?: number;
   skipClientCache?: boolean;
+  timeoutMs?: number;
 };
 
 function canUseBrowserStorage() {
@@ -117,6 +118,24 @@ function buildRequestCacheKey(path: string, options?: ApiRequestOptions) {
   ].join("|");
 }
 
+function resolveRequestTimeoutMs(path: string, options?: ApiRequestOptions) {
+  if (typeof options?.timeoutMs === "number") {
+    return options.timeoutMs;
+  }
+
+  const method = normalizeMethod(options?.method);
+
+  if (method === "GET" || method === "HEAD") {
+    return 15_000;
+  }
+
+  if (options?.body instanceof FormData) {
+    return 60_000;
+  }
+
+  return 30_000;
+}
+
 async function fetchAndCacheApiRequest<T>(
   cacheKey: string,
   path: string,
@@ -198,6 +217,7 @@ async function performApiFetch(
   return fetch(`${API_URL}/api/v1${path}`, {
     ...options,
     headers,
+    signal: options?.signal ?? AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
   });
 }
 
@@ -216,6 +236,7 @@ async function performApiDownloadFetch(
   return fetch(`${API_URL}/api/v1${path}`, {
     ...options,
     headers,
+    signal: options?.signal ?? AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
   });
 }
 
