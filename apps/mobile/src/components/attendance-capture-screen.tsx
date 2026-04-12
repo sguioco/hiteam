@@ -7,7 +7,7 @@ import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
-import type { BiometricPolicyResponse } from "@smart/types";
+import type { AttendanceStatusResponse, BiometricPolicyResponse } from "@smart/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
@@ -26,7 +26,7 @@ import {
   isPreciseLocationError,
   type AttendanceLocationSnapshot,
 } from "../../lib/location";
-import { peekScreenCache, readScreenCache } from "../../lib/screen-cache";
+import { peekScreenCache, readScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import {
   TODAY_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_TTL_MS,
@@ -299,6 +299,22 @@ export function AttendanceCaptureScreen({
       : false;
   }
 
+  function redirectToBiometricSetup() {
+    setCapturedArtifact(null);
+    setError(
+      language === "ru"
+        ? "Биометрия не настроена. Завершите первичную регистрацию лица перед отметкой."
+        : "Biometric enrollment is not configured yet. Complete the initial face setup before attendance.",
+    );
+    router.replace({
+      pathname: "/biometric" as never,
+      params: {
+        mode: "enroll",
+        returnTo: "/today",
+      },
+    });
+  }
+
   async function refresh(options?: { silent?: boolean }) {
     if (!options?.silent) {
       setLoading(true);
@@ -315,6 +331,11 @@ export function AttendanceCaptureScreen({
 
       const activeStatus = applyLatestStatus(nextStatus);
       if (!activeStatus) {
+        return;
+      }
+
+      if (nextBiometricPolicy.enrollmentStatus !== "ENROLLED") {
+        redirectToBiometricSetup();
         return;
       }
 
@@ -526,6 +547,19 @@ export function AttendanceCaptureScreen({
       return;
     }
 
+    const nextBiometricPolicy =
+      biometricPolicy ?? (await loadBiometricPolicy().catch(() => null));
+    if (!nextBiometricPolicy) {
+      setError(t("biometric.policyUnavailable"));
+      return;
+    }
+
+    setBiometricPolicy(nextBiometricPolicy);
+    if (nextBiometricPolicy.enrollmentStatus !== "ENROLLED") {
+      redirectToBiometricSetup();
+      return;
+    }
+
     const nextLocationCheck = hasFreshLocationCheck(locationCheck)
       ? locationCheck
       : await runLocationCheck(nextStatus);
@@ -584,32 +618,12 @@ export function AttendanceCaptureScreen({
       setCapturedArtifact(frozenArtifact);
       const artifacts = [artifactDataUrl];
       const captureMetadata = {
-        mode:
-          biometricPolicy?.enrollmentStatus === "ENROLLED"
-            ? "verify"
-            : "enroll",
+        mode: "verify",
         captureSource: "expo-camera",
         platform: "mobile",
         frameCount: 1,
         capturedAt: new Date().toISOString(),
       };
-
-      if (biometricPolicy?.enrollmentStatus !== "ENROLLED") {
-        setCapturedArtifact(null);
-        setError(
-          language === "ru"
-            ? "Биометрия не настроена. Завершите первичную регистрацию лица перед отметкой."
-            : "Biometric enrollment is not configured yet. Complete the initial face setup before attendance.",
-        );
-        router.replace({
-          pathname: "/biometric" as never,
-          params: {
-            mode: "enroll",
-            returnTo: "/today",
-          },
-        });
-        return;
-      }
 
       const verificationResult = await verifyBiometricWithArtifacts(
         intent,
@@ -651,13 +665,29 @@ export function AttendanceCaptureScreen({
     setError(null);
 
     try {
-      await submitAttendanceAction(action, {
+      const attendanceResult = await submitAttendanceAction(action, {
         ...snapshot,
         biometricVerificationId: verificationId,
         notes: isCheckIn
           ? "Mobile attendance check-in"
           : "Mobile attendance check-out",
       });
+
+      const currentStatus =
+        status ?? initialTodaySnapshot?.value.attendanceStatus ?? null;
+      const optimisticStatus = buildOptimisticAttendanceStatus(
+        currentStatus,
+        attendanceResult as {
+          sessionId: string;
+          recordedAt: string;
+        },
+      );
+
+      if (optimisticStatus) {
+        setStatus(optimisticStatus);
+        await syncTodayScreenCache(optimisticStatus);
+      }
+
       router.replace("/today" as never);
     } catch (nextError) {
       const nextMessage =
@@ -686,6 +716,60 @@ export function AttendanceCaptureScreen({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function buildOptimisticAttendanceStatus(
+    currentStatus: AttendanceStatusResponse | null,
+    actionResult: {
+      sessionId: string;
+      recordedAt: string;
+    },
+  ): AttendanceStatusResponse | null {
+    if (!currentStatus) {
+      return null;
+    }
+
+    if (isCheckIn) {
+      return {
+        ...currentStatus,
+        attendanceState: "checked_in",
+        allowedActions: ["check_out", "start_break"],
+        activeSession: {
+          id: actionResult.sessionId,
+          startedAt: actionResult.recordedAt,
+          endedAt: null,
+          breakMinutes: 0,
+          paidBreakMinutes: 0,
+          activeBreak: null,
+        },
+      };
+    }
+
+    return {
+      ...currentStatus,
+      attendanceState: "checked_out",
+      allowedActions: [],
+      activeSession: null,
+    };
+  }
+
+  async function syncTodayScreenCache(nextAttendanceStatus: AttendanceStatusResponse) {
+    const currentSnapshot =
+      peekScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      ) ??
+      (await readScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      ));
+
+    await writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
+      attendanceStatus: nextAttendanceStatus,
+      profile: currentSnapshot?.value.profile ?? null,
+      shifts: currentSnapshot?.value.shifts ?? [],
+      tasks: currentSnapshot?.value.tasks ?? [],
+    } satisfies TodayScreenCacheValue);
   }
 
   async function handlePrimaryAction() {

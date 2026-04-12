@@ -92,7 +92,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   }
 
   async startEnrollment(userId: string, dto: StartEnrollmentDto) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: { biometricProfile: true },
+    });
+    this.assertEnrollmentCanBeStarted(employee.biometricProfile);
 
     const profile = await this.prisma.biometricProfile.upsert({
       where: { employeeId: employee.id },
@@ -126,7 +130,19 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createAwsLivenessBootstrap(userId: string, mode: 'enroll' | 'verify') {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: { biometricProfile: true },
+    });
+
+    if (mode === 'enroll') {
+      this.assertEnrollmentCanBeStarted(employee.biometricProfile);
+    } else if (
+      !employee.biometricProfile ||
+      employee.biometricProfile.enrollmentStatus !== BiometricEnrollmentStatus.ENROLLED
+    ) {
+      throw new ForbiddenException('Biometric enrollment must be completed before verification.');
+    }
 
     if (!this.biometricProviderService.isAwsRekognitionEnabled()) {
       throw new ForbiddenException('AWS face liveness provider is not enabled.');
@@ -161,7 +177,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
   }
 
   async completeEnrollment(userId: string, dto: CompleteEnrollmentDto) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { userId },
+      include: { biometricProfile: true },
+    });
+    this.assertEnrollmentCanBeStarted(employee.biometricProfile);
     const awsProviderEnabled = this.biometricProviderService.isAwsRekognitionEnabled();
     const comprefaceEnabled = this.biometricProviderService.isCompreFaceEnabled();
     const awsSessionId =
@@ -1118,6 +1138,25 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     }
 
     return Buffer.from(match[2], 'base64');
+  }
+
+  private assertEnrollmentCanBeStarted(
+    profile:
+      | {
+          enrollmentStatus: BiometricEnrollmentStatus;
+          templateRef: string | null;
+        }
+      | null
+      | undefined,
+  ) {
+    if (
+      profile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED &&
+      profile.templateRef
+    ) {
+      throw new ForbiddenException(
+        'Biometric reference is already registered. Reset the existing enrollment before capturing a new reference.',
+      );
+    }
   }
 
   private buildBullConnection(redisUrl: string) {

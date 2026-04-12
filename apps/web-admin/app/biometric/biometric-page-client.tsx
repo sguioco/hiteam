@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Search,
@@ -25,6 +25,7 @@ import { apiRequest } from '../../lib/api';
 import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 import { getMockAvatarDataUrl } from '../../lib/mock-avatar';
+import { navigateWithClickSupport } from '../../lib/navigation';
 
 type EmployeeOption = {
   id: string;
@@ -226,8 +227,15 @@ export default function BiometricReviewPageClient({
     });
   }, [locale, reviews?.items, search, sortDescriptor]);
 
-  function openEmployeeProfile(targetEmployeeId: string) {
-    router.push(`/employees/${targetEmployeeId}`);
+  function openEmployeeProfile(
+    targetEmployeeId: string,
+    event?: MouseEvent<HTMLElement>,
+  ) {
+    navigateWithClickSupport(
+      (href) => router.push(href),
+      `/employees/${targetEmployeeId}`,
+      event,
+    );
   }
 
 function renderStatusChip(label: string, tone: string) {
@@ -383,7 +391,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--identity"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               <div className="flex items-center gap-3">
@@ -409,7 +417,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle whitespace-nowrap">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--center"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               {renderStatusChip(
@@ -422,7 +430,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle whitespace-nowrap">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--center"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               <span className="team-tasks-team-text">
@@ -436,7 +444,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle whitespace-nowrap">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--center"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               {item.latestVerification
@@ -451,7 +459,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--progress"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
@@ -463,7 +471,7 @@ function getEnrollmentStatusLabel(
                           <Table.Cell className="align-middle">
                             <button
                               className="team-tasks-row-button team-tasks-row-button--progress"
-                              onClick={() => openEmployeeProfile(item.employeeId)}
+                              onClick={(event) => openEmployeeProfile(item.employeeId, event)}
                               type="button"
                             >
                               <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">

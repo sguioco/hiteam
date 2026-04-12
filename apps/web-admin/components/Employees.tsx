@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
@@ -73,6 +73,7 @@ import {
   normalizeWebAdminTaskPriority,
 } from "@/lib/task-priority";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
+import { navigateWithClickSupport } from "@/lib/navigation";
 
 type EmployeeApiRecord = {
   id: string;
@@ -939,8 +940,15 @@ const Employees = ({
     [employees, selectedEmployeeId],
   );
 
-  function openEmployeePage(employeeId: string) {
-    router.push(`/employees/${employeeId}`);
+  function openEmployeePage(
+    employeeId: string,
+    event?: MouseEvent<HTMLElement>,
+  ) {
+    navigateWithClickSupport(
+      (href) => router.push(href),
+      `/employees/${employeeId}`,
+      event,
+    );
   }
 
   const groupEditor = useMemo(
@@ -1826,7 +1834,7 @@ const Employees = ({
                   <Table.Cell className="align-middle">
                     <button
                       className="team-tasks-row-button team-tasks-row-button--identity"
-                      onClick={() => openEmployeePage(employee.id)}
+                      onClick={(event) => openEmployeePage(employee.id, event)}
                       type="button"
                     >
                       <div className="flex items-center gap-3">
@@ -1852,7 +1860,7 @@ const Employees = ({
                   <Table.Cell className="align-middle whitespace-nowrap">
                     <button
                       className="team-tasks-row-button team-tasks-row-button--center"
-                      onClick={() => openEmployeePage(employee.id)}
+                      onClick={(event) => openEmployeePage(employee.id, event)}
                       type="button"
                     >
                       {renderEmployeeStatusBadge(employee.status)}
@@ -1862,7 +1870,7 @@ const Employees = ({
                   <Table.Cell className="align-middle whitespace-nowrap">
                     <button
                       className="team-tasks-row-button team-tasks-row-button--center"
-                      onClick={() => openEmployeePage(employee.id)}
+                      onClick={(event) => openEmployeePage(employee.id, event)}
                       type="button"
                     >
                       <span className="team-tasks-team-text">
@@ -1874,7 +1882,7 @@ const Employees = ({
                   <Table.Cell className="align-middle whitespace-nowrap">
                     <button
                       className="team-tasks-row-button team-tasks-row-button--center"
-                      onClick={() => openEmployeePage(employee.id)}
+                      onClick={(event) => openEmployeePage(employee.id, event)}
                       type="button"
                     >
                       {employee.group ? (
@@ -1890,7 +1898,7 @@ const Employees = ({
                   <Table.Cell className="align-middle">
                     <button
                       className="team-tasks-row-button team-tasks-row-button--progress"
-                      onClick={() => openEmployeePage(employee.id)}
+                      onClick={(event) => openEmployeePage(employee.id, event)}
                       type="button"
                     >
                       <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">

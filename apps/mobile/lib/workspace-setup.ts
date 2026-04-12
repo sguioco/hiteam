@@ -48,3 +48,19 @@ export function getWorkspaceSetupHref(step: Exclude<WorkspaceSetupStep, null>) {
 
   return '/onboarding/workspace-ready' as const;
 }
+
+export async function resolveAttendanceActionHref(action: 'check-in' | 'check-out') {
+  const biometricPolicy = await loadBiometricPolicy().catch(() => null);
+
+  if (biometricPolicy?.enrollmentStatus !== 'ENROLLED') {
+    return {
+      pathname: '/biometric' as const,
+      params: {
+        mode: 'enroll',
+        returnTo: '/today',
+      },
+    };
+  }
+
+  return action === 'check-in' ? ('/say-hi' as const) : ('/say-bye' as const);
+}

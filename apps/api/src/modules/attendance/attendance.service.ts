@@ -2313,12 +2313,14 @@ export class AttendanceService {
         lateMinutes: session.lateMinutes,
         earlyLeaveMinutes: session.earlyLeaveMinutes,
         checkInEvent: {
+          eventId: session.checkInEvent.id,
           occurredAt: session.checkInEvent.occurredAt.toISOString(),
           distanceMeters: Math.round(session.checkInEvent.distanceMeters),
           notes: session.checkInEvent.notes,
         },
         checkOutEvent: session.checkOutEvent
           ? {
+              eventId: session.checkOutEvent.id,
               occurredAt: session.checkOutEvent.occurredAt.toISOString(),
               distanceMeters: Math.round(session.checkOutEvent.distanceMeters),
               notes: session.checkOutEvent.notes,

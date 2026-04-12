@@ -13,6 +13,7 @@ import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCach
 import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
 import { primeTaskTranslations } from '../../lib/use-translated-task-copy';
 import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
+import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
 import TaskList from '../components/TaskList';
@@ -368,7 +369,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     return attendanceStatus;
   }, [attendanceStatus, shifts]);
 
-  function openAttendanceAction() {
+  async function openAttendanceAction() {
     if (!effectiveAttendanceStatus) {
       return;
     }
@@ -377,7 +378,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       effectiveAttendanceStatus.attendanceState === 'not_checked_in' &&
       effectiveAttendanceStatus.allowedActions.includes('check_in')
     ) {
-      router.push('/say-hi' as never);
+      router.push(await resolveAttendanceActionHref('check-in'));
       return;
     }
 
@@ -386,7 +387,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         effectiveAttendanceStatus.attendanceState === 'on_break') &&
       effectiveAttendanceStatus.allowedActions.includes('check_out')
     ) {
-      router.push('/say-bye' as never);
+      router.push(await resolveAttendanceActionHref('check-out'));
     }
   }
 

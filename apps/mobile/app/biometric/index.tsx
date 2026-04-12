@@ -46,11 +46,24 @@ export default function BiometricPage() {
   const [artifacts, setArtifacts] = useState<string[]>([]);
 
   useEffect(() => {
-    if (forcedMode) {
-      setMode(forcedMode);
-      setArtifacts([]);
+    if (!policy) {
+      if (forcedMode) {
+        setMode(forcedMode);
+        setArtifacts([]);
+      }
+      return;
     }
-  }, [forcedMode]);
+
+    const nextMode =
+      policy.enrollmentStatus === "ENROLLED"
+        ? "verify"
+        : forcedMode === "verify"
+          ? "enroll"
+          : forcedMode ?? "enroll";
+
+    setMode(nextMode);
+    setArtifacts([]);
+  }, [forcedMode, policy]);
 
   async function refresh() {
     setLoading(true);

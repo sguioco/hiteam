@@ -224,9 +224,18 @@ export default function EmployeeCardPageClient({
   const [selectedVerificationId, setSelectedVerificationId] = useState<
     string | null
   >(null);
+  const [selectedAttendanceSessionId, setSelectedAttendanceSessionId] =
+    useState<string | null>(null);
   const session = getSession();
   const canManageRoles = hasDesktopAdminAccess(session?.user.roleCodes ?? []);
-  const didUseInitialData = useRef(Boolean(initialData));
+  const initialDataIsComplete = Boolean(
+    initialData?.employee &&
+      initialData?.history &&
+      initialData?.anomalies &&
+      initialData?.biometricHistory &&
+      (!canManageRoles || initialData?.managerAccess),
+  );
+  const didUseInitialData = useRef(Boolean(initialData) && initialDataIsComplete);
 
   async function loadEmployeePageData(targetEmployeeId: string) {
     const session = getSession();
@@ -374,6 +383,28 @@ export default function EmployeeCardPageClient({
   );
   const selectedVerificationArtifacts =
     selectedVerification?.artifacts.filter((artifact) => artifact.url) ?? [];
+  const selectedAttendanceSession = useMemo(
+    () =>
+      history?.rows.find((item) => item.sessionId === selectedAttendanceSessionId) ??
+      null,
+    [history, selectedAttendanceSessionId],
+  );
+  const selectedCheckInVerification = useMemo(
+    () =>
+      biometricHistory?.verifications.find(
+        (item) =>
+          item.attendanceEvent?.id === selectedAttendanceSession?.checkInEvent.eventId,
+      ) ?? null,
+    [biometricHistory, selectedAttendanceSession],
+  );
+  const selectedCheckOutVerification = useMemo(
+    () =>
+      biometricHistory?.verifications.find(
+        (item) =>
+          item.attendanceEvent?.id === selectedAttendanceSession?.checkOutEvent?.eventId,
+      ) ?? null,
+    [biometricHistory, selectedAttendanceSession],
+  );
   const biometricStatusLabel = getEnrollmentStatusLabel(
     biometricHistory?.profile?.enrollmentStatus,
     locale,
@@ -678,6 +709,9 @@ export default function EmployeeCardPageClient({
                           ? "История посещаемости"
                           : "Attendance history"
                       }
+                      onRowAction={(key) =>
+                        setSelectedAttendanceSessionId(String(key))
+                      }
                       size="sm"
                     >
                       <Table.Header>
@@ -715,7 +749,7 @@ export default function EmployeeCardPageClient({
                       <Table.Body items={history.rows}>
                         {(row) => (
                           <Table.Row
-                            className="team-tasks-table-row"
+                            className="team-tasks-table-row cursor-pointer"
                             id={row.sessionId}
                           >
                             <Table.Cell className="font-medium">
@@ -1228,6 +1262,136 @@ export default function EmployeeCardPageClient({
               />
             ))}
         </div>
+
+        <Dialog
+          open={Boolean(selectedAttendanceSession)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedAttendanceSessionId(null);
+            }
+          }}
+        >
+          <DialogContent className="w-[min(1080px,calc(100vw-2rem))]">
+            <DialogHeader>
+              <DialogTitle>
+                {locale === "ru"
+                  ? "Биометрия смены"
+                  : "Shift biometric verification"}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedAttendanceSession
+                  ? `${formatDate(selectedAttendanceSession.startedAt)} • ${
+                      locale === "ru" ? "Смена" : "Shift"
+                    }`
+                  : locale === "ru"
+                    ? "Скан check-in и check-out для выбранной смены."
+                    : "Check-in and check-out scans for the selected shift."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedAttendanceSession ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {[
+                  {
+                    key: "check-in",
+                    label: "Check-in",
+                    verification: selectedCheckInVerification,
+                    occurredAt: selectedAttendanceSession.checkInEvent.occurredAt,
+                  },
+                  {
+                    key: "check-out",
+                    label: "Check-out",
+                    verification: selectedCheckOutVerification,
+                    occurredAt:
+                      selectedAttendanceSession.checkOutEvent?.occurredAt ?? null,
+                  },
+                ].map((item) => {
+                  const previewArtifact =
+                    item.verification?.artifacts.find((artifact) => artifact.url) ??
+                    null;
+
+                  return (
+                    <div
+                      className="rounded-2xl border border-border bg-card p-4"
+                      key={item.key}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-foreground">
+                            {item.label}
+                          </h3>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {item.occurredAt
+                              ? `${formatDate(item.occurredAt)} ${formatTime(item.occurredAt)}`
+                              : locale === "ru"
+                                ? "Событие не записано"
+                                : "Event not recorded"}
+                          </p>
+                        </div>
+                        {item.verification ? (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              item.verification.result === "PASSED"
+                                ? "bg-green-50 text-green-700"
+                                : item.verification.result === "REVIEW"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {item.verification.result}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {previewArtifact?.url ? (
+                        <img
+                          alt={
+                            locale === "ru"
+                              ? `Биометрия ${item.label}`
+                              : `${item.label} biometric`
+                          }
+                          className="mb-3 h-72 w-full rounded-2xl border border-border object-cover"
+                          src={previewArtifact.url}
+                        />
+                      ) : (
+                        <div className="mb-3 flex h-72 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+                          {item.occurredAt
+                            ? locale === "ru"
+                              ? "Для этого события не найдено сохранённое фото биометрии."
+                              : "No saved biometric photo was found for this event."
+                            : locale === "ru"
+                              ? "Check-out ещё не записан."
+                              : "Check-out has not been recorded yet."}
+                        </div>
+                      )}
+
+                      <dl className="grid gap-2 text-sm">
+                        <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/20 px-3 py-2">
+                          <dt className="text-muted-foreground">Liveness</dt>
+                          <dd className="font-medium text-foreground">
+                            {item.verification?.livenessScore !== null &&
+                            item.verification?.livenessScore !== undefined
+                              ? `${Math.round(item.verification.livenessScore * 100)}%`
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/20 px-3 py-2">
+                          <dt className="text-muted-foreground">Match</dt>
+                          <dd className="font-medium text-foreground">
+                            {item.verification?.matchScore !== null &&
+                            item.verification?.matchScore !== undefined
+                              ? `${Math.round(item.verification.matchScore * 100)}%`
+                              : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={Boolean(selectedVerification)}

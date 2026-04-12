@@ -23,6 +23,7 @@ import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 import { useI18n } from '../../lib/i18n';
 import { hydrateWorkspaceCaches, warmWorkspaceCaches, WORKSPACE_REFRESH_INTERVAL_MS } from '../../lib/workspace-cache';
+import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
 
 type Tab = 'calendar' | 'today' | 'manage' | 'news' | 'profile';
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
@@ -432,7 +433,9 @@ const Index = () => {
               onPress={() => {
                 closeStartShiftPrompt();
                 navigateToTab('today');
-                router.push('/say-hi' as never);
+                void resolveAttendanceActionHref('check-in').then((href) => {
+                  router.push(href);
+                });
               }}
             >
               <Text style={styles.primaryButtonLabel}>{t('today.startPromptConfirm')}</Text>

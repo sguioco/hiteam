@@ -129,6 +129,61 @@ function formatDuration(totalMinutes: number, language: AppLanguage) {
   return parts.slice(0, 2).join(' ');
 }
 
+const RU_WEEKDAY_SHORT = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'] as const;
+const EN_WEEKDAY_SHORT = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
+
+function isSameCalendarDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function formatNextShiftHint(
+  nextShift: AttendanceStatusResponse['nextShift'],
+  now: Date,
+  language: AppLanguage,
+  locale: string,
+) {
+  if (!nextShift) {
+    return null;
+  }
+
+  const nextShiftStart = new Date(nextShift.startsAt);
+  if (Number.isNaN(nextShiftStart.getTime())) {
+    return null;
+  }
+
+  const timeLabel = nextShiftStart.toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (isSameCalendarDay(nextShiftStart, now)) {
+    return language === 'ru'
+      ? `Следующая: сегодня в ${timeLabel}`
+      : `Next: today at ${timeLabel}`;
+  }
+
+  if (isSameCalendarDay(nextShiftStart, tomorrow)) {
+    return language === 'ru'
+      ? `Следующая: завтра в ${timeLabel}`
+      : `Next: tomorrow at ${timeLabel}`;
+  }
+
+  const weekdayLabel =
+    language === 'ru'
+      ? RU_WEEKDAY_SHORT[nextShiftStart.getDay()]
+      : EN_WEEKDAY_SHORT[nextShiftStart.getDay()];
+
+  return language === 'ru'
+    ? `Следующая: ${weekdayLabel} в ${timeLabel}`
+    : `Next: ${weekdayLabel} at ${timeLabel}`;
+}
+
 const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
   const { config: bannerTheme } = useBannerTheme();
@@ -278,12 +333,21 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
     }
 
     if (status.attendanceState === 'checked_out') {
+      const nextShiftHint = formatNextShiftHint(
+        status.nextShift,
+        now,
+        language,
+        locale,
+      );
+
       return {
         title: t('today.cardCheckedOutTitle'),
         body: t('today.cardCheckedOutBody'),
         timing,
         locationLabel: status.location.name,
-        statusText: t('today.shiftComplete'),
+        statusText: nextShiftHint
+          ? `${t('today.shiftComplete')} • ${nextShiftHint}`
+          : t('today.shiftComplete'),
         statusColor: '#cbd5e1',
         statusIcon: 'moon-outline' as const,
         statusVariant: 'default' as const,
@@ -341,7 +405,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 
   const buttonClasses =
     shiftMeta.buttonTone === 'danger'
-      ? 'bg-[#546cf2]'
+      ? 'border border-white/75 bg-[#546cf2]'
       : shiftMeta.buttonTone === 'success'
         ? 'bg-white/92'
         : 'bg-[#dff8d8]';

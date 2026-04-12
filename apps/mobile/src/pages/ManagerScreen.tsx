@@ -517,11 +517,13 @@ function buildDemoHistory(
       lateMinutes,
       earlyLeaveMinutes,
       checkInEvent: {
+        eventId: `demo-check-in-${employee.id}-${index + 1}`,
         occurredAt: startedAt,
         distanceMeters: 8,
         notes: null,
       },
       checkOutEvent: {
+        eventId: `demo-check-out-${employee.id}-${index + 1}`,
         occurredAt: endedAt,
         distanceMeters: 10,
         notes: null,

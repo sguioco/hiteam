@@ -819,11 +819,13 @@ export type AttendanceHistoryResponse = {
     lateMinutes: number;
     earlyLeaveMinutes: number;
     checkInEvent: {
+      eventId: string;
       occurredAt: string;
       distanceMeters: number;
       notes: string | null;
     };
     checkOutEvent: {
+      eventId: string;
       occurredAt: string;
       distanceMeters: number;
       notes: string | null;

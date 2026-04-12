@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  type MouseEvent,
   type ReactNode,
   useId,
   useEffect,
@@ -94,6 +95,7 @@ import {
   normalizeWebAdminTaskPriority,
 } from "@/lib/task-priority";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
+import { navigateWithClickSupport } from "@/lib/navigation";
 
 type EmployeeDirectoryItem = {
   id: string;
@@ -833,6 +835,12 @@ export default function DashboardHome({
 }) {
   const router = useRouter();
   const { locale } = useI18n();
+  function openDashboardRoute(
+    href: string,
+    event?: MouseEvent<HTMLElement>,
+  ) {
+    navigateWithClickSupport((nextHref) => router.push(nextHref), href, event);
+  }
   const priorityOptions = useMemo(() => getPriorityOptions(locale), [locale]);
   const session = initialSession ?? getSession();
   const isDemoSession = isDemoAccessToken(session?.accessToken);
@@ -2327,11 +2335,12 @@ export default function DashboardHome({
                     ) : null}
                     <div className="manager-event-dialog-actions">
                       <Button
-                        onClick={() =>
-                          router.push(
+                        onClick={(event) =>
+                          openDashboardRoute(
                             `/schedule?date=${selectedCalendarEvent.date.toISOString().slice(0, 10)}&eventType=${
                               selectedCalendarEvent.kind === "meeting" ? "meetings" : "tasks"
                             }`,
+                            event,
                           )
                         }
                         type="button"
@@ -2445,7 +2454,9 @@ export default function DashboardHome({
               {messageAction ? (
                 <Button
                   className="dashboard-toast-action"
-                  onClick={() => router.push(messageAction.href)}
+                  onClick={(event) =>
+                    openDashboardRoute(messageAction.href, event)
+                  }
                   type="button"
                   variant="outline"
                 >

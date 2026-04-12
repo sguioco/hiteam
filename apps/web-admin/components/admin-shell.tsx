@@ -62,6 +62,7 @@ import {
   type ShellHeaderCachePayload,
   type ShellNotificationsCachePayload,
 } from "../lib/shell-bootstrap";
+import { shouldHandleRouteClick, type RouteClickEvent } from "../lib/navigation";
 import { primeWorkspaceExperience } from "../lib/workspace-warmup";
 
 type NavItem = {
@@ -908,8 +909,8 @@ export function AdminShell({
     }
   }
 
-  function handleRouteStart(href?: string | null) {
-    if (!href || isActive(pathname, href)) {
+  function handleRouteStart(href?: string | null, event?: RouteClickEvent | null) {
+    if (!href || isActive(pathname, href) || !shouldHandleRouteClick(event)) {
       return;
     }
 
@@ -1050,7 +1051,7 @@ export function AdminShell({
                     <Link
                       className="sidebar-link-main"
                       href={item.href}
-                      onClick={() => handleRouteStart(item.href)}
+                      onClick={(event) => handleRouteStart(item.href, event)}
                     >
                       <span className="flex items-center gap-3">
                         <Icon className="size-4" />
@@ -1109,7 +1110,7 @@ export function AdminShell({
                           className={`sidebar-sublink ${isActive(pathname, subItem.href) ? "is-active" : ""}`}
                           href={subItem.href}
                           key={subItem.href}
-                          onClick={() => handleRouteStart(subItem.href)}
+                          onClick={(event) => handleRouteStart(subItem.href, event)}
                         >
                           <span className="flex items-center gap-3">
                             <SubIcon className="size-4" />
@@ -1165,9 +1166,13 @@ export function AdminShell({
                     className="sidebar-user-menu-item"
                     href={item.href}
                     key={item.href}
-                    onClick={() => {
+                    onClick={(event) => {
+                      if (!shouldHandleRouteClick(event)) {
+                        return;
+                      }
+
                       setAccountMenuOpen(false);
-                      handleRouteStart(item.href);
+                      handleRouteStart(item.href, event);
                     }}
                   >
                     {item.label}
@@ -1260,7 +1265,9 @@ export function AdminShell({
                   >
                     <Link
                       href={toAdminHref("/organization")}
-                      onClick={() => handleRouteStart(toAdminHref("/organization"))}
+                      onClick={(event) =>
+                        handleRouteStart(toAdminHref("/organization"), event)
+                      }
                     >
                       <Settings2 className="size-4" />
                       {locale === "ru"
@@ -1331,9 +1338,13 @@ export function AdminShell({
                                   <Link
                                     className="grid min-w-0 flex-1 gap-1"
                                     href={resolveNotificationHref(item.actionUrl)}
-                                    onClick={() => {
+                                    onClick={(event) => {
+                                      if (!shouldHandleRouteClick(event)) {
+                                        return;
+                                      }
+
                                       setNotificationsOpen(false);
-                                      handleRouteStart(resolveNotificationHref(item.actionUrl));
+                                      handleRouteStart(resolveNotificationHref(item.actionUrl), event);
                                     }}
                                   >
                                     <strong className="text-sm leading-5 text-[color:var(--foreground)]">
@@ -1394,9 +1405,13 @@ export function AdminShell({
                                   <Link
                                     className="grid min-w-0 gap-1"
                                     href={resolveNotificationHref(item.actionUrl)}
-                                    onClick={() => {
+                                    onClick={(event) => {
+                                      if (!shouldHandleRouteClick(event)) {
+                                        return;
+                                      }
+
                                       setNotificationsOpen(false);
-                                      handleRouteStart(resolveNotificationHref(item.actionUrl));
+                                      handleRouteStart(resolveNotificationHref(item.actionUrl), event);
                                     }}
                                   >
                                     <strong className="text-sm leading-5 text-[color:var(--foreground)]">
