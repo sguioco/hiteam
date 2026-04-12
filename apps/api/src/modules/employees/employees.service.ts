@@ -844,7 +844,7 @@ export class EmployeesService {
         });
 
         return { user, invitation: updatedInvitation };
-      });
+      }, EMPLOYEE_REVIEW_TRANSACTION_OPTIONS);
     } catch (error) {
       this.logger.error(
         `registerFromInvitation failed for invitation ${invitation.id} in tenant ${invitation.tenantId}`,
