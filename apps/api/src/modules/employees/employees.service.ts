@@ -386,16 +386,12 @@ export class EmployeesService {
       throw new ConflictException('Такой email уже зарегистрирован в компании.');
     }
 
-    let avatar: Awaited<ReturnType<typeof this.uploadOptionalAvatar>> = null;
-
-    try {
-      avatar = await this.uploadOptionalAvatar(company.tenantId, email, dto.avatarDataUrl);
-    } catch (error) {
-      this.logger.warn(
-        `submitJoinRequestByCompanyCode avatar upload failed for ${email} in tenant ${company.tenantId}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    }
+    const avatar = await this.uploadOptionalAvatarSafely(
+      company.tenantId,
+      email,
+      dto.avatarDataUrl,
+      'submitJoinRequestByCompanyCode',
+    );
 
     try {
       const inviterUserId = await this.ensureSystemInviter(company.tenantId);
@@ -754,10 +750,11 @@ export class EmployeesService {
       },
     });
 
-    const avatar = await this.uploadOptionalAvatar(
+    const avatar = await this.uploadOptionalAvatarSafely(
       invitation.tenantId,
       invitation.email,
       dto.avatarDataUrl,
+      'registerFromInvitation',
     );
 
     let result: { user: { id: string }; invitation: { id: string } };
@@ -942,7 +939,12 @@ export class EmployeesService {
       }
     }
 
-    const avatar = await this.uploadOptionalAvatar(tenantId, invitation.email, dto.avatarDataUrl);
+    const avatar = await this.uploadOptionalAvatarSafely(
+      tenantId,
+      invitation.email,
+      dto.avatarDataUrl,
+      'reviewInvitation',
+    );
 
     const updatePayload = {
       firstName: dto.firstName?.trim() ?? invitation.firstName,
@@ -1610,6 +1612,23 @@ export class EmployeesService {
     }
 
     return this.uploadAvatar(tenantId, email, dataUrl);
+  }
+
+  private async uploadOptionalAvatarSafely(
+    tenantId: string,
+    email: string,
+    dataUrl: string | null | undefined,
+    context: string,
+  ) {
+    try {
+      return await this.uploadOptionalAvatar(tenantId, email, dataUrl);
+    } catch (error) {
+      this.logger.warn(
+        `${context} avatar upload failed for ${email} in tenant ${tenantId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return null;
+    }
   }
 
   private async resolveInvitationCompanyId(tx: PrismaTx, tenantId: string, companyId: string | null | undefined) {
