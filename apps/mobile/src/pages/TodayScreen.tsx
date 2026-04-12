@@ -10,7 +10,7 @@ import { normalizeBannerTheme, useBannerTheme } from '../../lib/banner-theme';
 import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
-import { formatDateKeyInTimeZone, isDateKeyBefore } from '../../lib/timezone';
+import { formatDateKeyInTimeZone } from '../../lib/timezone';
 import { primeTaskTranslations } from '../../lib/use-translated-task-copy';
 import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
 import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
@@ -19,6 +19,7 @@ import ShiftStatusCard from '../components/ShiftStatusCard';
 import TaskList from '../components/TaskList';
 import { loadAttendanceStatus, loadMyProfile, loadMyShifts, loadMyTasks, updateMyTaskStatus } from '../../lib/api';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
+import { collapseDuplicateTodayTasks, countOverdueTodayTasks, taskAnchorsDateKey } from '../../lib/today-task-state';
 
 type TodayScreenProps = {
   onOpenOverdue?: () => void;
@@ -29,99 +30,6 @@ function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
   return next;
-}
-
-function normalizeTodayTaskTitle(title: string) {
-  return title
-    .replace(/^(Employee recurring|Повторяющаяся задача сотрудника):\s*/i, '')
-    .replace(/^(Owner recurring|Повторяющаяся задача владельца):\s*/i, '')
-    .trim()
-    .toLowerCase();
-}
-
-function getTodayTaskAnchorDate(task: TaskItem) {
-  const candidates = [task.dueAt, task.occurrenceDate, task.createdAt];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const parsed = new Date(candidate);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-
-  return null;
-}
-
-function getTodayTaskDuplicateKey(
-  task: TaskItem,
-  timeZone?: string | null,
-) {
-  const anchorDate = getTodayTaskAnchorDate(task);
-  const anchorKey = anchorDate
-    ? formatDateKeyInTimeZone(anchorDate, timeZone)
-    : 'no-date';
-  const kindKey = isTaskMeeting(task) ? 'meeting' : 'task';
-  const photoKey = task.requiresPhoto ? 'photo' : 'plain';
-
-  return `${kindKey}|${photoKey}|${normalizeTodayTaskTitle(task.title)}|${anchorKey}`;
-}
-
-function taskAnchorsToday(
-  task: TaskItem,
-  dateKey: string,
-  timeZone?: string | null,
-) {
-  const anchorDate = getTodayTaskAnchorDate(task);
-  if (!anchorDate) return false;
-
-  return formatDateKeyInTimeZone(anchorDate, timeZone) === dateKey;
-}
-
-function choosePreferredTodayTask(current: TaskItem, candidate: TaskItem) {
-  const currentHasPhotos = current.photoProofs.some((proof) => !proof.deletedAt && !proof.supersededByProofId);
-  const candidateHasPhotos = candidate.photoProofs.some((proof) => !proof.deletedAt && !proof.supersededByProofId);
-
-  const currentScore =
-    (current.requiresPhoto ? 100 : 0) +
-    (currentHasPhotos ? 40 : 0) +
-    (!current.isRecurring ? 20 : 0) +
-    (current.status !== 'DONE' && current.status !== 'CANCELLED' ? 10 : 0);
-
-  const candidateScore =
-    (candidate.requiresPhoto ? 100 : 0) +
-    (candidateHasPhotos ? 40 : 0) +
-    (!candidate.isRecurring ? 20 : 0) +
-    (candidate.status !== 'DONE' && candidate.status !== 'CANCELLED' ? 10 : 0);
-
-  if (candidateScore !== currentScore) {
-    return candidateScore > currentScore ? candidate : current;
-  }
-
-  return new Date(candidate.updatedAt).getTime() >= new Date(current.updatedAt).getTime()
-    ? candidate
-    : current;
-}
-
-function collapseDuplicateTodayTasks(
-  tasks: TaskItem[],
-  timeZone?: string | null,
-) {
-  const byKey = new Map<string, TaskItem>();
-
-  for (const task of tasks) {
-    const key = getTodayTaskDuplicateKey(task, timeZone);
-    const current = byKey.get(key);
-
-    if (!current) {
-      byKey.set(key, task);
-      continue;
-    }
-
-    byKey.set(key, choosePreferredTodayTask(current, task));
-  }
-
-  return Array.from(byKey.values());
 }
 
 function toAttendanceShift(shift: ShiftItem) {
@@ -284,7 +192,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       visibleTasks.filter(
         (task) =>
           !isTaskMeeting(task) &&
-          taskAnchorsToday(task, todayDateKey, businessTimeZone),
+          taskAnchorsDateKey(task, todayDateKey, businessTimeZone),
       ),
     [businessTimeZone, todayDateKey, visibleTasks],
   );
@@ -296,26 +204,13 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
           task.status !== 'DONE' &&
           task.status !== 'CANCELLED' &&
           isTaskMeeting(task) &&
-          taskAnchorsToday(task, todayDateKey, businessTimeZone),
+          taskAnchorsDateKey(task, todayDateKey, businessTimeZone),
       ),
     [businessTimeZone, todayDateKey, visibleTasks],
   );
 
   const overdueCount = useMemo(() => {
-    return visibleTasks.filter((task) => {
-      if (!isTaskOpen(task.status)) {
-        return false;
-      }
-
-      const dueAt = parseTaskDueAt(task);
-      return Boolean(
-        dueAt &&
-          isDateKeyBefore(
-            formatDateKeyInTimeZone(dueAt, businessTimeZone),
-            todayDateKey,
-          ),
-      );
-    }).length;
+    return countOverdueTodayTasks(visibleTasks, todayDateKey, businessTimeZone);
   }, [businessTimeZone, todayDateKey, visibleTasks]);
 
   const effectiveAttendanceStatus = useMemo<AttendanceStatusResponse | null>(() => {

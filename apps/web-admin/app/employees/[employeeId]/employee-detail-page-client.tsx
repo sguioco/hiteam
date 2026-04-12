@@ -954,7 +954,10 @@ export default function EmployeeCardPageClient({
                           {biometricHistory.verifications.length}
                         </span>
                       </div>
-                      <div className="team-tasks-table-shell">
+                      <div
+                        className="team-tasks-table-shell overflow-y-auto"
+                        style={{ maxHeight: "428px" }}
+                      >
                         <Table
                           aria-label={
                             locale === "ru"
@@ -966,7 +969,7 @@ export default function EmployeeCardPageClient({
                           }
                           size="sm"
                         >
-                          <Table.Header>
+                          <Table.Header className="sticky top-0 z-[1]">
                             <Table.Head
                               className="min-w-[150px]"
                               id="capturedAt"

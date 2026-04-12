@@ -525,6 +525,9 @@ const Employees = ({
   const [directoryLoading, setDirectoryLoading] = useState(!initialData);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState<string | null>(null);
+  const [navigatingEmployeeId, setNavigatingEmployeeId] = useState<string | null>(
+    null,
+  );
 
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>(
     initialData?.employeeRecords ?? [],
@@ -939,16 +942,48 @@ const Employees = ({
       employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
   );
+  const navigatingEmployee = useMemo(
+    () =>
+      navigatingEmployeeId
+        ? employees.find((employee) => employee.id === navigatingEmployeeId) ?? null
+        : null,
+    [employees, navigatingEmployeeId],
+  );
 
   function openEmployeePage(
     employeeId: string,
     event?: MouseEvent<HTMLElement>,
   ) {
-    navigateWithClickSupport(
-      (href) => router.push(href),
-      `/employees/${employeeId}`,
-      event,
-    );
+    const href = `/employees/${employeeId}`;
+
+    if (
+      event &&
+      (event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey)
+    ) {
+      navigateWithClickSupport((nextHref) => router.push(nextHref), href, event);
+      return;
+    }
+
+    if (navigatingEmployeeId) {
+      return;
+    }
+
+    setNavigatingEmployeeId(employeeId);
+    void router.prefetch(href);
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        router.push(href);
+      });
+      return;
+    }
+
+    router.push(href);
   }
 
   const groupEditor = useMemo(
@@ -1137,6 +1172,16 @@ const Employees = ({
     const timeout = window.setTimeout(() => setPageMessage(null), 3200);
     return () => window.clearTimeout(timeout);
   }, [pageMessage]);
+
+  useEffect(() => {
+    if (!navigatingEmployeeId) return;
+
+    const timeout = window.setTimeout(() => {
+      setNavigatingEmployeeId(null);
+    }, 10000);
+
+    return () => window.clearTimeout(timeout);
+  }, [navigatingEmployeeId]);
 
   useEffect(() => {
     if (selectedEmployeeId) {
@@ -3940,6 +3985,43 @@ const Employees = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {navigatingEmployeeId ? (
+        <div
+          aria-live="polite"
+          className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(244,247,252,0.38)] backdrop-blur-[2px]"
+          role="status"
+        >
+          <div className="flex items-center gap-4 rounded-[24px] border border-border/80 bg-white/96 px-5 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
+            <div className="session-loader">
+              <span aria-hidden="true" className="session-loader-glow" />
+              <span
+                aria-hidden="true"
+                className="session-loader-ring session-loader-ring-primary"
+              />
+              <span
+                aria-hidden="true"
+                className="session-loader-ring session-loader-ring-secondary"
+              />
+              <span aria-hidden="true" className="session-loader-core" />
+            </div>
+            <div className="grid gap-1">
+              <strong className="text-sm font-heading text-foreground">
+                {runtimeLocalize(
+                  "Открываю карточку сотрудника",
+                  "Opening employee profile",
+                  locale,
+                )}
+              </strong>
+              <span className="text-xs text-muted-foreground">
+                {navigatingEmployee
+                  ? navigatingEmployee.name
+                  : runtimeLocalize("Переходим на страницу", "Navigating to page", locale)}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

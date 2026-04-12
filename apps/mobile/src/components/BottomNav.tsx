@@ -127,7 +127,7 @@ const BottomNav = ({ active, onNavigate, hasBadge = false, showManage = false }:
           className="overflow-hidden border-t border-[#edf1f7] bg-white shadow-lg shadow-[#1f2687]/10"
           style={{ minHeight: 106 + insets.bottom }}
         >
-          <View className="px-8 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
+          <View className="px-10 pb-4 pt-3" style={{ transform: [{ translateY: navContentOffset }] }}>
             <View className="flex-row items-end justify-between" style={{ paddingLeft: 84 }}>
               <View className="w-[72px] items-center">
                 <NavItem

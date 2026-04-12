@@ -23,7 +23,10 @@ import ProfileScreen from './ProfileScreen';
 import TodayScreen from './TodayScreen';
 import { useI18n } from '../../lib/i18n';
 import { hydrateWorkspaceCaches, warmWorkspaceCaches, WORKSPACE_REFRESH_INTERVAL_MS } from '../../lib/workspace-cache';
+import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
 import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
+import { peekScreenCache, readScreenCache, subscribeScreenCache } from '../../lib/screen-cache';
+import { getTodayNavBadgeState } from '../../lib/today-task-state';
 
 type Tab = 'calendar' | 'today' | 'manage' | 'news' | 'profile';
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
@@ -110,10 +113,24 @@ const Index = () => {
   const params = useLocalSearchParams<{ tab?: string | string[]; overdue?: string | string[] }>();
   const { language, t } = useI18n();
   const { isAuthenticated, roleCodes, workspaceAccessAllowed, workspaceSetupStep } = useAuthFlowState();
+  const initialTodaySnapshot = useMemo(
+    () =>
+      peekScreenCache<TodayScreenCacheValue>(
+        TODAY_SCREEN_CACHE_KEY,
+        TODAY_SCREEN_CACHE_TTL_MS,
+      ),
+    [],
+  );
   const routeTab = normalizeTab(params.tab);
   const overdueParam = Array.isArray(params.overdue) ? params.overdue[0] : params.overdue;
   const overdueSheetSignal = Number(overdueParam ?? '0') || 0;
   const [activeTab, setActiveTab] = useState<Tab>(routeTab);
+  const [todayHasBadge, setTodayHasBadge] = useState(() =>
+    getTodayNavBadgeState(
+      initialTodaySnapshot?.value.tasks ?? [],
+      initialTodaySnapshot?.value.profile?.primaryLocation?.timezone,
+    ).hasBadge,
+  );
   const [mountedTabs, setMountedTabs] = useState<Record<Tab, boolean>>(() => ({
     today: routeTab === 'today',
     calendar: routeTab === 'calendar',
@@ -211,6 +228,36 @@ const Index = () => {
       clearInterval(interval);
     };
   }, [hasWorkspaceEntry, language, roleCodes]);
+
+  useEffect(() => {
+    if (!hasWorkspaceEntry) {
+      setTodayHasBadge(false);
+      return;
+    }
+
+    const applyTodayBadgeState = (entry: TodayScreenCacheValue | null) => {
+      setTodayHasBadge(
+        getTodayNavBadgeState(
+          entry?.tasks ?? [],
+          entry?.profile?.primaryLocation?.timezone,
+        ).hasBadge,
+      );
+    };
+
+    const unsubscribe = subscribeScreenCache<TodayScreenCacheValue>(
+      TODAY_SCREEN_CACHE_KEY,
+      (entry) => applyTodayBadgeState(entry?.value ?? null),
+    );
+
+    void readScreenCache<TodayScreenCacheValue>(
+      TODAY_SCREEN_CACHE_KEY,
+      TODAY_SCREEN_CACHE_TTL_MS,
+    ).then((entry) => {
+      applyTodayBadgeState(entry?.value ?? null);
+    });
+
+    return unsubscribe;
+  }, [hasWorkspaceEntry]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -414,7 +461,7 @@ const Index = () => {
           {renderTabScene('news')}
           {renderTabScene('profile')}
         </View>
-        <BottomNav active={activeTab} hasBadge onNavigate={navigateToTab} showManage={isManager} />
+        <BottomNav active={activeTab} hasBadge={todayHasBadge} onNavigate={navigateToTab} showManage={isManager} />
       </View>
       <Modal
         animationType="fade"
