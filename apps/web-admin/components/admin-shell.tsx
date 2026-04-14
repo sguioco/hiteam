@@ -166,7 +166,7 @@ function resolveDemoSidebarProfile(
   const normalizedEmail = email?.trim().toLowerCase();
   if (normalizedEmail === DEMO_ADMIN_EMAIL) {
     return {
-      name: locale === "ru" ? "Сергей Григорьев" : "Sergei Grigoryev",
+      name: locale === "ru" ? "Алекс Петров" : "Alex Petrov",
       avatarUrl: DEMO_ADMIN_AVATAR_URL,
     };
   }

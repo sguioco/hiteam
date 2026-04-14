@@ -37,6 +37,13 @@ type ManagerEmployee = Awaited<
   avatar?: any;
 };
 
+type ManagerScreenCacheValue = {
+  profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
+  employees: ManagerEmployee[];
+  liveSessions: AttendanceLiveSession[];
+  tasks: TaskItem[];
+};
+
 const MOCK_AVATARS = {
   female: [
     require("../../assets/avatars/1.jpg"),
@@ -49,6 +56,12 @@ const MOCK_AVATARS = {
   ],
 };
 
+const DEMO_REMOTE_AVATARS = {
+  ilya: "https://www.untitledui.com/images/avatars/ali-mahdi",
+  denis:
+    "https://www.untitledui.com/images/avatars/transparent/scott-clayton?bg=%23E0E0E0",
+} as const;
+
 type ManagerScreenProps = {
   active?: boolean;
   standalone?: boolean;
@@ -59,6 +72,8 @@ type TaskPhoto = {
   capturedAt: string;
   uri: string;
 };
+
+const DEMO_OWNER_EMAIL = "owner@demo.smart";
 
 function formatLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -78,6 +93,28 @@ function isTaskOpen(status: TaskItem["status"]) {
 function isManagerTaskMeeting(task: TaskItem) {
   return Boolean(parseTaskMeta(task.description).meeting);
 }
+
+function formatAttendanceOffset(minutes: number) {
+  const totalMinutes = Math.max(0, Math.abs(minutes));
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  if (hours > 0 && mins > 0) {
+    return `${hours}h ${mins}m`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+
+  return `${mins}m`;
+}
+
+type AttendanceDisplay = {
+  timeLabel: string;
+  statusLabel: string;
+  statusStyle: "late" | "early" | "onTime" | "notCheckedIn" | "muted";
+};
 
 function normalizeManagerTaskTitle(title: string) {
   return title
@@ -278,7 +315,18 @@ function attendanceSortRank(session: AttendanceLiveSession | null) {
     return 1;
   }
 
+  if (session.lateMinutes < 0) {
+    return 3;
+  }
+
   return 2;
+}
+
+function isDemoOwnerProfile(
+  profile?: Awaited<ReturnType<typeof loadMyProfile>> | null,
+) {
+  const email = profile?.user?.email?.toLowerCase();
+  return email === DEMO_OWNER_EMAIL;
 }
 
 function isoAt(daysOffset: number, hour: number, minute: number) {
@@ -290,8 +338,15 @@ function isoAt(daysOffset: number, hour: number, minute: number) {
 
 function buildDemoEmployees(): ManagerEmployee[] {
   const source = [
+    [
+      "Alexander",
+      "Prokhorov",
+      "Operations",
+      "Store Lead",
+      "Downtown",
+      "male",
+    ],
     ["Elena", "Morozova", "Operations", "Store Lead", "Downtown", "female"],
-    ["Roman", "Volkov", "Sales", "Floor Manager", "Downtown", "male"],
     ["Alina", "Kuznetsova", "Support", "Customer Care", "Mall West", "female"],
     [
       "Maxim",
@@ -303,14 +358,6 @@ function buildDemoEmployees(): ManagerEmployee[] {
     ],
     ["Sofia", "Orlova", "Retail", "Senior Associate", "Mall West", "female"],
     ["Ilya", "Petrov", "Logistics", "Dispatcher", "Warehouse A", "male"],
-    [
-      "Maria",
-      "Sokolova",
-      "Retail",
-      "Visual Merchandiser",
-      "Central Plaza",
-      "female",
-    ],
     ["Denis", "Fedorov", "Support", "Team Lead", "Central Plaza", "male"],
   ] as const;
 
@@ -322,8 +369,15 @@ function buildDemoEmployees(): ManagerEmployee[] {
       [firstName, lastName, departmentName, positionName, locationName, gender],
       index,
     ) => {
+      const fullName = `${firstName} ${lastName}`;
+      const remoteAvatarUrl =
+        fullName === "Ilya Petrov"
+          ? DEMO_REMOTE_AVATARS.ilya
+          : fullName === "Denis Fedorov"
+            ? DEMO_REMOTE_AVATARS.denis
+            : null;
       const avatar =
-        gender === "female"
+        remoteAvatarUrl ? { uri: remoteAvatarUrl } : gender === "female"
           ? MOCK_AVATARS.female[fIdx++ % MOCK_AVATARS.female.length]
           : MOCK_AVATARS.male[mIdx++ % MOCK_AVATARS.male.length];
 
@@ -356,66 +410,79 @@ function buildDemoLiveSessions(
 ): AttendanceLiveSession[] {
   const variants = [
     {
-      hour: 9,
-      minute: 14,
-      lateMinutes: 14,
+      employeeIndex: 1,
+      lateMinutes: 87,
+      minuteOffset: 87,
       earlyLeaveMinutes: 0,
       status: "on_shift" as const,
     },
     {
-      hour: 8,
-      minute: 53,
-      lateMinutes: 0,
+      employeeIndex: 2,
+      lateMinutes: 16,
+      minuteOffset: 16,
       earlyLeaveMinutes: 0,
       status: "on_shift" as const,
     },
     {
-      hour: 8,
-      minute: 56,
+      employeeIndex: 3,
       lateMinutes: 0,
+      minuteOffset: 0,
       earlyLeaveMinutes: 0,
-      status: "on_break" as const,
+      status: "on_shift" as const,
     },
     {
-      hour: 8,
-      minute: 58,
-      lateMinutes: 0,
+      employeeIndex: 4,
+      lateMinutes: -28,
+      minuteOffset: -28,
       earlyLeaveMinutes: 0,
-      status: "checked_out" as const,
+      status: "on_shift" as const,
+    },
+    {
+      employeeIndex: 5,
+      lateMinutes: -72,
+      minuteOffset: -72,
+      earlyLeaveMinutes: 0,
+      status: "on_shift" as const,
+    },
+    {
+      employeeIndex: 6,
+      lateMinutes: -12,
+      minuteOffset: -12,
+      earlyLeaveMinutes: 0,
+      status: "on_shift" as const,
     },
   ] as const;
 
-  return employees.slice(0, 4).map((employee, index) => {
-    const variant = variants[index % variants.length];
-    const startedAt = isoAt(0, variant.hour, variant.minute);
-    const endedAt =
-      variant.status === "checked_out"
-        ? isoAt(
-            0,
-            variant.hour + 8,
-            variant.minute + (index % 2 === 0 ? -10 : 5),
-          )
-        : null;
+  return variants
+    .map((variant) => {
+      const employee = employees[variant.employeeIndex];
+      if (!employee) {
+        return [];
+      }
 
-    return {
-      sessionId: `demo-session-${employee.id}`,
-      employeeId: employee.id,
-      employeeName: `${employee.firstName} ${employee.lastName}`,
-      employeeNumber: employee.employeeNumber,
-      department: employee.department?.name ?? "Team",
-      location: employee.primaryLocation?.name ?? "Main location",
-      shiftLabel: "09:00 - 18:00",
-      status: variant.status,
-      startedAt,
-      endedAt,
-      totalMinutes:
-        variant.status === "checked_out" ? 470 - variant.earlyLeaveMinutes : 0,
-      breakMinutes: variant.status === "on_break" ? 20 : 30,
-      paidBreakMinutes: 15,
-      lateMinutes: variant.lateMinutes,
-      earlyLeaveMinutes: variant.earlyLeaveMinutes,
-    };
-  });
+      const startedAt = isoAt(0, 9, variant.minuteOffset);
+
+      return [
+        {
+          sessionId: `demo-session-${employee.id}`,
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          employeeNumber: employee.employeeNumber,
+          department: employee.department?.name ?? "Team",
+          location: employee.primaryLocation?.name ?? "Main location",
+          shiftLabel: "09:00 - 18:00",
+          status: variant.status,
+          startedAt,
+          endedAt: null,
+          totalMinutes: 0,
+          breakMinutes: 30,
+          paidBreakMinutes: 15,
+          lateMinutes: variant.lateMinutes,
+          earlyLeaveMinutes: variant.earlyLeaveMinutes,
+        },
+      ];
+    })
+    .flat();
 }
 
 function buildDemoTasks(employees: ManagerEmployee[]): TaskItem[] {
@@ -564,6 +631,37 @@ function buildDemoManagerData() {
   };
 }
 
+function resolveManagerScreenData(
+  profile: Awaited<ReturnType<typeof loadMyProfile>> | null | undefined,
+  data: Partial<ManagerScreenCacheValue> | null | undefined,
+  preferRemoteData = false,
+) {
+  const fallbackProfile = data?.profile ?? null;
+  const resolvedProfile = profile ?? fallbackProfile;
+  const isDemoOwner = isDemoOwnerProfile(resolvedProfile);
+  const hasRemoteData =
+    (data?.employees?.length ?? 0) > 0 ||
+    (data?.liveSessions?.length ?? 0) > 0 ||
+    (data?.tasks?.length ?? 0) > 0;
+
+  if (!isDemoOwner || preferRemoteData || hasRemoteData) {
+    return {
+      profile: resolvedProfile,
+      employees: data?.employees ?? [],
+      liveSessions: data?.liveSessions ?? [],
+      tasks: data?.tasks ?? [],
+    };
+  }
+
+  const demoData = buildDemoManagerData();
+  return {
+    profile: resolvedProfile,
+    employees: demoData.employees,
+    liveSessions: demoData.liveSessions,
+    tasks: demoData.tasks,
+  };
+}
+
 export default function ManagerScreen({
   active = true,
   standalone = false,
@@ -580,20 +678,30 @@ export default function ManagerScreen({
       : "Open company news and overall readership status.";
   const initialSnapshot = useMemo(
     () =>
-      peekScreenCache<{
-        profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
-        employees: ManagerEmployee[];
-        liveSessions: AttendanceLiveSession[];
-        tasks: TaskItem[];
-      }>(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS),
+      peekScreenCache<ManagerScreenCacheValue>(
+        MANAGER_SCREEN_CACHE_KEY,
+        MANAGER_SCREEN_CACHE_TTL_MS,
+      ),
     [],
   );
-  const [profile, setProfile] = useState<Awaited<
-    ReturnType<typeof loadMyProfile>
-  > | null>(initialSnapshot?.value.profile ?? null);
-  const [employees, setEmployees] = useState<ManagerEmployee[]>(initialSnapshot?.value.employees ?? []);
-  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(initialSnapshot?.value.liveSessions ?? []);
-  const [tasks, setTasks] = useState<TaskItem[]>(initialSnapshot?.value.tasks ?? []);
+  const initialResolved = useMemo(
+    () =>
+      resolveManagerScreenData(
+        initialSnapshot?.value?.profile,
+        initialSnapshot?.value,
+      ),
+    [initialSnapshot],
+  );
+  const [profile, setProfile] = useState<
+    Awaited<ReturnType<typeof loadMyProfile>> | null
+  >(initialResolved.profile);
+  const [employees, setEmployees] = useState<ManagerEmployee[]>(
+    initialResolved.employees,
+  );
+  const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
+    initialResolved.liveSessions,
+  );
+  const [tasks, setTasks] = useState<TaskItem[]>(initialResolved.tasks);
   const [loading, setLoading] = useState(!initialSnapshot);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(
     null,
@@ -620,11 +728,18 @@ export default function ManagerScreen({
         return;
       }
 
-      void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
-      setProfile(entry.value.profile ?? null);
-      setEmployees(entry.value.employees);
-      setLiveSessions(entry.value.liveSessions);
-      setTasks(entry.value.tasks);
+      const resolvedData = resolveManagerScreenData(
+        entry.value.profile,
+        entry.value,
+        true,
+      );
+      void primeTaskTranslations(resolvedData.tasks, language).catch(
+        () => undefined,
+      );
+      setProfile(resolvedData.profile);
+      setEmployees(resolvedData.employees);
+      setLiveSessions(resolvedData.liveSessions);
+      setTasks(resolvedData.tasks);
       setFailedAvatarEmployeeIds(new Set());
       setLoading(false);
     });
@@ -632,26 +747,35 @@ export default function ManagerScreen({
 
   useEffect(() => {
     async function loadData() {
-      const cached = await readScreenCache<{
-        profile?: Awaited<ReturnType<typeof loadMyProfile>> | null;
-        employees: ManagerEmployee[];
-        liveSessions: AttendanceLiveSession[];
-        tasks: TaskItem[];
-      }>(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS);
+      const cached = await readScreenCache<ManagerScreenCacheValue>(
+        MANAGER_SCREEN_CACHE_KEY,
+        MANAGER_SCREEN_CACHE_TTL_MS,
+      );
 
       if (cached) {
-        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
-        setProfile(cached.value.profile ?? null);
-        setEmployees(cached.value.employees);
-        setLiveSessions(cached.value.liveSessions);
-        setTasks(cached.value.tasks);
+      const cachedResolved = resolveManagerScreenData(
+        cached.value.profile,
+        cached.value,
+        isDemoOwnerProfile(cached.value.profile),
+      );
+        void primeTaskTranslations(cachedResolved.tasks, language).catch(
+          () => undefined,
+        );
+        setProfile(cachedResolved.profile);
+        setEmployees(cachedResolved.employees);
+        setLiveSessions(cachedResolved.liveSessions);
+        setTasks(cachedResolved.tasks);
         setLoading(false);
         const hasUsefulCachedData =
-          cached.value.employees.length > 0 ||
-          cached.value.liveSessions.length > 0 ||
-          cached.value.tasks.length > 0;
+          cachedResolved.employees.length > 0 ||
+          cachedResolved.liveSessions.length > 0 ||
+          cachedResolved.tasks.length > 0;
 
-        if (!cached.isStale && hasUsefulCachedData) {
+        if (
+          !cached.isStale &&
+          hasUsefulCachedData &&
+          !isDemoOwnerProfile(cached.value?.profile ?? null)
+        ) {
           return;
         }
       }
@@ -678,13 +802,13 @@ export default function ManagerScreen({
         profileResult.status === "fulfilled"
           ? profileResult.value
           : cached?.value.profile ?? null;
-      const nextEmployees =
+      const nextEmployeesDefault =
         employeesResult.status === "fulfilled"
           ? Array.isArray(employeesResult.value)
             ? employeesResult.value
             : []
           : cached?.value.employees ?? [];
-      const nextLiveSessions =
+      const nextLiveSessionsDefault =
         liveSessionsResult.status === "fulfilled"
           ? Array.isArray(liveSessionsResult.value)
             ? liveSessionsResult.value
@@ -723,20 +847,32 @@ export default function ManagerScreen({
         }
       }
 
-      await primeTaskTranslations(nextTasks, language);
+      const nextProfileWithFallback =
+        nextProfile ?? cached?.value.profile ?? null;
+      const nextResolvedData = resolveManagerScreenData(nextProfileWithFallback, {
+        profile: nextProfileWithFallback,
+        employees: nextEmployeesDefault,
+        liveSessions: nextLiveSessionsDefault,
+        tasks: nextTasks,
+      });
 
-      setProfile(nextProfile);
+      await primeTaskTranslations(nextResolvedData.tasks, language);
+      const finalTasks = nextResolvedData.tasks;
+      const nextEmployees = nextResolvedData.employees;
+      const nextLiveSessions = nextResolvedData.liveSessions;
+
+      setProfile(nextProfileWithFallback);
       setEmployees(nextEmployees);
       setLiveSessions(nextLiveSessions);
-      setTasks(nextTasks);
+      setTasks(finalTasks);
       setFailedAvatarEmployeeIds(new Set());
       setLoading(false);
 
       void writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
-        profile: nextProfile,
+        profile: nextProfileWithFallback,
         employees: nextEmployees,
         liveSessions: nextLiveSessions,
-        tasks: nextTasks,
+        tasks: finalTasks,
       });
     }
 
@@ -815,20 +951,24 @@ export default function ManagerScreen({
       .sort((left, right) => {
         const leftRank = attendanceSortRank(left.liveSession);
         const rightRank = attendanceSortRank(right.liveSession);
+        const leftLateMinutes = left.liveSession?.lateMinutes ?? 0;
+        const rightLateMinutes = right.liveSession?.lateMinutes ?? 0;
 
         if (leftRank !== rightRank) {
           return leftRank - rightRank;
         }
 
-        if (
-          leftRank === 1 &&
-          (right.liveSession?.lateMinutes ?? 0) !==
-            (left.liveSession?.lateMinutes ?? 0)
-        ) {
-          return (
-            (right.liveSession?.lateMinutes ?? 0) -
-            (left.liveSession?.lateMinutes ?? 0)
-          );
+        if (leftRank === 1) {
+          if (leftLateMinutes !== rightLateMinutes) {
+            return rightLateMinutes - leftLateMinutes;
+          }
+        } else if (leftRank === 3) {
+          const leftEarlyAbs = Math.abs(leftLateMinutes);
+          const rightEarlyAbs = Math.abs(rightLateMinutes);
+
+          if (leftEarlyAbs !== rightEarlyAbs) {
+            return leftEarlyAbs - rightEarlyAbs;
+          }
         }
 
         return buildEmployeeName(
@@ -931,54 +1071,50 @@ export default function ManagerScreen({
     setActivePhotoTaskId(taskId);
   }
 
-  function attendanceTone(session: AttendanceLiveSession | null) {
-    if (!session) {
-      return {
-        badgeVariant: "muted" as const,
-        label: t("manager.noCheckInYet"),
-        note: t("manager.noCheckInHint"),
-      };
-    }
-
-    if (session.lateMinutes > 0) {
-      return {
-        badgeVariant: "alert" as const,
-        label: t("manager.lateBy", { minutes: session.lateMinutes }),
-        note: t("manager.checkedInAt", {
-          time: new Date(session.startedAt).toLocaleTimeString(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        }),
-      };
-    }
-
-    if (session.earlyLeaveMinutes > 0) {
-      return {
-        badgeVariant: "muted" as const,
-        label: t("manager.leftEarlyBy", { minutes: session.earlyLeaveMinutes }),
-        note: t("manager.checkedOutAt", {
-          time: session.endedAt
-            ? new Date(session.endedAt).toLocaleTimeString(locale, {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "—",
-        }),
-      };
-    }
-
+function getAttendanceDisplay(
+  session: AttendanceLiveSession | null,
+  locale: string,
+  t: ReturnType<typeof useI18n>["t"],
+): AttendanceDisplay {
+  if (!session) {
     return {
-      badgeVariant: "brand" as const,
-      label: t("manager.onTime"),
-      note: t("manager.checkedInAt", {
-        time: new Date(session.startedAt).toLocaleTimeString(locale, {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      }),
+      timeLabel: "",
+      statusLabel: t("manager.noCheckInYet"),
+      statusStyle: "notCheckedIn",
     };
   }
+
+  const checkInTime = new Date(session.startedAt).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (session.lateMinutes > 0) {
+    return {
+      timeLabel: checkInTime,
+      statusLabel: t("manager.lateByDuration", {
+        duration: formatAttendanceOffset(session.lateMinutes),
+      }),
+      statusStyle: "late",
+    };
+  }
+
+  if (session.lateMinutes < 0) {
+    return {
+      timeLabel: checkInTime,
+      statusLabel: t("manager.earlierBy", {
+        duration: formatAttendanceOffset(session.lateMinutes),
+      }),
+      statusStyle: "early",
+    };
+  }
+
+  return {
+    timeLabel: checkInTime,
+    statusLabel: t("manager.onTime"),
+    statusStyle: "onTime",
+  };
+}
 
   function renderTaskLeading(task: TaskItem, photoCount: number) {
     const isDone = task.status === "DONE";
@@ -1066,36 +1202,30 @@ export default function ManagerScreen({
                 </View>
               </View>
 
-              <View className="flex-row items-center gap-2">
-                <PressableScale
-                  className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
-                  haptic="selection"
-                  onPress={() => router.push("/?tab=news" as never)}
-                >
-                  <Ionicons color="#1f2937" name="newspaper-outline" size={16} />
-                  <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
-                    {newsActionTitle}
-                  </Text>
-                </PressableScale>
+              <View className="flex-col items-end gap-2">
+                <View className="flex-row items-center gap-2">
+                  <PressableScale
+                    className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
+                    haptic="selection"
+                    onPress={() => router.push("/?tab=news" as never)}
+                  >
+                    <Ionicons color="#1f2937" name="newspaper-outline" size={16} />
+                    <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
+                      {newsActionTitle}
+                    </Text>
+                  </PressableScale>
 
-                <Button
-                  className="rounded-full border-white/80 bg-white/80 px-5"
-                  label={`+ ${t("manager.createAction")}`}
-                  onPress={() => setActionMenuOpen(true)}
-                  textClassName="text-[13px] tracking-[1.2px]"
-                  variant="secondary"
-                />
+                  <Button
+                    className="rounded-full border-white/80 bg-white/80 px-5"
+                    label={`+ ${t("manager.createAction")}`}
+                    onPress={() => setActionMenuOpen(true)}
+                    textClassName="text-[13px] tracking-[1.2px]"
+                    variant="secondary"
+                  />
+                </View>
+
               </View>
             </Animated.View>
-
-            <View className="flex-row items-baseline gap-2">
-              <Text className="text-[15px] font-semibold text-[#42526b]">
-                {t("manager.lateShort")}
-              </Text>
-              <Text className="font-display text-[24px] font-bold text-[#be123c]">
-                {summary.lateCount}
-              </Text>
-            </View>
 
             {loading ? (
               <View className="rounded-3xl border border-white/30 bg-white/70 px-4 py-5 shadow-sm shadow-[#1f2687]/10">
@@ -1106,20 +1236,11 @@ export default function ManagerScreen({
             ) : employeeCards.length ? (
               <View className="overflow-hidden rounded-[30px] border border-white/30 bg-white/70 shadow-sm shadow-[#1f2687]/10">
                 {employeeCards.map((item, index) => {
-                  const tone = attendanceTone(item.liveSession);
+                  const tone = getAttendanceDisplay(item.liveSession, locale, t);
                   const isExpanded = expandedEmployeeId === item.employee.id;
                   const showAvatar =
                     item.employee.avatar &&
                     !failedAvatarEmployeeIds.has(item.employee.id);
-                  const checkInTime = item.liveSession
-                    ? new Date(item.liveSession.startedAt).toLocaleTimeString(
-                        locale,
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        },
-                      )
-                    : "—";
                   const isLast = index === employeeCards.length - 1;
 
                   return (
@@ -1138,6 +1259,13 @@ export default function ManagerScreen({
                         onPress={() => toggleEmployeeExpanded(item.employee.id)}
                       >
                         <View className="flex-row items-center gap-4">
+                          <View className="w-5 items-center">
+                            <Ionicons
+                              color="#6b7a90"
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={20}
+                            />
+                          </View>
                           {showAvatar ? (
                             <Image
                               source={item.employee.avatar}
@@ -1164,23 +1292,45 @@ export default function ManagerScreen({
                             </Text>
                           </View>
 
-                          <View className="items-end gap-2">
-                            <Ionicons
-                              color="#6b7a90"
-                              name={isExpanded ? "chevron-up" : "chevron-down"}
-                              size={20}
-                            />
+                          <View className="items-end gap-0.5">
+                            {(() => {
+                              const isEarlyOrOnTime =
+                                tone.statusStyle === "early" ||
+                                tone.statusStyle === "onTime";
+                              const timeColorClass = tone.statusStyle === "late"
+                                ? "text-[#b91c1c]"
+                                : tone.statusStyle === "notCheckedIn"
+                                  ? "text-[#6b7280]"
+                                  : "text-[#0f766e]";
+
+                              return (
+                                <>
+                                  {tone.timeLabel ? (
+                                    <Text
+                                      className={`${timeColorClass} text-[16px] font-semibold`}
+                                    >
+                                      {tone.timeLabel}
+                                    </Text>
+                                  ) : null}
+                                  <Text
+                                    className={`text-[12px] font-semibold ${
+                                      isEarlyOrOnTime || tone.statusStyle === "late"
+                                        ? tone.statusStyle === "late"
+                                          ? "text-[#b91c1c]"
+                                          : "text-[#0f766e]"
+                                        : "text-[#6b7280]"
+                                    }`}
+                                  >
+                                    {tone.statusLabel}
+                                  </Text>
+                                </>
+                              );
+                            })()}
                           </View>
                         </View>
 
                         {isExpanded ? (
                           <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
-                            {item.liveSession ? (
-                              <Text className="text-[13px] font-semibold text-[#4f6df5]">
-                                {t("manager.checkedInAt", { time: checkInTime })}
-                              </Text>
-                            ) : null}
-
                             <View className="flex-row items-center justify-between">
                               <Text className="text-[14px] font-semibold text-[#42526b]">
                                 {t("manager.tasksToday")}
@@ -1263,10 +1413,6 @@ export default function ManagerScreen({
                               </View>
                             )}
                           </View>
-                        ) : item.liveSession ? (
-                          <Text className="mt-4 text-[13px] font-semibold text-[#42526b]">
-                            {tone.note}
-                          </Text>
                         ) : null}
                       </PressableScale>
 

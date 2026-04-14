@@ -7,8 +7,8 @@ import type {
   HTMLAttributes,
 } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import createGlobe from "cobe";
 import { useGSAP } from "@gsap/react";
+import Image from "next/image";
 import {
   ChartBreakoutSquare,
   MessageChatCircle,
@@ -32,6 +32,14 @@ import { Separator } from "@/components/ui/separator";
 import { AuroraText } from "@/components/ui/aurora-text";
 import { LineShadowText } from "@/components/ui/line-shadow-text";
 import { useI18n } from "@/lib/i18n";
+import {
+  LANDING_GLOBE_GEO_SRC,
+  LANDING_GLOBE_ROOM_SRC,
+  LANDING_GLOBE_VERIFIED_AVATAR_SRC,
+  LANDING_HERO_MP4_SRC,
+  LANDING_HERO_POSTER_SRC,
+  LANDING_HERO_WEBM_SRC,
+} from "@/lib/landing-assets";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -94,7 +102,7 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     id: "dubai-verified",
     type: "polaroid",
     location: [-1.2864, 33.8172],
-    image: "/room.webp",
+    image: LANDING_GLOBE_ROOM_SRC,
     alt: "Room photo.",
     title: "Photo task",
     titleVariant: "badge",
@@ -122,8 +130,7 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     id: "singapore-proof",
     type: "polaroid",
     location: [1.3521, 103.8198],
-    image:
-      "https://www.untitledui.com/images/avatars/transparent/drew-cano?bg=%23D9E5CC",
+    image: LANDING_GLOBE_VERIFIED_AVATAR_SRC,
     alt: "Portrait on a transparent background.",
     title: "VERIFIED",
     frameWidth: 82,
@@ -150,7 +157,7 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     id: "sao-paulo-ops",
     type: "polaroid",
     location: [-23.5505, -46.6333],
-    image: "/geo.webp",
+    image: LANDING_GLOBE_GEO_SRC,
     alt: "Geo photo.",
     title: "Login attempt",
     frameWidth: 94,
@@ -696,6 +703,7 @@ function GlobePolaroidCard({
               <img
                 alt={item.alt}
                 className="w-full object-cover transition-transform duration-700 hover:scale-105"
+                decoding="async"
                 style={{ height: `${imageHeight}px` }}
                 src={item.image}
               />
@@ -1076,6 +1084,10 @@ const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [shouldLoadHeroVideo, setShouldLoadHeroVideo] = useState(false);
+  const [shouldLoadGlobe, setShouldLoadGlobe] = useState(false);
+  const [isHeroVideoReady, setIsHeroVideoReady] = useState(false);
+  const [isGlobeReady, setIsGlobeReady] = useState(false);
   const [demoName, setDemoName] = useState("");
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
@@ -1122,6 +1134,94 @@ const Landing = () => {
     }
   }, [locale, setLocale]);
 
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      connection?: { saveData?: boolean };
+    };
+    const browserWindow = window as Window & typeof globalThis & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    setIsHeroVideoReady(false);
+    setShouldLoadHeroVideo(false);
+
+    if (!isDesktopViewport || nav.connection?.saveData) {
+      return;
+    }
+
+    let timeoutId: number | null = null;
+    let idleId: number | null = null;
+
+    const activateVideo = () => {
+      setShouldLoadHeroVideo(true);
+    };
+
+    if (typeof browserWindow.requestIdleCallback === "function") {
+      idleId = browserWindow.requestIdleCallback(() => {
+        activateVideo();
+      }, { timeout: 1800 });
+    } else {
+      timeoutId = window.setTimeout(activateVideo, 900);
+    }
+
+    return () => {
+      if (idleId !== null && typeof browserWindow.cancelIdleCallback === "function") {
+        browserWindow.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [isDesktopViewport]);
+
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      connection?: { saveData?: boolean };
+    };
+    const browserWindow = window as Window & typeof globalThis & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions,
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    setIsGlobeReady(false);
+    setShouldLoadGlobe(false);
+
+    if (!isDesktopViewport || nav.connection?.saveData) {
+      return;
+    }
+
+    let timeoutId: number | null = null;
+    let idleId: number | null = null;
+
+    const activateGlobe = () => {
+      setShouldLoadGlobe(true);
+    };
+
+    if (typeof browserWindow.requestIdleCallback === "function") {
+      idleId = browserWindow.requestIdleCallback(() => {
+        activateGlobe();
+      }, { timeout: 2200 });
+    } else {
+      timeoutId = window.setTimeout(activateGlobe, 1200);
+    }
+
+    return () => {
+      if (idleId !== null && typeof browserWindow.cancelIdleCallback === "function") {
+        browserWindow.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [isDesktopViewport]);
+
   const setOverlayRef = (id: string) => (node: HTMLDivElement | null) => {
     overlayRefs.current[id] = node;
   };
@@ -1154,15 +1254,25 @@ const Landing = () => {
 
   useGSAP(() => {
     const video = heroVideoRef.current;
-    if (!video) {
+    if (!video || !shouldLoadHeroVideo) {
+      setIsHeroVideoReady(false);
       return;
     }
+
+    let isActive = true;
 
     video.muted = true;
     video.defaultMuted = true;
     video.loop = true;
     video.playsInline = true;
+    video.preload = "metadata";
     video.playbackRate = 1.6;
+
+    const markReady = () => {
+      if (isActive) {
+        setIsHeroVideoReady(true);
+      }
+    };
 
     const tryPlay = () => {
       const playback = video.play();
@@ -1182,25 +1292,38 @@ const Landing = () => {
       }
     };
 
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      markReady();
+    }
+
+    video.load();
     tryPlay();
+    video.addEventListener("playing", markReady);
     video.addEventListener("canplay", tryPlay);
     video.addEventListener("loadeddata", tryPlay);
+    video.addEventListener("loadeddata", markReady);
     video.addEventListener("ended", handleEnded);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", tryPlay);
 
     return () => {
+      isActive = false;
+      video.removeEventListener("playing", markReady);
       video.removeEventListener("canplay", tryPlay);
       video.removeEventListener("loadeddata", tryPlay);
+      video.removeEventListener("loadeddata", markReady);
       video.removeEventListener("ended", handleEnded);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", tryPlay);
     };
-  }, { scope: landingRef });
+  }, { scope: landingRef, dependencies: [shouldLoadHeroVideo] });
 
   useGSAP(() => {
-    if (!canvasRef.current || !globeContainerRef.current) return;
+    if (!shouldLoadGlobe || !canvasRef.current || !globeContainerRef.current) {
+      return;
+    }
 
+    let isActive = true;
     const canvas = canvasRef.current;
     const globeContainer = globeContainerRef.current;
     const devicePixelRatio = Math.min(
@@ -1208,8 +1331,16 @@ const Landing = () => {
       GLOBE_MAX_DEVICE_PIXEL_RATIO,
     );
     let globeSize = Math.max(globeContainer.offsetWidth * devicePixelRatio, 1);
+    let bootstrapFrameId = 0;
     let frameId = 0;
     let globeVisible = document.visibilityState === "visible";
+    let globe: {
+      update: (options: { phi?: number; width?: number; height?: number }) => void;
+      destroy: () => void;
+    } | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+
+    setIsGlobeReady(false);
 
     const syncOverlays = (currentPhi: number) => {
       const rect = globeContainer.getBoundingClientRect();
@@ -1244,48 +1375,8 @@ const Landing = () => {
       }
     };
 
-    const globe = createGlobe(canvas, {
-      devicePixelRatio,
-      width: globeSize,
-      height: globeSize,
-      phi: basePhiRef.current,
-      theta: GLOBE_THETA,
-      dark: 0,
-      diffuse: 0.2,
-      mapSamples: GLOBE_MAP_SAMPLES,
-      mapBrightness: 7,
-      mapBaseBrightness: 0,
-      scale: GLOBE_SCALE,
-      baseColor: GLOBE_BASE_COLOR,
-      markerColor: LANDING_PRIMARY_COBE_RGB,
-      glowColor: [0.98, 0.99, 1],
-      offset: [0, 0],
-      markerElevation: 0,
-      markers: GLOBE_OVERLAY_ITEMS.filter(
-        (item) => item.id !== "berlin-face",
-      ).map((item) => ({
-        location: item.location,
-        size: item.size,
-        id: item.id,
-      })),
-    });
-
-    const resizeObserver = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      const nextGlobeSize = Math.max(
-        entry.contentRect.width * devicePixelRatio,
-        1,
-      );
-      if (Math.abs(nextGlobeSize - globeSize) < 1) return;
-      globeSize = nextGlobeSize;
-      globe.update({ width: globeSize, height: globeSize });
-      syncOverlays(basePhiRef.current);
-    });
-
-    resizeObserver.observe(globeContainer);
-
     const animate = () => {
-      if (!globeVisible) {
+      if (!globeVisible || !globe) {
         frameId = 0;
         return;
       }
@@ -1305,17 +1396,74 @@ const Landing = () => {
       }
     };
 
-    syncOverlays(basePhiRef.current);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    frameId = window.requestAnimationFrame(animate);
+    const loadGlobe = async () => {
+      const { default: createGlobe } = await import("cobe");
+
+      if (!isActive) {
+        return;
+      }
+
+      globe = createGlobe(canvas, {
+        devicePixelRatio,
+        width: globeSize,
+        height: globeSize,
+        phi: basePhiRef.current,
+        theta: GLOBE_THETA,
+        dark: 0,
+        diffuse: 0.2,
+        mapSamples: GLOBE_MAP_SAMPLES,
+        mapBrightness: 7,
+        mapBaseBrightness: 0,
+        scale: GLOBE_SCALE,
+        baseColor: GLOBE_BASE_COLOR,
+        markerColor: LANDING_PRIMARY_COBE_RGB,
+        glowColor: [0.98, 0.99, 1],
+        offset: [0, 0],
+        markerElevation: 0,
+        markers: GLOBE_OVERLAY_ITEMS.filter(
+          (item) => item.id !== "berlin-face",
+        ).map((item) => ({
+          location: item.location,
+          size: item.size,
+          id: item.id,
+        })),
+      });
+
+      resizeObserver = new ResizeObserver(([entry]) => {
+        if (!entry || !globe) return;
+        const nextGlobeSize = Math.max(
+          entry.contentRect.width * devicePixelRatio,
+          1,
+        );
+        if (Math.abs(nextGlobeSize - globeSize) < 1) return;
+        globeSize = nextGlobeSize;
+        globe.update({ width: globeSize, height: globeSize });
+        syncOverlays(basePhiRef.current);
+      });
+
+      resizeObserver.observe(globeContainer);
+      syncOverlays(basePhiRef.current);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      bootstrapFrameId = window.requestAnimationFrame(() => {
+        if (!isActive) {
+          return;
+        }
+        setIsGlobeReady(true);
+        frameId = window.requestAnimationFrame(animate);
+      });
+    };
+
+    void loadGlobe();
 
     return () => {
+      isActive = false;
+      window.cancelAnimationFrame(bootstrapFrameId);
       window.cancelAnimationFrame(frameId);
-      resizeObserver.disconnect();
+      resizeObserver?.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      globe.destroy();
+      globe?.destroy();
     };
-  }, { scope: landingRef });
+  }, { scope: landingRef, dependencies: [shouldLoadGlobe] });
 
   useGSAP(() => {
     const mediaQueryList = window.matchMedia(LANDING_DESKTOP_QUERY);
@@ -2090,7 +2238,24 @@ const Landing = () => {
           background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
         }}
       >
-        {/* Background Video */}
+        <div
+          className={cx(
+            "pointer-events-none absolute inset-0 z-[1] overflow-hidden transition-opacity duration-700 ease-out",
+            isHeroVideoReady ? "opacity-0" : "opacity-100",
+          )}
+        >
+          <div className="absolute inset-0 animate-[heroPosterDrift_18s_ease-in-out_infinite]">
+            <Image
+              alt=""
+              aria-hidden
+              className="object-cover [transform:scale(-1,-1)] [filter:brightness(0.92)_contrast(1.02)_saturate(0.84)]"
+              fill
+              priority
+              sizes="100vw"
+              src={LANDING_HERO_POSTER_SRC}
+            />
+          </div>
+        </div>
         <video
           autoPlay
           disablePictureInPicture
@@ -2098,9 +2263,12 @@ const Landing = () => {
           loop
           muted
           playsInline
-          poster="/hero-poster.jpg"
-          preload="metadata"
-          className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
+          poster={LANDING_HERO_POSTER_SRC}
+          preload={shouldLoadHeroVideo ? "metadata" : "none"}
+          className={cx(
+            "pointer-events-none absolute inset-0 z-[2] h-full w-full object-cover transition-opacity duration-700 ease-out",
+            isHeroVideoReady ? "opacity-100" : "opacity-0",
+          )}
           data-lp-hero-video
           ref={heroVideoRef}
           style={{
@@ -2108,11 +2276,15 @@ const Landing = () => {
             filter: "brightness(0.9) contrast(1.02) saturate(0.8)",
           }}
         >
-          <source src="/hero.webm" type='video/webm; codecs="vp9"' />
-          <source src="/hero.mp4" type="video/mp4" />
+          {shouldLoadHeroVideo ? (
+            <>
+              <source src={LANDING_HERO_WEBM_SRC} type='video/webm; codecs="vp9"' />
+              <source src={LANDING_HERO_MP4_SRC} type="video/mp4" />
+            </>
+          ) : null}
         </video>
-        <div className="pointer-events-none absolute inset-0 z-[2] bg-white/22" />
-        <div className="pointer-events-none absolute inset-0 z-[3] bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_34%),radial-gradient(circle_at_88%_14%,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_30%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,249,253,0.22)_52%,rgba(238,243,251,0.34)_100%)]" />
+        <div className="pointer-events-none absolute inset-0 z-[3] bg-white/22" />
+        <div className="pointer-events-none absolute inset-0 z-[4] bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_34%),radial-gradient(circle_at_88%_14%,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_30%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,249,253,0.22)_52%,rgba(238,243,251,0.34)_100%)]" />
         <div className="relative z-30 mx-auto flex min-h-[50rem] max-w-7xl flex-col items-center justify-start gap-8 pt-6 sm:min-h-[calc(100svh-5rem)] sm:gap-10 sm:pt-8 lg:min-h-[calc(95vh-6rem)] lg:flex-row lg:gap-2 lg:pt-2">
           <div className="relative z-10 w-full max-w-xl flex-1 lg:max-w-[40rem] lg:flex-[1.06]">
             <div
@@ -2281,22 +2453,31 @@ const Landing = () => {
               <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_34%_26%,rgba(255,255,255,0.72),rgba(248,250,255,0.28)_42%,rgba(255,255,255,0.04)_72%)] shadow-[0_36px_120px_rgba(148,163,184,0.06)]" />
               <div className="absolute inset-[11%] rounded-full shadow-[inset_-24px_-30px_72px_rgba(148,163,184,0.1)] ring-1 ring-white/55" />
               <div className="relative size-full" ref={globeContainerRef}>
-                <div className="pointer-events-none absolute inset-[8%] z-0 rounded-full">
-                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_24%,rgba(231,237,248,0.82)_52%,rgba(207,220,244,0.62)_78%,rgba(184,201,234,0.38)_100%)] shadow-[inset_-38px_-54px_110px_rgba(86,114,184,0.12),inset_24px_24px_82px_rgba(255,255,255,0.78),0_36px_100px_rgba(148,163,184,0.08)]" />
-                  <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_30%_34%,rgba(255,255,255,0.36)_0%,rgba(255,255,255,0.08)_24%,rgba(255,255,255,0)_58%)]" />
-                  <div className="absolute left-[18%] top-[26%] h-[16%] w-[27%] rounded-[42%_58%_52%_48%/58%_42%_58%_42%] bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(149,171,214,0.14))] blur-[2px]" />
-                  <div className="absolute left-[27%] top-[45%] h-[13%] w-[18%] rounded-[54%_46%_60%_40%/45%_55%_45%_55%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(151,173,216,0.12))] blur-[1px]" />
-                  <div className="absolute right-[18%] top-[35%] h-[19%] w-[23%] rounded-[58%_42%_48%_52%/48%_54%_46%_52%] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(153,175,219,0.14))] blur-[2px]" />
-                  <div className="absolute right-[28%] top-[58%] h-[9%] w-[13%] rounded-[62%_38%_55%_45%/44%_56%_46%_54%] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(148,171,216,0.12))] blur-[1px]" />
-                  <div className="absolute inset-[4%] rounded-full border border-white/68" />
-                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/32" />
-                  <div className="absolute inset-x-[7%] inset-y-[10%] rounded-full border border-[#b8caea]/26" />
-                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.34)_18%,rgba(255,255,255,0.54)_50%,rgba(255,255,255,0.34)_82%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.16)_22%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0.16)_78%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.16)_22%,rgba(255,255,255,0.28)_50%,rgba(255,255,255,0.16)_78%,rgba(255,255,255,0)_100%)]" />
+                <div
+                  className={cx(
+                    "pointer-events-none absolute inset-[8%] z-0 rounded-full transition-opacity duration-700 ease-out",
+                    isGlobeReady ? "opacity-0" : "opacity-100",
+                  )}
+                >
+                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.98)_0%,rgba(247,250,255,0.94)_26%,rgba(231,238,248,0.82)_56%,rgba(201,216,244,0.58)_80%,rgba(184,201,234,0.32)_100%)] shadow-[inset_-38px_-54px_110px_rgba(86,114,184,0.10),inset_24px_24px_82px_rgba(255,255,255,0.84),0_36px_100px_rgba(148,163,184,0.08)]" />
+                  <div className="absolute inset-[5%] rounded-full border border-white/70" />
+                  <div className="absolute inset-[14%] rounded-full border border-[#d7e3f7]/72 [animation:lpGlobePlaceholderSpin_22s_linear_infinite]" />
+                  <div className="absolute inset-[24%] rounded-full border border-[#c7d7f3]/58 [animation:lpGlobePlaceholderSpin_16s_linear_infinite_reverse]" />
+                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/26" />
+                  <div className="absolute inset-x-[6%] inset-y-[10%] rounded-full border border-[#b8caea]/24" />
+                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.28)_18%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.28)_82%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.12)_22%,rgba(255,255,255,0.24)_50%,rgba(255,255,255,0.12)_78%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.12)_22%,rgba(255,255,255,0.24)_50%,rgba(255,255,255,0.12)_78%,rgba(255,255,255,0)_100%)]" />
+                  <div className="absolute inset-[10%] rounded-full bg-[conic-gradient(from_180deg_at_50%_50%,rgba(255,255,255,0)_0deg,rgba(255,255,255,0.42)_40deg,rgba(255,255,255,0)_92deg)] opacity-80 [mask-image:radial-gradient(circle,transparent_44%,black_67%,transparent_76%)] [animation:lpGlobeSweep_8s_linear_infinite]" />
+                  <div className="absolute left-[24%] top-[32%] h-3.5 w-3.5 rounded-full bg-[#2f63ff]/72 shadow-[0_0_0_10px_rgba(47,99,255,0.08)] [animation:lpGlobeNodePulse_2.8s_ease-in-out_infinite]" />
+                  <div className="absolute right-[24%] top-[42%] h-3 w-3 rounded-full bg-[#34c759]/72 shadow-[0_0_0_10px_rgba(52,199,89,0.08)] [animation:lpGlobeNodePulse_3.2s_ease-in-out_infinite_0.4s]" />
+                  <div className="absolute left-[44%] top-[58%] h-2.5 w-2.5 rounded-full bg-[#111827]/58 shadow-[0_0_0_8px_rgba(15,23,42,0.06)] [animation:lpGlobeNodePulse_2.4s_ease-in-out_infinite_0.8s]" />
                 </div>
                 <canvas
-                  className="relative z-10 block h-full w-full [contain:layout_paint_size]"
+                  className={cx(
+                    "relative z-10 block h-full w-full [contain:layout_paint_size] transition-opacity duration-700 ease-out",
+                    isGlobeReady ? "opacity-100" : "opacity-0",
+                  )}
                   ref={canvasRef}
                   style={{ maxWidth: "100%", aspectRatio: "1" }}
                 />
@@ -2393,11 +2574,17 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(1, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(1, locale)}
                 />
               </AlternateImageMockup>
@@ -2427,11 +2614,17 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(2, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(2, locale)}
                 />
               </AlternateImageMockup>
@@ -2461,11 +2654,17 @@ const Landing = () => {
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain lg:w-auto lg:max-w-none dark:hidden"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(3, locale)}
                 />
                 <img
                   alt="Dashboard mockup showing application interface"
                   className="size-full object-contain not-dark:hidden lg:w-auto lg:max-w-none"
+                  decoding="async"
+                  fetchPriority="low"
+                  loading="lazy"
                   src={getLandingMockupSrc(3, locale)}
                 />
               </AlternateImageMockup>
@@ -2569,6 +2768,9 @@ const Landing = () => {
                   <img
                     alt={locale === "ru" ? "Скриншот приложения" : "App screenshot"}
                     className="h-full w-full object-cover object-top"
+                    decoding="async"
+                    fetchPriority="low"
+                    loading="lazy"
                     src={locale === "ru" ? "/mob_ru.webp" : "/mob_en.webp"}
                   />
                 </div>
@@ -2884,6 +3086,10 @@ const Landing = () => {
           0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
           50% { box-shadow: 0 0 20px 4px rgba(59, 130, 246, 0.15); }
         }
+        @keyframes heroPosterDrift {
+          0%, 100% { transform: scale(1) translate3d(0, 0, 0); }
+          50% { transform: scale(1.035) translate3d(0, -1.5%, 0); }
+        }
         @keyframes bounceTextBadge {
           0%, 70% { transform: translateY(0%); }
           80% { transform: translateY(-15%); }
@@ -2892,6 +3098,18 @@ const Landing = () => {
           97% { transform: translateY(0%); }
           99% { transform: translateY(-3%); }
           100% { transform: translateY(0); }
+        }
+        @keyframes lpGlobePlaceholderSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes lpGlobeSweep {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes lpGlobeNodePulse {
+          0%, 100% { transform: scale(1); opacity: 0.72; }
+          50% { transform: scale(1.18); opacity: 1; }
         }
         .globe-shimmer-text {
           background: linear-gradient(

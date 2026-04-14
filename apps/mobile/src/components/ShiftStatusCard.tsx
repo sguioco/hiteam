@@ -32,6 +32,7 @@ function ShiftBannerVideoBackdrop({ onReady }: { onReady: () => void }) {
   const player = useVideoPlayer(HERO_BANNER_VIDEO_SOURCE, (nextPlayer) => {
     nextPlayer.loop = true;
     nextPlayer.muted = true;
+    nextPlayer.audioMixingMode = 'mixWithOthers';
     nextPlayer.play();
   });
 

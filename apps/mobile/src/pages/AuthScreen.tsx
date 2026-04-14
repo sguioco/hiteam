@@ -79,6 +79,7 @@ const AuthHeroVideoOverlay = memo(function AuthHeroVideoOverlay({ onReady }: { o
   const player = useVideoPlayer(require('../../timelapse-mobile.mp4'), (nextPlayer) => {
     nextPlayer.loop = true;
     nextPlayer.muted = true;
+    nextPlayer.audioMixingMode = 'mixWithOthers';
     nextPlayer.play();
   });
 

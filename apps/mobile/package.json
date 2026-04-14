@@ -4,7 +4,9 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "expo start --clear --port 8082",
+    "dev": "node ./scripts/run-expo-dev.cjs",
+    "dev:clear": "node ./scripts/run-expo-dev.cjs --clear",
+    "dev:online": "node ./scripts/run-expo-dev.cjs --online",
     "build": "expo export --platform web",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

@@ -12,6 +12,55 @@ module.exports = (phase) => {
     distDir: isDevelopmentServer ? ".next-dev" : ".next",
     outputFileTracingRoot: path.join(__dirname, "../../"),
     transpilePackages: ["@smart/ui", "@smart/types"],
+    async headers() {
+      return [
+        {
+          source: "/hero-poster.jpg",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+        {
+          source: "/hero.webm",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+        {
+          source: "/hero.mp4",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+        {
+          source: "/room.webp",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+        {
+          source: "/geo.webp",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+      ];
+    },
   };
 
   return nextConfig;

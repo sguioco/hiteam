@@ -8,6 +8,9 @@ import { petersburgHero } from './landing-hero-font';
 import { cn } from "@/lib/utils";
 import { getServerSession } from "@/lib/server-auth";
 import { loadInitialShellBootstrap } from "@/lib/server-shell";
+import {
+  LANDING_HERO_POSTER_SRC,
+} from "@/lib/landing-assets";
 
 const teodor = localFont({
   src: [
@@ -127,6 +130,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         petersburgHero.variable,
       )}
     >
+      <head>
+        <link as="image" fetchPriority="high" href={LANDING_HERO_POSTER_SRC} rel="preload" />
+      </head>
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers initialLocale={initialLocale}>{children}</Providers>

@@ -33,8 +33,8 @@ function buildDemoInitialShellBootstrap(
         configured: true,
       },
       accountProfile: {
-        firstName: isEmployee ? "Alex" : "Sergei",
-        lastName: isEmployee ? "Mironov" : "Grigoryev",
+        firstName: isEmployee ? "Alex" : "Alex",
+        lastName: isEmployee ? "Mironov" : "Petrov",
         avatarUrl: isEmployee
           ? getMockAvatarDataUrl("Alex Mironov", "male")
           : DEMO_ADMIN_AVATAR_URL,

@@ -636,7 +636,7 @@ export default function EmployeeCardPageClient({
                       : "Downgrade to employee"
                     : locale === "ru"
                       ? "Сделать менеджером"
-                      : "Make manager"}
+                      : "Upgrade to manager"}
               </button>
             ) : null}
           </div>

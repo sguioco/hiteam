@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Image, Linking, ScrollView, TextInput, View } from 'react-native';
+import { Line, Rect, Svg } from 'react-native-svg';
 import MapView, { Marker } from 'react-native-maps';
 import { Text } from '../../components/ui/text';
 import Animated, {
@@ -800,7 +801,76 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           </View>
         </>
       ) : (
-        <View className="flex-1 items-center justify-center px-6">
+        <View className="flex-1 items-center justify-center gap-3 px-6">
+          <Svg height="54" viewBox="0 0 64 64" width="54">
+            <Rect
+              x="9"
+              y="8"
+              fill="none"
+              height="44"
+              rx="5"
+              ry="5"
+              stroke="#94a3b8"
+              strokeWidth="2.5"
+              width="46"
+            />
+            <Line
+              stroke="#94a3b8"
+              strokeLinecap="round"
+              strokeWidth="2.3"
+              x1="16"
+              x2="34"
+              y1="22"
+              y2="22"
+            />
+            <Line
+              stroke="#94a3b8"
+              strokeLinecap="round"
+              strokeWidth="2.3"
+              x1="16"
+              x2="34"
+              y1="30"
+              y2="30"
+            />
+            <Line
+              stroke="#94a3b8"
+              strokeLinecap="round"
+              strokeWidth="2.3"
+              x1="16"
+              x2="26"
+              y1="38"
+              y2="38"
+            />
+            <Rect
+              fill="none"
+              height="28"
+              rx="4"
+              ry="4"
+              stroke="#64748b"
+              strokeWidth="2"
+              width="16"
+              x="39"
+              y="18"
+            />
+            <Line
+              stroke="#64748b"
+              strokeLinecap="round"
+              strokeWidth="2.3"
+              x1="44"
+              x2="49"
+              y1="25"
+              y2="25"
+            />
+            <Line
+              stroke="#64748b"
+              strokeLinecap="round"
+              strokeWidth="2.3"
+              x1="44"
+              x2="49"
+              y1="32"
+              y2="32"
+            />
+          </Svg>
           <Text className="text-center text-[17px] leading-6 text-[#5f728b]">{copy.empty}</Text>
         </View>
       )}

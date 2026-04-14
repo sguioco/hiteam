@@ -21,6 +21,7 @@ import {
   Pencil,
   Paperclip,
   Pin,
+  Newspaper,
   Trash2,
   X,
 } from "lucide-react";
@@ -2338,7 +2339,7 @@ export function NewsCenter({
         ) : (
           <div className="animate-fade-in rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/94 px-6 py-12 text-center shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-sky-50 text-sky-600">
-              <FileText className="size-6" />
+              <Newspaper className="size-6" />
             </div>
             <h2 className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-[color:var(--foreground)]">
               {localize(locale, "Пока новостей нет", "No news yet")}

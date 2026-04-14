@@ -8,6 +8,7 @@ import {
   getDemoRoleByToken,
   isDemoAccessToken,
   isDemoModeEnabled,
+  DEMO_ADMIN_EMAIL,
 } from "./demo-mode";
 import {
   readBrowserStorageItem,
@@ -419,8 +420,8 @@ function buildDemoAuthBootstrap(state: DemoState, token?: string) {
         configured: state.organization.configured,
       },
       accountProfile: {
-        firstName: isEmployee ? "Alex" : "Sergei",
-        lastName: isEmployee ? "Mironov" : "Grigoryev",
+        firstName: isEmployee ? "Alex" : "Alex",
+        lastName: isEmployee ? "Mironov" : "Petrov",
         avatarUrl: fallbackAvatarUrl,
         company: {
           logoUrl: state.organization.company?.logoUrl ?? null,
@@ -434,6 +435,20 @@ function buildDemoAuthBootstrap(state: DemoState, token?: string) {
         right.createdAt.localeCompare(left.createdAt),
       ),
     },
+  };
+}
+
+function withDemoOwnerIdentity(employee: DemoEmployee) {
+  const isOwner = employee.user?.email === DEMO_ADMIN_EMAIL;
+  if (!isOwner) {
+    return employee;
+  }
+
+  return {
+    ...employee,
+    firstName: "Alex",
+    lastName: "Petrov",
+    avatarUrl: DEMO_ADMIN_AVATAR_URL,
   };
 }
 
@@ -453,6 +468,8 @@ function createInitialState(): DemoState {
       );
       return {
         ...employee,
+        firstName: index === 0 ? "Alex" : employee.firstName,
+        lastName: index === 0 ? "Petrov" : employee.lastName,
         department: employee.department ?? null,
         primaryLocation: employee.primaryLocation ?? null,
         position: employee.position ?? null,
@@ -460,14 +477,18 @@ function createInitialState(): DemoState {
         birthDate: buildDemoBirthDate(index),
         gender,
         phone: `+7 999 000 0${index}${index}`,
-        avatarUrl: getMockAvatarDataUrl(
-          `${employee.firstName} ${employee.lastName}`,
-          gender,
-        ),
+        avatarUrl:
+          index === 0
+            ? DEMO_ADMIN_AVATAR_URL
+            : getMockAvatarDataUrl(
+                `${employee.firstName} ${employee.lastName}`,
+                gender,
+              ),
         status: index < 4 ? "ACTIVE" : "INACTIVE",
         user: {
           id: `user-${employee.id}`,
-          email: index === 0 ? "sgiuoco688@gmail.com" : `employee${index + 1}@hiteam.demo`,
+          email:
+            index === 0 ? DEMO_ADMIN_EMAIL : `employee${index + 1}@hiteam.demo`,
         },
         company,
         devices: [
@@ -783,6 +804,78 @@ function createInitialState(): DemoState {
           createdAt: createIsoAt(0, 9, 45),
         }
       ]
+    },
+    buildTask({
+      id: "task-owner-today-1",
+      title: "Собрать отчёт по инвентаризации для управляющего",
+      description:
+        "Сверить остатки по категориям и отправить короткий статус руководителю смены.",
+      dueAt: createIsoAt(0, 9, 45),
+      priority: "MEDIUM",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-owner-today-2",
+      title: "Проверить заявки на смены за выходные",
+      description: "Подтвердить или отклонить все актуальные запросы на обмены.",
+      dueAt: createIsoAt(0, 12, 20),
+      priority: "HIGH",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-owner-today-3",
+      title: "Подготовить сводку по отсутствующим сотрудникам",
+      description: "Собрать список отсутствий и отметить причину неявок.",
+      dueAt: createIsoAt(0, 14, 10),
+      priority: "MEDIUM",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    buildTask({
+      id: "task-owner-today-4",
+      title: "Проверить статус обучения новых сотрудников",
+      description: "Проконтролировать завершение онбординга и назначить наставника.",
+      dueAt: createIsoAt(0, 16, 5),
+      priority: "LOW",
+      assigneeEmployeeId: employees[0].id,
+    }),
+    {
+      ...buildTask({
+        id: "task-owner-today-photo-1",
+        title: "Фото отчёт по кассовой зоне",
+        description:
+          "Загрузить фото закрытой кассовой зоны после пересчёта.",
+        dueAt: createIsoAt(0, 10, 15),
+        priority: "HIGH",
+        status: "DONE",
+        assigneeEmployeeId: employees[0].id,
+      }),
+      photoProofs: [
+        {
+          id: "owner-proof-1",
+          url: "https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&q=80&w=1000",
+          createdAt: createIsoAt(0, 10, 10),
+        },
+      ],
+    },
+    {
+      ...buildTask({
+        id: "task-owner-today-photo-2",
+        title: "Фото отчёт по чистоте торгового зала",
+        description:
+          "Подтвердить фотоотчётом, что зал приведён в порядок после открытия.",
+        dueAt: createIsoAt(0, 15, 30),
+        priority: "MEDIUM",
+        status: "DONE",
+        assigneeEmployeeId: employees[0].id,
+      }),
+      photoProofs: [
+        {
+          id: "owner-proof-2",
+          url: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&q=80&w=1000",
+          createdAt: createIsoAt(0, 15, 25),
+        },
+      ],
     },
   ].map((task) => normalizeDemoTask(task, employees));
 
@@ -1226,6 +1319,7 @@ function loadState(): DemoState {
       const normalizedGender = resolveMockAvatarGender(fullName);
       const nextAvatarUrl = getMockAvatarDataUrl(fullName, normalizedGender);
       const nextBirthDate = employee.birthDate ?? buildDemoBirthDate(index);
+      const isOwner = employee.user?.email === DEMO_ADMIN_EMAIL;
       const nextMiddleName =
         normalizedGender === "male" ? "Александрович" : "Игоревна";
       const shouldReplaceAvatar =
@@ -1237,17 +1331,22 @@ function loadState(): DemoState {
         shouldReplaceAvatar ||
         employee.birthDate !== nextBirthDate ||
         employee.gender !== normalizedGender ||
-        employee.middleName !== nextMiddleName
+        employee.middleName !== nextMiddleName ||
+        employee.user?.email === DEMO_ADMIN_EMAIL
       ) {
         changed = true;
       }
 
       return {
-        ...employee,
+        ...withDemoOwnerIdentity(employee),
         gender: normalizedGender,
         middleName: nextMiddleName,
         birthDate: nextBirthDate,
-        avatarUrl: shouldReplaceAvatar ? nextAvatarUrl : employee.avatarUrl,
+        avatarUrl: isOwner
+          ? DEMO_ADMIN_AVATAR_URL
+          : shouldReplaceAvatar
+            ? nextAvatarUrl
+            : employee.avatarUrl,
       };
     });
 
