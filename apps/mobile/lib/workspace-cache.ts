@@ -18,6 +18,7 @@ import {
   loadMyTimeOffBalances,
 } from './api';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
+import { normalizeDemoOwnerProfile, resolveDemoOwnerTodayScreenData } from './demo-owner';
 import { readScreenCache, writeScreenCache } from './screen-cache';
 import { formatDateKeyInTimeZone } from './timezone';
 import { primeLiveTextMap } from './use-live-text-map';
@@ -173,7 +174,9 @@ function collectAnnouncementTexts(items: AnnouncementItem[]) {
 }
 
 async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
-  const nextProfile = profile ?? (await loadMyProfile());
+  const nextProfile = normalizeDemoOwnerProfile(
+    profile ?? (await loadMyProfile()),
+  ) as WorkspaceProfile;
 
   await writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
   await prefetchImageSources([buildProfileAvatarSource(nextProfile)]);
@@ -182,7 +185,9 @@ async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
 }
 
 export async function warmTodayScreenCache(profile?: WorkspaceProfile | null, language?: AppLanguage) {
-  const nextProfile = profile ?? (await loadMyProfile());
+  const nextProfile = normalizeDemoOwnerProfile(
+    profile ?? (await loadMyProfile()),
+  ) as WorkspaceProfile;
   const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
   const [attendanceStatus, shifts, tasks] = await Promise.all([
     loadAttendanceStatus(),
@@ -193,19 +198,19 @@ export async function warmTodayScreenCache(profile?: WorkspaceProfile | null, la
     }),
   ]);
 
-  const payload: TodayScreenCacheValue = {
+  const payload: TodayScreenCacheValue = resolveDemoOwnerTodayScreenData({
     attendanceStatus,
     profile: nextProfile,
     shifts,
     tasks,
-  };
+  });
 
   if (language) {
-    await primeTaskTranslations(tasks, language);
+    await primeTaskTranslations(payload.tasks, language);
   }
 
   await writeScreenCache(TODAY_SCREEN_CACHE_KEY, payload);
-  await prefetchImageSources([buildProfileAvatarSource(nextProfile), ...collectTaskPhotoUris(tasks)]);
+  await prefetchImageSources([buildProfileAvatarSource(payload.profile!), ...collectTaskPhotoUris(payload.tasks)]);
 
   return payload;
 }

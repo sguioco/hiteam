@@ -19,6 +19,11 @@ import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib
 type ProfileScreenProps = {
   active?: boolean;
 };
+const DEMO_OWNER_EMAIL = "owner@demo.smart";
+const DEMO_OWNER_PROFILE_NAME = {
+  firstName: "Alex",
+  lastName: "Petrov",
+};
 
 const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
@@ -40,6 +45,25 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  const normalizedProfile = useMemo(() => {
+    if (!profile || profile.user.email.toLowerCase() !== DEMO_OWNER_EMAIL) {
+      return profile;
+    }
+
+    if (
+      profile.firstName === DEMO_OWNER_PROFILE_NAME.firstName &&
+      profile.lastName === DEMO_OWNER_PROFILE_NAME.lastName
+    ) {
+      return profile;
+    }
+
+    return {
+      ...profile,
+      firstName: DEMO_OWNER_PROFILE_NAME.firstName,
+      lastName: DEMO_OWNER_PROFILE_NAME.lastName,
+    };
+  }, [profile]);
 
   useEffect(() => {
     return subscribeScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
@@ -116,43 +140,45 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   }, [t]);
 
   const fullName = useMemo(() => {
-    if (!profile) {
+    if (!normalizedProfile) {
       return "...";
     }
 
-    return [profile.firstName, profile.lastName].filter(Boolean).join(" ");
-  }, [profile]);
+    return [normalizedProfile.firstName, normalizedProfile.lastName]
+      .filter(Boolean)
+      .join(" ");
+  }, [normalizedProfile]);
 
   const profileAvatar = useMemo(() => {
-    if (!profile) {
+    if (!normalizedProfile) {
       return null;
     }
 
     return resolveEmployeeAvatarSource({
-      avatarUrl: profile.avatarUrl,
-      email: profile.user.email,
-      employeeNumber: profile.employeeNumber,
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      gender: profile.gender,
-      id: profile.id,
+      avatarUrl: normalizedProfile.avatarUrl,
+      email: normalizedProfile.user.email,
+      employeeNumber: normalizedProfile.employeeNumber,
+      firstName: normalizedProfile.firstName,
+      lastName: normalizedProfile.lastName,
+      gender: normalizedProfile.gender,
+      id: normalizedProfile.id,
     });
-  }, [profile]);
+  }, [normalizedProfile]);
 
   const profileAvatarFallback = useMemo(() => {
-    if (!profile) {
+    if (!normalizedProfile) {
       return null;
     }
 
     return resolveEmployeeAvatarSource({
-      email: profile.user.email,
-      employeeNumber: profile.employeeNumber,
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      gender: profile.gender,
-      id: profile.id,
+      email: normalizedProfile.user.email,
+      employeeNumber: normalizedProfile.employeeNumber,
+      firstName: normalizedProfile.firstName,
+      lastName: normalizedProfile.lastName,
+      gender: normalizedProfile.gender,
+      id: normalizedProfile.id,
     });
-  }, [profile]);
+  }, [normalizedProfile]);
 
   const profileItems = useMemo(
     () =>

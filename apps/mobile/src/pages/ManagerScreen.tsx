@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../../components/ui/text';
+import { useFocusEffect } from "@react-navigation/native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -61,6 +62,10 @@ const DEMO_REMOTE_AVATARS = {
   denis:
     "https://www.untitledui.com/images/avatars/transparent/scott-clayton?bg=%23E0E0E0",
 } as const;
+const DEMO_OWNER_DISPLAY_NAME = {
+  firstName: "Alex",
+  lastName: "Petrov",
+};
 
 type ManagerScreenProps = {
   active?: boolean;
@@ -74,6 +79,104 @@ type TaskPhoto = {
 };
 
 const DEMO_OWNER_EMAIL = "owner@demo.smart";
+
+function isDemoOwnerEmail(email?: string | null) {
+  return email?.trim().toLowerCase() === DEMO_OWNER_EMAIL;
+}
+
+function normalizePersonName<T extends { firstName: string; lastName: string }>(
+  person: T,
+  firstName: string,
+  lastName: string,
+) {
+  return {
+    ...person,
+    firstName,
+    lastName,
+  };
+}
+
+function normalizeDemoOwnerProfile(
+  profile?: Awaited<ReturnType<typeof loadMyProfile>> | null,
+) {
+  if (!profile || !isDemoOwnerEmail(profile.user?.email)) {
+    return profile ?? null;
+  }
+
+  return normalizePersonName(profile, DEMO_OWNER_DISPLAY_NAME.firstName, DEMO_OWNER_DISPLAY_NAME.lastName);
+}
+
+function normalizeDemoOwnerEmployee(
+  employee: ManagerEmployee,
+  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
+) {
+  if (
+    !ownerProfile ||
+    employee.id !== ownerProfile.id &&
+      !isDemoOwnerEmail(employee.email)
+  ) {
+    return employee;
+  }
+
+  return normalizePersonName(
+    employee,
+    DEMO_OWNER_DISPLAY_NAME.firstName,
+    DEMO_OWNER_DISPLAY_NAME.lastName,
+  );
+}
+
+function normalizeDemoOwnerLiveSession(
+  session: AttendanceLiveSession,
+  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
+) {
+  if (!ownerProfile || session.employeeId !== ownerProfile.id) {
+    return session;
+  }
+
+  return {
+    ...session,
+    employeeName: buildEmployeeName(
+      DEMO_OWNER_DISPLAY_NAME.firstName,
+      DEMO_OWNER_DISPLAY_NAME.lastName,
+    ),
+  };
+}
+
+function normalizeDemoOwnerTask(
+  task: TaskItem,
+  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
+) {
+  if (!ownerProfile) {
+    return task;
+  }
+
+  const nextTask = { ...task };
+  let hasChanges = false;
+
+  if (nextTask.managerEmployee?.id === ownerProfile.id) {
+    nextTask.managerEmployee = {
+      ...nextTask.managerEmployee,
+      firstName: DEMO_OWNER_DISPLAY_NAME.firstName,
+      lastName: DEMO_OWNER_DISPLAY_NAME.lastName,
+    };
+    hasChanges = true;
+  }
+
+  if (nextTask.assigneeEmployee?.id === ownerProfile.id) {
+    nextTask.assigneeEmployee = {
+      ...nextTask.assigneeEmployee,
+      firstName: DEMO_OWNER_DISPLAY_NAME.firstName,
+      lastName: DEMO_OWNER_DISPLAY_NAME.lastName,
+    };
+    hasChanges = true;
+  }
+
+  if (!hasChanges) {
+    return task;
+  }
+
+  return nextTask;
+}
 
 function formatLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -637,28 +740,44 @@ function resolveManagerScreenData(
   preferRemoteData = false,
 ) {
   const fallbackProfile = data?.profile ?? null;
-  const resolvedProfile = profile ?? fallbackProfile;
+  const resolvedProfile = normalizeDemoOwnerProfile(profile ?? fallbackProfile);
   const isDemoOwner = isDemoOwnerProfile(resolvedProfile);
-  const hasRemoteData =
-    (data?.employees?.length ?? 0) > 0 ||
-    (data?.liveSessions?.length ?? 0) > 0 ||
-    (data?.tasks?.length ?? 0) > 0;
 
-  if (!isDemoOwner || preferRemoteData || hasRemoteData) {
+  const normalizeTasks = (tasks: TaskItem[]) =>
+    tasks.map((task) => normalizeDemoOwnerTask(task, resolvedProfile));
+  const normalizeSessions = (liveSessions: AttendanceLiveSession[]) =>
+    liveSessions.map((session) =>
+      normalizeDemoOwnerLiveSession(session, resolvedProfile),
+    );
+  const normalizeEmployees = (employees: ManagerEmployee[]) =>
+    employees.map((employee) =>
+      normalizeDemoOwnerEmployee(employee, resolvedProfile),
+    );
+
+  if (isDemoOwner) {
+    const demoData = buildDemoManagerData();
     return {
       profile: resolvedProfile,
-      employees: data?.employees ?? [],
-      liveSessions: data?.liveSessions ?? [],
-      tasks: data?.tasks ?? [],
+      employees: normalizeEmployees(demoData.employees),
+      liveSessions: normalizeSessions(demoData.liveSessions),
+      tasks: normalizeTasks(demoData.tasks),
     };
   }
 
-  const demoData = buildDemoManagerData();
+  if (!preferRemoteData) {
+    return {
+      profile: resolvedProfile,
+      employees: normalizeEmployees(data?.employees ?? []),
+      liveSessions: normalizeSessions(data?.liveSessions ?? []),
+      tasks: normalizeTasks(data?.tasks ?? []),
+    };
+  }
+
   return {
     profile: resolvedProfile,
-    employees: demoData.employees,
-    liveSessions: demoData.liveSessions,
-    tasks: demoData.tasks,
+    employees: normalizeEmployees(data?.employees ?? []),
+    liveSessions: normalizeSessions(data?.liveSessions ?? []),
+    tasks: normalizeTasks(data?.tasks ?? []),
   };
 }
 
@@ -745,139 +864,137 @@ export default function ManagerScreen({
     });
   }, [language]);
 
-  useEffect(() => {
-    async function loadData() {
-      const cached = await readScreenCache<ManagerScreenCacheValue>(
-        MANAGER_SCREEN_CACHE_KEY,
-        MANAGER_SCREEN_CACHE_TTL_MS,
-      );
+  const loadData = useCallback(async () => {
+    const cached = await readScreenCache<ManagerScreenCacheValue>(
+      MANAGER_SCREEN_CACHE_KEY,
+      MANAGER_SCREEN_CACHE_TTL_MS,
+    );
 
-      if (cached) {
+    if (!cached) {
+      setLoading(true);
+    } else if (cached.value && loading) {
+      setLoading(false);
+    }
+
+    if (cached) {
       const cachedResolved = resolveManagerScreenData(
         cached.value.profile,
         cached.value,
         isDemoOwnerProfile(cached.value.profile),
       );
-        void primeTaskTranslations(cachedResolved.tasks, language).catch(
-          () => undefined,
-        );
-        setProfile(cachedResolved.profile);
-        setEmployees(cachedResolved.employees);
-        setLiveSessions(cachedResolved.liveSessions);
-        setTasks(cachedResolved.tasks);
-        setLoading(false);
-        const hasUsefulCachedData =
-          cachedResolved.employees.length > 0 ||
-          cachedResolved.liveSessions.length > 0 ||
-          cachedResolved.tasks.length > 0;
-
-        if (
-          !cached.isStale &&
-          hasUsefulCachedData &&
-          !isDemoOwnerProfile(cached.value?.profile ?? null)
-        ) {
-          return;
-        }
-      }
-
-      const now = new Date();
-      const cachedTimeZone = cached?.value.profile?.primaryLocation?.timezone ?? null;
-      const initialPreviousDateKey = formatDateKeyInTimeZone(
-        addDays(now, -1),
-        cachedTimeZone,
+      void primeTaskTranslations(cachedResolved.tasks, language).catch(
+        () => undefined,
       );
-      const initialNextDayDateKey = formatDateKeyInTimeZone(
-        addDays(now, 1),
-        cachedTimeZone,
-      );
+      setProfile(cachedResolved.profile);
+      setEmployees(cachedResolved.employees);
+      setLiveSessions(cachedResolved.liveSessions);
+      setTasks(cachedResolved.tasks);
+      setFailedAvatarEmployeeIds(new Set());
+    }
 
-      const [profileResult, employeesResult, liveSessionsResult] =
-        await Promise.allSettled([
-          loadMyProfile(),
-          loadManagerEmployees(),
-          loadManagerLiveSessions(),
-        ]);
+    const now = new Date();
+    const cachedTimeZone = cached?.value.profile?.primaryLocation?.timezone ?? null;
+    const initialPreviousDateKey = formatDateKeyInTimeZone(
+      addDays(now, -1),
+      cachedTimeZone,
+    );
+    const initialNextDayDateKey = formatDateKeyInTimeZone(
+      addDays(now, 1),
+      cachedTimeZone,
+    );
 
-      const nextProfile =
-        profileResult.status === "fulfilled"
-          ? profileResult.value
-          : cached?.value.profile ?? null;
-      const nextEmployeesDefault =
-        employeesResult.status === "fulfilled"
-          ? Array.isArray(employeesResult.value)
-            ? employeesResult.value
-            : []
-          : cached?.value.employees ?? [];
-      const nextLiveSessionsDefault =
-        liveSessionsResult.status === "fulfilled"
-          ? Array.isArray(liveSessionsResult.value)
-            ? liveSessionsResult.value
-            : []
-          : cached?.value.liveSessions ?? [];
+    const [profileResult, employeesResult, liveSessionsResult] =
+      await Promise.allSettled([
+        loadMyProfile(),
+        loadManagerEmployees(),
+        loadManagerLiveSessions(),
+      ]);
 
-      const resolvedTimeZone = nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
-      const resolvedPreviousDateKey = formatDateKeyInTimeZone(
-        addDays(now, -1),
-        resolvedTimeZone,
-      );
-      const resolvedNextDayDateKey = formatDateKeyInTimeZone(
-        addDays(now, 1),
-        resolvedTimeZone,
-      );
+    const nextProfile =
+      profileResult.status === "fulfilled" ? profileResult.value : cached?.value.profile ?? null;
+    const nextEmployeesDefault =
+      employeesResult.status === "fulfilled"
+        ? Array.isArray(employeesResult.value)
+          ? employeesResult.value
+          : []
+        : cached?.value.employees ?? [];
+    const nextLiveSessionsDefault =
+      liveSessionsResult.status === "fulfilled"
+        ? Array.isArray(liveSessionsResult.value)
+          ? liveSessionsResult.value
+          : []
+        : cached?.value.liveSessions ?? [];
 
-      let nextTasks = cached?.value.tasks ?? [];
+    const resolvedTimeZone = nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
+    const resolvedPreviousDateKey = formatDateKeyInTimeZone(
+      addDays(now, -1),
+      resolvedTimeZone,
+    );
+    const resolvedNextDayDateKey = formatDateKeyInTimeZone(
+      addDays(now, 1),
+      resolvedTimeZone,
+    );
 
+    let nextTasks = cached?.value.tasks ?? [];
+
+    try {
+      nextTasks = await loadManagerTasks({
+        dateFrom: resolvedPreviousDateKey,
+        dateTo: resolvedNextDayDateKey,
+      });
+    } catch {
       try {
         nextTasks = await loadManagerTasks({
-          dateFrom: resolvedPreviousDateKey,
-          dateTo: resolvedNextDayDateKey,
+          dateFrom: initialPreviousDateKey,
+          dateTo: initialNextDayDateKey,
         });
       } catch {
         try {
-          nextTasks = await loadManagerTasks({
-            dateFrom: initialPreviousDateKey,
-            dateTo: initialNextDayDateKey,
-          });
+          nextTasks = await loadManagerTasks();
         } catch {
-          try {
-            nextTasks = await loadManagerTasks();
-          } catch {
-            nextTasks = cached?.value.tasks ?? [];
-          }
+          nextTasks = cached?.value.tasks ?? [];
         }
       }
-
-      const nextProfileWithFallback =
-        nextProfile ?? cached?.value.profile ?? null;
-      const nextResolvedData = resolveManagerScreenData(nextProfileWithFallback, {
-        profile: nextProfileWithFallback,
-        employees: nextEmployeesDefault,
-        liveSessions: nextLiveSessionsDefault,
-        tasks: nextTasks,
-      });
-
-      await primeTaskTranslations(nextResolvedData.tasks, language);
-      const finalTasks = nextResolvedData.tasks;
-      const nextEmployees = nextResolvedData.employees;
-      const nextLiveSessions = nextResolvedData.liveSessions;
-
-      setProfile(nextProfileWithFallback);
-      setEmployees(nextEmployees);
-      setLiveSessions(nextLiveSessions);
-      setTasks(finalTasks);
-      setFailedAvatarEmployeeIds(new Set());
-      setLoading(false);
-
-      void writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
-        profile: nextProfileWithFallback,
-        employees: nextEmployees,
-        liveSessions: nextLiveSessions,
-        tasks: finalTasks,
-      });
     }
 
-    void loadData();
+    const nextProfileWithFallback =
+      nextProfile ?? cached?.value.profile ?? null;
+    const nextResolvedData = resolveManagerScreenData(nextProfileWithFallback, {
+      profile: nextProfileWithFallback,
+      employees: nextEmployeesDefault,
+      liveSessions: nextLiveSessionsDefault,
+      tasks: nextTasks,
+    });
+
+    await primeTaskTranslations(nextResolvedData.tasks, language);
+    const finalTasks = nextResolvedData.tasks;
+    const nextEmployees = nextResolvedData.employees;
+    const nextLiveSessions = nextResolvedData.liveSessions;
+
+    setProfile(nextProfileWithFallback);
+    setEmployees(nextEmployees);
+    setLiveSessions(nextLiveSessions);
+    setTasks(finalTasks);
+    setFailedAvatarEmployeeIds(new Set());
+    setLoading(false);
+
+    void writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
+      profile: nextProfileWithFallback,
+      employees: nextEmployees,
+      liveSessions: nextLiveSessions,
+      tasks: finalTasks,
+    });
   }, [language]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData]),
+  );
 
   const liveSessionByEmployeeId = useMemo(
     () =>

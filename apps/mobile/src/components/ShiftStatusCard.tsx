@@ -21,6 +21,7 @@ const HERO_BANNER_VIDEO_SOURCE =
 type ShiftStatusCardProps = {
   greetingName?: string | null;
   status: AttendanceStatusResponse | null;
+  displayTimeZone?: string | null;
   loading?: boolean;
   topInset?: number;
   onPrimaryAction?: () => void;
@@ -154,11 +155,24 @@ function isSameCalendarDay(left: Date, right: Date) {
   );
 }
 
+function formatClockTime(
+  value: string,
+  locale: string,
+  timeZone?: string | null,
+) {
+  return new Date(value).toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
 function formatNextShiftHint(
   nextShift: AttendanceStatusResponse['nextShift'],
   now: Date,
   language: AppLanguage,
   locale: string,
+  timeZone?: string | null,
 ) {
   if (!nextShift) {
     return null;
@@ -169,10 +183,7 @@ function formatNextShiftHint(
     return null;
   }
 
-  const timeLabel = nextShiftStart.toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const timeLabel = formatClockTime(nextShift.startsAt, locale, timeZone);
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
@@ -198,7 +209,14 @@ function formatNextShiftHint(
     : `Next: ${weekdayLabel} at ${timeLabel}`;
 }
 
-const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryAction, topInset = 0 }: ShiftStatusCardProps) => {
+const ShiftStatusCard = ({
+  greetingName,
+  status,
+  displayTimeZone,
+  loading = false,
+  onPrimaryAction,
+  topInset = 0,
+}: ShiftStatusCardProps) => {
   const { language, t } = useI18n();
   const { config: bannerTheme } = useBannerTheme();
   const [videoReady, setVideoReady] = useState(false);
@@ -287,10 +305,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         return {
           title: null,
           body: '',
-          timing: `${nextShiftStart.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${nextShiftEnd.toLocaleTimeString(locale, {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}`,
+          timing: `${formatClockTime(status.nextShift.startsAt, locale, displayTimeZone)} - ${formatClockTime(status.nextShift.endsAt, locale, displayTimeZone)}`,
           locationLabel: status.nextShift.locationName,
           statusText: t('today.startsIn', {
             duration: formatDuration(minutesBeforeStart, language, 'accusative'),
@@ -319,10 +334,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
 
     const shiftStart = new Date(status.shift.startsAt);
     const shiftEnd = new Date(status.shift.endsAt);
-    const timing = `${shiftStart.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })} - ${shiftEnd.toLocaleTimeString(locale, {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
+    const timing = `${formatClockTime(status.shift.startsAt, locale, displayTimeZone)} - ${formatClockTime(status.shift.endsAt, locale, displayTimeZone)}`;
 
     if (status.attendanceState === 'checked_in') {
       const endMinutes = Math.max(0, (shiftEnd.getTime() - now.getTime()) / 60000);
@@ -363,6 +375,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
         now,
         language,
         locale,
+        displayTimeZone,
       );
 
       return {
@@ -428,7 +441,7 @@ const ShiftStatusCard = ({ greetingName, status, loading = false, onPrimaryActio
       buttonLabel: null,
       buttonTone: 'neutral' as const,
     };
-  }, [language, loading, locale, status, t]);
+  }, [displayTimeZone, language, loading, locale, status, t]);
 
   const buttonClasses =
     shiftMeta.buttonTone === 'danger'
