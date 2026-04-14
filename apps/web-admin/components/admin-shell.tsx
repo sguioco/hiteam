@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Activity,
   Bell,
   BriefcaseBusiness,
   Building2,
@@ -690,6 +691,7 @@ export function AdminShell({
     ? hasDesktopAdminAccess(session.user.roleCodes)
     : false;
   const homeHref = toAdminHref("/");
+  const activityHref = toAdminHref("/activity");
   const scheduleHref = toAdminHref("/schedule");
   const tasksHref = toAdminHref("/tasks");
   const newsHref = toAdminHref("/news");
@@ -704,6 +706,11 @@ export function AdminShell({
           href: homeHref,
           label: locale === "ru" ? "Главная" : "Home",
           icon: Home,
+        },
+        {
+          href: activityHref,
+          label: "Activity",
+          icon: Activity,
         },
         {
           href: newsHref,
@@ -723,6 +730,11 @@ export function AdminShell({
         href: homeHref,
         label: locale === "ru" ? "Главная" : "Home",
         icon: Home,
+      },
+      {
+        href: activityHref,
+        label: "Activity",
+        icon: Activity,
       },
     ];
 
@@ -767,7 +779,7 @@ export function AdminShell({
     });
 
     return items;
-  }, [employeeOnly, homeHref, locale, managerOnly, newsHref, scheduleHref, session?.user.roleCodes, t, tasksHref]);
+  }, [activityHref, employeeOnly, homeHref, locale, managerOnly, newsHref, scheduleHref, session?.user.roleCodes, t, tasksHref]);
 
   useEffect(() => {
     const nextExpanded = Object.fromEntries(
@@ -1083,10 +1095,9 @@ export function AdminShell({
                       ) : null}
                     </button>
                   ) : (
-                    <Link
+                    <a
                       className="sidebar-link-main"
                       href={item.href}
-                      onClick={(event) => handleRouteStart(item.href, event)}
                     >
                       <span className="flex items-center gap-3">
                         <Icon className="size-4" />
@@ -1095,7 +1106,7 @@ export function AdminShell({
                       {typeof item.count === "number" && item.count > 0 ? (
                         <span className="sidebar-count-pill">{item.count}</span>
                       ) : null}
-                    </Link>
+                    </a>
                   )}
 
                   {hasChildren ? (
@@ -1141,11 +1152,10 @@ export function AdminShell({
                           ) : null}
                         </button>
                       ) : (
-                        <Link
+                        <a
                           className={`sidebar-sublink ${isActive(pathname, subItem.href) ? "is-active" : ""}`}
                           href={subItem.href}
                           key={subItem.href}
-                          onClick={(event) => handleRouteStart(subItem.href, event)}
                         >
                           <span className="flex items-center gap-3">
                             <SubIcon className="size-4" />
@@ -1157,7 +1167,7 @@ export function AdminShell({
                               {subItem.count}
                             </span>
                           ) : null}
-                        </Link>
+                        </a>
                       );
                     })}
                   </div>

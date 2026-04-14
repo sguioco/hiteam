@@ -2418,7 +2418,13 @@ export default function DashboardHome({
                     items={dailyActivity}
                     locale={locale}
                   />
-                  <TodayAttendancePanel locale={locale} />
+                  <TodayAttendancePanel
+                    anomalies={anomalies}
+                    employees={employees}
+                    liveSessions={liveSessions}
+                    locale={locale}
+                    scheduleShifts={scheduleShifts}
+                  />
                 </div>
               )}
             </div>

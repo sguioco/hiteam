@@ -10,7 +10,6 @@ import {
   LogOut,
   UserRoundCheck,
 } from "lucide-react";
-import { useMemo } from "react";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
@@ -52,21 +51,7 @@ function localize(locale: "ru" | "en", ru: string, en: string) {
   return locale === "ru" ? ru : en;
 }
 
-function formatDayLabel(value: string, locale: "ru" | "en") {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
-    weekday: "short",
-    day: "numeric",
-    month: "numeric",
-  });
-}
-
-function formatTimeLabel(value: string, locale: "ru" | "en") {
+export function formatTimeLabel(value: string, locale: "ru" | "en") {
   const parsed = new Date(value);
 
   if (Number.isNaN(parsed.getTime())) {
@@ -98,7 +83,7 @@ function resolvePersonName(
   return person.displayName;
 }
 
-function getInitials(value: string) {
+export function getInitials(value: string) {
   return value
     .split(/\s+/)
     .filter(Boolean)
@@ -107,12 +92,12 @@ function getInitials(value: string) {
     .join("");
 }
 
-function getAvatarSource(person: DashboardActivityPerson, locale: "ru" | "en") {
+export function getAvatarSource(person: DashboardActivityPerson, locale: "ru" | "en") {
   const displayName = resolvePersonName(person, locale);
   return person.avatarUrl || getMockAvatarDataUrl(displayName);
 }
 
-function getActivityIcon(item: DashboardActivityItem) {
+export function getActivityIcon(item: DashboardActivityItem) {
   if (item.kind === "announcement") {
     return FileText;
   }
@@ -138,7 +123,7 @@ function getActivityIcon(item: DashboardActivityItem) {
   return CheckCircle2;
 }
 
-function getActivityIconTone(item: DashboardActivityItem) {
+export function getActivityIconTone(item: DashboardActivityItem) {
   if (item.kind === "announcement") return "is-news";
   if (item.kind === "task") return "is-task";
   if (item.kind === "shift") return "is-shift";
@@ -147,7 +132,7 @@ function getActivityIconTone(item: DashboardActivityItem) {
   return "is-checkin";
 }
 
-function resolveActionCopy(item: DashboardActivityItem, locale: "ru" | "en") {
+export function resolveActionCopy(item: DashboardActivityItem, locale: "ru" | "en") {
   const actorName = resolvePersonName(item.actor, locale);
 
   switch (item.kind) {
@@ -213,7 +198,7 @@ function resolveActionCopy(item: DashboardActivityItem, locale: "ru" | "en") {
   }
 }
 
-function resolveTargetLabel(item: DashboardActivityItem, locale: "ru" | "en") {
+export function resolveTargetLabel(item: DashboardActivityItem, locale: "ru" | "en") {
   if (!item.targetLabel) {
     return null;
   }
@@ -225,7 +210,7 @@ function resolveTargetLabel(item: DashboardActivityItem, locale: "ru" | "en") {
   return localize(locale, `для ${item.targetLabel}`, `for ${item.targetLabel}`);
 }
 
-function ActivityTargetAvatars({
+export function ActivityTargetAvatars({
   locale,
   people,
 }: {
@@ -269,124 +254,102 @@ export function DailyActivityPanel({
   items,
   locale,
 }: DailyActivityPanelProps) {
-  const groupedItems = useMemo(() => {
-    const groups: Array<{
-      key: string;
-      label: string;
-      items: DashboardActivityItem[];
-    }> = [];
-
-    items.forEach((item) => {
-      const parsed = new Date(item.createdAt);
-      const dayKey = Number.isNaN(parsed.getTime())
-        ? item.createdAt
-        : parsed.toISOString().slice(0, 10);
-      const group = groups.find((entry) => entry.key === dayKey);
-
-      if (group) {
-        group.items.push(item);
-        return;
-      }
-
-      groups.push({
-        key: dayKey,
-        label: formatDayLabel(item.createdAt, locale),
-        items: [item],
-      });
-    });
-
-    return groups;
-  }, [items, locale]);
-
   return (
     <div className="dashboard-card daily-activity-panel">
       <div className="daily-activity-head">
         <h2>Daily Activity</h2>
       </div>
 
-      <div className="daily-activity-body scrollbar-hide">
-        {groupedItems.length ? (
-          groupedItems.map((group) => (
-            <section className="daily-activity-group" key={group.key}>
-              <div className="daily-activity-group-label">{group.label}</div>
+      <div
+        className={cn(
+          "daily-activity-body scrollbar-hide",
+          items.length === 0 && "is-empty",
+        )}
+      >
+        {items.length ? (
+          <div className="daily-activity-group-list">
+            {items.map((item, index) => {
+              const Icon = getActivityIcon(item);
+              const { actorName, actionLabel } = resolveActionCopy(item, locale);
+              const itemTitle = item.title?.trim() || null;
+              const targetLabel = resolveTargetLabel(item, locale);
 
-              <div className="daily-activity-group-list">
-                {group.items.map((item, index) => {
-                  const Icon = getActivityIcon(item);
-                  const { actorName, actionLabel } = resolveActionCopy(item, locale);
-                  const itemTitle = item.title?.trim() || null;
-                  const targetLabel = resolveTargetLabel(item, locale);
+              return (
+                <article className="daily-activity-item" key={item.id}>
+                  <div className="daily-activity-rail" aria-hidden="true">
+                    <span className="daily-activity-rail-dot" />
+                    {index < items.length - 1 ? (
+                      <span className="daily-activity-rail-line" />
+                    ) : null}
+                  </div>
 
-                  return (
-                    <article className="daily-activity-item" key={item.id}>
-                      <div className="daily-activity-rail" aria-hidden="true">
-                        <span className="daily-activity-rail-dot" />
-                        {index < group.items.length - 1 ? (
-                          <span className="daily-activity-rail-line" />
-                        ) : null}
-                      </div>
+                  <div
+                    className={cn(
+                      "daily-activity-kind",
+                      getActivityIconTone(item),
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
 
-                      <div
-                        className={cn(
-                          "daily-activity-kind",
-                          getActivityIconTone(item),
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-
-                      <div className="daily-activity-item-main">
-                        <div className="daily-activity-item-copy">
-                          {item.actor ? (
-                            <div className="daily-activity-actor-avatar">
-                              <img
-                                alt={actorName}
-                                src={getAvatarSource(item.actor, locale)}
-                              />
-                            </div>
-                          ) : (
-                            <div className="daily-activity-actor-avatar daily-activity-actor-avatar--fallback">
-                              {getInitials(actorName)}
-                            </div>
-                          )}
-
-                          <div className="daily-activity-text">
-                            <p>
-                              <strong>{actorName}</strong>{" "}
-                              <span>{actionLabel}</span>{" "}
-                              {itemTitle ? (
-                                <strong>{itemTitle}</strong>
-                              ) : null}
-                              {targetLabel ? (
-                                <>
-                                  {" "}
-                                  <span>{targetLabel}</span>
-                                </>
-                              ) : null}
-                            </p>
-                            <div className="daily-activity-meta">
-                              <time dateTime={item.createdAt}>
-                                {formatTimeLabel(item.createdAt, locale)}
-                              </time>
-                              {item.context ? <span>{item.context}</span> : null}
-                            </div>
-                          </div>
+                  <div className="daily-activity-item-main">
+                    <div className="daily-activity-item-copy">
+                      {item.actor ? (
+                        <div className="daily-activity-actor-avatar">
+                          <img
+                            alt={actorName}
+                            src={getAvatarSource(item.actor, locale)}
+                          />
                         </div>
+                      ) : (
+                        <div className="daily-activity-actor-avatar daily-activity-actor-avatar--fallback">
+                          {getInitials(actorName)}
+                        </div>
+                      )}
 
-                        <ActivityTargetAvatars
-                          locale={locale}
-                          people={item.targetEmployees}
-                        />
+                      <div className="daily-activity-text">
+                        <p>
+                          <strong>{actorName}</strong>{" "}
+                          <span>{actionLabel}</span>{" "}
+                          {itemTitle ? (
+                            <strong>{itemTitle}</strong>
+                          ) : null}
+                          {targetLabel ? (
+                            <>
+                              {" "}
+                              <span>{targetLabel}</span>
+                            </>
+                          ) : null}
+                        </p>
+                        <div className="daily-activity-meta">
+                          <time dateTime={item.createdAt}>
+                            {formatTimeLabel(item.createdAt, locale)}
+                          </time>
+                          {item.context ? <span>{item.context}</span> : null}
+                        </div>
                       </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          ))
+                    </div>
+
+                    <ActivityTargetAvatars
+                      locale={locale}
+                      people={item.targetEmployees}
+                    />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         ) : (
           <div className="daily-activity-empty">
-            {localize(locale, "Пока нет активности за день.", "No company activity yet.")}
+            <div className="daily-activity-empty-icon" aria-hidden="true">
+              <ListTodo className="size-7" />
+            </div>
+            <p className="daily-activity-empty-title">No activity to display</p>
+            <p className="daily-activity-empty-copy">
+              Once your users will interact with the app
+              <br />
+              you'll see it here
+            </p>
           </div>
         )}
       </div>

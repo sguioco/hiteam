@@ -1,6 +1,7 @@
 export const ADMIN_APP_PREFIX = '/app';
 
 export const ADMIN_ROUTE_PREFIXES = [
+  '/activity',
   '/analytics',
   '/attendance',
   '/biometric',

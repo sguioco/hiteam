@@ -16,11 +16,12 @@ import {
 } from "../../lib/api";
 import { updateAuthFlowState } from "../../lib/auth-flow";
 import { useI18n } from "../../lib/i18n";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function BiometricPage() {
   const router = useRouter();
   const { t } = useI18n();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     mode?: string;
     intent?: string;
@@ -307,6 +308,7 @@ export default function BiometricPage() {
     processing ||
     capturing ||
     (permission?.granted ? !canSubmit && !currentStep : false);
+  const bottomActionPadding = Math.max(insets.bottom, 12);
 
   async function handlePrimaryAction() {
     if (!permission?.granted) {
@@ -325,11 +327,11 @@ export default function BiometricPage() {
   return (
     <SafeAreaView
       className="flex-1 bg-white"
-      edges={["top", "left", "right", "bottom"]}
+      edges={["top", "left", "right"]}
     >
       <StatusBar style="dark" />
 
-      <View className="flex-1 px-6 pb-8 pt-6">
+      <View className="flex-1 px-6 pt-6">
         <View className="gap-4">
           <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
         </View>
@@ -393,29 +395,32 @@ export default function BiometricPage() {
             </View>
           </View>
         </View>
+      </View>
 
-        <View className="mt-6 gap-3">
-          {message ? (
-            <Text style={[errorStyle, { textAlign: "center" }]}>{message}</Text>
-          ) : null}
+      <View
+        className="gap-3 px-6 pt-4"
+        style={{ paddingBottom: bottomActionPadding }}
+      >
+        {message ? (
+          <Text style={[errorStyle, { textAlign: "center" }]}>{message}</Text>
+        ) : null}
 
-          <PressableScale
-            className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
-              isPrimaryActionDisabled ? "opacity-70" : ""
-            }`}
-            disabled={isPrimaryActionDisabled}
-            haptic="medium"
-            onPress={() => void handlePrimaryAction()}
-          >
-            <Text style={actionLabelStyle}>
-              {capturing
-                ? t("biometric.capturing")
-                : processing
-                  ? t("common.processing")
-                  : primaryActionLabel}
-            </Text>
-          </PressableScale>
-        </View>
+        <PressableScale
+          className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+            isPrimaryActionDisabled ? "opacity-70" : ""
+          }`}
+          disabled={isPrimaryActionDisabled}
+          haptic="medium"
+          onPress={() => void handlePrimaryAction()}
+        >
+          <Text style={actionLabelStyle}>
+            {capturing
+              ? t("biometric.capturing")
+              : processing
+                ? t("common.processing")
+                : primaryActionLabel}
+          </Text>
+        </PressableScale>
       </View>
     </SafeAreaView>
   );

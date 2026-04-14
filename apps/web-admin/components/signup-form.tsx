@@ -150,9 +150,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email, password }),
       });
+      const nextRoute = resolvePostLoginRoute(session);
       await persistSession(session);
       navigationStarted = true;
-      window.location.replace(await resolvePostLoginRoute(session));
+      window.location.replace(nextRoute);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {

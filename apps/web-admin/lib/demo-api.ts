@@ -105,6 +105,8 @@ type DemoState = {
     };
   }>;
   tasks: any[];
+  announcements: any[];
+  announcementArchive: any[];
   requests: any[];
   notifications: any[];
   invitations: any[];
@@ -167,6 +169,216 @@ function buildEmployeeFullName(employee: {
     .filter(Boolean)
     .join(" ")
     .trim();
+}
+
+function resolveDemoEmployee(
+  employees: DemoEmployee[],
+  employeeId?: string | null,
+) {
+  if (employeeId) {
+    const matched = employees.find((employee) => employee.id === employeeId);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  return employees[0] ?? null;
+}
+
+function normalizeDemoChecklistItem(
+  item: any,
+  index: number,
+  employees: DemoEmployee[],
+  assigneeEmployeeId?: string | null,
+) {
+  const fallbackEmployee = resolveDemoEmployee(
+    employees,
+    item.completedByEmployee?.id ?? assigneeEmployeeId,
+  );
+  const completedByEmployee =
+    item.completedByEmployee ??
+    (item.isCompleted && fallbackEmployee
+      ? {
+          id: fallbackEmployee.id,
+          firstName: fallbackEmployee.firstName,
+          lastName: fallbackEmployee.lastName,
+        }
+      : null);
+
+  return {
+    id: item.id ?? `checklist-${index + 1}`,
+    title: item.title ?? `Шаг ${index + 1}`,
+    sortOrder: Number.isFinite(item.sortOrder) ? item.sortOrder : index + 1,
+    isCompleted: Boolean(item.isCompleted),
+    completedAt:
+      item.completedAt ??
+      (item.isCompleted ? item.updatedAt ?? new Date().toISOString() : null),
+    completedByEmployee,
+  };
+}
+
+function buildTodayDemoShifts(employees: DemoEmployee[]) {
+  return [
+    {
+      employeeIndex: 0,
+      startsAtLocal: "09:00",
+      endsAtLocal: "18:00",
+      templateId: "tpl-demo-day-1",
+      templateName: "Основная смена",
+      templateCode: "MAIN",
+    },
+    {
+      employeeIndex: 1,
+      startsAtLocal: "09:00",
+      endsAtLocal: "18:00",
+      templateId: "tpl-demo-day-2",
+      templateName: "Операционный день",
+      templateCode: "DAY",
+    },
+    {
+      employeeIndex: 2,
+      startsAtLocal: "10:00",
+      endsAtLocal: "19:00",
+      templateId: "tpl-demo-day-3",
+      templateName: "Поддержка зала",
+      templateCode: "SUP",
+    },
+    {
+      employeeIndex: 3,
+      startsAtLocal: "10:00",
+      endsAtLocal: "19:00",
+      templateId: "tpl-demo-day-4",
+      templateName: "Дневная смена",
+      templateCode: "DAY-2",
+    },
+    {
+      employeeIndex: 4,
+      startsAtLocal: "09:00",
+      endsAtLocal: "18:00",
+      templateId: "tpl-demo-day-5",
+      templateName: "Ритейл смена",
+      templateCode: "RTL",
+    },
+    {
+      employeeIndex: 5,
+      startsAtLocal: "11:00",
+      endsAtLocal: "20:00",
+      templateId: "tpl-demo-day-6",
+      templateName: "Поздняя смена",
+      templateCode: "LATE",
+    },
+  ].map((item) => {
+    const employee = employees[item.employeeIndex];
+    return {
+      id: `shift-demo-today-${employee.id}`,
+      shiftDate: dateKey(),
+      startsAt: createIsoAt(
+        0,
+        Number(item.startsAtLocal.slice(0, 2)),
+        Number(item.startsAtLocal.slice(3, 5)),
+      ),
+      endsAt: createIsoAt(
+        0,
+        Number(item.endsAtLocal.slice(0, 2)),
+        Number(item.endsAtLocal.slice(3, 5)),
+      ),
+      status: "ASSIGNED",
+      createdAt: createIsoAt(-1, 9, 0),
+      updatedAt: createIsoAt(-1, 9, 0),
+      employee: {
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+      },
+      location: employee.primaryLocation ?? {
+        id: "loc-1",
+        name: "Main Location",
+      },
+      position: employee.position ?? {
+        id: "pos-1",
+        name: "Manager",
+      },
+      template: {
+        id: item.templateId,
+        name: item.templateName,
+        code: item.templateCode,
+        startsAtLocal: item.startsAtLocal,
+        endsAtLocal: item.endsAtLocal,
+      },
+    };
+  });
+}
+
+function normalizeDemoPhotoProof(
+  proof: any,
+  employees: DemoEmployee[],
+  assigneeEmployeeId?: string | null,
+) {
+  const fallbackEmployee = resolveDemoEmployee(
+    employees,
+    proof.uploadedByEmployee?.id ?? assigneeEmployeeId,
+  );
+
+  return {
+    id: proof.id ?? buildTaskId("proof"),
+    fileName: proof.fileName ?? `${proof.id ?? "proof"}.jpg`,
+    storageKey:
+      proof.storageKey ?? `demo/tasks/${proof.id ?? buildTaskId("proof")}.jpg`,
+    url: proof.url ?? null,
+    deletedAt: proof.deletedAt ?? null,
+    supersededByProofId: proof.supersededByProofId ?? null,
+    createdAt: proof.createdAt ?? new Date().toISOString(),
+    uploadedByEmployee:
+      proof.uploadedByEmployee ??
+      (fallbackEmployee
+        ? {
+            id: fallbackEmployee.id,
+            firstName: fallbackEmployee.firstName,
+            lastName: fallbackEmployee.lastName,
+          }
+        : {
+            id: "demo-user",
+            firstName: "Demo",
+            lastName: "User",
+          }),
+  };
+}
+
+function normalizeDemoTask(task: any, employees: DemoEmployee[]) {
+  const createdAt = task.createdAt ?? task.dueAt ?? new Date().toISOString();
+  const updatedAt = task.updatedAt ?? task.completedAt ?? task.dueAt ?? createdAt;
+
+  return {
+    ...task,
+    requiresPhoto: Boolean(task.requiresPhoto || task.photoProofs?.length),
+    isRecurring: Boolean(task.isRecurring),
+    taskTemplateId: task.taskTemplateId ?? null,
+    occurrenceDate:
+      task.occurrenceDate ??
+      (typeof task.dueAt === "string" ? task.dueAt.slice(0, 10) : null),
+    createdAt,
+    updatedAt,
+    checklistItems: Array.isArray(task.checklistItems)
+      ? task.checklistItems.map((item: any, index: number) =>
+          normalizeDemoChecklistItem(
+            item,
+            index,
+            employees,
+            task.assigneeEmployeeId ?? task.assigneeEmployee?.id,
+          ),
+        )
+      : [],
+    activities: Array.isArray(task.activities) ? task.activities : [],
+    photoProofs: Array.isArray(task.photoProofs)
+      ? task.photoProofs.map((proof: any) =>
+          normalizeDemoPhotoProof(
+            proof,
+            employees,
+            task.assigneeEmployeeId ?? task.assigneeEmployee?.id,
+          ),
+        )
+      : [],
+  };
 }
 
 function buildDemoBirthDate(index: number) {
@@ -572,6 +784,205 @@ function createInitialState(): DemoState {
         }
       ]
     },
+  ].map((task) => normalizeDemoTask(task, employees));
+
+  const announcements = [
+    {
+      id: "announcement-demo-1",
+      audience: "ALL",
+      title: "Планёрка по открытию новой недели",
+      body:
+        "Сегодня в 09:30 короткий синк по загрузке мастеров, SLA по ответам и аномалиям attendance. Сводка и ссылки на материалы уже в рабочем чате.",
+      isPinned: true,
+      linkUrl: "https://smart.demo/company-weekly-brief",
+      imageUrl:
+        "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=1400",
+      imageAspectRatio: "16:9",
+      scheduledFor: null,
+      publishedAt: createIsoAt(0, 8, 15),
+      createdAt: createIsoAt(0, 8, 5),
+      updatedAt: createIsoAt(0, 8, 15),
+      notificationId: "notification-news-1",
+      authorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+      group: null,
+      department: null,
+      location: null,
+      targetEmployee: null,
+      attachments: [],
+      readAtByEmployeeId: {
+        [managerEmployee.id]: createIsoAt(0, 8, 20),
+        [employees[2].id]: createIsoAt(0, 8, 27),
+      },
+    },
+    {
+      id: "announcement-demo-2",
+      audience: "GROUP",
+      title: "Фотоотчёт по витрине до 18:00",
+      body:
+        "Команда утренней смены должна загрузить фото итоговой выкладки и отметить, что ценники обновлены.",
+      isPinned: false,
+      groupIds: [groups[0].id],
+      linkUrl: null,
+      imageUrl:
+        "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&q=80&w=1400",
+      imageAspectRatio: "4:3",
+      scheduledFor: null,
+      publishedAt: createIsoAt(-1, 17, 20),
+      createdAt: createIsoAt(-1, 17, 10),
+      updatedAt: createIsoAt(-1, 17, 20),
+      notificationId: "notification-news-2",
+      authorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+      group: {
+        id: groups[0].id,
+        name: groups[0].name,
+      },
+      department: null,
+      location: null,
+      targetEmployee: null,
+      attachments: [
+        {
+          id: "announcement-demo-2-attachment",
+          fileName: "storefront-checklist.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 184320,
+          url: "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp...",
+        },
+      ],
+      readAtByEmployeeId: {
+        [managerEmployee.id]: createIsoAt(-1, 17, 24),
+        [employees[1].id]: createIsoAt(-1, 17, 41),
+      },
+    },
+    {
+      id: "announcement-demo-3",
+      audience: "EMPLOYEE",
+      title: "Индивидуальный onboarding по CRM",
+      body:
+        "Завтра в 11:00 для нового сотрудника запланирован персональный разбор карточек клиента, сценариев follow-up и быстрых ответов.",
+      isPinned: false,
+      linkUrl: "https://meet.smart.demo/onboarding-crm",
+      imageUrl: null,
+      imageAspectRatio: null,
+      scheduledFor: createIsoAt(1, 11, 0),
+      publishedAt: null,
+      createdAt: createIsoAt(0, 16, 40),
+      updatedAt: createIsoAt(0, 16, 40),
+      notificationId: null,
+      authorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+      group: null,
+      department: null,
+      location: null,
+      targetEmployee: {
+        id: employees[1].id,
+        firstName: employees[1].firstName,
+        lastName: employees[1].lastName,
+        employeeNumber: employees[1].employeeNumber,
+      },
+      targetEmployeeIds: [employees[1].id],
+      attachments: [],
+      readAtByEmployeeId: {},
+    },
+    {
+      id: "announcement-demo-4",
+      audience: "LOCATION",
+      title: "Проверка кассовой зоны перед вечерней сменой",
+      body:
+        "До 17:30 нужно сверить терминал, печать чеков и подготовить резервную ленту. Если заметите проблему, сразу приложите фото и комментарий.",
+      isPinned: false,
+      linkUrl: null,
+      attachmentLocation: {
+        address: "Sukhumvit Rd, Bangkok, Thailand",
+        latitude: 13.7563,
+        longitude: 100.5018,
+        placeId: "demo-place-id",
+      },
+      imageUrl: null,
+      imageAspectRatio: null,
+      scheduledFor: null,
+      publishedAt: createIsoAt(0, 12, 10),
+      createdAt: createIsoAt(0, 12, 0),
+      updatedAt: createIsoAt(0, 12, 10),
+      notificationId: "notification-news-4",
+      authorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+      group: null,
+      department: null,
+      location: employees[0].primaryLocation ?? {
+        id: "location-demo-main",
+        name: "Main salon",
+      },
+      targetEmployee: null,
+      attachments: [
+        {
+          id: "announcement-demo-4-attachment",
+          fileName: "cash-zone-checklist.xlsx",
+          contentType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          sizeBytes: 92314,
+          url: "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQD...",
+        },
+      ],
+      readAtByEmployeeId: {
+        [managerEmployee.id]: createIsoAt(0, 12, 12),
+      },
+    },
+  ];
+
+  const announcementArchive = [
+    {
+      id: "announcement-archive-1",
+      announcementId: "announcement-demo-1",
+      action: "announcement.created",
+      createdAt: createIsoAt(0, 8, 15),
+      title: "Планёрка по открытию новой недели",
+      isPinned: true,
+      actorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+    },
+    {
+      id: "announcement-archive-2",
+      announcementId: "announcement-demo-2",
+      action: "announcement.created",
+      createdAt: createIsoAt(-1, 17, 20),
+      title: "Фотоотчёт по витрине до 18:00",
+      isPinned: false,
+      actorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+    },
+    {
+      id: "announcement-archive-3",
+      announcementId: "announcement-demo-3",
+      action: "announcement.generated",
+      createdAt: createIsoAt(0, 16, 40),
+      title: "Индивидуальный onboarding по CRM",
+      isPinned: false,
+      actorEmployee: {
+        id: managerEmployee.id,
+        firstName: managerEmployee.firstName,
+        lastName: managerEmployee.lastName,
+      },
+    },
   ];
 
   const requests = createMockApprovalInboxItems(new Date(), "ru").map(
@@ -753,6 +1164,8 @@ function createInitialState(): DemoState {
     };
   });
 
+  const todayDemoShifts = buildTodayDemoShifts(employees);
+
   return {
     organization: {
       company,
@@ -772,34 +1185,14 @@ function createInitialState(): DemoState {
     positions: scheduleData.positions,
     groups,
     tasks,
+    announcements,
+    announcementArchive,
     requests,
     notifications,
     invitations,
     shifts: [
-      ...scheduleData.shifts,
-      {
-        id: "shift-sgiuoco-today-1",
-        shiftDate: dateKey(),
-        startsAt: createIsoAt(0, 9, 0),
-        endsAt: createIsoAt(0, 17, 0),
-        status: "ASSIGNED",
-        createdAt: createIsoAt(-1, 9, 0),
-        updatedAt: createIsoAt(-1, 9, 0),
-        employee: {
-          id: employees[0].id,
-          firstName: employees[0].firstName,
-          lastName: employees[0].lastName,
-        },
-        location: employees[0].primaryLocation ?? { id: "loc-1", name: "Main Location" },
-        position: employees[0].position ?? { id: "pos-1", name: "Manager" },
-        template: {
-          id: "tpl-1",
-          name: "Основная смена",
-          code: "MAIN",
-          startsAtLocal: "09:00",
-          endsAtLocal: "17:00",
-        },
-      },
+      ...scheduleData.shifts.filter((shift) => shift.shiftDate !== dateKey()),
+      ...todayDemoShifts,
     ],
     templates: scheduleData.templates,
     payrollPolicy,
@@ -825,6 +1218,7 @@ function loadState(): DemoState {
   try {
     const parsed = JSON.parse(raw) as DemoState;
     const normalized = cloneState(parsed);
+    const seedState = createInitialState();
     let changed = false;
 
     normalized.employees = normalized.employees.map((employee, index) => {
@@ -856,6 +1250,62 @@ function loadState(): DemoState {
         avatarUrl: shouldReplaceAvatar ? nextAvatarUrl : employee.avatarUrl,
       };
     });
+
+    const normalizedTasks = Array.isArray(normalized.tasks)
+      ? normalized.tasks.map((task) => normalizeDemoTask(task, normalized.employees))
+      : seedState.tasks;
+    if (
+      !Array.isArray(normalized.tasks) ||
+      JSON.stringify(normalizedTasks) !== JSON.stringify(normalized.tasks)
+    ) {
+      changed = true;
+    }
+    normalized.tasks = normalizedTasks;
+
+    if (!Array.isArray(normalized.announcements)) {
+      normalized.announcements = seedState.announcements;
+      changed = true;
+    } else {
+      normalized.announcements = normalized.announcements.map((announcement) => ({
+        ...announcement,
+        attachments: Array.isArray(announcement.attachments)
+          ? announcement.attachments
+          : [],
+        groupIds: Array.isArray(announcement.groupIds)
+          ? announcement.groupIds
+          : [],
+        readAtByEmployeeId:
+          announcement.readAtByEmployeeId &&
+          typeof announcement.readAtByEmployeeId === "object"
+            ? announcement.readAtByEmployeeId
+            : {},
+        targetEmployeeIds: Array.isArray(announcement.targetEmployeeIds)
+          ? announcement.targetEmployeeIds
+          : [],
+      }));
+    }
+
+    if (!Array.isArray(normalized.announcementArchive)) {
+      normalized.announcementArchive = seedState.announcementArchive;
+      changed = true;
+    }
+
+    const todayShiftKey = dateKey();
+    const seedTodayShifts = Array.isArray(seedState.shifts)
+      ? seedState.shifts.filter((shift) => shift.shiftDate === todayShiftKey)
+      : [];
+    const normalizedNonTodayShifts = Array.isArray(normalized.shifts)
+      ? normalized.shifts.filter((shift) => shift.shiftDate !== todayShiftKey)
+      : [];
+    const mergedShifts = [...normalizedNonTodayShifts, ...seedTodayShifts];
+
+    if (
+      !Array.isArray(normalized.shifts) ||
+      JSON.stringify(mergedShifts) !== JSON.stringify(normalized.shifts)
+    ) {
+      normalized.shifts = mergedShifts;
+      changed = true;
+    }
 
     memoryState = normalized;
 
@@ -1267,11 +1717,515 @@ function buildTaskBoard(state: DemoState) {
   };
 }
 
+function buildDemoAnnouncementRecipients(state: DemoState, announcement: any) {
+  const deduped = new Map<string, DemoEmployee>();
+  const register = (employee: DemoEmployee | null | undefined) => {
+    if (employee) {
+      deduped.set(employee.id, employee);
+    }
+  };
+
+  if (announcement.audience === "GROUP") {
+    const groupIds = Array.isArray(announcement.groupIds)
+      ? announcement.groupIds
+      : announcement.group?.id
+        ? [announcement.group.id]
+        : [];
+    state.groups
+      .filter((group) => groupIds.includes(group.id))
+      .forEach((group) => {
+        group.memberships.forEach((membership) => {
+          register(
+            state.employees.find((employee) => employee.id === membership.employeeId),
+          );
+        });
+      });
+  } else if (announcement.audience === "EMPLOYEE") {
+    const employeeIds: string[] = Array.isArray(announcement.targetEmployeeIds)
+      ? announcement.targetEmployeeIds
+      : announcement.targetEmployee?.id
+        ? [announcement.targetEmployee.id]
+        : [];
+    employeeIds.forEach((employeeId: string) => {
+      register(state.employees.find((employee) => employee.id === employeeId));
+    });
+  } else if (announcement.audience === "DEPARTMENT") {
+    state.employees
+      .filter(
+        (employee) => employee.department?.id === announcement.department?.id,
+      )
+      .forEach(register);
+  } else if (announcement.audience === "LOCATION") {
+    state.employees
+      .filter(
+        (employee) =>
+          employee.primaryLocation?.id === announcement.location?.id,
+      )
+      .forEach(register);
+  } else {
+    state.employees.forEach(register);
+  }
+
+  return Array.from(deduped.values());
+}
+
+function countDemoAnnouncementReads(state: DemoState, announcement: any) {
+  const recipients = buildDemoAnnouncementRecipients(state, announcement);
+  const readAtByEmployeeId =
+    announcement.readAtByEmployeeId &&
+    typeof announcement.readAtByEmployeeId === "object"
+      ? announcement.readAtByEmployeeId
+      : {};
+  const readRecipients = recipients.filter(
+    (employee) => typeof readAtByEmployeeId[employee.id] === "string",
+  ).length;
+
+  return {
+    recipients,
+    readRecipients,
+    unreadRecipients: Math.max(0, recipients.length - readRecipients),
+  };
+}
+
+function buildDemoDashboardActivityPerson(employee?: DemoEmployee | null) {
+  if (!employee) {
+    return null;
+  }
+
+  return {
+    id: employee.id,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    displayName: buildEmployeeFullName(employee),
+    avatarUrl: employee.avatarUrl ?? null,
+  };
+}
+
+function buildDemoAnnouncementItemForViewer(
+  state: DemoState,
+  announcement: any,
+  token?: string,
+) {
+  const role = currentDemoRole(token);
+  const viewerEmployeeId = currentEmployeeId(token);
+  const isEmployee = role === "employee";
+  const { recipients, readRecipients, unreadRecipients } =
+    countDemoAnnouncementReads(state, announcement);
+  const readAt =
+    announcement.readAtByEmployeeId?.[viewerEmployeeId] ?? null;
+
+  return {
+    ...announcement,
+    attachments: Array.isArray(announcement.attachments)
+      ? announcement.attachments
+      : [],
+    groupIds: Array.isArray(announcement.groupIds) ? announcement.groupIds : [],
+    targetEmployeeIds: Array.isArray(announcement.targetEmployeeIds)
+      ? announcement.targetEmployeeIds
+      : [],
+    totalRecipients: recipients.length,
+    readRecipients,
+    unreadRecipients,
+    isRead: isEmployee ? Boolean(readAt) : announcement.isRead,
+    readAt: isEmployee ? readAt : announcement.readAt ?? null,
+  };
+}
+
+function buildDemoAnnouncementsForViewer(state: DemoState, token?: string) {
+  const role = currentDemoRole(token);
+  const viewerEmployeeId = currentEmployeeId(token);
+
+  return [...state.announcements]
+    .filter((announcement) => {
+      if (role !== "employee") {
+        return true;
+      }
+
+      if (announcement.scheduledFor && !announcement.publishedAt) {
+        return false;
+      }
+
+      return buildDemoAnnouncementRecipients(state, announcement).some(
+        (employee) => employee.id === viewerEmployeeId,
+      );
+    })
+    .map((announcement) =>
+      buildDemoAnnouncementItemForViewer(state, announcement, token),
+    )
+    .sort((left, right) => {
+      const leftTime = left.publishedAt ?? left.scheduledFor ?? left.createdAt;
+      const rightTime = right.publishedAt ?? right.scheduledFor ?? right.createdAt;
+      return rightTime.localeCompare(leftTime);
+    });
+}
+
+function buildDemoAnnouncementReadReceipts(state: DemoState, announcementId: string) {
+  const announcement = state.announcements.find((item) => item.id === announcementId);
+  if (!announcement) {
+    throw new Error("Новость не найдена.");
+  }
+
+  const readAtByEmployeeId =
+    announcement.readAtByEmployeeId &&
+    typeof announcement.readAtByEmployeeId === "object"
+      ? announcement.readAtByEmployeeId
+      : {};
+
+  return buildDemoAnnouncementRecipients(state, announcement)
+    .map((employee) => ({
+      notificationId: announcement.notificationId ?? announcement.id,
+      userId: employee.user?.id ?? employee.id,
+      employeeId: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber,
+      avatarUrl: employee.avatarUrl ?? null,
+      isRead: typeof readAtByEmployeeId[employee.id] === "string",
+      readAt: readAtByEmployeeId[employee.id] ?? null,
+    }))
+    .sort(
+      (left, right) =>
+        Number(right.isRead) - Number(left.isRead) ||
+        `${left.lastName} ${left.firstName}`.localeCompare(
+          `${right.lastName} ${right.firstName}`,
+          "ru-RU",
+        ),
+    );
+}
+
+function buildDemoNewsBootstrap(state: DemoState, token?: string) {
+  return {
+    items: buildDemoAnnouncementsForViewer(state, token),
+    employees: state.employees.map((employee) => ({
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber,
+    })),
+    groups: state.groups.map((group) => ({
+      ...group,
+      _count: {
+        tasks: state.tasks.filter((task) => task.groupId === group.id).length,
+      },
+    })),
+  };
+}
+
+function buildDemoActivityBootstrap(state: DemoState) {
+  return {
+    items: buildDemoDailyActivity(state),
+  };
+}
+
+function buildDemoDailyActivity(state: DemoState) {
+  const manager = state.employees[0];
+  const liveSessions = buildAttendanceLive(state);
+  const announcements = buildDemoAnnouncementsForViewer(
+    state,
+    createDemoSession("admin").accessToken,
+  ).filter((item) => item.publishedAt);
+
+  if (!manager) {
+    return [];
+  }
+
+  const managerPerson = buildDemoDashboardActivityPerson(manager);
+  const employeeAt = (index: number) => state.employees[index] ?? manager;
+  const personAt = (index: number) =>
+    buildDemoDashboardActivityPerson(employeeAt(index));
+  const buildTargets = (...indexes: number[]) =>
+    indexes
+      .map((index) => personAt(index))
+      .filter(Boolean);
+  const taskTargets = buildTargets(0, 1, 2);
+  const locationAt = (index: number) =>
+    state.locations[index]?.name ?? state.locations[0]?.name ?? null;
+  const groupAt = (index: number) =>
+    state.groups[index]?.name ?? state.groups[0]?.name ?? null;
+
+  const items = [
+    announcements[0]
+      ? {
+          id: `activity-announcement-${announcements[0].id}`,
+          kind: "announcement",
+          action: "published",
+          createdAt: announcements[0].publishedAt ?? announcements[0].createdAt,
+          actor: managerPerson,
+          title: announcements[0].title,
+          context: announcements[0].body,
+          targetLabel:
+            announcements[0].audience === "ALL"
+              ? "all-company"
+              : announcements[0].group?.name ??
+                announcements[0].location?.name ??
+                announcements[0].targetEmployee?.firstName ??
+                null,
+          targetEmployees: buildDemoAnnouncementRecipients(
+            state,
+            state.announcements.find((item) => item.id === announcements[0].id),
+          )
+            .slice(0, 5)
+            .map((employee) => ({
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              displayName: buildEmployeeFullName(employee),
+              avatarUrl: employee.avatarUrl ?? null,
+            })),
+        }
+      : null,
+    {
+      id: "activity-task-demo",
+      kind: "task",
+      action: "created",
+      createdAt: createIsoAt(0, 9, 12),
+      actor: managerPerson,
+      title: "Проверить фотоотчёты по витрине",
+      context: "Новая задача с фото-подтверждением ушла в утреннюю смену.",
+      targetLabel: state.groups[0]?.name ?? null,
+      targetEmployees: taskTargets,
+    },
+    {
+      id: "activity-shift-demo",
+      kind: "shift",
+      action: "created",
+      createdAt: createIsoAt(0, 8, 40),
+      actor: managerPerson,
+      title: "Вечерняя смена на пятницу",
+      context: "Добавлены 3 сотрудника и подтверждён резервный мастер.",
+      targetLabel: state.locations[0]?.name ?? null,
+      targetEmployees: buildTargets(0, 1, 2),
+    },
+    liveSessions[1]
+      ? {
+          id: `activity-checkin-${liveSessions[1].employeeId}`,
+          kind: "attendance",
+          action: "check_in",
+          createdAt: liveSessions[1].startedAt,
+          actor: buildDemoDashboardActivityPerson(
+            state.employees.find(
+              (employee) => employee.id === liveSessions[1].employeeId,
+            ),
+          ),
+          title: "Открытие смены",
+          context:
+            liveSessions[1].lateMinutes > 0
+              ? `Опоздание ${liveSessions[1].lateMinutes} мин.`
+              : "Отметка внутри геозоны.",
+          targetLabel: liveSessions[1].location,
+          targetEmployees: [],
+        }
+      : null,
+    liveSessions[3]
+      ? {
+          id: `activity-checkout-${liveSessions[3].employeeId}`,
+          kind: "attendance",
+          action: "check_out",
+          createdAt: liveSessions[3].endedAt ?? liveSessions[3].startedAt,
+          actor: buildDemoDashboardActivityPerson(
+            state.employees.find(
+              (employee) => employee.id === liveSessions[3].employeeId,
+            ),
+          ),
+          title: "Смена закрыта",
+          context: "Чек-аут завершён, комментарий к раннему уходу добавлен.",
+          targetLabel: liveSessions[3].location,
+          targetEmployees: [],
+        }
+      : null,
+    state.requests[0]
+      ? {
+          id: `activity-request-${state.requests[0].id}`,
+          kind: "request",
+          action: "submitted",
+          createdAt:
+            state.requests[0].request?.comments?.[0]?.createdAt ??
+            createIsoAt(-1, 18, 10),
+          actor: buildDemoDashboardActivityPerson(
+            state.employees.find(
+              (employee) =>
+                employee.id === state.requests[0].request.employee.id,
+            ),
+          ),
+          title: state.requests[0].request.title,
+          context: "Новый запрос ушёл на согласование руководителю.",
+          targetLabel: null,
+          targetEmployees: [managerPerson].filter(Boolean),
+        }
+      : null,
+    announcements[1]
+      ? {
+          id: `activity-announcement-${announcements[1].id}`,
+          kind: "announcement",
+          action: "published",
+          createdAt: announcements[1].publishedAt ?? announcements[1].createdAt,
+          actor: managerPerson,
+          title: announcements[1].title,
+          context: announcements[1].body,
+          targetLabel:
+            announcements[1].group?.name ??
+            announcements[1].location?.name ??
+            null,
+          targetEmployees: buildDemoAnnouncementRecipients(
+            state,
+            state.announcements.find((item) => item.id === announcements[1].id),
+          )
+            .slice(0, 5)
+            .map((employee) => ({
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              displayName: buildEmployeeFullName(employee),
+              avatarUrl: employee.avatarUrl ?? null,
+            })),
+        }
+      : null,
+    {
+      id: "activity-task-restock",
+      kind: "task",
+      action: "created",
+      createdAt: createIsoAt(-1, 16, 25),
+      actor: managerPerson,
+      title: "Подтвердить пополнение расходников",
+      context: "Обычная ежедневная задача для вечерней смены на фото-подтверждение.",
+      targetLabel: groupAt(1),
+      targetEmployees: buildTargets(3, 4, 5),
+    },
+    {
+      id: "activity-attendance-open-south",
+      kind: "attendance",
+      action: "check_in",
+      createdAt: createIsoAt(-1, 10, 6),
+      actor: personAt(1),
+      title: "Открытие смены",
+      context: "Сотрудник вошёл через Face ID без замечаний.",
+      targetLabel: locationAt(0),
+      targetEmployees: [],
+    },
+    {
+      id: "activity-announcement-inventory",
+      kind: "announcement",
+      action: "published",
+      createdAt: createIsoAt(-2, 18, 40),
+      actor: managerPerson,
+      title: "Пятничная инвентаризация материалов",
+      context: "Опубликовали напоминание и список фото-зон для отчёта по филиалам.",
+      targetLabel: "all-company",
+      targetEmployees: buildTargets(0, 1, 2, 3, 4),
+    },
+    {
+      id: "activity-employee-approved-cashier",
+      kind: "employee",
+      action: "approved",
+      createdAt: createIsoAt(-2, 10, 20),
+      actor: managerPerson,
+      title: "Профиль нового кассира",
+      context: `${buildEmployeeFullName(employeeAt(5))} завершил загрузку документов и получил доступ к сменам.`,
+      targetLabel: null,
+      targetEmployees: buildTargets(5),
+    },
+    {
+      id: "activity-request-shift-swap",
+      kind: "request",
+      action: "submitted",
+      createdAt: createIsoAt(-3, 9, 5),
+      actor: personAt(2),
+      title: "Обмен сменой на субботу",
+      context: "Обычный запрос на подмену уже ушёл менеджеру на согласование.",
+      targetLabel: null,
+      targetEmployees: [managerPerson].filter(Boolean),
+    },
+    {
+      id: "activity-shift-cover-sunday",
+      kind: "shift",
+      action: "created",
+      createdAt: createIsoAt(-4, 17, 10),
+      actor: managerPerson,
+      title: "Подмена на воскресенье",
+      context: "Собрали резервную смену для главного офиса и склада.",
+      targetLabel: locationAt(1),
+      targetEmployees: buildTargets(1, 4, 6),
+    },
+    {
+      id: "activity-task-waiting-zone-photo",
+      kind: "task",
+      action: "created",
+      createdAt: createIsoAt(-5, 12, 35),
+      actor: managerPerson,
+      title: "Сделать фото зоны ожидания",
+      context: "Задача с фото нужна для стандартного аудита чистоты и выкладки.",
+      targetLabel: groupAt(0),
+      targetEmployees: buildTargets(0, 2, 4),
+    },
+    {
+      id: "activity-attendance-early-start",
+      kind: "attendance",
+      action: "check_in",
+      createdAt: createIsoAt(-6, 8, 55),
+      actor: personAt(4),
+      title: "Открытие смены",
+      context: "Сотрудник пришёл на 5 минут раньше начала графика.",
+      targetLabel: locationAt(2),
+      targetEmployees: [],
+    },
+    {
+      id: "activity-announcement-training",
+      kind: "announcement",
+      action: "published",
+      createdAt: createIsoAt(-7, 19, 0),
+      actor: managerPerson,
+      title: "Подготовка к внутреннему обучению",
+      context: "Руководителям отправили список участников и слоты по филиалам.",
+      targetLabel: groupAt(0),
+      targetEmployees: buildTargets(0, 1, 2, 3),
+    },
+    {
+      id: "activity-task-front-desk",
+      kind: "task",
+      action: "created",
+      createdAt: createIsoAt(-9, 14, 25),
+      actor: managerPerson,
+      title: "Проверить стойку ресепшн перед вечером",
+      context: "Обычная операционная задача с чек-листом и коротким фото-отчётом.",
+      targetLabel: locationAt(0),
+      targetEmployees: buildTargets(2, 3),
+    },
+    {
+      id: "activity-employee-submitted-docs",
+      kind: "employee",
+      action: "submitted",
+      createdAt: createIsoAt(-11, 10, 15),
+      actor: personAt(6),
+      title: "Документы для оформления",
+      context: "Новый сотрудник загрузил документы и ждёт подтверждения администратора.",
+      targetLabel: null,
+      targetEmployees: [managerPerson].filter(Boolean),
+    },
+    {
+      id: "activity-request-uniform",
+      kind: "request",
+      action: "submitted",
+      createdAt: createIsoAt(-12, 15, 45),
+      actor: personAt(3),
+      title: "Запрос на новую форму",
+      context: "Обычный служебный запрос по размеру формы для следующей смены.",
+      targetLabel: null,
+      targetEmployees: [managerPerson].filter(Boolean),
+    },
+  ].filter(Boolean);
+
+  return items.sort((left: any, right: any) =>
+    right.createdAt.localeCompare(left.createdAt),
+  );
+}
+
 function buildDemoShowcaseTaskBoardForCurrentUser(
   state: DemoState,
   token?: string,
 ) {
-  return buildDemoEmployeeShowcaseTaskBoard(state, currentEmployeeId(token));
+  return currentDemoRole(token) === "employee"
+    ? buildDemoEmployeeShowcaseTaskBoard(state, currentEmployeeId(token))
+    : buildTaskBoard(state);
 }
 
 function buildBootstrapTasks(state: DemoState) {
@@ -1510,6 +2464,122 @@ function buildDemoEmployeeShowcaseScheduleShifts(
       endsAtLocal: index % 2 === 0 ? "18:00" : "19:00",
     },
   }));
+}
+
+function buildDemoEmployeeShowcaseTaskPreset(
+  taskId: string,
+  employee: DemoEmployee,
+  managerEmployee: DemoEmployee,
+): any {
+  if (taskId === "emp-showcase-task-4") {
+    return {
+      description:
+        "Нужно обзвонить неподтвержденные записи, отметить ответ и отправить short summary в чат смены.",
+      checklistItems: [
+        { id: "emp-showcase-task-4-check-1", title: "Подтвердить VIP-клиентов", isCompleted: true },
+        { id: "emp-showcase-task-4-check-2", title: "Закрыть неподтвержденные окна", isCompleted: false },
+        { id: "emp-showcase-task-4-check-3", title: "Передать итог менеджеру", isCompleted: false },
+      ],
+    };
+  }
+
+  if (taskId === "emp-showcase-task-20") {
+    return {
+      description: appendTaskMeta("10-минутный синк по загрузке четверга и переносам клиентов.", {
+        kind: "meeting",
+        meetingMode: "online",
+        meetingLink: "https://meet.smart.demo/thursday-sync",
+      }),
+    };
+  }
+
+  if (taskId === "emp-showcase-task-28") {
+    return {
+      title: "Встреча: Разбор вечерней загрузки",
+      description: appendTaskMeta("Проверим заполнение расписания, SLA по ответам и свободные окна на завтра.", {
+        kind: "meeting",
+        meetingMode: "offline",
+        meetingLocation: "Кабинет менеджера",
+      }),
+    };
+  }
+
+  if (taskId === "emp-showcase-task-29") {
+    return {
+      title: "Фотоотчёт по витрине весенней кампании",
+      description:
+        "Сделать 3 фото фронтальной выкладки, зоны кассы и стойки с акционными наборами.",
+      requiresPhoto: true,
+      photoProofs: [
+        {
+          id: "emp-showcase-task-29-proof-1",
+          url: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=1200",
+          createdAt: createFixedIso("2026-04-16", 17, 52),
+          fileName: "spring-storefront.jpg",
+          uploadedByEmployee: {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          },
+        },
+      ],
+    };
+  }
+
+  if (taskId === "emp-showcase-task-30") {
+    return {
+      title: "Открытие смены по новому чек-листу",
+      description:
+        "Перед первым клиентом нужно пройти новый morning checklist и отметить всё прямо в задаче.",
+      checklistItems: [
+        { id: "emp-showcase-task-30-check-1", title: "Включить кассу и терминал", isCompleted: true },
+        { id: "emp-showcase-task-30-check-2", title: "Проверить расходники у моек", isCompleted: false },
+        { id: "emp-showcase-task-30-check-3", title: "Подготовить welcome-зону", isCompleted: false },
+      ],
+    };
+  }
+
+  if (taskId === "emp-showcase-task-31") {
+    return {
+      title: "Собрать набор расходников на субботу",
+      description:
+        "Проверить краску, перчатки, полотенца и сфотографировать собранный комплект перед закрытием.",
+      requiresPhoto: true,
+      checklistItems: [
+        { id: "emp-showcase-task-31-check-1", title: "Собрать материалы по процедурам", isCompleted: true },
+        { id: "emp-showcase-task-31-check-2", title: "Проверить резерв по краске", isCompleted: false },
+      ],
+      photoProofs: [
+        {
+          id: "emp-showcase-task-31-proof-1",
+          url: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&q=80&w=1200",
+          createdAt: createFixedIso("2026-04-18", 17, 4),
+          fileName: "supplies-kit.jpg",
+          uploadedByEmployee: {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    activities: [
+      {
+        id: `activity-${taskId}`,
+        kind: "CREATED",
+        body: "Задача создана менеджером в demo-режиме.",
+        createdAt: createIsoAt(-2, 9, 15),
+        actorEmployee: {
+          id: managerEmployee.id,
+          firstName: managerEmployee.firstName,
+          lastName: managerEmployee.lastName,
+        },
+      },
+    ],
+  };
 }
 
 function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string) {
@@ -1765,9 +2835,50 @@ function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string
       status: "TODO" as const,
       priority: "MEDIUM" as const,
     },
+    {
+      id: "emp-showcase-task-28",
+      title: "Разбор вечерней загрузки",
+      dueDate: "2026-04-14",
+      hours: 9,
+      minutes: 30,
+      status: "IN_PROGRESS" as const,
+      priority: "MEDIUM" as const,
+    },
+    {
+      id: "emp-showcase-task-29",
+      title: "Фотоотчёт по витрине",
+      dueDate: "2026-04-16",
+      hours: 18,
+      minutes: 0,
+      status: "DONE" as const,
+      priority: "HIGH" as const,
+    },
+    {
+      id: "emp-showcase-task-30",
+      title: "Открытие смены",
+      dueDate: "2026-04-17",
+      hours: 8,
+      minutes: 40,
+      status: "TODO" as const,
+      priority: "MEDIUM" as const,
+    },
+    {
+      id: "emp-showcase-task-31",
+      title: "Набор расходников",
+      dueDate: "2026-04-18",
+      hours: 17,
+      minutes: 10,
+      status: "DONE" as const,
+      priority: "HIGH" as const,
+    },
   ];
 
   const tasks = taskBlueprints.map((task, index) => {
+    const preset = buildDemoEmployeeShowcaseTaskPreset(
+      task.id,
+      employee,
+      managerEmployee,
+    );
     const dueAt = createFixedIso(task.dueDate, task.hours, task.minutes);
     const createdAt = createFixedIso(task.dueDate, 8, 30 - Math.min(index, 20));
     const persistedTask = state.tasks.find((entry) => entry.id === task.id);
@@ -1778,13 +2889,17 @@ function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string
         ? createFixedIso(task.dueDate, task.hours + 1, task.minutes)
         : null);
 
-    return {
+    return normalizeDemoTask({
       id: task.id,
-      title: persistedTask?.title ?? task.title,
+      title: persistedTask?.title ?? preset.title ?? task.title,
       description:
-        persistedTask?.description ?? "Показательный набор задач для demo-режима.",
+        persistedTask?.description ??
+        preset.description ??
+        "Показательный набор задач для demo-режима.",
       status: effectiveStatus,
       priority: persistedTask?.priority ?? task.priority,
+      requiresPhoto:
+        persistedTask?.requiresPhoto ?? preset.requiresPhoto ?? false,
       dueAt: persistedTask?.dueAt ?? dueAt,
       completedAt,
       createdAt,
@@ -1805,10 +2920,10 @@ function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string
         primaryLocation: employee.primaryLocation,
       },
       group: null,
-      checklistItems: [],
-      activities: [],
-      photoProofs: [],
-    };
+      checklistItems: persistedTask?.checklistItems ?? preset.checklistItems ?? [],
+      activities: persistedTask?.activities ?? preset.activities ?? [],
+      photoProofs: persistedTask?.photoProofs ?? preset.photoProofs ?? [],
+    }, state.employees);
   });
 
   return {
@@ -1860,6 +2975,7 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
       ? buildDemoEmployeeShowcaseScheduleShifts(snapshot, employeeId)
       : snapshot.shifts,
     canCheckWorkdays: true,
+    dailyActivity: buildDemoDailyActivity(snapshot),
     personalHistory: isEmployee
       ? buildDemoEmployeeShowcaseHistory(snapshot, employeeId)
       : buildAttendanceHistory(snapshot, employeeId, null, null),
@@ -1871,6 +2987,21 @@ export function getDemoDashboardBootstrap(token?: string) {
   return {
     initialData: buildDemoDashboardInitialData(state, token),
     mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
+  };
+}
+
+export function getDemoNewsBootstrap(token?: string) {
+  const state = loadState();
+  return {
+    initialData: buildDemoNewsBootstrap(state, token),
+    mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
+  };
+}
+
+export function getDemoActivityBootstrap() {
+  const state = loadState();
+  return {
+    initialData: buildDemoActivityBootstrap(state),
   };
 }
 
@@ -2386,11 +3517,137 @@ export async function demoApiRequest<T>(
     return getDemoDashboardBootstrap(token) as T;
   }
 
+  if (pathname === "/bootstrap/activity" && method === "GET") {
+    return getDemoActivityBootstrap().initialData as T;
+  }
+
   if (pathname === "/bootstrap/schedule" && method === "GET") {
     return getDemoScheduleBootstrap(token, {
       dateFrom: url.searchParams.get("dateFrom"),
       dateTo: url.searchParams.get("dateTo"),
     }) as T;
+  }
+
+  if (pathname === "/bootstrap/news" && method === "GET") {
+    return getDemoNewsBootstrap(token) as T;
+  }
+
+  if (pathname === "/collaboration/announcements" && method === "GET") {
+    return buildDemoAnnouncementsForViewer(currentState, token) as T;
+  }
+
+  if (pathname === "/collaboration/announcements/me" && method === "GET") {
+    return buildDemoAnnouncementsForViewer(
+      currentState,
+      createDemoSession("employee").accessToken,
+    ) as T;
+  }
+
+  if (pathname === "/collaboration/announcements/archive" && method === "GET") {
+    return [...currentState.announcementArchive].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    ) as T;
+  }
+
+  if (pathname === "/collaboration/announcements" && method === "POST") {
+    const payload = parseBody<any>(options?.body);
+    const actor =
+      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
+      currentState.employees[0];
+    const group =
+      payload.groupId
+        ? (currentState.groups.find((entry) => entry.id === payload.groupId) ?? null)
+        : null;
+    const targetEmployee =
+      payload.targetEmployeeId
+        ? (currentState.employees.find((entry) => entry.id === payload.targetEmployeeId) ?? null)
+        : null;
+    const scheduledFor = payload.scheduledFor ?? null;
+    const publishedAt =
+      scheduledFor && new Date(scheduledFor).getTime() > Date.now()
+        ? null
+        : new Date().toISOString();
+    const announcementId = buildTaskId("announcement");
+
+    let createdAnnouncement: any = null;
+    updateState((state) => {
+      createdAnnouncement = {
+        id: announcementId,
+        audience: payload.audience ?? "ALL",
+        title: payload.title,
+        body: payload.body,
+        isPinned: Boolean(payload.isPinned),
+        groupIds: Array.isArray(payload.groupIds)
+          ? payload.groupIds
+          : payload.groupId
+            ? [payload.groupId]
+            : [],
+        targetEmployeeIds: Array.isArray(payload.targetEmployeeIds)
+          ? payload.targetEmployeeIds
+          : payload.targetEmployeeId
+            ? [payload.targetEmployeeId]
+            : [],
+        linkUrl: payload.linkUrl ?? null,
+        attachmentLocation: payload.attachmentLocation ?? null,
+        attachments: Array.isArray(payload.attachments)
+          ? payload.attachments.map((attachment: any, index: number) => ({
+              id: `${announcementId}-attachment-${index + 1}`,
+              fileName: attachment.fileName ?? `attachment-${index + 1}`,
+              contentType: attachment.contentType ?? null,
+              sizeBytes: attachment.sizeBytes ?? null,
+              url: attachment.dataUrl ?? attachment.url ?? "#",
+            }))
+          : [],
+        imageUrl: payload.imageDataUrl ?? payload.imageUrl ?? null,
+        imageAspectRatio: payload.imageAspectRatio ?? null,
+        scheduledFor,
+        publishedAt,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        notificationId: publishedAt ? `notification-${announcementId}` : null,
+        authorEmployee: actor
+          ? {
+              id: actor.id,
+              firstName: actor.firstName,
+              lastName: actor.lastName,
+            }
+          : {
+              id: "emp-1",
+              firstName: "Demo",
+              lastName: "Manager",
+            },
+        group: group ? { id: group.id, name: group.name } : null,
+        department: null,
+        location: null,
+        targetEmployee: targetEmployee
+          ? {
+              id: targetEmployee.id,
+              firstName: targetEmployee.firstName,
+              lastName: targetEmployee.lastName,
+              employeeNumber: targetEmployee.employeeNumber,
+            }
+          : null,
+        readAtByEmployeeId: actor ? { [actor.id]: new Date().toISOString() } : {},
+      };
+      state.announcements.unshift(createdAnnouncement);
+      state.announcementArchive.unshift({
+        id: buildTaskId("announcement-archive"),
+        announcementId,
+        action: publishedAt ? "announcement.created" : "announcement.generated",
+        createdAt: new Date().toISOString(),
+        title: payload.title,
+        isPinned: Boolean(payload.isPinned),
+        actorEmployee: actor
+          ? {
+              id: actor.id,
+              firstName: actor.firstName,
+              lastName: actor.lastName,
+            }
+          : null,
+      });
+    });
+
+    return buildDemoAnnouncementItemForViewer(loadState(), createdAnnouncement, token) as T;
   }
 
   if (pathname === "/collaboration/overview" && method === "GET") {
@@ -2407,8 +3664,12 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/collaboration/tasks/me" && method === "GET") {
     const employeeId = currentEmployeeId(token);
-    return currentState.tasks.filter(
-      (task) => task.assigneeEmployee?.id === employeeId,
+    return (
+      currentDemoRole(token) === "employee"
+        ? buildDemoEmployeeShowcaseTaskBoard(currentState, employeeId).tasks
+        : currentState.tasks.filter(
+            (task) => task.assigneeEmployee?.id === employeeId,
+          )
     ) as T;
   }
 
@@ -2422,7 +3683,7 @@ export async function demoApiRequest<T>(
       const group = payload.groupId
         ? (state.groups.find((entry) => entry.id === payload.groupId) ?? null)
         : null;
-      state.tasks.unshift({
+      state.tasks.unshift(normalizeDemoTask({
         id: buildTaskId("task"),
         title: payload.title,
         description: payload.description ?? null,
@@ -2457,7 +3718,7 @@ export async function demoApiRequest<T>(
         checklistItems: [],
         activities: [],
         photoProofs: [],
-      });
+      }, state.employees));
     });
     return undefined as T;
   }
@@ -2523,6 +3784,130 @@ export async function demoApiRequest<T>(
           : null;
       }
     });
+    return undefined as T;
+  }
+
+  const announcementReadersMatch = pathname.match(
+    /^\/collaboration\/announcements\/([^/]+)\/readers$/,
+  );
+  if (announcementReadersMatch && method === "GET") {
+    return buildDemoAnnouncementReadReceipts(
+      currentState,
+      announcementReadersMatch[1],
+    ) as T;
+  }
+
+  const announcementReadMatch = pathname.match(
+    /^\/collaboration\/announcements\/([^/]+)\/read$/,
+  );
+  if (announcementReadMatch && method === "POST") {
+    const viewerEmployeeId = currentEmployeeId(token);
+    let readAt = new Date().toISOString();
+
+    updateState((state) => {
+      const announcement = state.announcements.find(
+        (item) => item.id === announcementReadMatch[1],
+      );
+      if (!announcement) {
+        return;
+      }
+
+      announcement.readAtByEmployeeId = {
+        ...(announcement.readAtByEmployeeId ?? {}),
+        [viewerEmployeeId]: readAt,
+      };
+    });
+
+    return { readAt } as T;
+  }
+
+  const announcementDetailsMatch = pathname.match(
+    /^\/collaboration\/announcements\/([^/]+)$/,
+  );
+  if (announcementDetailsMatch && method === "PATCH") {
+    const payload = parseBody<any>(options?.body);
+    const actor =
+      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
+      currentState.employees[0];
+    let updatedAnnouncement: any = null;
+
+    updateState((state) => {
+      const announcement = state.announcements.find(
+        (item) => item.id === announcementDetailsMatch[1],
+      );
+      if (!announcement) {
+        return;
+      }
+
+      announcement.title = payload.title ?? announcement.title;
+      announcement.body = payload.body ?? announcement.body;
+      announcement.isPinned =
+        typeof payload.isPinned === "boolean"
+          ? payload.isPinned
+          : announcement.isPinned;
+      announcement.updatedAt = new Date().toISOString();
+      updatedAnnouncement = { ...announcement };
+
+      state.announcementArchive.unshift({
+        id: buildTaskId("announcement-archive"),
+        announcementId: announcement.id,
+        action: "announcement.updated",
+        createdAt: new Date().toISOString(),
+        title: announcement.title,
+        isPinned: announcement.isPinned,
+        actorEmployee: actor
+          ? {
+              id: actor.id,
+              firstName: actor.firstName,
+              lastName: actor.lastName,
+            }
+          : null,
+      });
+    });
+
+    if (!updatedAnnouncement) {
+      throw new Error("Новость не найдена.");
+    }
+
+    return buildDemoAnnouncementItemForViewer(
+      loadState(),
+      updatedAnnouncement,
+      token,
+    ) as T;
+  }
+
+  if (announcementDetailsMatch && method === "DELETE") {
+    const actor =
+      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
+      currentState.employees[0];
+
+    updateState((state) => {
+      const announcement = state.announcements.find(
+        (item) => item.id === announcementDetailsMatch[1],
+      );
+      state.announcements = state.announcements.filter(
+        (item) => item.id !== announcementDetailsMatch[1],
+      );
+
+      if (announcement) {
+        state.announcementArchive.unshift({
+          id: buildTaskId("announcement-archive"),
+          announcementId: announcement.id,
+          action: "announcement.deleted",
+          createdAt: new Date().toISOString(),
+          title: announcement.title,
+          isPinned: announcement.isPinned,
+          actorEmployee: actor
+            ? {
+                id: actor.id,
+                firstName: actor.firstName,
+                lastName: actor.lastName,
+              }
+            : null,
+        });
+      }
+    });
+
     return undefined as T;
   }
 

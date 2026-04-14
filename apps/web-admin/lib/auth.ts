@@ -30,7 +30,6 @@ const SESSION_KEY = 'smart-admin-session';
 const TENANT_SLUG_KEY = 'smart-admin-tenant-slug';
 export const SESSION_EXPIRED_EVENT = 'smart-admin-session-expired';
 export const SESSION_UPDATED_EVENT = 'smart-admin-session-updated';
-const AUTH_API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 
 declare global {
   interface Window {
@@ -285,42 +284,8 @@ export function resolveHomeRoute(roleCodes: string[]): string {
   return toAdminHref('/');
 }
 
-export async function resolvePostLoginRoute(session: AuthSession): Promise<string> {
-  const fallbackRoute = resolveHomeRoute(session.user.roleCodes);
-
-  if (
-    typeof window === 'undefined' ||
-    isEmployeeOnlyRole(session.user.roleCodes) ||
-    isDemoAccessToken(session.accessToken)
-  ) {
-    return fallbackRoute;
-  }
-
-  try {
-    const response = await fetch(`${AUTH_API_URL}/api/v1/bootstrap/organization`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return fallbackRoute;
-    }
-
-    const payload = (await response.json()) as {
-      setup?: {
-        configured?: boolean;
-      } | null;
-    };
-
-    return payload.setup?.configured === false
-      ? toAdminHref('/organization')
-      : fallbackRoute;
-  } catch {
-    return fallbackRoute;
-  }
+export function resolvePostLoginRoute(session: AuthSession): string {
+  return resolveHomeRoute(session.user.roleCodes);
 }
 
 export function isEmployeeOnlyRole(roleCodes: string[]): boolean {

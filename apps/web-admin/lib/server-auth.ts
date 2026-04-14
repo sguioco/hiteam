@@ -32,10 +32,12 @@ export async function getServerSession(): Promise<AuthSession | null> {
 }
 
 export async function requireServerSession(): Promise<AuthSession> {
+  const cookieStore = await cookies();
+  const rawSessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const session = await getServerSession();
 
   if (!session) {
-    redirect("/login");
+    redirect(rawSessionCookie ? "/login?force=1" : "/login");
   }
 
   return session;

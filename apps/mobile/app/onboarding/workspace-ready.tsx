@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, Platform, View } from 'react-native';
+import { AppState, Platform, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import { Screen } from '../../components/ui/screen';
 import { BrandWordmark } from '../../src/components/brand-wordmark';
 import { loadBiometricPolicy, loadMyShifts } from '../../lib/api';
 import { updateAuthFlowState } from '../../lib/auth-flow';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { getPreciseLocationAccessStatus, type PreciseLocationAccessStatus } from '../../lib/location';
 import { markLocationOnboardingComplete } from '../../lib/onboarding';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
 
 export default function WorkspaceReadyOnboardingScreen() {
   const router = useRouter();
   const { language, t } = useI18n();
+  const insets = useSafeAreaInsets();
   const locale = getDateLocale(language);
   const isIos = Platform.OS === 'ios';
   const weekdayLabels = useMemo(
@@ -70,6 +71,7 @@ export default function WorkspaceReadyOnboardingScreen() {
   const appStateRef = useRef(AppState.currentState);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bottomActionPadding = Math.max(insets.bottom, 12);
 
   const titleStyle = {
     color: '#26334a',
@@ -329,128 +331,135 @@ export default function WorkspaceReadyOnboardingScreen() {
   }
 
   return (
-    <Screen contentClassName="gap-6 px-6 pb-8 pt-6" safeAreaClassName="bg-white" showsVerticalScrollIndicator={false}>
+    <SafeAreaView className="flex-1 bg-white" edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
-
-      <View className="gap-4">
-        <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
-        <View className="mt-10 gap-2">
-          <Text style={[titleStyle, { textAlign: 'center' }]}>
-            <Text style={{ fontFamily: 'Manrope_700Bold' }}>
-              {copy.title.split(' ')[0]}
-            </Text>
-            <Text style={{ fontFamily: 'Manrope_700Bold' }}>
-              {' '}
-              {copy.title.split(' ').slice(1).join(' ')}
-            </Text>
-          </Text>
-        </View>
-      </View>
-
-      <Card className="gap-4 rounded-[30px] bg-white">
-        <Text style={[metaLabelStyle, { textAlign: 'center' }]}>{copy.locationTitle}</Text>
-        <View className="items-center gap-3 px-2">
-          <Text
-            style={[
-              statusPillStyle,
-              {
-                color: locationStatus.status === 'ready' ? '#1f9d55' : '#c43d4b',
-                maxWidth: 320,
-                textAlign: 'center',
-              },
-            ]}
-          >
-            {locationStatus.status === 'ready'
-              ? copy.locationStatusReady
-              : locationStatus.status === 'imprecise'
-                ? copy.locationStatusImprecise
-                : copy.locationStatusMissing}
-          </Text>
-          <Text style={[bodyStyle, { maxWidth: 320, textAlign: 'center' }]}>
-            {locationStatus.status === 'ready'
-              ? copy.locationBodyReady
-              : locationStatus.status === 'imprecise'
-                ? copy.locationBodyImprecise
-                : copy.locationBodyMissing}
-          </Text>
-        </View>
-        {locationStatus.status === 'ready' ? null : (
-          <PressableScale
-            className="min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
-            haptic="medium"
-            onPress={() => void handleVerifyLocation()}
-          >
-            <Text style={actionLabelStyle}>{copy.requestLocation}</Text>
-          </PressableScale>
-        )}
-        {error ? <Text style={[errorStyle, { textAlign: 'center' }]}>{error}</Text> : null}
-      </Card>
-
-      <Card className="gap-4 rounded-[30px] bg-white">
-        <Text style={[headingStyle, { textAlign: 'center' }]}>{copy.upcomingDays}</Text>
-        {scheduleSummary ? (
-          <View className="gap-4">
-            <View>
-              <Text style={[metaLabelStyle, { textAlign: 'center' }]}>{copy.workingHours}</Text>
-              <Text
-                className="mt-2"
-                style={{
-                  color: '#26334a',
-                  fontFamily: 'Manrope_700Bold',
-                  fontSize: 24,
-                  includeFontPadding: false,
-                  lineHeight: 28,
-                  textAlign: 'center',
-                }}
-              >
-                {scheduleSummary.dominantRange}
+      <ScrollView
+        className="flex-1 bg-white"
+        contentContainerClassName="gap-6 px-6 pb-8 pt-6"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="gap-4">
+          <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
+          <View className="mt-10 gap-2">
+            <Text style={[titleStyle, { textAlign: 'center' }]}>
+              <Text style={{ fontFamily: 'Manrope_700Bold' }}>
+                {copy.title.split(' ')[0]}
               </Text>
-            </View>
-
-            <View className="flex-row items-center justify-center gap-1">
-              {weekdayLabels.map((label, index) => {
-                const isActive = scheduleSummary.activeWeekdays.has(index);
-                const usesCompactWeekdayText = label.length >= 4;
-
-                return (
-                  <View
-                    className={`h-14 w-14 items-center justify-center rounded-full border ${
-                      isActive ? 'border-[#546cf2] bg-white' : 'border-[#d6dceb] bg-[#f4f6fb]'
-                    }`}
-                    key={label}
-                  >
-                    <Text
-                      style={{
-                        color: isActive ? '#546cf2' : '#8b94a8',
-                        fontFamily: 'Manrope_600SemiBold',
-                        fontSize: usesCompactWeekdayText ? 13 : 15,
-                        includeFontPadding: false,
-                        lineHeight: usesCompactWeekdayText ? 13 : 16,
-                      }}
-                    >
-                      {label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+              <Text style={{ fontFamily: 'Manrope_700Bold' }}>
+                {' '}
+                {copy.title.split(' ').slice(1).join(' ')}
+              </Text>
+            </Text>
           </View>
+        </View>
+
+        <Card className="gap-4 rounded-[30px] bg-white">
+          <Text style={[metaLabelStyle, { textAlign: 'center' }]}>{copy.locationTitle}</Text>
+          <View className="items-center gap-3 px-2">
+            <Text
+              style={[
+                statusPillStyle,
+                {
+                  color: locationStatus.status === 'ready' ? '#1f9d55' : '#c43d4b',
+                  maxWidth: 320,
+                  textAlign: 'center',
+                },
+              ]}
+            >
+              {locationStatus.status === 'ready'
+                ? copy.locationStatusReady
+                : locationStatus.status === 'imprecise'
+                  ? copy.locationStatusImprecise
+                  : copy.locationStatusMissing}
+            </Text>
+            <Text style={[bodyStyle, { maxWidth: 320, textAlign: 'center' }]}>
+              {locationStatus.status === 'ready'
+                ? copy.locationBodyReady
+                : locationStatus.status === 'imprecise'
+                  ? copy.locationBodyImprecise
+                  : copy.locationBodyMissing}
+            </Text>
+          </View>
+          {locationStatus.status === 'ready' ? null : (
+            <PressableScale
+              className="min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
+              haptic="medium"
+              onPress={() => void handleVerifyLocation()}
+            >
+              <Text style={actionLabelStyle}>{copy.requestLocation}</Text>
+            </PressableScale>
+          )}
+          {error ? <Text style={[errorStyle, { textAlign: 'center' }]}>{error}</Text> : null}
+        </Card>
+
+        <Card className="gap-4 rounded-[30px] bg-white">
+          <Text style={[headingStyle, { textAlign: 'center' }]}>{copy.upcomingDays}</Text>
+          {scheduleSummary ? (
+            <View className="gap-4">
+              <View>
+                <Text style={[metaLabelStyle, { textAlign: 'center' }]}>{copy.workingHours}</Text>
+                <Text
+                  className="mt-2"
+                  style={{
+                    color: '#26334a',
+                    fontFamily: 'Manrope_700Bold',
+                    fontSize: 24,
+                    includeFontPadding: false,
+                    lineHeight: 28,
+                    textAlign: 'center',
+                  }}
+                >
+                  {scheduleSummary.dominantRange}
+                </Text>
+              </View>
+
+              <View className="flex-row items-center justify-center gap-1">
+                {weekdayLabels.map((label, index) => {
+                  const isActive = scheduleSummary.activeWeekdays.has(index);
+                  const usesCompactWeekdayText = label.length >= 4;
+
+                  return (
+                    <View
+                      className={`h-14 w-14 items-center justify-center rounded-full border ${
+                        isActive ? 'border-[#546cf2] bg-white' : 'border-[#d6dceb] bg-[#f4f6fb]'
+                      }`}
+                      key={label}
+                    >
+                      <Text
+                        style={{
+                          color: isActive ? '#546cf2' : '#8b94a8',
+                          fontFamily: 'Manrope_600SemiBold',
+                          fontSize: usesCompactWeekdayText ? 13 : 15,
+                          includeFontPadding: false,
+                          lineHeight: usesCompactWeekdayText ? 13 : 16,
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
           ) : (
             <Text style={[bodyStyle, { textAlign: 'center' }]}>{copy.noShift}</Text>
           )}
-      </Card>
+        </Card>
+      </ScrollView>
 
-      <PressableScale
-        className={`mt-16 min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
-          locationStatus.status === 'ready' ? '' : 'opacity-70'
-        }`}
-        disabled={locationStatus.status !== 'ready'}
-        haptic="medium"
-        onPress={() => void handleFinish()}
-      >
-        <Text style={actionLabelStyle}>{copy.finish}</Text>
-      </PressableScale>
-    </Screen>
+      <View className="px-6 pt-4" style={{ paddingBottom: bottomActionPadding }}>
+        <PressableScale
+          className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+            locationStatus.status === 'ready' ? '' : 'opacity-70'
+          }`}
+          disabled={locationStatus.status !== 'ready'}
+          haptic="medium"
+          onPress={() => void handleFinish()}
+        >
+          <Text style={actionLabelStyle}>{copy.finish}</Text>
+        </PressableScale>
+      </View>
+    </SafeAreaView>
   );
 }
 

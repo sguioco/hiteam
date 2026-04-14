@@ -2104,7 +2104,7 @@ export default function Schedule({
       <main className="page-shell section-stack min-h-0 overflow-y-auto scrollbar-hide">
           <section className="mb-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            {!isEmployeeMode ? (
+            {!isEmployeeMode && activeTab !== "schedules" ? (
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 className="font-heading"
@@ -2187,33 +2187,67 @@ export default function Schedule({
               </div>
 
               <div className="schedule-calendar-actions">
-                <div className="schedule-event-legend">
-                  <div className="schedule-event-legend-items">
-                    <span className="schedule-event-legend-chip is-shift">
-                      <span className="schedule-event-legend-dot" />
-                      {ui.shiftsOnly}
-                    </span>
-                    <span className="schedule-event-legend-chip is-task">
-                      <span className="schedule-event-legend-dot" />
-                      {ui.tasksOnly}
-                    </span>
-                    <span className="schedule-event-legend-chip is-meeting">
-                      <span className="schedule-event-legend-dot" />
-                      {ui.meetingsOnly}
-                    </span>
+                {!isEmployeeMode ? (
+                  <div className="schedule-calendar-primary-actions">
+                    <Button
+                      className="font-heading"
+                      onClick={() => setCreateShiftOpen(true)}
+                      size="lg"
+                      type="button"
+                    >
+                      <Plus className="size-4" />
+                      {ui.createShift}
+                    </Button>
+                    <Button
+                      className="font-heading"
+                      onClick={() => setMassAssignOpen(true)}
+                      size="lg"
+                      type="button"
+                      variant="outline"
+                    >
+                      {ui.massAssign}
+                    </Button>
+                    <Button
+                      className="font-heading"
+                      onClick={() => setTemplatesOpen(true)}
+                      size="lg"
+                      type="button"
+                      variant="outline"
+                    >
+                      {ui.templates}
+                    </Button>
                   </div>
+                ) : null}
+
+                <div className="schedule-calendar-secondary-actions">
+                  <div className="schedule-event-legend">
+                    <div className="schedule-event-legend-items">
+                      <span className="schedule-event-legend-chip is-shift">
+                        <span className="schedule-event-legend-dot" />
+                        {ui.shiftsOnly}
+                      </span>
+                      <span className="schedule-event-legend-chip is-task">
+                        <span className="schedule-event-legend-dot" />
+                        {ui.tasksOnly}
+                      </span>
+                      <span className="schedule-event-legend-chip is-meeting">
+                        <span className="schedule-event-legend-dot" />
+                        {ui.meetingsOnly}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    className={`h-8 rounded-xl px-3 text-xs font-heading ${
+                      showFilters ? "bg-foreground text-background hover:bg-foreground/90" : ""
+                    }`}
+                    onClick={() => setShowFilters((current) => !current)}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Filter className="size-3.5" />
+                    {ui.filters}
+                  </Button>
                 </div>
-                <Button
-                  className={`h-8 rounded-xl px-3 text-xs font-heading ${
-                    showFilters ? "bg-foreground text-background hover:bg-foreground/90" : ""
-                  }`}
-                  onClick={() => setShowFilters((current) => !current)}
-                  type="button"
-                  variant="outline"
-                >
-                  <Filter className="size-3.5" />
-                  {ui.filters}
-                </Button>
               </div>
             </div>
 

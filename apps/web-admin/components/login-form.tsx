@@ -182,9 +182,10 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
         method: 'POST',
         body: JSON.stringify({ identifier, password }),
       });
+      const nextRoute = resolvePostLoginRoute(session);
       await persistSession(session);
       navigationStarted = true;
-      window.location.replace(await resolvePostLoginRoute(session));
+      window.location.replace(nextRoute);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
     } finally {

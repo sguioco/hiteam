@@ -41,7 +41,6 @@ import {
   resolvePostLoginRoute,
   saveTenantSlug,
 } from '@/lib/auth';
-import { primeWorkspaceExperienceWithinBudget } from '@/lib/workspace-warmup';
 import { BrandWordmark } from './brand-wordmark';
 
 gsap.registerPlugin(useGSAP);
@@ -365,9 +364,10 @@ export function AuthPanel() {
         enableDemoMode();
         resetDemoState();
         const session = getDemoSessionForRole(demoRole);
+        const nextRoute = resolvePostLoginRoute(session);
         await persistSession(session);
         navigationStarted = true;
-        window.location.replace(await resolvePostLoginRoute(session));
+        window.location.replace(nextRoute);
         return;
       }
 
@@ -384,10 +384,10 @@ export function AuthPanel() {
       });
 
       disableDemoMode();
+      const nextRoute = resolvePostLoginRoute(session);
       await persistSession(session);
-      await primeWorkspaceExperienceWithinBudget(session, 700);
       navigationStarted = true;
-      window.location.replace(await resolvePostLoginRoute(session));
+      window.location.replace(nextRoute);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {
@@ -453,9 +453,10 @@ export function AuthPanel() {
     enableDemoMode();
     resetDemoState();
     const session = getDemoSessionForRole(role);
+    const nextRoute = resolvePostLoginRoute(session);
     void persistSession(session)
-      .then(async () => {
-        window.location.replace(await resolvePostLoginRoute(session));
+      .then(() => {
+        window.location.replace(nextRoute);
       })
       .catch((error) => {
         setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
