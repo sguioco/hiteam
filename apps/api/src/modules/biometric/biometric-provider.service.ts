@@ -26,9 +26,8 @@ export class BiometricProviderService {
   private readonly comprefaceTimeoutMs: number;
 
   constructor(private readonly configService: ConfigService) {
-    this.provider = this.configService.get<string>(
-      "BIOMETRIC_PROVIDER",
-      "guided-web",
+    this.provider = this.normalizeProvider(
+      this.configService.get<string>("BIOMETRIC_PROVIDER", "guided-web"),
     );
     this.comprefaceBaseUrl =
       this.configService
@@ -89,15 +88,7 @@ export class BiometricProviderService {
   }
 
   getProviderName() {
-    if (this.isAwsRekognitionEnabled()) {
-      return "aws-rekognition";
-    }
-
-    if (this.isCompreFaceEnabled()) {
-      return "compreface";
-    }
-
-    return "guided-web";
+    return this.provider;
   }
 
   isAwsRekognitionEnabled() {
@@ -106,6 +97,14 @@ export class BiometricProviderService {
 
   isCompreFaceEnabled() {
     return this.provider === "compreface";
+  }
+
+  canUseCompreFace() {
+    return this.hasCompreFaceConfiguration();
+  }
+
+  canUseCompreFaceFallback() {
+    return this.isAwsRekognitionEnabled() && this.hasCompreFaceConfiguration();
   }
 
   getCompreFaceSimilarityThreshold() {
@@ -117,7 +116,7 @@ export class BiometricProviderService {
     targetBytes: Buffer,
     contentType = "image/jpeg",
   ) {
-    if (!this.isCompreFaceEnabled()) {
+    if (!this.canUseCompreFace()) {
       return null;
     }
 
@@ -273,11 +272,27 @@ export class BiometricProviderService {
   }
 
   private assertCompreFaceConfigured() {
-    if (!this.comprefaceBaseUrl || !this.comprefaceApiKey) {
+    if (!this.hasCompreFaceConfiguration()) {
       throw new Error(
         "CompreFace is enabled but COMPRE_FACE_BASE_URL or COMPRE_FACE_API_KEY is missing.",
       );
     }
+  }
+
+  private hasCompreFaceConfiguration() {
+    return Boolean(this.comprefaceBaseUrl && this.comprefaceApiKey);
+  }
+
+  private normalizeProvider(provider: string | null | undefined) {
+    if (
+      provider === "aws-rekognition" ||
+      provider === "compreface" ||
+      provider === "guided-web"
+    ) {
+      return provider;
+    }
+
+    return "guided-web";
   }
 
   private async callCompreFace(
