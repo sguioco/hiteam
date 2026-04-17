@@ -91,6 +91,21 @@ export class BiometricProviderService {
     return this.provider;
   }
 
+  getAwsSimilarityThreshold() {
+    const rawThreshold = Number(
+      this.configService.get<string>(
+        "AWS_REKOGNITION_SIMILARITY_THRESHOLD",
+        "90",
+      ),
+    );
+
+    const threshold = Number.isFinite(rawThreshold)
+      ? Math.min(Math.max(rawThreshold, 0), 100)
+      : 90;
+
+    return threshold / 100;
+  }
+
   isAwsRekognitionEnabled() {
     return this.provider === "aws-rekognition";
   }
@@ -163,12 +178,7 @@ export class BiometricProviderService {
 
     const response = await this.client.send(
       new CompareFacesCommand({
-        SimilarityThreshold: Number(
-          this.configService.get<string>(
-            "AWS_REKOGNITION_SIMILARITY_THRESHOLD",
-            "90",
-          ),
-        ),
+        SimilarityThreshold: this.getAwsSimilarityThreshold() * 100,
         SourceImage: { Bytes: sourceBytes },
         TargetImage: { Bytes: targetBytes },
       }),

@@ -232,10 +232,6 @@ export function AttendanceCaptureScreen({
   }, [locationCheck.snapshot, status?.location]);
 
   const primaryButtonLabel = useMemo(() => {
-    if (!permission?.granted) {
-      return copy.cameraPermissionCta;
-    }
-
     if (submitting) {
       return copy.processingAction;
     }
@@ -257,7 +253,6 @@ export function AttendanceCaptureScreen({
     copy,
     faceProcessing,
     locationCheck.state,
-    permission,
     submitting,
   ]);
 
@@ -751,17 +746,17 @@ export function AttendanceCaptureScreen({
   }
 
   async function handlePrimaryAction() {
+    if (biometricVerificationId && locationCheck.state !== "ready") {
+      await runLocationCheck();
+      return;
+    }
+
     if (!permission?.granted) {
       if (permission?.canAskAgain ?? true) {
         setCameraPromptOpen(true);
       } else {
         await ensurePermission();
       }
-      return;
-    }
-
-    if (biometricVerificationId && locationCheck.state !== "ready") {
-      await runLocationCheck();
       return;
     }
 

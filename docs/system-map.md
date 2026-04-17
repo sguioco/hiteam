@@ -18,6 +18,15 @@
   - `S3_ENDPOINT=http://localhost:9000`
   - `S3_BUCKET=smart-local`
   - `S3_PUBLIC_BASE_URL=http://localhost:9000/smart-local`
+- `Biometric`
+  - `BIOMETRIC_PROVIDER=aws-rekognition`
+  - `AWS_REGION=us-east-1`
+  - `AWS_ACCESS_KEY_ID=...`
+  - `AWS_SECRET_ACCESS_KEY=...`
+  - `AWS_REKOGNITION_SIMILARITY_THRESHOLD=90`
+  - `AWS_BIOMETRIC_ASSUME_ROLE_ARN=` optional, only for web AWS liveness UI
+  - `COMPRE_FACE_BASE_URL=` optional fallback
+  - `COMPRE_FACE_API_KEY=` optional fallback
 - `JWT`
   - `JWT_ACCESS_SECRET`
   - `JWT_REFRESH_SECRET`

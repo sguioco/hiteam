@@ -48,6 +48,18 @@ Do not send secrets into chat if you do not want them persisted. You can also ad
 - `S3_ACCESS_KEY`
 - `S3_SECRET_KEY`
 - `S3_BUCKET`
+- `S3_PUBLIC_BASE_URL`
+- `BIOMETRIC_PROVIDER`
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REKOGNITION_SIMILARITY_THRESHOLD`
+- `AWS_BIOMETRIC_ASSUME_ROLE_ARN` optional, only for web AWS liveness UI
+- `AWS_BIOMETRIC_SESSION_DURATION_SECONDS` optional
+- `AWS_BIOMETRIC_EXTERNAL_ID` optional
+- `COMPRE_FACE_BASE_URL` optional fallback
+- `COMPRE_FACE_API_KEY` optional fallback
+- `COMPRE_FACE_SIMILARITY_THRESHOLD` optional fallback
 - `FRONTEND_URL`
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
@@ -76,6 +88,18 @@ Do not send secrets into chat if you do not want them persisted. You can also ad
 - `S3_ACCESS_KEY`
 - `S3_SECRET_KEY`
 - `S3_BUCKET`
+- `S3_PUBLIC_BASE_URL`
+- `BIOMETRIC_PROVIDER=aws-rekognition`
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REKOGNITION_SIMILARITY_THRESHOLD=90`
+- `AWS_BIOMETRIC_ASSUME_ROLE_ARN` optional, only for web AWS liveness UI
+- `AWS_BIOMETRIC_SESSION_DURATION_SECONDS=900` optional
+- `AWS_BIOMETRIC_EXTERNAL_ID` optional
+- `COMPRE_FACE_BASE_URL` optional fallback
+- `COMPRE_FACE_API_KEY` optional fallback
+- `COMPRE_FACE_SIMILARITY_THRESHOLD=0.60` optional fallback
 - `FRONTEND_URL`
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
@@ -90,6 +114,13 @@ Do not send secrets into chat if you do not want them persisted. You can also ad
 ### Mobile build environment
 
 - `EXPO_PUBLIC_API_URL`
+
+### Biometric note
+
+For the mobile attendance flow the app captures a selfie locally and sends it to `apps/api`.
+The backend then calls AWS Rekognition `CompareFaces` and returns the verification result.
+This flow does not require opening the AWS liveness widget window in mobile.
+The optional AWS liveness bootstrap variables are only needed for the web liveness UI path.
 
 ## 5. Recommended Provider Layout
 

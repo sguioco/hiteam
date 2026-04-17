@@ -85,7 +85,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       provider,
       rules: {
         enrollmentRequired: true,
-        livenessRequired: provider === 'aws-rekognition',
+        livenessRequired: false,
         faceMatchRequired: true,
         auditEnabled: true,
       },
@@ -204,22 +204,14 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       try {
         awsLivenessResult = await this.biometricProviderService.getLivenessSessionResult(awsSessionId);
       } catch (error) {
-        if (!comprefaceFallbackEnabled) {
-          throw error;
-        }
-
-        this.logAwsFallback('enrollment', error);
+        const details = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`AWS liveness enrollment lookup failed, continuing with uploaded selfie: ${details}`);
       }
-    } else if (awsProviderEnabled && !comprefaceFallbackEnabled) {
-      throw new BadRequestException('AWS liveness session is required to complete biometric enrollment.');
     }
 
     const awsReady = awsProviderEnabled && Boolean(awsLivenessResult?.confidence !== null);
-    if (awsProviderEnabled && !awsReady && !comprefaceFallbackEnabled) {
-      throw new BadRequestException('AWS liveness result is not available for biometric enrollment.');
-    }
 
-    if (awsReady) {
+    if (awsProviderEnabled) {
       providerUsed = 'aws-rekognition';
     } else if (comprefaceAvailable) {
       providerUsed = 'compreface';
@@ -236,16 +228,13 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
           )
         : null;
     const inlineTemplateRef =
-      comprefaceAvailable && this.isInlineBiometricReference(dto.artifacts?.[0])
+      this.isInlineBiometricReference(dto.artifacts?.[0])
         ? dto.artifacts?.[0] ?? null
         : null;
     const templateRef = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? dto.templateRef ?? inlineTemplateRef;
     const livenessScore = awsReady ? awsLivenessResult?.confidence ?? dto.livenessScore ?? null : dto.livenessScore ?? null;
     if (!templateRef) {
       throw new BadRequestException('Unable to create a biometric reference image for enrollment.');
-    }
-    if (awsReady && livenessScore === null) {
-      throw new BadRequestException('AWS liveness score is missing for biometric enrollment.');
     }
 
     const profile = await this.prisma.biometricProfile.upsert({
@@ -611,20 +600,12 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       try {
         awsLivenessResult = await this.biometricProviderService.getLivenessSessionResult(awsSessionId);
       } catch (error) {
-        if (!comprefaceFallbackEnabled) {
-          throw error;
-        }
-
-        this.logAwsFallback('verification', error);
+        const details = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`AWS liveness verification lookup failed, continuing with uploaded selfie: ${details}`);
       }
-    } else if (awsProviderEnabled && !comprefaceFallbackEnabled) {
-      throw new BadRequestException('AWS liveness session is required before biometric verification.');
     }
 
-    let awsReady = awsProviderEnabled && awsLivenessResult?.confidence !== null;
-    if (awsProviderEnabled && !awsReady && !comprefaceFallbackEnabled) {
-      throw new BadRequestException('AWS liveness result is not available for biometric verification.');
-    }
+    const awsReady = awsProviderEnabled && awsLivenessResult?.confidence !== null;
 
     const providerReferenceKey =
       awsReady && awsLivenessResult?.referenceImageBytes && this.storageService.isConfigured()
@@ -642,60 +623,57 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       this.resolveBiometricReferenceBytes(templateRef),
       this.resolveBiometricReferenceBytes(targetArtifactRef),
     ]);
+    const awsComparisonAvailable = awsProviderEnabled && Boolean(sourceBytes && targetBytes);
 
-    if ((awsReady || comprefaceAvailable) && (!sourceBytes || !targetBytes)) {
+    if ((awsComparisonAvailable || comprefaceAvailable) && (!sourceBytes || !targetBytes)) {
       throw new BadRequestException('Biometric reference or verification image is missing for AWS comparison.');
     }
 
-    const fallbackLivenessScore =
-      awsReady || comprefaceAvailable ? null : this.deriveGuidedLivenessScore(dto.captureMetadata ?? null);
     let providerMatchScore: number | null = null;
     let comprefaceVerification: Awaited<ReturnType<typeof this.biometricProviderService.compareCompreFaceFaces>> | null = null;
     let providerUsed = this.biometricProviderService.getProviderName();
     let providerLivenessScore = awsReady ? awsLivenessResult?.confidence ?? null : null;
+    let awsComparisonSucceeded = false;
 
-    if (awsReady && sourceBytes && targetBytes) {
+    if (awsComparisonAvailable && sourceBytes && targetBytes) {
       try {
         providerMatchScore = await this.biometricProviderService.compareFaces(sourceBytes, targetBytes);
+        providerUsed = 'aws-rekognition';
+        awsComparisonSucceeded = true;
       } catch (error) {
         if (!comprefaceFallbackEnabled) {
           throw error;
         }
 
-        awsReady = false;
         providerLivenessScore = null;
         this.logAwsFallback('verification', error);
       }
     }
 
-    if (!awsReady && comprefaceAvailable && sourceBytes && targetBytes) {
+    if (!awsComparisonSucceeded && comprefaceAvailable && sourceBytes && targetBytes) {
       comprefaceVerification = await this.biometricProviderService.compareCompreFaceFaces(sourceBytes, targetBytes);
       providerUsed = 'compreface';
-    } else if (awsReady) {
-      providerUsed = 'aws-rekognition';
     }
 
-    if (awsReady && providerMatchScore === null) {
+    if (awsComparisonSucceeded && providerMatchScore === null) {
       throw new BadRequestException('AWS face comparison did not return a similarity score.');
     }
-    if (!awsReady && comprefaceAvailable && !comprefaceVerification) {
+    if (!awsComparisonSucceeded && comprefaceAvailable && !comprefaceVerification) {
       throw new BadRequestException('CompreFace did not return a similarity score.');
     }
-    const livenessScore = !awsReady && comprefaceVerification ? null : providerLivenessScore ?? fallbackLivenessScore;
-    const matchScore = !awsReady && comprefaceVerification
+    const livenessScore = comprefaceVerification ? null : providerLivenessScore;
+    const matchScore = comprefaceVerification
       ? comprefaceVerification?.similarity ?? null
       : providerMatchScore;
-    if (livenessScore === null || matchScore === null) {
-      if (!comprefaceVerification) {
-        throw new BadRequestException('Biometric verification requires real liveness and face match scores.');
-      }
+    if (matchScore === null) {
+      throw new BadRequestException('Biometric verification requires a face match score.');
     }
     const result =
       comprefaceVerification
         ? matchScore !== null && matchScore >= this.biometricProviderService.getCompreFaceSimilarityThreshold()
           ? BiometricVerificationResult.PASSED
           : BiometricVerificationResult.FAILED
-        : livenessScore !== null && matchScore !== null && livenessScore >= 0.9 && matchScore >= 0.9
+        : matchScore >= this.biometricProviderService.getAwsSimilarityThreshold()
         ? BiometricVerificationResult.PASSED
         : BiometricVerificationResult.FAILED;
 
