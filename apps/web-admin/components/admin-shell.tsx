@@ -2,7 +2,7 @@
 
 import { NotificationItem, NotificationUnreadResponse } from "@smart/types";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -207,6 +207,7 @@ export function AdminShell({
   const hasValidatedServerSession = Boolean(initialSession);
   const hasValidatedInitialShell = Boolean(initialSession && initialShellBootstrap);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
   const [session, setSession] = useState<AuthSession | null>(
@@ -242,6 +243,8 @@ export function AdminShell({
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const routeLoadingTimerRef = useRef<number | null>(null);
+  const routeLoadingFallbackRef = useRef<number | null>(null);
+  const pendingRouteHrefRef = useRef<string | null>(null);
   const shellHeaderCacheKey = useMemo(
     () => (session ? buildShellHeaderCacheKey(session, mode) : null),
     [mode, session],
@@ -612,16 +615,17 @@ export function AdminShell({
     };
   }, [accountProfile, employeeCount, session, shellHeaderCacheKey]);
 
+  const searchParamsKey = searchParams.toString();
+
   useEffect(() => {
-    clearRouteLoadingTimer();
+    resetRouteLoadingState();
     setNotificationsOpen(false);
     setAccountMenuOpen(false);
-    setRouteLoading(false);
-  }, [pathname]);
+  }, [pathname, searchParamsKey]);
 
   useEffect(() => {
     return () => {
-      clearRouteLoadingTimer();
+      resetRouteLoadingState();
     };
   }, []);
 
@@ -956,6 +960,20 @@ export function AdminShell({
     }
   }
 
+  function clearRouteLoadingFallback() {
+    if (routeLoadingFallbackRef.current !== null) {
+      window.clearTimeout(routeLoadingFallbackRef.current);
+      routeLoadingFallbackRef.current = null;
+    }
+  }
+
+  function resetRouteLoadingState() {
+    clearRouteLoadingTimer();
+    clearRouteLoadingFallback();
+    pendingRouteHrefRef.current = null;
+    setRouteLoading(false);
+  }
+
   function handleRouteStart(href?: string | null, event?: RouteClickEvent | null) {
     if (!href || isActive(pathname, href) || !shouldHandleRouteClick(event)) {
       return;
@@ -964,11 +982,26 @@ export function AdminShell({
     void router.prefetch(href);
     setNotificationsOpen(false);
     setAccountMenuOpen(false);
-    clearRouteLoadingTimer();
+    resetRouteLoadingState();
+    pendingRouteHrefRef.current = href;
     routeLoadingTimerRef.current = window.setTimeout(() => {
       setRouteLoading(true);
       routeLoadingTimerRef.current = null;
     }, 180);
+    routeLoadingFallbackRef.current = window.setTimeout(() => {
+      const pendingHref = pendingRouteHrefRef.current;
+
+      resetRouteLoadingState();
+
+      if (!pendingHref || typeof window === "undefined") {
+        return;
+      }
+
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== pendingHref) {
+        window.location.assign(pendingHref);
+      }
+    }, 8000);
   }
 
   async function handleMarkRead(notificationId: string) {

@@ -33,7 +33,11 @@ export async function serverApiRequest<T>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    const error = new Error(
+      text || `Request failed with status ${response.status}`,
+    ) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   if (response.status === 204) {

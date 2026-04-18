@@ -39,6 +39,10 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-smart-public-route", isPublicRoute ? "1" : "0");
   requestHeaders.set("x-smart-pathname", pathname);
+  requestHeaders.set(
+    "x-smart-return-to",
+    `${pathname}${request.nextUrl.search}`,
+  );
 
   const session = decodeSessionCookie(
     request.cookies.get(SESSION_COOKIE_NAME)?.value,

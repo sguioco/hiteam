@@ -1474,23 +1474,23 @@ function buildAttendanceLive(state: DemoState) {
     },
     {
       shiftLabel: "09:00-18:00",
-      status: "on_shift",
+      status: "checked_out",
       startedAt: createIsoAt(0, 8, 46),
-      endedAt: null,
-      totalMinutes: 404,
-      breakMinutes: 30,
+      endedAt: createIsoAt(0, 16, 46),
+      totalMinutes: 421,
+      breakMinutes: 45,
       lateMinutes: 0,
-      earlyLeaveMinutes: 0,
+      earlyLeaveMinutes: 74,
     },
     {
       shiftLabel: "09:00-18:00",
-      status: "checked_out",
+      status: "on_shift",
       startedAt: createIsoAt(0, 10, 0),
-      endedAt: createIsoAt(0, 17, 55),
+      endedAt: null,
       totalMinutes: 348,
       breakMinutes: 0,
       lateMinutes: 0,
-      earlyLeaveMinutes: 10,
+      earlyLeaveMinutes: 0,
     },
     {
       shiftLabel: null,
@@ -1541,8 +1541,32 @@ function buildAttendanceHistory(
     .filter((employee) => !employeeId || employee.id === employeeId)
     .forEach((employee, employeeIndex) => {
       for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
-        const startedAt = createIsoAt(-dayOffset, 9 + (employeeIndex % 2), 0);
-        const endedAt = createIsoAt(-dayOffset, 18, 5);
+        const isToday = dayOffset === 0;
+        const isPetrovLateToday = employee.id === "emp-2" && isToday;
+        const isSokolovaEarlyToday = employee.id === "emp-3" && isToday;
+        const startedAt = isPetrovLateToday
+          ? createIsoAt(0, 10, 13)
+          : createIsoAt(-dayOffset, 9 + (employeeIndex % 2), 0);
+        const endedAt = isSokolovaEarlyToday
+          ? createIsoAt(0, 16, 46)
+          : createIsoAt(-dayOffset, 18, 5);
+        const lateMinutes = isPetrovLateToday
+          ? 73
+          : employee.id === "emp-2"
+            ? 0
+            : employeeIndex === 1 && dayOffset < 2
+              ? 12
+              : 0;
+        const earlyLeaveMinutes = isSokolovaEarlyToday
+          ? 74
+          : employeeIndex === 3 && dayOffset === 2
+            ? 15
+            : 0;
+        const workedMinutes = isPetrovLateToday
+          ? 422
+          : isSokolovaEarlyToday
+            ? 421
+            : 495 - employeeIndex * 8;
         const dayKey = dateKey(new Date(startedAt));
         if (dayKey < from || dayKey > to) {
           continue;
@@ -1559,16 +1583,11 @@ function buildAttendanceHistory(
           startedAt,
           endedAt,
           totalMinutes: 540,
-          workedMinutes: 495 - employeeIndex * 8,
+          workedMinutes,
           breakMinutes: 45,
           paidBreakMinutes: 0,
-          lateMinutes:
-            employee.id === "emp-2"
-              ? 0
-              : employeeIndex === 1 && dayOffset < 2
-                ? 12
-                : 0,
-          earlyLeaveMinutes: employeeIndex === 3 && dayOffset === 2 ? 15 : 0,
+          lateMinutes,
+          earlyLeaveMinutes,
           checkInEvent: {
             occurredAt: startedAt,
             distanceMeters: 21 + employeeIndex * 3,
@@ -2384,29 +2403,10 @@ function buildDemoShowcaseTaskBoardForCurrentUser(
 
 function buildBootstrapTasks(state: DemoState) {
   const snapshot = cloneState(state);
-  const biometricStatusByEmployeeId = new Map(
-    snapshot.biometricEmployees.map((item) => [
-      item.employeeId,
-      item.enrollmentStatus,
-    ]),
-  );
 
   return {
     tasks: snapshot.tasks,
-    employees: snapshot.employees.map((employee) => ({
-      id: employee.id,
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-      employeeNumber: employee.employeeNumber,
-      avatarUrl: employee.avatarUrl,
-      biometricProfile: {
-        enrollmentStatus:
-          biometricStatusByEmployeeId.get(employee.id) ?? "NOT_STARTED",
-      },
-      department: employee.department,
-      primaryLocation: employee.primaryLocation,
-      position: employee.position,
-    })),
+    employees: buildDemoEmployeeRecords(snapshot),
     groups: snapshot.groups.map((group) => ({
       ...group,
       _count: {
@@ -2421,6 +2421,106 @@ function createFixedIso(dateKey: string, hours: number, minutes: number) {
   const value = new Date(`${dateKey}T00:00:00`);
   value.setHours(hours, minutes, 0, 0);
   return value.toISOString();
+}
+
+function buildDemoEmployeeRecords(state: DemoState) {
+  const biometricStatusByEmployeeId = new Map(
+    state.biometricEmployees.map((item) => [item.employeeId, item.enrollmentStatus]),
+  );
+
+  return state.employees.map((employee) => ({
+    ...employee,
+    user: employee.user
+      ? {
+          ...employee.user,
+          roles:
+            employee.user.email === DEMO_ADMIN_EMAIL
+              ? [{ role: { code: "tenant_owner" } }]
+              : [],
+        }
+      : null,
+    biometricProfile: {
+      enrollmentStatus:
+        biometricStatusByEmployeeId.get(employee.id) ?? "NOT_STARTED",
+    },
+  }));
+}
+
+function buildDemoEmployeesBootstrap(state: DemoState) {
+  const snapshot = cloneState(state);
+
+  return {
+    employeeRecords: buildDemoEmployeeRecords(snapshot),
+    liveSessions: buildAttendanceLive(snapshot),
+    overview: buildCollaborationOverview(snapshot),
+    pendingInvitations: snapshot.invitations,
+    scheduleShifts: snapshot.shifts,
+    scheduleTemplates: snapshot.templates,
+    organizationSetup: {
+      company: snapshot.organization.company
+        ? {
+            id: snapshot.organization.company.id,
+            code: "DEMO",
+            name: snapshot.organization.company.name,
+          }
+        : null,
+    },
+    canCheckWorkdays: true,
+  };
+}
+
+function buildDemoAttendanceBootstrap(
+  state: DemoState,
+  searchParams: URLSearchParams,
+) {
+  const snapshot = cloneState(state);
+  const dateFrom = searchParams.get("dateFrom")?.trim() || dateKey(new Date());
+  const dateTo = searchParams.get("dateTo")?.trim() || dateKey(new Date());
+
+  return {
+    employees: snapshot.employees.map((employee) => ({
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber,
+      position: employee.position,
+      department: employee.department,
+      primaryLocation: employee.primaryLocation,
+      avatarUrl: employee.avatarUrl,
+    })),
+    history: buildAttendanceHistory(snapshot, null, dateFrom, dateTo),
+    anomalies: buildAttendanceAnomalies(snapshot),
+    liveSessions: buildAttendanceLive(snapshot),
+    audit: buildAttendanceAudit(snapshot, dateFrom, dateTo),
+    dateFrom,
+    dateTo,
+  };
+}
+
+function buildDemoBiometricBootstrap(
+  state: DemoState,
+  searchParams: URLSearchParams,
+) {
+  const snapshot = cloneState(state);
+  const result = searchParams.get("result");
+  const normalizedResult =
+    result === "FAILED" || result === "PASSED" || result === "REVIEW"
+      ? result
+      : "__all";
+
+  return {
+    employees: snapshot.employees.map((employee) => ({
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      employeeNumber: employee.employeeNumber,
+      avatarUrl: employee.avatarUrl,
+      department: employee.department,
+      primaryLocation: employee.primaryLocation,
+    })),
+    reviews: buildBiometricReviewResponse(snapshot, searchParams),
+    result: normalizedResult,
+  };
 }
 
 function buildDemoEmployeeShowcaseHistory(state: DemoState, employeeId: string) {
@@ -3210,7 +3310,11 @@ function buildBiometricReviewResponse(
   searchParams: URLSearchParams,
 ) {
   const employeeId = searchParams.get("employeeId");
-  const result = searchParams.get("result");
+  const rawResult = searchParams.get("result");
+  const result =
+    rawResult === "FAILED" || rawResult === "PASSED" || rawResult === "REVIEW"
+      ? rawResult
+      : null;
   const items = state.biometricEmployees.filter((item) => {
     if (employeeId && item.employeeId !== employeeId) return false;
     if (result && item.latestVerification?.result !== result) return false;
@@ -3667,6 +3771,14 @@ export async function demoApiRequest<T>(
     return buildBootstrapTasks(currentState) as T;
   }
 
+  if (pathname === "/bootstrap/employees" && method === "GET") {
+    return buildDemoEmployeesBootstrap(currentState) as T;
+  }
+
+  if (pathname === "/bootstrap/attendance" && method === "GET") {
+    return buildDemoAttendanceBootstrap(currentState, url.searchParams) as T;
+  }
+
   if (pathname === "/bootstrap/dashboard" && method === "GET") {
     return getDemoDashboardBootstrap(token) as T;
   }
@@ -3684,6 +3796,10 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/bootstrap/news" && method === "GET") {
     return getDemoNewsBootstrap(token) as T;
+  }
+
+  if (pathname === "/bootstrap/biometric" && method === "GET") {
+    return buildDemoBiometricBootstrap(currentState, url.searchParams) as T;
   }
 
   if (pathname === "/collaboration/announcements" && method === "GET") {
