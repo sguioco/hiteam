@@ -20,6 +20,6 @@ import { CollaborationService } from './collaboration.service';
     CollaborationRealtimeService,
     CollaborationScheduler,
   ],
-  exports: [CollaborationService],
+  exports: [CollaborationService, CollaborationRealtimeService],
 })
 export class CollaborationModule {}
