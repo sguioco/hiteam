@@ -20,9 +20,9 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { TranslationService } from "../translation/translation.service";
+import { CollaborationRealtimeService } from "./collaboration-realtime.service";
 import { AddTaskCommentDto } from "./dto/add-task-comment.dto";
 import { BulkRemindTasksDto } from "./dto/bulk-remind-tasks.dto";
-import { CollaborationGateway } from "./collaboration.gateway";
 import { CreateAnnouncementDto } from "./dto/create-announcement.dto";
 import { CreateAnnouncementTemplateDto } from "./dto/create-announcement-template.dto";
 import { CreateChatThreadDto } from "./dto/create-chat-thread.dto";
@@ -54,7 +54,7 @@ export class CollaborationService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
-    private readonly collaborationGateway: CollaborationGateway,
+    private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly storageService: StorageService,
     private readonly translationService: TranslationService,
   ) {}
@@ -385,7 +385,7 @@ export class CollaborationService {
           tenantId: manager.tenantId,
           managerEmployeeId: manager.id,
         },
-        include: this.taskInclude(),
+        include: this.taskListInclude(),
         orderBy: [{ createdAt: "desc" }],
         take: 24,
       }),
@@ -508,7 +508,7 @@ export class CollaborationService {
               gte: rangeStart,
             },
           },
-          include: this.taskInclude(),
+          include: this.taskListInclude(),
           orderBy: [{ createdAt: "desc" }],
         }),
         this.prisma.chatThread.count({
@@ -2281,7 +2281,7 @@ export class CollaborationService {
             groupId: task.groupId,
           },
         });
-        this.collaborationGateway.emitThreadUpdated(
+        void this.collaborationRealtimeService.fanoutThreadUpdated(
           task.assigneeEmployee.userId,
           {
             taskId: task.id,
@@ -2579,6 +2579,7 @@ export class CollaborationService {
     });
     const now = new Date();
     const taskWindow = this.resolveTaskWindow(query);
+    const onlyOverdue = query.onlyOverdue === "true";
 
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -2590,10 +2591,17 @@ export class CollaborationService {
               mode: "insensitive",
             }
           : undefined,
-        status: query.status,
+        status:
+          query.status ??
+          (onlyOverdue
+            ? {
+                notIn: [TaskStatus.DONE, TaskStatus.CANCELLED],
+              }
+            : undefined),
         priority: query.priority,
         groupId: query.groupId,
         assigneeEmployeeId: query.assigneeEmployeeId,
+        dueAt: onlyOverdue && !taskWindow ? { lt: now } : undefined,
         assigneeEmployee:
           query.departmentId || query.locationId
             ? {
@@ -2603,7 +2611,7 @@ export class CollaborationService {
             : undefined,
         ...this.buildTaskDateWhere(taskWindow),
       },
-      include: this.taskInclude(),
+      include: this.taskListInclude(),
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     });
 
@@ -3069,7 +3077,7 @@ export class CollaborationService {
         assigneeEmployeeId: employee.id,
         ...this.buildTaskDateWhere(taskWindow),
       },
-      include: this.taskInclude(),
+      include: this.taskListInclude(),
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     });
 
@@ -3519,14 +3527,14 @@ export class CollaborationService {
       }
     }
 
-    this.collaborationGateway.emitThreadMessage(thread.id, {
+    void this.collaborationRealtimeService.fanoutThreadMessage(thread.id, {
       threadId: thread.id,
       message,
     });
 
     for (const participant of thread.participants) {
       if (participant.employee.userId) {
-        this.collaborationGateway.emitThreadUpdated(
+        void this.collaborationRealtimeService.fanoutThreadUpdated(
           participant.employee.userId,
           {
             threadId: thread.id,
@@ -3555,7 +3563,7 @@ export class CollaborationService {
     });
 
     if (employee.userId) {
-      this.collaborationGateway.emitThreadUpdated(employee.userId, {
+      void this.collaborationRealtimeService.fanoutThreadUpdated(employee.userId, {
         threadId,
         readAt: new Date().toISOString(),
       });
@@ -5335,7 +5343,7 @@ export class CollaborationService {
             recurring: true,
           },
         });
-        this.collaborationGateway.emitThreadUpdated(
+        void this.collaborationRealtimeService.fanoutThreadUpdated(
           task.assigneeEmployee.userId,
           {
             taskId: task.id,
@@ -5504,7 +5512,7 @@ export class CollaborationService {
           escalation: options.escalation,
         },
       });
-      this.collaborationGateway.emitThreadUpdated(
+      void this.collaborationRealtimeService.fanoutThreadUpdated(
         task.assigneeEmployee.userId,
         {
           taskId: task.id,
@@ -5579,7 +5587,7 @@ export class CollaborationService {
           data: { updatedAt: new Date() },
         });
 
-        this.collaborationGateway.emitThreadMessage(directThread.id, {
+        void this.collaborationRealtimeService.fanoutThreadMessage(directThread.id, {
           threadId: directThread.id,
           message,
         });
@@ -6747,6 +6755,17 @@ export class CollaborationService {
 
   private serializeTaskWithPhotoProofUrls<
     T extends {
+      activities?: Array<{
+        id: string;
+        kind: TaskActivityKind;
+        body: string | null;
+        createdAt: Date;
+        actorEmployee: {
+          id: string;
+          firstName: string;
+          lastName: string;
+        };
+      }>;
       photoProofs: Array<{
         id: string;
         fileName: string;
@@ -6764,6 +6783,12 @@ export class CollaborationService {
   >(task: T) {
     return {
       ...task,
+      activities: Array.isArray(task.activities)
+        ? task.activities.map((activity) => ({
+            ...activity,
+            createdAt: activity.createdAt.toISOString(),
+          }))
+        : [],
       photoProofs: task.photoProofs.map((proof) => ({
         id: proof.id,
         fileName: proof.fileName,
@@ -7210,7 +7235,7 @@ export class CollaborationService {
     const refreshedAt = new Date().toISOString();
 
     for (const userId of userIds) {
-      this.collaborationGateway.emitWorkspaceRefresh(userId, {
+      void this.collaborationRealtimeService.fanoutWorkspaceRefresh(userId, {
         reason,
         refreshedAt,
       });
@@ -7285,6 +7310,79 @@ export class CollaborationService {
       photoProofs: {
         include: {
           uploadedByEmployee: true,
+        },
+        orderBy: { createdAt: "asc" as const },
+      },
+    } satisfies Prisma.TaskInclude;
+  }
+
+  private taskListInclude() {
+    return {
+      managerEmployee: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+      assigneeEmployee: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          employeeNumber: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          primaryLocation: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+      group: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      checklistItems: {
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          isCompleted: true,
+          completedAt: true,
+          completedByEmployee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: { sortOrder: "asc" as const },
+      },
+      photoProofs: {
+        select: {
+          id: true,
+          fileName: true,
+          storageKey: true,
+          deletedAt: true,
+          supersededByProofId: true,
+          createdAt: true,
+          uploadedByEmployee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
         },
         orderBy: { createdAt: "asc" as const },
       },

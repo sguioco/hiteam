@@ -709,7 +709,7 @@ export function AdminShell({
         },
         {
           href: activityHref,
-          label: "Activity",
+          label: t("nav.activity"),
           icon: Activity,
         },
         {
@@ -733,7 +733,7 @@ export function AdminShell({
       },
       {
         href: activityHref,
-        label: "Activity",
+        label: t("nav.activity"),
         icon: Activity,
       },
     ];

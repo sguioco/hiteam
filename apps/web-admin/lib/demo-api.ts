@@ -1451,23 +1451,79 @@ function shouldHandle(token?: string) {
 }
 
 function buildAttendanceLive(state: DemoState) {
-  return state.employees.slice(0, 5).map((employee, index) => ({
-    sessionId: `session-${employee.id}`,
-    employeeId: employee.id,
-    employeeName: buildEmployeeFullName(employee),
-    employeeNumber: employee.employeeNumber,
-    department: employee.department?.name ?? "—",
-    location: employee.primaryLocation?.name ?? "—",
-    shiftLabel: index === 4 ? null : "09:00-18:00",
-    status: index === 3 ? "checked_out" : "on_shift",
-    startedAt: createIsoAt(0, 9 + (index % 2), 0),
-    endedAt: index === 3 ? createIsoAt(0, 17, 55) : null,
-    totalMinutes: 420 - index * 24,
-    breakMinutes: index === 2 ? 30 : 0,
-    paidBreakMinutes: 0,
-    lateMinutes: index === 1 ? 18 : index === 4 ? 6 : 0,
-    earlyLeaveMinutes: index === 3 ? 10 : 0,
-  }));
+  const presets = [
+    {
+      shiftLabel: "09:00-18:00",
+      status: "on_shift",
+      startedAt: createIsoAt(0, 9, 0),
+      endedAt: null,
+      totalMinutes: 420,
+      breakMinutes: 0,
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+    },
+    {
+      shiftLabel: "09:00-18:00",
+      status: "on_shift",
+      startedAt: createIsoAt(0, 10, 13),
+      endedAt: null,
+      totalMinutes: 347,
+      breakMinutes: 0,
+      lateMinutes: 73,
+      earlyLeaveMinutes: 0,
+    },
+    {
+      shiftLabel: "09:00-18:00",
+      status: "on_shift",
+      startedAt: createIsoAt(0, 8, 46),
+      endedAt: null,
+      totalMinutes: 404,
+      breakMinutes: 30,
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+    },
+    {
+      shiftLabel: "09:00-18:00",
+      status: "checked_out",
+      startedAt: createIsoAt(0, 10, 0),
+      endedAt: createIsoAt(0, 17, 55),
+      totalMinutes: 348,
+      breakMinutes: 0,
+      lateMinutes: 0,
+      earlyLeaveMinutes: 10,
+    },
+    {
+      shiftLabel: null,
+      status: "on_shift",
+      startedAt: createIsoAt(0, 9, 6),
+      endedAt: null,
+      totalMinutes: 324,
+      breakMinutes: 0,
+      lateMinutes: 6,
+      earlyLeaveMinutes: 0,
+    },
+  ] as const;
+
+  return state.employees.slice(0, 5).map((employee, index) => {
+    const preset = presets[index];
+    return {
+      sessionId: `session-${employee.id}`,
+      employeeId: employee.id,
+      employeeName: buildEmployeeFullName(employee),
+      employeeNumber: employee.employeeNumber,
+      department: employee.department?.name ?? "—",
+      location: employee.primaryLocation?.name ?? "—",
+      shiftLabel: preset?.shiftLabel ?? "09:00-18:00",
+      status: preset?.status ?? "on_shift",
+      startedAt: preset?.startedAt ?? createIsoAt(0, 9, 0),
+      endedAt: preset?.endedAt ?? null,
+      totalMinutes: preset?.totalMinutes ?? 420,
+      breakMinutes: preset?.breakMinutes ?? 0,
+      paidBreakMinutes: 0,
+      lateMinutes: preset?.lateMinutes ?? 0,
+      earlyLeaveMinutes: preset?.earlyLeaveMinutes ?? 0,
+    };
+  });
 }
 
 function buildAttendanceHistory(

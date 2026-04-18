@@ -4,6 +4,7 @@ import { AttendanceGateway } from '../attendance/attendance.gateway';
 import { AttendanceRealtimeService } from '../attendance/attendance-realtime.service';
 import { AuditService } from '../audit/audit.service';
 import { BiometricService } from '../biometric/biometric.service';
+import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
 import { DiagnosticsService } from '../diagnostics/diagnostics.service';
 import { ExportsService } from '../exports/exports.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -20,6 +21,7 @@ export class ObservabilityService {
     private readonly notificationsRealtimeService: NotificationsRealtimeService,
     private readonly attendanceGateway: AttendanceGateway,
     private readonly attendanceRealtimeService: AttendanceRealtimeService,
+    private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly exportsService: ExportsService,
     private readonly biometricService: BiometricService,
     private readonly pushService: PushService,
@@ -108,6 +110,7 @@ export class ObservabilityService {
 
     const notificationsRealtime = this.notificationsRealtimeService.getRuntimeStatus();
     const attendanceRealtime = this.attendanceRealtimeService.getRuntimeStatus();
+    const collaborationRealtime = this.collaborationRealtimeService.getRuntimeStatus();
     const notificationSocket = this.notificationsGateway.getStats();
     const attendanceSocket = this.attendanceGateway.getStats();
 
@@ -122,12 +125,17 @@ export class ObservabilityService {
       detail: string;
     }> = [];
 
-    if (notificationsRealtime.transport === 'in_process' || attendanceRealtime.transport === 'in_process') {
+    if (
+      notificationsRealtime.transport === 'in_process' ||
+      attendanceRealtime.transport === 'in_process' ||
+      collaborationRealtime.transport === 'in_process'
+    ) {
       alerts.push({
         id: 'realtime-fallback',
         severity: 'warning',
         title: 'Realtime transport fallback',
-        detail: 'At least one realtime channel is running without Redis pub/sub fanout.',
+        detail:
+          'At least one realtime channel is running without Redis pub/sub fanout.',
       });
     }
 

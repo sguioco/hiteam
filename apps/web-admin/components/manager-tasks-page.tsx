@@ -536,8 +536,14 @@ type ManagerTasksCachePayload = {
 
 export type ManagerTasksPageInitialData = ManagerTasksCachePayload;
 
-function buildManagerTasksCacheKey(session: ReturnType<typeof getSession>) {
-  return session ? `manager-tasks:${session.user.id}` : null;
+function buildManagerTasksCacheKey(
+  session: ReturnType<typeof getSession>,
+  dateFrom: string,
+  dateTo: string,
+) {
+  return session
+    ? `manager-tasks:${session.user.id}:${dateFrom}:${dateTo}`
+    : null;
 }
 
 export function ManagerTasksPage({
@@ -549,10 +555,6 @@ export function ManagerTasksPage({
   const { locale } = useI18n();
   const session = getSession();
   const accessToken = session?.accessToken ?? null;
-  const tasksCacheKey = useMemo(
-    () => buildManagerTasksCacheKey(session),
-    [session],
-  );
   const [accessChecked, setAccessChecked] = useState(false);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
@@ -591,6 +593,7 @@ export function ManagerTasksPage({
     direction: "ascending",
   });
   const didUseInitialData = useRef(Boolean(initialData));
+  const latestSnapshotRequestKey = useRef<string | null>(null);
 
   function applyCachedSnapshot(snapshot: ManagerTasksCachePayload) {
     setTasks(snapshot.tasks);
@@ -599,7 +602,9 @@ export function ManagerTasksPage({
     setLiveSessions(snapshot.liveSessions);
   }
 
-  async function loadTasksSnapshot(options?: {
+  async function loadTasksSnapshot(options: {
+    dateFrom: string;
+    dateTo: string;
     force?: boolean;
     silent?: boolean;
   }) {
@@ -615,14 +620,30 @@ export function ManagerTasksPage({
       setError(null);
     }
 
+    const query = new URLSearchParams({
+      dateFrom: options?.dateFrom,
+      dateTo: options?.dateTo,
+    }).toString();
+    latestSnapshotRequestKey.current = query;
+
     try {
-      const snapshot = await apiRequest<ManagerTasksCachePayload>("/bootstrap/tasks", {
-        token: session.accessToken,
-        skipClientCache: options?.force ?? false,
-      });
+      const snapshot = await apiRequest<ManagerTasksCachePayload>(
+        `/bootstrap/tasks?${query}`,
+        {
+          token: session.accessToken,
+          skipClientCache: options?.force ?? false,
+        },
+      );
+      if (latestSnapshotRequestKey.current !== query) {
+        return;
+      }
       setError(null);
       applyCachedSnapshot(snapshot);
     } catch (loadError) {
+      if (latestSnapshotRequestKey.current !== query) {
+        return;
+      }
+
       if (options?.silent) {
         return;
       }
@@ -663,6 +684,31 @@ export function ManagerTasksPage({
     setAccessChecked(true);
   }, [router]);
 
+  const today = useMemo(() => startOfDay(new Date()), []);
+
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    let start = parseDateInput(dateFrom, "start") ?? startOfDay(today);
+    let end = parseDateInput(dateTo, "end") ?? endOfDay(today);
+
+    if (start.getTime() > end.getTime()) {
+      const nextStart = startOfDay(end);
+      const nextEnd = endOfDay(start);
+      return { rangeStart: nextStart, rangeEnd: nextEnd };
+    }
+
+    return { rangeStart: start, rangeEnd: end };
+  }, [dateFrom, dateTo, today]);
+  const resolvedDateFrom = useMemo(() => formatDateInput(rangeStart), [rangeStart]);
+  const resolvedDateTo = useMemo(() => formatDateInput(rangeEnd), [rangeEnd]);
+  const tasksCacheKey = useMemo(
+    () => buildManagerTasksCacheKey(session, resolvedDateFrom, resolvedDateTo),
+    [resolvedDateFrom, resolvedDateTo, session],
+  );
+  const isHistoricalRange = useMemo(
+    () => rangeEnd.getTime() < today.getTime(),
+    [rangeEnd, today],
+  );
+
   useEffect(() => {
     if (!accessChecked) {
       return;
@@ -674,8 +720,18 @@ export function ManagerTasksPage({
 
     if (didUseInitialData.current && initialData) {
       didUseInitialData.current = false;
+      applyCachedSnapshot(initialData);
+      if (tasksCacheKey) {
+        writeClientCache(tasksCacheKey, initialData);
+      }
       setError(null);
       setLoading(false);
+      void loadTasksSnapshot({
+        dateFrom: resolvedDateFrom,
+        dateTo: resolvedDateTo,
+        force: true,
+        silent: true,
+      });
       return;
     }
 
@@ -695,6 +751,8 @@ export function ManagerTasksPage({
     }
 
     void loadTasksSnapshot({
+      dateFrom: resolvedDateFrom,
+      dateTo: resolvedDateTo,
       force: true,
       silent: Boolean(cached),
     }).finally(() => {
@@ -708,13 +766,22 @@ export function ManagerTasksPage({
     return () => {
       cancelled = true;
     };
-  }, [accessChecked, initialData, locale, tasksCacheKey]);
+  }, [
+    accessChecked,
+    initialData,
+    locale,
+    resolvedDateFrom,
+    resolvedDateTo,
+    tasksCacheKey,
+  ]);
 
   useWorkspaceAutoRefresh({
     session,
     enabled: accessChecked && Boolean(session),
     onRefresh: async () => {
       await loadTasksSnapshot({
+        dateFrom: resolvedDateFrom,
+        dateTo: resolvedDateTo,
         force: true,
         silent: true,
       });
@@ -733,27 +800,6 @@ export function ManagerTasksPage({
       liveSessions,
     } satisfies ManagerTasksCachePayload);
   }, [employees, groups, liveSessions, loading, tasks, tasksCacheKey]);
-
-  const today = useMemo(() => startOfDay(new Date()), []);
-
-  const { rangeStart, rangeEnd } = useMemo(() => {
-    let start = parseDateInput(dateFrom, "start") ?? startOfDay(today);
-    let end = parseDateInput(dateTo, "end") ?? endOfDay(today);
-
-    if (start.getTime() > end.getTime()) {
-      const nextStart = startOfDay(end);
-      const nextEnd = endOfDay(start);
-      return { rangeStart: nextStart, rangeEnd: nextEnd };
-    }
-
-    return { rangeStart: start, rangeEnd: end };
-  }, [dateFrom, dateTo, today]);
-  const resolvedDateFrom = useMemo(() => formatDateInput(rangeStart), [rangeStart]);
-  const resolvedDateTo = useMemo(() => formatDateInput(rangeEnd), [rangeEnd]);
-  const isHistoricalRange = useMemo(
-    () => rangeEnd.getTime() < today.getTime(),
-    [rangeEnd, today],
-  );
 
   useEffect(() => {
     if (!accessChecked) {

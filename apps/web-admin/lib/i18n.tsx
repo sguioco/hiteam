@@ -38,6 +38,7 @@ const dictionaries = {
     },
     nav: {
       dashboard: "Dashboard",
+      activity: "Activity",
       employees: "Employees",
       biometric: "Biometric",
       attendance: "Attendance",
@@ -884,6 +885,7 @@ const dictionaries = {
     },
     nav: {
       dashboard: "Дашборд",
+      activity: "Активность",
       employees: "Сотрудники",
       biometric: "Биометрия",
       attendance: "Посещаемость",

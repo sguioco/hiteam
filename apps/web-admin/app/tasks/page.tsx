@@ -8,6 +8,13 @@ import { toAdminHref } from "@/lib/admin-routes";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function loadInitialTasksData(): Promise<ManagerTasksPageInitialData | null> {
   const session = await requireServerSession();
 
@@ -15,10 +22,12 @@ async function loadInitialTasksData(): Promise<ManagerTasksPageInitialData | nul
     redirect(toAdminHref("/"));
   }
 
+  const today = formatDateInput(new Date());
+
   try {
     return await serverApiRequestWithSession<ManagerTasksPageInitialData>(
       session,
-      "/bootstrap/tasks",
+      `/bootstrap/tasks?dateFrom=${today}&dateTo=${today}`,
     );
   } catch {
     return null;

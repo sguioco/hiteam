@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { TaskStatus } from '@prisma/client';
 import type { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -74,6 +75,19 @@ function formatDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function startOfDayLocal(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function resolveBootstrapTaskRange(dateFrom?: string, dateTo?: string) {
+  const today = formatDateKey(new Date());
+
+  return {
+    dateFrom: dateFrom ?? dateTo ?? today,
+    dateTo: dateTo ?? dateFrom ?? today,
+  };
+}
+
 function startOfSixMonthWindow(reference: Date) {
   const next = new Date(reference);
   next.setHours(0, 0, 0, 0);
@@ -102,6 +116,92 @@ async function withTimeoutFallback<T>(
   }
 }
 
+function sortBootstrapTasks<
+  T extends {
+    status: string;
+    dueAt?: string | Date | null;
+    createdAt: string | Date;
+  },
+>(tasks: T[]) {
+  return tasks.slice().sort((left, right) => {
+    const leftDone =
+      left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+        ? 1
+        : 0;
+    const rightDone =
+      right.status === TaskStatus.DONE || right.status === TaskStatus.CANCELLED
+        ? 1
+        : 0;
+
+    if (leftDone !== rightDone) {
+      return leftDone - rightDone;
+    }
+
+    const leftDueAt = left.dueAt
+      ? new Date(left.dueAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    const rightDueAt = right.dueAt
+      ? new Date(right.dueAt).getTime()
+      : Number.POSITIVE_INFINITY;
+
+    if (leftDueAt !== rightDueAt) {
+      return leftDueAt - rightDueAt;
+    }
+
+    return (
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    );
+  });
+}
+
+function mergeTaskBoards<
+  T extends {
+    id: string;
+    status: string;
+    dueAt?: string | Date | null;
+    createdAt: string | Date;
+  },
+>(boards: Array<{ tasks: T[] } | null>) {
+  const availableBoards = boards.filter(
+    (board): board is { tasks: T[] } => Boolean(board),
+  );
+
+  if (!availableBoards.length) {
+    return null;
+  }
+
+  const taskMap = new Map<string, T>();
+
+  for (const board of availableBoards) {
+    for (const task of board.tasks) {
+      taskMap.set(task.id, task);
+    }
+  }
+
+  const tasks = sortBootstrapTasks(Array.from(taskMap.values()));
+  const now = Date.now();
+
+  return {
+    totals: {
+      total: tasks.length,
+      overdue: tasks.filter(
+        (task) =>
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED &&
+          Boolean(task.dueAt) &&
+          new Date(task.dueAt as string | Date).getTime() < now,
+      ).length,
+      active: tasks.filter(
+        (task) =>
+          task.status !== TaskStatus.DONE &&
+          task.status !== TaskStatus.CANCELLED,
+      ).length,
+      done: tasks.filter((task) => task.status === TaskStatus.DONE).length,
+    },
+    tasks,
+  };
+}
+
 @Injectable()
 export class BootstrapService {
   constructor(
@@ -115,12 +215,48 @@ export class BootstrapService {
     private readonly scheduleService: ScheduleService,
   ) {}
 
-  async tasks(user: JwtUser) {
+  private async loadDashboardManagerTaskBoard(user: JwtUser) {
+    const today = startOfDayLocal(new Date());
+    const dateFrom = formatDateKey(today);
+    const dateTo = formatDateKey(addDays(today, 6));
+
+    const [upcomingBoard, overdueBoard] = await Promise.all([
+      this.collaborationService
+        .listManagerTasks(user.sub, {
+          dateFrom,
+          dateTo,
+        })
+        .catch(() => null),
+      this.collaborationService
+        .listManagerTasks(user.sub, {
+          onlyOverdue: 'true',
+        })
+        .catch(() => null),
+    ]);
+
+    return mergeTaskBoards([upcomingBoard, overdueBoard]);
+  }
+
+  async tasks(user: JwtUser, dateFrom?: string, dateTo?: string) {
+    const resolvedRange = resolveBootstrapTaskRange(dateFrom, dateTo);
+
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
-      this.collaborationService.listManagerTasks(user.sub, {}),
-      this.employeesService.list(user.tenantId, {}),
-      this.collaborationService.listGroups(user.sub),
-      this.attendanceService.liveTeam(user.tenantId),
+      this.collaborationService.listManagerTasks(user.sub, resolvedRange),
+      withTimeoutFallback(
+        this.employeesService.list(user.tenantId, {}).catch(() => []),
+        1500,
+        [],
+      ),
+      withTimeoutFallback(
+        this.collaborationService.listGroups(user.sub).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.attendanceService.liveTeam(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
     ]);
 
     return {
@@ -158,29 +294,58 @@ export class BootstrapService {
   }
 
   async employees(user: JwtUser) {
-    let canCheckWorkdays = false;
-
     const [
       employeeRecords,
       liveSessions,
       overview,
       pendingInvitations,
-      scheduleShifts,
+      workdaySnapshot,
       scheduleTemplates,
       organizationSetup,
     ] = await Promise.all([
       this.employeesService.list(user.tenantId, {}),
-      this.attendanceService.liveTeam(user.tenantId).catch(() => []),
-      this.collaborationService.managerOverview(user.sub),
-      this.employeesService.listPendingInvitations(user.tenantId),
-      this.scheduleService.listShifts(user.tenantId)
-        .then((result) => {
-          canCheckWorkdays = true;
-          return result;
-        })
-        .catch(() => []),
-      this.scheduleService.listTemplates(user.tenantId).catch(() => []),
-      this.orgService.getSetup(user.tenantId).catch(() => ({ company: null })),
+      withTimeoutFallback(
+        this.attendanceService.liveTeam(user.tenantId).catch(() => []),
+        1000,
+        [],
+      ),
+      withTimeoutFallback(
+        this.collaborationService.managerOverview(user.sub).catch(() => null),
+        1200,
+        null,
+      ),
+      withTimeoutFallback(
+        this.employeesService.listPendingInvitations(user.tenantId).catch(() => []),
+        1000,
+        [],
+      ),
+      withTimeoutFallback(
+        this.scheduleService
+          .listShifts(user.tenantId)
+          .then((shifts) => ({
+            canCheckWorkdays: true,
+            scheduleShifts: shifts,
+          }))
+          .catch(() => ({
+            canCheckWorkdays: false,
+            scheduleShifts: [],
+          })),
+        1200,
+        {
+          canCheckWorkdays: false,
+          scheduleShifts: [],
+        },
+      ),
+      withTimeoutFallback(
+        this.scheduleService.listTemplates(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.orgService.getSetup(user.tenantId).catch(() => ({ company: null })),
+        1000,
+        { company: null },
+      ),
     ]);
 
     return {
@@ -188,10 +353,10 @@ export class BootstrapService {
       liveSessions,
       overview,
       pendingInvitations,
-      scheduleShifts,
+      scheduleShifts: workdaySnapshot.scheduleShifts,
       scheduleTemplates,
       organizationSetup,
-      canCheckWorkdays,
+      canCheckWorkdays: workdaySnapshot.canCheckWorkdays,
     };
   }
 
@@ -326,8 +491,6 @@ export class BootstrapService {
       };
     }
 
-    let canCheckWorkdays = false;
-
     const [
       liveSessions,
       anomalies,
@@ -342,15 +505,19 @@ export class BootstrapService {
       this.attendanceService.liveTeam(user.tenantId).catch(() => []),
       this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null),
       this.requestsService.inbox(user.sub).catch(() => []),
-      this.collaborationService.listManagerTasks(user.sub, {}).catch(() => null),
+      this.loadDashboardManagerTaskBoard(user),
       this.employeesService.list(user.tenantId, {}).catch(() => []),
       this.collaborationService.listGroups(user.sub).catch(() => []),
-      this.scheduleService.listShifts(user.tenantId)
-        .then((result) => {
-          canCheckWorkdays = true;
-          return result;
-        })
-        .catch(() => []),
+      this.scheduleService
+        .listShifts(user.tenantId)
+        .then((result) => ({
+          canCheckWorkdays: true,
+          scheduleShifts: result,
+        }))
+        .catch(() => ({
+          canCheckWorkdays: false,
+          scheduleShifts: [],
+        })),
       this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
       withTimeoutFallback(
         this.auditService.listCompanyActivity(user.tenantId).catch(() => []),
@@ -368,8 +535,8 @@ export class BootstrapService {
         taskBoard,
         employees,
         groups,
-        scheduleShifts,
-        canCheckWorkdays,
+        scheduleShifts: scheduleShifts.scheduleShifts,
+        canCheckWorkdays: scheduleShifts.canCheckWorkdays,
         personalHistory,
         dailyActivity,
       },

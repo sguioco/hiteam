@@ -13,8 +13,12 @@ export class BootstrapController {
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('tasks')
-  tasks(@CurrentUser() user: JwtUser) {
-    return this.bootstrapService.tasks(user);
+  tasks(
+    @CurrentUser() user: JwtUser,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.bootstrapService.tasks(user, dateFrom, dateTo);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

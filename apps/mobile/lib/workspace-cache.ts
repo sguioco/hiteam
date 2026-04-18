@@ -62,6 +62,7 @@ const WORKSPACE_WARMUP_MIN_INTERVAL_MS = WORKSPACE_REFRESH_INTERVAL_MS;
 
 let lastWorkspaceWarmupAt = 0;
 let workspaceWarmupPromise: Promise<void> | null = null;
+let workspaceBackgroundWarmupPromise: Promise<void> | null = null;
 
 function addDays(date: Date, amount: number) {
   const next = new Date(date);
@@ -317,6 +318,27 @@ async function warmManagerScreenCache(profile?: WorkspaceProfile | null, languag
   ]);
 }
 
+function warmWorkspaceBackgroundCaches(
+  isManager: boolean,
+  language?: AppLanguage,
+) {
+  if (workspaceBackgroundWarmupPromise) {
+    return workspaceBackgroundWarmupPromise;
+  }
+
+  workspaceBackgroundWarmupPromise = (async () => {
+    await Promise.allSettled([
+      warmCalendarScreenCache(new Date(), language),
+      warmNewsScreenCache(isManager, language),
+      warmRequestsScreenCache(new Date(), language),
+    ]);
+  })().finally(() => {
+    workspaceBackgroundWarmupPromise = null;
+  });
+
+  return workspaceBackgroundWarmupPromise;
+}
+
 export async function warmAnnouncementImages(items: AnnouncementItem[]) {
   await prefetchImageSources(items.map((item) => item.imageUrl));
 }
@@ -385,14 +407,12 @@ export async function warmWorkspaceCaches(roleCodes: string[], options?: { force
 
     await Promise.allSettled([
       warmTodayScreenCache(profile, options?.language),
-      warmCalendarScreenCache(new Date(), options?.language),
-      warmNewsScreenCache(isManager, options?.language),
-      warmRequestsScreenCache(new Date(), options?.language),
       warmChatsScreenCache(),
       isManager ? warmManagerScreenCache(profile, options?.language) : Promise.resolve(),
     ]);
 
     lastWorkspaceWarmupAt = Date.now();
+    void warmWorkspaceBackgroundCaches(isManager, options?.language);
   })().finally(() => {
     workspaceWarmupPromise = null;
   });

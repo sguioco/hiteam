@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { TranslationModule } from '../translation/translation.module';
 import { CollaborationGateway } from './collaboration.gateway';
+import { CollaborationRealtimeService } from './collaboration-realtime.service';
 import { CollaborationController } from './collaboration.controller';
 import { CollaborationScheduler } from './collaboration.scheduler';
 import { CollaborationService } from './collaboration.service';
@@ -13,7 +14,12 @@ import { CollaborationService } from './collaboration.service';
 @Module({
   imports: [PrismaModule, AuditModule, NotificationsModule, StorageModule, TranslationModule, JwtModule.register({})],
   controllers: [CollaborationController],
-  providers: [CollaborationService, CollaborationGateway, CollaborationScheduler],
+  providers: [
+    CollaborationService,
+    CollaborationGateway,
+    CollaborationRealtimeService,
+    CollaborationScheduler,
+  ],
   exports: [CollaborationService],
 })
 export class CollaborationModule {}

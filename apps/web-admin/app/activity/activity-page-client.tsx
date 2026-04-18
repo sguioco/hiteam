@@ -336,7 +336,9 @@ export default function ActivityPageClient({
         >
           <div className="team-tasks-heading">
             <h1 className="team-tasks-focus-label">
-              <span className="team-tasks-focus-text">Activity</span>
+              <span className="team-tasks-focus-text">
+                {localize(locale, "Активность", "Activity")}
+              </span>
             </h1>
           </div>
 

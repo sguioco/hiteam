@@ -1105,6 +1105,10 @@ const Employees = ({
       }
       setDirectoryLoading(false);
       setInvitationsLoading(false);
+      void loadDirectory({
+        force: true,
+        silent: true,
+      });
       return;
     }
 
@@ -2303,14 +2307,6 @@ const Employees = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-              {runtimeLocalize(
-                "Сотруднику больше не нужен код компании. Ему достаточно знать свой email, который вы добавили здесь.",
-                "The employee no longer needs a company code. They only need to know the email you added here.",
-                locale,
-              )}
-            </div>
-
             <label className="grid gap-2 text-sm font-heading">
               <span>{runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)}</span>
               <Input
