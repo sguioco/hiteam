@@ -48,8 +48,12 @@ gsap.registerPlugin(useGSAP);
 type SupportedLang = 'en' | 'ru' | 'ar';
 type AuthTab = 'signin' | 'company-code';
 type CompanyLookupResult = {
+  token: string;
+  email: string;
+  status: string;
+  registrationCompleted: boolean;
   companyName: string;
-  companyCode: string;
+  companyCode?: string | null;
   tenantName: string;
   tenantSlug: string;
 };
@@ -72,18 +76,20 @@ const texts = {
     hidePassword: 'Hide password',
     signIn: 'Sign in',
     signingIn: 'Signing in...',
-    companyCodeTitle: 'Join with company code',
-    companyCodeDesc: 'If you do not have an account yet, enter the company code from your administrator and continue the join flow.',
-    companyCodeLabel: 'Company code',
-    companyCodePlaceholder: 'For example, TEAM-4821',
+    companyCodeTitle: 'Join with work email',
+    companyCodeDesc: 'Ask your manager to add your work email to the team, then enter the same email here to continue registration.',
+    companyCodeLabel: 'Work email',
+    companyCodePlaceholder: 'you@company.com',
     companyCodeAction: 'Continue',
-    companyCodeChecking: 'Checking code...',
-    companyCodeRequired: 'Enter the company code.',
-    companyFoundLabel: 'Company found',
-    companyFoundBody: 'We found {companyName}. Continue in the mobile join flow or switch back to sign in if you already have an account.',
-    continueInMobile: 'Continue in mobile',
+    companyCodeChecking: 'Checking email...',
+    companyCodeRequired: 'Enter your work email.',
+    companyFoundLabel: 'Employee found',
+    companyFoundBody: 'We found {companyName}. Continue registration and create your password.',
+    companyFoundExistingBody: 'An account for {email} already exists in {companyName}. Open sign-in and continue there.',
+    continueInMobile: 'Continue registration',
+    existingAccountAction: 'Open sign in',
     alreadyHaveAccount: 'I already have an account',
-    useAnotherCode: 'Use another code',
+    useAnotherCode: 'Use another email',
     selectedWorkspace: 'Selected workspace',
     forgotPassword: 'Forgot password?',
     forgotTitle: 'Reset password',
@@ -111,18 +117,20 @@ const texts = {
     hidePassword: 'Скрыть пароль',
     signIn: 'Войти',
     signingIn: 'Входим...',
-    companyCodeTitle: 'Вступить по коду компании',
-    companyCodeDesc: 'Если у вас ещё нет аккаунта, введите код компании от администратора и продолжите регистрацию.',
-    companyCodeLabel: 'Код компании',
-    companyCodePlaceholder: 'Например, TEAM-4821',
+    companyCodeTitle: 'Вступить по рабочему email',
+    companyCodeDesc: 'Попросите менеджера добавить ваш рабочий email в команду, затем введите этот email здесь и продолжите регистрацию.',
+    companyCodeLabel: 'Рабочий email',
+    companyCodePlaceholder: 'you@company.com',
     companyCodeAction: 'Продолжить',
-    companyCodeChecking: 'Проверяем код...',
-    companyCodeRequired: 'Введите код компании.',
-    companyFoundLabel: 'Компания найдена',
-    companyFoundBody: 'Мы нашли {companyName}. Продолжите мобильный join flow или вернитесь ко входу, если аккаунт уже есть.',
-    continueInMobile: 'Продолжить в мобильном',
+    companyCodeChecking: 'Проверяем email...',
+    companyCodeRequired: 'Введите рабочий email.',
+    companyFoundLabel: 'Сотрудник найден',
+    companyFoundBody: 'Мы нашли {companyName}. Продолжите регистрацию и создайте пароль.',
+    companyFoundExistingBody: 'Для {email} аккаунт в {companyName} уже создан. Откройте вход и продолжайте там.',
+    continueInMobile: 'Продолжить регистрацию',
+    existingAccountAction: 'Открыть вход',
     alreadyHaveAccount: 'У меня уже есть аккаунт',
-    useAnotherCode: 'Ввести другой код',
+    useAnotherCode: 'Ввести другой email',
     selectedWorkspace: 'Выбранное пространство',
     forgotPassword: 'Забыли пароль?',
     forgotTitle: 'Восстановление пароля',
@@ -150,18 +158,20 @@ const texts = {
     hidePassword: 'إخفاء كلمة المرور',
     signIn: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول...',
-    companyCodeTitle: 'الانضمام برمز الشركة',
-    companyCodeDesc: 'إذا لم يكن لديك حساب بعد، أدخل رمز الشركة الذي أرسله المسؤول وتابع مسار الانضمام.',
-    companyCodeLabel: 'رمز الشركة',
-    companyCodePlaceholder: 'مثال: TEAM-4821',
+    companyCodeTitle: 'الانضمام عبر بريد العمل',
+    companyCodeDesc: 'اطلب من المدير إضافة بريدك المهني إلى الفريق، ثم أدخل البريد نفسه هنا لمتابعة التسجيل.',
+    companyCodeLabel: 'بريد العمل',
+    companyCodePlaceholder: 'you@company.com',
     companyCodeAction: 'متابعة',
-    companyCodeChecking: 'جارٍ التحقق من الرمز...',
-    companyCodeRequired: 'أدخل رمز الشركة.',
-    companyFoundLabel: 'تم العثور على الشركة',
-    companyFoundBody: 'تم العثور على {companyName}. تابع مسار الانضمام عبر الهاتف أو عد لتسجيل الدخول إذا كان لديك حساب بالفعل.',
-    continueInMobile: 'المتابعة عبر الهاتف',
+    companyCodeChecking: 'جارٍ التحقق من البريد...',
+    companyCodeRequired: 'أدخل بريد العمل.',
+    companyFoundLabel: 'تم العثور على الموظف',
+    companyFoundBody: 'تم العثور على {companyName}. تابع التسجيل وأنشئ كلمة المرور.',
+    companyFoundExistingBody: 'يوجد حساب بالفعل للبريد {email} في {companyName}. افتح شاشة تسجيل الدخول وتابع هناك.',
+    continueInMobile: 'متابعة التسجيل',
+    existingAccountAction: 'فتح تسجيل الدخول',
     alreadyHaveAccount: 'لدي حساب بالفعل',
-    useAnotherCode: 'استخدام رمز آخر',
+    useAnotherCode: 'استخدام بريد آخر',
     selectedWorkspace: 'مساحة العمل المحددة',
     forgotPassword: 'هل نسيت كلمة المرور؟',
     forgotTitle: 'استعادة كلمة المرور',
@@ -260,7 +270,9 @@ export function AuthPanel() {
         ? t.signingIn
         : t.signIn
       : companyLookupResult
-        ? t.continueInMobile
+        ? companyLookupResult.registrationCompleted
+          ? t.existingAccountAction
+          : t.continueInMobile
         : companyLookupLoading
           ? t.companyCodeChecking
           : t.companyCodeAction;
@@ -399,7 +411,7 @@ export function AuthPanel() {
 
   async function handleCompanyCodeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedCode = companyCode.trim().toUpperCase();
+    const trimmedCode = companyCode.trim().toLowerCase();
 
     if (!trimmedCode) {
       setCompanyLookupError(t.companyCodeRequired);
@@ -410,15 +422,15 @@ export function AuthPanel() {
     setCompanyLookupLoading(true);
 
     try {
-      const payload = await apiRequest<CompanyLookupResult>('/employees/public/join/code/lookup', {
+      const payload = await apiRequest<CompanyLookupResult>('/employees/public/join/email/lookup', {
         method: 'POST',
         realBackend: true,
-        body: JSON.stringify({ code: trimmedCode }),
+        body: JSON.stringify({ email: trimmedCode }),
       });
 
       saveTenantSlug(payload.tenantSlug);
       setCompanyLookupResult(payload);
-      setCompanyCode(payload.companyCode);
+      setCompanyCode(payload.email);
     } catch (error) {
       setCompanyLookupResult(null);
       setCompanyLookupError(error instanceof Error ? error.message : t.companyCodeRequired);
@@ -475,7 +487,14 @@ export function AuthPanel() {
       return;
     }
 
-    router.push(`/join/company/${encodeURIComponent(companyLookupResult.companyCode)}`);
+    if (companyLookupResult.registrationCompleted) {
+      setIdentifier(companyLookupResult.email);
+      setLoginError('');
+      setTab('signin');
+      return;
+    }
+
+    router.push(`/join/${encodeURIComponent(companyLookupResult.token)}`);
   }
 
   function continueToWorkspaceLogin() {
@@ -712,7 +731,11 @@ export function AuthPanel() {
                               {companyLookupResult.companyName}
                             </p>
                             <p className="text-sm leading-6 text-muted-foreground">
-                              {t.companyFoundBody.replace('{companyName}', companyLookupResult.companyName)}
+                              {companyLookupResult.registrationCompleted
+                                ? t.companyFoundExistingBody
+                                    .replace('{email}', companyLookupResult.email)
+                                    .replace('{companyName}', companyLookupResult.companyName)
+                                : t.companyFoundBody.replace('{companyName}', companyLookupResult.companyName)}
                             </p>
                           </div>
                         </div>
@@ -721,8 +744,8 @@ export function AuthPanel() {
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
                             {t.companyCodeLabel}
                           </p>
-                          <p className="mt-1 text-sm font-semibold tracking-[0.22em] text-foreground uppercase">
-                            {companyLookupResult.companyCode}
+                          <p className="mt-1 text-sm font-semibold text-foreground">
+                            {companyLookupResult.email}
                           </p>
                         </div>
 
@@ -756,17 +779,17 @@ export function AuthPanel() {
                           <div className="auth-panel-field">
                             <Input
                               aria-label={t.companyCodeLabel}
-                              autoCapitalize="characters"
+                              autoCapitalize="none"
                               autoComplete="off"
                               disabled={companyLookupLoading}
                               id="company-code"
                               onChange={(event) => {
-                                setCompanyCode(event.target.value.toUpperCase());
+                                setCompanyCode(event.target.value);
                                 setCompanyLookupError('');
                               }}
-                              placeholder={t.companyCodeLabel}
+                              placeholder={t.companyCodePlaceholder}
                               required
-                              type="text"
+                              type="email"
                               value={companyCode}
                             />
                           </div>

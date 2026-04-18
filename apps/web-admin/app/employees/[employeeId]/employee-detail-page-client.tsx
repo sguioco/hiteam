@@ -728,10 +728,6 @@ export default function EmployeeCardPageClient({
                           label={locale === "ru" ? "Отработано" : "Worked"}
                         />
                         <Table.Head
-                          id="breaks"
-                          label={locale === "ru" ? "Перерывы" : "Breaks"}
-                        />
-                        <Table.Head
                           id="late"
                           label={locale === "ru" ? "Опоздание" : "Late"}
                         />
@@ -790,9 +786,6 @@ export default function EmployeeCardPageClient({
                             <Table.Cell className="font-medium">
                               {formatHours(row.workedMinutes)}
                             </Table.Cell>
-                            <Table.Cell className="text-muted-foreground">
-                              {formatHours(row.breakMinutes)}
-                            </Table.Cell>
                             <Table.Cell>
                               {row.lateMinutes > 0 ? (
                                 <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
@@ -818,14 +811,10 @@ export default function EmployeeCardPageClient({
                               )}
                             </Table.Cell>
                             <Table.Cell>
-                              {row.status === "on_shift" ? (
+                              {row.status === "on_shift" || row.status === "on_break" ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
                                   <span className="size-1.5 animate-pulse rounded-full bg-green-500" />
                                   {locale === "ru" ? "На смене" : "On shift"}
-                                </span>
-                              ) : row.status === "on_break" ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                  {locale === "ru" ? "Перерыв" : "Break"}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">

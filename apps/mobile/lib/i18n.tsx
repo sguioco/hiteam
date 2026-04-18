@@ -88,8 +88,8 @@ const translations = {
     'welcome.titleLineOne': 'Добро пожаловать',
     'welcome.titleLineTwo': 'в HiTeam',
     'welcome.subtitle': 'Что вы хотели сделать?',
-    'welcome.invitationOnly': 'Через код приглашения',
-    'welcome.invitationOnlyHint': 'Открыть форму ввода кода',
+    'welcome.invitationOnly': 'Вступить по email',
+    'welcome.invitationOnlyHint': 'Открыть вход и продолжить присоединение по рабочему email',
     'welcome.alreadyHaveAccount': 'Уже есть аккаунт?',
 
     'invite.joinCompany': 'Присоединиться к компании',
@@ -837,8 +837,8 @@ const translations = {
     'welcome.titleLineOne': 'Welcome',
     'welcome.titleLineTwo': 'to HiTeam',
     'welcome.subtitle': 'What would you like to do?',
-    'welcome.invitationOnly': 'Enter invitation code',
-    'welcome.invitationOnlyHint': 'Open the code entry screen',
+    'welcome.invitationOnly': 'Join with email',
+    'welcome.invitationOnlyHint': 'Open sign-in and continue joining with your work email',
     'welcome.alreadyHaveAccount': 'Already have an account?',
 
     'invite.joinCompany': 'Join a company',

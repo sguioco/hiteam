@@ -20,12 +20,10 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { EmployeeInvitationsMailerService } from './employee-invitations.mailer';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
-import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
@@ -45,7 +43,6 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
-    private readonly employeeInvitationsMailerService: EmployeeInvitationsMailerService,
     private readonly storageService: StorageService,
   ) {}
 
@@ -357,152 +354,20 @@ export class EmployeesService {
     });
   }
 
-  async lookupCompanyByCode(code: string) {
-    const company = await this.findCompanyByJoinCode(code);
+  async lookupInvitationByEmail(rawEmail: string) {
+    const invitation = await this.findInvitationByJoinEmail(rawEmail);
+    const refreshed = await this.refreshInvitationJoinToken(invitation.id);
 
     return {
-      companyName: company.name,
-      companyCode: company.code,
-      tenantName: company.tenant.name,
-      tenantSlug: company.tenant.slug,
+      token: refreshed.token,
+      email: refreshed.invitation.email,
+      status: refreshed.invitation.status,
+      registrationCompleted: Boolean(refreshed.invitation.userId),
+      companyName: refreshed.invitation.company?.name ?? refreshed.invitation.tenant.name,
+      companyCode: refreshed.invitation.company?.code ?? null,
+      tenantName: refreshed.invitation.tenant.name,
+      tenantSlug: refreshed.invitation.tenant.slug,
     };
-  }
-
-  async submitJoinRequestByCompanyCode(dto: PublicCompanyJoinDto) {
-    const company = await this.findCompanyByJoinCode(dto.code);
-    const email = dto.email.toLowerCase().trim();
-    const firstName = dto.firstName.trim();
-    const lastName = dto.lastName.trim();
-    const phone = dto.phone.trim();
-
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        tenantId: company.tenantId,
-        email,
-      },
-    });
-
-    if (existingUser) {
-      throw new ConflictException('Такой email уже зарегистрирован в компании.');
-    }
-
-    const avatar = await this.uploadOptionalAvatarSafely(
-      company.tenantId,
-      email,
-      dto.avatarDataUrl,
-      'submitJoinRequestByCompanyCode',
-    );
-
-    try {
-      const inviterUserId = await this.ensureSystemInviter(company.tenantId);
-      const token = randomBytes(24).toString('hex');
-      const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-      const invitation = await this.prisma.employeeInvitation.upsert({
-        where: {
-          tenantId_email: {
-            tenantId: company.tenantId,
-            email,
-          },
-        },
-        create: {
-          tenantId: company.tenantId,
-          companyId: company.id,
-          email,
-          invitedByUserId: inviterUserId,
-          tokenHash: this.hashToken(token),
-          expiresAt,
-          status: EmployeeInvitationStatus.PENDING_APPROVAL,
-          submittedAt: new Date(),
-          firstName,
-          lastName,
-          birthDate: new Date(dto.birthDate),
-          phone,
-          avatarStorageKey: avatar?.key ?? null,
-          avatarUrl: avatar?.url ?? null,
-        },
-        update: {
-          companyId: company.id,
-          invitedByUserId: inviterUserId,
-          tokenHash: this.hashToken(token),
-          expiresAt,
-          status: EmployeeInvitationStatus.PENDING_APPROVAL,
-          submittedAt: new Date(),
-          approvedAt: null,
-          approvedByUserId: null,
-          rejectedAt: null,
-          rejectedReason: null,
-          userId: null,
-          employeeId: null,
-          firstName,
-          lastName,
-          middleName: null,
-          birthDate: new Date(dto.birthDate),
-          gender: null,
-          phone,
-          avatarStorageKey: avatar?.key ?? null,
-          avatarUrl: avatar?.url ?? null,
-        },
-      });
-
-      const recipients = await this.listApprovalRecipientIds(company.tenantId);
-      if (recipients.length > 0) {
-        const notificationResults = await Promise.allSettled(
-          recipients.map((userId) =>
-            this.notificationsService.createForUser({
-              tenantId: company.tenantId,
-              userId,
-              type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
-              title: 'Новая заявка на присоединение по коду компании',
-              body: `${firstName} ${lastName} отправил(а) заявку для ${company.name}.`,
-              actionUrl: '/app/employees',
-              metadata: { invitationId: invitation.id, email, companyCode: company.code },
-            }),
-          ),
-        );
-        const failedNotifications = notificationResults.filter((result) => result.status === 'rejected');
-
-        if (failedNotifications.length > 0) {
-          this.logger.warn(
-            `submitJoinRequestByCompanyCode notifications partially failed for ${email} in tenant ${company.tenantId}: ${failedNotifications.length}/${notificationResults.length}`,
-          );
-        }
-      }
-
-      try {
-        await this.auditService.log({
-          tenantId: company.tenantId,
-          actorUserId: inviterUserId,
-          entityType: 'employee_invitation',
-          entityId: invitation.id,
-          action: 'employee.public_join_requested',
-          metadata: {
-            email,
-            companyCode: company.code,
-            firstName,
-            lastName,
-            birthDate: dto.birthDate,
-          },
-        });
-      } catch (error) {
-        this.logger.warn(
-          `submitJoinRequestByCompanyCode audit log failed for ${email} in tenant ${company.tenantId}`,
-          error instanceof Error ? error.stack : undefined,
-        );
-      }
-
-      return {
-        id: invitation.id,
-        status: invitation.status,
-        tenantName: company.tenant.name,
-        companyName: company.name,
-      };
-    } catch (error) {
-      this.logger.error(
-        `submitJoinRequestByCompanyCode failed for ${email} in tenant ${company.tenantId}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-      throw new InternalServerErrorException('Не удалось отправить заявку на вступление.');
-    }
   }
 
   async createInvitation(tenantId: string, actorUserId: string, dto: CreateEmployeeInvitationDto) {
@@ -527,7 +392,7 @@ export class EmployeesService {
 
     const token = randomBytes(24).toString('hex');
     const tokenHash = this.hashToken(token);
-    const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
     const invitation = await this.prisma.employeeInvitation.upsert({
       where: {
@@ -538,6 +403,7 @@ export class EmployeesService {
       },
       create: {
         tenantId,
+        companyId: tenant.companies[0]?.id ?? null,
         email,
         invitedByUserId: actorUserId,
         tokenHash,
@@ -545,6 +411,7 @@ export class EmployeesService {
         status: EmployeeInvitationStatus.INVITED,
       },
       update: {
+        companyId: tenant.companies[0]?.id ?? null,
         invitedByUserId: actorUserId,
         tokenHash,
         expiresAt,
@@ -561,20 +428,13 @@ export class EmployeesService {
       },
     });
 
-    const delivery = await this.employeeInvitationsMailerService.sendInvitationEmail({
-      email,
-      companyName: tenant.companies[0]?.name ?? tenant.name,
-      tenantName: tenant.name,
-      token,
-    });
-
     await this.auditService.log({
       tenantId,
       actorUserId,
       entityType: 'employee_invitation',
       entityId: invitation.id,
-      action: 'employee.invitation_created',
-      metadata: { email, expiresAt: expiresAt.toISOString(), provider: delivery.provider },
+      action: 'employee.join_email_registered',
+      metadata: { email, expiresAt: expiresAt.toISOString() },
     });
 
     return {
@@ -582,7 +442,8 @@ export class EmployeesService {
       email: invitation.email,
       status: invitation.status,
       expiresAt: invitation.expiresAt.toISOString(),
-      previewUrl: delivery.provider === 'log' ? delivery.inviteUrl : null,
+      companyName: tenant.companies[0]?.name ?? tenant.name,
+      tenantName: tenant.name,
     };
   }
 
@@ -611,24 +472,17 @@ export class EmployeesService {
 
     if (invitation.expiresAt.getTime() <= Date.now()) {
       await this.markInvitationExpired(invitation.id);
-      throw new BadRequestException('Invitation expired. Create a new invite.');
+      throw new BadRequestException('Приглашение истекло. Добавьте email заново.');
     }
 
-    const token = randomBytes(24).toString('hex');
     const updated = await this.prisma.employeeInvitation.update({
       where: { id: invitation.id },
       data: {
-        tokenHash: this.hashToken(token),
+        tokenHash: this.hashToken(randomBytes(24).toString('hex')),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         lastSentAt: new Date(),
         resentCount: { increment: 1 },
       },
-    });
-
-    const delivery = await this.employeeInvitationsMailerService.sendInvitationEmail({
-      email: invitation.email,
-      companyName: invitation.tenant.companies[0]?.name ?? invitation.tenant.name,
-      tenantName: invitation.tenant.name,
-      token,
     });
 
     await this.auditService.log({
@@ -636,8 +490,8 @@ export class EmployeesService {
       actorUserId,
       entityType: 'employee_invitation',
       entityId: invitation.id,
-      action: 'employee.invitation_resent',
-      metadata: { email: invitation.email, resentCount: updated.resentCount, provider: delivery.provider },
+      action: 'employee.join_email_refreshed',
+      metadata: { email: invitation.email, resentCount: updated.resentCount },
     });
 
     return {
@@ -645,7 +499,6 @@ export class EmployeesService {
       status: updated.status,
       expiresAt: updated.expiresAt.toISOString(),
       resentCount: updated.resentCount,
-      previewUrl: delivery.provider === 'log' ? delivery.inviteUrl : null,
     };
   }
 
@@ -700,8 +553,14 @@ export class EmployeesService {
 
     const canRegisterApprovedInvitation =
       invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
+    const canRegisterPendingInvitation =
+      invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL && !invitation.userId;
 
-    if (invitation.status !== EmployeeInvitationStatus.INVITED && !canRegisterApprovedInvitation) {
+    if (
+      invitation.status !== EmployeeInvitationStatus.INVITED &&
+      !canRegisterApprovedInvitation &&
+      !canRegisterPendingInvitation
+    ) {
       throw new BadRequestException('Этот invite уже использован. Войдите в систему.');
     }
 
@@ -734,7 +593,12 @@ export class EmployeesService {
     const isPreApproved = invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
     const roleCode = isFirstUser ? 'tenant_owner' : 'employee';
     const roleName = isFirstUser ? 'Tenant Owner' : 'Employee';
-    const shouldAutoApprove = isFirstUser || isPreApproved;
+    const shouldAutoApprove =
+      invitation.status === EmployeeInvitationStatus.INVITED ||
+      invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL ||
+      invitation.status === EmployeeInvitationStatus.APPROVED ||
+      isFirstUser ||
+      isPreApproved;
 
     if (isFirstUser && !dto.avatarDataUrl?.trim() && !invitation.avatarUrl) {
       throw new BadRequestException('Добавьте фото профиля.');
@@ -828,10 +692,10 @@ export class EmployeesService {
           data: {
             userId: user.id,
             employeeId: employee.id,
-            status: shouldAutoApprove ? EmployeeInvitationStatus.APPROVED : EmployeeInvitationStatus.PENDING_APPROVAL,
+            status: EmployeeInvitationStatus.APPROVED,
             submittedAt: new Date(),
-            approvedAt: shouldAutoApprove ? invitation.approvedAt ?? new Date() : null,
-            approvedByUserId: shouldAutoApprove ? invitation.approvedByUserId ?? null : null,
+            approvedAt: invitation.approvedAt ?? new Date(),
+            approvedByUserId: invitation.approvedByUserId ?? invitation.invitedByUserId,
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
             middleName: dto.middleName?.trim() || null,
@@ -854,31 +718,24 @@ export class EmployeesService {
       throw new InternalServerErrorException('Failed to create the manager profile.');
     }
 
-    if (!shouldAutoApprove) {
-      await this.notificationsService.createForUser({
-        tenantId: invitation.tenantId,
-        userId: invitation.invitedByUserId,
-        type: NotificationType.EMPLOYEE_APPROVAL_ACTION_REQUIRED,
-        title: 'Новая заявка сотрудника ждёт подтверждения',
-        body: `${dto.firstName.trim()} ${dto.lastName.trim()} заполнил(а) профиль и ждёт подтверждения.`,
-        actionUrl: '/app/employees',
-        metadata: { invitationId: invitation.id, email: invitation.email },
-      });
-    }
-
     await this.auditService.log({
       tenantId: invitation.tenantId,
       actorUserId: result.user.id,
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: 'employee.profile_submitted',
-      metadata: { email: invitation.email, autoApproved: shouldAutoApprove, preApproved: isPreApproved },
+      metadata: {
+        email: invitation.email,
+        autoApproved: shouldAutoApprove,
+        preApproved: isPreApproved,
+        migratedFromPendingApproval: canRegisterPendingInvitation,
+      },
     });
 
     return {
       invitationId: invitation.id,
-      status: shouldAutoApprove ? EmployeeInvitationStatus.APPROVED : EmployeeInvitationStatus.PENDING_APPROVAL,
-      accessGranted: shouldAutoApprove,
+      status: EmployeeInvitationStatus.APPROVED,
+      accessGranted: true,
     };
   }
 
@@ -1403,68 +1260,86 @@ export class EmployeesService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private normalizeCompanyJoinCode(code: string) {
-    return code.trim().toUpperCase();
+  private normalizeJoinEmail(email: string) {
+    return email.trim().toLowerCase();
   }
 
-  private async findCompanyByJoinCode(code: string) {
-    const normalizedCode = this.normalizeCompanyJoinCode(code);
-    const companies = await this.prisma.company.findMany({
-      where: { code: normalizedCode },
-      include: { tenant: true },
-      take: 2,
-    });
-
-    if (companies.length === 0) {
-      throw new NotFoundException('Компания с таким кодом не найдена.');
+  private async findInvitationByJoinEmail(rawEmail: string) {
+    const email = this.normalizeJoinEmail(rawEmail);
+    if (!email) {
+      throw new BadRequestException('Укажите email сотрудника.');
     }
 
-    if (companies.length > 1) {
-      throw new BadRequestException('Код компании неоднозначен. Обратитесь к администратору.');
-    }
-
-    return companies[0];
-  }
-
-  private async ensureSystemInviter(tenantId: string) {
-    const email = `system+${tenantId}@smart.local`;
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        tenantId,
-        email,
-      },
-      select: { id: true },
-    });
-
-    if (existing) {
-      return existing.id;
-    }
-
-    try {
-      const created = await this.prisma.user.create({
-        data: {
-          tenantId,
-          email,
-          passwordHash: await bcrypt.hash(randomBytes(16).toString('hex'), 10),
-          status: UserStatus.ACTIVE,
+    const invitations = await this.prisma.employeeInvitation.findMany({
+      where: { email },
+      include: {
+        tenant: true,
+        company: {
+          select: {
+            name: true,
+            code: true,
+          },
         },
-        select: { id: true },
-      });
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 5,
+    });
 
-      return created.id;
-    } catch (error) {
-      this.logger.warn(
-        `ensureSystemInviter create failed for tenant ${tenantId}, trying fallback actor`,
-        error instanceof Error ? error.stack : undefined,
-      );
-
-      const fallback = await this.findFallbackInvitationActor(tenantId);
-      if (fallback) {
-        return fallback;
+    const activeInvitations: typeof invitations = [];
+    for (const invitation of invitations) {
+      if (invitation.status === EmployeeInvitationStatus.EXPIRED) {
+        continue;
       }
 
-      throw error;
+      if (
+        invitation.status === EmployeeInvitationStatus.INVITED &&
+        invitation.expiresAt.getTime() <= Date.now()
+      ) {
+        await this.markInvitationExpired(invitation.id).catch(() => undefined);
+        continue;
+      }
+
+      if (
+        invitation.status === EmployeeInvitationStatus.INVITED ||
+        invitation.status === EmployeeInvitationStatus.APPROVED ||
+        invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL
+      ) {
+        activeInvitations.push(invitation);
+      }
     }
+
+    if (activeInvitations.length === 0) {
+      throw new NotFoundException('Этот email не найден в списке сотрудников. Попросите менеджера добавить его.');
+    }
+
+    if (activeInvitations.length > 1) {
+      throw new ConflictException('Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.');
+    }
+
+    return activeInvitations[0];
+  }
+
+  private async refreshInvitationJoinToken(invitationId: string) {
+    const token = randomBytes(24).toString('hex');
+    const invitation = await this.prisma.employeeInvitation.update({
+      where: { id: invitationId },
+      data: {
+        tokenHash: this.hashToken(token),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        lastSentAt: new Date(),
+      },
+      include: {
+        tenant: true,
+        company: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    return { token, invitation };
   }
 
   private async ensureEmployeeRole(tx: PrismaTx) {
@@ -1528,66 +1403,6 @@ export class EmployeesService {
   private generateTemporaryPassword(length = 10) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
     return Array.from(randomBytes(length), (byte) => alphabet[byte % alphabet.length]).join('');
-  }
-
-  private async listApprovalRecipientIds(tenantId: string) {
-    const users = await this.prisma.user.findMany({
-      where: {
-        tenantId,
-        status: UserStatus.ACTIVE,
-        email: { not: { startsWith: 'system+' } },
-        roles: {
-          some: {
-            role: {
-              code: {
-                in: ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'],
-              },
-            },
-          },
-        },
-      },
-      select: { id: true },
-      distinct: ['id'],
-    });
-
-    return users.map((user) => user.id);
-  }
-
-  private async findFallbackInvitationActor(tenantId: string) {
-    const privilegedUser = await this.prisma.user.findFirst({
-      where: {
-        tenantId,
-        status: UserStatus.ACTIVE,
-        email: { not: { startsWith: 'system+' } },
-        roles: {
-          some: {
-            role: {
-              code: {
-                in: ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'],
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-
-    if (privilegedUser) {
-      return privilegedUser.id;
-    }
-
-    const activeUser = await this.prisma.user.findFirst({
-      where: {
-        tenantId,
-        status: UserStatus.ACTIVE,
-        email: { not: { startsWith: 'system+' } },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-
-    return activeUser?.id ?? null;
   }
 
   private async markInvitationExpired(invitationId: string) {

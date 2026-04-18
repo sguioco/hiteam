@@ -8,14 +8,12 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  ExternalLink,
   FolderOpen,
   ListTodo,
   Mail,
   Plus,
   Search,
   Settings,
-  Smartphone,
   Trash2,
   UserPlus,
   Users,
@@ -194,7 +192,6 @@ export type EmployeesInitialData = EmployeesDirectorySnapshot;
 type EmployeeStatus =
   | "late"
   | "on_shift"
-  | "on_break"
   | "off_shift"
   | "not_registered"
   | "inactive"
@@ -234,7 +231,6 @@ type EmployeeRowView = {
 const statusStyles: Record<EmployeeStatus, string> = {
   late: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
   on_shift: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
-  on_break: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   off_shift: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   not_registered: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   inactive: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
@@ -244,7 +240,6 @@ const statusStyles: Record<EmployeeStatus, string> = {
 const statusToneByEmployeeStatus: Record<EmployeeStatus, string> = {
   late: "is-error",
   on_shift: "is-success",
-  on_break: "is-gray",
   off_shift: "is-gray",
   not_registered: "is-gray",
   inactive: "is-gray",
@@ -359,10 +354,6 @@ function resolveEmployeeStatus(
     return "late";
   }
 
-  if (liveSession?.status === "on_break") {
-    return "on_break";
-  }
-
   if (isCheckedIn) {
     return "on_shift";
   }
@@ -404,7 +395,6 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
 function getStatusLabel(status: EmployeeStatus, locale: "ru" | "en") {
   if (status === "late") return runtimeLocalize("Опаздывает", "Late", locale);
   if (status === "on_shift") return runtimeLocalize("На смене", "On shift", locale);
-  if (status === "on_break") return runtimeLocalize("На перерыве", "On break", locale);
   if (status === "off_shift") return runtimeLocalize("Не на смене", "Off shift", locale);
   if (status === "not_registered") return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
   if (status === "inactive") return runtimeLocalize("Неактивен", "Inactive", locale);
@@ -416,7 +406,7 @@ function getInvitationLabel(
   locale: "ru" | "en",
 ) {
   if (status === "INVITED") {
-    return runtimeLocalize("Приглашение отправлено", "Invitation sent", locale);
+    return runtimeLocalize("Email добавлен", "Email registered", locale);
   }
   if (status === "PENDING_APPROVAL") {
     return runtimeLocalize("Ждёт подтверждения", "Pending approval", locale);
@@ -564,8 +554,6 @@ const Employees = ({
   const [copiedInviteField, setCopiedInviteField] = useState<
     "code" | "link" | "email" | "password" | null
   >(null);
-  const [organizationSetup, setOrganizationSetup] =
-    useState<OrganizationSetupResponse | null>(initialData?.organizationSetup ?? null);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
@@ -873,11 +861,10 @@ const Employees = ({
     const statusOrder: Record<EmployeeStatus, number> = {
       late: 0,
       on_shift: 1,
-      on_break: 2,
-      off_shift: 3,
-      not_registered: 4,
-      inactive: 5,
-      dismissed: 6,
+      off_shift: 2,
+      not_registered: 3,
+      inactive: 4,
+      dismissed: 5,
     };
 
     return [...filteredEmployees].sort((left, right) => {
@@ -1034,12 +1021,6 @@ const Employees = ({
   const biometricLastVerifiedAt =
     selectedEmployeeBiometric?.profile?.lastVerifiedAt ?? null;
 
-  const employeeJoinCode = organizationSetup?.company?.code ?? "";
-  const employeeJoinLink =
-    typeof window !== "undefined" && employeeJoinCode
-      ? `${window.location.origin}/join/company/${encodeURIComponent(employeeJoinCode)}`
-      : "";
-
   function applyDirectorySnapshot(
     snapshot: EmployeesDirectorySnapshot,
     cacheKey?: string | null,
@@ -1050,7 +1031,6 @@ const Employees = ({
     setPendingInvitations(snapshot.pendingInvitations);
     setScheduleShifts(snapshot.scheduleShifts);
     setScheduleTemplates(snapshot.scheduleTemplates);
-    setOrganizationSetup(snapshot.organizationSetup);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
 
     setExpandedGroups(buildExpandedGroupsFromSnapshot(snapshot));
@@ -1106,7 +1086,6 @@ const Employees = ({
         setPendingInvitations([]);
         setScheduleShifts([]);
         setScheduleTemplates([]);
-        setOrganizationSetup(null);
         setCanCheckWorkdays(false);
       }
     } finally {
@@ -1264,8 +1243,8 @@ const Employees = ({
       });
       setInviteSuccess(
         runtimeLocalize(
-          "Приглашение отправлено. Ссылка действует 3 дня.",
-          "Invitation sent. The link is valid for 3 days.",
+          "Email сотрудника сохранён. Теперь он может ввести этот email в join flow и сразу продолжить регистрацию.",
+          "The employee email has been saved. They can now enter the same email in the join flow and continue registration immediately.",
           locale,
         ),
       );
@@ -1276,8 +1255,8 @@ const Employees = ({
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось отправить приглашение.",
-              "Failed to send invitation.",
+              "Не удалось сохранить email сотрудника.",
+              "Failed to save the employee email.",
               locale,
             ),
       );
@@ -1357,8 +1336,8 @@ const Employees = ({
       });
       setPageMessage(
         runtimeLocalize(
-          "Приглашение отправлено повторно.",
-          "Invitation sent again.",
+          "Доступ по email обновлён.",
+          "Email access was refreshed.",
           locale,
         ),
       );
@@ -1368,8 +1347,8 @@ const Employees = ({
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось повторно отправить приглашение.",
-              "Failed to resend invitation.",
+              "Не удалось обновить email-доступ.",
+              "Failed to refresh email access.",
               locale,
             ),
       );
@@ -2161,8 +2140,8 @@ const Employees = ({
                           } ${new Date(invitation.submittedAt).toLocaleString(getRuntimeLocaleTag(locale))}`
                         : `${
                             runtimeLocalize(
-                              "Ссылка активна до",
-                              "Link active until",
+                              "Email добавлен, доступ активен до",
+                              "Email is registered, access is active until",
                               locale,
                             )
                           } ${new Date(invitation.expiresAt).toLocaleString(getRuntimeLocaleTag(locale))}`}
@@ -2176,16 +2155,17 @@ const Employees = ({
                         size="sm"
                         variant="outline"
                       >
-                        <Mail className="h-4 w-4" /> {runtimeLocalize("Повторить", "Resend", locale)}
+                        <Mail className="h-4 w-4" /> {runtimeLocalize("Обновить", "Refresh", locale)}
                       </Button>
-                    ) : null}
-                    <Button
-                      className="rounded-xl font-heading"
-                      onClick={() => openInvitation(invitation)}
-                      size="sm"
-                    >
-                      {runtimeLocalize("Проверить", "Review", locale)}
-                    </Button>
+                    ) : (
+                      <Button
+                        className="rounded-xl font-heading"
+                        onClick={() => openInvitation(invitation)}
+                        size="sm"
+                      >
+                        {runtimeLocalize("Проверить", "Review", locale)}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -2316,101 +2296,23 @@ const Employees = ({
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Лучше выдать сотруднику код компании или mobile join link. Email приглашение можно использовать как запасной вариант.",
-                "It is better to give the employee the company code or a mobile join link. Email invitation can be used as a fallback option.",
+                "Введите рабочий email сотрудника. После этого сотрудник введёт этот же email в join flow и сразу продолжит регистрацию без ручного подтверждения менеджером.",
+                "Enter the employee's work email. After that, the employee will enter the same email in the join flow and continue registration without manual manager approval.",
                 locale,
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-3 rounded-2xl border border-border bg-secondary/20 p-4">
-              <div className="space-y-1">
-                <div className="text-sm font-heading font-semibold text-foreground">
-                  {runtimeLocalize("Код компании", "Company code", locale)}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={
-                      employeeJoinCode ||
-                      runtimeLocalize(
-                        "Сначала настройте организацию",
-                        "Configure the organization first",
-                        locale,
-                      )
-                    }
-                  />
-                  <Button
-                    disabled={!employeeJoinCode}
-                    onClick={() =>
-                      void copyInviteValue(employeeJoinCode, "code")
-                    }
-                    type="button"
-                    variant="outline"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    {copiedInviteField === "code"
-                      ? runtimeLocalize("Скопировано", "Copied", locale)
-                      : runtimeLocalize("Копировать", "Copy", locale)}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-heading font-semibold text-foreground">
-                  <Smartphone className="h-4 w-4 text-muted-foreground" />
-                  {runtimeLocalize("Ссылка для входа", "Mobile join link", locale)}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={
-                      employeeJoinLink ||
-                      runtimeLocalize(
-                        "Ссылка появится после настройки организации",
-                        "The link will appear after organization setup",
-                        locale,
-                      )
-                    }
-                  />
-                  <Button
-                    disabled={!employeeJoinLink}
-                    onClick={() =>
-                      void copyInviteValue(employeeJoinLink, "link")
-                    }
-                    type="button"
-                    variant="outline"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    {copiedInviteField === "link"
-                      ? runtimeLocalize("Скопировано", "Copied", locale)
-                      : runtimeLocalize("Копировать", "Copy", locale)}
-                  </Button>
-                  {employeeJoinLink ? (
-                    <Button asChild type="button" variant="outline">
-                      <a
-                        href={employeeJoinLink}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
             <div className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
               {runtimeLocalize(
-                "Если не хотите зависеть от email-сервиса, просто отправьте сотруднику код компании. Он сможет сам зарегистрироваться в мобильном приложении. Менеджерский доступ задаётся на этапе подтверждения анкеты.",
-                "If you do not want to depend on the email service, just send the employee the company code. They can register in the mobile app on their own. Manager access is granted during form approval.",
+                "Сотруднику больше не нужен код компании. Ему достаточно знать свой email, который вы добавили здесь.",
+                "The employee no longer needs a company code. They only need to know the email you added here.",
                 locale,
               )}
             </div>
 
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Email для приглашения", "Invitation email", locale)}</span>
+              <span>{runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)}</span>
               <Input
                 onChange={(event) => setInviteEmail(event.target.value)}
                 placeholder="employee@company.ru"
@@ -2431,8 +2333,8 @@ const Employees = ({
               >
                 <Mail className="h-4 w-4" />
                 {inviteSubmitting
-                  ? runtimeLocalize("Отправляем...", "Sending...", locale)
-                  : runtimeLocalize("Отправить приглашение", "Send invitation", locale)}
+                  ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                  : runtimeLocalize("Добавить email", "Add email", locale)}
               </Button>
             </div>
           </div>

@@ -522,7 +522,6 @@ function getAttendanceArrivalLabel(
       ? `Опоздание +${session.lateMinutes} мин`
       : `Late +${session.lateMinutes} min`;
   }
-  if (session.status === "on_break") return localize(locale, "На перерыве", "On break");
   if (session.status === "checked_out") {
     return localize(locale, "Завершил смену", "Shift completed");
   }
@@ -532,7 +531,6 @@ function getAttendanceArrivalLabel(
 function getAttendanceArrivalTone(session: AttendanceLiveSession | undefined) {
   if (!session) return "absent";
   if (session.lateMinutes > 0) return "late";
-  if (session.status === "on_break") return "break";
   if (session.status === "checked_out") return "checked";
   return "ontime";
 }
@@ -1218,8 +1216,9 @@ export default function DashboardHome({
   const absentCount = Math.max(0, employees.length - presentCount);
 
   const stats = {
-    onShift: liveSessions.filter((item) => item.status === "on_shift").length,
-    onBreak: liveSessions.filter((item) => item.status === "on_break").length,
+    onShift: liveSessions.filter(
+      (item) => item.status === "on_shift" || item.status === "on_break",
+    ).length,
     checkedOut: liveSessions.filter((item) => item.status === "checked_out")
       .length,
     late: liveSessions.filter((item) => item.lateMinutes > 0).length,

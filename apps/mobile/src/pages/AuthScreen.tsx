@@ -19,9 +19,9 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   bootstrapDemoDevice,
+  lookupInvitationByEmail,
   signInWithEmail,
   submitCompanyJoinRequest,
-  lookupCompanyByCode,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
 import { isRTLLanguage, useI18n } from '../../lib/i18n';
@@ -33,7 +33,12 @@ import { BrandWordmark } from '../components/brand-wordmark';
 import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
-type JoinCompanyPayload = Awaited<ReturnType<typeof lookupCompanyByCode>>;
+type JoinCompanyPayload = {
+  companyName: string;
+  companyCode: string;
+  tenantName: string;
+  tenantSlug: string;
+};
 type JoinProfileForm = {
   firstName: string;
   lastName: string;
@@ -213,6 +218,31 @@ const AuthScreen = () => {
       done: t('joinProfile.done'),
     }),
     [t],
+  );
+  const joinUi = useMemo(
+    () =>
+      language === 'ru'
+        ? {
+            title: 'Вступить по email',
+            placeholder: 'you@company.com',
+            button: 'Продолжить',
+            checking: 'Проверяем email...',
+            description: 'Введите рабочий email, который менеджер добавил в команду.',
+            empty: 'Введите рабочий email.',
+            invalid: 'Введите корректный email.',
+            existing: 'Аккаунт уже создан. Откройте вход и используйте свой пароль.',
+          }
+        : {
+            title: 'Join with email',
+            placeholder: 'you@company.com',
+            button: 'Continue',
+            checking: 'Checking email...',
+            description: 'Enter the work email your manager added to the team.',
+            empty: 'Enter your work email.',
+            invalid: 'Enter a valid work email.',
+            existing: 'Your account is already created. Open sign-in and use your password.',
+          },
+    [language],
   );
   const joinProfileInputStyle = {
     color: '#24314b',
@@ -498,11 +528,17 @@ const AuthScreen = () => {
   }
 
   async function handleJoinTeam() {
-    const trimmedInviteCode = inviteCode.trim();
+    const trimmedInviteCode = inviteCode.trim().toLowerCase();
 
     if (!trimmedInviteCode) {
       hapticError();
-      setMessage(t('invite.errorEmpty'));
+      setMessage(joinUi.empty);
+      return;
+    }
+
+    if (!trimmedInviteCode.includes('@')) {
+      hapticError();
+      setMessage(joinUi.invalid);
       return;
     }
 
@@ -510,17 +546,24 @@ const AuthScreen = () => {
     setMessage(null);
 
     try {
-      const payload = await lookupCompanyByCode(trimmedInviteCode);
+      const payload = await lookupInvitationByEmail(trimmedInviteCode);
+
+      if (payload.registrationCompleted) {
+        hapticSelection();
+        setIdentifier(payload.email);
+        setInteractionBlocked(true);
+        startTransition(() => {
+          setMode('signin');
+        });
+        setMessage(joinUi.existing);
+        return;
+      }
+
       hapticSuccess();
-      setInteractionBlocked(true);
-      startTransition(() => {
-        setJoinCompany(payload);
-        setJoinProfileSubmitted(false);
-        setMode('joinProfile');
-      });
+      router.push(`/auth/register/${encodeURIComponent(payload.token)}` as never);
     } catch (error) {
       hapticError();
-      setMessage(error instanceof Error ? error.message : t('invite.verificationFailed'));
+      setMessage(error instanceof Error ? error.message : joinUi.invalid);
     } finally {
       setSubmitting(false);
     }
@@ -753,7 +796,7 @@ const AuthScreen = () => {
   function renderJoinTitle() {
     return (
       <Text style={styles.joinTitle}>
-        {t('login.joinWithCode')}
+        {joinUi.title}
       </Text>
     );
   }
@@ -1171,17 +1214,17 @@ const AuthScreen = () => {
                         <View className="gap-3">
                           {mode === 'join' ? (
                             <TextInput
-                              autoCapitalize="characters"
+                              autoCapitalize="none"
                               autoCorrect={false}
                               className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
                               importantForAutofill="no"
-                              keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
-                              key="join-code-input"
+                              keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                              key="join-email-input"
                               onChangeText={(nextValue) => {
                                 setInviteCode(nextValue);
                                 setMessage(null);
                               }}
-                              placeholder={t('invite.placeholder')}
+                              placeholder={joinUi.placeholder}
                               placeholderTextColor="#7f8da1"
                               returnKeyType="go"
                               selectionColor="#26334a"
@@ -1292,7 +1335,9 @@ const AuthScreen = () => {
                           }
                         >
                           {mode === 'join' ? (
-                            <Text style={actionLabelStyle}>{submitting ? '...' : t('invite.joinButton')}</Text>
+                            <Text style={actionLabelStyle}>
+                              {submitting ? joinUi.checking : joinUi.button}
+                            </Text>
                           ) : (
                             <View className="flex-row items-center justify-center gap-3">
                               {submitting ? (

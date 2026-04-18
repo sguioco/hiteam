@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   CalendarRange,
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +82,9 @@ function resolvePersonName(
     }
   }
 
-  return person.displayName;
+  return locale === "en"
+    ? localizePersonName(person.displayName, locale)
+    : person.displayName;
 }
 
 export function getInitials(value: string) {
@@ -254,10 +258,27 @@ export function DailyActivityPanel({
   items,
   locale,
 }: DailyActivityPanelProps) {
+  const translatableTexts = useMemo(
+    () =>
+      items.flatMap((item) =>
+        [item.title ?? "", item.context ?? "", item.targetLabel ?? ""].filter(Boolean),
+      ),
+    [items],
+  );
+  const textMap = useLiveTextMap(translatableTexts, locale);
+
+  function translateText(text: string | null | undefined) {
+    if (!text || locale === "ru") {
+      return text ?? "";
+    }
+
+    return textMap[text] ?? text;
+  }
+
   return (
     <div className="dashboard-card daily-activity-panel">
       <div className="daily-activity-head">
-        <h2>Daily Activity</h2>
+        <h2>{localize(locale, "Активность за день", "Daily activity")}</h2>
       </div>
 
       <div
@@ -271,8 +292,17 @@ export function DailyActivityPanel({
             {items.map((item, index) => {
               const Icon = getActivityIcon(item);
               const { actorName, actionLabel } = resolveActionCopy(item, locale);
-              const itemTitle = item.title?.trim() || null;
-              const targetLabel = resolveTargetLabel(item, locale);
+              const itemTitle = translateText(item.title)?.trim() || null;
+              const targetLabel = item.targetLabel
+                ? item.targetLabel === "all-company"
+                  ? localize(locale, "для всей компании", "for the whole company")
+                  : localize(
+                    locale,
+                    `для ${translateText(item.targetLabel)}`,
+                    `for ${translateText(item.targetLabel)}`,
+                  )
+                : null;
+              const itemContext = translateText(item.context);
 
               return (
                 <article className="daily-activity-item" key={item.id}>
@@ -325,7 +355,7 @@ export function DailyActivityPanel({
                           <time dateTime={item.createdAt}>
                             {formatTimeLabel(item.createdAt, locale)}
                           </time>
-                          {item.context ? <span>{item.context}</span> : null}
+                          {itemContext ? <span>{itemContext}</span> : null}
                         </div>
                       </div>
                     </div>
@@ -344,11 +374,15 @@ export function DailyActivityPanel({
             <div className="daily-activity-empty-icon" aria-hidden="true">
               <ListTodo className="size-7" />
             </div>
-            <p className="daily-activity-empty-title">No activity to display</p>
+            <p className="daily-activity-empty-title">
+              {localize(locale, "Пока нет активности", "No activity to display")}
+            </p>
             <p className="daily-activity-empty-copy">
-              Once your users will interact with the app
-              <br />
-              you'll see it here
+              {localize(
+                locale,
+                "Когда сотрудники начнут работать в системе, события появятся здесь.",
+                "Once your team starts using the app, activity will show up here.",
+              )}
             </p>
           </div>
         )}

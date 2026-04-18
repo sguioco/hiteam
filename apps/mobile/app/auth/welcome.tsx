@@ -31,7 +31,7 @@ export default function WelcomeScreen() {
       <View className="mt-14 gap-4">
         <Pressable
           className="min-h-[108px] flex-row items-center justify-between rounded-[24px] border border-[#dfe3ee] bg-white px-5"
-          onPress={() => router.push('/auth/invite')}
+          onPress={() => router.push('/' as never)}
         >
           <View className="flex-1 pr-4">
             <Text className="text-[18px] font-bold text-[#25324c]">{t('welcome.invitationOnly')}</Text>

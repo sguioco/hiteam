@@ -15,7 +15,6 @@ import {
   Download,
   FileClock,
   MoonStar,
-  Sparkles,
   Trash2,
   Users,
   Wallet,
@@ -138,10 +137,18 @@ export default function PayrollPageClient({
           leavePaidRatio: Number(fd.get('leavePaidRatio')),
           sickLeavePaidRatio: Number(fd.get('sickLeavePaidRatio')),
           standardShiftMinutes: Number(fd.get('standardShiftMinutes')),
-          defaultBreakIsPaid: fd.get('defaultBreakIsPaid') === 'on',
-          maxBreakMinutes: Number(fd.get('maxBreakMinutes')),
-          mandatoryBreakThresholdMinutes: Number(fd.get('mandatoryBreakThresholdMinutes')),
-          mandatoryBreakDurationMinutes: Number(fd.get('mandatoryBreakDurationMinutes')),
+          defaultBreakIsPaid: fd.has('defaultBreakIsPaid')
+            ? fd.get('defaultBreakIsPaid') === 'on'
+            : (policy?.defaultBreakIsPaid ?? false),
+          maxBreakMinutes: fd.has('maxBreakMinutes')
+            ? Number(fd.get('maxBreakMinutes'))
+            : (policy?.maxBreakMinutes ?? 0),
+          mandatoryBreakThresholdMinutes: fd.has('mandatoryBreakThresholdMinutes')
+            ? Number(fd.get('mandatoryBreakThresholdMinutes'))
+            : (policy?.mandatoryBreakThresholdMinutes ?? 0),
+          mandatoryBreakDurationMinutes: fd.has('mandatoryBreakDurationMinutes')
+            ? Number(fd.get('mandatoryBreakDurationMinutes'))
+            : (policy?.mandatoryBreakDurationMinutes ?? 0),
         }),
       });
       setPolicy(next);
@@ -229,9 +236,6 @@ export default function PayrollPageClient({
     { name: 'earlyLeavePenaltyPerMinute', label: t('payroll.earlyPenalty'), step: '0.01', type: 'number', value: policy.earlyLeavePenaltyPerMinute },
     { name: 'leavePaidRatio', label: t('payroll.leaveRatio'), step: '0.01', type: 'number', value: policy.leavePaidRatio },
     { name: 'sickLeavePaidRatio', label: t('payroll.sickRatio'), step: '0.01', type: 'number', value: policy.sickLeavePaidRatio },
-    { name: 'maxBreakMinutes', label: t('payroll.maxBreakMinutes'), type: 'number', value: policy.maxBreakMinutes },
-    { name: 'mandatoryBreakThresholdMinutes', label: t('payroll.mandatoryBreakThreshold'), type: 'number', value: policy.mandatoryBreakThresholdMinutes },
-    { name: 'mandatoryBreakDurationMinutes', label: t('payroll.mandatoryBreakDuration'), type: 'number', value: policy.mandatoryBreakDurationMinutes },
   ] : [];
 
   /* ── Tab renderers ── */
@@ -261,7 +265,6 @@ export default function PayrollPageClient({
                     />
                     <Table.Head className="text-right [&>div]:justify-end" id="scheduled" label={t('payroll.scheduled')} />
                     <Table.Head className="text-right [&>div]:justify-end" id="worked" label={t('payroll.worked')} />
-                    <Table.Head className="text-right [&>div]:justify-end" id="breaks" label={t('payroll.breaks')} />
                     <Table.Head className="text-right [&>div]:justify-end" id="late" label={t('payroll.late')} />
                     <Table.Head className="text-right [&>div]:justify-end" id="night" label={t('payroll.night')} />
                     <Table.Head className="text-right [&>div]:justify-end" id="overtime" label={t('payroll.overtime')} />
@@ -282,7 +285,6 @@ export default function PayrollPageClient({
                         </Table.Cell>
                         <Table.Cell className="text-right tabular-nums">{formatHours(row.scheduledMinutes)}</Table.Cell>
                         <Table.Cell className="text-right tabular-nums">{formatHours(row.workedMinutes)}</Table.Cell>
-                        <Table.Cell className="text-right tabular-nums">{formatHours(row.breakMinutes)}</Table.Cell>
                         <Table.Cell className="text-right tabular-nums">{formatHours(row.lateMinutes)}</Table.Cell>
                         <Table.Cell className="text-right tabular-nums">{formatHours(row.nightMinutes)}</Table.Cell>
                         <Table.Cell className="text-right tabular-nums">
@@ -354,10 +356,9 @@ export default function PayrollPageClient({
             <CardContent><div className="grid gap-4 sm:grid-cols-2">{primaryPolicyFields.map((f) => (<label className="space-y-1.5" key={f.name}><span className="text-xs font-medium text-muted-foreground">{f.label}</span><Input defaultValue={f.value} id={f.name} name={f.name} required step={f.step} type={f.type} /></label>))}</div></CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">{locale === 'ru' ? 'Ограничения и удержания' : 'Rules & deductions'}</CardTitle><CardDescription>{locale === 'ru' ? 'Ночное окно, штрафы и перерывы.' : 'Night window, penalties, breaks.'}</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-base">{locale === 'ru' ? 'Ограничения и удержания' : 'Rules & deductions'}</CardTitle><CardDescription>{locale === 'ru' ? 'Ночное окно и штрафы.' : 'Night window and penalties.'}</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">{rulePolicyFields.map((f) => (<label className="space-y-1.5" key={f.name}><span className="text-xs font-medium text-muted-foreground">{f.label}</span><Input defaultValue={f.value} id={f.name} name={f.name} required step={f.step} type={f.type} /></label>))}</div>
-              <label className="flex items-center gap-2.5 text-sm"><input className="h-4 w-4 rounded border accent-primary" defaultChecked={policy.defaultBreakIsPaid} name="defaultBreakIsPaid" type="checkbox" />{t('payroll.defaultBreakPaid')}</label>
             </CardContent>
             <CardFooter className="justify-end border-t pt-4"><Button type="submit">{t('payroll.savePolicy')}</Button></CardFooter>
           </Card>
@@ -480,12 +481,11 @@ export default function PayrollPageClient({
         ) : summary ? (
           <>
             {/* KPI stripe */}
-            <div className="grid grid-cols-2 rounded-xl border bg-card sm:grid-cols-4 lg:grid-cols-8">
+            <div className="grid grid-cols-2 rounded-xl border bg-card sm:grid-cols-4 lg:grid-cols-7">
               {[
                 { label: t('payroll.employees'), value: String(summary.totals.employees), icon: Users },
                 { label: t('payroll.scheduled'), value: formatHours(summary.totals.scheduledMinutes), icon: CalendarRange },
                 { label: t('payroll.worked'), value: formatHours(summary.totals.workedMinutes), icon: Clock3 },
-                { label: t('payroll.breaks'), value: formatHours(summary.totals.breakMinutes), icon: Sparkles },
                 { label: t('payroll.night'), value: formatHours(summary.totals.nightMinutes), icon: MoonStar },
                 { label: t('payroll.holiday'), value: formatHours(summary.totals.holidayMinutes), icon: CalendarRange },
                 { label: t('payroll.overtime'), value: formatHours(summary.totals.overtimeMinutes), icon: FileClock },

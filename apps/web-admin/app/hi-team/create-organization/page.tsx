@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, Globe, Loader2, Mail, ShieldCheck, Smartphone } from "lucide-react";
+import { Copy, ExternalLink, Globe, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,8 +26,6 @@ type RegisterOrganizationResponse = {
   managerEmail: string;
   managerSetupUrl: string;
   managerTemporaryPassword?: string;
-  employeeJoinUrl: string;
-  employeeDeepLink: string;
 };
 
 type SupportedLang = "en" | "ru";
@@ -41,22 +39,20 @@ const texts = {
   en: {
     pageTitle: "Hi-Team Internal Setup",
     pageDescription:
-      "Create an organization, issue the manager setup link, and generate the company code for mobile employee onboarding.",
+      "Create an organization, issue the manager setup link, and prepare the internal company identifier. Employees will join later by work email, not by company code.",
     successTitle: "Organization created",
     successBody:
-      "Send the manager setup link to the manager, and send the company code or mobile join link to employees.",
+      "Send the manager setup link to the manager. After setup, the manager will add employee work emails in organization settings.",
     managerLogin: "Manager login",
     managerTemporaryPassword: "Manager temporary password",
-    employeeCompanyCode: "Employee company code",
-    employeeMobileJoinLink: "Employee mobile join link",
-    employeeDeepLink: "Employee deep link",
+    employeeCompanyCode: "Internal company code",
     copied: "Copied",
     copy: "Copy",
     createAnother: "Create another organization",
     internalAccessKey: "Internal access key",
     organizationName: "Organization name",
     managerEmail: "Manager email",
-    companyCode: "Company code",
+    companyCode: "Internal company code",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
     companyCodePlaceholder: "HITEAM-HQ",
@@ -68,22 +64,20 @@ const texts = {
   ru: {
     pageTitle: "Внутренняя настройка Hi-Team",
     pageDescription:
-      "Создай организацию, выпусти ссылку для настройки менеджера и сгенерируй код компании для mobile onboarding сотрудников.",
+      "Создай организацию, выпусти ссылку для настройки менеджера и задай внутренний код компании. Сотрудники теперь подключаются по рабочему email, а не по коду компании.",
     successTitle: "Организация создана",
     successBody:
-      "Передай ссылку менеджеру для desktop setup, а сотрудникам отправь код компании или mobile join link.",
+      "Передай ссылку менеджеру для desktop setup. После настройки менеджер добавит рабочие email сотрудников в настройках организации.",
     managerLogin: "Вход менеджера",
     managerTemporaryPassword: "Временный пароль менеджера",
-    employeeCompanyCode: "Код компании для сотрудников",
-    employeeMobileJoinLink: "Ссылка для входа сотрудников в mobile",
-    employeeDeepLink: "Deep link для сотрудников",
+    employeeCompanyCode: "Внутренний код компании",
     copied: "Скопировано",
     copy: "Копировать",
     createAnother: "Создать ещё одну организацию",
     internalAccessKey: "Internal access key",
     organizationName: "Название организации",
     managerEmail: "Email менеджера",
-    companyCode: "Код компании",
+    companyCode: "Внутренний код компании",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
     companyCodePlaceholder: "HITEAM-HQ",
@@ -135,7 +129,7 @@ export default function InternalCreateOrganizationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegisterOrganizationResponse | null>(null);
-  const [copiedField, setCopiedField] = useState<"manager" | "code" | "mobile" | "deep" | null>(null);
+  const [copiedField, setCopiedField] = useState<"manager" | "code" | null>(null);
   const t = texts[lang];
 
   useEffect(() => {
@@ -156,7 +150,7 @@ export default function InternalCreateOrganizationPage() {
     writeBrowserStorageItem("smart-admin-locale", lang);
   }, [lang]);
 
-  async function copyValue(value: string, field: "manager" | "code" | "mobile" | "deep") {
+  async function copyValue(value: string, field: "manager" | "code") {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedField(field);
@@ -271,31 +265,6 @@ export default function InternalCreateOrganizationPage() {
                       <Button type="button" variant="outline" onClick={() => void copyValue(result.companyCode, "code")}>
                         <Copy className="mr-2 h-4 w-4" />
                         {copiedField === "code" ? t.copied : t.copy}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Smartphone className="h-4 w-4 text-muted-foreground" />
-                      {t.employeeMobileJoinLink}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input readOnly value={result.employeeJoinUrl} />
-                      <Button type="button" variant="outline" onClick={() => void copyValue(result.employeeJoinUrl, "mobile")}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "mobile" ? t.copied : t.copy}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">{t.employeeDeepLink}</div>
-                    <div className="flex gap-2">
-                      <Input readOnly value={result.employeeDeepLink} />
-                      <Button type="button" variant="outline" onClick={() => void copyValue(result.employeeDeepLink, "deep")}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "deep" ? t.copied : t.copy}
                       </Button>
                     </div>
                   </div>

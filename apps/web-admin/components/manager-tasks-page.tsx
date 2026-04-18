@@ -1021,9 +1021,7 @@ export function ManagerTasksPage({
                   ? localize(locale, "Не зарегистрирован", "Not registered")
                   : isLate
                   ? localize(locale, "Опаздывает", "Late")
-                  : liveSession?.status === "on_break"
-                    ? localize(locale, "На перерыве", "On break")
-                    : isCheckedIn
+                  : isCheckedIn
                     ? localize(locale, "На смене", "On shift")
                     : localize(locale, "Не на смене", "Off shift"),
               statusActive: isRegistered ? isCheckedIn : false,

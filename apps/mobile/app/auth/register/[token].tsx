@@ -29,6 +29,7 @@ export default function RegisterInvitationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [step, setStep] = useState<'password' | 'profile'>('password');
   const [form, setForm] = useState({
     password: '',
     firstName: '',
@@ -38,6 +39,41 @@ export default function RegisterInvitationScreen() {
     gender: 'male' as 'male' | 'female',
     phone: '',
   });
+  const copy = useMemo(
+    () =>
+      language === 'ru'
+        ? {
+            title: 'Присоединение к команде',
+            passwordSubtitle:
+              'Ваш email уже добавлен в организацию. Сначала придумайте пароль для входа.',
+            profileSubtitle:
+              'Теперь заполните профиль. После этого мы сразу откроем биометрию и ваш график.',
+            passwordHint:
+              'Пароль нужен только для входа. На следующем шаге вы заполните личные данные.',
+            next: 'Далее',
+            createAccount: 'Создать аккаунт',
+            creatingAccount: 'Создаём аккаунт...',
+            alreadySubmittedTitle: 'Аккаунт уже создан',
+            alreadySubmittedBody: 'Для {email} аккаунт уже настроен. Просто войдите в приложение.',
+            profileRequired: 'Заполните имя, фамилию, дату рождения и телефон.',
+          }
+        : {
+            title: 'Join the team',
+            passwordSubtitle:
+              'Your email is already on the team. Start by creating your sign-in password.',
+            profileSubtitle:
+              'Now complete your profile. After that we will open biometric setup and your schedule right away.',
+            passwordHint:
+              'This password is only for sign-in. On the next step you will finish your personal details.',
+            next: 'Continue',
+            createAccount: 'Create account',
+            creatingAccount: 'Creating account...',
+            alreadySubmittedTitle: 'Account already created',
+            alreadySubmittedBody: 'An account for {email} is already set up. Just sign in to the app.',
+            profileRequired: 'Complete first name, last name, birth date, and phone.',
+          },
+    [language],
+  );
 
   useEffect(() => {
     if (params.biometricEnrollmentStatus === 'ENROLLED') {
@@ -95,21 +131,31 @@ export default function RegisterInvitationScreen() {
       return false;
     }
 
-    return invitation.status === 'PENDING_APPROVAL' || (invitation.status === 'APPROVED' && invitation.registrationCompleted);
+    return Boolean(invitation.registrationCompleted);
   }, [invitation]);
+
+  function handleContinue() {
+    if (form.password.trim().length < 8) {
+      setError(t('register.passwordShort'));
+      return;
+    }
+
+    setError(null);
+    setStep('profile');
+  }
 
   async function handleSubmit() {
     if (!invitation) {
       return;
     }
 
-    if (form.password.trim().length < 8) {
-      setError(t('register.passwordShort'));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate.trim())) {
+      setError(t('register.invalidDate'));
       return;
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate.trim())) {
-      setError(t('register.invalidDate'));
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim()) {
+      setError(copy.profileRequired);
       return;
     }
 
@@ -185,9 +231,9 @@ export default function RegisterInvitationScreen() {
       <SafeAreaView className="flex-1 bg-[#f4f5f9] px-6 py-8">
         <StatusBar style="dark" />
         <Card className="mt-auto gap-4 rounded-[30px] bg-white">
-          <Text className="text-[28px] font-extrabold text-[#24314b]">{t('register.alreadySubmittedTitle')}</Text>
+          <Text className="text-[28px] font-extrabold text-[#24314b]">{copy.alreadySubmittedTitle}</Text>
           <Text className="text-[16px] leading-7 text-[#6f7892]">
-            {t('register.alreadySubmittedBody', { email: invitation.email })}
+            {copy.alreadySubmittedBody.replace('{email}', invitation.email)}
           </Text>
           <Button fullWidth label={t('login.signIn')} onPress={() => router.replace('/' as never)} />
         </Card>
@@ -204,9 +250,9 @@ export default function RegisterInvitationScreen() {
         </Pressable>
 
         <View className="gap-3">
-          <Text className="text-[32px] font-extrabold leading-[38px] text-[#24314b]">{t('register.title')}</Text>
+          <Text className="text-[32px] font-extrabold leading-[38px] text-[#24314b]">{copy.title}</Text>
           <Text className="text-[17px] leading-[26px] text-[#7a8094]">
-            {invitation.status === 'APPROVED' ? t('register.approvedSubtitle') : t('register.subtitle')}
+            {step === 'password' ? copy.passwordSubtitle : copy.profileSubtitle}
           </Text>
         </View>
 
@@ -225,70 +271,82 @@ export default function RegisterInvitationScreen() {
             style={textDirectionStyle}
             value={form.password}
           />
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
-            placeholder={t('register.firstName')}
-            placeholderTextColor="#8a92ab"
-            style={textDirectionStyle}
-            value={form.firstName}
-          />
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
-            placeholder={t('register.lastName')}
-            placeholderTextColor="#8a92ab"
-            style={textDirectionStyle}
-            value={form.lastName}
-          />
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, middleName: value }))}
-            placeholder={t('register.middleName')}
-            placeholderTextColor="#8a92ab"
-            style={textDirectionStyle}
-            value={form.middleName}
-          />
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
-            placeholder={t('register.birthDatePlaceholder')}
-            placeholderTextColor="#8a92ab"
-            style={textDirectionStyle}
-            value={form.birthDate}
-          />
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
-            placeholder={t('register.phone')}
-            placeholderTextColor="#8a92ab"
-            style={textDirectionStyle}
-            value={form.phone}
-          />
+          {step === 'password' ? (
+            <View className="rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 py-4">
+              <Text className="text-[15px] leading-6 text-[#6f7892]">{copy.passwordHint}</Text>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+                onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
+                placeholder={t('register.firstName')}
+                placeholderTextColor="#8a92ab"
+                style={textDirectionStyle}
+                value={form.firstName}
+              />
+              <TextInput
+                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+                onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
+                placeholder={t('register.lastName')}
+                placeholderTextColor="#8a92ab"
+                style={textDirectionStyle}
+                value={form.lastName}
+              />
+              <TextInput
+                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+                onChangeText={(value) => setForm((current) => ({ ...current, middleName: value }))}
+                placeholder={t('register.middleName')}
+                placeholderTextColor="#8a92ab"
+                style={textDirectionStyle}
+                value={form.middleName}
+              />
+              <TextInput
+                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+                onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
+                placeholder={t('register.birthDatePlaceholder')}
+                placeholderTextColor="#8a92ab"
+                style={textDirectionStyle}
+                value={form.birthDate}
+              />
+              <TextInput
+                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+                onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
+                placeholder={t('register.phone')}
+                placeholderTextColor="#8a92ab"
+                style={textDirectionStyle}
+                value={form.phone}
+              />
 
-          <View className="flex-row gap-3">
-            <Button
-              className="flex-1"
-              label={t('register.male')}
-              onPress={() => setForm((current) => ({ ...current, gender: 'male' }))}
-              variant={form.gender === 'male' ? 'primary' : 'secondary'}
-            />
-            <Button
-              className="flex-1"
-              label={t('register.female')}
-              onPress={() => setForm((current) => ({ ...current, gender: 'female' }))}
-              variant={form.gender === 'female' ? 'primary' : 'secondary'}
-            />
-          </View>
+              <View className="flex-row gap-3">
+                <Button
+                  className="flex-1"
+                  label={t('register.male')}
+                  onPress={() => setForm((current) => ({ ...current, gender: 'male' }))}
+                  variant={form.gender === 'male' ? 'primary' : 'secondary'}
+                />
+                <Button
+                  className="flex-1"
+                  label={t('register.female')}
+                  onPress={() => setForm((current) => ({ ...current, gender: 'female' }))}
+                  variant={form.gender === 'female' ? 'primary' : 'secondary'}
+                />
+              </View>
+            </>
+          )}
 
           {message ? <Text className="text-[14px] leading-6 text-[#546cf2]">{message}</Text> : null}
           {error ? <Text className="text-[14px] leading-6 text-[#b93b4a]">{error}</Text> : null}
 
-          <Button
-            fullWidth
-            label={submitting ? t('register.submitting') : t('register.submit')}
-            onPress={() => void handleSubmit()}
-          />
+          {step === 'password' ? (
+            <Button fullWidth label={copy.next} onPress={() => handleContinue()} />
+          ) : (
+            <Button
+              fullWidth
+              label={submitting ? copy.creatingAccount : copy.createAccount}
+              onPress={() => void handleSubmit()}
+            />
+          )}
         </Card>
       </ScrollView>
     </SafeAreaView>

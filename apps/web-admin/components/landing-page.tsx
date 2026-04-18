@@ -7,6 +7,7 @@ import type {
   HTMLAttributes,
 } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import createGlobe from "cobe";
 import { useGSAP } from "@gsap/react";
 import Image from "next/image";
 import {
@@ -131,7 +132,7 @@ const GLOBE_OVERLAY_ITEMS: GlobeOverlayItem[] = [
     type: "polaroid",
     location: [1.3521, 103.8198],
     image: LANDING_GLOBE_VERIFIED_AVATAR_SRC,
-    alt: "Portrait on a transparent background.",
+    alt: "Portrait photo.",
     title: "VERIFIED",
     frameWidth: 82,
     imageHeight: 102,
@@ -1085,9 +1086,7 @@ const Landing = () => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const [shouldLoadHeroVideo, setShouldLoadHeroVideo] = useState(false);
-  const [shouldLoadGlobe, setShouldLoadGlobe] = useState(false);
   const [isHeroVideoReady, setIsHeroVideoReady] = useState(false);
-  const [isGlobeReady, setIsGlobeReady] = useState(false);
   const [demoName, setDemoName] = useState("");
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
@@ -1166,50 +1165,6 @@ const Landing = () => {
       }, { timeout: 1800 });
     } else {
       timeoutId = window.setTimeout(activateVideo, 900);
-    }
-
-    return () => {
-      if (idleId !== null && typeof browserWindow.cancelIdleCallback === "function") {
-        browserWindow.cancelIdleCallback(idleId);
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isDesktopViewport]);
-
-  useEffect(() => {
-    const nav = navigator as Navigator & {
-      connection?: { saveData?: boolean };
-    };
-    const browserWindow = window as Window & typeof globalThis & {
-      requestIdleCallback?: (
-        callback: IdleRequestCallback,
-        options?: IdleRequestOptions,
-      ) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-
-    setIsGlobeReady(false);
-    setShouldLoadGlobe(false);
-
-    if (!isDesktopViewport || nav.connection?.saveData) {
-      return;
-    }
-
-    let timeoutId: number | null = null;
-    let idleId: number | null = null;
-
-    const activateGlobe = () => {
-      setShouldLoadGlobe(true);
-    };
-
-    if (typeof browserWindow.requestIdleCallback === "function") {
-      idleId = browserWindow.requestIdleCallback(() => {
-        activateGlobe();
-      }, { timeout: 2200 });
-    } else {
-      timeoutId = window.setTimeout(activateGlobe, 1200);
     }
 
     return () => {
@@ -1319,7 +1274,15 @@ const Landing = () => {
   }, { scope: landingRef, dependencies: [shouldLoadHeroVideo] });
 
   useGSAP(() => {
-    if (!shouldLoadGlobe || !canvasRef.current || !globeContainerRef.current) {
+    if (!canvasRef.current || !globeContainerRef.current) {
+      return;
+    }
+
+    const nav = navigator as Navigator & {
+      connection?: { saveData?: boolean };
+    };
+
+    if (!isDesktopViewport || nav.connection?.saveData) {
       return;
     }
 
@@ -1339,8 +1302,6 @@ const Landing = () => {
       destroy: () => void;
     } | null = null;
     let resizeObserver: ResizeObserver | null = null;
-
-    setIsGlobeReady(false);
 
     const syncOverlays = (currentPhi: number) => {
       const rect = globeContainer.getBoundingClientRect();
@@ -1396,64 +1357,53 @@ const Landing = () => {
       }
     };
 
-    const loadGlobe = async () => {
-      const { default: createGlobe } = await import("cobe");
+    globe = createGlobe(canvas, {
+      devicePixelRatio,
+      width: globeSize,
+      height: globeSize,
+      phi: basePhiRef.current,
+      theta: GLOBE_THETA,
+      dark: 0,
+      diffuse: 0.2,
+      mapSamples: GLOBE_MAP_SAMPLES,
+      mapBrightness: 7,
+      mapBaseBrightness: 0,
+      scale: GLOBE_SCALE,
+      baseColor: GLOBE_BASE_COLOR,
+      markerColor: LANDING_PRIMARY_COBE_RGB,
+      glowColor: [0.98, 0.99, 1],
+      offset: [0, 0],
+      markerElevation: 0,
+      markers: GLOBE_OVERLAY_ITEMS.filter(
+        (item) => item.id !== "berlin-face",
+      ).map((item) => ({
+        location: item.location,
+        size: item.size,
+        id: item.id,
+      })),
+    });
 
+    resizeObserver = new ResizeObserver(([entry]) => {
+      if (!entry || !globe) return;
+      const nextGlobeSize = Math.max(
+        entry.contentRect.width * devicePixelRatio,
+        1,
+      );
+      if (Math.abs(nextGlobeSize - globeSize) < 1) return;
+      globeSize = nextGlobeSize;
+      globe.update({ width: globeSize, height: globeSize });
+      syncOverlays(basePhiRef.current);
+    });
+
+    resizeObserver.observe(globeContainer);
+    syncOverlays(basePhiRef.current);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    bootstrapFrameId = window.requestAnimationFrame(() => {
       if (!isActive) {
         return;
       }
-
-      globe = createGlobe(canvas, {
-        devicePixelRatio,
-        width: globeSize,
-        height: globeSize,
-        phi: basePhiRef.current,
-        theta: GLOBE_THETA,
-        dark: 0,
-        diffuse: 0.2,
-        mapSamples: GLOBE_MAP_SAMPLES,
-        mapBrightness: 7,
-        mapBaseBrightness: 0,
-        scale: GLOBE_SCALE,
-        baseColor: GLOBE_BASE_COLOR,
-        markerColor: LANDING_PRIMARY_COBE_RGB,
-        glowColor: [0.98, 0.99, 1],
-        offset: [0, 0],
-        markerElevation: 0,
-        markers: GLOBE_OVERLAY_ITEMS.filter(
-          (item) => item.id !== "berlin-face",
-        ).map((item) => ({
-          location: item.location,
-          size: item.size,
-          id: item.id,
-        })),
-      });
-
-      resizeObserver = new ResizeObserver(([entry]) => {
-        if (!entry || !globe) return;
-        const nextGlobeSize = Math.max(
-          entry.contentRect.width * devicePixelRatio,
-          1,
-        );
-        if (Math.abs(nextGlobeSize - globeSize) < 1) return;
-        globeSize = nextGlobeSize;
-        globe.update({ width: globeSize, height: globeSize });
-        syncOverlays(basePhiRef.current);
-      });
-
-      resizeObserver.observe(globeContainer);
-      syncOverlays(basePhiRef.current);
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-      bootstrapFrameId = window.requestAnimationFrame(() => {
-        if (!isActive) {
-          return;
-        }
-        setIsGlobeReady(true);
-        frameId = window.requestAnimationFrame(animate);
-      });
-    };
-
-    void loadGlobe();
+      frameId = window.requestAnimationFrame(animate);
+    });
 
     return () => {
       isActive = false;
@@ -1463,7 +1413,7 @@ const Landing = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       globe?.destroy();
     };
-  }, { scope: landingRef, dependencies: [shouldLoadGlobe] });
+  }, { scope: landingRef, dependencies: [isDesktopViewport] });
 
   useGSAP(() => {
     const mediaQueryList = window.matchMedia(LANDING_DESKTOP_QUERY);
@@ -2453,31 +2403,8 @@ const Landing = () => {
               <div className="absolute inset-[11%] rounded-full bg-[radial-gradient(circle_at_34%_26%,rgba(255,255,255,0.72),rgba(248,250,255,0.28)_42%,rgba(255,255,255,0.04)_72%)] shadow-[0_36px_120px_rgba(148,163,184,0.06)]" />
               <div className="absolute inset-[11%] rounded-full shadow-[inset_-24px_-30px_72px_rgba(148,163,184,0.1)] ring-1 ring-white/55" />
               <div className="relative size-full" ref={globeContainerRef}>
-                <div
-                  className={cx(
-                    "pointer-events-none absolute inset-[8%] z-0 rounded-full transition-opacity duration-700 ease-out",
-                    isGlobeReady ? "opacity-0" : "opacity-100",
-                  )}
-                >
-                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(255,255,255,0.98)_0%,rgba(247,250,255,0.94)_26%,rgba(231,238,248,0.82)_56%,rgba(201,216,244,0.58)_80%,rgba(184,201,234,0.32)_100%)] shadow-[inset_-38px_-54px_110px_rgba(86,114,184,0.10),inset_24px_24px_82px_rgba(255,255,255,0.84),0_36px_100px_rgba(148,163,184,0.08)]" />
-                  <div className="absolute inset-[5%] rounded-full border border-white/70" />
-                  <div className="absolute inset-[14%] rounded-full border border-[#d7e3f7]/72 [animation:lpGlobePlaceholderSpin_22s_linear_infinite]" />
-                  <div className="absolute inset-[24%] rounded-full border border-[#c7d7f3]/58 [animation:lpGlobePlaceholderSpin_16s_linear_infinite_reverse]" />
-                  <div className="absolute inset-x-[16%] inset-y-[24%] rounded-full border border-white/26" />
-                  <div className="absolute inset-x-[6%] inset-y-[10%] rounded-full border border-[#b8caea]/24" />
-                  <div className="absolute left-1/2 top-[10%] h-[80%] w-[1px] -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.28)_18%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.28)_82%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute left-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.12)_22%,rgba(255,255,255,0.24)_50%,rgba(255,255,255,0.12)_78%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute right-[32%] top-[16%] h-[68%] w-[1px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.12)_22%,rgba(255,255,255,0.24)_50%,rgba(255,255,255,0.12)_78%,rgba(255,255,255,0)_100%)]" />
-                  <div className="absolute inset-[10%] rounded-full bg-[conic-gradient(from_180deg_at_50%_50%,rgba(255,255,255,0)_0deg,rgba(255,255,255,0.42)_40deg,rgba(255,255,255,0)_92deg)] opacity-80 [mask-image:radial-gradient(circle,transparent_44%,black_67%,transparent_76%)] [animation:lpGlobeSweep_8s_linear_infinite]" />
-                  <div className="absolute left-[24%] top-[32%] h-3.5 w-3.5 rounded-full bg-[#2f63ff]/72 shadow-[0_0_0_10px_rgba(47,99,255,0.08)] [animation:lpGlobeNodePulse_2.8s_ease-in-out_infinite]" />
-                  <div className="absolute right-[24%] top-[42%] h-3 w-3 rounded-full bg-[#34c759]/72 shadow-[0_0_0_10px_rgba(52,199,89,0.08)] [animation:lpGlobeNodePulse_3.2s_ease-in-out_infinite_0.4s]" />
-                  <div className="absolute left-[44%] top-[58%] h-2.5 w-2.5 rounded-full bg-[#111827]/58 shadow-[0_0_0_8px_rgba(15,23,42,0.06)] [animation:lpGlobeNodePulse_2.4s_ease-in-out_infinite_0.8s]" />
-                </div>
                 <canvas
-                  className={cx(
-                    "relative z-10 block h-full w-full [contain:layout_paint_size] transition-opacity duration-700 ease-out",
-                    isGlobeReady ? "opacity-100" : "opacity-0",
-                  )}
+                  className="relative z-10 block h-full w-full [contain:layout_paint_size]"
                   ref={canvasRef}
                   style={{ maxWidth: "100%", aspectRatio: "1" }}
                 />
@@ -3098,18 +3025,6 @@ const Landing = () => {
           97% { transform: translateY(0%); }
           99% { transform: translateY(-3%); }
           100% { transform: translateY(0); }
-        }
-        @keyframes lpGlobePlaceholderSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes lpGlobeSweep {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes lpGlobeNodePulse {
-          0%, 100% { transform: scale(1); opacity: 0.72; }
-          50% { transform: scale(1.18); opacity: 1; }
         }
         .globe-shimmer-text {
           background: linear-gradient(

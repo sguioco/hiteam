@@ -518,26 +518,30 @@ export async function loadPublicInvitation(token: string): Promise<{
   return response.json();
 }
 
-export async function lookupCompanyByCode(code: string): Promise<{
+export async function lookupInvitationByEmail(email: string): Promise<{
+  token: string;
+  email: string;
+  status: string;
+  registrationCompleted: boolean;
   companyName: string;
-  companyCode: string;
+  companyCode: string | null;
   tenantName: string;
   tenantSlug: string;
 }> {
   const response = await fetchWithTimeout(
-    "/api/v1/employees/public/join/code/lookup",
+    "/api/v1/employees/public/join/email/lookup",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ email }),
     },
   );
 
   if (!response.ok) {
     throw new Error(
-      await readErrorMessage(response, "Unable to verify company code."),
+      await readErrorMessage(response, "Unable to verify employee email."),
     );
   }
 
@@ -558,24 +562,8 @@ export async function submitCompanyJoinRequest(payload: {
   tenantName: string;
   companyName: string;
 }> {
-  const response = await fetchWithTimeout(
-    "/api/v1/employees/public/join/code/submit",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "Unable to submit join request."),
-    );
-  }
-
-  return response.json();
+  void payload;
+  throw new Error("Legacy company-code join flow has been removed.");
 }
 
 export async function registerFromInvitation(

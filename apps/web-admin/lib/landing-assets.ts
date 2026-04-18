@@ -6,4 +6,4 @@ export const LANDING_HERO_MP4_SRC = `/hero.mp4?v=${LANDING_ASSET_VERSION}`;
 
 export const LANDING_GLOBE_ROOM_SRC = `/room.webp?v=${LANDING_ASSET_VERSION}`;
 export const LANDING_GLOBE_GEO_SRC = `/geo.webp?v=${LANDING_ASSET_VERSION}`;
-export const LANDING_GLOBE_VERIFIED_AVATAR_SRC = `/hero-verified-avatar.svg?v=${LANDING_ASSET_VERSION}`;
+export const LANDING_GLOBE_VERIFIED_AVATAR_SRC = `/hero-verified-avatar.webp?v=${LANDING_ASSET_VERSION}`;

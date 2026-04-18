@@ -1,8 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { AttendanceAnomalyResponse, AttendanceLiveSession } from "@smart/types";
 import type { EmployeeScheduleShift } from "@/lib/employee-workdays";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { localizePersonName } from "@/lib/transliteration";
+import { useLiveTextMap } from "@/lib/use-live-text-map";
 
 type TodayAttendanceEmployee = {
   id: string;
@@ -48,19 +51,19 @@ function formatTime(value: string | Date | null | undefined, locale: "ru" | "en"
   });
 }
 
-function formatDuration(totalMinutes: number) {
+function formatDuration(totalMinutes: number, locale: "ru" | "en") {
   if (totalMinutes < 60) {
-    return `${totalMinutes} min`;
+    return locale === "ru" ? `${totalMinutes} мин` : `${totalMinutes} min`;
   }
 
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
   if (minutes === 0) {
-    return `${hours}h`;
+    return locale === "ru" ? `${hours} ч` : `${hours}h`;
   }
 
-  return `${hours}h ${minutes}min`;
+  return locale === "ru" ? `${hours} ч ${minutes} мин` : `${hours}h ${minutes}min`;
 }
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -131,7 +134,11 @@ function getArrivalState(options: {
 
     if (diffMinutes > 0) {
       return {
-        note: `Late by ${formatDuration(diffMinutes)}`,
+        note: localize(
+          locale,
+          `Опоздание на ${formatDuration(diffMinutes, locale)}`,
+          `Late by ${formatDuration(diffMinutes, locale)}`,
+        ),
         time: formatTime(startedAt, locale),
         tone: "late" as AttendanceRowTone,
       };
@@ -139,14 +146,18 @@ function getArrivalState(options: {
 
     if (diffMinutes < 0) {
       return {
-        note: `Early by ${formatDuration(Math.abs(diffMinutes))}`,
+        note: localize(
+          locale,
+          `Раньше на ${formatDuration(Math.abs(diffMinutes), locale)}`,
+          `Early by ${formatDuration(Math.abs(diffMinutes), locale)}`,
+        ),
         time: formatTime(startedAt, locale),
         tone: "early" as AttendanceRowTone,
       };
     }
 
     return {
-      note: "On time",
+      note: localize(locale, "Вовремя", "On time"),
       time: formatTime(startedAt, locale),
       tone: "neutral" as AttendanceRowTone,
     };
@@ -156,8 +167,12 @@ function getArrivalState(options: {
     return {
       note:
         session.status === "checked_out" && session.endedAt
-          ? `Checked out at ${formatTime(session.endedAt, locale)}`
-          : "On shift",
+          ? localize(
+            locale,
+            `Завершил смену в ${formatTime(session.endedAt, locale)}`,
+            `Checked out at ${formatTime(session.endedAt, locale)}`,
+          )
+          : localize(locale, "В смене", "On shift"),
       time: formatTime(session.startedAt, locale),
       tone: "neutral" as AttendanceRowTone,
     };
@@ -167,14 +182,22 @@ function getArrivalState(options: {
     const diffMinutes = Math.round((now.getTime() - shiftStart.getTime()) / 60_000);
     if (diffMinutes > 0) {
       return {
-        note: `Late by ${formatDuration(diffMinutes)}`,
+        note: localize(
+          locale,
+          `Опоздание на ${formatDuration(diffMinutes, locale)}`,
+          `Late by ${formatDuration(diffMinutes, locale)}`,
+        ),
         time: localize(locale, "Нет отметки", "No check-in"),
         tone: "late" as AttendanceRowTone,
       };
     }
 
     return {
-      note: `Starts at ${formatTime(shiftStart, locale)}`,
+      note: localize(
+        locale,
+        `Начало в ${formatTime(shiftStart, locale)}`,
+        `Starts at ${formatTime(shiftStart, locale)}`,
+      ),
       time: formatTime(shiftStart, locale),
       tone: "neutral" as AttendanceRowTone,
     };
@@ -255,7 +278,7 @@ export function TodayAttendancePanel({
             : 0;
       const fullName = employee
         ? `${employee.lastName} ${employee.firstName}`.trim()
-        : session?.employeeName ?? "Employee";
+        : session?.employeeName ?? localize(locale, "Сотрудник", "Employee");
       return {
         id: shift.employee.id,
         avatarUrl:
@@ -284,11 +307,26 @@ export function TodayAttendancePanel({
 
   const presentCount = rows.filter((row) => sessionByEmployeeId.has(row.id)).length;
   const expectedCount = rows.length || liveSessions.length;
+  const translatableTexts = useMemo(
+    () =>
+      rows.flatMap((row) => [row.department, row.note, row.shiftLabel].filter(Boolean)),
+    [rows],
+  );
+  const textMap = useLiveTextMap(translatableTexts, locale);
+  const localizedRows = rows.map((row) => ({
+    ...row,
+    department:
+      locale === "ru" ? row.department : (textMap[row.department] ?? row.department),
+    fullName: locale === "en" ? localizePersonName(row.fullName, locale) : row.fullName,
+    note: locale === "ru" ? row.note : (textMap[row.note] ?? row.note),
+    shiftLabel:
+      locale === "ru" ? row.shiftLabel : (textMap[row.shiftLabel] ?? row.shiftLabel),
+  }));
 
   return (
     <div className="dashboard-card today-attendance-panel">
       <div className="today-attendance-head">
-        <h2>Today Attendance</h2>
+        <h2>{localize(locale, "Посещаемость сегодня", "Today attendance")}</h2>
         <span className="today-attendance-head-count">
           {presentCount}/{expectedCount}
         </span>
@@ -296,8 +334,8 @@ export function TodayAttendancePanel({
 
       <div className={`today-attendance-body${rows.length === 0 ? " is-empty" : ""}`}>
         <div className="today-attendance-list">
-          {rows.length ? (
-            rows.map((row) => (
+          {localizedRows.length ? (
+            localizedRows.map((row) => (
               <article className="today-attendance-row" key={row.id}>
                 <div className="today-attendance-avatar">
                   <img alt={row.fullName} src={row.avatarUrl} />
@@ -327,7 +365,9 @@ export function TodayAttendancePanel({
             ))
           ) : (
             <div className="today-attendance-empty">
-              <div>No scheduled shifts for today</div>
+              <div>
+                {localize(locale, "На сегодня смен не запланировано", "No scheduled shifts for today")}
+              </div>
             </div>
           )}
         </div>

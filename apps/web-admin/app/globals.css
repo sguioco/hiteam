@@ -954,7 +954,7 @@
 }
 
 .activity-day-list .daily-activity-item:last-child .daily-activity-item-main {
-  padding-bottom: 0;
+  padding-bottom: 8px;
 }
 
 .activity-page-loading {

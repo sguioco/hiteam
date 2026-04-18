@@ -9,8 +9,7 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
-import { PublicCompanyCodeDto } from './dto/public-company-code.dto';
-import { PublicCompanyJoinDto } from './dto/public-company-join.dto';
+import { PublicEmailLookupDto } from './dto/public-email-lookup.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
@@ -47,14 +46,9 @@ export class EmployeesController {
     return this.employeesService.getInvitationByToken(token);
   }
 
-  @Post('public/join/code/lookup')
-  lookupCompanyCode(@Body() dto: PublicCompanyCodeDto) {
-    return this.employeesService.lookupCompanyByCode(dto.code);
-  }
-
-  @Post('public/join/code/submit')
-  submitJoinByCode(@Body() dto: PublicCompanyJoinDto) {
-    return this.employeesService.submitJoinRequestByCompanyCode(dto);
+  @Post('public/join/email/lookup')
+  lookupInvitationByEmail(@Body() dto: PublicEmailLookupDto) {
+    return this.employeesService.lookupInvitationByEmail(dto.email);
   }
 
   @Post('invitations/public/:token/register')

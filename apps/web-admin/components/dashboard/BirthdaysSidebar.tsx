@@ -2,6 +2,7 @@
 
 import { Cake } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { localizePersonName } from "@/lib/transliteration";
 
 type BirthdayItem = {
   avatarUrl?: string | null;
@@ -43,7 +44,9 @@ export const BirthdaysSidebar = ({
                 src={item.avatarUrl ?? undefined}
               />
               <div className="birthdays-sidebar-copy">
-                <p className="birthdays-sidebar-name">{item.name}</p>
+                <p className="birthdays-sidebar-name">
+                  {localizePersonName(item.name, locale)}
+                </p>
                 <span className="birthdays-sidebar-date">
                   {item.dateLabel}
                 </span>

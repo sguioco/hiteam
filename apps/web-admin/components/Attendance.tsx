@@ -569,8 +569,8 @@ export default function Attendance({
         let statusLabel = runtimeLocalize("Нет отметки", "No punch", locale);
 
         if (row?.status === "on_break") {
-          status = "break";
-          statusLabel = runtimeLocalize("На перерыве", "On break", locale);
+          status = "online";
+          statusLabel = runtimeLocalize("На месте", "On site", locale);
         } else if (row?.lateMinutes && row.lateMinutes > 0) {
           status = "late";
           statusLabel =
@@ -598,19 +598,13 @@ export default function Attendance({
           row ? (row.workedMinutes / 480) * 100 : 0,
         );
         const progressTone = getProgressTone(progress);
-        const activeBreak = row?.breaks.find((item) => !item.endedAt) ?? null;
 
         let summary = runtimeLocalize(
           "Нет активности за выбранный день",
           "No activity for the selected day",
           locale,
         );
-        if (activeBreak) {
-          summary =
-            locale === "ru"
-              ? `Активный перерыв ${formatMinutes(activeBreak.totalMinutes)}`
-              : `Active break ${formatMinutes(activeBreak.totalMinutes)}`;
-        } else if (row) {
+        if (row) {
           summary =
             locale === "ru"
               ? `Отработано ${formatMinutes(row.workedMinutes)}`
@@ -697,7 +691,7 @@ export default function Attendance({
       all: todayCards.length,
       online: todayCards.filter((item) => item.status === "online").length,
       late: todayCards.filter((item) => item.status === "late").length,
-      break: todayCards.filter((item) => item.status === "break").length,
+      break: 0,
       offline: todayCards.filter((item) => item.status === "offline").length,
     };
   }, [todayCards]);

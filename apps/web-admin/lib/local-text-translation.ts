@@ -40,6 +40,30 @@ const RU_TO_EN_TEXT_MAP: Record<string, string> = {
   "Проверить готовность формы отчета": "Check report form readiness",
   "Убедиться, что шаблон отчета по посещаемости заполнен и готов к отправке руководителю.":
     "Make sure the attendance report template is complete and ready to be sent to the manager.",
+  "Проверить состояние инвентаря в зале": "Check inventory status on the sales floor",
+  "Необходимо осмотреть витрины и убедиться, что все товары на своих местах.":
+    "Inspect the displays and make sure all items are in place.",
+  "Сверить отчет по кассе за утро": "Reconcile the morning cash report",
+  "Проверить Z-отчет и соответствие наличных в кассе.":
+    "Review the Z-report and verify the cash balance in the register.",
+  "Собрать отчёт по инвентаризации для управляющего":
+    "Prepare the inventory report for the manager",
+  "Сверить остатки по категориям и отправить короткий статус руководителю смены.":
+    "Reconcile stock by category and send a short status update to the shift manager.",
+  "Проверить заявки на смены за выходные": "Review weekend shift requests",
+  "Подтвердить или отклонить все актуальные запросы на обмены.":
+    "Approve or reject all current swap requests.",
+  "Подготовить сводку по отсутствующим сотрудникам":
+    "Prepare a summary of absent employees",
+  "Собрать список отсутствий и отметить причину неявок.":
+    "Compile the absence list and note the reason for each no-show.",
+  "Проверить статус обучения новых сотрудников":
+    "Check the onboarding status of new employees",
+  "Проконтролировать завершение онбординга и назначить наставника.":
+    "Track onboarding completion and assign a mentor.",
+  "Фото отчёт по кассовой зоне": "Cash zone photo report",
+  "Загрузить фото закрытой кассовой зоны после пересчёта.":
+    "Upload a photo of the closed cash zone after the count.",
   "Подготовить рабочее место к открытию недели": "Prepare the workstation for the start of the week",
   "Проверить чек-лист витрины": "Check the display checklist",
   "Сверить остатки по расходным материалам": "Reconcile consumables stock levels",
@@ -73,6 +97,51 @@ const RU_TO_EN_TEXT_MAP: Record<string, string> = {
   "Показательный набор задач для demo-режима.": "Demo-mode showcase task set.",
   "Переговорная B": "Meeting room B",
   "Кабинет менеджера": "Manager office",
+  "Проверить фотоотчёты по витрине": "Review display photo reports",
+  "Новая задача с фото-подтверждением ушла в утреннюю смену.":
+    "A new task with photo confirmation was sent to the morning shift.",
+  "Вечерняя смена на пятницу": "Friday evening shift",
+  "Добавлены 3 сотрудника и подтверждён резервный мастер.":
+    "Three employees were added and the backup specialist was confirmed.",
+  "Открытие смены": "Shift opening",
+  "Смена закрыта": "Shift closed",
+  "Чек-аут завершён, комментарий к раннему уходу добавлен.":
+    "Check-out completed, and the early-leave comment was added.",
+  "Новый запрос ушёл на согласование руководителю.":
+    "A new request was sent to the manager for approval.",
+  "Подтвердить пополнение расходников": "Confirm consumables restock",
+  "Обычная ежедневная задача для вечерней смены на фото-подтверждение.":
+    "A standard daily task for the evening shift with photo confirmation.",
+  "Сотрудник вошёл через Face ID без замечаний.":
+    "The employee checked in via Face ID without issues.",
+  "Пятничная инвентаризация материалов": "Friday materials inventory",
+  "Опубликовали напоминание и список фото-зон для отчёта по филиалам.":
+    "A reminder and photo-zone checklist for branch reporting were published.",
+  "Профиль нового кассира": "New cashier profile",
+  "Обмен сменой на субботу": "Saturday shift swap",
+  "Обычный запрос на подмену уже ушёл менеджеру на согласование.":
+    "A standard replacement request has already been sent to the manager for approval.",
+  "Подмена на воскресенье": "Sunday coverage shift",
+  "Собрали резервную смену для главного офиса и склада.":
+    "A backup shift was assembled for the head office and warehouse.",
+  "Сделать фото зоны ожидания": "Take a photo of the waiting area",
+  "Задача с фото нужна для стандартного аудита чистоты и выкладки.":
+    "A photo task is required for the standard cleanliness and merchandising audit.",
+  "Сотрудник пришёл на 5 минут раньше начала графика.":
+    "The employee arrived 5 minutes before the scheduled start.",
+  "Проверка кассовой зоны перед вечерней сменой":
+    "Cash zone check before the evening shift",
+  "До 17:30 нужно сверить терминал, печать чеков и подготовить резервную ленту. Если заметите проблему, сразу приложите фото и комментарий.":
+    "By 5:30 PM, verify the terminal, receipt printing, and prepare a backup roll. If you notice an issue, attach a photo and comment right away.",
+  "Операции / Утро": "Operations / Morning",
+  "Основная утренняя смена.": "Primary morning shift.",
+  "HR и сопровождение.": "HR and support.",
+  "Главный офис": "Head office",
+  "Склад Север": "North warehouse",
+  "Розница Юг": "South retail",
+  "Продажи": "Sales",
+  "Операции": "Operations",
+  "Охрана": "Security",
 };
 
 export function getLocalTextTranslation(
@@ -88,6 +157,16 @@ export function getLocalTextTranslation(
     const directMatch = RU_TO_EN_TEXT_MAP[normalized];
     if (directMatch) {
       return directMatch;
+    }
+
+    const lateMatch = normalized.match(/^Опоздание\s+(\d+)\s+мин\.?$/i);
+    if (lateMatch) {
+      return `Late by ${lateMatch[1]} min.`;
+    }
+
+    const earlyMatch = normalized.match(/^Раньше\s+на\s+(\d+)\s+мин\.?$/i);
+    if (earlyMatch) {
+      return `Early by ${earlyMatch[1]} min.`;
     }
 
     const meetingMatch = normalized.match(/^Встреча:\s*(.+)$/i);

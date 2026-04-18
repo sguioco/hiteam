@@ -537,8 +537,6 @@ export class AuthService {
     companyCode: string;
     managerEmail: string;
     managerSetupUrl: string;
-    employeeJoinUrl: string;
-    employeeDeepLink: string;
   }> {
     const organizationName = this.normalizeOrganizationName(dto.organizationName);
     const managerEmail = dto.managerEmail.trim().toLowerCase();
@@ -627,8 +625,6 @@ export class AuthService {
 
     const webBaseUrl = (process.env.WEB_ADMIN_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     const managerSetupUrl = `${webBaseUrl}/join/manager/${token}`;
-    const employeeJoinUrl = `${webBaseUrl}/join/company/${encodeURIComponent(companyCode)}`;
-    const employeeDeepLink = `smart://auth/join/${encodeURIComponent(companyCode)}`;
 
     await this.auditService.log({
       tenantId: result.tenantId,
@@ -650,8 +646,6 @@ export class AuthService {
       companyCode,
       managerEmail,
       managerSetupUrl,
-      employeeJoinUrl,
-      employeeDeepLink,
     };
   }
 
