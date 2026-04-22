@@ -17,6 +17,7 @@ import {
   ListTodo,
   ScanFace,
   Settings2,
+  Trophy,
   UsersRound,
   Plus,
 } from "lucide-react";
@@ -44,7 +45,10 @@ import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { SessionLoader } from "./session-loader";
-import { buildUserDisplayName, getDisplayInitials } from "../lib/profile-display";
+import {
+  buildUserDisplayName,
+  getDisplayInitials,
+} from "../lib/profile-display";
 import { localizePersonName } from "../lib/transliteration";
 import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
 import {
@@ -60,7 +64,10 @@ import {
   type ShellHeaderCachePayload,
   type ShellNotificationsCachePayload,
 } from "../lib/shell-bootstrap";
-import { shouldHandleRouteClick, type RouteClickEvent } from "../lib/navigation";
+import {
+  shouldHandleRouteClick,
+  type RouteClickEvent,
+} from "../lib/navigation";
 import { primeWorkspaceExperience } from "../lib/workspace-warmup";
 
 type NavItem = {
@@ -134,8 +141,7 @@ function resolveDemoHeaderBrand(
   }
 
   return {
-    companyName:
-      locale === "ru" ? DEMO_COMPANY_NAME_RU : DEMO_COMPANY_NAME_EN,
+    companyName: locale === "ru" ? DEMO_COMPANY_NAME_RU : DEMO_COMPANY_NAME_EN,
     employeeCount: DEMO_HEADER_EMPLOYEE_COUNT,
   };
 }
@@ -205,7 +211,9 @@ export function AdminShell({
       return bootstrap;
     })();
   const hasValidatedServerSession = Boolean(initialSession);
-  const hasValidatedInitialShell = Boolean(initialSession && initialShellBootstrap);
+  const hasValidatedInitialShell = Boolean(
+    initialSession && initialShellBootstrap,
+  );
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -261,7 +269,8 @@ export function AdminShell({
     { value: "ru", label: "Русский", icon: "/ru.png" },
     { value: "en", label: "English", icon: "/en.png" },
   ];
-  const profileAvatarScope = session?.user.email ?? initialSession?.user.email ?? null;
+  const profileAvatarScope =
+    session?.user.email ?? initialSession?.user.email ?? null;
 
   useEffect(() => {
     if (
@@ -341,7 +350,9 @@ export function AdminShell({
       }
 
       const resolvedHomeRoute = resolveHomeRoute(currentSession.user.roleCodes);
-      const employeeOnlySession = isEmployeeOnlyRole(currentSession.user.roleCodes);
+      const employeeOnlySession = isEmployeeOnlyRole(
+        currentSession.user.roleCodes,
+      );
       const headerCacheKey = buildShellHeaderCacheKey(currentSession, mode);
       const notificationsCacheKey =
         buildShellNotificationsCacheKey(currentSession);
@@ -435,10 +446,13 @@ export function AdminShell({
       }
 
       try {
-        const snapshot = await apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
-          token: currentSession.accessToken,
-          skipClientCache: true,
-        });
+        const snapshot = await apiRequest<ShellBootstrapResponse>(
+          "/auth/bootstrap",
+          {
+            token: currentSession.accessToken,
+            skipClientCache: true,
+          },
+        );
 
         if (cancelled) {
           return;
@@ -677,10 +691,16 @@ export function AdminShell({
       redirectToLogin();
     }
 
-    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated as EventListener);
+    window.addEventListener(
+      SESSION_UPDATED_EVENT,
+      handleSessionUpdated as EventListener,
+    );
     window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
     return () => {
-      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated as EventListener);
+      window.removeEventListener(
+        SESSION_UPDATED_EVENT,
+        handleSessionUpdated as EventListener,
+      );
       window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
     };
   }, [router]);
@@ -698,6 +718,7 @@ export function AdminShell({
   const activityHref = toAdminHref("/activity");
   const scheduleHref = toAdminHref("/schedule");
   const tasksHref = toAdminHref("/tasks");
+  const leaderboardHref = toAdminHref("/leaderboard");
   const newsHref = toAdminHref("/news");
   const profileHref = toAdminHref("/profile");
   const notificationsHref = toAdminHref("/notifications");
@@ -715,6 +736,11 @@ export function AdminShell({
           href: activityHref,
           label: t("nav.activity"),
           icon: Activity,
+        },
+        {
+          href: leaderboardHref,
+          label: t("nav.leaderboard"),
+          icon: Trophy,
         },
         {
           href: newsHref,
@@ -751,6 +777,12 @@ export function AdminShell({
     }
 
     items.push({
+      href: leaderboardHref,
+      label: t("nav.leaderboard"),
+      icon: Trophy,
+    });
+
+    items.push({
       href: newsHref,
       label: locale === "ru" ? "Новости" : "News",
       icon: FileText,
@@ -783,7 +815,19 @@ export function AdminShell({
     });
 
     return items;
-  }, [activityHref, employeeOnly, homeHref, locale, managerOnly, newsHref, scheduleHref, session?.user.roleCodes, t, tasksHref]);
+  }, [
+    activityHref,
+    employeeOnly,
+    homeHref,
+    leaderboardHref,
+    locale,
+    managerOnly,
+    newsHref,
+    scheduleHref,
+    session?.user.roleCodes,
+    t,
+    tasksHref,
+  ]);
 
   useEffect(() => {
     const nextExpanded = Object.fromEntries(
@@ -810,10 +854,13 @@ export function AdminShell({
     });
   }, [navItems, pathname]);
 
-  const demoSidebarProfile = resolveDemoSidebarProfile(session?.user.email, locale);
+  const demoSidebarProfile = resolveDemoSidebarProfile(
+    session?.user.email,
+    locale,
+  );
   const demoHeaderBrand = resolveDemoHeaderBrand(session?.user.email, locale);
   const profileName = session
-    ? demoSidebarProfile?.name ??
+    ? (demoSidebarProfile?.name ??
       buildUserDisplayName(
         accountProfile?.firstName,
         accountProfile?.lastName,
@@ -821,7 +868,7 @@ export function AdminShell({
           .split("@")[0]
           .replace(/[._-]+/g, " ")
           .trim(),
-      )
+      ))
     : "";
   const displayProfileName = localizePersonName(profileName, locale);
   const profileRole = session
@@ -834,7 +881,9 @@ export function AdminShell({
   const displayEmployeeCount = demoHeaderBrand?.employeeCount ?? employeeCount;
   const companyLogoUrl = organization?.company?.logoUrl ?? null;
   const resolvedProfileAvatarUrl =
-    accountProfile?.avatarUrl || storedAvatarUrl || demoSidebarProfile?.avatarUrl;
+    accountProfile?.avatarUrl ||
+    storedAvatarUrl ||
+    demoSidebarProfile?.avatarUrl;
   const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
   const unreadNotifications = notificationItems.filter((item) => !item.isRead);
   const readNotifications = notificationItems.filter((item) => item.isRead);
@@ -974,7 +1023,10 @@ export function AdminShell({
     setRouteLoading(false);
   }
 
-  function handleRouteStart(href?: string | null, event?: RouteClickEvent | null) {
+  function handleRouteStart(
+    href?: string | null,
+    event?: RouteClickEvent | null,
+  ) {
     if (!href || isActive(pathname, href) || !shouldHandleRouteClick(event)) {
       return;
     }
@@ -1007,7 +1059,9 @@ export function AdminShell({
   async function handleMarkRead(notificationId: string) {
     if (!session) return;
 
-    const notification = notificationItems.find((item) => item.id === notificationId);
+    const notification = notificationItems.find(
+      (item) => item.id === notificationId,
+    );
     if (!notification || notification.isRead) {
       return;
     }
@@ -1128,10 +1182,7 @@ export function AdminShell({
                       ) : null}
                     </button>
                   ) : (
-                    <a
-                      className="sidebar-link-main"
-                      href={item.href}
-                    >
+                    <a className="sidebar-link-main" href={item.href}>
                       <span className="flex items-center gap-3">
                         <Icon className="size-4" />
                         {item.label}
@@ -1308,7 +1359,9 @@ export function AdminShell({
       <section
         className={`admin-content${contentHasStudioBackground ? " has-studio-background" : ""}`}
       >
-        <div className={`shell-stage${routeLoading ? " is-route-loading" : ""}`}>
+        <div
+          className={`shell-stage${routeLoading ? " is-route-loading" : ""}`}
+        >
           {showTopbar ? (
             <header className="shell-topbar">
               <div className="shell-topbar-main">
@@ -1376,9 +1429,7 @@ export function AdminShell({
                       <div className="flex items-start justify-between gap-3">
                         <div className="grid gap-1">
                           <strong className="text-sm text-[color:var(--foreground)]">
-                            {locale === "ru"
-                              ? "Уведомления"
-                              : "Notifications"}
+                            {locale === "ru" ? "Уведомления" : "Notifications"}
                           </strong>
                           <span className="text-xs text-[color:var(--muted-foreground)]">
                             {locale === "ru"
@@ -1411,18 +1462,26 @@ export function AdminShell({
                         {unreadNotifications.length ? (
                           <div className="grid gap-1">
                             {unreadNotifications.map((item, index) => (
-                              <div className="grid gap-3 px-2 py-2" key={item.id}>
+                              <div
+                                className="grid gap-3 px-2 py-2"
+                                key={item.id}
+                              >
                                 <div className="flex items-start justify-between gap-3">
                                   <Link
                                     className="grid min-w-0 flex-1 gap-1"
-                                    href={resolveNotificationHref(item.actionUrl)}
+                                    href={resolveNotificationHref(
+                                      item.actionUrl,
+                                    )}
                                     onClick={(event) => {
                                       if (!shouldHandleRouteClick(event)) {
                                         return;
                                       }
 
                                       setNotificationsOpen(false);
-                                      handleRouteStart(resolveNotificationHref(item.actionUrl), event);
+                                      handleRouteStart(
+                                        resolveNotificationHref(item.actionUrl),
+                                        event,
+                                      );
                                     }}
                                   >
                                     <strong className="text-sm leading-5 text-[color:var(--foreground)]">
@@ -1452,9 +1511,7 @@ export function AdminShell({
                                       isMarkingAllRead ||
                                       pendingReadIds.includes(item.id)
                                     }
-                                    onClick={() =>
-                                      void handleMarkRead(item.id)
-                                    }
+                                    onClick={() => void handleMarkRead(item.id)}
                                     type="button"
                                   >
                                     {pendingReadIds.includes(item.id)
@@ -1479,17 +1536,25 @@ export function AdminShell({
                             {unreadNotifications.length ? <Separator /> : null}
                             <div className="grid gap-1 opacity-45">
                               {readNotifications.map((item, index) => (
-                                <div className="grid gap-3 px-2 py-2" key={item.id}>
+                                <div
+                                  className="grid gap-3 px-2 py-2"
+                                  key={item.id}
+                                >
                                   <Link
                                     className="grid min-w-0 gap-1"
-                                    href={resolveNotificationHref(item.actionUrl)}
+                                    href={resolveNotificationHref(
+                                      item.actionUrl,
+                                    )}
                                     onClick={(event) => {
                                       if (!shouldHandleRouteClick(event)) {
                                         return;
                                       }
 
                                       setNotificationsOpen(false);
-                                      handleRouteStart(resolveNotificationHref(item.actionUrl), event);
+                                      handleRouteStart(
+                                        resolveNotificationHref(item.actionUrl),
+                                        event,
+                                      );
                                     }}
                                   >
                                     <strong className="text-sm leading-5 text-[color:var(--foreground)]">
@@ -1516,7 +1581,8 @@ export function AdminShell({
                           </>
                         ) : null}
 
-                        {!unreadNotifications.length && !readNotifications.length ? (
+                        {!unreadNotifications.length &&
+                        !readNotifications.length ? (
                           <div className="rounded-[18px] border border-dashed border-[color:var(--border)] bg-[rgba(246,248,252,0.72)] px-4 py-6 text-sm text-[color:var(--muted-foreground)]">
                             {locale === "ru"
                               ? "Уведомлений нет."
@@ -1549,7 +1615,11 @@ export function AdminShell({
 
           {children}
           {routeLoading ? (
-            <div className="shell-route-loader" aria-live="polite" role="status">
+            <div
+              className="shell-route-loader"
+              aria-live="polite"
+              role="status"
+            >
               <div className="session-loader">
                 <span aria-hidden="true" className="session-loader-glow" />
                 <span

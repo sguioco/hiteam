@@ -3,6 +3,7 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
 import {
+  AttendanceActionResponse,
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
   ApprovalInboxItem,
@@ -18,6 +19,7 @@ import {
   MyTimeOffBalancesResponse,
   AttendanceLiveSession,
   ChatThreadItem,
+  LeaderboardOverviewResponse,
   TaskItem,
   TaskTemplateItem,
   WorkGroupItem,
@@ -729,7 +731,7 @@ export async function submitAttendanceAction(
     notes?: string;
     isPaidBreak?: boolean;
   },
-) {
+): Promise<AttendanceActionResponse> {
   const deviceFingerprint = await getCurrentDeviceFingerprint();
   return authRequest(`/attendance/${action}`, {
     method: "POST",
@@ -743,6 +745,10 @@ export async function submitAttendanceAction(
       isPaidBreak: payload.isPaidBreak ?? false,
     }),
   });
+}
+
+export async function loadLeaderboardOverview(): Promise<LeaderboardOverviewResponse> {
+  return authRequest<LeaderboardOverviewResponse>("/leaderboard/overview");
 }
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {

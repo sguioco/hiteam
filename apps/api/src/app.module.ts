@@ -27,6 +27,7 @@ import { BootstrapModule } from './modules/bootstrap/bootstrap.module';
 import { DiagnosticsModule } from './modules/diagnostics/diagnostics.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
+import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
 import { TranslationModule } from './modules/translation/translation.module';
 import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
 import { HttpResponseCacheInterceptor } from './common/cache/http-response-cache.interceptor';
@@ -55,6 +56,7 @@ import { ResponseCacheService } from './common/cache/response-cache.service';
     DiagnosticsModule,
     ObservabilityModule,
     CollaborationModule,
+    LeaderboardModule,
     TranslationModule,
     AuthModule,
     OrgModule,

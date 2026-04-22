@@ -1,11 +1,10 @@
 import { AuthSession, expireSession, getSession, saveSession } from "./auth";
-import { readBrowserStorageItem, writeBrowserStorageItem } from "./browser-storage";
-import { readClientCache, writeClientCache } from "./client-cache";
 import {
-  demoApiDownload,
-  demoApiRequest,
-  shouldUseDemoApi,
-} from "./demo-api";
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
+import { readClientCache, writeClientCache } from "./client-cache";
+import { demoApiDownload, demoApiRequest, shouldUseDemoApi } from "./demo-api";
 import { isDemoAccessToken } from "./demo-mode";
 import { humanizeValidationError } from "./humanize-validation-error";
 import { getRuntimeLocale } from "./runtime-locale";
@@ -25,18 +24,31 @@ type ApiRequestOptions = RequestInit & {
 };
 
 function canUseBrowserStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return (
+    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  );
 }
 
-function readCacheNamespaceVersion(scope: "tenant" | "user", id?: string | null) {
+function readCacheNamespaceVersion(
+  scope: "tenant" | "user",
+  id?: string | null,
+) {
   if (!id || !canUseBrowserStorage()) {
     return 0;
   }
 
-  return Number(readBrowserStorageItem(`${API_CACHE_NAMESPACE_PREFIX}${scope}:${id}`) ?? "0") || 0;
+  return (
+    Number(
+      readBrowserStorageItem(`${API_CACHE_NAMESPACE_PREFIX}${scope}:${id}`) ??
+        "0",
+    ) || 0
+  );
 }
 
-function bumpCacheNamespaceVersion(scope: "tenant" | "user", id?: string | null) {
+function bumpCacheNamespaceVersion(
+  scope: "tenant" | "user",
+  id?: string | null,
+) {
   if (!id || !canUseBrowserStorage()) {
     return;
   }
@@ -74,31 +86,44 @@ function resolveCacheTtlMs(path: string, options?: ApiRequestOptions) {
   if (/\/bootstrap\/analytics(?:\?|$)/.test(path)) return 20_000;
   if (/\/bootstrap\/organization$/.test(path)) return 60_000;
   if (/\/bootstrap\/news$/.test(path)) return 20_000;
+  if (/\/bootstrap\/leaderboard$/.test(path)) return 20_000;
   if (/\/bootstrap\/biometric(?:\?|$)/.test(path)) return 20_000;
+  if (/\/leaderboard\/overview$/.test(path)) return 20_000;
   if (/\/notifications\/me\/unread-count$/.test(path)) return 15_000;
   if (/\/notifications\/me$/.test(path)) return 20_000;
   if (/\/devices\/me$/.test(path)) return 60_000;
   if (/\/push\/me$/.test(path)) return 60_000;
   if (/\/attendance\/(?:me\/status|team\/live)$/.test(path)) return 10_000;
-  if (/\/attendance\/(?:me\/history|team\/history|team\/audit)(?:\?|$)/.test(path)) return 20_000;
+  if (
+    /\/attendance\/(?:me\/history|team\/history|team\/audit)(?:\?|$)/.test(path)
+  )
+    return 20_000;
   if (/\/attendance\/team\/anomalies$/.test(path)) return 20_000;
   if (/\/collaboration\/(?:overview|analytics)$/.test(path)) return 45_000;
-  if (/\/collaboration\/announcements(?:\/(?:archive|me))?(?:\?|$)/.test(path)) return 30_000;
-  if (/\/collaboration\/announcement-templates(?:\?|$)/.test(path)) return 45_000;
+  if (/\/collaboration\/announcements(?:\/(?:archive|me))?(?:\?|$)/.test(path))
+    return 30_000;
+  if (/\/collaboration\/announcement-templates(?:\?|$)/.test(path))
+    return 45_000;
   if (/\/collaboration\/task-templates(?:\?|$)/.test(path)) return 45_000;
   if (/\/collaboration\/tasks(?:\/me)?(?:\?|$)/.test(path)) return 20_000;
-  if (/\/collaboration\/(?:inbox\/me|inbox-summary\/me)(?:\?|$)/.test(path)) return 20_000;
+  if (/\/collaboration\/(?:inbox\/me|inbox-summary\/me)(?:\?|$)/.test(path))
+    return 20_000;
   if (/\/collaboration\/chats(?:\/[^/]+)?(?:\?|$)/.test(path)) return 20_000;
-  if (/\/requests\/me(?:\/(?:balances|calendar))?(?:\?|$)/.test(path)) return 30_000;
-  if (/\/requests\/(?:inbox|policies|balances)(?:\?|$)/.test(path)) return 45_000;
-  if (/\/biometric\/(?:policy|jobs\/(?:me|team))(?:\?|$)/.test(path)) return 20_000;
+  if (/\/requests\/me(?:\/(?:balances|calendar))?(?:\?|$)/.test(path))
+    return 30_000;
+  if (/\/requests\/(?:inbox|policies|balances)(?:\?|$)/.test(path))
+    return 45_000;
+  if (/\/biometric\/(?:policy|jobs\/(?:me|team))(?:\?|$)/.test(path))
+    return 20_000;
   if (/^\/employees(?:\/.*)?$/.test(path)) return 2 * 60_000;
   if (/\/schedule\/me(?:\?|$)/.test(path)) return 30_000;
   if (/\/org\/setup$/.test(path)) return 10 * 60_000;
-  if (/\/org\/(?:companies|departments|locations|positions)(?:\?|$)/.test(path)) return 10 * 60_000;
+  if (/\/org\/(?:companies|departments|locations|positions)(?:\?|$)/.test(path))
+    return 10 * 60_000;
   if (/\/schedule\/templates$/.test(path)) return 10 * 60_000;
   if (/\/schedule\/shifts$/.test(path)) return 60_000;
-  if (/\/payroll\/(?:summary|policy|holidays)(?:\?|$)/.test(path)) return 60_000;
+  if (/\/payroll\/(?:summary|policy|holidays)(?:\?|$)/.test(path))
+    return 60_000;
   if (/\/(?:diagnostics|observability)\/summary$/.test(path)) return 15_000;
   return 60_000;
 }
@@ -107,8 +132,14 @@ function buildRequestCacheKey(path: string, options?: ApiRequestOptions) {
   const currentSession = getSession();
   const tenantId = currentSession?.user.tenantId ?? "public";
   const userId = currentSession?.user.id ?? "public";
-  const tenantVersion = readCacheNamespaceVersion("tenant", currentSession?.user.tenantId);
-  const userVersion = readCacheNamespaceVersion("user", currentSession?.user.id);
+  const tenantVersion = readCacheNamespaceVersion(
+    "tenant",
+    currentSession?.user.tenantId,
+  );
+  const userVersion = readCacheNamespaceVersion(
+    "user",
+    currentSession?.user.id,
+  );
 
   return [
     "api-cache:v2",
@@ -142,7 +173,9 @@ async function fetchAndCacheApiRequest<T>(
   path: string,
   options?: ApiRequestOptions,
 ) {
-  const existingRequest = inFlightRequestCache.get(cacheKey) as Promise<T> | undefined;
+  const existingRequest = inFlightRequestCache.get(cacheKey) as
+    | Promise<T>
+    | undefined;
   if (existingRequest) {
     return existingRequest;
   }
@@ -150,11 +183,20 @@ async function fetchAndCacheApiRequest<T>(
   const requestPromise = (async () => {
     let response = await performApiFetch(path, options);
 
-    if (!response.ok && response.status === 401 && options?.token && typeof window !== "undefined") {
+    if (
+      !response.ok &&
+      response.status === 401 &&
+      options?.token &&
+      typeof window !== "undefined"
+    ) {
       const refreshedSession = await refreshStoredSession();
 
       if (refreshedSession?.accessToken) {
-        response = await performApiFetch(path, options, refreshedSession.accessToken);
+        response = await performApiFetch(
+          path,
+          options,
+          refreshedSession.accessToken,
+        );
       }
     }
 
@@ -169,7 +211,9 @@ async function fetchAndCacheApiRequest<T>(
       }
 
       throw new Error(
-        await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }),
+        await getApiErrorMessage(response, {
+          hasAuthenticatedSession: Boolean(options?.token),
+        }),
       );
     }
 
@@ -218,7 +262,9 @@ async function performApiFetch(
   return fetch(`${API_URL}/api/v1${path}`, {
     ...options,
     headers,
-    signal: options?.signal ?? AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
+    signal:
+      options?.signal ??
+      AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
   });
 }
 
@@ -237,7 +283,9 @@ async function performApiDownloadFetch(
   return fetch(`${API_URL}/api/v1${path}`, {
     ...options,
     headers,
-    signal: options?.signal ?? AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
+    signal:
+      options?.signal ??
+      AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
   });
 }
 
@@ -282,15 +330,23 @@ function humanizeAuthErrorMessage(message: string): string {
   const locale = getRuntimeLocale();
   switch (message) {
     case "Account with this email is not registered.":
-      return locale === "ru" ? "Аккаунт с таким email не зарегистрирован." : "No account is registered with this email.";
+      return locale === "ru"
+        ? "Аккаунт с таким email не зарегистрирован."
+        : "No account is registered with this email.";
     case "Account with this phone is not registered.":
-      return locale === "ru" ? "Аккаунт с таким телефоном не зарегистрирован." : "No account is registered with this phone.";
+      return locale === "ru"
+        ? "Аккаунт с таким телефоном не зарегистрирован."
+        : "No account is registered with this phone.";
     case "Invalid password.":
       return locale === "ru" ? "Неверный пароль." : "Invalid password.";
     case "This account is inactive.":
-      return locale === "ru" ? "Аккаунт неактивен. Обратись к администратору." : "This account is inactive. Contact your administrator.";
+      return locale === "ru"
+        ? "Аккаунт неактивен. Обратись к администратору."
+        : "This account is inactive. Contact your administrator.";
     case "Account identifier is required.":
-      return locale === "ru" ? "Укажи email или телефон." : "Enter your email or phone.";
+      return locale === "ru"
+        ? "Укажи email или телефон."
+        : "Enter your email or phone.";
     case "Multiple workspaces found for this account. Contact support or use a direct invite link.":
       return locale === "ru"
         ? "Для этого аккаунта найдено несколько рабочих пространств. Открой прямую ссылку-приглашение или обратись к администратору."
@@ -349,11 +405,16 @@ export async function apiRequest<T>(
 
   if (cacheableGet) {
     const cacheKey = buildRequestCacheKey(path, options);
-    const cached = readClientCache<T>(cacheKey, resolveCacheTtlMs(path, options));
+    const cached = readClientCache<T>(
+      cacheKey,
+      resolveCacheTtlMs(path, options),
+    );
 
     if (cached) {
       if (cached.isStale) {
-        void fetchAndCacheApiRequest<T>(cacheKey, path, options).catch(() => undefined);
+        void fetchAndCacheApiRequest<T>(cacheKey, path, options).catch(
+          () => undefined,
+        );
       }
 
       return cached.value;
@@ -364,11 +425,20 @@ export async function apiRequest<T>(
 
   let response = await performApiFetch(path, options);
 
-  if (!response.ok && response.status === 401 && options?.token && typeof window !== "undefined") {
+  if (
+    !response.ok &&
+    response.status === 401 &&
+    options?.token &&
+    typeof window !== "undefined"
+  ) {
     const refreshedSession = await refreshStoredSession();
 
     if (refreshedSession?.accessToken) {
-      response = await performApiFetch(path, options, refreshedSession.accessToken);
+      response = await performApiFetch(
+        path,
+        options,
+        refreshedSession.accessToken,
+      );
     }
   }
 
@@ -382,7 +452,11 @@ export async function apiRequest<T>(
       expireSession();
     }
 
-    throw new Error(await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }));
+    throw new Error(
+      await getApiErrorMessage(response, {
+        hasAuthenticatedSession: Boolean(options?.token),
+      }),
+    );
   }
 
   if (response.status === 204) {
@@ -416,11 +490,20 @@ export async function apiDownload(
 
   let response = await performApiDownloadFetch(path, options);
 
-  if (!response.ok && response.status === 401 && options?.token && typeof window !== "undefined") {
+  if (
+    !response.ok &&
+    response.status === 401 &&
+    options?.token &&
+    typeof window !== "undefined"
+  ) {
     const refreshedSession = await refreshStoredSession();
 
     if (refreshedSession?.accessToken) {
-      response = await performApiDownloadFetch(path, options, refreshedSession.accessToken);
+      response = await performApiDownloadFetch(
+        path,
+        options,
+        refreshedSession.accessToken,
+      );
     }
   }
 
@@ -433,7 +516,11 @@ export async function apiDownload(
     ) {
       expireSession();
     }
-    throw new Error(await getApiErrorMessage(response, { hasAuthenticatedSession: Boolean(options?.token) }));
+    throw new Error(
+      await getApiErrorMessage(response, {
+        hasAuthenticatedSession: Boolean(options?.token),
+      }),
+    );
   }
 
   const contentDisposition = response.headers.get("content-disposition");

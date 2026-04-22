@@ -6,6 +6,7 @@ import { AttendanceService } from '../attendance/attendance.service';
 import { BiometricService } from '../biometric/biometric.service';
 import { CollaborationService } from '../collaboration/collaboration.service';
 import { EmployeesService } from '../employees/employees.service';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { OrgService } from '../org/org.service';
 import { RequestsService } from '../requests/requests.service';
 import { ScheduleService } from '../schedule/schedule.service';
@@ -210,6 +211,7 @@ export class BootstrapService {
     private readonly biometricService: BiometricService,
     private readonly collaborationService: CollaborationService,
     private readonly employeesService: EmployeesService,
+    private readonly leaderboardService: LeaderboardService,
     private readonly orgService: OrgService,
     private readonly requestsService: RequestsService,
     private readonly scheduleService: ScheduleService,
@@ -611,6 +613,15 @@ export class BootstrapService {
         employees,
         groups,
       },
+    };
+  }
+
+  async leaderboard(user: JwtUser) {
+    const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
+
+    return {
+      mode,
+      initialData: await this.leaderboardService.getOverview(user.sub),
     };
   }
 

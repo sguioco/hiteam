@@ -7,7 +7,10 @@ import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
-import type { AttendanceStatusResponse, BiometricPolicyResponse } from "@smart/types";
+import type {
+  AttendanceStatusResponse,
+  BiometricPolicyResponse,
+} from "@smart/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
@@ -26,8 +29,14 @@ import {
   isPreciseLocationError,
   type AttendanceLocationSnapshot,
 } from "../../lib/location";
-import { peekScreenCache, readScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import {
+  clearScreenCache,
+  peekScreenCache,
+  readScreenCache,
+  writeScreenCache,
+} from "../../lib/screen-cache";
+import {
+  LEADERBOARD_CELEBRATION_CACHE_KEY,
   TODAY_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_TTL_MS,
   warmTodayScreenCache,
@@ -662,6 +671,7 @@ export function AttendanceCaptureScreen({
       void syncTodayScreenCache(optimisticStatus);
     }
 
+    void clearScreenCache(LEADERBOARD_CELEBRATION_CACHE_KEY);
     router.replace("/today" as never);
 
     void submitAttendanceAction(action, {
@@ -673,14 +683,24 @@ export function AttendanceCaptureScreen({
     })
       .then((attendanceResult) => {
         const reconciledStatus = optimisticStatus
-          ? buildOptimisticAttendanceStatus(optimisticStatus, attendanceResult as {
-              sessionId: string;
-              recordedAt: string;
-            })
+          ? buildOptimisticAttendanceStatus(
+              optimisticStatus,
+              attendanceResult as {
+                sessionId: string;
+                recordedAt: string;
+              },
+            )
           : null;
 
         if (reconciledStatus) {
           void syncTodayScreenCache(reconciledStatus);
+        }
+
+        if (attendanceResult.leaderboardCelebration) {
+          void writeScreenCache(
+            LEADERBOARD_CELEBRATION_CACHE_KEY,
+            attendanceResult.leaderboardCelebration,
+          );
         }
 
         return warmTodayScreenCache(undefined, language);
@@ -726,7 +746,9 @@ export function AttendanceCaptureScreen({
     };
   }
 
-  async function syncTodayScreenCache(nextAttendanceStatus: AttendanceStatusResponse) {
+  async function syncTodayScreenCache(
+    nextAttendanceStatus: AttendanceStatusResponse,
+  ) {
     const currentSnapshot =
       peekScreenCache<TodayScreenCacheValue>(
         TODAY_SCREEN_CACHE_KEY,

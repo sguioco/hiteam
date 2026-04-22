@@ -1,9 +1,14 @@
-import { Image, type ImageSourcePropType } from 'react-native';
-import type { AnnouncementItem, AttendanceStatusResponse, TaskItem } from '@smart/types';
-import { hasManagerAccess } from './auth-flow';
-import type { AppLanguage } from './i18n';
+import { Image, type ImageSourcePropType } from "react-native";
+import type {
+  AnnouncementItem,
+  AttendanceStatusResponse,
+  TaskItem,
+} from "@smart/types";
+import { hasManagerAccess } from "./auth-flow";
+import type { AppLanguage } from "./i18n";
 import {
   loadAttendanceStatus,
+  loadLeaderboardOverview,
   loadMyChats,
   loadManagerAnnouncements,
   loadManagerEmployees,
@@ -16,13 +21,16 @@ import {
   loadMyShifts,
   loadMyTasks,
   loadMyTimeOffBalances,
-} from './api';
-import { resolveEmployeeAvatarSource } from './employee-avatar';
-import { normalizeDemoOwnerProfile, resolveDemoOwnerTodayScreenData } from './demo-owner';
-import { readScreenCache, writeScreenCache } from './screen-cache';
-import { formatDateKeyInTimeZone } from './timezone';
-import { primeLiveTextMap } from './use-live-text-map';
-import { primeTaskTranslations } from './use-translated-task-copy';
+} from "./api";
+import { resolveEmployeeAvatarSource } from "./employee-avatar";
+import {
+  normalizeDemoOwnerProfile,
+  resolveDemoOwnerTodayScreenData,
+} from "./demo-owner";
+import { readScreenCache, writeScreenCache } from "./screen-cache";
+import { formatDateKeyInTimeZone } from "./timezone";
+import { primeLiveTextMap } from "./use-live-text-map";
+import { primeTaskTranslations } from "./use-translated-task-copy";
 
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>;
@@ -39,15 +47,19 @@ export type TodayScreenCacheValue = {
   tasks: TodayTasks;
 };
 
-export const TODAY_SCREEN_CACHE_KEY = 'today-screen:v1';
+export const TODAY_SCREEN_CACHE_KEY = "today-screen:v1";
 export const TODAY_SCREEN_CACHE_TTL_MS = 5 * 60_000;
-export const PROFILE_SCREEN_CACHE_KEY = 'profile-screen';
+export const PROFILE_SCREEN_CACHE_KEY = "profile-screen";
 export const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
-export const MANAGER_SCREEN_CACHE_KEY = 'manager-screen-v4';
+export const MANAGER_SCREEN_CACHE_KEY = "manager-screen-v4";
 export const MANAGER_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+export const LEADERBOARD_SCREEN_CACHE_KEY = "leaderboard-screen:v1";
+export const LEADERBOARD_SCREEN_CACHE_TTL_MS = 60_000;
+export const LEADERBOARD_CELEBRATION_CACHE_KEY = "leaderboard-celebration:v1";
+export const LEADERBOARD_CELEBRATION_CACHE_TTL_MS = 10 * 60_000;
 export const NEWS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const REQUESTS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
-export const CHATS_SCREEN_CACHE_KEY = 'chats-screen:v1';
+export const CHATS_SCREEN_CACHE_KEY = "chats-screen:v1";
 export const CHATS_SCREEN_CACHE_TTL_MS = 60_000;
 export const WORKSPACE_REFRESH_INTERVAL_MS = 10_000;
 
@@ -81,7 +93,7 @@ export function getCalendarScreenCacheKey(date = new Date()) {
 }
 
 export function getNewsScreenCacheKey(isManager: boolean) {
-  return `news-screen:${isManager ? 'manager' : 'employee'}`;
+  return `news-screen:${isManager ? "manager" : "employee"}`;
 }
 
 export function getRequestsScreenCacheKey(date = new Date()) {
@@ -113,28 +125,36 @@ function buildRequestsDateRange(date = new Date()) {
   return {
     rangeStart,
     rangeEnd,
-    dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, '0')}-${`${rangeStart.getDate()}`.padStart(2, '0')}`,
-    dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, '0')}-${`${rangeEnd.getDate()}`.padStart(2, '0')}`,
+    dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
+    dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
   };
 }
 
-function getRemoteImageUri(source: string | ImageSourcePropType | null | undefined) {
+function getRemoteImageUri(
+  source: string | ImageSourcePropType | null | undefined,
+) {
   if (!source) {
     return null;
   }
 
-  if (typeof source === 'string') {
+  if (typeof source === "string") {
     return source.trim() || null;
   }
 
-  if (typeof source === 'object' && 'uri' in source && typeof source.uri === 'string') {
+  if (
+    typeof source === "object" &&
+    "uri" in source &&
+    typeof source.uri === "string"
+  ) {
     return source.uri.trim() || null;
   }
 
   return null;
 }
 
-async function prefetchImageSources(sources: Array<string | ImageSourcePropType | null | undefined>) {
+async function prefetchImageSources(
+  sources: Array<string | ImageSourcePropType | null | undefined>,
+) {
   const uniqueUris = Array.from(
     new Set(
       sources
@@ -165,7 +185,9 @@ function buildProfileAvatarSource(profile: WorkspaceProfile) {
 function collectTaskPhotoUris(tasks: TaskItem[]) {
   return tasks.flatMap((task) =>
     task.photoProofs
-      .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
+      .filter(
+        (proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url,
+      )
       .map((proof) => proof.url),
   );
 }
@@ -185,11 +207,16 @@ async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
   return nextProfile;
 }
 
-export async function warmTodayScreenCache(profile?: WorkspaceProfile | null, language?: AppLanguage) {
+export async function warmTodayScreenCache(
+  profile?: WorkspaceProfile | null,
+  language?: AppLanguage,
+) {
   const nextProfile = normalizeDemoOwnerProfile(
     profile ?? (await loadMyProfile()),
   ) as WorkspaceProfile;
-  const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
+  const { previousDateKey, nextDateKey } = buildTodayDateRange(
+    nextProfile.primaryLocation?.timezone,
+  );
   const [attendanceStatus, shifts, tasks] = await Promise.all([
     loadAttendanceStatus(),
     loadMyShifts(),
@@ -211,18 +238,24 @@ export async function warmTodayScreenCache(profile?: WorkspaceProfile | null, la
   }
 
   await writeScreenCache(TODAY_SCREEN_CACHE_KEY, payload);
-  await prefetchImageSources([buildProfileAvatarSource(payload.profile!), ...collectTaskPhotoUris(payload.tasks)]);
+  await prefetchImageSources([
+    buildProfileAvatarSource(payload.profile!),
+    ...collectTaskPhotoUris(payload.tasks),
+  ]);
 
   return payload;
 }
 
-async function warmCalendarScreenCache(date = new Date(), language?: AppLanguage) {
+async function warmCalendarScreenCache(
+  date = new Date(),
+  language?: AppLanguage,
+) {
   const { rangeStart, rangeEnd } = buildCalendarDateRange(date);
   const [shifts, tasks] = await Promise.all([
     loadMyShifts(),
     loadMyTasks({
-      dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, '0')}-${`${rangeStart.getDate()}`.padStart(2, '0')}`,
-      dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, '0')}-${`${rangeEnd.getDate()}`.padStart(2, '0')}`,
+      dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
+      dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
     }),
   ]);
 
@@ -243,7 +276,9 @@ async function warmCalendarScreenCache(date = new Date(), language?: AppLanguage
 }
 
 async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {
-  const items = isManager ? await loadManagerAnnouncements() : await loadMyAnnouncements();
+  const items = isManager
+    ? await loadManagerAnnouncements()
+    : await loadMyAnnouncements();
 
   if (language) {
     await primeLiveTextMap(collectAnnouncementTexts(items), language);
@@ -255,7 +290,16 @@ async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {
   return items;
 }
 
-export async function warmRequestsScreenCache(date = new Date(), language?: AppLanguage) {
+export async function warmLeaderboardScreenCache() {
+  const overview = await loadLeaderboardOverview();
+  await writeScreenCache(LEADERBOARD_SCREEN_CACHE_KEY, overview);
+  return overview;
+}
+
+export async function warmRequestsScreenCache(
+  date = new Date(),
+  language?: AppLanguage,
+) {
   const { dateFrom, dateTo } = buildRequestsDateRange(date);
   const [balances, items, calendar, tasks] = await Promise.all([
     loadMyTimeOffBalances(),
@@ -290,9 +334,14 @@ export async function warmChatsScreenCache() {
   return threads;
 }
 
-async function warmManagerScreenCache(profile?: WorkspaceProfile | null, language?: AppLanguage) {
+async function warmManagerScreenCache(
+  profile?: WorkspaceProfile | null,
+  language?: AppLanguage,
+) {
   const nextProfile = profile ?? (await loadMyProfile());
-  const { previousDateKey, nextDateKey } = buildTodayDateRange(nextProfile.primaryLocation?.timezone);
+  const { previousDateKey, nextDateKey } = buildTodayDateRange(
+    nextProfile.primaryLocation?.timezone,
+  );
   const [employees, liveSessions, tasks] = await Promise.all([
     loadManagerEmployees(),
     loadManagerLiveSessions(),
@@ -329,6 +378,7 @@ function warmWorkspaceBackgroundCaches(
   workspaceBackgroundWarmupPromise = (async () => {
     await Promise.allSettled([
       warmCalendarScreenCache(new Date(), language),
+      warmLeaderboardScreenCache(),
       warmNewsScreenCache(isManager, language),
       warmRequestsScreenCache(new Date(), language),
     ]);
@@ -343,7 +393,10 @@ export async function warmAnnouncementImages(items: AnnouncementItem[]) {
   await prefetchImageSources(items.map((item) => item.imageUrl));
 }
 
-export async function hydrateWorkspaceCaches(roleCodes: string[], language?: AppLanguage) {
+export async function hydrateWorkspaceCaches(
+  roleCodes: string[],
+  language?: AppLanguage,
+) {
   const isManager = hasManagerAccess(roleCodes);
 
   const results = await Promise.allSettled([
@@ -364,13 +417,13 @@ export async function hydrateWorkspaceCaches(roleCodes: string[], language?: App
 
   const taskBuckets = results.flatMap((result) => {
     const tasks =
-      result.status === 'fulfilled' &&
+      result.status === "fulfilled" &&
       result.value &&
-      typeof result.value === 'object' &&
-      'value' in result.value &&
+      typeof result.value === "object" &&
+      "value" in result.value &&
       result.value.value &&
-      typeof result.value.value === 'object' &&
-      'tasks' in result.value.value &&
+      typeof result.value.value === "object" &&
+      "tasks" in result.value.value &&
       Array.isArray(result.value.value.tasks)
         ? result.value.value.tasks
         : [];
@@ -378,7 +431,7 @@ export async function hydrateWorkspaceCaches(roleCodes: string[], language?: App
     return tasks;
   });
   const newsItems =
-    results[3]?.status === 'fulfilled' && results[3].value
+    results[3]?.status === "fulfilled" && results[3].value
       ? results[3].value.value
       : [];
 
@@ -392,12 +445,18 @@ export async function hydrateWorkspaceCaches(roleCodes: string[], language?: App
   ]);
 }
 
-export async function warmWorkspaceCaches(roleCodes: string[], options?: { force?: boolean; language?: AppLanguage }) {
+export async function warmWorkspaceCaches(
+  roleCodes: string[],
+  options?: { force?: boolean; language?: AppLanguage },
+) {
   if (workspaceWarmupPromise) {
     return workspaceWarmupPromise;
   }
 
-  if (!options?.force && Date.now() - lastWorkspaceWarmupAt < WORKSPACE_WARMUP_MIN_INTERVAL_MS) {
+  if (
+    !options?.force &&
+    Date.now() - lastWorkspaceWarmupAt < WORKSPACE_WARMUP_MIN_INTERVAL_MS
+  ) {
     return;
   }
 
@@ -408,7 +467,9 @@ export async function warmWorkspaceCaches(roleCodes: string[], options?: { force
     await Promise.allSettled([
       warmTodayScreenCache(profile, options?.language),
       warmChatsScreenCache(),
-      isManager ? warmManagerScreenCache(profile, options?.language) : Promise.resolve(),
+      isManager
+        ? warmManagerScreenCache(profile, options?.language)
+        : Promise.resolve(),
     ]);
 
     lastWorkspaceWarmupAt = Date.now();

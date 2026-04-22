@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from '../../components/ui/text';
+import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "../../components/ui/text";
 import { useFocusEffect } from "@react-navigation/native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,15 +22,27 @@ import {
   loadManagerTasks,
   loadMyProfile,
 } from "../../lib/api";
-import { getDateLocale, getDirectionalIconStyle, useI18n } from "../../lib/i18n";
-import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
+import {
+  getDateLocale,
+  getDirectionalIconStyle,
+  useI18n,
+} from "../../lib/i18n";
+import {
+  peekScreenCache,
+  readScreenCache,
+  subscribeScreenCache,
+  writeScreenCache,
+} from "../../lib/screen-cache";
 import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
 import { formatDateKeyInTimeZone } from "../../lib/timezone";
 import {
   primeTaskTranslations,
   useTranslatedTaskCopy,
 } from "../../lib/use-translated-task-copy";
-import { MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
+import {
+  MANAGER_SCREEN_CACHE_KEY,
+  MANAGER_SCREEN_CACHE_TTL_MS,
+} from "../../lib/workspace-cache";
 
 type ManagerEmployee = Awaited<
   ReturnType<typeof loadManagerEmployees>
@@ -103,7 +115,11 @@ function normalizeDemoOwnerProfile(
     return profile ?? null;
   }
 
-  return normalizePersonName(profile, DEMO_OWNER_DISPLAY_NAME.firstName, DEMO_OWNER_DISPLAY_NAME.lastName);
+  return normalizePersonName(
+    profile,
+    DEMO_OWNER_DISPLAY_NAME.firstName,
+    DEMO_OWNER_DISPLAY_NAME.lastName,
+  );
 }
 
 function normalizeDemoOwnerEmployee(
@@ -112,8 +128,7 @@ function normalizeDemoOwnerEmployee(
 ) {
   if (
     !ownerProfile ||
-    employee.id !== ownerProfile.id &&
-      !isDemoOwnerEmail(employee.email)
+    (employee.id !== ownerProfile.id && !isDemoOwnerEmail(employee.email))
   ) {
     return employee;
   }
@@ -341,7 +356,8 @@ function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
     )
     .sort(
       (left, right) =>
-        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+        new Date(left.createdAt).getTime() -
+        new Date(right.createdAt).getTime(),
     )
     .map((proof, index) => ({
       id: proof.id,
@@ -355,7 +371,10 @@ function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
     }));
 }
 
-function buildEmployeeName(firstName?: string | null, lastName?: string | null) {
+function buildEmployeeName(
+  firstName?: string | null,
+  lastName?: string | null,
+) {
   return [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ").trim();
 }
 
@@ -441,14 +460,7 @@ function isoAt(daysOffset: number, hour: number, minute: number) {
 
 function buildDemoEmployees(): ManagerEmployee[] {
   const source = [
-    [
-      "Alexander",
-      "Prokhorov",
-      "Operations",
-      "Store Lead",
-      "Downtown",
-      "male",
-    ],
+    ["Alexander", "Prokhorov", "Operations", "Store Lead", "Downtown", "male"],
     ["Elena", "Morozova", "Operations", "Store Lead", "Downtown", "female"],
     ["Alina", "Kuznetsova", "Support", "Customer Care", "Mall West", "female"],
     [
@@ -479,8 +491,9 @@ function buildDemoEmployees(): ManagerEmployee[] {
           : fullName === "Denis Fedorov"
             ? DEMO_REMOTE_AVATARS.denis
             : null;
-      const avatar =
-        remoteAvatarUrl ? { uri: remoteAvatarUrl } : gender === "female"
+      const avatar = remoteAvatarUrl
+        ? { uri: remoteAvatarUrl }
+        : gender === "female"
           ? MOCK_AVATARS.female[fIdx++ % MOCK_AVATARS.female.length]
           : MOCK_AVATARS.male[mIdx++ % MOCK_AVATARS.male.length];
 
@@ -790,6 +803,8 @@ export default function ManagerScreen({
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
+  const leaderboardActionTitle =
+    language === "ru" ? "Leaderboard" : "Leaderboard";
   const newsActionTitle = language === "ru" ? "Новости" : "News";
   const newsActionHint =
     language === "ru"
@@ -811,9 +826,9 @@ export default function ManagerScreen({
       ),
     [initialSnapshot],
   );
-  const [profile, setProfile] = useState<
-    Awaited<ReturnType<typeof loadMyProfile>> | null
-  >(initialResolved.profile);
+  const [profile, setProfile] = useState<Awaited<
+    ReturnType<typeof loadMyProfile>
+  > | null>(initialResolved.profile);
   const [employees, setEmployees] = useState<ManagerEmployee[]>(
     initialResolved.employees,
   );
@@ -893,7 +908,8 @@ export default function ManagerScreen({
     }
 
     const now = new Date();
-    const cachedTimeZone = cached?.value.profile?.primaryLocation?.timezone ?? null;
+    const cachedTimeZone =
+      cached?.value.profile?.primaryLocation?.timezone ?? null;
     const initialPreviousDateKey = formatDateKeyInTimeZone(
       addDays(now, -1),
       cachedTimeZone,
@@ -911,21 +927,24 @@ export default function ManagerScreen({
       ]);
 
     const nextProfile =
-      profileResult.status === "fulfilled" ? profileResult.value : cached?.value.profile ?? null;
+      profileResult.status === "fulfilled"
+        ? profileResult.value
+        : (cached?.value.profile ?? null);
     const nextEmployeesDefault =
       employeesResult.status === "fulfilled"
         ? Array.isArray(employeesResult.value)
           ? employeesResult.value
           : []
-        : cached?.value.employees ?? [];
+        : (cached?.value.employees ?? []);
     const nextLiveSessionsDefault =
       liveSessionsResult.status === "fulfilled"
         ? Array.isArray(liveSessionsResult.value)
           ? liveSessionsResult.value
           : []
-        : cached?.value.liveSessions ?? [];
+        : (cached?.value.liveSessions ?? []);
 
-    const resolvedTimeZone = nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
+    const resolvedTimeZone =
+      nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
     const resolvedPreviousDateKey = formatDateKeyInTimeZone(
       addDays(now, -1),
       resolvedTimeZone,
@@ -1096,7 +1115,14 @@ export default function ManagerScreen({
           locale,
         );
       });
-  }, [businessTimeZone, employees, liveSessionByEmployeeId, liveSessions, locale, visibleTasks]);
+  }, [
+    businessTimeZone,
+    employees,
+    liveSessionByEmployeeId,
+    liveSessions,
+    locale,
+    visibleTasks,
+  ]);
 
   const activePhotoTask = useMemo(
     () => visibleTasks.find((task) => task.id === activePhotoTaskId) ?? null,
@@ -1147,13 +1173,19 @@ export default function ManagerScreen({
   }, [employeeCards]);
 
   function buildManagerCreateHref(
-    path: "/manager/create-task" | "/manager/create-meeting" | "/manager/create-news",
+    path:
+      | "/manager/create-task"
+      | "/manager/create-meeting"
+      | "/manager/create-news",
   ) {
     return path as never;
   }
 
   function openCreateScreen(
-    path: "/manager/create-task" | "/manager/create-meeting" | "/manager/create-news",
+    path:
+      | "/manager/create-task"
+      | "/manager/create-meeting"
+      | "/manager/create-news",
   ) {
     setActionMenuOpen(false);
     requestAnimationFrame(() => {
@@ -1188,97 +1220,75 @@ export default function ManagerScreen({
     setActivePhotoTaskId(taskId);
   }
 
-function getAttendanceDisplay(
-  session: AttendanceLiveSession | null,
-  locale: string,
-  t: ReturnType<typeof useI18n>["t"],
-): AttendanceDisplay {
-  if (!session) {
-    return {
-      timeLabel: "",
-      statusLabel: t("manager.noCheckInYet"),
-      statusStyle: "notCheckedIn",
-    };
-  }
+  function getAttendanceDisplay(
+    session: AttendanceLiveSession | null,
+    locale: string,
+    t: ReturnType<typeof useI18n>["t"],
+  ): AttendanceDisplay {
+    if (!session) {
+      return {
+        timeLabel: "",
+        statusLabel: t("manager.noCheckInYet"),
+        statusStyle: "notCheckedIn",
+      };
+    }
 
-  const checkInTime = new Date(session.startedAt).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+    const checkInTime = new Date(session.startedAt).toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
-  if (session.lateMinutes > 0) {
+    if (session.lateMinutes > 0) {
+      return {
+        timeLabel: checkInTime,
+        statusLabel: t("manager.lateByDuration", {
+          duration: formatAttendanceOffset(session.lateMinutes),
+        }),
+        statusStyle: "late",
+      };
+    }
+
+    if (session.lateMinutes < 0) {
+      return {
+        timeLabel: checkInTime,
+        statusLabel: t("manager.earlierBy", {
+          duration: formatAttendanceOffset(session.lateMinutes),
+        }),
+        statusStyle: "early",
+      };
+    }
+
     return {
       timeLabel: checkInTime,
-      statusLabel: t("manager.lateByDuration", {
-        duration: formatAttendanceOffset(session.lateMinutes),
-      }),
-      statusStyle: "late",
+      statusLabel: t("manager.onTime"),
+      statusStyle: "onTime",
     };
   }
-
-  if (session.lateMinutes < 0) {
-    return {
-      timeLabel: checkInTime,
-      statusLabel: t("manager.earlierBy", {
-        duration: formatAttendanceOffset(session.lateMinutes),
-      }),
-      statusStyle: "early",
-    };
-  }
-
-  return {
-    timeLabel: checkInTime,
-    statusLabel: t("manager.onTime"),
-    statusStyle: "onTime",
-  };
-}
 
   function renderTaskLeading(task: TaskItem, photoCount: number) {
     const isDone = task.status === "DONE";
 
     if (task.requiresPhoto && photoCount > 0) {
-      return (
-        <Ionicons
-          color="#6d73ff"
-          name="images-outline"
-          size={20}
-        />
-      );
+      return <Ionicons color="#6d73ff" name="images-outline" size={20} />;
     }
 
     if (task.requiresPhoto) {
-      return (
-        <Ionicons
-          color="#22c55e"
-          name="camera-outline"
-          size={20}
-        />
-      );
+      return <Ionicons color="#22c55e" name="camera-outline" size={20} />;
     }
 
     if (isDone) {
-      return (
-        <Ionicons
-          color="#22c55e"
-          name="checkmark-circle"
-          size={20}
-        />
-      );
+      return <Ionicons color="#22c55e" name="checkmark-circle" size={20} />;
     }
 
-    return (
-      <Ionicons
-        color="#c4cfdf"
-        name="ellipse-outline"
-        size={20}
-      />
-    );
+    return <Ionicons color="#c4cfdf" name="ellipse-outline" size={20} />;
   }
 
   return (
     <>
       <View className="flex-1 bg-transparent">
-        {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
+        {active ? (
+          <StatusBar backgroundColor="transparent" style="dark" translucent />
+        ) : null}
         <ScrollView
           className="flex-1 bg-transparent"
           contentContainerStyle={{
@@ -1303,7 +1313,12 @@ function getAttendanceDisplay(
                     haptic="selection"
                     onPress={() => router.back()}
                   >
-                    <Ionicons color="#1f2937" name="arrow-back" size={20} style={directionalIconStyle} />
+                    <Ionicons
+                      color="#1f2937"
+                      name="arrow-back"
+                      size={20}
+                      style={directionalIconStyle}
+                    />
                   </PressableScale>
                 ) : null}
                 <View>
@@ -1324,9 +1339,23 @@ function getAttendanceDisplay(
                   <PressableScale
                     className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
                     haptic="selection"
+                    onPress={() => router.push("/manager/leaderboard" as never)}
+                  >
+                    <Ionicons color="#1f2937" name="trophy-outline" size={16} />
+                    <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
+                      {leaderboardActionTitle}
+                    </Text>
+                  </PressableScale>
+                  <PressableScale
+                    className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
+                    haptic="selection"
                     onPress={() => router.push("/?tab=news" as never)}
                   >
-                    <Ionicons color="#1f2937" name="newspaper-outline" size={16} />
+                    <Ionicons
+                      color="#1f2937"
+                      name="newspaper-outline"
+                      size={16}
+                    />
                     <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
                       {newsActionTitle}
                     </Text>
@@ -1340,7 +1369,6 @@ function getAttendanceDisplay(
                     variant="secondary"
                   />
                 </View>
-
               </View>
             </Animated.View>
 
@@ -1353,7 +1381,11 @@ function getAttendanceDisplay(
             ) : employeeCards.length ? (
               <View className="overflow-hidden rounded-[30px] border border-white/30 bg-white/70 shadow-sm shadow-[#1f2687]/10">
                 {employeeCards.map((item, index) => {
-                  const tone = getAttendanceDisplay(item.liveSession, locale, t);
+                  const tone = getAttendanceDisplay(
+                    item.liveSession,
+                    locale,
+                    t,
+                  );
                   const isExpanded = expandedEmployeeId === item.employee.id;
                   const showAvatar =
                     item.employee.avatar &&
@@ -1414,11 +1446,12 @@ function getAttendanceDisplay(
                               const isEarlyOrOnTime =
                                 tone.statusStyle === "early" ||
                                 tone.statusStyle === "onTime";
-                              const timeColorClass = tone.statusStyle === "late"
-                                ? "text-[#b91c1c]"
-                                : tone.statusStyle === "notCheckedIn"
-                                  ? "text-[#6b7280]"
-                                  : "text-[#0f766e]";
+                              const timeColorClass =
+                                tone.statusStyle === "late"
+                                  ? "text-[#b91c1c]"
+                                  : tone.statusStyle === "notCheckedIn"
+                                    ? "text-[#6b7280]"
+                                    : "text-[#0f766e]";
 
                               return (
                                 <>
@@ -1431,7 +1464,8 @@ function getAttendanceDisplay(
                                   ) : null}
                                   <Text
                                     className={`text-[12px] font-semibold ${
-                                      isEarlyOrOnTime || tone.statusStyle === "late"
+                                      isEarlyOrOnTime ||
+                                      tone.statusStyle === "late"
                                         ? tone.statusStyle === "late"
                                           ? "text-[#b91c1c]"
                                           : "text-[#0f766e]"
@@ -1498,7 +1532,8 @@ function getAttendanceDisplay(
                                           ) : (
                                             <View className="mt-1 h-4 w-[64%] rounded-full bg-[#e2eaf6]" />
                                           )}
-                                          {task.requiresPhoto && photoCount > 0 ? (
+                                          {task.requiresPhoto &&
+                                          photoCount > 0 ? (
                                             <Text className="mt-1 text-[13px] leading-5 text-[#7b8798]">
                                               {t("today.photosSaved", {
                                                 count: photoCount,
@@ -1623,11 +1658,7 @@ function getAttendanceDisplay(
                 </View>
               ) : (
                 <View className="items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10">
-                  <Ionicons
-                    color="#6d73ff"
-                    name="images-outline"
-                    size={24}
-                  />
+                  <Ionicons color="#6d73ff" name="images-outline" size={24} />
                   <Text className="mt-4 text-center font-body text-sm leading-6 text-muted-foreground">
                     {t("manager.noTaskPhotos")}
                   </Text>
@@ -1738,4 +1769,3 @@ function getAttendanceDisplay(
     </>
   );
 }
-

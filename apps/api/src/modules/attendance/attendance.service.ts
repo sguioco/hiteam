@@ -22,6 +22,7 @@ import { CreateAttendanceCorrectionRequestDto } from './dto/create-attendance-co
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ScheduleService } from '../schedule/schedule.service';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { BiometricService } from '../biometric/biometric.service';
 
@@ -33,6 +34,7 @@ export class AttendanceService {
     private readonly biometricService: BiometricService,
     private readonly auditService: AuditService,
     private readonly scheduleService: ScheduleService,
+    private readonly leaderboardService: LeaderboardService,
     private readonly attendanceRealtimeService: AttendanceRealtimeService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -234,6 +236,10 @@ export class AttendanceService {
     });
 
     await this.publishTeamSnapshot(employee.tenantId);
+    const leaderboardCelebration =
+      lateMinutes <= shift.template.gracePeriodMinutes
+        ? await this.leaderboardService.getCheckInCelebration(userId).catch(() => null)
+        : null;
 
     return {
       eventId: event.id,
@@ -242,6 +248,7 @@ export class AttendanceService {
       recordedAt: event.serverRecordedAt.toISOString(),
       distanceMeters: Math.round(context.distanceMeters),
       lateMinutes,
+      leaderboardCelebration,
     };
   }
 

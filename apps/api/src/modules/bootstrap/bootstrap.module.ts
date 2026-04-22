@@ -4,6 +4,7 @@ import { AttendanceModule } from '../attendance/attendance.module';
 import { BiometricModule } from '../biometric/biometric.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { EmployeesModule } from '../employees/employees.module';
+import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { OrgModule } from '../org/org.module';
 import { RequestsModule } from '../requests/requests.module';
 import { ScheduleModule } from '../schedule/schedule.module';
@@ -17,6 +18,7 @@ import { BootstrapService } from './bootstrap.service';
     BiometricModule,
     CollaborationModule,
     EmployeesModule,
+    LeaderboardModule,
     OrgModule,
     RequestsModule,
     ScheduleModule,

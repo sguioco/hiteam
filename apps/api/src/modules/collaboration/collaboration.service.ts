@@ -3069,6 +3069,44 @@ export class CollaborationService {
         },
       },
     });
+    return this.listEmployeeTasksForResolvedEmployee(employee, query);
+  }
+
+  async listEmployeeTasksForRange(
+    employeeId: string,
+    query?: { date?: string; dateFrom?: string; dateTo?: string },
+  ) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { id: employeeId },
+      include: {
+        department: true,
+        primaryLocation: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+
+    return this.listEmployeeTasksForResolvedEmployee(employee, query);
+  }
+
+  private async listEmployeeTasksForResolvedEmployee(
+    employee: {
+      id: string;
+      tenantId: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      departmentId: string;
+      primaryLocationId: string;
+      department: { id: string; name: string };
+      primaryLocation: { id: string; name: string };
+      groupMemberships: Array<{ groupId: string }>;
+    },
+    query?: { date?: string; dateFrom?: string; dateTo?: string },
+  ) {
     const taskWindow = this.resolveTaskWindow(query);
 
     const tasks = await this.prisma.task.findMany({

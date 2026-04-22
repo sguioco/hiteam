@@ -126,9 +126,7 @@ function isLocalDevHost() {
     return false;
   }
 
-  return ["localhost", "127.0.0.1", "::1"].includes(
-    window.location.hostname,
-  );
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
 function createIsoAt(offsetDays: number, hours: number, minutes: number) {
@@ -213,7 +211,7 @@ function normalizeDemoChecklistItem(
     isCompleted: Boolean(item.isCompleted),
     completedAt:
       item.completedAt ??
-      (item.isCompleted ? item.updatedAt ?? new Date().toISOString() : null),
+      (item.isCompleted ? (item.updatedAt ?? new Date().toISOString()) : null),
     completedByEmployee,
   };
 }
@@ -347,7 +345,8 @@ function normalizeDemoPhotoProof(
 
 function normalizeDemoTask(task: any, employees: DemoEmployee[]) {
   const createdAt = task.createdAt ?? task.dueAt ?? new Date().toISOString();
-  const updatedAt = task.updatedAt ?? task.completedAt ?? task.dueAt ?? createdAt;
+  const updatedAt =
+    task.updatedAt ?? task.completedAt ?? task.dueAt ?? createdAt;
 
   return {
     ...task,
@@ -704,14 +703,19 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-sgiuoco-1",
       title: "Финальная проверка квартального отчета",
-      description: "Необходимо сверить все цифры перед отправкой в финансовый отдел.",
+      description:
+        "Необходимо сверить все цифры перед отправкой в финансовый отдел.",
       dueAt: createIsoAt(0, 18, 0),
       priority: "URGENT",
       status: "TODO",
       assigneeEmployeeId: employees[0].id,
       checklistItems: [
         { id: "s1-c1", title: "Сверить налоги за март", isCompleted: true },
-        { id: "s1-c2", title: "Проверить выплаты по пропускам", isCompleted: false },
+        {
+          id: "s1-c2",
+          title: "Проверить выплаты по пропускам",
+          isCompleted: false,
+        },
         { id: "s1-c3", title: "Подписать PDF", isCompleted: false },
       ],
     }),
@@ -754,7 +758,8 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-sgiuoco-today-1",
       title: "Проверить состояние инвентаря в зале",
-      description: "Необходимо осмотреть витрины и убедиться, что все товары на своих местах.",
+      description:
+        "Необходимо осмотреть витрины и убедиться, что все товары на своих местах.",
       dueAt: createIsoAt(0, 11, 0),
       priority: "MEDIUM",
       status: "TODO",
@@ -784,8 +789,8 @@ function createInitialState(): DemoState {
           id: "proof-1",
           url: "https://images.unsplash.com/photo-1593062096033-9a26b09da705?auto=format&fit=crop&q=80&w=1000",
           createdAt: createIsoAt(0, 16, 30),
-        }
-      ]
+        },
+      ],
     },
     {
       ...buildTask({
@@ -802,8 +807,8 @@ function createInitialState(): DemoState {
           id: "proof-2",
           url: "https://images.unsplash.com/photo-1601004890684-d8cbf393f922?auto=format&fit=crop&q=80&w=1000",
           createdAt: createIsoAt(0, 9, 45),
-        }
-      ]
+        },
+      ],
     },
     buildTask({
       id: "task-owner-today-1",
@@ -818,7 +823,8 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-owner-today-2",
       title: "Проверить заявки на смены за выходные",
-      description: "Подтвердить или отклонить все актуальные запросы на обмены.",
+      description:
+        "Подтвердить или отклонить все актуальные запросы на обмены.",
       dueAt: createIsoAt(0, 12, 20),
       priority: "HIGH",
       assigneeEmployeeId: employees[0].id,
@@ -834,7 +840,8 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-owner-today-4",
       title: "Проверить статус обучения новых сотрудников",
-      description: "Проконтролировать завершение онбординга и назначить наставника.",
+      description:
+        "Проконтролировать завершение онбординга и назначить наставника.",
       dueAt: createIsoAt(0, 16, 5),
       priority: "LOW",
       assigneeEmployeeId: employees[0].id,
@@ -843,8 +850,7 @@ function createInitialState(): DemoState {
       ...buildTask({
         id: "task-owner-today-photo-1",
         title: "Фото отчёт по кассовой зоне",
-        description:
-          "Загрузить фото закрытой кассовой зоны после пересчёта.",
+        description: "Загрузить фото закрытой кассовой зоны после пересчёта.",
         dueAt: createIsoAt(0, 10, 15),
         priority: "HIGH",
         status: "DONE",
@@ -884,8 +890,7 @@ function createInitialState(): DemoState {
       id: "announcement-demo-1",
       audience: "ALL",
       title: "Планёрка по открытию новой недели",
-      body:
-        "Сегодня в 09:30 короткий синк по загрузке мастеров, SLA по ответам и аномалиям attendance. Сводка и ссылки на материалы уже в рабочем чате.",
+      body: "Сегодня в 09:30 короткий синк по загрузке мастеров, SLA по ответам и аномалиям attendance. Сводка и ссылки на материалы уже в рабочем чате.",
       isPinned: true,
       linkUrl: "https://smart.demo/company-weekly-brief",
       imageUrl:
@@ -915,8 +920,7 @@ function createInitialState(): DemoState {
       id: "announcement-demo-2",
       audience: "GROUP",
       title: "Фотоотчёт по витрине до 18:00",
-      body:
-        "Команда утренней смены должна загрузить фото итоговой выкладки и отметить, что ценники обновлены.",
+      body: "Команда утренней смены должна загрузить фото итоговой выкладки и отметить, что ценники обновлены.",
       isPinned: false,
       groupIds: [groups[0].id],
       linkUrl: null,
@@ -958,8 +962,7 @@ function createInitialState(): DemoState {
       id: "announcement-demo-3",
       audience: "EMPLOYEE",
       title: "Индивидуальный onboarding по CRM",
-      body:
-        "Завтра в 11:00 для нового сотрудника запланирован персональный разбор карточек клиента, сценариев follow-up и быстрых ответов.",
+      body: "Завтра в 11:00 для нового сотрудника запланирован персональный разбор карточек клиента, сценариев follow-up и быстрых ответов.",
       isPinned: false,
       linkUrl: "https://meet.smart.demo/onboarding-crm",
       imageUrl: null,
@@ -991,8 +994,7 @@ function createInitialState(): DemoState {
       id: "announcement-demo-4",
       audience: "LOCATION",
       title: "Проверка кассовой зоны перед вечерней сменой",
-      body:
-        "До 17:30 нужно сверить терминал, печать чеков и подготовить резервную ленту. Если заметите проблему, сразу приложите фото и комментарий.",
+      body: "До 17:30 нужно сверить терминал, печать чеков и подготовить резервную ленту. Если заметите проблему, сразу приложите фото и комментарий.",
       isPinned: false,
       linkUrl: null,
       attachmentLocation: {
@@ -1351,7 +1353,9 @@ function loadState(): DemoState {
     });
 
     const normalizedTasks = Array.isArray(normalized.tasks)
-      ? normalized.tasks.map((task) => normalizeDemoTask(task, normalized.employees))
+      ? normalized.tasks.map((task) =>
+          normalizeDemoTask(task, normalized.employees),
+        )
       : seedState.tasks;
     if (
       !Array.isArray(normalized.tasks) ||
@@ -1365,23 +1369,25 @@ function loadState(): DemoState {
       normalized.announcements = seedState.announcements;
       changed = true;
     } else {
-      normalized.announcements = normalized.announcements.map((announcement) => ({
-        ...announcement,
-        attachments: Array.isArray(announcement.attachments)
-          ? announcement.attachments
-          : [],
-        groupIds: Array.isArray(announcement.groupIds)
-          ? announcement.groupIds
-          : [],
-        readAtByEmployeeId:
-          announcement.readAtByEmployeeId &&
-          typeof announcement.readAtByEmployeeId === "object"
-            ? announcement.readAtByEmployeeId
-            : {},
-        targetEmployeeIds: Array.isArray(announcement.targetEmployeeIds)
-          ? announcement.targetEmployeeIds
-          : [],
-      }));
+      normalized.announcements = normalized.announcements.map(
+        (announcement) => ({
+          ...announcement,
+          attachments: Array.isArray(announcement.attachments)
+            ? announcement.attachments
+            : [],
+          groupIds: Array.isArray(announcement.groupIds)
+            ? announcement.groupIds
+            : [],
+          readAtByEmployeeId:
+            announcement.readAtByEmployeeId &&
+            typeof announcement.readAtByEmployeeId === "object"
+              ? announcement.readAtByEmployeeId
+              : {},
+          targetEmployeeIds: Array.isArray(announcement.targetEmployeeIds)
+            ? announcement.targetEmployeeIds
+            : [],
+        }),
+      );
     }
 
     if (!Array.isArray(normalized.announcementArchive)) {
@@ -1909,7 +1915,9 @@ function buildDemoAnnouncementRecipients(state: DemoState, announcement: any) {
       .forEach((group) => {
         group.memberships.forEach((membership) => {
           register(
-            state.employees.find((employee) => employee.id === membership.employeeId),
+            state.employees.find(
+              (employee) => employee.id === membership.employeeId,
+            ),
           );
         });
       });
@@ -1984,8 +1992,7 @@ function buildDemoAnnouncementItemForViewer(
   const isEmployee = role === "employee";
   const { recipients, readRecipients, unreadRecipients } =
     countDemoAnnouncementReads(state, announcement);
-  const readAt =
-    announcement.readAtByEmployeeId?.[viewerEmployeeId] ?? null;
+  const readAt = announcement.readAtByEmployeeId?.[viewerEmployeeId] ?? null;
 
   return {
     ...announcement,
@@ -2000,7 +2007,7 @@ function buildDemoAnnouncementItemForViewer(
     readRecipients,
     unreadRecipients,
     isRead: isEmployee ? Boolean(readAt) : announcement.isRead,
-    readAt: isEmployee ? readAt : announcement.readAt ?? null,
+    readAt: isEmployee ? readAt : (announcement.readAt ?? null),
   };
 }
 
@@ -2027,13 +2034,19 @@ function buildDemoAnnouncementsForViewer(state: DemoState, token?: string) {
     )
     .sort((left, right) => {
       const leftTime = left.publishedAt ?? left.scheduledFor ?? left.createdAt;
-      const rightTime = right.publishedAt ?? right.scheduledFor ?? right.createdAt;
+      const rightTime =
+        right.publishedAt ?? right.scheduledFor ?? right.createdAt;
       return rightTime.localeCompare(leftTime);
     });
 }
 
-function buildDemoAnnouncementReadReceipts(state: DemoState, announcementId: string) {
-  const announcement = state.announcements.find((item) => item.id === announcementId);
+function buildDemoAnnouncementReadReceipts(
+  state: DemoState,
+  announcementId: string,
+) {
+  const announcement = state.announcements.find(
+    (item) => item.id === announcementId,
+  );
   if (!announcement) {
     throw new Error("Новость не найдена.");
   }
@@ -2107,9 +2120,7 @@ function buildDemoDailyActivity(state: DemoState) {
   const personAt = (index: number) =>
     buildDemoDashboardActivityPerson(employeeAt(index));
   const buildTargets = (...indexes: number[]) =>
-    indexes
-      .map((index) => personAt(index))
-      .filter(Boolean);
+    indexes.map((index) => personAt(index)).filter(Boolean);
   const taskTargets = buildTargets(0, 1, 2);
   const locationAt = (index: number) =>
     state.locations[index]?.name ?? state.locations[0]?.name ?? null;
@@ -2129,10 +2140,10 @@ function buildDemoDailyActivity(state: DemoState) {
           targetLabel:
             announcements[0].audience === "ALL"
               ? "all-company"
-              : announcements[0].group?.name ??
+              : (announcements[0].group?.name ??
                 announcements[0].location?.name ??
                 announcements[0].targetEmployee?.firstName ??
-                null,
+                null),
           targetEmployees: buildDemoAnnouncementRecipients(
             state,
             state.announcements.find((item) => item.id === announcements[0].id),
@@ -2260,7 +2271,8 @@ function buildDemoDailyActivity(state: DemoState) {
       createdAt: createIsoAt(-1, 16, 25),
       actor: managerPerson,
       title: "Подтвердить пополнение расходников",
-      context: "Обычная ежедневная задача для вечерней смены на фото-подтверждение.",
+      context:
+        "Обычная ежедневная задача для вечерней смены на фото-подтверждение.",
       targetLabel: groupAt(1),
       targetEmployees: buildTargets(3, 4, 5),
     },
@@ -2282,7 +2294,8 @@ function buildDemoDailyActivity(state: DemoState) {
       createdAt: createIsoAt(-2, 18, 40),
       actor: managerPerson,
       title: "Пятничная инвентаризация материалов",
-      context: "Опубликовали напоминание и список фото-зон для отчёта по филиалам.",
+      context:
+        "Опубликовали напоминание и список фото-зон для отчёта по филиалам.",
       targetLabel: "all-company",
       targetEmployees: buildTargets(0, 1, 2, 3, 4),
     },
@@ -2326,7 +2339,8 @@ function buildDemoDailyActivity(state: DemoState) {
       createdAt: createIsoAt(-5, 12, 35),
       actor: managerPerson,
       title: "Сделать фото зоны ожидания",
-      context: "Задача с фото нужна для стандартного аудита чистоты и выкладки.",
+      context:
+        "Задача с фото нужна для стандартного аудита чистоты и выкладки.",
       targetLabel: groupAt(0),
       targetEmployees: buildTargets(0, 2, 4),
     },
@@ -2359,7 +2373,8 @@ function buildDemoDailyActivity(state: DemoState) {
       createdAt: createIsoAt(-9, 14, 25),
       actor: managerPerson,
       title: "Проверить стойку ресепшн перед вечером",
-      context: "Обычная операционная задача с чек-листом и коротким фото-отчётом.",
+      context:
+        "Обычная операционная задача с чек-листом и коротким фото-отчётом.",
       targetLabel: locationAt(0),
       targetEmployees: buildTargets(2, 3),
     },
@@ -2370,7 +2385,8 @@ function buildDemoDailyActivity(state: DemoState) {
       createdAt: createIsoAt(-11, 10, 15),
       actor: personAt(6),
       title: "Документы для оформления",
-      context: "Новый сотрудник загрузил документы и ждёт подтверждения администратора.",
+      context:
+        "Новый сотрудник загрузил документы и ждёт подтверждения администратора.",
       targetLabel: null,
       targetEmployees: [managerPerson].filter(Boolean),
     },
@@ -2410,7 +2426,8 @@ function buildBootstrapTasks(state: DemoState) {
     groups: snapshot.groups.map((group) => ({
       ...group,
       _count: {
-        tasks: snapshot.tasks.filter((task) => task.groupId === group.id).length,
+        tasks: snapshot.tasks.filter((task) => task.groupId === group.id)
+          .length,
       },
     })),
     liveSessions: buildAttendanceLive(snapshot),
@@ -2425,7 +2442,10 @@ function createFixedIso(dateKey: string, hours: number, minutes: number) {
 
 function buildDemoEmployeeRecords(state: DemoState) {
   const biometricStatusByEmployeeId = new Map(
-    state.biometricEmployees.map((item) => [item.employeeId, item.enrollmentStatus]),
+    state.biometricEmployees.map((item) => [
+      item.employeeId,
+      item.enrollmentStatus,
+    ]),
   );
 
   return state.employees.map((employee) => ({
@@ -2523,9 +2543,14 @@ function buildDemoBiometricBootstrap(
   };
 }
 
-function buildDemoEmployeeShowcaseHistory(state: DemoState, employeeId: string) {
+function buildDemoEmployeeShowcaseHistory(
+  state: DemoState,
+  employeeId: string,
+) {
   const employee =
-    state.employees.find((item) => item.id === employeeId) ?? state.employees[1] ?? state.employees[0];
+    state.employees.find((item) => item.id === employeeId) ??
+    state.employees[1] ??
+    state.employees[0];
 
   if (!employee) {
     return buildAttendanceHistory(state, employeeId, null, null);
@@ -2544,61 +2569,70 @@ function buildDemoEmployeeShowcaseHistory(state: DemoState, employeeId: string) 
     "2026-04-27": [0, 15, 0, 0],
   };
 
-  const rows = Object.entries(weeklyLatePlan).flatMap(([weekStart, latePlan], weekIndex) =>
-    latePlan.map((lateMinutes, dayIndex) => {
-      const day = new Date(`${weekStart}T00:00:00`);
-      day.setDate(day.getDate() + dayIndex);
-      const dateKey = day.toISOString().slice(0, 10);
-      const startedAt = createFixedIso(dateKey, 9, lateMinutes > 0 ? lateMinutes : 0);
-      const endedAt = createFixedIso(dateKey, 18, weekIndex === 3 && dayIndex === 4 ? 5 : 0);
-      const workedMinutes = lateMinutes > 0 ? 480 - lateMinutes : 480;
+  const rows = Object.entries(weeklyLatePlan).flatMap(
+    ([weekStart, latePlan], weekIndex) =>
+      latePlan.map((lateMinutes, dayIndex) => {
+        const day = new Date(`${weekStart}T00:00:00`);
+        day.setDate(day.getDate() + dayIndex);
+        const dateKey = day.toISOString().slice(0, 10);
+        const startedAt = createFixedIso(
+          dateKey,
+          9,
+          lateMinutes > 0 ? lateMinutes : 0,
+        );
+        const endedAt = createFixedIso(
+          dateKey,
+          18,
+          weekIndex === 3 && dayIndex === 4 ? 5 : 0,
+        );
+        const workedMinutes = lateMinutes > 0 ? 480 - lateMinutes : 480;
 
-      return {
-        sessionId: `${employee.id}-showcase-${dateKey}`,
-        employeeId: employee.id,
-        employeeName: buildEmployeeFullName(employee),
-        employeeNumber: employee.employeeNumber,
-        department: employee.department?.name ?? "—",
-        location: employee.primaryLocation?.name ?? "—",
-        shiftLabel: "09:00-18:00",
-        status: "checked_out",
-        startedAt,
-        endedAt,
-        totalMinutes: 540,
-        workedMinutes,
-        breakMinutes: 60,
-        paidBreakMinutes: 0,
-        lateMinutes,
-        earlyLeaveMinutes: 0,
-        checkInEvent: {
-          occurredAt: startedAt,
-          distanceMeters: 10 + dayIndex,
-          notes: null,
-        },
-        checkOutEvent: {
-          occurredAt: endedAt,
-          distanceMeters: 8 + dayIndex,
-          notes: null,
-        },
-        breaks: [
-          {
-            id: `${employee.id}-showcase-break-${dateKey}`,
-            startedAt: createFixedIso(dateKey, 13, 0),
-            endedAt: createFixedIso(dateKey, 14, 0),
-            totalMinutes: 60,
-            isPaid: false,
-            startEvent: {
-              occurredAt: createFixedIso(dateKey, 13, 0),
-              distanceMeters: 5,
-            },
-            endEvent: {
-              occurredAt: createFixedIso(dateKey, 14, 0),
-              distanceMeters: 5,
-            },
+        return {
+          sessionId: `${employee.id}-showcase-${dateKey}`,
+          employeeId: employee.id,
+          employeeName: buildEmployeeFullName(employee),
+          employeeNumber: employee.employeeNumber,
+          department: employee.department?.name ?? "—",
+          location: employee.primaryLocation?.name ?? "—",
+          shiftLabel: "09:00-18:00",
+          status: "checked_out",
+          startedAt,
+          endedAt,
+          totalMinutes: 540,
+          workedMinutes,
+          breakMinutes: 60,
+          paidBreakMinutes: 0,
+          lateMinutes,
+          earlyLeaveMinutes: 0,
+          checkInEvent: {
+            occurredAt: startedAt,
+            distanceMeters: 10 + dayIndex,
+            notes: null,
           },
-        ],
-      };
-    }),
+          checkOutEvent: {
+            occurredAt: endedAt,
+            distanceMeters: 8 + dayIndex,
+            notes: null,
+          },
+          breaks: [
+            {
+              id: `${employee.id}-showcase-break-${dateKey}`,
+              startedAt: createFixedIso(dateKey, 13, 0),
+              endedAt: createFixedIso(dateKey, 14, 0),
+              totalMinutes: 60,
+              isPaid: false,
+              startEvent: {
+                occurredAt: createFixedIso(dateKey, 13, 0),
+                distanceMeters: 5,
+              },
+              endEvent: {
+                occurredAt: createFixedIso(dateKey, 14, 0),
+                distanceMeters: 5,
+              },
+            },
+          ],
+        };
+      }),
   );
 
   const totals = rows.reduce(
@@ -2730,31 +2764,49 @@ function buildDemoEmployeeShowcaseTaskPreset(
       description:
         "Нужно обзвонить неподтвержденные записи, отметить ответ и отправить short summary в чат смены.",
       checklistItems: [
-        { id: "emp-showcase-task-4-check-1", title: "Подтвердить VIP-клиентов", isCompleted: true },
-        { id: "emp-showcase-task-4-check-2", title: "Закрыть неподтвержденные окна", isCompleted: false },
-        { id: "emp-showcase-task-4-check-3", title: "Передать итог менеджеру", isCompleted: false },
+        {
+          id: "emp-showcase-task-4-check-1",
+          title: "Подтвердить VIP-клиентов",
+          isCompleted: true,
+        },
+        {
+          id: "emp-showcase-task-4-check-2",
+          title: "Закрыть неподтвержденные окна",
+          isCompleted: false,
+        },
+        {
+          id: "emp-showcase-task-4-check-3",
+          title: "Передать итог менеджеру",
+          isCompleted: false,
+        },
       ],
     };
   }
 
   if (taskId === "emp-showcase-task-20") {
     return {
-      description: appendTaskMeta("10-минутный синк по загрузке четверга и переносам клиентов.", {
-        kind: "meeting",
-        meetingMode: "online",
-        meetingLink: "https://meet.smart.demo/thursday-sync",
-      }),
+      description: appendTaskMeta(
+        "10-минутный синк по загрузке четверга и переносам клиентов.",
+        {
+          kind: "meeting",
+          meetingMode: "online",
+          meetingLink: "https://meet.smart.demo/thursday-sync",
+        },
+      ),
     };
   }
 
   if (taskId === "emp-showcase-task-28") {
     return {
       title: "Встреча: Разбор вечерней загрузки",
-      description: appendTaskMeta("Проверим заполнение расписания, SLA по ответам и свободные окна на завтра.", {
-        kind: "meeting",
-        meetingMode: "offline",
-        meetingLocation: "Кабинет менеджера",
-      }),
+      description: appendTaskMeta(
+        "Проверим заполнение расписания, SLA по ответам и свободные окна на завтра.",
+        {
+          kind: "meeting",
+          meetingMode: "offline",
+          meetingLocation: "Кабинет менеджера",
+        },
+      ),
     };
   }
 
@@ -2786,9 +2838,21 @@ function buildDemoEmployeeShowcaseTaskPreset(
       description:
         "Перед первым клиентом нужно пройти новый morning checklist и отметить всё прямо в задаче.",
       checklistItems: [
-        { id: "emp-showcase-task-30-check-1", title: "Включить кассу и терминал", isCompleted: true },
-        { id: "emp-showcase-task-30-check-2", title: "Проверить расходники у моек", isCompleted: false },
-        { id: "emp-showcase-task-30-check-3", title: "Подготовить welcome-зону", isCompleted: false },
+        {
+          id: "emp-showcase-task-30-check-1",
+          title: "Включить кассу и терминал",
+          isCompleted: true,
+        },
+        {
+          id: "emp-showcase-task-30-check-2",
+          title: "Проверить расходники у моек",
+          isCompleted: false,
+        },
+        {
+          id: "emp-showcase-task-30-check-3",
+          title: "Подготовить welcome-зону",
+          isCompleted: false,
+        },
       ],
     };
   }
@@ -2800,8 +2864,16 @@ function buildDemoEmployeeShowcaseTaskPreset(
         "Проверить краску, перчатки, полотенца и сфотографировать собранный комплект перед закрытием.",
       requiresPhoto: true,
       checklistItems: [
-        { id: "emp-showcase-task-31-check-1", title: "Собрать материалы по процедурам", isCompleted: true },
-        { id: "emp-showcase-task-31-check-2", title: "Проверить резерв по краске", isCompleted: false },
+        {
+          id: "emp-showcase-task-31-check-1",
+          title: "Собрать материалы по процедурам",
+          isCompleted: true,
+        },
+        {
+          id: "emp-showcase-task-31-check-2",
+          title: "Проверить резерв по краске",
+          isCompleted: false,
+        },
       ],
       photoProofs: [
         {
@@ -2836,9 +2908,14 @@ function buildDemoEmployeeShowcaseTaskPreset(
   };
 }
 
-function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string) {
+function buildDemoEmployeeShowcaseTaskBoard(
+  state: DemoState,
+  employeeId: string,
+) {
   const employee =
-    state.employees.find((item) => item.id === employeeId) ?? state.employees[1] ?? state.employees[0];
+    state.employees.find((item) => item.id === employeeId) ??
+    state.employees[1] ??
+    state.employees[0];
   const managerEmployee = state.employees[0] ?? employee;
 
   if (!employee || !managerEmployee) {
@@ -3143,41 +3220,45 @@ function buildDemoEmployeeShowcaseTaskBoard(state: DemoState, employeeId: string
         ? createFixedIso(task.dueDate, task.hours + 1, task.minutes)
         : null);
 
-    return normalizeDemoTask({
-      id: task.id,
-      title: persistedTask?.title ?? preset.title ?? task.title,
-      description:
-        persistedTask?.description ??
-        preset.description ??
-        "Показательный набор задач для demo-режима.",
-      status: effectiveStatus,
-      priority: persistedTask?.priority ?? task.priority,
-      requiresPhoto:
-        persistedTask?.requiresPhoto ?? preset.requiresPhoto ?? false,
-      dueAt: persistedTask?.dueAt ?? dueAt,
-      completedAt,
-      createdAt,
-      updatedAt: persistedTask?.updatedAt ?? completedAt ?? dueAt,
-      groupId: null,
-      assigneeEmployeeId: employee.id,
-      managerEmployee: {
-        id: managerEmployee.id,
-        firstName: managerEmployee.firstName,
-        lastName: managerEmployee.lastName,
+    return normalizeDemoTask(
+      {
+        id: task.id,
+        title: persistedTask?.title ?? preset.title ?? task.title,
+        description:
+          persistedTask?.description ??
+          preset.description ??
+          "Показательный набор задач для demo-режима.",
+        status: effectiveStatus,
+        priority: persistedTask?.priority ?? task.priority,
+        requiresPhoto:
+          persistedTask?.requiresPhoto ?? preset.requiresPhoto ?? false,
+        dueAt: persistedTask?.dueAt ?? dueAt,
+        completedAt,
+        createdAt,
+        updatedAt: persistedTask?.updatedAt ?? completedAt ?? dueAt,
+        groupId: null,
+        assigneeEmployeeId: employee.id,
+        managerEmployee: {
+          id: managerEmployee.id,
+          firstName: managerEmployee.firstName,
+          lastName: managerEmployee.lastName,
+        },
+        assigneeEmployee: {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          employeeNumber: employee.employeeNumber,
+          department: employee.department,
+          primaryLocation: employee.primaryLocation,
+        },
+        group: null,
+        checklistItems:
+          persistedTask?.checklistItems ?? preset.checklistItems ?? [],
+        activities: persistedTask?.activities ?? preset.activities ?? [],
+        photoProofs: persistedTask?.photoProofs ?? preset.photoProofs ?? [],
       },
-      assigneeEmployee: {
-        id: employee.id,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        employeeNumber: employee.employeeNumber,
-        department: employee.department,
-        primaryLocation: employee.primaryLocation,
-      },
-      group: null,
-      checklistItems: persistedTask?.checklistItems ?? preset.checklistItems ?? [],
-      activities: persistedTask?.activities ?? preset.activities ?? [],
-      photoProofs: persistedTask?.photoProofs ?? preset.photoProofs ?? [],
-    }, state.employees);
+      state.employees,
+    );
   });
 
   return {
@@ -3222,7 +3303,8 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
     groups: snapshot.groups.map((group) => ({
       ...group,
       _count: {
-        tasks: snapshot.tasks.filter((task) => task.groupId === group.id).length,
+        tasks: snapshot.tasks.filter((task) => task.groupId === group.id)
+          .length,
       },
     })),
     scheduleShifts: isEmployee
@@ -3248,6 +3330,376 @@ export function getDemoNewsBootstrap(token?: string) {
   const state = loadState();
   return {
     initialData: buildDemoNewsBootstrap(state, token),
+    mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
+  };
+}
+
+function buildDemoLeaderboardEntries() {
+  const source = [
+    [
+      "emp-demo-01",
+      "Mia",
+      "Sokolova",
+      "EMP-4101",
+      "Operations",
+      "Shift Lead",
+      196,
+      15,
+      20,
+    ],
+    [
+      "emp-demo-02",
+      "Alex",
+      "Petrov",
+      "EMP-4102",
+      "Operations",
+      "Owner",
+      178,
+      10,
+      10,
+    ],
+    [
+      "emp-demo-03",
+      "Denis",
+      "Fedorov",
+      "EMP-4103",
+      "Support",
+      "Team Lead",
+      171,
+      13,
+      8,
+    ],
+    [
+      "emp-demo-04",
+      "Alexey",
+      "Mironov",
+      "EMP-4104",
+      "Retail",
+      "Consultant",
+      149,
+      8,
+      5,
+    ],
+    [
+      "emp-demo-05",
+      "Sofia",
+      "Orlova",
+      "EMP-4105",
+      "Retail",
+      "Senior Associate",
+      143,
+      10,
+      4,
+    ],
+    [
+      "emp-demo-06",
+      "Ilya",
+      "Petrov",
+      "EMP-4106",
+      "Logistics",
+      "Dispatcher",
+      139,
+      13,
+      4,
+    ],
+    [
+      "emp-demo-07",
+      "Elena",
+      "Morozova",
+      "EMP-4107",
+      "Operations",
+      "Coordinator",
+      132,
+      10,
+      3,
+    ],
+    [
+      "emp-demo-08",
+      "Maxim",
+      "Lebedev",
+      "EMP-4108",
+      "Warehouse",
+      "Shift Coordinator",
+      129,
+      5,
+      3,
+    ],
+    [
+      "emp-demo-09",
+      "Alina",
+      "Kuznetsova",
+      "EMP-4109",
+      "Support",
+      "Customer Care",
+      125,
+      8,
+      2,
+    ],
+    [
+      "emp-demo-10",
+      "Nikita",
+      "Rudenko",
+      "EMP-4110",
+      "Retail",
+      "Associate",
+      118,
+      5,
+      2,
+    ],
+    [
+      "emp-demo-11",
+      "Yana",
+      "Volkova",
+      "EMP-4111",
+      "Retail",
+      "Associate",
+      111,
+      8,
+      2,
+    ],
+    [
+      "emp-demo-12",
+      "Kirill",
+      "Safonov",
+      "EMP-4112",
+      "Warehouse",
+      "Operator",
+      109,
+      3,
+      1,
+    ],
+    [
+      "emp-demo-13",
+      "Eva",
+      "Romanova",
+      "EMP-4113",
+      "Support",
+      "Operator",
+      102,
+      5,
+      1,
+    ],
+    [
+      "emp-demo-14",
+      "Pavel",
+      "Bespalov",
+      "EMP-4114",
+      "Operations",
+      "Operator",
+      95,
+      5,
+      1,
+    ],
+    [
+      "emp-demo-15",
+      "Lina",
+      "Markina",
+      "EMP-4115",
+      "Retail",
+      "Associate",
+      89,
+      3,
+      0,
+    ],
+    [
+      "emp-demo-16",
+      "Timur",
+      "Yakovlev",
+      "EMP-4116",
+      "Warehouse",
+      "Operator",
+      83,
+      0,
+      0,
+    ],
+    [
+      "emp-demo-17",
+      "Olga",
+      "Belova",
+      "EMP-4117",
+      "Support",
+      "Coordinator",
+      77,
+      0,
+      0,
+    ],
+  ] as const;
+
+  return source.map(
+    (
+      [
+        id,
+        firstName,
+        lastName,
+        employeeNumber,
+        departmentName,
+        positionName,
+        points,
+        todayPoints,
+        streak,
+      ],
+      index,
+    ) => ({
+      rank: index + 1,
+      employee: {
+        id,
+        firstName,
+        lastName,
+        employeeNumber,
+        avatarUrl: null,
+        department: {
+          id: `department-${departmentName.toLowerCase()}`,
+          name: departmentName,
+        },
+        position: {
+          id: `position-${positionName.toLowerCase().replace(/\s+/g, "-")}`,
+          name: positionName,
+        },
+      },
+      points,
+      todayPoints,
+      streak,
+    }),
+  );
+}
+
+function buildDemoLeaderboardOverview(token?: string) {
+  const role = currentDemoRole(token) === "employee" ? "employee" : "admin";
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+    999,
+  );
+  const leaderboard = buildDemoLeaderboardEntries();
+  const me =
+    leaderboard.find((entry) =>
+      role === "employee"
+        ? entry.employee.firstName === "Alexey" &&
+          entry.employee.lastName === "Mironov"
+        : entry.employee.firstName === "Alex" &&
+          entry.employee.lastName === "Petrov",
+    ) ?? leaderboard[0];
+  const progress =
+    role === "employee"
+      ? [
+          {
+            key: "on_time_arrival",
+            earnedPoints: 5,
+            maxPoints: 5,
+            completed: true,
+            details: {
+              checkedAt: createIsoAt(0, 8, 56),
+              shiftBoundaryAt: createIsoAt(0, 9, 0),
+              dueTaskCount: 0,
+              completedDueTaskCount: 0,
+              overdueCount: 0,
+            },
+          },
+          {
+            key: "on_time_departure",
+            earnedPoints: 0,
+            maxPoints: 5,
+            completed: false,
+            details: {
+              checkedAt: null,
+              shiftBoundaryAt: createIsoAt(0, 18, 0),
+              dueTaskCount: 0,
+              completedDueTaskCount: 0,
+              overdueCount: 0,
+            },
+          },
+          {
+            key: "tasks_and_checklists",
+            earnedPoints: 3,
+            maxPoints: 5,
+            completed: false,
+            details: {
+              checkedAt: null,
+              shiftBoundaryAt: null,
+              dueTaskCount: 4,
+              completedDueTaskCount: 4,
+              overdueCount: 2,
+            },
+          },
+        ]
+      : [
+          {
+            key: "on_time_arrival",
+            earnedPoints: 5,
+            maxPoints: 5,
+            completed: true,
+            details: {
+              checkedAt: createIsoAt(0, 8, 54),
+              shiftBoundaryAt: createIsoAt(0, 9, 0),
+              dueTaskCount: 0,
+              completedDueTaskCount: 0,
+              overdueCount: 0,
+            },
+          },
+          {
+            key: "on_time_departure",
+            earnedPoints: 0,
+            maxPoints: 5,
+            completed: false,
+            details: {
+              checkedAt: null,
+              shiftBoundaryAt: createIsoAt(0, 18, 0),
+              dueTaskCount: 0,
+              completedDueTaskCount: 0,
+              overdueCount: 0,
+            },
+          },
+          {
+            key: "tasks_and_checklists",
+            earnedPoints: 5,
+            maxPoints: 5,
+            completed: true,
+            details: {
+              checkedAt: null,
+              shiftBoundaryAt: null,
+              dueTaskCount: 4,
+              completedDueTaskCount: 4,
+              overdueCount: 0,
+            },
+          },
+        ];
+
+  return {
+    month: {
+      key: dateKey(monthStart).slice(0, 7),
+      startsAt: monthStart.toISOString(),
+      endsAt: monthEnd.toISOString(),
+      todayKey: dateKey(now),
+    },
+    summary: {
+      participants: leaderboard.length,
+      maxDailyPoints: 15,
+    },
+    me: {
+      employeeId: me.employee.id,
+      rank: me.rank,
+      points: me.points,
+      todayPoints: progress.reduce(
+        (total, item) => total + item.earnedPoints,
+        0,
+      ),
+      todayMaxPoints: 15,
+      streak: me.streak,
+      progress,
+    },
+    leaderboard,
+  };
+}
+
+export function getDemoLeaderboardBootstrap(token?: string) {
+  return {
+    initialData: buildDemoLeaderboardOverview(token),
     mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
   };
 }
@@ -3798,8 +4250,16 @@ export async function demoApiRequest<T>(
     return getDemoNewsBootstrap(token) as T;
   }
 
+  if (pathname === "/bootstrap/leaderboard" && method === "GET") {
+    return getDemoLeaderboardBootstrap(token) as T;
+  }
+
   if (pathname === "/bootstrap/biometric" && method === "GET") {
     return buildDemoBiometricBootstrap(currentState, url.searchParams) as T;
+  }
+
+  if (pathname === "/leaderboard/overview" && method === "GET") {
+    return buildDemoLeaderboardOverview(token) as T;
   }
 
   if (pathname === "/collaboration/announcements" && method === "GET") {
@@ -3822,16 +4282,18 @@ export async function demoApiRequest<T>(
   if (pathname === "/collaboration/announcements" && method === "POST") {
     const payload = parseBody<any>(options?.body);
     const actor =
-      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
-      currentState.employees[0];
-    const group =
-      payload.groupId
-        ? (currentState.groups.find((entry) => entry.id === payload.groupId) ?? null)
-        : null;
-    const targetEmployee =
-      payload.targetEmployeeId
-        ? (currentState.employees.find((entry) => entry.id === payload.targetEmployeeId) ?? null)
-        : null;
+      currentState.employees.find(
+        (employee) => employee.id === currentEmployeeId(token),
+      ) ?? currentState.employees[0];
+    const group = payload.groupId
+      ? (currentState.groups.find((entry) => entry.id === payload.groupId) ??
+        null)
+      : null;
+    const targetEmployee = payload.targetEmployeeId
+      ? (currentState.employees.find(
+          (entry) => entry.id === payload.targetEmployeeId,
+        ) ?? null)
+      : null;
     const scheduledFor = payload.scheduledFor ?? null;
     const publishedAt =
       scheduledFor && new Date(scheduledFor).getTime() > Date.now()
@@ -3897,7 +4359,9 @@ export async function demoApiRequest<T>(
               employeeNumber: targetEmployee.employeeNumber,
             }
           : null,
-        readAtByEmployeeId: actor ? { [actor.id]: new Date().toISOString() } : {},
+        readAtByEmployeeId: actor
+          ? { [actor.id]: new Date().toISOString() }
+          : {},
       };
       state.announcements.unshift(createdAnnouncement);
       state.announcementArchive.unshift({
@@ -3917,7 +4381,11 @@ export async function demoApiRequest<T>(
       });
     });
 
-    return buildDemoAnnouncementItemForViewer(loadState(), createdAnnouncement, token) as T;
+    return buildDemoAnnouncementItemForViewer(
+      loadState(),
+      createdAnnouncement,
+      token,
+    ) as T;
   }
 
   if (pathname === "/collaboration/overview" && method === "GET") {
@@ -3953,42 +4421,47 @@ export async function demoApiRequest<T>(
       const group = payload.groupId
         ? (state.groups.find((entry) => entry.id === payload.groupId) ?? null)
         : null;
-      state.tasks.unshift(normalizeDemoTask({
-        id: buildTaskId("task"),
-        title: payload.title,
-        description: payload.description ?? null,
-        status: "TODO",
-        priority: payload.priority ?? "MEDIUM",
-        requiresPhoto: Boolean(payload.requiresPhoto),
-        isRecurring: false,
-        taskTemplateId: null,
-        occurrenceDate: null,
-        dueAt: payload.dueAt ?? null,
-        completedAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        groupId: group?.id ?? null,
-        assigneeEmployeeId: assignee?.id ?? null,
-        managerEmployee: {
-          id: "emp-1",
-          firstName: state.employees[0].firstName,
-          lastName: state.employees[0].lastName,
-        },
-        assigneeEmployee: assignee
-          ? {
-              id: assignee.id,
-              firstName: assignee.firstName,
-              lastName: assignee.lastName,
-              employeeNumber: assignee.employeeNumber,
-              department: assignee.department,
-              primaryLocation: assignee.primaryLocation,
-            }
-          : null,
-        group: group ? { id: group.id, name: group.name } : null,
-        checklistItems: [],
-        activities: [],
-        photoProofs: [],
-      }, state.employees));
+      state.tasks.unshift(
+        normalizeDemoTask(
+          {
+            id: buildTaskId("task"),
+            title: payload.title,
+            description: payload.description ?? null,
+            status: "TODO",
+            priority: payload.priority ?? "MEDIUM",
+            requiresPhoto: Boolean(payload.requiresPhoto),
+            isRecurring: false,
+            taskTemplateId: null,
+            occurrenceDate: null,
+            dueAt: payload.dueAt ?? null,
+            completedAt: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            groupId: group?.id ?? null,
+            assigneeEmployeeId: assignee?.id ?? null,
+            managerEmployee: {
+              id: "emp-1",
+              firstName: state.employees[0].firstName,
+              lastName: state.employees[0].lastName,
+            },
+            assigneeEmployee: assignee
+              ? {
+                  id: assignee.id,
+                  firstName: assignee.firstName,
+                  lastName: assignee.lastName,
+                  employeeNumber: assignee.employeeNumber,
+                  department: assignee.department,
+                  primaryLocation: assignee.primaryLocation,
+                }
+              : null,
+            group: group ? { id: group.id, name: group.name } : null,
+            checklistItems: [],
+            activities: [],
+            photoProofs: [],
+          },
+          state.employees,
+        ),
+      );
     });
     return undefined as T;
   }
@@ -4003,9 +4476,10 @@ export async function demoApiRequest<T>(
 
       if (!task) {
         const employeeId = currentEmployeeId(token);
-        const showcaseTask = buildDemoEmployeeShowcaseTaskBoard(state, employeeId).tasks.find(
-          (entry) => entry.id === taskStatusMatch[1],
-        );
+        const showcaseTask = buildDemoEmployeeShowcaseTaskBoard(
+          state,
+          employeeId,
+        ).tasks.find((entry) => entry.id === taskStatusMatch[1]);
 
         if (showcaseTask) {
           state.tasks.unshift({ ...showcaseTask });
@@ -4097,8 +4571,9 @@ export async function demoApiRequest<T>(
   if (announcementDetailsMatch && method === "PATCH") {
     const payload = parseBody<any>(options?.body);
     const actor =
-      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
-      currentState.employees[0];
+      currentState.employees.find(
+        (employee) => employee.id === currentEmployeeId(token),
+      ) ?? currentState.employees[0];
     let updatedAnnouncement: any = null;
 
     updateState((state) => {
@@ -4148,8 +4623,9 @@ export async function demoApiRequest<T>(
 
   if (announcementDetailsMatch && method === "DELETE") {
     const actor =
-      currentState.employees.find((employee) => employee.id === currentEmployeeId(token)) ??
-      currentState.employees[0];
+      currentState.employees.find(
+        (employee) => employee.id === currentEmployeeId(token),
+      ) ?? currentState.employees[0];
 
     updateState((state) => {
       const announcement = state.announcements.find(

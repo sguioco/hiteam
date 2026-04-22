@@ -7,7 +7,7 @@ import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { BrandWordmark } from '../../src/components/brand-wordmark';
 import { loadBiometricPolicy, loadMyShifts } from '../../lib/api';
-import { updateAuthFlowState } from '../../lib/auth-flow';
+import { signOutLocally, updateAuthFlowState } from '../../lib/auth-flow';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { getPreciseLocationAccessStatus, type PreciseLocationAccessStatus } from '../../lib/location';
 import { markLocationOnboardingComplete } from '../../lib/onboarding';
@@ -321,6 +321,11 @@ export default function WorkspaceReadyOnboardingScreen() {
     }
   }
 
+  function handleBrandPress() {
+    signOutLocally();
+    router.replace('/' as never);
+  }
+
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-white px-6">
@@ -339,7 +344,11 @@ export default function WorkspaceReadyOnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
+          <BrandWordmark
+            accessibilityRole="button"
+            className="text-center text-[46px] leading-[50px] text-[#26334a]"
+            onPress={handleBrandPress}
+          />
           <View className="mt-10 gap-2">
             <Text style={[titleStyle, { textAlign: 'center' }]}>
               <Text style={{ fontFamily: 'Manrope_700Bold' }}>

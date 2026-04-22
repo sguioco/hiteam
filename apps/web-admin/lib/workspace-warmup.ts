@@ -37,6 +37,7 @@ function buildWarmupPaths(session: AuthSession) {
     "/auth/bootstrap",
     "/bootstrap/dashboard",
     "/bootstrap/news",
+    "/bootstrap/leaderboard",
     "/notifications/me",
     "/notifications/me/unread-count",
   ];
@@ -116,8 +117,5 @@ export async function primeWorkspaceExperienceWithinBudget(
 ) {
   const warmup = primeWorkspaceExperience(session, { force: true });
 
-  await Promise.race([
-    warmup,
-    delay(Math.max(budgetMs, 0)),
-  ]);
+  await Promise.race([warmup, delay(Math.max(budgetMs, 0))]);
 }

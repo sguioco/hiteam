@@ -14,7 +14,7 @@ import {
   startBiometricEnrollment,
   verifyBiometricWithArtifacts,
 } from "../../lib/api";
-import { updateAuthFlowState } from "../../lib/auth-flow";
+import { signOutLocally, updateAuthFlowState } from "../../lib/auth-flow";
 import { useI18n } from "../../lib/i18n";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -324,6 +324,11 @@ export default function BiometricPage() {
     await captureStep();
   }
 
+  function handleBrandPress() {
+    signOutLocally();
+    router.replace("/" as never);
+  }
+
   return (
     <SafeAreaView
       className="flex-1 bg-white"
@@ -333,7 +338,11 @@ export default function BiometricPage() {
 
       <View className="flex-1 px-6 pt-6">
         <View className="gap-4">
-          <BrandWordmark className="text-center text-[46px] leading-[50px] text-[#26334a]" />
+          <BrandWordmark
+            accessibilityRole="button"
+            className="text-center text-[46px] leading-[50px] text-[#26334a]"
+            onPress={handleBrandPress}
+          />
         </View>
 
         <View className="mt-10 flex-1">

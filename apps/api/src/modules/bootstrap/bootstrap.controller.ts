@@ -71,6 +71,12 @@ export class BootstrapController {
     return this.bootstrapService.news(user);
   }
 
+  @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('leaderboard')
+  leaderboard(@CurrentUser() user: JwtUser) {
+    return this.bootstrapService.leaderboard(user);
+  }
+
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('biometric')
   biometric(@CurrentUser() user: JwtUser, @Query('result') result?: string) {
