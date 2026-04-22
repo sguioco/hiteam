@@ -47,13 +47,17 @@ webAdmin:
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
 
 migrations:
-  enabled: true
+  enabled: false
   waitFor:
-    host: "dpg-d719g6ggjchc739c28tg-a.oregon-postgres.render.com"
+    host: ""
     port: 5432
 
 postgres:
-  enabled: false
+  enabled: true
+  auth:
+    username: "hiteam"
+    password: "hiteamsecretno"
+    database: "hiteam"
 
 redis:
   enabled: true
