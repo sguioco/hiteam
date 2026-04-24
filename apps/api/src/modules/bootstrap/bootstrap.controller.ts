@@ -73,8 +73,8 @@ export class BootstrapController {
 
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('leaderboard')
-  leaderboard(@CurrentUser() user: JwtUser) {
-    return this.bootstrapService.leaderboard(user);
+  leaderboard(@CurrentUser() user: JwtUser, @Query('month') month?: string) {
+    return this.bootstrapService.leaderboard(user, month);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

@@ -16,6 +16,7 @@ import {
 } from "./leaderboard.mock";
 import type {
   LeaderboardCelebration,
+  LeaderboardDailyActivity,
   LeaderboardEntry,
   LeaderboardOverviewResponse,
   LeaderboardProgressMetric,
@@ -80,6 +81,8 @@ type TaskDayEvaluation = {
   earnedPoints: number;
   dueTaskCount: number;
   completedDueTaskCount: number;
+  dueChecklistItemCount: number;
+  completedDueChecklistItemCount: number;
   overdueCount: number;
 };
 
@@ -96,14 +99,17 @@ export class LeaderboardService {
     private readonly collaborationService: CollaborationService,
   ) {}
 
-  async getOverview(userId: string): Promise<LeaderboardOverviewResponse> {
+  async getOverview(
+    userId: string,
+    requestedMonthKey?: string | null,
+  ): Promise<LeaderboardOverviewResponse> {
     const viewer = await this.loadViewerEmployee(userId);
 
     if (isDemoLeaderboardEmail(viewer.user.email)) {
-      return buildDemoLeaderboardOverview(viewer.user.email);
+      return buildDemoLeaderboardOverview(viewer.user.email, requestedMonthKey);
     }
 
-    const context = this.createMonthContext();
+    const context = this.createMonthContext(requestedMonthKey);
     const employees = await this.loadTeamEmployees(viewer.tenantId, viewer.id);
     const employeeIds = employees.map((employee) => employee.id);
 
@@ -214,6 +220,7 @@ export class LeaderboardService {
           streak: 0,
         },
         progress: this.createEmptyProgress(),
+        dailyActivity: [],
       };
 
     return {
@@ -235,6 +242,7 @@ export class LeaderboardService {
         todayMaxPoints: LEADERBOARD_DAILY_MAX_POINTS,
         streak: me.entry.streak,
         progress: me.progress,
+        dailyActivity: me.dailyActivity,
       },
       leaderboard: ranked.map((item) => item.entry),
     };
@@ -445,21 +453,28 @@ export class LeaderboardService {
     );
 
     let points = 0;
+    const dailyActivity: LeaderboardDailyActivity[] = [];
 
     for (const dayKey of context.monthKeys) {
       const shift = shiftByDayKey.get(dayKey) ?? null;
       const session = shift ? (sessionByShiftId.get(shift.id) ?? null) : null;
       const taskDay = this.evaluateTaskDay(tasks, dayKey, timeZone);
+      const onTimeArrival = this.isOnTimeArrival(session, shift);
+      const onTimeDeparture = this.isOnTimeDeparture(session, shift);
+      const dailyPoints =
+        (onTimeArrival ? LEADERBOARD_CHECK_IN_POINTS : 0) +
+        (onTimeDeparture ? LEADERBOARD_CHECK_OUT_POINTS : 0) +
+        taskDay.earnedPoints;
 
-      points +=
-        (this.isOnTimeArrival(session, shift)
-          ? LEADERBOARD_CHECK_IN_POINTS
-          : 0) +
-        (this.isOnTimeDeparture(session, shift)
-          ? LEADERBOARD_CHECK_OUT_POINTS
-          : 0) +
-        taskDay.earnedPoints +
-        (streakState.bonusByDayKey.get(dayKey) ?? 0);
+      points += dailyPoints + (streakState.bonusByDayKey.get(dayKey) ?? 0);
+      dailyActivity.push({
+        dayKey,
+        earnedPoints: dailyPoints,
+        maxPoints: LEADERBOARD_DAILY_MAX_POINTS,
+        completed: dailyPoints >= LEADERBOARD_DAILY_MAX_POINTS,
+        onTimeArrival,
+        hadShift: Boolean(shift),
+      });
     }
 
     const todayShift = shiftByDayKey.get(context.todayKey) ?? null;
@@ -504,6 +519,7 @@ export class LeaderboardService {
         streak: streakState.currentStreak,
       } satisfies LeaderboardEntry,
       progress,
+      dailyActivity,
     };
   }
 
@@ -525,6 +541,8 @@ export class LeaderboardService {
           shiftBoundaryAt: shift?.startsAt.toISOString() ?? null,
           dueTaskCount: 0,
           completedDueTaskCount: 0,
+          dueChecklistItemCount: 0,
+          completedDueChecklistItemCount: 0,
           overdueCount: 0,
         },
       },
@@ -540,6 +558,8 @@ export class LeaderboardService {
           shiftBoundaryAt: shift?.endsAt.toISOString() ?? null,
           dueTaskCount: 0,
           completedDueTaskCount: 0,
+          dueChecklistItemCount: 0,
+          completedDueChecklistItemCount: 0,
           overdueCount: 0,
         },
       },
@@ -553,6 +573,9 @@ export class LeaderboardService {
           shiftBoundaryAt: null,
           dueTaskCount: taskDay.dueTaskCount,
           completedDueTaskCount: taskDay.completedDueTaskCount,
+          dueChecklistItemCount: taskDay.dueChecklistItemCount,
+          completedDueChecklistItemCount:
+            taskDay.completedDueChecklistItemCount,
           overdueCount: taskDay.overdueCount,
         },
       },
@@ -634,6 +657,15 @@ export class LeaderboardService {
     const completedDueTaskCount = dueTodayTasks.filter((task) =>
       this.isTaskCompletedByDayKey(task, dayKey, timeZone),
     ).length;
+    const dueChecklistItemCount = dueTodayTasks.reduce(
+      (total, task) => total + task.checklistItems.length,
+      0,
+    );
+    const completedDueChecklistItemCount = dueTodayTasks.reduce(
+      (total, task) =>
+        total + task.checklistItems.filter((item) => item.isCompleted).length,
+      0,
+    );
     const overdueCount = relevantTasks.filter((task) =>
       this.isTaskOverdueOnDayKey(task, dayKey, timeZone),
     ).length;
@@ -649,6 +681,8 @@ export class LeaderboardService {
         : 0,
       dueTaskCount: dueTodayTasks.length,
       completedDueTaskCount,
+      dueChecklistItemCount,
+      completedDueChecklistItemCount,
       overdueCount,
     };
   }
@@ -788,18 +822,29 @@ export class LeaderboardService {
     });
   }
 
-  private createMonthContext(): MonthContext {
+  private createMonthContext(requestedMonthKey?: string | null): MonthContext {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const requestedMonthStart = this.parseMonthKey(requestedMonthKey);
+    const monthStart =
+      requestedMonthStart &&
+      requestedMonthStart.getTime() <= currentMonthStart.getTime()
+        ? requestedMonthStart
+        : currentMonthStart;
     const monthEnd = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
+      monthStart.getFullYear(),
+      monthStart.getMonth() + 1,
       0,
       23,
       59,
       59,
       999,
     );
+    const evaluationEnd =
+      monthStart.getFullYear() === now.getFullYear() &&
+      monthStart.getMonth() === now.getMonth()
+        ? now
+        : monthEnd;
     const taskLookbackStart = this.addDays(
       monthStart,
       -LEADERBOARD_TASK_LOOKBACK_DAYS,
@@ -815,8 +860,8 @@ export class LeaderboardService {
       monthEnd,
       taskLookbackStart,
       streakLookbackStart,
-      todayKey: this.formatDateKey(now),
-      monthKeys: this.buildDateKeyRange(monthStart, now),
+      todayKey: this.formatDateKey(evaluationEnd),
+      monthKeys: this.buildDateKeyRange(monthStart, evaluationEnd),
     };
   }
 
@@ -868,6 +913,8 @@ export class LeaderboardService {
           shiftBoundaryAt: null,
           dueTaskCount: 0,
           completedDueTaskCount: 0,
+          dueChecklistItemCount: 0,
+          completedDueChecklistItemCount: 0,
           overdueCount: 0,
         },
       },
@@ -881,6 +928,8 @@ export class LeaderboardService {
           shiftBoundaryAt: null,
           dueTaskCount: 0,
           completedDueTaskCount: 0,
+          dueChecklistItemCount: 0,
+          completedDueChecklistItemCount: 0,
           overdueCount: 0,
         },
       },
@@ -894,6 +943,8 @@ export class LeaderboardService {
           shiftBoundaryAt: null,
           dueTaskCount: 0,
           completedDueTaskCount: 0,
+          dueChecklistItemCount: 0,
+          completedDueChecklistItemCount: 0,
           overdueCount: 0,
         },
       },
@@ -920,6 +971,29 @@ export class LeaderboardService {
     const next = new Date(value);
     next.setDate(next.getDate() + amount);
     return next;
+  }
+
+  private parseMonthKey(value?: string | null) {
+    const trimmed = value?.trim() ?? "";
+    const match = /^(\d{4})-(\d{2})$/.exec(trimmed);
+
+    if (!match) {
+      return null;
+    }
+
+    const year = Number.parseInt(match[1] ?? "", 10);
+    const monthIndex = Number.parseInt(match[2] ?? "", 10) - 1;
+
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(monthIndex) ||
+      monthIndex < 0 ||
+      monthIndex > 11
+    ) {
+      return null;
+    }
+
+    return new Date(year, monthIndex, 1);
   }
 
   private formatDateKey(value: Date) {

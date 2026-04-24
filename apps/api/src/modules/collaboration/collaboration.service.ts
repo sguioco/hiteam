@@ -3851,12 +3851,14 @@ export class CollaborationService {
       });
     });
 
-    return this.serializeTaskWithPhotoProofUrls(
-      await this.prisma.task.findUniqueOrThrow({
-        where: { id: taskId },
-        include: this.taskInclude(),
-      }),
-    );
+    const updated = await this.prisma.task.findUniqueOrThrow({
+      where: { id: taskId },
+      include: this.taskInclude(),
+    });
+
+    await this.emitWorkspaceRefreshForTasks([updated], "task.checklist_toggled");
+
+    return this.serializeTaskWithPhotoProofUrls(updated);
   }
 
   async addTaskComment(userId: string, taskId: string, body: string) {

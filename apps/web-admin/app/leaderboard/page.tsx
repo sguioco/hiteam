@@ -6,17 +6,18 @@ import {
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 
-async function loadInitialLeaderboardData(): Promise<{
+async function loadInitialLeaderboardData(month?: string): Promise<{
   initialData: LeaderboardCenterInitialData | null;
   mode: "admin" | "employee";
 }> {
   const session = await requireServerSession();
+  const query = month?.trim() ? `?month=${encodeURIComponent(month.trim())}` : "";
 
   try {
     return await serverApiRequestWithSession<{
       initialData: LeaderboardCenterInitialData | null;
       mode: "admin" | "employee";
-    }>(session, "/bootstrap/leaderboard");
+    }>(session, `/bootstrap/leaderboard${query}`);
   } catch {
     return {
       mode: "admin",
@@ -25,8 +26,16 @@ async function loadInitialLeaderboardData(): Promise<{
   }
 }
 
-export default async function LeaderboardPage() {
-  const { initialData, mode } = await loadInitialLeaderboardData();
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const monthParam = resolvedSearchParams?.month;
+  const month =
+    typeof monthParam === "string" ? monthParam : monthParam?.[0];
+  const { initialData, mode } = await loadInitialLeaderboardData(month);
 
   return (
     <AdminShell mode={mode}>

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -13,7 +13,7 @@ export class LeaderboardController {
 
   @Roles("employee", "tenant_owner", "hr_admin", "operations_admin", "manager")
   @Get("overview")
-  overview(@CurrentUser() user: JwtUser) {
-    return this.leaderboardService.getOverview(user.sub);
+  overview(@CurrentUser() user: JwtUser, @Query("month") month?: string) {
+    return this.leaderboardService.getOverview(user.sub, month);
   }
 }

@@ -616,12 +616,12 @@ export class BootstrapService {
     };
   }
 
-  async leaderboard(user: JwtUser) {
+  async leaderboard(user: JwtUser, month?: string) {
     const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
 
     return {
       mode,
-      initialData: await this.leaderboardService.getOverview(user.sub),
+      initialData: await this.leaderboardService.getOverview(user.sub, month),
     };
   }
 

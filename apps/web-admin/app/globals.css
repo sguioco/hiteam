@@ -10474,6 +10474,21 @@ body {
   background: rgba(246, 248, 252, 0.94) !important;
 }
 
+.team-tasks-table-row.is-current-user {
+  isolation: isolate;
+  background: linear-gradient(
+    135deg,
+    rgba(40, 75, 255, 0.08),
+    rgba(40, 75, 255, 0.02) 38%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.team-tasks-table-row.is-current-user > td,
+.team-tasks-table-row.is-current-user:hover > td {
+  background: transparent !important;
+}
+
 .team-tasks-detail-row > td {
   padding: 0 !important;
   background: rgba(246, 248, 252, 0.94) !important;

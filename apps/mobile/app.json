@@ -30,6 +30,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-notifications",
+        {
+          "mode": "production"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Smart uses the front camera to verify your identity before you can enter the workspace."

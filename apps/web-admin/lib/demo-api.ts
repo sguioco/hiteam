@@ -3334,7 +3334,77 @@ export function getDemoNewsBootstrap(token?: string) {
   };
 }
 
-function buildDemoLeaderboardEntries() {
+function parseLeaderboardMonthKey(value?: string | null) {
+  const trimmed = value?.trim() ?? "";
+  const match = /^(\d{4})-(\d{2})$/.exec(trimmed);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number.parseInt(match[1] ?? "", 10);
+  const monthIndex = Number.parseInt(match[2] ?? "", 10) - 1;
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(monthIndex) ||
+    monthIndex < 0 ||
+    monthIndex > 11
+  ) {
+    return null;
+  }
+
+  return new Date(year, monthIndex, 1);
+}
+
+function resolveLeaderboardMonthStart(monthKey?: string | null) {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const requestedMonthStart = parseLeaderboardMonthKey(monthKey);
+
+  if (
+    requestedMonthStart &&
+    requestedMonthStart.getTime() <= currentMonthStart.getTime()
+  ) {
+    return requestedMonthStart;
+  }
+
+  return currentMonthStart;
+}
+
+function getLeaderboardMonthOffset(monthStart: Date) {
+  const now = new Date();
+  return Math.max(
+    0,
+    (now.getFullYear() - monthStart.getFullYear()) * 12 +
+      (now.getMonth() - monthStart.getMonth()),
+  );
+}
+
+function buildDemoLeaderboardDailyActivity(
+  anchorDate: Date,
+  todayPoints: number,
+) {
+  const points = [9, 13, 8, 14, 11, 7, todayPoints];
+
+  return points.map((earnedPoints, index) => {
+    const day = new Date(anchorDate);
+    day.setDate(anchorDate.getDate() - (points.length - 1 - index));
+
+    return {
+      dayKey: dateKey(day),
+      earnedPoints,
+      maxPoints: 15,
+      completed: earnedPoints >= 15,
+      onTimeArrival: earnedPoints >= 5,
+      hadShift: true,
+    };
+  });
+}
+
+function buildDemoLeaderboardEntries(monthKey?: string | null) {
+  const monthStart = resolveLeaderboardMonthStart(monthKey);
+  const monthOffset = getLeaderboardMonthOffset(monthStart);
   const source = [
     [
       "emp-demo-01",
@@ -3525,58 +3595,92 @@ function buildDemoLeaderboardEntries() {
     ],
   ] as const;
 
-  return source.map(
-    (
-      [
-        id,
-        firstName,
-        lastName,
-        employeeNumber,
-        departmentName,
-        positionName,
-        points,
-        todayPoints,
-        streak,
-      ],
-      index,
-    ) => ({
+  return source
+    .map(
+      (
+        [
+          id,
+          firstName,
+          lastName,
+          employeeNumber,
+          departmentName,
+          positionName,
+          points,
+          todayPoints,
+          streak,
+        ],
+        index,
+      ) => ({
+        rank: 0,
+        employee: {
+          id,
+          firstName,
+          lastName,
+          employeeNumber,
+          avatarUrl: getMockAvatarDataUrl(`${firstName} ${lastName}`),
+          department: {
+            id: `department-${departmentName.toLowerCase()}`,
+            name: departmentName,
+          },
+          position: {
+            id: `position-${positionName.toLowerCase().replace(/\s+/g, "-")}`,
+            name: positionName,
+          },
+        },
+        points: Math.max(36, points - monthOffset * (4 + (index % 3))),
+        todayPoints:
+          monthOffset === 0
+            ? todayPoints
+            : Math.max(0, todayPoints - (index % 4)),
+        streak: Math.max(0, streak - monthOffset),
+      }),
+    )
+    .sort((left, right) => {
+      if (right.points !== left.points) {
+        return right.points - left.points;
+      }
+
+      if (right.todayPoints !== left.todayPoints) {
+        return right.todayPoints - left.todayPoints;
+      }
+
+      if (right.streak !== left.streak) {
+        return right.streak - left.streak;
+      }
+
+      return `${left.employee.lastName} ${left.employee.firstName}`.localeCompare(
+        `${right.employee.lastName} ${right.employee.firstName}`,
+        "ru",
+      );
+    })
+    .map((entry, index) => ({
+      ...entry,
       rank: index + 1,
-      employee: {
-        id,
-        firstName,
-        lastName,
-        employeeNumber,
-        avatarUrl: null,
-        department: {
-          id: `department-${departmentName.toLowerCase()}`,
-          name: departmentName,
-        },
-        position: {
-          id: `position-${positionName.toLowerCase().replace(/\s+/g, "-")}`,
-          name: positionName,
-        },
-      },
-      points,
-      todayPoints,
-      streak,
-    }),
-  );
+    }));
 }
 
-function buildDemoLeaderboardOverview(token?: string) {
+function buildDemoLeaderboardOverview(
+  token?: string,
+  monthKey?: string | null,
+) {
   const role = currentDemoRole(token) === "employee" ? "employee" : "admin";
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStart = resolveLeaderboardMonthStart(monthKey);
   const monthEnd = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
     0,
     23,
     59,
     59,
     999,
   );
-  const leaderboard = buildDemoLeaderboardEntries();
+  const anchorDate =
+    monthStart.getFullYear() === now.getFullYear() &&
+    monthStart.getMonth() === now.getMonth()
+      ? now
+      : monthEnd;
+  const leaderboard = buildDemoLeaderboardEntries(monthKey);
   const me =
     leaderboard.find((entry) =>
       role === "employee"
@@ -3598,6 +3702,8 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: createIsoAt(0, 9, 0),
               dueTaskCount: 0,
               completedDueTaskCount: 0,
+              dueChecklistItemCount: 0,
+              completedDueChecklistItemCount: 0,
               overdueCount: 0,
             },
           },
@@ -3611,6 +3717,8 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: createIsoAt(0, 18, 0),
               dueTaskCount: 0,
               completedDueTaskCount: 0,
+              dueChecklistItemCount: 0,
+              completedDueChecklistItemCount: 0,
               overdueCount: 0,
             },
           },
@@ -3624,6 +3732,8 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: null,
               dueTaskCount: 4,
               completedDueTaskCount: 4,
+              dueChecklistItemCount: 8,
+              completedDueChecklistItemCount: 6,
               overdueCount: 2,
             },
           },
@@ -3639,6 +3749,8 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: createIsoAt(0, 9, 0),
               dueTaskCount: 0,
               completedDueTaskCount: 0,
+              dueChecklistItemCount: 0,
+              completedDueChecklistItemCount: 0,
               overdueCount: 0,
             },
           },
@@ -3652,6 +3764,8 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: createIsoAt(0, 18, 0),
               dueTaskCount: 0,
               completedDueTaskCount: 0,
+              dueChecklistItemCount: 0,
+              completedDueChecklistItemCount: 0,
               overdueCount: 0,
             },
           },
@@ -3665,17 +3779,23 @@ function buildDemoLeaderboardOverview(token?: string) {
               shiftBoundaryAt: null,
               dueTaskCount: 4,
               completedDueTaskCount: 4,
+              dueChecklistItemCount: 8,
+              completedDueChecklistItemCount: 8,
               overdueCount: 0,
             },
           },
         ];
+  const todayPoints = progress.reduce(
+    (total, item) => total + item.earnedPoints,
+    0,
+  );
 
   return {
     month: {
       key: dateKey(monthStart).slice(0, 7),
       startsAt: monthStart.toISOString(),
       endsAt: monthEnd.toISOString(),
-      todayKey: dateKey(now),
+      todayKey: dateKey(anchorDate),
     },
     summary: {
       participants: leaderboard.length,
@@ -3685,21 +3805,22 @@ function buildDemoLeaderboardOverview(token?: string) {
       employeeId: me.employee.id,
       rank: me.rank,
       points: me.points,
-      todayPoints: progress.reduce(
-        (total, item) => total + item.earnedPoints,
-        0,
-      ),
+      todayPoints,
       todayMaxPoints: 15,
       streak: me.streak,
       progress,
+      dailyActivity: buildDemoLeaderboardDailyActivity(anchorDate, todayPoints),
     },
     leaderboard,
   };
 }
 
-export function getDemoLeaderboardBootstrap(token?: string) {
+export function getDemoLeaderboardBootstrap(
+  token?: string,
+  monthKey?: string | null,
+) {
   return {
-    initialData: buildDemoLeaderboardOverview(token),
+    initialData: buildDemoLeaderboardOverview(token, monthKey),
     mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
   };
 }
@@ -4251,7 +4372,10 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/bootstrap/leaderboard" && method === "GET") {
-    return getDemoLeaderboardBootstrap(token) as T;
+    return getDemoLeaderboardBootstrap(
+      token,
+      url.searchParams.get("month"),
+    ) as T;
   }
 
   if (pathname === "/bootstrap/biometric" && method === "GET") {
@@ -4259,7 +4383,10 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/leaderboard/overview" && method === "GET") {
-    return buildDemoLeaderboardOverview(token) as T;
+    return buildDemoLeaderboardOverview(
+      token,
+      url.searchParams.get("month"),
+    ) as T;
   }
 
   if (pathname === "/collaboration/announcements" && method === "GET") {

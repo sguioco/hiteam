@@ -97,12 +97,16 @@ function formatDayHeader(value: string) {
     };
   }
 
+  const monthLabel = parsed
+    .toLocaleDateString("en-US", { month: "long" })
+    .toUpperCase();
+
   return {
     key: formatDateKey(parsed),
     weekday: parsed
       .toLocaleDateString("en-US", { weekday: "long" })
       .toUpperCase(),
-    dateLabel: `${parsed.getDate()}/${parsed.getMonth() + 1}`,
+    dateLabel: `${parsed.getDate()} ${monthLabel}`,
   };
 }
 

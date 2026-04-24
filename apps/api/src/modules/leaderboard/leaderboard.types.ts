@@ -13,8 +13,19 @@ export type LeaderboardProgressMetric = {
     shiftBoundaryAt: string | null;
     dueTaskCount: number;
     completedDueTaskCount: number;
+    dueChecklistItemCount: number;
+    completedDueChecklistItemCount: number;
     overdueCount: number;
   };
+};
+
+export type LeaderboardDailyActivity = {
+  dayKey: string;
+  earnedPoints: number;
+  maxPoints: number;
+  completed: boolean;
+  onTimeArrival: boolean;
+  hadShift: boolean;
 };
 
 export type LeaderboardEntry = {
@@ -58,6 +69,7 @@ export type LeaderboardOverviewResponse = {
     todayMaxPoints: number;
     streak: number;
     progress: LeaderboardProgressMetric[];
+    dailyActivity: LeaderboardDailyActivity[];
   };
   leaderboard: LeaderboardEntry[];
 };
