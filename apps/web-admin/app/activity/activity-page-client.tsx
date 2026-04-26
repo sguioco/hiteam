@@ -338,14 +338,6 @@ export default function ActivityPageClient({
             preset === "custom" ? " is-custom-open" : ""
           }`}
         >
-          <div className="team-tasks-heading">
-            <h1 className="team-tasks-focus-label">
-              <span className="team-tasks-focus-text">
-                {localize(locale, "Активность", "Activity")}
-              </span>
-            </h1>
-          </div>
-
           <div className="team-tasks-period-controls">
             {preset === "custom" ? (
               <div className="team-tasks-custom-range">

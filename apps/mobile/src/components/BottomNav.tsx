@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View, type ImageSourcePropType } from "react-native";
 import { Text } from "../../components/ui/text";
+import { useEffect, useState } from "react";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +17,7 @@ interface BottomNavProps {
     tab: "calendar" | "today" | "manage" | "leaderboard" | "news" | "profile",
   ) => void;
   hasBadge?: boolean;
+  profileAvatarSource?: ImageSourcePropType | null;
   showManage?: boolean;
 }
 
@@ -23,6 +25,7 @@ const BottomNav = ({
   active,
   onNavigate,
   hasBadge = false,
+  profileAvatarSource = null,
   showManage = false,
 }: BottomNavProps) => {
   const insets = useSafeAreaInsets();
@@ -45,10 +48,17 @@ const BottomNav = ({
     label: string;
   }) {
     const isActive = active === tab;
+    const [avatarFailed, setAvatarFailed] = useState(false);
     const scale = useSharedValue(1);
     const animatedStyle = useAnimatedStyle(() => ({
       transform: [{ scale: scale.value }],
     }));
+    const shouldShowAvatar =
+      tab === "profile" && profileAvatarSource && !avatarFailed;
+
+    useEffect(() => {
+      setAvatarFailed(false);
+    }, [profileAvatarSource]);
 
     return (
       <Pressable
@@ -65,11 +75,27 @@ const BottomNav = ({
         }}
       >
         <Animated.View className="items-center gap-1" style={animatedStyle}>
-          <Ionicons
-            color={isActive ? "#6d73ff" : "#6b7a90"}
-            name={icon}
-            size={22}
-          />
+          {shouldShowAvatar ? (
+            <View
+              className={`h-[24px] w-[24px] items-center justify-center rounded-full ${
+                isActive ? "border-2 border-primary" : "border border-[#d8deea]"
+              }`}
+            >
+              <Image
+                accessibilityIgnoresInvertColors
+                className="h-full w-full rounded-full"
+                onError={() => setAvatarFailed(true)}
+                resizeMode="cover"
+                source={profileAvatarSource}
+              />
+            </View>
+          ) : (
+            <Ionicons
+              color={isActive ? "#6d73ff" : "#6b7a90"}
+              name={icon}
+              size={22}
+            />
+          )}
           <Text
             adjustsFontSizeToFit
             className={`w-full text-center text-[11px] font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}

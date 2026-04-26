@@ -18,7 +18,7 @@ import type {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppGradientBackground } from "../../components/ui/screen";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
-import { loadAttendanceStatus, loadMyShifts } from "../../lib/api";
+import { loadAttendanceStatus, loadMyProfile, loadMyShifts } from "../../lib/api";
 import { createCollaborationSocket } from "../../lib/collaboration-socket";
 import { createNotificationsSocket } from "../../lib/notifications-socket";
 import BottomNav from "../components/BottomNav";
@@ -40,20 +40,25 @@ import {
 import {
   LEADERBOARD_CELEBRATION_CACHE_KEY,
   LEADERBOARD_CELEBRATION_CACHE_TTL_MS,
+  PROFILE_SCREEN_CACHE_KEY,
+  PROFILE_SCREEN_CACHE_TTL_MS,
   TODAY_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_TTL_MS,
   type TodayScreenCacheValue,
 } from "../../lib/workspace-cache";
+import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { resolveAttendanceActionHref } from "../../lib/workspace-setup";
 import {
   clearScreenCache,
   peekScreenCache,
   readScreenCache,
   subscribeScreenCache,
+  writeScreenCache,
 } from "../../lib/screen-cache";
 import { getTodayNavBadgeState } from "../../lib/today-task-state";
 
 type Tab = "calendar" | "today" | "manage" | "leaderboard" | "news" | "profile";
+type ProfileCacheValue = Awaited<ReturnType<typeof loadMyProfile>>;
 type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
 type StartShiftPromptState = {
   minutesUntilStart: number;
@@ -190,6 +195,14 @@ const Index = () => {
       ),
     [],
   );
+  const initialProfileSnapshot = useMemo(
+    () =>
+      peekScreenCache<ProfileCacheValue>(
+        PROFILE_SCREEN_CACHE_KEY,
+        PROFILE_SCREEN_CACHE_TTL_MS,
+      ),
+    [],
+  );
   const routeTab = normalizeTab(params.tab);
   const overdueParam = Array.isArray(params.overdue)
     ? params.overdue[0]
@@ -219,6 +232,9 @@ const Index = () => {
     useState<LeaderboardCelebration | null>(
       initialCelebrationSnapshot?.value ?? null,
     );
+  const [navProfile, setNavProfile] = useState<ProfileCacheValue | null>(
+    initialProfileSnapshot?.value ?? null,
+  );
   const appStateRef = useRef(AppState.currentState);
   const handWaveRotation = useSharedValue(0);
   const isManager = hasManagerAccess(roleCodes);
@@ -239,6 +255,22 @@ const Index = () => {
       duration: formatPromptLead(startShiftPrompt.minutesUntilStart),
     });
   }, [startShiftPrompt, t]);
+
+  const navProfileAvatarSource = useMemo(() => {
+    if (!navProfile?.avatarUrl) {
+      return null;
+    }
+
+    return resolveEmployeeAvatarSource({
+      avatarUrl: navProfile.avatarUrl,
+      email: navProfile.user.email,
+      employeeNumber: navProfile.employeeNumber,
+      firstName: navProfile.firstName,
+      gender: navProfile.gender,
+      id: navProfile.id,
+      lastName: navProfile.lastName,
+    });
+  }, [navProfile]);
 
   function markTabMounted(tab: Tab) {
     setMountedTabs((current) => {
@@ -364,6 +396,53 @@ const Index = () => {
     });
 
     return unsubscribe;
+  }, [hasWorkspaceEntry]);
+
+  useEffect(() => {
+    if (!hasWorkspaceEntry) {
+      setNavProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const unsubscribe = subscribeScreenCache<ProfileCacheValue>(
+      PROFILE_SCREEN_CACHE_KEY,
+      (entry) => {
+        if (!cancelled) {
+          setNavProfile(entry?.value ?? null);
+        }
+      },
+    );
+
+    void readScreenCache<ProfileCacheValue>(
+      PROFILE_SCREEN_CACHE_KEY,
+      PROFILE_SCREEN_CACHE_TTL_MS,
+    ).then((entry) => {
+      if (cancelled) {
+        return;
+      }
+
+      setNavProfile(entry?.value ?? null);
+
+      if (!entry?.value?.avatarUrl) {
+        void loadMyProfile()
+          .then((profile) => {
+            if (cancelled) {
+              return;
+            }
+
+            setNavProfile(profile);
+            return writeScreenCache(PROFILE_SCREEN_CACHE_KEY, profile);
+          })
+          .catch(() => undefined);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [hasWorkspaceEntry]);
 
   useEffect(() => {
@@ -608,6 +687,7 @@ const Index = () => {
           active={activeTab}
           hasBadge={todayHasBadge}
           onNavigate={navigateToTab}
+          profileAvatarSource={navProfileAvatarSource}
           showManage={isManager}
         />
       </View>

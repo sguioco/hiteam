@@ -747,8 +747,11 @@ export async function submitAttendanceAction(
   });
 }
 
-export async function loadLeaderboardOverview(): Promise<LeaderboardOverviewResponse> {
-  return authRequest<LeaderboardOverviewResponse>("/leaderboard/overview");
+export async function loadLeaderboardOverview(
+  monthKey?: string,
+): Promise<LeaderboardOverviewResponse> {
+  const query = monthKey ? `?month=${encodeURIComponent(monthKey)}` : "";
+  return authRequest<LeaderboardOverviewResponse>(`/leaderboard/overview${query}`);
 }
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {

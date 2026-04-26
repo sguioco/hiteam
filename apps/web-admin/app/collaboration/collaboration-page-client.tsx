@@ -868,12 +868,6 @@ export default function CollaborationPageClient({
   return (
     <AdminShell>
       <main className="page-shell section-stack">
-        <section className="section-header">
-          <span className="eyebrow">{t('nav.collaboration')}</span>
-          <h1>{t('collaboration.title')}</h1>
-          <p>{t('collaboration.subtitle')}</p>
-        </section>
-
         {message ? <div className="inline-note">{message}</div> : null}
 
         <section className="panel">

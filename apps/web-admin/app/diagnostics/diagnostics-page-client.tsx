@@ -336,12 +336,6 @@ export default function DiagnosticsPageClient({
   return (
     <AdminShell>
       <main className="flex w-full flex-col gap-8 px-5 py-6 lg:px-8">
-        <section className="border-b border-[color:var(--border)] pb-5">
-          <h1 className="text-2xl font-semibold text-[color:var(--foreground)]">
-            Diagnostics
-          </h1>
-        </section>
-
         {message ? (
           <div className="border-b border-t border-[color:var(--border)] py-3 text-sm text-[color:var(--foreground)]">
             {message}

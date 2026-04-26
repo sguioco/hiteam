@@ -96,6 +96,12 @@ export function getNewsScreenCacheKey(isManager: boolean) {
   return `news-screen:${isManager ? "manager" : "employee"}`;
 }
 
+export function getLeaderboardScreenCacheKey(monthKey?: string) {
+  return monthKey
+    ? `${LEADERBOARD_SCREEN_CACHE_KEY}:${monthKey}`
+    : LEADERBOARD_SCREEN_CACHE_KEY;
+}
+
 export function getRequestsScreenCacheKey(date = new Date()) {
   return `requests-screen:${date.getFullYear()}-${date.getMonth()}`;
 }
@@ -292,7 +298,7 @@ async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {
 
 export async function warmLeaderboardScreenCache() {
   const overview = await loadLeaderboardOverview();
-  await writeScreenCache(LEADERBOARD_SCREEN_CACHE_KEY, overview);
+  await writeScreenCache(getLeaderboardScreenCacheKey(overview.month.key), overview);
   return overview;
 }
 

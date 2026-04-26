@@ -827,10 +827,16 @@
 
 .activity-page-toolbar {
   align-items: flex-start;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
 }
 
 .activity-page-toolbar .team-tasks-heading {
   padding-left: 30px;
+}
+
+.activity-page-toolbar .team-tasks-period-controls {
+  justify-content: flex-start;
 }
 
 .activity-page-toolbar .team-tasks-focus-label {
@@ -1953,7 +1959,8 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 24px;
+  min-height: 90px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--border);
   background: rgba(242, 239, 234, 0.92);
   backdrop-filter: blur(16px);
@@ -1963,7 +1970,7 @@ textarea {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
 }
 
 .shell-topbar-brandmark {
@@ -1977,6 +1984,8 @@ textarea {
   background: #141821;
   color: #fff;
   box-shadow: 0 14px 30px rgba(20, 24, 33, 0.14);
+  transform: scale(1.18);
+  transform-origin: center;
 }
 
 .shell-topbar-brandmark img {
@@ -1986,18 +1995,27 @@ textarea {
   object-fit: cover;
 }
 
+.shell-topbar-wordmark {
+  font-size: 0.72rem;
+  letter-spacing: -0.05em;
+}
+
 .shell-topbar-copy {
   display: grid;
   min-width: 0;
   gap: 4px;
 }
 
-.shell-topbar-copy strong {
-  font-size: 1.125rem;
+.shell-topbar-copy h1 {
+  margin: 0;
+  font-size: clamp(1.38rem, 4.35vw, 2.95rem);
   font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 0.92;
+  letter-spacing: -0.07em;
+  text-transform: uppercase;
   color: var(--foreground);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
 }
 
 .shell-topbar-meta {
@@ -6299,6 +6317,12 @@ body {
     flex-direction: column;
   }
 
+  .shell-topbar-copy h1 {
+    font-size: clamp(1.56rem, 9.4vw, 2.34rem);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .employee-row-trigger,
   .table-row,
   .table-row-employees,
@@ -10066,7 +10090,9 @@ body {
 }
 
 .team-tasks-page .team-tasks-focus-label {
-  font-weight: 400;
+  font-size: clamp(2.05rem, 4.9vw, 3.25rem);
+  line-height: 0.86;
+  font-weight: 300;
 }
 
 .team-tasks-focus-text {

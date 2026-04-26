@@ -8,7 +8,6 @@ import {
   Activity,
   Bell,
   BriefcaseBusiness,
-  Building2,
   CalendarRange,
   ChevronDown,
   ChevronRight,
@@ -106,6 +105,92 @@ function buildShellNotificationsCacheKey(session: AuthSession) {
 function isActive(pathname: string, href: string) {
   if (href === toAdminHref("/")) return pathname === toAdminHref("/");
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function resolveShellPageTitle(pathname: string, locale: Locale) {
+  const titles = [
+    {
+      href: toAdminHref("/news/archive"),
+      label: locale === "ru" ? "Архив новостей" : "News archive",
+    },
+    {
+      href: toAdminHref("/employees"),
+      label: locale === "ru" ? "Сотрудники" : "Employees",
+    },
+    {
+      href: toAdminHref("/attendance"),
+      label: locale === "ru" ? "Посещаемость" : "Attendance",
+    },
+    {
+      href: toAdminHref("/biometric"),
+      label: locale === "ru" ? "Биометрия" : "Biometric",
+    },
+    {
+      href: toAdminHref("/activity"),
+      label: locale === "ru" ? "Активность" : "Activity",
+    },
+    {
+      href: toAdminHref("/analytics"),
+      label: locale === "ru" ? "Аналитика" : "Analytics",
+    },
+    {
+      href: toAdminHref("/collaboration"),
+      label: locale === "ru" ? "Коллаборация" : "Collaboration",
+    },
+    {
+      href: toAdminHref("/diagnostics"),
+      label: locale === "ru" ? "Диагностика" : "Diagnostics",
+    },
+    {
+      href: toAdminHref("/leaderboard"),
+      label: locale === "ru" ? "Рейтинг" : "Leaderboard",
+    },
+    {
+      href: toAdminHref("/news"),
+      label: locale === "ru" ? "Новости" : "News",
+    },
+    {
+      href: toAdminHref("/notifications"),
+      label: locale === "ru" ? "Уведомления" : "Notifications",
+    },
+    {
+      href: toAdminHref("/observability"),
+      label: locale === "ru" ? "Наблюдаемость" : "Observability",
+    },
+    {
+      href: toAdminHref("/organization"),
+      label: locale === "ru" ? "Структура" : "Organization",
+    },
+    {
+      href: toAdminHref("/payroll"),
+      label: locale === "ru" ? "Payroll" : "Payroll",
+    },
+    {
+      href: toAdminHref("/profile"),
+      label: locale === "ru" ? "Профиль" : "Profile",
+    },
+    {
+      href: toAdminHref("/requests"),
+      label: locale === "ru" ? "Заявки" : "Requests",
+    },
+    {
+      href: toAdminHref("/schedule"),
+      label: locale === "ru" ? "График" : "Calendar",
+    },
+    {
+      href: toAdminHref("/tasks"),
+      label: locale === "ru" ? "Задачи" : "Tasks",
+    },
+    {
+      href: toAdminHref("/"),
+      label: locale === "ru" ? "Главная" : "Home",
+    },
+  ];
+
+  return (
+    titles.find((item) => isActive(pathname, item.href))?.label ??
+    (locale === "ru" ? "Главная" : "Home")
+  );
 }
 
 function resolveSidebarRoleLabel(roleCodes: string[], locale: Locale) {
@@ -878,7 +963,7 @@ export function AdminShell({
     demoHeaderBrand?.companyName ||
     organization?.company?.name?.trim() ||
     (locale === "ru" ? "Организация" : "Organization");
-  const displayEmployeeCount = demoHeaderBrand?.employeeCount ?? employeeCount;
+  const shellPageTitle = resolveShellPageTitle(pathname, locale);
   const companyLogoUrl = organization?.company?.logoUrl ?? null;
   const resolvedProfileAvatarUrl =
     accountProfile?.avatarUrl ||
@@ -1369,20 +1454,11 @@ export function AdminShell({
                   {companyLogoUrl ? (
                     <img alt={companyName} src={companyLogoUrl} />
                   ) : (
-                    <Building2 className="size-5" />
+                    <BrandWordmark className="shell-topbar-wordmark" />
                   )}
                 </div>
                 <div className="shell-topbar-copy">
-                  <strong>{companyName}</strong>
-                  {!employeeOnly ? (
-                    <div className="shell-topbar-meta">
-                      <span className="shell-topbar-meta-item">
-                        <UsersRound className="size-3.5" />
-                        {displayEmployeeCount}{" "}
-                        {locale === "ru" ? "сотрудников" : "employees"}
-                      </span>
-                    </div>
-                  ) : null}
+                  <h1>{shellPageTitle}</h1>
                 </div>
               </div>
 

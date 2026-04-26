@@ -1125,16 +1125,7 @@ export function NewsCenter({
   return (
     <section className="flex flex-col gap-5">
       {isManagerView ? (
-        <header className="animate-fade-in flex flex-col gap-4 px-1 py-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-baseline gap-5">
-            <h1 className="text-[clamp(2.35rem,5.6vw,3.8rem)] font-medium uppercase leading-[0.92] tracking-[-0.07em] text-[color:var(--foreground)]">
-              {localize(locale, "Новости", "News")}
-            </h1>
-            <span className="text-[clamp(2.35rem,5.6vw,3.8rem)] font-medium leading-[0.92] tracking-[-0.07em] text-[rgba(71,85,105,0.62)]">
-              {orderedItems.length}
-            </span>
-          </div>
-
+        <header className="animate-fade-in flex flex-wrap items-center justify-end gap-2 px-1 py-1">
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
             <Button asChild type="button" variant="outline">
               <Link href={toAdminHref("/news/archive")}>
@@ -1154,11 +1145,7 @@ export function NewsCenter({
           </div>
         </header>
       ) : (
-        <header className="animate-fade-in px-1 py-2 text-center">
-          <h1 className="text-4xl font-semibold tracking-[-0.05em] text-[color:var(--foreground)]">
-            Team news
-          </h1>
-        </header>
+        null
       )}
 
       {feedback ? (

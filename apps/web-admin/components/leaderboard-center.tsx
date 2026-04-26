@@ -540,14 +540,6 @@ export function LeaderboardCenter({
 
   return (
     <div className="flex min-h-0 flex-col gap-5">
-      <header className="animate-fade-in flex flex-col gap-4 px-1 py-1">
-        <div className="flex min-w-0 items-baseline gap-5">
-          <h1 className="text-[clamp(2.35rem,5.6vw,3.8rem)] font-normal uppercase leading-[0.92] tracking-[-0.07em] text-[color:var(--foreground)]">
-            {localize(locale, "Рейтинг", "Leaderboard")}
-          </h1>
-        </div>
-      </header>
-
       {topLeaders.length > 0 ? (
         <section className="px-1">
           <div className="grid gap-3 md:grid-cols-3 md:items-end">

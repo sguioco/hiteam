@@ -92,12 +92,7 @@ export default function ObservabilityPageClient({
   return (
     <AdminShell>
       <main className="page-shell section-stack">
-        <section className="section-header">
-          <span className="eyebrow">{t('observability.eyebrow')}</span>
-          <h1>{t('observability.title')}</h1>
-          <p>{t('observability.subtitle')}</p>
-          {summary ? <div className="inline-note">{t('observability.updatedAt')}: {new Date(summary.asOf).toLocaleString()}</div> : null}
-        </section>
+        {summary ? <div className="inline-note">{t('observability.updatedAt')}: {new Date(summary.asOf).toLocaleString()}</div> : null}
         {message ? <div className="inline-note">{message}</div> : null}
 
         {summary ? (

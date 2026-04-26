@@ -72,12 +72,6 @@ export function NotificationsCenter({
 
   return (
     <section className="section-stack">
-      <section className="section-header">
-        <span className="eyebrow">{t('nav.notifications')}</span>
-        <h1>{t('notifications.title')}</h1>
-        <p>{t('notifications.subtitle')}</p>
-      </section>
-
       <section className="hero-grid">
         <article className="metric-card metric-card--accent">
           <span className="metric-label">{t('notifications.unread')}</span>
