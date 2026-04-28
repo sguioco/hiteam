@@ -916,6 +916,11 @@
   );
 }
 
+.activity-day-group:first-child .activity-day-header {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
 .activity-day-header.is-collapsed {
   margin-bottom: 0;
 }

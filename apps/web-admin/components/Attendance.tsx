@@ -48,6 +48,7 @@ type EmployeeRecord = {
 type AttendanceCard = {
   id: string;
   name: string;
+  avatarUrl: string | null;
   employeeNumber: string;
   position: string;
   department: string;
@@ -73,6 +74,7 @@ type AttendanceCard = {
 type PeriodSummaryRow = {
   id: string;
   name: string;
+  avatarUrl: string | null;
   position: string;
   employeeNumber: string;
   total: number;
@@ -113,13 +115,6 @@ const statusDotClass: Record<AttendanceStatus, string> = {
   offline: "bg-[color:var(--muted-foreground)]",
 };
 
-const statusBadgeClass: Record<AttendanceStatus, string> = {
-  online: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
-  late: "bg-[color:var(--soft-warning)] text-[color:var(--warning)]",
-  break: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
-  offline: "bg-[rgba(117,117,117,0.12)] text-[color:var(--muted-foreground)]",
-};
-
 const statusTextClass: Record<AttendanceStatus, string> = {
   online: "text-[color:var(--accent-strong)]",
   late: "text-[color:var(--warning)]",
@@ -143,6 +138,7 @@ const attendanceStatusWeight: Record<AttendanceStatus, number> = {
   late: 2,
   offline: 3,
 };
+const STANDARD_SHIFT_MINUTES = 480;
 
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
@@ -343,7 +339,7 @@ function AttendanceAvatar({
       <img
         alt={name}
         className={cn(
-          "rounded-2xl border border-[color:var(--border)] object-cover",
+          "rounded-full border border-[color:var(--border)] object-cover",
           sizeClass,
         )}
         src={avatarUrl}
@@ -354,7 +350,7 @@ function AttendanceAvatar({
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-2xl bg-[color:var(--panel-muted)] font-semibold text-[color:var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+        "flex items-center justify-center rounded-full bg-[color:var(--panel-muted)] font-semibold text-[color:var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
         sizeClass,
       )}
     >
@@ -558,6 +554,17 @@ export default function Attendance({
     return map;
   }, [anomalies]);
 
+  const employeeAvatarById = useMemo(
+    () =>
+      new Map(
+        employees.map((employee) => [
+          employee.id,
+          employee.avatarUrl ?? null,
+        ]),
+      ),
+    [employees],
+  );
+
   const todayCards = useMemo<AttendanceCard[]>(() => {
     return employees
       .map((employee) => {
@@ -595,7 +602,7 @@ export default function Attendance({
         }
 
         const progress = clampPercent(
-          row ? (row.workedMinutes / 480) * 100 : 0,
+          row ? (row.workedMinutes / STANDARD_SHIFT_MINUTES) * 100 : 0,
         );
         const progressTone = getProgressTone(progress);
 
@@ -616,6 +623,7 @@ export default function Attendance({
         return {
           id: employee.id,
           name: buildFullName(employee),
+          avatarUrl: employee.avatarUrl ?? null,
           employeeNumber: employee.employeeNumber,
           position: employee.position?.name ?? runtimeLocalize("Сотрудник", "Employee", locale),
           department:
@@ -728,6 +736,7 @@ export default function Attendance({
         return {
           id: employee.id,
           name: buildFullName(employee),
+          avatarUrl: employee.avatarUrl ?? null,
           position: employee.position?.name ?? runtimeLocalize("Сотрудник", "Employee", locale),
           employeeNumber: employee.employeeNumber,
           total: rows.length,
@@ -932,7 +941,11 @@ export default function Attendance({
                         >
                           <div className="flex items-start gap-3">
                             <div className="relative shrink-0">
-                              <AttendanceAvatar name={card.name} size="md" />
+                              <AttendanceAvatar
+                                avatarUrl={card.avatarUrl}
+                                name={card.name}
+                                size="md"
+                              />
                               <span
                                 className={cn(
                                   "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white",
@@ -1012,7 +1025,11 @@ export default function Attendance({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="relative">
-                          <AttendanceAvatar name={selectedCard.name} size="lg" />
+                          <AttendanceAvatar
+                            avatarUrl={selectedCard.avatarUrl}
+                            name={selectedCard.name}
+                            size="lg"
+                          />
                           <span
                             className={cn(
                               "absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-white",
@@ -1045,7 +1062,9 @@ export default function Attendance({
                     <div className="rounded-[22px] border border-[rgba(40,75,255,0.14)] bg-[linear-gradient(180deg,rgba(225,231,255,0.92)_0%,rgba(255,255,255,0.96)_100%)] p-4">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Покрытие смены", "Shift coverage", locale)}
+                          {locale === "ru"
+                            ? `Смена ${selectedCard.schedule}`
+                            : `Shift ${selectedCard.schedule}`}
                         </span>
                         <span className="text-sm font-semibold text-[color:var(--foreground)]">
                           {selectedCard.progress}%
@@ -1059,15 +1078,15 @@ export default function Attendance({
                       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[color:var(--muted-foreground)]">
                         <span>
                           {locale === "ru"
-                            ? `Отработано ${formatMinutes(selectedCard.workedMinutes)}`
-                            : `Worked ${formatMinutes(selectedCard.workedMinutes)}`}
+                            ? `Отработано ${formatMinutes(selectedCard.workedMinutes)} из ${formatMinutes(STANDARD_SHIFT_MINUTES)}`
+                            : `Worked ${formatMinutes(selectedCard.workedMinutes)} of ${formatMinutes(STANDARD_SHIFT_MINUTES)}`}
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="rounded-[20px] bg-[color:var(--panel-muted)] p-4">
-                        <div className="mb-2 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                    <div className="grid gap-0">
+                      <div className="flex items-center justify-between gap-4 py-3">
+                        <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogIn className="h-3.5 w-3.5" />
                           {runtimeLocalize("Приход", "Check-in", locale)}
                         </div>
@@ -1075,47 +1094,15 @@ export default function Attendance({
                           {formatTime(selectedCard.arrival)}
                         </div>
                       </div>
-                      <div className="rounded-[20px] bg-[color:var(--panel-muted)] p-4">
-                        <div className="mb-2 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
+                      <Separator className="bg-[color:var(--border)]" />
+                      <div className="flex items-center justify-between gap-4 py-3">
+                        <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogOut className="h-3.5 w-3.5" />
                           {runtimeLocalize("Уход", "Check-out", locale)}
                         </div>
                         <div className="text-base font-semibold text-[color:var(--foreground)]">
                           {formatTime(selectedCard.departure)}
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[20px] bg-[color:var(--panel-muted)] p-4">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-foreground)]">
-                        {runtimeLocalize("Смена и статус", "Shift and status", locale)}
-                      </div>
-                      <div className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {selectedCard.schedule}
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                            statusBadgeClass[selectedCard.status],
-                          )}
-                        >
-                          {selectedCard.statusLabel}
-                        </span>
-                        {selectedCard.lateMinutes > 0 ? (
-                          <span className="inline-flex items-center rounded-full bg-[color:var(--soft-warning)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--warning)]">
-                            {locale === "ru"
-                              ? `Опоздание ${selectedCard.lateMinutes} мин`
-                              : `${selectedCard.lateMinutes} min late`}
-                          </span>
-                        ) : null}
-                        {selectedCard.earlyLeaveMinutes > 0 ? (
-                          <span className="inline-flex items-center rounded-full bg-[color:var(--soft-danger)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--danger)]">
-                            {locale === "ru"
-                              ? `Ранний уход ${selectedCard.earlyLeaveMinutes} мин`
-                              : `${selectedCard.earlyLeaveMinutes} min early`}
-                          </span>
-                        ) : null}
                       </div>
                     </div>
 
@@ -1165,13 +1152,6 @@ export default function Attendance({
                   <h3 className="text-xl font-semibold text-[color:var(--foreground)]">
                     {runtimeLocalize("Журнал отметок и проверок", "Attendance and verification log", locale)}
                   </h3>
-                  <p className="text-sm text-[color:var(--muted-foreground)]">
-                    {runtimeLocalize(
-                      "Последние события прихода, ухода и перерывов с устройством, расстоянием и biometric status.",
-                      "Latest check-in, check-out and break events with device, distance and biometric status.",
-                      locale,
-                    )}
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm text-[color:var(--muted-foreground)]">
                   <span>{runtimeLocalize("Всего:", "Total:", locale)} {audit?.totals.total ?? 0}</span>
@@ -1193,6 +1173,7 @@ export default function Attendance({
                       const reviewNeeded =
                         item.biometricVerification?.result === "REVIEW" ||
                         item.biometricVerification?.manualReviewStatus === "PENDING";
+                      const auditAvatarUrl = employeeAvatarById.get(item.employeeId) ?? null;
 
                       return (
                         <button
@@ -1207,45 +1188,52 @@ export default function Attendance({
                           type="button"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-semibold text-[color:var(--foreground)]">
-                                  {item.employeeName}
-                                </span>
-                                <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--muted-foreground)]">
-                                  {formatAuditEventType(item.eventType)}
-                                </span>
-                                <span className="rounded-full bg-[rgba(49,84,255,0.08)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--accent)]">
-                                  {formatAuditSource(item.source)}
-                                </span>
-                                {reviewNeeded ? (
-                                  <span className="rounded-full bg-[color:var(--soft-warning)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--warning)]">
-                                    {runtimeLocalize(
-                                      "Требует review",
-                                      "Needs review",
-                                      locale,
-                                    )}
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <AttendanceAvatar
+                                avatarUrl={auditAvatarUrl}
+                                name={item.employeeName}
+                                size="sm"
+                              />
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-semibold text-[color:var(--foreground)]">
+                                    {item.employeeName}
                                   </span>
-                                ) : null}
-                                {item.result === "REJECTED" ? (
-                                  <span className="rounded-full bg-[color:var(--soft-danger)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--danger)]">
-                                    {runtimeLocalize(
-                                      "Отклонено",
-                                      "Rejected",
-                                      locale,
-                                    )}
+                                  <span className="rounded-full bg-[color:var(--panel-muted)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--muted-foreground)]">
+                                    {formatAuditEventType(item.eventType)}
                                   </span>
-                                ) : null}
+                                  <span className="rounded-full bg-[rgba(49,84,255,0.08)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--accent)]">
+                                    {formatAuditSource(item.source)}
+                                  </span>
+                                  {reviewNeeded ? (
+                                    <span className="rounded-full bg-[color:var(--soft-warning)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--warning)]">
+                                      {runtimeLocalize(
+                                        "Требует review",
+                                        "Needs review",
+                                        locale,
+                                      )}
+                                    </span>
+                                  ) : null}
+                                  {item.result === "REJECTED" ? (
+                                    <span className="rounded-full bg-[color:var(--soft-danger)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--danger)]">
+                                      {runtimeLocalize(
+                                        "Отклонено",
+                                        "Rejected",
+                                        locale,
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-xs text-[color:var(--muted-foreground)]">
+                                  {item.department} • {item.location.name} •{" "}
+                                  {new Date(item.occurredAt).toLocaleString(getRuntimeLocaleTag(locale), {
+                                    day: "2-digit",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
                               </div>
-                              <p className="text-xs text-[color:var(--muted-foreground)]">
-                                {item.department} • {item.location.name} •{" "}
-                                {new Date(item.occurredAt).toLocaleString(getRuntimeLocaleTag(locale), {
-                                  day: "2-digit",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
                             </div>
                             <div className="text-right text-xs text-[color:var(--muted-foreground)]">
                               <div>
@@ -1316,120 +1304,6 @@ export default function Attendance({
                         locationLatitude={selectedAuditItem.location.latitude}
                         locationLongitude={selectedAuditItem.location.longitude}
                       />
-
-                      <div className="rounded-[24px] border border-[color:var(--border)] bg-white p-5">
-                        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Детали события", "Event details", locale)}
-                        </div>
-                        <div className="grid gap-3 text-sm text-[color:var(--muted-foreground)]">
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">
-                              {runtimeLocalize("Рабочая точка", "Work location", locale)}:
-                            </strong>{" "}
-                            {selectedAuditItem.location.address}
-                          </div>
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">
-                              {runtimeLocalize(
-                                "Координаты события",
-                                "Event coordinates",
-                                locale,
-                              )}
-                              :
-                            </strong>{" "}
-                            {selectedAuditItem.latitude.toFixed(6)}, {selectedAuditItem.longitude.toFixed(6)}
-                          </div>
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">
-                              {runtimeLocalize("Радиус геозоны", "Geofence radius", locale)}:
-                            </strong>{" "}
-                            {selectedAuditItem.location.geofenceRadiusMeters}
-                            {locale === "ru" ? " м" : " m"}
-                          </div>
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">
-                              {runtimeLocalize("Источник", "Source", locale)}:
-                            </strong>{" "}
-                            {formatAuditSource(selectedAuditItem.source)}
-                          </div>
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">
-                              {runtimeLocalize("Устройство", "Device", locale)}:
-                            </strong>{" "}
-                            {selectedAuditItem.device.name ||
-                              selectedAuditItem.device.platform ||
-                              runtimeLocalize("Неизвестное устройство", "Unknown device", locale)}
-                          </div>
-                          <div>
-                            <strong className="text-[color:var(--foreground)]">Primary:</strong>{" "}
-                            {selectedAuditItem.device.isPrimary === null
-                              ? runtimeLocalize("Неизвестно", "Unknown", locale)
-                              : selectedAuditItem.device.isPrimary
-                                ? runtimeLocalize("Да", "Yes", locale)
-                                : runtimeLocalize("Нет", "No", locale)}
-                          </div>
-                          {selectedAuditItem.failureReason ? (
-                            <div>
-                              <strong className="text-[color:var(--foreground)]">
-                                {runtimeLocalize("Причина отказа", "Failure reason", locale)}:
-                              </strong>{" "}
-                              {formatFailureReason(selectedAuditItem.failureReason)}
-                            </div>
-                          ) : null}
-                          {selectedAuditItem.notes ? (
-                            <div>
-                              <strong className="text-[color:var(--foreground)]">
-                                {runtimeLocalize("Комментарий", "Comment", locale)}:
-                              </strong>{" "}
-                              {selectedAuditItem.notes}
-                            </div>
-                          ) : null}
-                          {selectedAuditItem.biometricVerification ? (
-                            <div className="rounded-[18px] bg-[color:var(--panel-muted)] p-4">
-                              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                                {runtimeLocalize(
-                                  "Проверка биометрии",
-                                  "Biometric verification",
-                                  locale,
-                                )}
-                              </div>
-                              <div className="grid gap-2 text-sm">
-                                <div>
-                                  <strong className="text-[color:var(--foreground)]">
-                                    {runtimeLocalize("Статус", "Status", locale)}:
-                                  </strong>{" "}
-                                  {formatBiometricResult(selectedAuditItem.biometricVerification.result)}
-                                </div>
-                                <div>
-                                  <strong className="text-[color:var(--foreground)]">
-                                    {runtimeLocalize("Совпадение", "Match score", locale)}:
-                                  </strong>{" "}
-                                  {selectedAuditItem.biometricVerification.matchScore ?? "—"}
-                                </div>
-                                <div>
-                                  <strong className="text-[color:var(--foreground)]">
-                                    {runtimeLocalize("Живость", "Liveness", locale)}:
-                                  </strong>{" "}
-                                  {selectedAuditItem.biometricVerification.livenessScore ?? "—"}
-                                </div>
-                                {selectedAuditItem.biometricVerification.reviewReason ? (
-                                  <div>
-                                    <strong className="text-[color:var(--foreground)]">
-                                      {runtimeLocalize(
-                                        "Причина отказа",
-                                        "Failure reason",
-                                        locale,
-                                      )}
-                                      :
-                                    </strong>{" "}
-                                    {selectedAuditItem.biometricVerification.reviewReason}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1587,7 +1461,7 @@ export default function Attendance({
                     <Table.Row className="animate-fade-in" id={row.id}>
                       <Table.Cell className="align-middle">
                         <div className="flex items-center gap-3">
-                          <AttendanceAvatar name={row.name} size="sm" />
+                          <AttendanceAvatar avatarUrl={row.avatarUrl} name={row.name} size="sm" />
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-primary">
                               {row.name}
