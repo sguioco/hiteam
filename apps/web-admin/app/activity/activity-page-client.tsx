@@ -339,6 +339,38 @@ export default function ActivityPageClient({
           }`}
         >
           <div className="team-tasks-period-controls">
+            <div className="team-tasks-period-toggle" role="tablist">
+              {(
+                [
+                  { key: "7d", label: localize(locale, "7 дней", "7 days") },
+                  { key: "14d", label: localize(locale, "14 дней", "14 days") },
+                  {
+                    key: "custom",
+                    label: localize(locale, "Свой период", "Custom"),
+                  },
+                ] as const
+              ).map((item) => (
+                <button
+                  aria-pressed={preset === item.key}
+                  className={`team-tasks-period-button ${
+                    preset === item.key ? "is-active" : ""
+                  }`}
+                  key={item.key}
+                  onClick={() => {
+                    if (item.key === "custom") {
+                      setPreset("custom");
+                      return;
+                    }
+
+                    applyPreset(item.key);
+                  }}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
             {preset === "custom" ? (
               <div className="team-tasks-custom-range">
                 <div className="team-tasks-custom-field">
@@ -371,38 +403,6 @@ export default function ActivityPageClient({
                 </div>
               </div>
             ) : null}
-
-            <div className="team-tasks-period-toggle" role="tablist">
-              {(
-                [
-                  { key: "7d", label: localize(locale, "7 дней", "7 days") },
-                  { key: "14d", label: localize(locale, "14 дней", "14 days") },
-                  {
-                    key: "custom",
-                    label: localize(locale, "Свой период", "Custom"),
-                  },
-                ] as const
-              ).map((item) => (
-                <button
-                  aria-pressed={preset === item.key}
-                  className={`team-tasks-period-button ${
-                    preset === item.key ? "is-active" : ""
-                  }`}
-                  key={item.key}
-                  onClick={() => {
-                    if (item.key === "custom") {
-                      setPreset("custom");
-                      return;
-                    }
-
-                    applyPreset(item.key);
-                  }}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
           </div>
         </section>
 

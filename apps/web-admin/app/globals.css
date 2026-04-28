@@ -935,6 +935,8 @@
 }
 
 .activity-day-weekday {
+  flex: 0 0 9.5ch;
+  width: 9.5ch;
   font-family: var(--font-heading);
   font-size: clamp(0.95rem, 1.35vw, 1.3rem);
   font-weight: 400;
@@ -1087,20 +1089,23 @@
 .today-attendance-row-side {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   align-self: center;
   gap: 6px;
   justify-self: end;
   min-width: 108px;
-  text-align: center;
+  text-align: right;
 }
 
 .today-attendance-row-arrival {
+  min-width: 5ch;
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--foreground);
 }
 
@@ -1180,6 +1185,10 @@
   }
 
   .today-attendance-row-note {
+    text-align: left;
+  }
+
+  .today-attendance-row-arrival {
     text-align: left;
   }
 

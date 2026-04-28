@@ -37,6 +37,7 @@ const BottomNav = ({
     includeFontPadding: false,
     width: "100%" as const,
   };
+  const leadingTab = showManage && active !== "leaderboard" ? "manage" : "leaderboard";
 
   function NavItem({
     tab,
@@ -186,9 +187,9 @@ const BottomNav = ({
             >
               <View className="w-[72px] items-center">
                 <NavItem
-                  icon={showManage ? "eye-outline" : "trophy-outline"}
-                  label={showManage ? t("nav.manage") : t("nav.leaderboard")}
-                  tab={showManage ? "manage" : "leaderboard"}
+                  icon={leadingTab === "manage" ? "eye-outline" : "trophy-outline"}
+                  label={leadingTab === "manage" ? t("nav.manage") : t("nav.leaderboard")}
+                  tab={leadingTab}
                 />
               </View>
               <View className="w-[72px] items-center">

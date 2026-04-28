@@ -17,6 +17,9 @@ type AttendanceAuditMapProps = {
 
 const SCRIPT_FALLBACK_LATITUDE = 55.0302;
 const SCRIPT_FALLBACK_LONGITUDE = 82.9204;
+const AUDIT_MAP_DEFAULT_ZOOM = 15;
+const AUDIT_MAP_MAX_AUTO_ZOOM = 15;
+const AUDIT_MAP_FIT_PADDING = 96;
 
 export function AttendanceAuditMap({
   apiKey,
@@ -61,7 +64,7 @@ export function AttendanceAuditMap({
         if (!mapRef.current) {
           mapRef.current = new maps.Map(mapNodeRef.current, {
             center,
-            zoom: 16,
+            zoom: AUDIT_MAP_DEFAULT_ZOOM,
             disableDefaultUI: true,
             zoomControl: true,
             clickableIcons: false,
@@ -119,7 +122,13 @@ export function AttendanceAuditMap({
         const bounds = new maps.LatLngBounds();
         bounds.extend({ lat: locationLatitude, lng: locationLongitude });
         bounds.extend({ lat: eventLatitude, lng: eventLongitude });
-        mapRef.current.fitBounds(bounds, 72);
+        mapRef.current.fitBounds(bounds, AUDIT_MAP_FIT_PADDING);
+        maps.event.addListenerOnce(mapRef.current, "idle", () => {
+          const currentZoom = mapRef.current?.getZoom();
+          if (typeof currentZoom === "number" && currentZoom > AUDIT_MAP_MAX_AUTO_ZOOM) {
+            mapRef.current.setZoom(AUDIT_MAP_MAX_AUTO_ZOOM);
+          }
+        });
         setStatus("ready");
       } catch {
         if (!cancelled) {

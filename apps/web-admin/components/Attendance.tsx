@@ -107,21 +107,21 @@ export type AttendanceInitialData = {
 };
 
 const statusDotClass: Record<AttendanceStatus, string> = {
-  online: "bg-[color:var(--success)]",
+  online: "bg-[color:var(--accent)]",
   late: "bg-[color:var(--warning)]",
   break: "bg-[color:var(--accent)]",
   offline: "bg-[color:var(--muted-foreground)]",
 };
 
 const statusBadgeClass: Record<AttendanceStatus, string> = {
-  online: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
+  online: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   late: "bg-[color:var(--soft-warning)] text-[color:var(--warning)]",
   break: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   offline: "bg-[rgba(117,117,117,0.12)] text-[color:var(--muted-foreground)]",
 };
 
 const statusTextClass: Record<AttendanceStatus, string> = {
-  online: "text-[color:var(--success)]",
+  online: "text-[color:var(--accent-strong)]",
   late: "text-[color:var(--warning)]",
   break: "text-[color:var(--accent-strong)]",
   offline: "text-[color:var(--muted-foreground)]",
@@ -131,7 +131,7 @@ const progressToneClass: Record<
   AttendanceCard["progressTone"],
   string
 > = {
-  success: "bg-[color:var(--success)]",
+  success: "bg-[color:var(--accent)]",
   warning: "bg-[color:var(--warning)]",
   danger: "bg-[color:var(--danger)]",
   accent: "bg-[color:var(--accent)]",
@@ -804,9 +804,6 @@ export default function Attendance({
       <section className="dashboard-card space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
-            <h2 className="text-3xl font-semibold text-[color:var(--foreground)]">
-              {runtimeLocalize("Посещаемость", "Attendance", locale)}
-            </h2>
             {viewMode === "period" ? (
               <p className="text-sm text-[color:var(--muted-foreground)]">
                 {runtimeLocalize(
@@ -1605,7 +1602,7 @@ export default function Attendance({
                         {row.total}
                       </Table.Cell>
                       <Table.Cell className="align-middle text-center">
-                        <span className="font-semibold text-[color:var(--success)]">
+                        <span className="font-semibold text-[color:var(--accent-strong)]">
                           {row.ontime}
                         </span>
                       </Table.Cell>

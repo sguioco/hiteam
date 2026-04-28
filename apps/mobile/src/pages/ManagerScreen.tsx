@@ -803,13 +803,6 @@ export default function ManagerScreen({
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
-  const leaderboardActionTitle =
-    language === "ru" ? "Leaderboard" : "Leaderboard";
-  const newsActionTitle = language === "ru" ? "Новости" : "News";
-  const newsActionHint =
-    language === "ru"
-      ? "Откройте список новостей компании и общий статус прочтения."
-      : "Open company news and overall readership status.";
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<ManagerScreenCacheValue>(
@@ -1334,31 +1327,27 @@ export default function ManagerScreen({
                 </View>
               </View>
 
-              <View className="flex-col items-end gap-2">
-                <View className="flex-row items-center gap-2">
+              <View className="min-w-0 flex-1 items-end">
+                <View className="flex-row items-center justify-end gap-2">
                   <PressableScale
-                    className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
+                    accessibilityLabel="Leaderboard"
+                    className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/80"
                     haptic="selection"
                     onPress={() => router.push("/manager/leaderboard" as never)}
                   >
-                    <Ionicons color="#1f2937" name="trophy-outline" size={16} />
-                    <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
-                      {leaderboardActionTitle}
-                    </Text>
+                    <Ionicons color="#1f2937" name="trophy-outline" size={20} />
                   </PressableScale>
                   <PressableScale
-                    className="min-h-11 flex-row items-center gap-2 rounded-full border border-white/80 bg-white/80 px-4"
+                    accessibilityLabel={language === "ru" ? "Новости" : "News"}
+                    className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/80"
                     haptic="selection"
                     onPress={() => router.push("/?tab=news" as never)}
                   >
                     <Ionicons
                       color="#1f2937"
                       name="newspaper-outline"
-                      size={16}
+                      size={20}
                     />
-                    <Text className="text-[13px] font-extrabold tracking-[1.2px] text-foreground">
-                      {newsActionTitle}
-                    </Text>
                   </PressableScale>
 
                   <Button

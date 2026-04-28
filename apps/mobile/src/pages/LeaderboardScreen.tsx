@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Image, Pressable, ScrollView, View } from "react-native";
 import Animated, {
@@ -12,9 +13,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LeaderboardOverviewResponse } from "@smart/types";
-import { Screen } from "../../components/ui/screen";
 import { Text } from "../../components/ui/text";
 import { PressableScale } from "../../components/ui/pressable-scale";
+import BottomNav from "../components/BottomNav";
 import { loadLeaderboardOverview } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getDirectionalIconStyle, useI18n } from "../../lib/i18n";
@@ -28,6 +29,7 @@ type LeaderboardScreenProps = {
 };
 
 type LeaderboardTab = "table" | "progress";
+type MainNavTab = "calendar" | "today" | "manage" | "leaderboard" | "news" | "profile";
 
 const RANK_AWARDS = {
   1: require("../../assets/1st.webp"),
@@ -55,6 +57,7 @@ export default function LeaderboardScreen({
   standalone = false,
 }: LeaderboardScreenProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
   const currentMonthKey = useMemo(() => formatMonthKey(), []);
@@ -201,6 +204,10 @@ export default function LeaderboardScreen({
     hapticSelection();
     setMonthAnimationDirection(offset > 0 ? "next" : "prev");
     setSelectedMonthKey((current) => shiftMonthKey(current, offset));
+  }
+
+  function handleStandaloneNavigate(nextTab: MainNavTab) {
+    router.replace(`/?tab=${nextTab}` as never);
   }
 
   function renderRankBadge(rank: number) {
@@ -509,44 +516,47 @@ export default function LeaderboardScreen({
             </View>
           </View>
 
-          <LinearGradient
-            className="overflow-hidden rounded-[20px] px-4 py-4 shadow-sm shadow-[#1f2687]/20"
-            colors={["#1f73ff", "#1458f4"]}
-            end={{ x: 1, y: 1 }}
-            start={{ x: 0, y: 0 }}
-          >
-            <View className="flex-row items-center">
-              <View
-                className="min-w-0 flex-row items-center gap-3 pr-3"
-                style={{ flex: 2 }}
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white/16">
-                  <Ionicons color="#ffffff" name="trophy-outline" size={30} />
+          <View className="overflow-hidden rounded-[20px] shadow-sm shadow-[#1f2687]/20">
+            <LinearGradient
+              className="px-4 py-4"
+              colors={["#1f73ff", "#1458f4"]}
+              end={{ x: 1, y: 1 }}
+              start={{ x: 0, y: 0 }}
+              style={{ borderRadius: 20 }}
+            >
+              <View className="flex-row items-center">
+                <View
+                  className="min-w-0 flex-row items-center gap-3 pr-3"
+                  style={{ flex: 2 }}
+                >
+                  <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white/16">
+                    <Ionicons color="#ffffff" name="trophy-outline" size={30} />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="font-display text-[17px] font-bold text-white">
+                      {t("leaderboard.todayTotal")}
+                    </Text>
+                    <Text className="mt-0.5 text-[11px] leading-[14px] text-white">
+                      {todayTotalCaption}
+                    </Text>
+                  </View>
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="font-display text-[17px] font-bold text-white">
-                    {t("leaderboard.todayTotal")}
+                <View
+                  className="h-12 w-px"
+                  style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
+                />
+                <View className="items-center justify-center pl-3" style={{ flex: 1 }}>
+                  <Text className="font-display font-bold text-white">
+                    <Text className="text-[34px]">{todayPoints}</Text>
+                    <Text className="text-[23px]">/{dailyMaxPoints}</Text>
                   </Text>
-                  <Text className="mt-0.5 text-[11px] leading-[14px] text-white">
-                    {todayTotalCaption}
+                  <Text className="text-[11px] font-semibold text-white">
+                    {copy("готово сегодня", "done today")}
                   </Text>
                 </View>
               </View>
-              <View
-                className="h-12 w-px"
-                style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
-              />
-              <View className="items-center justify-center pl-3" style={{ flex: 1 }}>
-                <Text className="font-display font-bold text-white">
-                  <Text className="text-[34px]">{todayPoints}</Text>
-                  <Text className="text-[23px]">/{dailyMaxPoints}</Text>
-                </Text>
-                <Text className="text-[11px] font-semibold text-white">
-                  {copy("готово сегодня", "done today")}
-                </Text>
-              </View>
-            </View>
-          </LinearGradient>
+            </LinearGradient>
+          </View>
 
           <View className="rounded-[18px] border border-[#e5ebf5] bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
             <Text className="text-[13px] font-bold text-[#303847]">
@@ -655,14 +665,21 @@ export default function LeaderboardScreen({
 
   if (standalone) {
     return (
-      <Screen
-        contentClassName="gap-3 px-6 pb-10 pt-4"
-        safeAreaClassName="bg-[#f7f9fd]"
-        showsVerticalScrollIndicator={false}
-      >
+      <View className="flex-1 bg-[#f7f9fd]">
         {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
-        {content}
-      </Screen>
+        <ScrollView
+          className="flex-1 bg-transparent"
+          contentContainerStyle={{
+            paddingBottom: 132,
+            paddingHorizontal: 24,
+            paddingTop: insets.top + 16,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {content}
+        </ScrollView>
+        <BottomNav active="leaderboard" onNavigate={handleStandaloneNavigate} showManage />
+      </View>
     );
   }
 
