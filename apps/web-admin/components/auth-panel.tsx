@@ -46,14 +46,13 @@ import { BrandWordmark } from './brand-wordmark';
 gsap.registerPlugin(useGSAP);
 
 type SupportedLang = 'en' | 'ru' | 'ar';
-type AuthTab = 'signin' | 'company-code';
+type AuthTab = 'signin' | 'join';
 type CompanyLookupResult = {
   token: string;
   email: string;
   status: string;
   registrationCompleted: boolean;
   companyName: string;
-  companyCode?: string | null;
   tenantName: string;
   tenantSlug: string;
 };
@@ -67,7 +66,7 @@ const langs: { code: SupportedLang; label: string }[] = [
 const texts = {
   en: {
     signInTab: 'Sign in',
-    companyCodeTab: 'Registration',
+    joinTab: 'Registration',
     welcome: 'Welcome back',
     welcomeDesc: 'Enter your work email or phone to access your HiTeam workspace.',
     emailOrPhone: 'Email or phone',
@@ -76,13 +75,13 @@ const texts = {
     hidePassword: 'Hide password',
     signIn: 'Sign in',
     signingIn: 'Signing in...',
-    companyCodeTitle: 'Join with work email',
-    companyCodeDesc: 'Ask your manager to add your work email to the team, then enter the same email here to continue registration.',
-    companyCodeLabel: 'Work email',
-    companyCodePlaceholder: 'you@company.com',
-    companyCodeAction: 'Continue',
-    companyCodeChecking: 'Checking email...',
-    companyCodeRequired: 'Enter your work email.',
+    joinTitle: 'Join with work email',
+    joinDesc: 'Ask your manager to add your work email to the team, then enter the same email here to continue registration.',
+    joinLabel: 'Work email',
+    joinPlaceholder: 'you@company.com',
+    joinAction: 'Continue',
+    joinChecking: 'Checking email...',
+    joinRequired: 'Enter your work email.',
     companyFoundLabel: 'Employee found',
     companyFoundBody: 'We found {companyName}. Continue registration and create your password.',
     companyFoundExistingBody: 'An account for {email} already exists in {companyName}. Open sign-in and continue there.',
@@ -108,7 +107,7 @@ const texts = {
   },
   ru: {
     signInTab: 'Вход',
-    companyCodeTab: 'Регистрация',
+    joinTab: 'Регистрация',
     welcome: 'С возвращением',
     welcomeDesc: 'Введите рабочий email или телефон, чтобы войти в пространство HiTeam.',
     emailOrPhone: 'Email или телефон',
@@ -117,13 +116,13 @@ const texts = {
     hidePassword: 'Скрыть пароль',
     signIn: 'Войти',
     signingIn: 'Входим...',
-    companyCodeTitle: 'Вступить по рабочему email',
-    companyCodeDesc: 'Попросите менеджера добавить ваш рабочий email в команду, затем введите этот email здесь и продолжите регистрацию.',
-    companyCodeLabel: 'Рабочий email',
-    companyCodePlaceholder: 'you@company.com',
-    companyCodeAction: 'Продолжить',
-    companyCodeChecking: 'Проверяем email...',
-    companyCodeRequired: 'Введите рабочий email.',
+    joinTitle: 'Вступить по рабочему email',
+    joinDesc: 'Попросите менеджера добавить ваш рабочий email в команду, затем введите этот email здесь и продолжите регистрацию.',
+    joinLabel: 'Рабочий email',
+    joinPlaceholder: 'you@company.com',
+    joinAction: 'Продолжить',
+    joinChecking: 'Проверяем email...',
+    joinRequired: 'Введите рабочий email.',
     companyFoundLabel: 'Сотрудник найден',
     companyFoundBody: 'Мы нашли {companyName}. Продолжите регистрацию и создайте пароль.',
     companyFoundExistingBody: 'Для {email} аккаунт в {companyName} уже создан. Откройте вход и продолжайте там.',
@@ -149,7 +148,7 @@ const texts = {
   },
   ar: {
     signInTab: 'تسجيل الدخول',
-    companyCodeTab: 'التسجيل',
+    joinTab: 'التسجيل',
     welcome: 'مرحباً بعودتك',
     welcomeDesc: 'أدخل بريد العمل أو رقم الهاتف للوصول إلى مساحة HiTeam.',
     emailOrPhone: 'البريد الإلكتروني أو الهاتف',
@@ -158,13 +157,13 @@ const texts = {
     hidePassword: 'إخفاء كلمة المرور',
     signIn: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول...',
-    companyCodeTitle: 'الانضمام عبر بريد العمل',
-    companyCodeDesc: 'اطلب من المدير إضافة بريدك المهني إلى الفريق، ثم أدخل البريد نفسه هنا لمتابعة التسجيل.',
-    companyCodeLabel: 'بريد العمل',
-    companyCodePlaceholder: 'you@company.com',
-    companyCodeAction: 'متابعة',
-    companyCodeChecking: 'جارٍ التحقق من البريد...',
-    companyCodeRequired: 'أدخل بريد العمل.',
+    joinTitle: 'الانضمام عبر بريد العمل',
+    joinDesc: 'اطلب من المدير إضافة بريدك المهني إلى الفريق، ثم أدخل البريد نفسه هنا لمتابعة التسجيل.',
+    joinLabel: 'بريد العمل',
+    joinPlaceholder: 'you@company.com',
+    joinAction: 'متابعة',
+    joinChecking: 'جارٍ التحقق من البريد...',
+    joinRequired: 'أدخل بريد العمل.',
     companyFoundLabel: 'تم العثور على الموظف',
     companyFoundBody: 'تم العثور على {companyName}. تابع التسجيل وأنشئ كلمة المرور.',
     companyFoundExistingBody: 'يوجد حساب بالفعل للبريد {email} في {companyName}. افتح شاشة تسجيل الدخول وتابع هناك.',
@@ -203,7 +202,7 @@ const AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM = 10;
 const AUTH_PRIMARY_ACTION_HEIGHT = 48;
 const AUTH_ILLUSTRATION_SCALE = 1.3;
 const AUTH_SIGNIN_FORM_ID = 'auth-signin-form';
-const AUTH_COMPANY_CODE_FORM_ID = 'auth-company-code-form';
+const AUTH_JOIN_FORM_ID = 'auth-join-form';
 
 function LanguagePicker({
   lang,
@@ -248,7 +247,7 @@ export function AuthPanel() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [companyCode, setCompanyCode] = useState('');
+  const [joinEmail, setJoinEmail] = useState('');
   const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
   const [companyLookupError, setCompanyLookupError] = useState('');
   const [companyLookupResult, setCompanyLookupResult] = useState<CompanyLookupResult | null>(null);
@@ -274,8 +273,8 @@ export function AuthPanel() {
           ? t.existingAccountAction
           : t.continueInMobile
         : companyLookupLoading
-          ? t.companyCodeChecking
-          : t.companyCodeAction;
+          ? t.joinChecking
+          : t.joinAction;
   const sharedPrimaryActionDisabled =
     tab === 'signin' ? loginLoading : companyLookupResult ? false : companyLookupLoading;
   useGSAP(
@@ -409,12 +408,12 @@ export function AuthPanel() {
     }
   }
 
-  async function handleCompanyCodeSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleJoinSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedCode = companyCode.trim().toLowerCase();
+    const trimmedEmail = joinEmail.trim().toLowerCase();
 
-    if (!trimmedCode) {
-      setCompanyLookupError(t.companyCodeRequired);
+    if (!trimmedEmail) {
+      setCompanyLookupError(t.joinRequired);
       return;
     }
 
@@ -425,15 +424,15 @@ export function AuthPanel() {
       const payload = await apiRequest<CompanyLookupResult>('/employees/public/join/email/lookup', {
         method: 'POST',
         realBackend: true,
-        body: JSON.stringify({ email: trimmedCode }),
+        body: JSON.stringify({ email: trimmedEmail }),
       });
 
       saveTenantSlug(payload.tenantSlug);
       setCompanyLookupResult(payload);
-      setCompanyCode(payload.email);
+      setJoinEmail(payload.email);
     } catch (error) {
       setCompanyLookupResult(null);
-      setCompanyLookupError(error instanceof Error ? error.message : t.companyCodeRequired);
+      setCompanyLookupError(error instanceof Error ? error.message : t.joinRequired);
     } finally {
       setCompanyLookupLoading(false);
     }
@@ -509,7 +508,7 @@ export function AuthPanel() {
   function resetCompanyLookup() {
     setCompanyLookupResult(null);
     setCompanyLookupError('');
-    setCompanyCode('');
+    setJoinEmail('');
   }
 
   function handleForgotDialogChange(open: boolean) {
@@ -567,14 +566,14 @@ export function AuthPanel() {
                       className={cn(
                         'h-11 rounded-[16px] px-4 text-sm font-semibold transition-all',
                         loginLoading && 'pointer-events-none opacity-60',
-                        tab === 'company-code'
+                        tab === 'join'
                           ? 'text-foreground'
                           : 'bg-transparent text-[#7a88a6] hover:text-foreground',
                       )}
-                      onClick={() => handleTabChange('company-code')}
+                      onClick={() => handleTabChange('join')}
                       type="button"
                     >
-                      {t.companyCodeTab}
+                      {t.joinTab}
                     </button>
                   </div>
                 </div>
@@ -713,7 +712,7 @@ export function AuthPanel() {
                       }}
                     >
                       <h2 className="text-[2rem] font-light tracking-[-0.04em] text-foreground">
-                        {t.companyCodeTitle}
+                        {t.joinTitle}
                       </h2>
                     </div>
 
@@ -742,7 +741,7 @@ export function AuthPanel() {
 
                         <div className="mt-5 rounded-[18px] border border-[#d8e5ff] bg-white px-4 py-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
-                            {t.companyCodeLabel}
+                            {t.joinLabel}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-foreground">
                             {companyLookupResult.email}
@@ -763,7 +762,7 @@ export function AuthPanel() {
                         </div>
                       </div>
                     ) : (
-                      <form className="flex flex-1 flex-col" id={AUTH_COMPANY_CODE_FORM_ID} onSubmit={handleCompanyCodeSubmit}>
+                      <form className="flex flex-1 flex-col" id={AUTH_JOIN_FORM_ID} onSubmit={handleJoinSubmit}>
                         <div
                           className="space-y-4"
                           style={{
@@ -778,19 +777,19 @@ export function AuthPanel() {
 
                           <div className="auth-panel-field">
                             <Input
-                              aria-label={t.companyCodeLabel}
+                              aria-label={t.joinLabel}
                               autoCapitalize="none"
                               autoComplete="off"
                               disabled={companyLookupLoading}
-                              id="company-code"
+                              id="join-email"
                               onChange={(event) => {
-                                setCompanyCode(event.target.value);
+                                setJoinEmail(event.target.value);
                                 setCompanyLookupError('');
                               }}
-                              placeholder={t.companyCodePlaceholder}
+                              placeholder={t.joinPlaceholder}
                               required
                               type="email"
-                              value={companyCode}
+                              value={joinEmail}
                             />
                           </div>
                         </div>
@@ -804,7 +803,7 @@ export function AuthPanel() {
                   className="absolute inset-x-0"
                   style={{ bottom: AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM }}
                 >
-                  {tab === 'company-code' && companyLookupResult ? (
+                  {tab === 'join' && companyLookupResult ? (
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       onClick={openCompanyJoinFlow}
@@ -818,11 +817,11 @@ export function AuthPanel() {
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       disabled={sharedPrimaryActionDisabled}
-                      form={tab === 'signin' ? AUTH_SIGNIN_FORM_ID : AUTH_COMPANY_CODE_FORM_ID}
+                      form={tab === 'signin' ? AUTH_SIGNIN_FORM_ID : AUTH_JOIN_FORM_ID}
                       style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}
                       type="submit"
                     >
-                      {(tab === 'signin' && loginLoading) || (tab === 'company-code' && companyLookupLoading) ? (
+                      {(tab === 'signin' && loginLoading) || (tab === 'join' && companyLookupLoading) ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : null}
                       {sharedPrimaryActionLabel}

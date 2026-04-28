@@ -18,15 +18,6 @@ export class AuthService {
     private readonly auditService: AuditService,
   ) {}
 
-  private normalizeCompanyCode(value: string): string {
-    return value
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 32);
-  }
-
   private normalizeOrganizationName(value: string): string {
     return value.trim();
   }
@@ -34,9 +25,8 @@ export class AuthService {
   private async assertOrganizationAvailability(args: {
     tenantName: string;
     companyName: string;
-    companyCode: string;
   }): Promise<void> {
-    const [existingTenantName, existingCompanyCode, existingCompanyName] = await Promise.all([
+    const [existingTenantName, existingCompanyName] = await Promise.all([
       this.prisma.tenant.findFirst({
         where: {
           name: {
@@ -44,10 +34,6 @@ export class AuthService {
             mode: 'insensitive',
           },
         },
-        select: { id: true },
-      }),
-      this.prisma.company.findFirst({
-        where: { code: args.companyCode },
         select: { id: true },
       }),
       this.prisma.company.findFirst({
@@ -63,10 +49,6 @@ export class AuthService {
 
     if (existingTenantName || existingCompanyName) {
       throw new ConflictException('Organization with this name already exists.');
-    }
-
-    if (existingCompanyCode) {
-      throw new ConflictException('Invite code already exists.');
     }
   }
 
@@ -397,7 +379,6 @@ export class AuthService {
     const tenantSlug = dto.tenantSlug.trim().toLowerCase();
     const tenantName = this.normalizeOrganizationName(dto.tenantName);
     const companyName = this.normalizeOrganizationName(dto.companyName);
-    const companyCode = this.normalizeCompanyCode(dto.companyCode);
     const ownerEmail = dto.email.trim().toLowerCase();
 
     const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
@@ -409,14 +390,9 @@ export class AuthService {
       throw new ConflictException('Organization name is required.');
     }
 
-    if (!companyCode) {
-      throw new ConflictException('Invite code is required.');
-    }
-
     await this.assertOrganizationAvailability({
       tenantName,
       companyName,
-      companyCode,
     });
     await this.assertWorkspaceEmailAvailability(ownerEmail);
 
@@ -446,7 +422,6 @@ export class AuthService {
         data: {
           tenantId: tenant.id,
           name: companyName,
-          code: companyCode,
         },
       });
 
@@ -532,28 +507,22 @@ export class AuthService {
 
   async registerOrganization(dto: RegisterOrganizationDto): Promise<{
     tenantId: string;
+    businessId: string;
     tenantSlug: string;
     companyId: string;
-    companyCode: string;
     managerEmail: string;
     managerSetupUrl: string;
   }> {
     const organizationName = this.normalizeOrganizationName(dto.organizationName);
     const managerEmail = dto.managerEmail.trim().toLowerCase();
-    const companyCode = this.normalizeCompanyCode(dto.companyCode);
 
     if (!organizationName) {
       throw new ConflictException('Organization name is required.');
     }
 
-    if (!companyCode) {
-      throw new ConflictException('Invite code is required.');
-    }
-
     await this.assertOrganizationAvailability({
       tenantName: organizationName,
       companyName: organizationName,
-      companyCode,
     });
     await this.assertWorkspaceEmailAvailability(managerEmail);
 
@@ -575,7 +544,6 @@ export class AuthService {
         data: {
           tenantId: tenant.id,
           name: organizationName,
-          code: companyCode,
         },
       });
 
@@ -584,7 +552,7 @@ export class AuthService {
           tenantId: tenant.id,
           companyId: company.id,
           name: `${organizationName} HQ`,
-          code: `HQ-${companyCode}`,
+          code: 'HQ',
           address: 'Not set yet',
           latitude: 0,
           longitude: 0,
@@ -617,6 +585,7 @@ export class AuthService {
 
       return {
         tenantId: tenant.id,
+        businessId: tenant.businessId,
         companyId: company.id,
       };
     }, {
@@ -634,16 +603,15 @@ export class AuthService {
       metadata: {
         organizationName,
         tenantSlug,
-        companyCode,
         managerEmail,
       },
     });
 
     return {
       tenantId: result.tenantId,
+      businessId: result.businessId,
       tenantSlug,
       companyId: result.companyId,
-      companyCode,
       managerEmail,
       managerSetupUrl,
     };

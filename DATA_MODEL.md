@@ -15,11 +15,20 @@
 
 #### tenants
 - id
+- business_id (internal, billing and Kommo integration checks, not user-facing)
 - name
 - slug
 - status
 - timezone
 - locale
+- created_at
+- updated_at
+
+#### billing_subscriptions
+- id
+- tenant_id
+- paid_seats
+- status
 - created_at
 - updated_at
 

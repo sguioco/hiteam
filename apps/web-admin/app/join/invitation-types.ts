@@ -1,11 +1,10 @@
 export type PublicInvitationPayload = {
   id: string;
-  email: string;
+  email: string | null;
   status: string;
   tenantName: string;
   tenantSlug: string;
   companyName?: string | null;
-  companyCode?: string | null;
   expiresAt: string;
   submittedAt: string | null;
   registrationCompleted: boolean;

@@ -1,9 +1,13 @@
-import { IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class RegisterEmployeeInvitationDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsString()
   firstName!: string;

@@ -6,14 +6,8 @@ import { Line, Rect, Svg } from 'react-native-svg';
 import MapView, { Marker } from 'react-native-maps';
 import { Text } from '../../components/ui/text';
 import Animated, {
-  Easing,
   FadeInUp,
   LinearTransition,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Socket } from 'socket.io-client';
@@ -111,15 +105,19 @@ function formatDate(value: string, language: AppLanguage) {
   const dayMs = 24 * hourMs;
 
   if (diffMs < dayMs) {
-    const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-
     if (diffMs < hourMs) {
       const minutes = Math.max(1, Math.floor(diffMs / minuteMs));
-      return formatter.format(-minutes, 'minute');
+      if (typeof Intl !== 'undefined' && 'RelativeTimeFormat' in Intl) {
+        return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-minutes, 'minute');
+      }
+      return localizeText(language, `${minutes} мин. назад`, `${minutes} min ago`);
     }
 
     const hours = Math.max(1, Math.floor(diffMs / hourMs));
-    return formatter.format(-hours, 'hour');
+    if (typeof Intl !== 'undefined' && 'RelativeTimeFormat' in Intl) {
+      return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-hours, 'hour');
+    }
+    return localizeText(language, `${hours} ч. назад`, `${hours}h ago`);
   }
 
   const includeYear = parsed.getFullYear() !== new Date().getFullYear();
@@ -137,49 +135,62 @@ function formatMetaLine(
   item: AnnouncementItem,
   language: AppLanguage,
 ) {
-  const authorName = `${item.authorEmployee.firstName} ${item.authorEmployee.lastName}`;
+  const author = item.authorEmployee;
+  const authorName = author
+    ? `${author.firstName ?? ''} ${author.lastName ?? ''}`.trim()
+    : localizeText(language, 'Команда', 'Team');
   const relativeOrDate = formatDate(getAnnouncementDisplayTimestamp(item), language);
 
-  return `${relativeOrDate} • ${authorName}`;
+  return [relativeOrDate, authorName].filter(Boolean).join(' • ');
 }
 
-function UnreadPulseIndicator() {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(0.7);
+function normalizeAnnouncementItems(value: unknown): AnnouncementItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
-  useEffect(() => {
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.24, { duration: 900, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-      false,
+  return value.filter((item): item is AnnouncementItem => {
+    return Boolean(
+      item &&
+        typeof item === 'object' &&
+        typeof (item as AnnouncementItem).id === 'string' &&
+        typeof (item as AnnouncementItem).title === 'string' &&
+        typeof (item as AnnouncementItem).body === 'string',
     );
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }),
-        withTiming(0.45, { duration: 900, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-      false,
-    );
-  }, [opacity, scale]);
+  });
+}
 
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
+function isValidCoordinate(latitude: unknown, longitude: unknown) {
   return (
-    <View className="relative h-2.5 w-2.5 items-center justify-center">
-      <Animated.View
-        className="absolute h-2.5 w-2.5 rounded-full bg-[#67b7ff]"
-        style={pulseStyle}
-      />
-      <View className="h-1.5 w-1.5 rounded-full bg-[#1d9bf0]" />
-    </View>
+    typeof latitude === 'number' &&
+    typeof longitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
   );
+}
+
+function getAnnouncementImageUrl(item: AnnouncementItem) {
+  return typeof item.imageUrl === 'string' && item.imageUrl.trim()
+    ? item.imageUrl
+    : null;
+}
+
+function getAnnouncementLinkUrl(item: AnnouncementItem) {
+  return typeof item.linkUrl === 'string' && item.linkUrl.trim()
+    ? item.linkUrl
+    : null;
+}
+
+function getAnnouncementAttachments(item: AnnouncementItem) {
+  return Array.isArray(item.attachments)
+    ? item.attachments.filter(
+        (attachment) =>
+          attachment &&
+          typeof attachment.id === 'string' &&
+          typeof attachment.url === 'string' &&
+          typeof attachment.fileName === 'string',
+      )
+    : [];
 }
 
 export default function NewsScreen({ standalone = false }: NewsScreenProps) {
@@ -194,7 +205,9 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     () => peekScreenCache<AnnouncementItem[]>(cacheKey, NEWS_SCREEN_CACHE_TTL_MS),
     [cacheKey],
   );
-  const [items, setItems] = useState<AnnouncementItem[]>(initialSnapshot?.value ?? []);
+  const [items, setItems] = useState<AnnouncementItem[]>(
+    normalizeAnnouncementItems(initialSnapshot?.value),
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
@@ -286,9 +299,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     setError(null);
 
     try {
-      const nextItems = isManager
+      const nextItemsRaw = isManager
         ? await loadManagerAnnouncements()
         : await loadMyAnnouncements();
+      const nextItems = normalizeAnnouncementItems(nextItemsRaw);
       await primeLiveTextMap(
         nextItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
         language,
@@ -307,11 +321,12 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         return;
       }
 
+      const cachedItems = normalizeAnnouncementItems(entry.value);
       void primeLiveTextMap(
-        entry.value.flatMap((item) => [item.title, item.body]).filter(Boolean),
+        cachedItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
         language,
       ).catch(() => undefined);
-      setItems(entry.value);
+      setItems(cachedItems);
       setLoading(false);
     });
   }, [cacheKey, language]);
@@ -326,11 +341,12 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       );
 
       if (cached && !cancelled) {
+        const cachedItems = normalizeAnnouncementItems(cached.value);
         void primeLiveTextMap(
-          cached.value.flatMap((item) => [item.title, item.body]).filter(Boolean),
+          cachedItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
           language,
         ).catch(() => undefined);
-        setItems(cached.value);
+        setItems(cachedItems);
         setLoading(false);
         if (!cached.isStale) {
           return;
@@ -500,20 +516,18 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
   const content = (
     <View className={isEmptyState ? 'flex-1 gap-5' : 'gap-5'}>
-      <View className="relative min-h-[44px] justify-center px-1">
-        <Text className="px-20 text-center text-[30px] text-foreground">
+      <View className="min-h-[48px] flex-row items-center justify-between gap-3 px-1">
+        <Text className="flex-1 text-left text-[24px] font-extrabold leading-[30px] text-foreground">
           {copy.title}
         </Text>
         {isManager ? (
-          <View className="absolute bottom-0 right-1 top-0 justify-center">
-            <Button
-              className="rounded-full border-white/80 bg-white/80 px-5"
-              label={`+ ${copy.create}`}
-              onPress={() => router.push('/manager/create-news')}
-              textClassName="text-[13px] tracking-[1.2px]"
-              variant="secondary"
-            />
-          </View>
+          <Button
+            className="rounded-full border-white/80 bg-white/80 px-4"
+            label={`+ ${copy.create}`}
+            onPress={() => router.push('/manager/create-news')}
+            textClassName="text-[13px] font-semibold"
+            variant="secondary"
+          />
         ) : null}
       </View>
 
@@ -542,6 +556,9 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
               const shouldMute = expandedId !== null && !isExpanded;
               const isReadMuted = !isManager && item.isRead && !isExpanded;
               const cardOpacity = shouldMute ? 0.58 : isReadMuted ? 0.62 : 1;
+              const imageUrl = getAnnouncementImageUrl(item);
+              const linkUrl = getAnnouncementLinkUrl(item);
+              const attachments = getAnnouncementAttachments(item);
 
               return (
                 <Animated.View
@@ -600,10 +617,8 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                               <View className="mt-1 h-5 flex-1 rounded-full bg-[#e2eaf6]" />
                             );
                           })()}
-                          <View className="items-center gap-1">
-                            {!isManager && !item.isRead ? <UnreadPulseIndicator /> : <View className="h-2.5 w-2.5" />}
+                          <View className="items-center">
                             <Ionicons
-                              className="mt-1"
                               color={isReadMuted ? '#b2bfd0' : '#94a3b8'}
                               name={isExpanded ? 'chevron-up' : 'chevron-down'}
                               size={18}
@@ -625,10 +640,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 </View>
                               ) : null}
 
-                              {item.imageUrl ? (
+                              {imageUrl ? (
                                 <Image
                                   resizeMode="cover"
-                                  source={{ uri: item.imageUrl }}
+                                  source={{ uri: imageUrl }}
                                   style={{
                                     aspectRatio: announcementAspectRatioToNumber(
                                       item.imageAspectRatio ?? '16:9',
@@ -654,9 +669,9 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 );
                               })()}
 
-                              {item.attachments?.length ? (
+                              {attachments.length ? (
                                 <View className="gap-2">
-                                  {item.attachments.map((attachment) => (
+                                  {attachments.map((attachment) => (
                                     <PressableScale
                                       className="rounded-[20px] border border-white/30 bg-[#f8fbff] px-4 py-3 shadow-sm shadow-[#1f2687]/10"
                                       haptic="selection"
@@ -684,12 +699,12 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 </View>
                               ) : null}
 
-                              {item.linkUrl ? (
+                              {linkUrl ? (
                                 <PressableScale
                                   className="rounded-[20px] border border-white/30 bg-[#f8fbff] px-4 py-3 shadow-sm shadow-[#1f2687]/10"
                                   haptic="selection"
                                   onPress={() => {
-                                    const link = normalizeAnnouncementLink(item.linkUrl);
+                                    const link = normalizeAnnouncementLink(linkUrl);
                                     if (link) {
                                       void Linking.openURL(link);
                                     }
@@ -701,7 +716,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                         <Ionicons color="#334155" name="link-outline" size={18} />
                                       </View>
                                       <Text className="flex-1 text-[14px] font-semibold text-foreground">
-                                        {item.linkUrl}
+                                        {linkUrl}
                                       </Text>
                                     </View>
                                     <Ionicons color="#64748b" name="open-outline" size={18} />
@@ -709,7 +724,11 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
                                 </PressableScale>
                               ) : null}
 
-                              {item.attachmentLocation ? (
+                              {item.attachmentLocation &&
+                              isValidCoordinate(
+                                item.attachmentLocation.latitude,
+                                item.attachmentLocation.longitude,
+                              ) ? (
                                 <View className="overflow-hidden rounded-[20px] border border-white/30 bg-[#f8fbff] shadow-sm shadow-[#1f2687]/10">
                                   <View className="px-4 py-3">
                                     <Text className="text-[14px] font-semibold text-foreground">

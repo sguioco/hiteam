@@ -36,6 +36,7 @@ export default function JoinInvitationPageClient({
   const [step, setStep] = useState<"password" | "profile">("password");
   const requiredMark = <span className="ml-1 text-[color:var(--destructive)]">*</span>;
   const [form, setForm] = useState(() => ({
+    email: initialInvitation?.email ?? "",
     password: "",
     firstName: initialInvitation?.firstName ?? "",
     lastName: initialInvitation?.lastName ?? "",
@@ -73,6 +74,13 @@ export default function JoinInvitationPageClient({
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    const normalizedEmail = form.email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setError(locale === "ru" ? "Укажите email." : "Enter your email.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       await apiRequest(`/employees/invitations/public/${token}/register`, {
@@ -80,6 +88,7 @@ export default function JoinInvitationPageClient({
         realBackend: true,
         body: JSON.stringify({
           ...form,
+          email: normalizedEmail,
           avatarDataUrl: avatarDataUrl ?? undefined,
         }),
       });
@@ -101,7 +110,7 @@ export default function JoinInvitationPageClient({
         realBackend: true,
         body: JSON.stringify({
           tenantSlug: invitation?.tenantSlug,
-          email: invitation?.email,
+          email: normalizedEmail,
           password: form.password,
         }),
       });
@@ -142,6 +151,11 @@ export default function JoinInvitationPageClient({
   }
 
   function handleContinueToProfile() {
+    if (!form.email.trim()) {
+      setError(locale === "ru" ? "Укажите email." : "Enter your email.");
+      return;
+    }
+
     if (form.password.trim().length < 8) {
       setError(
         locale === "ru"
@@ -174,6 +188,7 @@ export default function JoinInvitationPageClient({
   if (!invitation) {
     return null;
   }
+  const displayEmail = invitation.email ?? form.email.trim();
 
   if (isAlreadySubmitted) {
     return (
@@ -184,8 +199,8 @@ export default function JoinInvitationPageClient({
           </h1>
           <p className="mt-3 text-sm text-[color:var(--muted-foreground)]">
             {locale === "ru"
-              ? `Для ${invitation.email} аккаунт уже создан. Просто войдите в систему.`
-              : `An account for ${invitation.email} has already been created. Just sign in.`}
+              ? `Для ${displayEmail || invitation.phone || "этого приглашения"} аккаунт уже создан. Просто войдите в систему.`
+              : `An account for ${displayEmail || invitation.phone || "this invitation"} has already been created. Just sign in.`}
           </p>
           <Link className="solid-button mt-6 inline-flex" href="/login">
             {locale === "ru" ? "Войти" : "Sign in"}
@@ -210,12 +225,12 @@ export default function JoinInvitationPageClient({
               <>
                 {locale === "ru" ? (
                   <>
-                    Компания <strong>{invitation.tenantName}</strong> уже добавила ваш email. Сначала придумайте пароль,
-                    затем заполните профиль.
+                    Компания <strong>{invitation.tenantName}</strong> отправила вам приглашение. Проверьте email,
+                    придумайте пароль, затем заполните профиль.
                   </>
                 ) : (
                   <>
-                    <strong>{invitation.tenantName}</strong> has already added your email. Start by creating a password,
+                    <strong>{invitation.tenantName}</strong> sent you an invitation. Confirm your email, create a password,
                     then fill in your profile.
                   </>
                 )}
@@ -235,8 +250,8 @@ export default function JoinInvitationPageClient({
             )}
           </p>
           <div className="preview-card mt-6">
-            <span className="section-kicker">Email</span>
-            <strong>{invitation.email}</strong>
+            <span className="section-kicker">{invitation.email ? "Email" : locale === "ru" ? "Приглашение" : "Invitation"}</span>
+            <strong>{displayEmail || invitation.phone || invitation.tenantName}</strong>
             <p>
               {locale === "ru" ? "Ссылка действует до " : "The link is valid until "}
               {new Date(invitation.expiresAt).toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}.
@@ -246,8 +261,14 @@ export default function JoinInvitationPageClient({
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
-            <span>Email</span>
-            <input disabled value={invitation.email} />
+            <span>Email{requiredMark}</span>
+            <input
+              disabled={Boolean(invitation.email)}
+              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              required
+              type="email"
+              value={form.email}
+            />
           </label>
 
           {step === "password" ? (

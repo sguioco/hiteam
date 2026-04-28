@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Text } from "../../components/ui/text";
 import { useFocusEffect } from "@react-navigation/native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
@@ -800,6 +806,8 @@ export default function ManagerScreen({
 }: ManagerScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: viewportHeight, width: viewportWidth } =
+    useWindowDimensions();
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
@@ -1134,6 +1142,10 @@ export default function ManagerScreen({
     activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ??
     activeTaskPhotos[0] ??
     null;
+  const photoViewerPreviewHeight = Math.max(
+    190,
+    Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
+  );
 
   useEffect(() => {
     if (!activeTaskPhotos.length) {
@@ -1468,9 +1480,10 @@ export default function ManagerScreen({
                             })()}
                           </View>
                         </View>
+                      </PressableScale>
 
                         {isExpanded ? (
-                          <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
+                          <View className="gap-3 border-t border-[#e4ebf5] px-5 pb-5 pt-4">
                             <View className="flex-row items-center justify-between">
                               <Text className="text-[14px] font-semibold text-[#42526b]">
                                 {t("manager.tasksToday")}
@@ -1489,7 +1502,6 @@ export default function ManagerScreen({
                                     const bDone = b.status === "DONE" ? 1 : 0;
                                     return aDone - bDone;
                                   })
-                                  .slice(0, 5)
                                   .map((task) => {
                                     const isDone = task.status === "DONE";
                                     const photoCount = buildTaskPhotos(
@@ -1555,7 +1567,6 @@ export default function ManagerScreen({
                             )}
                           </View>
                         ) : null}
-                      </PressableScale>
 
                       {!isLast ? <View className="h-px bg-[#edf1f7]" /> : null}
                     </Animated.View>
@@ -1579,8 +1590,8 @@ export default function ManagerScreen({
         visible={activePhotoTask !== null}
       >
         {activePhotoTask ? (
-          <View className="relative min-h-[610px]">
-            <View className="pb-24">
+          <View className="relative">
+            <View>
               <View className="mb-4 flex-row items-start justify-between gap-4">
                 <View className="w-10" />
                 <View className="flex-1 items-center">
@@ -1626,8 +1637,12 @@ export default function ManagerScreen({
               </View>
 
               {selectedPhoto ? (
-                <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
+                <View
+                  className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
+                  style={{ height: photoViewerPreviewHeight }}
+                >
                   <Image
+                    resizeMode="contain"
                     source={{ uri: selectedPhoto.uri }}
                     style={StyleSheet.absoluteFillObject}
                   />
@@ -1655,7 +1670,7 @@ export default function ManagerScreen({
               )}
             </View>
 
-            <View className="absolute inset-x-0 bottom-2">
+            <View className="mt-4">
               <PressableScale
                 className="rounded-[24px] bg-primary px-4 py-4"
                 haptic="selection"

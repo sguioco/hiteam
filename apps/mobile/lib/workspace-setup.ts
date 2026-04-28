@@ -49,6 +49,14 @@ export function getWorkspaceSetupHref(step: Exclude<WorkspaceSetupStep, null>) {
   return '/onboarding/workspace-ready' as const;
 }
 
-export function resolveAttendanceActionHref(action: 'check-in' | 'check-out') {
-  return action === 'check-in' ? ('/say-hi' as const) : ('/say-bye' as const);
+export function resolveAttendanceActionHref(action: 'check-in' | 'check-out' | 'break/start' | 'break/end') {
+  if (action === 'check-in') {
+    return '/say-hi' as const;
+  }
+
+  if (action === 'check-out') {
+    return '/say-bye' as const;
+  }
+
+  return action === 'break/start' ? ('/break-start' as const) : ('/break-end' as const);
 }

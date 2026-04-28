@@ -24,6 +24,7 @@ type ShiftStatusCardProps = {
   displayTimeZone?: string | null;
   loading?: boolean;
   topInset?: number;
+  onBreakAction?: () => void;
   onPrimaryAction?: () => void;
 };
 
@@ -214,6 +215,7 @@ const ShiftStatusCard = ({
   status,
   displayTimeZone,
   loading = false,
+  onBreakAction,
   onPrimaryAction,
   topInset = 0,
 }: ShiftStatusCardProps) => {
@@ -465,8 +467,25 @@ const ShiftStatusCard = ({
         : 'bg-[#7ee787]/28';
 
   const buttonTextColor = shiftMeta.buttonTone === 'danger' ? 'text-white' : 'text-[#1e3358]';
+  const breakAction =
+    status?.attendanceState === 'checked_in' && status.allowedActions.includes('start_break')
+      ? 'start'
+      : status?.attendanceState === 'on_break' && status.allowedActions.includes('end_break')
+        ? 'end'
+        : null;
+  const breakButtonLabel =
+    breakAction === 'start'
+      ? language === 'ru'
+        ? 'Перерыв'
+        : t('workspace.startBreak')
+      : breakAction === 'end'
+        ? language === 'ru'
+          ? 'Вернуться'
+          : t('workspace.endBreak')
+        : null;
   const greetingLabel = greetingName?.trim() ? t('today.greetingWithName', { name: greetingName.trim() }) : t('today.greetingCard');
   const showCardPlaceholder = loading && !status;
+  const showSplitActions = Boolean(shiftMeta.buttonLabel && breakButtonLabel && onBreakAction && !showCardPlaceholder);
 
   return (
     <View className="relative overflow-hidden rounded-b-[34px] border-x border-b border-white/70 bg-white/80 shadow-lg shadow-[#1f2687]/12">
@@ -562,7 +581,53 @@ const ShiftStatusCard = ({
           )}
         </View>
 
-        {shiftMeta.buttonLabel && !showCardPlaceholder ? (
+        {showSplitActions ? (
+          <View className="mt-4 flex-row gap-2">
+            <PressableScale
+              className="overflow-hidden rounded-[24px] border border-white/70 bg-white/90 shadow-lg"
+              haptic="selection"
+              onPress={() => onBreakAction?.()}
+              style={{ flex: 1 }}
+            >
+              <View className="bg-white">
+                <View className="bg-[#f3f7ff]/96 px-2 py-4">
+                  <View className="max-w-full flex-row items-center justify-center gap-1.5">
+                    <Ionicons color="#1e3358" name={breakAction === 'start' ? 'cafe-outline' : 'play-outline'} size={17} />
+                    <Text
+                      adjustsFontSizeToFit
+                      className="min-w-0 flex-shrink text-[13px] text-[#1e3358]"
+                      ellipsizeMode="clip"
+                      minimumFontScale={0.58}
+                      numberOfLines={1}
+                      style={buttonLabelStyle}
+                    >
+                      {breakButtonLabel}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </PressableScale>
+            <PressableScale className={`overflow-hidden rounded-[24px] shadow-lg ${buttonClasses}`} haptic="success" onPress={onPrimaryAction} style={{ flex: 2 }}>
+              <View className={buttonInnerClasses}>
+                <View className={`px-4 py-4 ${buttonOverlayClasses}`}>
+                  <View className="max-w-full flex-row items-center justify-center gap-2 px-2">
+                    <Text className="text-base">{shiftMeta.buttonLabel === t('workspace.checkIn') ? '\u{1F44B}' : '\u{1F44B}'}</Text>
+                    <Text
+                      adjustsFontSizeToFit
+                      className={`min-w-0 flex-shrink text-base ${buttonTextColor}`}
+                      ellipsizeMode="clip"
+                      minimumFontScale={0.62}
+                      numberOfLines={1}
+                      style={buttonLabelStyle}
+                    >
+                      {shiftMeta.buttonLabel}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </PressableScale>
+          </View>
+        ) : shiftMeta.buttonLabel && !showCardPlaceholder ? (
           <View className="mt-4">
             <PressableScale className={`w-full overflow-hidden rounded-[24px] shadow-lg ${buttonClasses}`} haptic="success" onPress={onPrimaryAction}>
               <View className={buttonInnerClasses}>

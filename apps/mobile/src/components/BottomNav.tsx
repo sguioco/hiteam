@@ -37,7 +37,7 @@ const BottomNav = ({
     includeFontPadding: false,
     width: "100%" as const,
   };
-  const leadingTab = showManage && active !== "leaderboard" ? "manage" : "leaderboard";
+  const leadingTab = showManage ? "manage" : "leaderboard";
 
   function NavItem({
     tab,

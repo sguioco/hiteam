@@ -16,7 +16,8 @@ import type { LeaderboardOverviewResponse } from "@smart/types";
 import { Text } from "../../components/ui/text";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomNav from "../components/BottomNav";
-import { loadLeaderboardOverview } from "../../lib/api";
+import { loadLeaderboardOverview, updateLeaderboardSettings } from "../../lib/api";
+import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getDirectionalIconStyle, useI18n } from "../../lib/i18n";
 import { hapticSelection } from "../../lib/haptics";
@@ -59,6 +60,8 @@ export default function LeaderboardScreen({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, t } = useI18n();
+  const { roleCodes } = useAuthFlowState();
+  const isManager = hasManagerAccess(roleCodes);
   const directionalIconStyle = getDirectionalIconStyle(language);
   const currentMonthKey = useMemo(() => formatMonthKey(), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
@@ -79,6 +82,7 @@ export default function LeaderboardScreen({
   >("next");
   const [tab, setTab] = useState<LeaderboardTab>("progress");
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [savingVisibility, setSavingVisibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<LeaderboardOverviewResponse | null>(
     initialSnapshot?.value ?? null,
@@ -210,6 +214,44 @@ export default function LeaderboardScreen({
     router.replace(`/?tab=${nextTab}` as never);
   }
 
+  async function handleLeaderboardPrivacyToggle() {
+    if (!overview?.visibility.canManage || savingVisibility) {
+      return;
+    }
+
+    hapticSelection();
+    const previousOverview = overview;
+    const hidePeersFromEmployees = !overview.visibility.hidePeersFromEmployees;
+    const nextOverview = {
+      ...overview,
+      visibility: {
+        ...overview.visibility,
+        hidePeersFromEmployees,
+      },
+    };
+
+    setOverview(nextOverview);
+    setSavingVisibility(true);
+    setError(null);
+
+    try {
+      await updateLeaderboardSettings({ hidePeersFromEmployees });
+      await writeScreenCache(leaderboardCacheKey, nextOverview);
+    } catch (nextError) {
+      setOverview(previousOverview);
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : copy(
+              "Не удалось сохранить настройку рейтинга.",
+              "Unable to save leaderboard setting.",
+            ),
+      );
+    } finally {
+      setSavingVisibility(false);
+    }
+  }
+
   function renderRankBadge(rank: number) {
     const award = RANK_AWARDS[rank as keyof typeof RANK_AWARDS];
 
@@ -314,6 +356,8 @@ export default function LeaderboardScreen({
   const meEntry = overview?.leaderboard.find(
     (entry) => entry.employee.id === overview.me.employeeId,
   );
+  const canManageLeaderboardVisibility =
+    isManager && Boolean(overview?.visibility.canManage);
   const dailyMaxPoints = overview?.me.todayMaxPoints ?? overview?.summary.maxDailyPoints ?? 15;
   const todayPoints = overview?.me.todayPoints ?? 0;
   const todayTotalCaption = copy(
@@ -321,9 +365,15 @@ export default function LeaderboardScreen({
     "You are one step\ncloser to the end",
   );
 
-  const content = (
-    <View className="gap-3">
-      <View className="px-1">
+  const leaderboardHeader = (
+    <View
+      className="bg-[#f7f9fd] px-1 pb-3"
+      style={{
+        elevation: 2,
+        paddingTop: insets.top + (standalone ? 16 : 18),
+        zIndex: 10,
+      }}
+    >
         <View className="flex-row items-center justify-between gap-4">
           <View className="flex-1">
             <Text className="font-display text-[30px] font-bold leading-9 text-[#1f2430]">
@@ -423,8 +473,48 @@ export default function LeaderboardScreen({
             </Text>
           </Pressable>
         </View>
-      </View>
 
+        {canManageLeaderboardVisibility ? (
+          <PressableScale
+            accessibilityRole="checkbox"
+            accessibilityState={{
+              checked: Boolean(overview?.visibility.hidePeersFromEmployees),
+              disabled: savingVisibility,
+            }}
+            className="mt-3 min-h-[54px] flex-row items-center gap-3 rounded-[18px] border border-[#e5ebf5] bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10"
+            disabled={savingVisibility}
+            haptic="selection"
+            onPress={handleLeaderboardPrivacyToggle}
+          >
+            <View
+              className={`h-6 w-6 items-center justify-center rounded-[8px] border ${
+                overview?.visibility.hidePeersFromEmployees
+                  ? "border-[#2559ff] bg-[#2559ff]"
+                  : "border-[#cfd8ea] bg-white"
+              }`}
+            >
+              {overview?.visibility.hidePeersFromEmployees ? (
+                <Ionicons color="#ffffff" name="checkmark" size={15} />
+              ) : null}
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[13px] font-bold text-[#303847]">
+                {copy("Скрыть рейтинг сотрудников", "Hide employee leaderboard")}
+              </Text>
+              <Text className="mt-0.5 text-[11px] leading-4 text-[#8b95a7]">
+                {copy(
+                  "Сотрудники видят только места и свой результат.",
+                  "Employees see ranks and their own result only.",
+                )}
+              </Text>
+            </View>
+          </PressableScale>
+        ) : null}
+    </View>
+  );
+
+  const leaderboardBody = (
+    <View className="gap-3">
       {error ? (
         <View className="rounded-[18px] border border-danger/20 bg-danger/10 px-4 py-3">
           <Text className="text-[13px] leading-5 text-danger">{error}</Text>
@@ -447,6 +537,7 @@ export default function LeaderboardScreen({
         <View className="overflow-hidden rounded-[18px] border border-[#e5ebf5] bg-white shadow-sm shadow-[#1f2687]/10">
           {overview.leaderboard.map((entry, index) => {
             const isMe = entry.employee.id === overview.me.employeeId;
+            const isPrivate = Boolean(entry.isPrivate);
 
             return (
               <Fragment key={entry.employee.id}>
@@ -454,28 +545,38 @@ export default function LeaderboardScreen({
                 <View className={`px-4 py-3 ${isMe ? "bg-[#eef4ff]" : "bg-transparent"}`}>
                   <View className="flex-row items-center gap-3">
                     {renderRankBadge(entry.rank)}
-                    <Image
-                      accessibilityIgnoresInvertColors
-                      className="h-9 w-9 rounded-full"
-                      resizeMode="cover"
-                      source={resolveEmployeeAvatarSource({
-                        avatarUrl: entry.employee.avatarUrl,
-                        employeeNumber: entry.employee.employeeNumber,
-                        firstName: entry.employee.firstName,
-                        id: entry.employee.id,
-                        lastName: entry.employee.lastName,
-                      })}
-                    />
+                    {isPrivate ? (
+                      <View className="h-9 w-9 items-center justify-center rounded-full bg-[#eef3fb]">
+                        <Ionicons color="#9aa5b5" name="shield-checkmark-outline" size={18} />
+                      </View>
+                    ) : (
+                      <Image
+                        accessibilityIgnoresInvertColors
+                        className="h-9 w-9 rounded-full"
+                        resizeMode="cover"
+                        source={resolveEmployeeAvatarSource({
+                          avatarUrl: entry.employee.avatarUrl,
+                          employeeNumber: entry.employee.employeeNumber,
+                          firstName: entry.employee.firstName,
+                          id: entry.employee.id,
+                          lastName: entry.employee.lastName,
+                        })}
+                      />
+                    )}
                     <View className="flex-1">
                       <Text className="text-[15px] font-semibold text-[#1f2430]">
-                        {entry.employee.firstName} {entry.employee.lastName}
+                        {isPrivate
+                          ? copy("Скрытый сотрудник", "Hidden employee")
+                          : `${entry.employee.firstName} ${entry.employee.lastName}`}
                       </Text>
                       <Text className="text-[11px] text-[#8b95a7]">
-                        {entry.employee.position?.name ?? entry.employee.department?.name ?? t("leaderboard.points")}
+                        {isPrivate
+                          ? copy("Данные видны менеджерам", "Visible to managers")
+                          : entry.employee.position?.name ?? entry.employee.department?.name ?? t("leaderboard.points")}
                       </Text>
                     </View>
                     <Text className="font-display text-[18px] font-bold text-[#2559ff]">
-                      {entry.points}
+                      {isPrivate ? "—" : entry.points}
                     </Text>
                   </View>
                 </View>
@@ -518,25 +619,25 @@ export default function LeaderboardScreen({
 
           <View className="overflow-hidden rounded-[20px] shadow-sm shadow-[#1f2687]/20">
             <LinearGradient
-              className="px-4 py-4"
+              className="px-4 py-3"
               colors={["#1f73ff", "#1458f4"]}
               end={{ x: 1, y: 1 }}
               start={{ x: 0, y: 0 }}
-              style={{ borderRadius: 20 }}
+              style={{ borderRadius: 20, minHeight: 80 }}
             >
               <View className="flex-row items-center">
                 <View
-                  className="min-w-0 flex-row items-center gap-3 pr-3"
-                  style={{ flex: 2 }}
+                  className="min-w-0 flex-1 flex-row items-center gap-3 pr-3"
+                  style={{ minWidth: 0 }}
                 >
-                  <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white/16">
-                    <Ionicons color="#ffffff" name="trophy-outline" size={30} />
+                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/16">
+                    <Ionicons color="#ffffff" name="trophy-outline" size={24} />
                   </View>
                   <View className="min-w-0 flex-1">
-                    <Text className="font-display text-[17px] font-bold text-white">
+                    <Text className="font-display text-[16px] font-bold leading-5 text-white" numberOfLines={1}>
                       {t("leaderboard.todayTotal")}
                     </Text>
-                    <Text className="mt-0.5 text-[11px] leading-[14px] text-white">
+                    <Text className="mt-0.5 text-[10px] leading-[13px] text-white" numberOfLines={2}>
                       {todayTotalCaption}
                     </Text>
                   </View>
@@ -545,12 +646,12 @@ export default function LeaderboardScreen({
                   className="h-12 w-px"
                   style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
                 />
-                <View className="items-center justify-center pl-3" style={{ flex: 1 }}>
-                  <Text className="font-display font-bold text-white">
-                    <Text className="text-[34px]">{todayPoints}</Text>
-                    <Text className="text-[23px]">/{dailyMaxPoints}</Text>
+                <View className="w-[96px] items-center justify-center pl-3">
+                  <Text className="font-display font-bold text-white" style={{ fontVariant: ["tabular-nums"] }}>
+                    <Text className="text-[32px]">{todayPoints}</Text>
+                    <Text className="text-[20px]">/{dailyMaxPoints}</Text>
                   </Text>
-                  <Text className="text-[11px] font-semibold text-white">
+                  <Text className="text-[10px] font-semibold text-white" numberOfLines={1}>
                     {copy("готово сегодня", "done today")}
                   </Text>
                 </View>
@@ -672,11 +773,12 @@ export default function LeaderboardScreen({
           contentContainerStyle={{
             paddingBottom: 132,
             paddingHorizontal: 24,
-            paddingTop: insets.top + 16,
           }}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
         >
-          {content}
+          {leaderboardHeader}
+          {leaderboardBody}
         </ScrollView>
         <BottomNav active="leaderboard" onNavigate={handleStandaloneNavigate} showManage />
       </View>
@@ -691,11 +793,12 @@ export default function LeaderboardScreen({
         contentContainerStyle={{
           paddingBottom: 116,
           paddingHorizontal: 24,
-          paddingTop: insets.top + 18,
         }}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
       >
-        {content}
+        {leaderboardHeader}
+        {leaderboardBody}
       </ScrollView>
     </View>
   );

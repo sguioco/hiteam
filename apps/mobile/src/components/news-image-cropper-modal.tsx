@@ -76,56 +76,22 @@ function CropGridOverlay() {
       pointerEvents="none"
       style={{
         position: 'absolute',
-        inset: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
       }}
     >
       <View
         style={{
           position: 'absolute',
-          inset: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
           borderColor: 'rgba(255,255,255,0.92)',
           borderRadius: 26,
           borderWidth: 2,
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: '33.3333%',
-          left: 0,
-          right: 0,
-          height: 1,
-          backgroundColor: 'rgba(255,255,255,0.38)',
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: '66.6666%',
-          left: 0,
-          right: 0,
-          height: 1,
-          backgroundColor: 'rgba(255,255,255,0.38)',
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          bottom: 0,
-          left: '33.3333%',
-          width: 1,
-          backgroundColor: 'rgba(255,255,255,0.38)',
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          bottom: 0,
-          left: '66.6666%',
-          width: 1,
-          backgroundColor: 'rgba(255,255,255,0.38)',
         }}
       />
     </View>

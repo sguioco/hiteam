@@ -12,7 +12,9 @@ import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicEmailLookupDto } from './dto/public-email-lookup.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
+import { UpdateEmployeeBreaksDto } from './dto/update-employee-breaks.dto';
 import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
+import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 import { EmployeesService } from './employees.service';
 
@@ -39,6 +41,17 @@ export class EmployeesController {
   @Post('invitations/:invitationId/resend')
   resendInvitation(@CurrentUser() user: JwtUser, @Param('invitationId') invitationId: string) {
     return this.employeesService.resendInvitation(user.tenantId, user.sub, invitationId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch('invitations/:invitationId/setup')
+  updateInvitationSetup(
+    @CurrentUser() user: JwtUser,
+    @Param('invitationId') invitationId: string,
+    @Body() dto: UpdateEmployeeInvitationSetupDto,
+  ) {
+    return this.employeesService.updateInvitationSetup(user.tenantId, user.sub, invitationId, dto);
   }
 
   @Get('invitations/public/:token')
@@ -97,7 +110,7 @@ export class EmployeesController {
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get()
   list(@CurrentUser() user: JwtUser, @Query() query: ListEmployeesQueryDto) {
-    return this.employeesService.list(user.tenantId, query);
+    return this.employeesService.list(user.tenantId, query, user.sub);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -105,6 +118,22 @@ export class EmployeesController {
   @Get(':employeeId')
   getById(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
     return this.employeesService.getById(user.tenantId, employeeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch(':employeeId/breaks')
+  updateBreaks(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: UpdateEmployeeBreaksDto,
+  ) {
+    return this.employeesService.updateBreaksAccess(
+      user.tenantId,
+      user.sub,
+      employeeId,
+      dto.breaksEnabled,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

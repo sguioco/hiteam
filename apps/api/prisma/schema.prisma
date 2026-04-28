@@ -233,10 +233,13 @@ enum BiometricJobStatus {
 
 model Tenant {
   id                 String               @id @default(uuid())
+  /// Internal business identifier for billing and integration checks. Keep out of user-facing DTOs.
+  businessId         String               @unique @default(uuid())
   name               String
   slug               String               @unique
   timezone           String               @default("UTC")
   locale             String               @default("en")
+  hideLeaderboardPeersFromEmployees Boolean @default(false)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
@@ -287,6 +290,18 @@ model Tenant {
   diagnosticsPolicy  DiagnosticsPolicy?
   taskAutomationPolicy TaskAutomationPolicy?
   diagnosticsSnapshots DiagnosticsSnapshot[]
+  billingSubscription BillingSubscription?
+}
+
+model BillingSubscription {
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  paidSeats Int      @default(1)
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model DiagnosticsPolicy {
@@ -425,7 +440,6 @@ model Company {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  code      String   @unique
   logoUrl   String?
   googlePlaceId String?
   createdAt DateTime @default(now())
@@ -436,6 +450,7 @@ model Company {
   locations Location[]
   employeeInvitations EmployeeInvitation[]
 
+  @@unique([tenantId, name])
 }
 
 model Department {
@@ -464,6 +479,7 @@ model Location {
   name                 String
   code                 String
   address              String
+  country              String?
   latitude             Float
   longitude            Float
   geofenceRadiusMeters Int      @default(100)
@@ -519,6 +535,7 @@ model Employee {
   phone               String?
   avatarStorageKey    String?
   avatarUrl           String?
+  breaksEnabled       Boolean                 @default(false)
   status              EmployeeStatus          @default(ACTIVE)
   hireDate            DateTime
   createdAt           DateTime                @default(now())
@@ -579,7 +596,7 @@ model EmployeeInvitation {
   id               String                   @id @default(uuid())
   tenantId         String
   companyId        String?
-  email            String
+  email            String?
   invitedByUserId  String
   userId           String?                  @unique
   approvedByUserId String?
@@ -617,6 +634,7 @@ model EmployeeInvitation {
   approvedGroup    WorkGroup?               @relation(fields: [approvedGroupId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, email])
+  @@index([tenantId, phone])
   @@index([tenantId, status, invitedAt])
 }
 
@@ -1385,6 +1403,7 @@ model PayrollPolicy {
   leavePaidRatio             Float    @default(1)
   sickLeavePaidRatio         Float    @default(0.8)
   standardShiftMinutes       Int      @default(480)
+  breaksEnabled              Boolean  @default(false)
   defaultBreakIsPaid         Boolean  @default(false)
   maxBreakMinutes            Int      @default(60)
   mandatoryBreakThresholdMinutes Int @default(360)

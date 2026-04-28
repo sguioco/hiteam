@@ -55,6 +55,7 @@ export class SystemService {
 
     return {
       tenantId: tenant.id,
+      businessId: tenant.businessId,
       slug: tenant.slug,
       invitationId: invitation.id,
       token,

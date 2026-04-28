@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsNumber, IsString, Matches, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 export class UpdatePayrollPolicyDto {
   @IsNumber()
@@ -56,6 +56,10 @@ export class UpdatePayrollPolicyDto {
   @IsInt()
   @Min(1)
   standardShiftMinutes!: number;
+
+  @IsBoolean()
+  @IsOptional()
+  breaksEnabled?: boolean;
 
   @IsBoolean()
   defaultBreakIsPaid!: boolean;

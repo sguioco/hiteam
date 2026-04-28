@@ -21,7 +21,6 @@ import {
   bootstrapDemoDevice,
   lookupInvitationByEmail,
   signInWithEmail,
-  submitCompanyJoinRequest,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
 import { isRTLLanguage, useI18n } from '../../lib/i18n';
@@ -35,7 +34,6 @@ import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/work
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
 type JoinCompanyPayload = {
   companyName: string;
-  companyCode: string;
   tenantName: string;
   tenantSlug: string;
 };
@@ -678,17 +676,7 @@ const AuthScreen = () => {
     setMessage(null);
 
     try {
-      await submitCompanyJoinRequest({
-        code: joinCompany.companyCode,
-        firstName: trimmedFirstName,
-        lastName: trimmedLastName,
-        email: trimmedEmail,
-        phone: `${joinProfileCountryCode}${trimmedPhone}`,
-        birthDate: trimmedBirthDate,
-        avatarDataUrl: joinProfileForm.avatarDataUrl,
-      });
-      hapticSuccess();
-      setJoinProfileSubmitted(true);
+      throw new Error(t('joinProfile.unavailableTitle'));
     } catch (error) {
       hapticError();
       setMessage(error instanceof Error ? error.message : joinProfileCopy.requiredFields);

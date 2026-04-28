@@ -10187,6 +10187,37 @@ body {
   transform: translateY(1px);
 }
 
+.employees-add-employee-pulse {
+  transform-origin: center;
+  animation: employees-add-employee-pulse 1.65s cubic-bezier(0.2, 0, 0, 1) infinite;
+  box-shadow:
+    0 0 0 0 rgba(37, 99, 235, 0.26),
+    0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+@keyframes employees-add-employee-pulse {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      0 0 0 0 rgba(37, 99, 235, 0.26),
+      0 12px 24px rgba(37, 99, 235, 0.18);
+  }
+
+  50% {
+    transform: translateY(-1px) scale(1.015);
+    box-shadow:
+      0 0 0 8px rgba(37, 99, 235, 0),
+      0 16px 30px rgba(37, 99, 235, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employees-add-employee-pulse {
+    animation: none;
+  }
+}
+
 .team-tasks-custom-range {
   display: grid;
   gap: 10px;

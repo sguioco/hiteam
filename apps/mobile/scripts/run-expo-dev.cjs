@@ -155,15 +155,15 @@ async function main() {
     args.push('--clear');
   }
 
-  if (onlineMode) {
-    if (resolvedHostMode === 'tunnel') {
-      args.push('--tunnel');
-    } else if (resolvedHostMode === 'localhost') {
-      args.push('--localhost');
-    } else {
-      args.push('--lan');
-    }
+  if (resolvedHostMode === 'tunnel') {
+    args.push('--tunnel');
+  } else if (resolvedHostMode === 'localhost') {
+    args.push('--localhost');
   } else {
+    args.push('--lan');
+  }
+
+  if (!onlineMode) {
     args.push('--offline');
   }
 

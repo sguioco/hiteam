@@ -31,6 +31,7 @@ export default function RegisterInvitationScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [step, setStep] = useState<'password' | 'profile'>('password');
   const [form, setForm] = useState({
+    email: '',
     password: '',
     firstName: '',
     lastName: '',
@@ -45,7 +46,7 @@ export default function RegisterInvitationScreen() {
         ? {
             title: 'Присоединение к команде',
             passwordSubtitle:
-              'Ваш email уже добавлен в организацию. Сначала придумайте пароль для входа.',
+              'Проверьте email и придумайте пароль для входа.',
             profileSubtitle:
               'Теперь заполните профиль. После этого мы сразу откроем биометрию и ваш график.',
             passwordHint:
@@ -56,11 +57,12 @@ export default function RegisterInvitationScreen() {
             alreadySubmittedTitle: 'Аккаунт уже создан',
             alreadySubmittedBody: 'Для {email} аккаунт уже настроен. Просто войдите в приложение.',
             profileRequired: 'Заполните имя, фамилию, дату рождения и телефон.',
+            emailRequired: 'Укажите email.',
           }
         : {
             title: 'Join the team',
             passwordSubtitle:
-              'Your email is already on the team. Start by creating your sign-in password.',
+              'Confirm your email and create your sign-in password.',
             profileSubtitle:
               'Now complete your profile. After that we will open biometric setup and your schedule right away.',
             passwordHint:
@@ -71,6 +73,7 @@ export default function RegisterInvitationScreen() {
             alreadySubmittedTitle: 'Account already created',
             alreadySubmittedBody: 'An account for {email} is already set up. Just sign in to the app.',
             profileRequired: 'Complete first name, last name, birth date, and phone.',
+            emailRequired: 'Enter your email.',
           },
     [language],
   );
@@ -104,6 +107,7 @@ export default function RegisterInvitationScreen() {
         setInvitation(payload);
         setForm((current) => ({
           ...current,
+          email: payload.email ?? current.email,
           firstName: payload.firstName ?? current.firstName,
           lastName: payload.lastName ?? current.lastName,
           phone: payload.phone ?? current.phone,
@@ -135,6 +139,11 @@ export default function RegisterInvitationScreen() {
   }, [invitation]);
 
   function handleContinue() {
+    if (!form.email.trim()) {
+      setError(copy.emailRequired);
+      return;
+    }
+
     if (form.password.trim().length < 8) {
       setError(t('register.passwordShort'));
       return;
@@ -146,6 +155,12 @@ export default function RegisterInvitationScreen() {
 
   async function handleSubmit() {
     if (!invitation) {
+      return;
+    }
+    const normalizedEmail = form.email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setError(copy.emailRequired);
       return;
     }
 
@@ -165,6 +180,7 @@ export default function RegisterInvitationScreen() {
 
     try {
       await registerFromInvitation(token, {
+        email: normalizedEmail,
         password: form.password.trim(),
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
@@ -174,7 +190,7 @@ export default function RegisterInvitationScreen() {
         phone: form.phone.trim(),
       });
 
-      await signInWithEmail(invitation.email, form.password.trim(), invitation.tenantSlug);
+      await signInWithEmail(normalizedEmail, form.password.trim(), invitation.tenantSlug);
       signInLocally({ workspaceSetupStep: 'biometric' });
       setMessage(t('register.startBiometric'));
       router.push({
@@ -227,13 +243,14 @@ export default function RegisterInvitationScreen() {
   }
 
   if (isAlreadyHandled) {
+    const displayEmail = invitation.email ?? invitation.phone ?? '';
     return (
       <SafeAreaView className="flex-1 bg-[#f4f5f9] px-6 py-8">
         <StatusBar style="dark" />
         <Card className="mt-auto gap-4 rounded-[30px] bg-white">
           <Text className="text-[28px] font-extrabold text-[#24314b]">{copy.alreadySubmittedTitle}</Text>
           <Text className="text-[16px] leading-7 text-[#6f7892]">
-            {copy.alreadySubmittedBody.replace('{email}', invitation.email)}
+            {copy.alreadySubmittedBody.replace('{email}', displayEmail)}
           </Text>
           <Button fullWidth label={t('login.signIn')} onPress={() => router.replace('/' as never)} />
         </Card>
@@ -259,7 +276,16 @@ export default function RegisterInvitationScreen() {
         <Card className="mt-6 gap-4 rounded-[30px] bg-white">
           <View className="gap-2">
             <Text className="text-[13px] font-bold uppercase tracking-[1.8px] text-[#7a8094]">{t('register.email')}</Text>
-            <Text className="text-[18px] font-semibold text-[#24314b]">{invitation.email}</Text>
+            <TextInput
+              className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
+              editable={!invitation.email}
+              keyboardType="email-address"
+              onChangeText={(value) => setForm((current) => ({ ...current, email: value }))}
+              placeholder="you@company.com"
+              placeholderTextColor="#8a92ab"
+              style={textDirectionStyle}
+              value={form.email}
+            />
           </View>
 
           <TextInput

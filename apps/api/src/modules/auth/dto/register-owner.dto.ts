@@ -11,9 +11,6 @@ export class RegisterOwnerDto {
   companyName!: string;
 
   @IsString()
-  companyCode!: string;
-
-  @IsString()
   firstName!: string;
 
   @IsString()

@@ -30,6 +30,7 @@ export type LeaderboardDailyActivity = {
 
 export type LeaderboardEntry = {
   rank: number;
+  isPrivate?: boolean;
   employee: {
     id: string;
     firstName: string;
@@ -72,6 +73,11 @@ export type LeaderboardOverviewResponse = {
     dailyActivity: LeaderboardDailyActivity[];
   };
   leaderboard: LeaderboardEntry[];
+  visibility: {
+    hidePeersFromEmployees: boolean;
+    canManage: boolean;
+    peersHiddenForViewer: boolean;
+  };
 };
 
 export type LeaderboardCelebration = {

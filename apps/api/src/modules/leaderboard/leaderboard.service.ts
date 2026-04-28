@@ -14,6 +14,7 @@ import {
   buildDemoLeaderboardOverview,
   isDemoLeaderboardEmail,
 } from "./leaderboard.mock";
+import type { UpdateLeaderboardSettingsDto } from "./dto/update-leaderboard-settings.dto";
 import type {
   LeaderboardCelebration,
   LeaderboardDailyActivity,
@@ -36,8 +37,30 @@ const STREAK_BONUSES = new Map<number, 10 | 20 | 30>([
   [10, 20],
   [20, 30],
 ]);
+const MANAGER_ROLE_CODES = new Set([
+  "tenant_owner",
+  "hr_admin",
+  "operations_admin",
+  "manager",
+]);
 
 type ViewerEmployee = Prisma.EmployeeGetPayload<{
+  include: {
+    user: {
+      include: {
+        roles: {
+          include: {
+            role: true;
+          };
+        };
+      };
+    };
+    department: true;
+    position: true;
+    primaryLocation: true;
+  };
+}>;
+type TeamEmployee = Prisma.EmployeeGetPayload<{
   include: {
     user: true;
     department: true;
@@ -45,7 +68,6 @@ type ViewerEmployee = Prisma.EmployeeGetPayload<{
     primaryLocation: true;
   };
 }>;
-type TeamEmployee = ViewerEmployee;
 type EmployeeShift = Prisma.ShiftGetPayload<{
   include: {
     template: true;
@@ -104,14 +126,29 @@ export class LeaderboardService {
     requestedMonthKey?: string | null,
   ): Promise<LeaderboardOverviewResponse> {
     const viewer = await this.loadViewerEmployee(userId);
+    const canManageLeaderboard = this.hasManagerAccess(viewer);
 
     if (isDemoLeaderboardEmail(viewer.user.email)) {
-      return buildDemoLeaderboardOverview(viewer.user.email, requestedMonthKey);
+      return buildDemoLeaderboardOverview(
+        viewer.user.email,
+        requestedMonthKey,
+        canManageLeaderboard,
+      );
     }
 
     const context = this.createMonthContext(requestedMonthKey);
-    const employees = await this.loadTeamEmployees(viewer.tenantId, viewer.id);
+    const [employees, tenantSettings] = await Promise.all([
+      this.loadTeamEmployees(viewer.tenantId, viewer.id),
+      this.prisma.tenant.findUnique({
+        where: { id: viewer.tenantId },
+        select: { hideLeaderboardPeersFromEmployees: true },
+      }),
+    ]);
     const employeeIds = employees.map((employee) => employee.id);
+    const hidePeersFromEmployees =
+      tenantSettings?.hideLeaderboardPeersFromEmployees ?? false;
+    const peersHiddenForViewer =
+      hidePeersFromEmployees && !canManageLeaderboard;
 
     const [shifts, sessions, approvedLeaves, taskBuckets] = await Promise.all([
       this.loadShifts(
@@ -244,7 +281,33 @@ export class LeaderboardService {
         progress: me.progress,
         dailyActivity: me.dailyActivity,
       },
-      leaderboard: ranked.map((item) => item.entry),
+      leaderboard: this.applyLeaderboardVisibility(
+        ranked.map((item) => item.entry),
+        viewer.id,
+        peersHiddenForViewer,
+      ),
+      visibility: {
+        hidePeersFromEmployees,
+        canManage: canManageLeaderboard,
+        peersHiddenForViewer,
+      },
+    };
+  }
+
+  async updateSettings(userId: string, dto: UpdateLeaderboardSettingsDto) {
+    const viewer = await this.loadViewerEmployee(userId);
+    const tenant = await this.prisma.tenant.update({
+      where: { id: viewer.tenantId },
+      data: {
+        hideLeaderboardPeersFromEmployees: dto.hidePeersFromEmployees,
+      },
+      select: {
+        hideLeaderboardPeersFromEmployees: true,
+      },
+    });
+
+    return {
+      hidePeersFromEmployees: tenant.hideLeaderboardPeersFromEmployees,
     };
   }
 
@@ -309,7 +372,15 @@ export class LeaderboardService {
     return this.prisma.employee.findUniqueOrThrow({
       where: { userId },
       include: {
-        user: true,
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
         department: true,
         position: true,
         primaryLocation: true,
@@ -347,6 +418,45 @@ export class LeaderboardService {
     });
 
     return viewer ? [...employees, viewer] : employees;
+  }
+
+  private hasManagerAccess(viewer: ViewerEmployee) {
+    return viewer.user.roles.some((assignment) =>
+      MANAGER_ROLE_CODES.has(assignment.role.code),
+    );
+  }
+
+  private applyLeaderboardVisibility(
+    entries: LeaderboardEntry[],
+    viewerEmployeeId: string,
+    peersHiddenForViewer: boolean,
+  ) {
+    if (!peersHiddenForViewer) {
+      return entries;
+    }
+
+    return entries.map((entry) => {
+      if (entry.employee.id === viewerEmployeeId) {
+        return entry;
+      }
+
+      return {
+        rank: entry.rank,
+        isPrivate: true,
+        employee: {
+          id: `private-rank-${entry.rank}`,
+          firstName: "",
+          lastName: "",
+          employeeNumber: "",
+          avatarUrl: null,
+          department: null,
+          position: null,
+        },
+        points: 0,
+        todayPoints: 0,
+        streak: 0,
+      } satisfies LeaderboardEntry;
+    });
   }
 
   private async loadShifts(

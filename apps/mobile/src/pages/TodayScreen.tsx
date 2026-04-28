@@ -312,6 +312,21 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     }
   }
 
+  function openBreakAction() {
+    if (!effectiveAttendanceStatus) {
+      return;
+    }
+
+    if (effectiveAttendanceStatus.allowedActions.includes('start_break')) {
+      router.push(resolveAttendanceActionHref('break/start'));
+      return;
+    }
+
+    if (effectiveAttendanceStatus.allowedActions.includes('end_break')) {
+      router.push(resolveAttendanceActionHref('break/end'));
+    }
+  }
+
   async function handleToggleTask(taskId: string, nextStatus: 'TODO' | 'DONE') {
     if (updatingTaskIds.includes(taskId)) {
       return;
@@ -373,6 +388,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
               displayTimeZone={businessTimeZone}
               greetingName={profile?.firstName ?? null}
               loading={showLoadingState}
+              onBreakAction={openBreakAction}
               onPrimaryAction={openAttendanceAction}
               status={effectiveAttendanceStatus}
               topInset={insets.top}

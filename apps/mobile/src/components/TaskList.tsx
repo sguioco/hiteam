@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { ActionSheetIOS, ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
 import type { TaskItem } from '@smart/types';
@@ -57,8 +67,8 @@ const PHOTO_REPORT_LAYOUT = {
       'rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4',
   },
   withPhotos: {
-    shellClassName: 'min-h-[610px] relative',
-    footerClassName: 'absolute inset-x-0 bottom-2 gap-6',
+    shellClassName: 'relative',
+    footerClassName: 'mt-4 gap-6',
     actionRowClassName: 'flex-row gap-3',
   },
 } as const;
@@ -108,6 +118,7 @@ export default function TaskList({
   onTaskUpdate,
 }: TaskListProps) {
   const { language, t, tp } = useI18n();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const locale = getDateLocale(language);
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -143,6 +154,10 @@ export default function TaskList({
   const photoReportLayout = activeTaskHasPhotos
     ? PHOTO_REPORT_LAYOUT.withPhotos
     : PHOTO_REPORT_LAYOUT.withoutPhotos;
+  const photoPreviewHeight = Math.max(
+    190,
+    Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
+  );
 
   useEffect(() => {
     if (!activeTaskPhotos.length) {
@@ -655,7 +670,7 @@ export default function TaskList({
       >
         {activeTask ? (
           <View className={photoReportLayout.shellClassName}>
-            <View className={activeTaskHasPhotos ? 'pb-24' : 'pb-24'}>
+            <View className={activeTaskHasPhotos ? '' : 'pb-24'}>
               <View className="mb-4 flex-row items-start justify-between gap-4">
                 <View className="w-10" />
                 <View className="flex-1 items-center">
@@ -728,8 +743,15 @@ export default function TaskList({
                 ) : null}
 
                 {selectedPhoto ? (
-                  <View className="mb-1 aspect-square overflow-hidden rounded-[26px] bg-[#dbe7ff]">
-                    <Image source={{ uri: selectedPhoto.uri }} style={StyleSheet.absoluteFillObject} />
+                  <View
+                    className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
+                    style={{ height: photoPreviewHeight }}
+                  >
+                    <Image
+                      resizeMode="contain"
+                      source={{ uri: selectedPhoto.uri }}
+                      style={StyleSheet.absoluteFillObject}
+                    />
                     {selectedPhoto.isPending ? (
                       <View className="absolute inset-0 items-center justify-center bg-[#0f172a]/18">
                         <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">

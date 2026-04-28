@@ -401,6 +401,7 @@ export function isDemoLeaderboardEmail(email?: string | null) {
 export function buildDemoLeaderboardOverview(
   email?: string | null,
   monthKey?: string | null,
+  canManage = false,
 ): LeaderboardOverviewResponse {
   const normalized = email?.trim().toLowerCase();
   const month = createMonthPayload(monthKey);
@@ -457,6 +458,11 @@ export function buildDemoLeaderboardOverview(
       dailyActivity: createDailyActivity(month, todayPoints),
     },
     leaderboard,
+    visibility: {
+      hidePeersFromEmployees: false,
+      canManage,
+      peersHiddenForViewer: false,
+    },
   };
 }
 

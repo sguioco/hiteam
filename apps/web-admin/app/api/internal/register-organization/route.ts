@@ -36,7 +36,6 @@ export async function POST(request: NextRequest) {
     accessKey?: string;
     organizationName?: string;
     managerEmail?: string;
-    companyCode?: string;
     timezone?: string;
   };
 
@@ -46,11 +45,10 @@ export async function POST(request: NextRequest) {
 
   const organizationName = (body.organizationName ?? "").trim();
   const managerEmail = (body.managerEmail ?? "").trim().toLowerCase();
-  const companyCode = (body.companyCode ?? "").trim().toUpperCase();
   const timezone = (body.timezone ?? "UTC").trim() || "UTC";
 
-  if (!organizationName || !managerEmail || !companyCode) {
-    return NextResponse.json({ message: "Organization name, manager email, and company code are required." }, { status: 400 });
+  if (!organizationName || !managerEmail) {
+    return NextResponse.json({ message: "Organization name and manager email are required." }, { status: 400 });
   }
 
   let response: Response;
@@ -64,7 +62,6 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         organizationName,
         managerEmail,
-        companyCode,
         timezone,
       }),
     });
@@ -106,8 +103,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const payload = JSON.parse(text);
-    return NextResponse.json(payload, { status: response.status });
+    const payload = JSON.parse(text) as {
+      managerEmail?: string;
+      managerSetupUrl?: string;
+      managerTemporaryPassword?: string;
+    };
+
+    if (!payload.managerEmail || !payload.managerSetupUrl) {
+      return NextResponse.json({ message: "API response is missing manager setup data." }, { status: 502 });
+    }
+
+    return NextResponse.json(
+      {
+        managerEmail: payload.managerEmail,
+        managerSetupUrl: payload.managerSetupUrl,
+        ...(payload.managerTemporaryPassword
+          ? { managerTemporaryPassword: payload.managerTemporaryPassword }
+          : {}),
+      },
+      { status: response.status },
+    );
   } catch {
     return NextResponse.json({ message: text }, { status: response.status });
   }

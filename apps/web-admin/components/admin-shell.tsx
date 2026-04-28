@@ -158,6 +158,10 @@ function resolveShellPageTitle(pathname: string, locale: Locale) {
       label: locale === "ru" ? "Наблюдаемость" : "Observability",
     },
     {
+      href: toAdminHref("/organization/billing"),
+      label: "Billing",
+    },
+    {
       href: toAdminHref("/organization"),
       label: locale === "ru" ? "Структура" : "Organization",
     },
@@ -985,6 +989,10 @@ export function AdminShell({
             {
               href: toAdminHref("/organization"),
               label: locale === "ru" ? "Организация" : "Organization",
+            },
+            {
+              href: toAdminHref("/organization/billing"),
+              label: "Billing",
             },
             {
               href: profileHref,

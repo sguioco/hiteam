@@ -120,6 +120,7 @@ function resolveCacheTtlMs(path: string, options?: ApiRequestOptions) {
   if (/\/org\/setup$/.test(path)) return 10 * 60_000;
   if (/\/org\/(?:companies|departments|locations|positions)(?:\?|$)/.test(path))
     return 10 * 60_000;
+  if (/\/billing\/summary$/.test(path)) return 30_000;
   if (/\/schedule\/templates$/.test(path)) return 10 * 60_000;
   if (/\/schedule\/shifts$/.test(path)) return 60_000;
   if (/\/payroll\/(?:summary|policy|holidays)(?:\?|$)/.test(path))

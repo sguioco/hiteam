@@ -19,6 +19,10 @@ export class UpsertOrgSetupDto {
   @IsString()
   address!: string;
 
+  @IsOptional()
+  @IsString()
+  country?: string;
+
   @IsNumber()
   latitude!: number;
 

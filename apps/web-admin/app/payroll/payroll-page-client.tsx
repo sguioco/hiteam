@@ -137,6 +137,9 @@ export default function PayrollPageClient({
           leavePaidRatio: Number(fd.get('leavePaidRatio')),
           sickLeavePaidRatio: Number(fd.get('sickLeavePaidRatio')),
           standardShiftMinutes: Number(fd.get('standardShiftMinutes')),
+          breaksEnabled: fd.has('breaksEnabled')
+            ? fd.get('breaksEnabled') === 'on'
+            : (policy?.breaksEnabled ?? false),
           defaultBreakIsPaid: fd.has('defaultBreakIsPaid')
             ? fd.get('defaultBreakIsPaid') === 'on'
             : (policy?.defaultBreakIsPaid ?? false),
@@ -359,6 +362,33 @@ export default function PayrollPageClient({
             <CardHeader><CardTitle className="text-base">{locale === 'ru' ? 'Ограничения и удержания' : 'Rules & deductions'}</CardTitle><CardDescription>{locale === 'ru' ? 'Ночное окно и штрафы.' : 'Night window and penalties.'}</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">{rulePolicyFields.map((f) => (<label className="space-y-1.5" key={f.name}><span className="text-xs font-medium text-muted-foreground">{f.label}</span><Input defaultValue={f.value} id={f.name} name={f.name} required step={f.step} type={f.type} /></label>))}</div>
+            </CardContent>
+          </Card>
+          <Card className="xl:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">{locale === 'ru' ? 'Перерывы' : 'Breaks'}</CardTitle>
+              <CardDescription>
+                {locale === 'ru'
+                  ? 'Включите функцию в компании, затем разрешите её нужным сотрудникам в карточке сотрудника.'
+                  : 'Enable breaks company-wide, then allow them for specific employees in the employee card.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-[1fr_repeat(3,minmax(140px,180px))]">
+              <label className="flex min-h-[74px] items-center gap-3 rounded-2xl border border-border bg-secondary/20 px-4 py-3">
+                <input className="h-4 w-4 rounded border accent-primary" defaultChecked={policy.breaksEnabled} name="breaksEnabled" type="checkbox" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-foreground">
+                    {locale === 'ru' ? 'Включить перерывы' : 'Enable breaks'}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {locale === 'ru' ? 'Кнопка появится только у разрешённых сотрудников.' : 'The button appears only for allowed employees.'}
+                  </span>
+                </span>
+              </label>
+              <label className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">{t('payroll.maxBreakMinutes')}</span><Input defaultValue={policy.maxBreakMinutes} min={1} name="maxBreakMinutes" required type="number" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">{t('payroll.mandatoryBreakThreshold')}</span><Input defaultValue={policy.mandatoryBreakThresholdMinutes} min={1} name="mandatoryBreakThresholdMinutes" required type="number" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">{t('payroll.mandatoryBreakDuration')}</span><Input defaultValue={policy.mandatoryBreakDurationMinutes} min={0} name="mandatoryBreakDurationMinutes" required type="number" /></label>
+              <label className="flex items-center gap-2.5 text-sm md:col-span-4"><input className="h-4 w-4 rounded border accent-primary" defaultChecked={policy.defaultBreakIsPaid} name="defaultBreakIsPaid" type="checkbox" />{t('payroll.defaultBreakPaid')}</label>
             </CardContent>
             <CardFooter className="justify-end border-t pt-4"><Button type="submit">{t('payroll.savePolicy')}</Button></CardFooter>
           </Card>

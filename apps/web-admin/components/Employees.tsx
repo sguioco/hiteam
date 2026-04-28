@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Check,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   FolderOpen,
   ListTodo,
   Mail,
+  Phone,
   Plus,
   Search,
   Settings,
@@ -19,6 +21,7 @@ import {
   Users,
   X,
   Clock,
+  CreditCard,
 } from "lucide-react";
 import {
   AttendanceLiveSession,
@@ -59,6 +62,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
+import { toAdminHref } from "@/lib/admin-routes";
+import {
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "@/lib/browser-storage";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import {
   buildEmployeeWorkdayLookup,
@@ -85,6 +93,7 @@ type EmployeeApiRecord = {
   gender?: string | null;
   phone?: string | null;
   avatarUrl?: string | null;
+  breaksEnabled?: boolean;
   status?: string | null;
   biometricProfile?: {
     enrollmentStatus?: "NOT_STARTED" | "PENDING" | "ENROLLED" | "FAILED" | null;
@@ -128,7 +137,7 @@ type EmployeeDetails = EmployeeApiRecord & {
 type InvitationRecord = {
   id: string;
   companyId?: string | null;
-  email: string;
+  email: string | null;
   status: "INVITED" | "PENDING_APPROVAL" | "REJECTED";
   expiresAt: string;
   submittedAt: string | null;
@@ -171,7 +180,6 @@ type ShiftTemplateRecord = {
 type OrganizationSetupResponse = {
   company: {
     id: string;
-    code: string;
     name: string;
   } | null;
 };
@@ -197,6 +205,8 @@ type EmployeeStatus =
   | "inactive"
   | "dismissed";
 type ViewMode = "employees" | "groups";
+type InviteContactMethod = "email" | "phone";
+type InvitationDialogMode = "setup" | "review";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
 type TaskDialogState =
   | {
@@ -272,11 +282,24 @@ const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
 const reviewInfoBoxClassName =
   "flex min-h-11 items-center rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted-foreground";
 const EMPLOYEES_DIRECTORY_CACHE_TTL_MS = 2 * 60 * 1000;
+const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
+const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
+const ADD_EMPLOYEE_PROMPT_DISMISSED = "dismissed";
 
 function buildEmployeesDirectoryCacheKey(
   session: NonNullable<ReturnType<typeof getSession>>,
 ) {
   return `employees:directory:${session.user.tenantId}:${session.user.id}`;
+}
+
+function buildAddEmployeePromptStorageKey(
+  session: NonNullable<ReturnType<typeof getSession>>,
+) {
+  return `${ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX}:${session.user.tenantId}:${session.user.id}`;
+}
+
+function isBillingSeatLimitMessage(message: string) {
+  return /оплаченных мест|billing|paid seats|seat/i.test(message);
 }
 
 function buildEmployeeName(employee: {
@@ -506,9 +529,13 @@ const Employees = ({
   const router = useRouter();
   const activeSession = getSession();
   const locale = getRuntimeLocale();
+  const addEmployeePromptStorageKey = activeSession
+    ? buildAddEmployeePromptStorageKey(activeSession)
+    : null;
   const taskPriorityOptions = useMemo(() => getTaskPriorityOptions(locale), [locale]);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("employees");
+  const [shouldPulseAddEmployee, setShouldPulseAddEmployee] = useState(false);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: "name",
     direction: "ascending",
@@ -541,18 +568,23 @@ const Employees = ({
     "general" | "personal"
   >("general");
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [breaksUpdating, setBreaksUpdating] = useState(false);
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => buildExpandedGroupsFromSnapshot(initialData),
   );
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteContactMethod, setInviteContactMethod] =
+    useState<InviteContactMethod>("email");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
   const [copiedInviteField, setCopiedInviteField] = useState<
-    "code" | "link" | "email" | "password" | null
+    "email" | "password" | null
   >(null);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
@@ -567,6 +599,8 @@ const Employees = ({
   const [invitationsLoading, setInvitationsLoading] = useState(!initialData);
   const [selectedInvitation, setSelectedInvitation] =
     useState<InvitationRecord | null>(null);
+  const [invitationDialogMode, setInvitationDialogMode] =
+    useState<InvitationDialogMode>("review");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [approvalCredentials, setApprovalCredentials] = useState<{
@@ -931,6 +965,11 @@ const Employees = ({
       employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
   );
+  const selectedEmployeeBreaksEnabled = Boolean(
+    selectedEmployeeDetails?.breaksEnabled ??
+      employeeRecords.find((employee) => employee.id === selectedEmployeeId)?.breaksEnabled ??
+      false,
+  );
   const navigatingEmployee = useMemo(
     () =>
       navigatingEmployeeId
@@ -1151,6 +1190,41 @@ const Employees = ({
   });
 
   useEffect(() => {
+    if (!addEmployeePromptStorageKey || typeof window === "undefined") {
+      setShouldPulseAddEmployee(false);
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const shouldPromptFromRedirect = params.get("focusAddEmployee") === "1";
+    const storedPrompt = readBrowserStorageItem(addEmployeePromptStorageKey, {
+      includeSessionFallback: true,
+    });
+
+    if (storedPrompt === ADD_EMPLOYEE_PROMPT_DISMISSED) {
+      setShouldPulseAddEmployee(false);
+      return;
+    }
+
+    if (
+      storedPrompt === ADD_EMPLOYEE_PROMPT_PENDING ||
+      shouldPromptFromRedirect
+    ) {
+      setShouldPulseAddEmployee(true);
+      if (shouldPromptFromRedirect && storedPrompt !== ADD_EMPLOYEE_PROMPT_PENDING) {
+        writeBrowserStorageItem(
+          addEmployeePromptStorageKey,
+          ADD_EMPLOYEE_PROMPT_PENDING,
+          { includeSessionFallback: true },
+        );
+      }
+      return;
+    }
+
+    setShouldPulseAddEmployee(false);
+  }, [addEmployeePromptStorageKey]);
+
+  useEffect(() => {
     const session = getSession();
     if (!session || !selectedEmployeeId) {
       setSelectedEmployeeDetails(null);
@@ -1159,6 +1233,8 @@ const Employees = ({
     }
 
     setDetailsLoading(true);
+    setSelectedEmployeeDetails(null);
+    setSelectedEmployeeBiometric(null);
     void Promise.all([
       apiRequest<EmployeeDetails>(`/employees/${selectedEmployeeId}`, {
         token: session.accessToken,
@@ -1205,6 +1281,58 @@ const Employees = ({
     }
   }, [selectedEmployeeId]);
 
+  async function updateSelectedEmployeeBreaks(nextBreaksEnabled: boolean) {
+    const session = getSession();
+    if (!session || !selectedEmployeeId) return;
+
+    setBreaksUpdating(true);
+    try {
+      const updatedEmployee = await apiRequest<EmployeeDetails>(
+        `/employees/${selectedEmployeeId}/breaks`,
+        {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({ breaksEnabled: nextBreaksEnabled }),
+        },
+      );
+
+      setSelectedEmployeeDetails((current) =>
+        current ? { ...current, breaksEnabled: updatedEmployee.breaksEnabled } : updatedEmployee,
+      );
+      setEmployeeRecords((current) =>
+        current.map((employee) =>
+          employee.id === updatedEmployee.id
+            ? { ...employee, breaksEnabled: updatedEmployee.breaksEnabled }
+            : employee,
+        ),
+      );
+      setPageMessage(
+        nextBreaksEnabled
+          ? runtimeLocalize("Перерывы включены для сотрудника", "Breaks enabled for employee", locale)
+          : runtimeLocalize("Перерывы выключены для сотрудника", "Breaks disabled for employee", locale),
+      );
+    } catch (error) {
+      setPageMessage(
+        error instanceof Error
+          ? error.message
+          : runtimeLocalize("Не удалось обновить перерывы", "Unable to update breaks", locale),
+      );
+    } finally {
+      setBreaksUpdating(false);
+    }
+  }
+
+  function dismissAddEmployeePrompt() {
+    if (addEmployeePromptStorageKey) {
+      writeBrowserStorageItem(
+        addEmployeePromptStorageKey,
+        ADD_EMPLOYEE_PROMPT_DISMISSED,
+        { includeSessionFallback: true },
+      );
+    }
+    setShouldPulseAddEmployee(false);
+  }
+
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((current) => {
       const next = new Set(current);
@@ -1234,36 +1362,57 @@ const Employees = ({
   async function handleInviteSubmit() {
     const session = getSession();
     if (!session) return;
+    const contactValue =
+      inviteContactMethod === "email"
+        ? inviteEmail.trim().toLowerCase()
+        : invitePhone.trim();
+
+    if (!contactValue) {
+      setInviteError(
+        inviteContactMethod === "email"
+          ? runtimeLocalize("Введите email сотрудника.", "Enter the employee email.", locale)
+          : runtimeLocalize("Введите телефон сотрудника.", "Enter the employee phone.", locale),
+      );
+      return;
+    }
 
     setInviteSubmitting(true);
     setInviteError(null);
     setInviteSuccess(null);
 
     try {
-      await apiRequest("/employees/invitations", {
+      const invitation = await apiRequest<InvitationRecord>("/employees/invitations", {
         method: "POST",
         token: session.accessToken,
-        body: JSON.stringify({ email: inviteEmail }),
-      });
-      setInviteSuccess(
-        runtimeLocalize(
-          "Email сотрудника сохранён. Теперь он может ввести этот email в join flow и сразу продолжить регистрацию.",
-          "The employee email has been saved. They can now enter the same email in the join flow and continue registration immediately.",
-          locale,
+        body: JSON.stringify(
+          inviteContactMethod === "email"
+            ? { email: contactValue }
+            : { phone: contactValue },
         ),
-      );
+      });
+      setInviteDialogOpen(false);
       setInviteEmail("");
+      setInvitePhone("");
+      openInvitation(invitation, "setup");
       await loadDirectory();
     } catch (requestError) {
-      setInviteError(
+      const message =
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось сохранить email сотрудника.",
-              "Failed to save the employee email.",
+              "Не удалось сохранить контакт сотрудника.",
+              "Failed to save the employee contact.",
               locale,
-            ),
-      );
+            );
+
+      if (isBillingSeatLimitMessage(message)) {
+        setInviteDialogOpen(false);
+        setSeatLimitDialogOpen(true);
+        setInviteError(null);
+        return;
+      }
+
+      setInviteError(message);
     } finally {
       setInviteSubmitting(false);
     }
@@ -1271,7 +1420,7 @@ const Employees = ({
 
   async function copyInviteValue(
     value: string,
-    field: "code" | "link" | "email" | "password",
+    field: "email" | "password",
   ) {
     if (!value.trim()) {
       return;
@@ -1340,8 +1489,8 @@ const Employees = ({
       });
       setPageMessage(
         runtimeLocalize(
-          "Доступ по email обновлён.",
-          "Email access was refreshed.",
+          "Приглашение обновлено.",
+          "Invitation was refreshed.",
           locale,
         ),
       );
@@ -1350,17 +1499,21 @@ const Employees = ({
       setInviteError(
         requestError instanceof Error
           ? requestError.message
-          : runtimeLocalize(
-              "Не удалось обновить email-доступ.",
-              "Failed to refresh email access.",
+            : runtimeLocalize(
+              "Не удалось обновить приглашение.",
+              "Failed to refresh invitation.",
               locale,
             ),
       );
     }
   }
 
-  function openInvitation(invitation: InvitationRecord) {
+  function openInvitation(
+    invitation: InvitationRecord,
+    mode: InvitationDialogMode = "review",
+  ) {
     setSelectedInvitation(invitation);
+    setInvitationDialogMode(mode);
     setReviewError(null);
     setReviewForm({
       firstName: invitation.firstName ?? "",
@@ -1385,6 +1538,82 @@ const Employees = ({
       avatarPreview: nextAvatarDataUrl ?? "",
     }));
     setReviewError(null);
+  }
+
+  async function submitInvitationSetup() {
+    const session = getSession();
+    if (!session || !selectedInvitation) return;
+
+    const firstName = reviewForm.firstName.trim();
+    const lastName = reviewForm.lastName.trim();
+    const shiftTemplateId = reviewForm.shiftTemplateId.trim();
+
+    if (!firstName || !lastName) {
+      setReviewError(
+        runtimeLocalize(
+          "Укажите имя и фамилию сотрудника.",
+          "Enter the employee first and last name.",
+          locale,
+        ),
+      );
+      return;
+    }
+
+    if (!shiftTemplateId) {
+      setReviewError(
+        runtimeLocalize(
+          "Выберите смену для сотрудника.",
+          "Select a shift for the employee.",
+          locale,
+        ),
+      );
+      return;
+    }
+
+    setReviewSubmitting(true);
+    setReviewError(null);
+
+    try {
+      await apiRequest<InvitationRecord>(
+        `/employees/invitations/${selectedInvitation.id}/setup`,
+        {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            middleName: reviewForm.middleName.trim() || undefined,
+            shiftTemplateId,
+            groupId:
+              reviewForm.groupId === "__none"
+                ? ""
+                : reviewForm.groupId || undefined,
+          }),
+        },
+      );
+      setSelectedInvitation(null);
+      setInvitationDialogMode("review");
+      setPageMessage(
+        runtimeLocalize(
+          "Приглашение настроено. Сотрудник заполнит остальные данные сам.",
+          "Invitation setup saved. The employee will fill in the rest.",
+          locale,
+        ),
+      );
+      await loadDirectory();
+    } catch (requestError) {
+      setReviewError(
+        requestError instanceof Error
+          ? requestError.message
+          : runtimeLocalize(
+              "Не удалось настроить приглашение.",
+              "Failed to save invitation setup.",
+              locale,
+            ),
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
   }
 
   async function submitReview(decision: "APPROVE" | "REJECT") {
@@ -2041,7 +2270,11 @@ const Employees = ({
               </button>
             </div>
             <Button
-              className="rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
+              className={`rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90 ${
+                viewMode === "employees" && shouldPulseAddEmployee
+                  ? "employees-add-employee-pulse"
+                  : ""
+              }`}
               onClick={() => {
                 if (viewMode === "groups") {
                   setCreateGroupOpen(true);
@@ -2049,6 +2282,7 @@ const Employees = ({
                   return;
                 }
 
+                dismissAddEmployeePrompt();
                 setInviteDialogOpen(true);
                 setInviteError(null);
                 setInviteSuccess(null);
@@ -2129,7 +2363,7 @@ const Employees = ({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-heading font-semibold text-foreground">
-                        {invitation.email}
+                        {invitation.email ?? invitation.phone ?? "—"}
                       </p>
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-heading ${invitationStyles[invitation.status]}`}
@@ -2144,8 +2378,12 @@ const Employees = ({
                           } ${new Date(invitation.submittedAt).toLocaleString(getRuntimeLocaleTag(locale))}`
                         : `${
                             runtimeLocalize(
-                              "Email добавлен, доступ активен до",
-                              "Email is registered, access is active until",
+                              invitation.email
+                                ? "Email добавлен, доступ активен до"
+                                : "Телефон добавлен, доступ активен до",
+                              invitation.email
+                                ? "Email is registered, access is active until"
+                                : "Phone is registered, access is active until",
                               locale,
                             )
                           } ${new Date(invitation.expiresAt).toLocaleString(getRuntimeLocaleTag(locale))}`}
@@ -2153,14 +2391,23 @@ const Employees = ({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {invitation.status === "INVITED" ? (
-                      <Button
-                        className="rounded-xl font-heading"
-                        onClick={() => void handleResend(invitation.id)}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Mail className="h-4 w-4" /> {runtimeLocalize("Обновить", "Refresh", locale)}
-                      </Button>
+                      <>
+                        <Button
+                          className="rounded-xl font-heading"
+                          onClick={() => openInvitation(invitation, "setup")}
+                          size="sm"
+                        >
+                          {runtimeLocalize("Настроить", "Setup", locale)}
+                        </Button>
+                        <Button
+                          className="rounded-xl font-heading"
+                          onClick={() => void handleResend(invitation.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Mail className="h-4 w-4" /> {runtimeLocalize("Обновить", "Refresh", locale)}
+                        </Button>
+                      </>
                     ) : (
                       <Button
                         className="rounded-xl font-heading"
@@ -2300,19 +2547,60 @@ const Employees = ({
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Введите рабочий email сотрудника. После этого сотрудник введёт этот же email в join flow и сразу продолжит регистрацию без ручного подтверждения менеджером.",
-                "Enter the employee's work email. After that, the employee will enter the same email in the join flow and continue registration without manual manager approval.",
+                "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и группы.",
+                "Add the employee email or phone. After sending, quick shift and group setup opens.",
                 locale,
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-secondary/20 p-1">
+              <button
+                className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
+                  inviteContactMethod === "email"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => {
+                  setInviteContactMethod("email");
+                  setInviteError(null);
+                }}
+                type="button"
+              >
+                <Mail className="h-4 w-4" />
+                Email
+              </button>
+              <button
+                className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
+                  inviteContactMethod === "phone"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => {
+                  setInviteContactMethod("phone");
+                  setInviteError(null);
+                }}
+                type="button"
+              >
+                <Phone className="h-4 w-4" />
+                {runtimeLocalize("Телефон", "Phone", locale)}
+              </button>
+            </div>
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)}</span>
+              <span>
+                {inviteContactMethod === "email"
+                  ? runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)
+                  : runtimeLocalize("Телефон сотрудника", "Employee phone", locale)}
+              </span>
               <Input
-                onChange={(event) => setInviteEmail(event.target.value)}
-                placeholder="employee@company.ru"
-                value={inviteEmail}
+                onChange={(event) =>
+                  inviteContactMethod === "email"
+                    ? setInviteEmail(event.target.value)
+                    : setInvitePhone(event.target.value)
+                }
+                placeholder={inviteContactMethod === "email" ? "employee@company.ru" : "+7 900 000 00 00"}
+                type={inviteContactMethod === "email" ? "email" : "tel"}
+                value={inviteContactMethod === "email" ? inviteEmail : invitePhone}
               />
             </label>
             {inviteError ? (
@@ -2324,16 +2612,69 @@ const Employees = ({
             <div className="flex justify-end">
               <Button
                 className="rounded-xl font-heading"
-                disabled={inviteSubmitting || !inviteEmail.trim()}
+                disabled={
+                  inviteSubmitting ||
+                  !(inviteContactMethod === "email" ? inviteEmail : invitePhone).trim()
+                }
                 onClick={() => void handleInviteSubmit()}
               >
-                <Mail className="h-4 w-4" />
+                {inviteContactMethod === "email" ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
                 {inviteSubmitting
-                  ? runtimeLocalize("Сохраняем...", "Saving...", locale)
-                  : runtimeLocalize("Добавить email", "Add email", locale)}
+                  ? runtimeLocalize("Отправляем...", "Sending...", locale)
+                  : inviteContactMethod === "email"
+                    ? runtimeLocalize("Отправить email", "Send email", locale)
+                    : runtimeLocalize("Отправить SMS", "Send SMS", locale)}
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={seatLimitDialogOpen} onOpenChange={setSeatLimitDialogOpen}>
+        <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          <DialogHeader>
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <DialogTitle className="font-heading text-2xl">
+              {runtimeLocalize("Не хватает оплаченных мест", "Not enough paid seats", locale)}
+            </DialogTitle>
+            <DialogDescription className="font-heading">
+              {runtimeLocalize(
+                "Чтобы добавить сотрудника, сначала добавьте место в Billing. Инвайт резервирует место сразу.",
+                "Add a seat in Billing before inviting another employee. An invitation reserves a seat immediately.",
+                locale,
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading text-sm text-muted-foreground">
+            {runtimeLocalize(
+              "В Billing видно, сколько сотрудников уже занимает оплаченные места и какая цена применяется по стране организации.",
+              "Billing shows how many employees already use paid seats and which regional price applies.",
+              locale,
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              className="rounded-xl font-heading"
+              onClick={() => setSeatLimitDialogOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              {runtimeLocalize("Закрыть", "Close", locale)}
+            </Button>
+            <Button
+              className="rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
+              onClick={() => {
+                setSeatLimitDialogOpen(false);
+                router.push(toAdminHref("/organization/billing"));
+              }}
+              type="button"
+            >
+              <CreditCard className="h-4 w-4" />
+              {runtimeLocalize("Перейти в Billing", "Open Billing", locale)}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2552,7 +2893,13 @@ const Employees = ({
       </Dialog>
 
       <Dialog
-        onOpenChange={(open) => !open && setSelectedInvitation(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedInvitation(null);
+            setInvitationDialogMode("review");
+            setReviewError(null);
+          }
+        }}
         open={!!selectedInvitation}
       >
         <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
@@ -2560,14 +2907,22 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  {runtimeLocalize("Проверка анкеты сотрудника", "Employee form review", locale)}
+                  {invitationDialogMode === "setup"
+                    ? runtimeLocalize("Настроить приглашение", "Setup invitation", locale)
+                    : runtimeLocalize("Проверка анкеты сотрудника", "Employee form review", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
-                  {runtimeLocalize(
-                    "Руководитель может исправить поля, добавить фото и подтвердить либо отклонить заявку.",
-                    "A manager can adjust the fields, add a photo, and approve or reject the request.",
-                    locale,
-                  )}
+                  {invitationDialogMode === "setup"
+                    ? runtimeLocalize(
+                        "Заполните имя, фамилию, смену и группу. Остальное сотрудник заполнит сам.",
+                        "Fill in the name, shift, and group. The employee will complete the rest.",
+                        locale,
+                      )
+                    : runtimeLocalize(
+                        "Руководитель может исправить поля, добавить фото и подтвердить либо отклонить заявку.",
+                        "A manager can adjust the fields, add a photo, and approve or reject the request.",
+                        locale,
+                      )}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -2597,63 +2952,69 @@ const Employees = ({
                     value={reviewForm.lastName}
                   />
                 </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Отчество", "Middle name", locale)}</span>
-                  <Input
-                    className={reviewFieldClassName}
-                    onChange={(event) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        middleName: event.target.value,
-                      }))
-                    }
-                    value={reviewForm.middleName}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Дата рождения*", "Date of birth*", locale)}</span>
-                  <DateOfBirthField
-                    className="grid-cols-[72px_84px_84px]"
-                    value={reviewForm.birthDate}
-                    onChange={(nextValue) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        birthDate: nextValue,
-                      }))
-                    }
-                    triggerClassName={reviewFieldClassName}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Пол*", "Gender*", locale)}</span>
-                  <AppSelectField
-                    value={reviewForm.gender}
-                    onValueChange={(value) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        gender: value,
-                      }))
-                    }
-                    options={[
-                      { value: "male", label: runtimeLocalize("Мужской", "Male", locale) },
-                      { value: "female", label: runtimeLocalize("Женский", "Female", locale) },
-                    ]}
-                    triggerClassName={reviewFieldClassName}
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Телефон*", "Phone*", locale)}</span>
-                  <Input
-                    className={reviewFieldClassName}
-                    onChange={(event) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        phone: event.target.value,
-                      }))
-                    }
-                    value={reviewForm.phone}
-                  />
-                </label>
+                {invitationDialogMode === "review" ? (
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>{runtimeLocalize("Отчество", "Middle name", locale)}</span>
+                    <Input
+                      className={reviewFieldClassName}
+                      onChange={(event) =>
+                        setReviewForm((current) => ({
+                          ...current,
+                          middleName: event.target.value,
+                        }))
+                      }
+                      value={reviewForm.middleName}
+                    />
+                  </label>
+                ) : null}
+                {invitationDialogMode === "review" ? (
+                  <>
+                    <label className="grid gap-2 text-sm font-heading">
+                      <span>{runtimeLocalize("Дата рождения*", "Date of birth*", locale)}</span>
+                      <DateOfBirthField
+                        className="grid-cols-[72px_84px_84px]"
+                        value={reviewForm.birthDate}
+                        onChange={(nextValue) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            birthDate: nextValue,
+                          }))
+                        }
+                        triggerClassName={reviewFieldClassName}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm font-heading">
+                      <span>{runtimeLocalize("Пол*", "Gender*", locale)}</span>
+                      <AppSelectField
+                        value={reviewForm.gender}
+                        onValueChange={(value) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            gender: value,
+                          }))
+                        }
+                        options={[
+                          { value: "male", label: runtimeLocalize("Мужской", "Male", locale) },
+                          { value: "female", label: runtimeLocalize("Женский", "Female", locale) },
+                        ]}
+                        triggerClassName={reviewFieldClassName}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm font-heading">
+                      <span>{runtimeLocalize("Телефон*", "Phone*", locale)}</span>
+                      <Input
+                        className={reviewFieldClassName}
+                        onChange={(event) =>
+                          setReviewForm((current) => ({
+                            ...current,
+                            phone: event.target.value,
+                          }))
+                        }
+                        value={reviewForm.phone}
+                      />
+                    </label>
+                  </>
+                ) : null}
                 <label className="grid gap-2 text-sm font-heading">
                   <span>{runtimeLocalize("Смена*", "Shift*", locale)}</span>
                   <AppSelectField
@@ -2702,21 +3063,49 @@ const Employees = ({
                     triggerClassName={reviewFieldClassName}
                   />
                 </label>
-                <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-heading sm:col-span-2">
-                  <Checkbox
-                    checked={reviewForm.grantManagerAccess}
-                    onCheckedChange={(value) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        grantManagerAccess: value === true,
-                      }))
-                    }
-                  />
-                  <span className="font-semibold text-foreground">
-                    {runtimeLocalize("Выдать менеджерский доступ", "Grant manager access", locale)}
-                  </span>
-                </label>
+                {invitationDialogMode === "review" ? (
+                  <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-heading sm:col-span-2">
+                    <Checkbox
+                      checked={reviewForm.grantManagerAccess}
+                      onCheckedChange={(value) =>
+                        setReviewForm((current) => ({
+                          ...current,
+                          grantManagerAccess: value === true,
+                        }))
+                      }
+                    />
+                    <span className="font-semibold text-foreground">
+                      {runtimeLocalize("Выдать менеджерский доступ", "Grant manager access", locale)}
+                    </span>
+                  </label>
+                ) : null}
               </div>
+              {invitationDialogMode === "setup" ? (
+                <div className="grid gap-3 rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {runtimeLocalize("Приглашение отправлено", "Invitation sent", locale)}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2 text-foreground">
+                      {selectedInvitation.email ? (
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="font-semibold">
+                        {selectedInvitation.email ?? selectedInvitation.phone ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {runtimeLocalize(
+                      "Менеджер задаёт только базовую структуру. Дату рождения, телефон, фото и остальные данные сотрудник заполнит сам при регистрации.",
+                      "The manager sets only the basic structure. Birth date, phone, photo, and the rest are completed by the employee during registration.",
+                      locale,
+                    )}
+                  </p>
+                </div>
+              ) : (
               <ImageAdjustField
                 dialogDescription={runtimeLocalize(
                   "Подгони фото сотрудника перед подтверждением анкеты.",
@@ -2786,11 +3175,15 @@ const Employees = ({
                           </Button>
                         ) : null}
                       </div>
-                      <span className="mt-2">Email</span>
+                      <span className="mt-2">
+                        {selectedInvitation.email
+                          ? "Email"
+                          : runtimeLocalize("Телефон", "Phone", locale)}
+                      </span>
                       <Input
                         className={reviewFieldClassName}
                         disabled
-                        value={selectedInvitation.email}
+                        value={selectedInvitation.email ?? selectedInvitation.phone ?? ""}
                       />
                       <span className="mt-2">
                         {runtimeLocalize("Причина отклонения", "Rejection reason", locale)}
@@ -2815,29 +3208,56 @@ const Employees = ({
                 )}
                 value={reviewForm.avatarPreview || null}
               />
+              )}
               {reviewError ? (
                 <div className="error-box">{reviewError}</div>
               ) : null}
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  className="rounded-xl font-heading text-[color:var(--danger)] hover:text-[color:var(--danger)]"
-                  disabled={reviewSubmitting}
-                  onClick={() => void submitReview("REJECT")}
-                  variant="outline"
-                >
-                  <X className="h-4 w-4" /> {runtimeLocalize("Отклонить", "Reject", locale)}
-                </Button>
-                <Button
-                  className="rounded-xl font-heading"
-                  disabled={reviewSubmitting}
-                  onClick={() => void submitReview("APPROVE")}
-                >
-                  <Check className="h-4 w-4" />
-                  {reviewSubmitting
-                    ? runtimeLocalize("Сохраняем...", "Saving...", locale)
-                    : runtimeLocalize("Подтвердить", "Approve", locale)}
-                </Button>
-              </div>
+              {invitationDialogMode === "setup" ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    className="rounded-xl font-heading"
+                    disabled={reviewSubmitting}
+                    onClick={() => {
+                      setSelectedInvitation(null);
+                      setInvitationDialogMode("review");
+                    }}
+                    variant="outline"
+                  >
+                    {runtimeLocalize("Позже", "Later", locale)}
+                  </Button>
+                  <Button
+                    className="rounded-xl font-heading"
+                    disabled={reviewSubmitting}
+                    onClick={() => void submitInvitationSetup()}
+                  >
+                    <Check className="h-4 w-4" />
+                    {reviewSubmitting
+                      ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                      : runtimeLocalize("Сохранить настройку", "Save setup", locale)}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    className="rounded-xl font-heading text-[color:var(--danger)] hover:text-[color:var(--danger)]"
+                    disabled={reviewSubmitting}
+                    onClick={() => void submitReview("REJECT")}
+                    variant="outline"
+                  >
+                    <X className="h-4 w-4" /> {runtimeLocalize("Отклонить", "Reject", locale)}
+                  </Button>
+                  <Button
+                    className="rounded-xl font-heading"
+                    disabled={reviewSubmitting}
+                    onClick={() => void submitReview("APPROVE")}
+                  >
+                    <Check className="h-4 w-4" />
+                    {reviewSubmitting
+                      ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                      : runtimeLocalize("Подтвердить", "Approve", locale)}
+                  </Button>
+                </div>
+              )}
             </>
           ) : null}
         </DialogContent>
@@ -3082,6 +3502,36 @@ const Employees = ({
                               selectedEmployee.hireDate,
                           )}
                         </p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {runtimeLocalize("Перерывы", "Breaks", locale)}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                            {runtimeLocalize(
+                              "Если политика перерывов включена в Payroll, сотрудник увидит кнопку в мобильном banner.",
+                              "When break policy is enabled in Payroll, this employee sees the button in the mobile banner.",
+                              locale,
+                            )}
+                          </p>
+                        </div>
+                        <Button
+                          className="shrink-0 rounded-xl font-heading"
+                          disabled={breaksUpdating || detailsLoading}
+                          onClick={() => void updateSelectedEmployeeBreaks(!selectedEmployeeBreaksEnabled)}
+                          type="button"
+                          variant={selectedEmployeeBreaksEnabled ? "secondary" : "outline"}
+                        >
+                          <Clock className="h-4 w-4" />
+                          {breaksUpdating
+                            ? runtimeLocalize("Сохраняю...", "Saving...", locale)
+                            : selectedEmployeeBreaksEnabled
+                              ? runtimeLocalize("Выключить", "Disable", locale)
+                              : runtimeLocalize("Включить", "Enable", locale)}
+                        </Button>
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-4">

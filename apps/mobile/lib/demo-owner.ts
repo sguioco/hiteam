@@ -321,6 +321,9 @@ export function buildDemoOwnerAttendanceStatus(
       deviceMustBePrimary: true,
     },
     breakPolicy: currentStatus?.breakPolicy ?? {
+      enabled: false,
+      companyEnabled: false,
+      employeeEnabled: false,
       defaultBreakIsPaid: false,
       maxBreakMinutes: 60,
       mandatoryBreakThresholdMinutes: 360,

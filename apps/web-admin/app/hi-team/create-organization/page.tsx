@@ -19,10 +19,6 @@ import {
 } from "@/lib/browser-storage";
 
 type RegisterOrganizationResponse = {
-  tenantId: string;
-  tenantSlug: string;
-  companyId: string;
-  companyCode: string;
   managerEmail: string;
   managerSetupUrl: string;
   managerTemporaryPassword?: string;
@@ -39,23 +35,20 @@ const texts = {
   en: {
     pageTitle: "Hi-Team Internal Setup",
     pageDescription:
-      "Create an organization, issue the manager setup link, and prepare the internal company identifier. Employees will join later by work email, not by company code.",
+      "Create an organization and issue the manager setup link. Employees will join later by work email or phone invitation.",
     successTitle: "Organization created",
     successBody:
       "Send the manager setup link to the manager. After setup, the manager will add employee work emails in organization settings.",
     managerLogin: "Manager login",
     managerTemporaryPassword: "Manager temporary password",
-    employeeCompanyCode: "Internal company code",
     copied: "Copied",
     copy: "Copy",
     createAnother: "Create another organization",
     internalAccessKey: "Internal access key",
     organizationName: "Organization name",
     managerEmail: "Manager email",
-    companyCode: "Internal company code",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
-    companyCodePlaceholder: "HITEAM-HQ",
     creating: "Creating...",
     createOrganization: "Create organization",
     copyFailed: "Failed to copy the value.",
@@ -64,23 +57,20 @@ const texts = {
   ru: {
     pageTitle: "Внутренняя настройка Hi-Team",
     pageDescription:
-      "Создай организацию, выпусти ссылку для настройки менеджера и задай внутренний код компании. Сотрудники теперь подключаются по рабочему email, а не по коду компании.",
+      "Создай организацию и выпусти ссылку для настройки менеджера. Сотрудники подключаются по приглашению на email или телефон.",
     successTitle: "Организация создана",
     successBody:
       "Передай ссылку менеджеру для desktop setup. После настройки менеджер добавит рабочие email сотрудников в настройках организации.",
     managerLogin: "Вход менеджера",
     managerTemporaryPassword: "Временный пароль менеджера",
-    employeeCompanyCode: "Внутренний код компании",
     copied: "Скопировано",
     copy: "Копировать",
     createAnother: "Создать ещё одну организацию",
     internalAccessKey: "Internal access key",
     organizationName: "Название организации",
     managerEmail: "Email менеджера",
-    companyCode: "Внутренний код компании",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
-    companyCodePlaceholder: "HITEAM-HQ",
     creating: "Создаём...",
     createOrganization: "Создать организацию",
     copyFailed: "Не удалось скопировать значение.",
@@ -125,11 +115,10 @@ export default function InternalCreateOrganizationPage() {
   const [accessKey, setAccessKey] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
-  const [companyCode, setCompanyCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegisterOrganizationResponse | null>(null);
-  const [copiedField, setCopiedField] = useState<"manager" | "code" | null>(null);
+  const [copiedField, setCopiedField] = useState<"manager" | null>(null);
   const t = texts[lang];
 
   useEffect(() => {
@@ -150,7 +139,7 @@ export default function InternalCreateOrganizationPage() {
     writeBrowserStorageItem("smart-admin-locale", lang);
   }, [lang]);
 
-  async function copyValue(value: string, field: "manager" | "code") {
+  async function copyValue(value: string, field: "manager") {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedField(field);
@@ -176,7 +165,6 @@ export default function InternalCreateOrganizationPage() {
           accessKey,
           organizationName,
           managerEmail,
-          companyCode,
         }),
       });
 
@@ -189,7 +177,6 @@ export default function InternalCreateOrganizationPage() {
       setResult(payload);
       setOrganizationName("");
       setManagerEmail("");
-      setCompanyCode("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t.createFailed);
     } finally {
@@ -258,16 +245,6 @@ export default function InternalCreateOrganizationPage() {
                     </div>
                   ) : null}
 
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">{t.employeeCompanyCode}</div>
-                    <div className="flex gap-2">
-                      <Input readOnly value={result.companyCode} />
-                      <Button type="button" variant="outline" onClick={() => void copyValue(result.companyCode, "code")}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        {copiedField === "code" ? t.copied : t.copy}
-                      </Button>
-                    </div>
-                  </div>
                 </div>
 
                 <Button type="button" variant="outline" onClick={() => setResult(null)}>
@@ -319,19 +296,6 @@ export default function InternalCreateOrganizationPage() {
                     value={managerEmail}
                     onChange={(event) => setManagerEmail(event.target.value)}
                     placeholder={t.managerEmailPlaceholder}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="company-code" className="text-sm font-medium">
-                    {t.companyCode}
-                  </label>
-                  <Input
-                    id="company-code"
-                    required
-                    value={companyCode}
-                    onChange={(event) => setCompanyCode(event.target.value.toUpperCase())}
-                    placeholder={t.companyCodePlaceholder}
                   />
                 </div>
 

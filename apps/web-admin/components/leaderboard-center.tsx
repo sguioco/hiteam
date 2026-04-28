@@ -379,6 +379,7 @@ export function LeaderboardCenter({
     initialData ?? null,
   );
   const [loading, setLoading] = useState(!initialData);
+  const [savingVisibility, setSavingVisibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cacheKey = useMemo(
     () => buildLeaderboardCacheKey(session, selectedMonthKey),
@@ -491,6 +492,46 @@ export function LeaderboardCenter({
     };
   }, [locale, selectedMonthKey, session?.accessToken]);
 
+  async function handleLeaderboardPrivacyChange(checked: boolean) {
+    if (!overview?.visibility.canManage || savingVisibility) {
+      return;
+    }
+
+    const previousOverview = overview;
+    const nextOverview = {
+      ...overview,
+      visibility: {
+        ...overview.visibility,
+        hidePeersFromEmployees: checked,
+      },
+    };
+
+    setOverview(nextOverview);
+    setSavingVisibility(true);
+    setError(null);
+
+    try {
+      await apiRequest("/leaderboard/settings", {
+        method: "PATCH",
+        token: session?.accessToken,
+        body: JSON.stringify({ hidePeersFromEmployees: checked }),
+      });
+    } catch (saveError) {
+      setOverview(previousOverview);
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : localize(
+              locale,
+              "Не удалось сохранить настройку рейтинга.",
+              "Unable to save leaderboard setting.",
+            ),
+      );
+    } finally {
+      setSavingVisibility(false);
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -511,7 +552,8 @@ export function LeaderboardCenter({
   const isPastMonth = selectedMonthKey < currentMonthKey;
   const canGoForward = selectedMonthKey < currentMonthKey;
   const leaderboard = overview?.leaderboard ?? [];
-  const topLeaders = leaderboard.slice(0, 3);
+  const peersHiddenForViewer = overview?.visibility.peersHiddenForViewer ?? false;
+  const topLeaders = peersHiddenForViewer ? [] : leaderboard.slice(0, 3);
   const monthLabel = formatMonthLabel(
     overview?.month.key ?? selectedMonthKey,
     locale,
@@ -532,7 +574,9 @@ export function LeaderboardCenter({
     9,
     Math.max(0, Math.round((todayCompletionPercent / 100) * 9)),
   );
-  const firstPlacePoints = leaderboard[0]?.points ?? overview?.me.points ?? 0;
+  const firstPlacePoints = peersHiddenForViewer
+    ? (overview?.me.points ?? 0)
+    : (leaderboard[0]?.points ?? overview?.me.points ?? 0);
   const pointsToFirst = overview
     ? Math.max(0, firstPlacePoints - overview.me.points)
     : 0;
@@ -659,6 +703,59 @@ export function LeaderboardCenter({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
+          {overview?.visibility.canManage ? (
+            <div
+              aria-disabled={savingVisibility}
+              aria-pressed={overview.visibility.hidePeersFromEmployees}
+              className="flex min-h-12 items-center gap-3 rounded-xl border border-[rgba(15,23,42,0.08)] bg-white/90 px-3 text-left text-sm shadow-[0_12px_28px_rgba(15,23,42,0.05)] transition-colors hover:bg-white"
+              onClick={() =>
+                handleLeaderboardPrivacyChange(
+                  !overview.visibility.hidePeersFromEmployees,
+                )
+              }
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                  return;
+                }
+
+                event.preventDefault();
+                handleLeaderboardPrivacyChange(
+                  !overview.visibility.hidePeersFromEmployees,
+                );
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <span
+                className={`flex size-5 shrink-0 items-center justify-center rounded-md border shadow-sm ${
+                  overview.visibility.hidePeersFromEmployees
+                    ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
+                    : "border-[color:var(--border-strong)] bg-white"
+                }`}
+              >
+                {overview.visibility.hidePeersFromEmployees ? (
+                  <CheckCircle2 className="size-3.5" />
+                ) : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block font-heading font-medium text-[color:var(--foreground)]">
+                  {localize(
+                    locale,
+                    "Скрыть рейтинг сотрудников",
+                    "Hide employee leaderboard",
+                  )}
+                </span>
+                <span className="block text-xs text-[color:var(--muted-foreground)]">
+                  {localize(
+                    locale,
+                    "Сотрудники видят только места и свой результат",
+                    "Employees see ranks and their own result only",
+                  )}
+                </span>
+              </span>
+            </div>
+          ) : null}
+
           <div className="flex h-12 overflow-hidden rounded-xl border border-border bg-white">
             <button
               className={`flex h-full items-center gap-2 px-4 text-sm font-heading font-medium transition-colors ${
@@ -778,11 +875,16 @@ export function LeaderboardCenter({
                 <Table.Body items={leaderboard}>
                   {(entry) => {
                     const isMe = entry.employee.id === overview.me.employeeId;
-                    const fullName = getEmployeeFullName(entry);
+                    const isPrivate = Boolean(entry.isPrivate);
+                    const fullName = isPrivate
+                      ? localize(locale, "Скрытый сотрудник", "Hidden employee")
+                      : getEmployeeFullName(entry);
                     const todayMaxPoints = overview.summary.maxDailyPoints || 1;
                     const todayProgressPercent = Math.min(
                       100,
-                      Math.round((entry.todayPoints / todayMaxPoints) * 100),
+                      isPrivate
+                        ? 0
+                        : Math.round((entry.todayPoints / todayMaxPoints) * 100),
                     );
 
                     return (
@@ -797,13 +899,19 @@ export function LeaderboardCenter({
                             <div className="flex w-7 shrink-0 items-center justify-center text-sm font-semibold tabular-nums text-[color:var(--muted-foreground)]">
                               {entry.rank}
                             </div>
-                            <Avatar
-                              alt={fullName}
-                              className="shrink-0"
-                              initials={getEmployeeInitials(fullName)}
-                              size="sm"
-                              src={getEmployeeAvatarSrc(entry)}
-                            />
+                            {isPrivate ? (
+                              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                                <ShieldCheck className="size-4" />
+                              </div>
+                            ) : (
+                              <Avatar
+                                alt={fullName}
+                                className="shrink-0"
+                                initials={getEmployeeInitials(fullName)}
+                                size="sm"
+                                src={getEmployeeAvatarSrc(entry)}
+                              />
+                            )}
                             <div className="min-w-0 space-y-0.5">
                               <div className="flex items-center">
                                 <p className="truncate text-base font-medium text-[color:var(--foreground)]">
@@ -811,7 +919,13 @@ export function LeaderboardCenter({
                                 </p>
                               </div>
                               <p className="truncate text-sm text-[color:var(--muted-foreground)]">
-                                {getEmployeeSubtitle(entry, locale)}
+                                {isPrivate
+                                  ? localize(
+                                      locale,
+                                      "Данные видны менеджерам",
+                                      "Visible to managers",
+                                    )
+                                  : getEmployeeSubtitle(entry, locale)}
                               </p>
                             </div>
                           </div>
@@ -820,8 +934,9 @@ export function LeaderboardCenter({
                         <Table.Cell className="align-middle whitespace-nowrap">
                           <div className="min-w-[150px]">
                             <strong className="block text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
-                              {entry.todayPoints}/
-                              {overview.summary.maxDailyPoints}
+                              {isPrivate
+                                ? "—"
+                                : `${entry.todayPoints}/${overview.summary.maxDailyPoints}`}
                             </strong>
                             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(148,163,184,0.2)]">
                               <div
@@ -837,7 +952,7 @@ export function LeaderboardCenter({
 
                         <Table.Cell className="align-middle whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5 text-sm text-[color:var(--muted-foreground)]">
-                            {entry.streak > 5 ? (
+                            {!isPrivate && entry.streak > 5 ? (
                               <Flame
                                 className="size-4 shrink-0 text-orange-500"
                                 fill="currentColor"
@@ -845,16 +960,18 @@ export function LeaderboardCenter({
                               />
                             ) : null}
                             <strong className="font-medium tabular-nums text-[color:var(--foreground)]">
-                              {entry.streak}
+                              {isPrivate ? "—" : entry.streak}
                             </strong>
-                            <span>{localize(locale, "дней", "days")}</span>
+                            {!isPrivate ? (
+                              <span>{localize(locale, "дней", "days")}</span>
+                            ) : null}
                           </div>
                         </Table.Cell>
 
                         <Table.Cell className="align-middle whitespace-nowrap">
                           <div className="team-tasks-row-button team-tasks-row-button--center">
                             <strong className="text-[clamp(1.7rem,2.6vw,2.15rem)] font-semibold leading-none tracking-[-0.05em] tabular-nums text-[color:var(--foreground)]">
-                              {entry.points}
+                              {isPrivate ? "—" : entry.points}
                             </strong>
                           </div>
                         </Table.Cell>

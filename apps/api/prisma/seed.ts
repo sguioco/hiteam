@@ -221,14 +221,13 @@ async function main(): Promise<void> {
   });
 
   const company = await prisma.company.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: 'BEAUTY-HQ' } },
+    where: { tenantId_name: { tenantId: tenant.id, name: 'Beauty Life' } },
     update: {
       name: 'Beauty Life',
     },
     create: {
       tenantId: tenant.id,
       name: 'Beauty Life',
-      code: 'BEAUTY-HQ',
     },
   });
 
@@ -438,6 +437,7 @@ async function main(): Promise<void> {
       leavePaidRatio: 1,
       sickLeavePaidRatio: 0.8,
       standardShiftMinutes: 480,
+      breaksEnabled: false,
       defaultBreakIsPaid: false,
       maxBreakMinutes: 60,
       mandatoryBreakThresholdMinutes: 360,

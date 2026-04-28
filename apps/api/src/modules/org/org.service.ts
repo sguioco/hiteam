@@ -46,24 +46,13 @@ function buildUniqueCode(
   return `${baseCode}-${index}`;
 }
 
-function buildUniqueCompanyCode(
-  existingCodes: string[],
-  value: string,
-  fallback: string,
-): string {
-  const baseCode = buildInternalCode(value, fallback).slice(0, 21);
+function inferCountryFromAddress(address: string) {
+  const parts = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
 
-  let nextCode = "";
-  do {
-    const suffix = String(Math.floor(Math.random() * 900) + 100);
-    nextCode = `${baseCode}${suffix}`;
-  } while (existingCodes.includes(nextCode));
-
-  return nextCode;
-}
-
-function isLegacyGeneratedCompanyCode(code: string, value: string, fallback: string) {
-  return code === buildInternalCode(value, fallback);
+  return parts[parts.length - 1] || null;
 }
 
 @Injectable()
@@ -155,7 +144,7 @@ export class OrgService {
 
   async upsertSetup(tenantId: string, dto: UpsertOrgSetupDto) {
     return this.prisma.$transaction(async (tx) => {
-      const [existingCompanies, existingLocations, globalCompanies] = await Promise.all([
+      const [existingCompanies, existingLocations] = await Promise.all([
         tx.company.findMany({
           where: { tenantId },
           orderBy: { createdAt: "desc" },
@@ -163,9 +152,6 @@ export class OrgService {
         tx.location.findMany({
           where: { tenantId },
           orderBy: { createdAt: "desc" },
-        }),
-        tx.company.findMany({
-          select: { id: true, code: true },
         }),
       ]);
 
@@ -178,29 +164,10 @@ export class OrgService {
           ) ?? null)
         : null;
 
-      const shouldRefreshLegacyCompanyCode = Boolean(
-        existingCompany?.code &&
-          !/\d{3}$/.test(existingCompany.code) &&
-          (isLegacyGeneratedCompanyCode(existingCompany.code, existingCompany.name, "ORG") ||
-            isLegacyGeneratedCompanyCode(existingCompany.code, dto.companyName, "ORG")),
-      );
-
-      const companyCode =
-        existingCompany?.code && !shouldRefreshLegacyCompanyCode
-          ? existingCompany.code
-          : buildUniqueCompanyCode(
-              globalCompanies
-                .filter((company) => company.id !== existingCompany?.id)
-                .map((company) => company.code),
-              dto.companyName,
-              "ORG",
-            );
-
       const company = existingCompany
         ? await tx.company.update({
             where: { id: existingCompany.id },
             data: {
-              code: companyCode,
               name: dto.companyName,
               logoUrl: dto.companyLogoUrl ?? null,
               googlePlaceId: dto.googlePlaceId ?? null,
@@ -210,7 +177,6 @@ export class OrgService {
             data: {
               tenantId,
               name: dto.companyName,
-              code: companyCode,
               logoUrl: dto.companyLogoUrl ?? null,
               googlePlaceId: dto.googlePlaceId ?? null,
             },
@@ -229,6 +195,7 @@ export class OrgService {
         name: dto.companyName,
         code: locationCode,
         address: dto.address,
+        country: dto.country?.trim() || inferCountryFromAddress(dto.address),
         latitude: dto.latitude,
         longitude: dto.longitude,
         geofenceRadiusMeters: normalizeGeofenceRadius(dto.geofenceRadiusMeters),

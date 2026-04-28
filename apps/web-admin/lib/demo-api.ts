@@ -35,6 +35,7 @@ type DemoEmployee = {
   gender: string | null;
   phone: string | null;
   avatarUrl: string | null;
+  breaksEnabled: boolean;
   status: string;
   user: {
     id: string;
@@ -76,6 +77,7 @@ type DemoState = {
     defaultGeofenceRadiusMeters: number;
     location: {
       address: string;
+      country?: string | null;
       latitude: number;
       longitude: number;
       timezone: string;
@@ -111,6 +113,7 @@ type DemoState = {
   requests: any[];
   notifications: any[];
   invitations: any[];
+  billingPaidSeats: number;
   shifts: any[];
   templates: any[];
   payrollPolicy: any;
@@ -483,6 +486,7 @@ function createInitialState(): DemoState {
                 `${employee.firstName} ${employee.lastName}`,
                 gender,
               ),
+        breaksEnabled: false,
         status: index < 4 ? "ACTIVE" : "INACTIVE",
         user: {
           id: `user-${employee.id}`,
@@ -1165,6 +1169,7 @@ function createInitialState(): DemoState {
     leavePaidRatio: 1,
     sickLeavePaidRatio: 0.75,
     standardShiftMinutes: 480,
+    breaksEnabled: false,
     defaultBreakIsPaid: false,
     maxBreakMinutes: 60,
     mandatoryBreakThresholdMinutes: 360,
@@ -1268,6 +1273,7 @@ function createInitialState(): DemoState {
       defaultGeofenceRadiusMeters: 180,
       location: {
         address: "Sukhumvit Rd, Bangkok, Thailand",
+        country: "Thailand",
         latitude: 13.7563,
         longitude: 100.5018,
         timezone: "Asia/Bangkok",
@@ -1285,6 +1291,7 @@ function createInitialState(): DemoState {
     requests,
     notifications,
     invitations,
+    billingPaidSeats: 18,
     shifts: [
       ...scheduleData.shifts.filter((shift) => shift.shiftDate !== dateKey()),
       ...todayDemoShifts,
@@ -1315,6 +1322,11 @@ function loadState(): DemoState {
     const normalized = cloneState(parsed);
     const seedState = createInitialState();
     let changed = false;
+
+    if (typeof normalized.billingPaidSeats !== "number") {
+      normalized.billingPaidSeats = seedState.billingPaidSeats;
+      changed = true;
+    }
 
     normalized.employees = normalized.employees.map((employee, index) => {
       const fullName = `${employee.firstName} ${employee.lastName}`.trim();
@@ -3812,6 +3824,11 @@ function buildDemoLeaderboardOverview(
       dailyActivity: buildDemoLeaderboardDailyActivity(anchorDate, todayPoints),
     },
     leaderboard,
+    visibility: {
+      hidePeersFromEmployees: false,
+      canManage: role !== "employee",
+      peersHiddenForViewer: false,
+    },
   };
 }
 
@@ -4182,6 +4199,61 @@ export async function demoApiRequest<T>(
     } as T;
   }
 
+  if (pathname === "/billing/summary" && method === "GET") {
+    const usedSeats = currentState.employees.length + currentState.invitations.length;
+    const unitAmount = 3;
+    const currency = "USD";
+    return {
+      status: "ACTIVE",
+      paidSeats: currentState.billingPaidSeats,
+      usedSeats,
+      availableSeats: Math.max(0, currentState.billingPaidSeats - usedSeats),
+      activeEmployeeCount: currentState.employees.length,
+      pendingInvitationCount: currentState.invitations.length,
+      monthlyTotal: currentState.billingPaidSeats * unitAmount,
+      nextSeatAmount: unitAmount,
+      price: {
+        regionCode: "standard",
+        regionLabel: "Standard",
+        country: currentState.organization.location?.country ?? "Thailand",
+        currency,
+        unitAmount,
+        approxUsd: null,
+        locationConfigured: Boolean(currentState.organization.location),
+      },
+    } as T;
+  }
+
+  if (pathname === "/billing/seats" && method === "POST") {
+    const payload = parseBody<{ seats?: number }>(options?.body);
+    const seats = Math.max(1, Math.floor(Number(payload.seats ?? 1)));
+    const nextState = updateState((state) => {
+      state.billingPaidSeats += seats;
+    });
+    const usedSeats = nextState.employees.length + nextState.invitations.length;
+    const unitAmount = 3;
+    const currency = "USD";
+    return {
+      status: "ACTIVE",
+      paidSeats: nextState.billingPaidSeats,
+      usedSeats,
+      availableSeats: Math.max(0, nextState.billingPaidSeats - usedSeats),
+      activeEmployeeCount: nextState.employees.length,
+      pendingInvitationCount: nextState.invitations.length,
+      monthlyTotal: nextState.billingPaidSeats * unitAmount,
+      nextSeatAmount: unitAmount,
+      price: {
+        regionCode: "standard",
+        regionLabel: "Standard",
+        country: nextState.organization.location?.country ?? "Thailand",
+        currency,
+        unitAmount,
+        approxUsd: null,
+        locationConfigured: Boolean(nextState.organization.location),
+      },
+    } as T;
+  }
+
   const readNotificationMatch = pathname.match(
     /^\/notifications\/([^/]+)\/read$/,
   );
@@ -4214,6 +4286,21 @@ export async function demoApiRequest<T>(
     return employee as T;
   }
 
+  const employeeBreaksMatch = pathname.match(/^\/employees\/([^/]+)\/breaks$/);
+  if (employeeBreaksMatch && method === "PATCH") {
+    const payload = parseBody<{ breaksEnabled?: boolean }>(options?.body);
+    const next = updateState((state) => {
+      const employee = state.employees.find(
+        (item) => item.id === employeeBreaksMatch[1],
+      );
+      if (!employee) {
+        throw new Error("Сотрудник не найден.");
+      }
+      employee.breaksEnabled = Boolean(payload.breaksEnabled);
+    });
+    return next.employees.find((item) => item.id === employeeBreaksMatch[1]) as T;
+  }
+
   if (pathname === "/employees/me/access-status" && method === "GET") {
     return {
       workspaceAccessAllowed: session?.user.workspaceAccessAllowed ?? true,
@@ -4228,11 +4315,14 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/employees/invitations" && method === "POST") {
-    const payload = parseBody<{ email: string }>(options?.body);
-    updateState((state) => {
-      state.invitations.unshift({
+    const payload = parseBody<{ email?: string; phone?: string }>(options?.body);
+    if (currentState.employees.length + currentState.invitations.length >= currentState.billingPaidSeats) {
+      throw new Error("Недостаточно оплаченных мест. Добавьте место в Billing, чтобы пригласить сотрудника.");
+    }
+    const nextState = updateState((state) => {
+      const invitation = {
         id: buildTaskId("invitation"),
-        email: payload.email,
+        email: payload.email ?? null,
         status: "INVITED",
         expiresAt: createIsoAt(3, 23, 59),
         submittedAt: null,
@@ -4242,12 +4332,15 @@ export async function demoApiRequest<T>(
         middleName: null,
         birthDate: null,
         gender: null,
-        phone: null,
+        phone: payload.phone ?? null,
         avatarUrl: null,
         rejectedReason: null,
-      });
+        approvedShiftTemplateId: null,
+        approvedGroupId: null,
+      };
+      state.invitations.unshift(invitation);
     });
-    return undefined as T;
+    return nextState.invitations[0] as T;
   }
 
   const resendInvitationMatch = pathname.match(
@@ -4264,6 +4357,38 @@ export async function demoApiRequest<T>(
       }
     });
     return undefined as T;
+  }
+
+  const setupInvitationMatch = pathname.match(
+    /^\/employees\/invitations\/([^/]+)\/setup$/,
+  );
+  if (setupInvitationMatch && method === "PATCH") {
+    const payload = parseBody<{
+      firstName?: string;
+      lastName?: string;
+      middleName?: string;
+      shiftTemplateId?: string;
+      groupId?: string;
+    }>(options?.body);
+    const nextState = updateState((state) => {
+      const invitation = state.invitations.find(
+        (item) => item.id === setupInvitationMatch[1],
+      );
+      if (!invitation) {
+        throw new Error("Приглашение не найдено.");
+      }
+
+      invitation.firstName = payload.firstName?.trim() || null;
+      invitation.lastName = payload.lastName?.trim() || null;
+      invitation.middleName = payload.middleName?.trim() || null;
+      invitation.approvedShiftTemplateId = payload.shiftTemplateId?.trim() || null;
+      invitation.approvedGroupId = payload.groupId?.trim() || null;
+    });
+
+    const invitation = nextState.invitations.find(
+      (item) => item.id === setupInvitationMatch[1],
+    );
+    return invitation as T;
   }
 
   const reviewInvitationMatch = pathname.match(
@@ -4315,6 +4440,7 @@ export async function demoApiRequest<T>(
       };
       state.organization.location = {
         address: payload.address,
+        country: payload.country ?? null,
         latitude: Number(payload.latitude),
         longitude: Number(payload.longitude),
         timezone: payload.timezone,
@@ -4387,6 +4513,15 @@ export async function demoApiRequest<T>(
       token,
       url.searchParams.get("month"),
     ) as T;
+  }
+
+  if (pathname === "/leaderboard/settings" && method === "PATCH") {
+    const payload = parseBody<{ hidePeersFromEmployees?: boolean }>(
+      options?.body,
+    );
+    return {
+      hidePeersFromEmployees: Boolean(payload.hidePeersFromEmployees),
+    } as T;
   }
 
   if (pathname === "/collaboration/announcements" && method === "GET") {

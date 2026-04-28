@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, Users, Save } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
@@ -19,11 +20,12 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { apiRequest } from "../../lib/api";
+import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
+import { writeBrowserStorageItem } from "../../lib/browser-storage";
 import { useI18n } from "../../lib/i18n";
 
 type Company = {
-  code?: string;
   id: string;
   googlePlaceId?: string | null;
   logoUrl?: string | null;
@@ -32,6 +34,7 @@ type Company = {
 
 type Location = {
   address: string;
+  country?: string | null;
   geofenceRadiusMeters?: number;
   latitude?: number;
   longitude?: number;
@@ -89,6 +92,8 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
   location: null,
 };
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
+const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
+const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
 
 const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
   "UTC-08:00": { address: "Downtown Anchorage, Alaska, United States", latitude: "61.217381", longitude: "-149.863129" },
@@ -187,6 +192,12 @@ function hasDraftCoordinates(draft: SetupDraft) {
   return draft.latitude.trim() !== "" && draft.longitude.trim() !== "";
 }
 
+function buildAddEmployeePromptStorageKey(
+  session: NonNullable<ReturnType<typeof getSession>>,
+) {
+  return `${ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX}:${session.user.tenantId}:${session.user.id}`;
+}
+
 export type OrganizationPageInitialData = {
   employeeCount: number;
   setup: OrganizationSetupResponse;
@@ -197,6 +208,7 @@ export default function OrganizationPageClient({
 }: {
   initialData?: OrganizationPageInitialData | null;
 }) {
+  const router = useRouter();
   const { locale } = useI18n();
   const [setup, setSetup] = useState<OrganizationSetupResponse>(
     initialData?.setup ?? EMPTY_SETUP,
@@ -221,6 +233,7 @@ export default function OrganizationPageClient({
     initialData?.setup.configured ? "update" : "create",
   );
   const successTimeoutRef = useRef<number | null>(null);
+  const employeesRedirectTimeoutRef = useRef<number | null>(null);
   const didUseInitialData = useRef(Boolean(initialData));
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -293,6 +306,15 @@ export default function OrganizationPageClient({
       }
     };
   }, [saveSuccess]);
+
+  useEffect(() => {
+    return () => {
+      if (employeesRedirectTimeoutRef.current !== null) {
+        window.clearTimeout(employeesRedirectTimeoutRef.current);
+        employeesRedirectTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!timeZonePreset || draft.address.trim() || hasDraftCoordinates(draft)) return;
@@ -372,6 +394,7 @@ export default function OrganizationPageClient({
       );
       return;
     }
+    const shouldRedirectToEmployees = setupMode === "create" || !setup.configured;
 
     try {
       setIsSaving(true); setError(null); setSaveSuccess(false);
@@ -379,6 +402,7 @@ export default function OrganizationPageClient({
         method: "POST", token: session.accessToken,
         body: JSON.stringify({
           mode: setupMode, address: draft.address.trim(), companyLogoUrl: draft.companyLogoUrl || undefined,
+          country: draft.details?.country || setup.location?.country || undefined,
           companyName: draft.companyName.trim(), geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
           googlePlaceId: draft.googlePlaceId || undefined, latitude: Number(draft.latitude), longitude: Number(draft.longitude),
           timezone: draft.timezone.trim() || "UTC",
@@ -397,6 +421,20 @@ export default function OrganizationPageClient({
         }),
       );
       setSaveSuccess(true);
+      if (shouldRedirectToEmployees && nextSetup.configured) {
+        writeBrowserStorageItem(
+          buildAddEmployeePromptStorageKey(session),
+          ADD_EMPLOYEE_PROMPT_PENDING,
+          { includeSessionFallback: true },
+        );
+        if (employeesRedirectTimeoutRef.current !== null) {
+          window.clearTimeout(employeesRedirectTimeoutRef.current);
+        }
+        employeesRedirectTimeoutRef.current = window.setTimeout(() => {
+          employeesRedirectTimeoutRef.current = null;
+          router.replace(toAdminHref("/employees?focusAddEmployee=1"));
+        }, 650);
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -434,11 +472,6 @@ export default function OrganizationPageClient({
                     <Users className="h-4 w-4" />
                     {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
                   </span>
-                  {setup.company?.code ? (
-                    <span className="organization-studio-code">
-                      {locale === "ru" ? "Код компании:" : "Company code:"} <strong>{setup.company.code}</strong>
-                    </span>
-                  ) : null}
                 </div>
               </label>
             </div>

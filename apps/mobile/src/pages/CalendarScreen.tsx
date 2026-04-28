@@ -4,11 +4,12 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { StatusBar } from "expo-status-bar";
-import { Platform, ScrollView, View } from "react-native";
+import { Image, Platform, ScrollView, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import Animated, {
   FadeInLeft,
   FadeInRight,
+  FadeInUp,
   FadeOutLeft,
   FadeOutRight,
 } from "react-native-reanimated";
@@ -18,6 +19,12 @@ import BottomSheetModal from "../components/BottomSheetModal";
 import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import {
+  createManagerShift,
+  loadManagerEmployees,
+  loadManagerGroups,
+  loadManagerShifts,
+  loadManagerShiftTemplates,
+  loadManagerTasks,
   loadMyAnnouncements,
   loadMyShifts,
   loadMyTasks,
@@ -68,6 +75,23 @@ type CalendarScreenProps = {
   overdueSheetSignal?: number;
 };
 
+type CalendarShift = Awaited<ReturnType<typeof loadMyShifts>>[number];
+type ManagerEmployee = Awaited<ReturnType<typeof loadManagerEmployees>>[number];
+type ManagerGroup = Awaited<ReturnType<typeof loadManagerGroups>>[number];
+type ManagerScheduleShift = Awaited<ReturnType<typeof loadManagerShifts>>[number];
+type ManagerShiftTemplate = Awaited<
+  ReturnType<typeof loadManagerShiftTemplates>
+>[number];
+
+type CalendarScreenCacheValue = {
+  shifts: CalendarShift[];
+  tasks: TaskItem[];
+  managerEmployees?: ManagerEmployee[];
+  managerGroups?: ManagerGroup[];
+  managerShifts?: ManagerScheduleShift[];
+  shiftTemplates?: ManagerShiftTemplate[];
+};
+
 const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 
 function formatDateKey(date: Date) {
@@ -96,6 +120,72 @@ function isOverdueTask(task: TaskItem, referenceDate: Date) {
   return Boolean(
     dueAt && startOfDay(dueAt).getTime() < startOfDay(referenceDate).getTime(),
   );
+}
+
+function getTaskCalendarDate(task: TaskItem) {
+  const meta = parseTaskMeta(task.description);
+  const dateSource =
+    meta.meeting?.scheduledAt ?? task.dueAt ?? task.occurrenceDate ?? task.createdAt;
+
+  if (!dateSource) {
+    return null;
+  }
+
+  const parsed = new Date(dateSource);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getTaskAssigneeId(task: TaskItem) {
+  return task.assigneeEmployeeId ?? task.assigneeEmployee?.id ?? null;
+}
+
+function buildEmployeeName(firstName?: string | null, lastName?: string | null) {
+  return [lastName?.trim(), firstName?.trim()].filter(Boolean).join(" ").trim();
+}
+
+function getEmployeeInitials(firstName?: string | null, lastName?: string | null) {
+  const first = firstName?.trim().charAt(0) ?? "";
+  const last = lastName?.trim().charAt(0) ?? "";
+  return `${first}${last}`.toUpperCase() || "HI";
+}
+
+function getEmployeeSubtitle(employee: ManagerEmployee) {
+  return (
+    employee.position?.name ??
+    employee.department?.name ??
+    employee.primaryLocation?.name ??
+    employee.email
+  );
+}
+
+function buildManagerEmployeeFromTask(task: TaskItem): ManagerEmployee | null {
+  if (!task.assigneeEmployee) {
+    return null;
+  }
+
+  return {
+    id: task.assigneeEmployee.id,
+    firstName: task.assigneeEmployee.firstName,
+    lastName: task.assigneeEmployee.lastName,
+    email: "",
+    employeeNumber: task.assigneeEmployee.employeeNumber,
+    department: task.assigneeEmployee.department ?? null,
+    position: null,
+    primaryLocation: task.assigneeEmployee.primaryLocation ?? null,
+  };
+}
+
+function formatShiftRange(shift: ManagerScheduleShift, locale: string) {
+  const start = new Date(shift.startsAt).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const end = new Date(shift.endsAt).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return `${start} - ${end}`;
 }
 
 function formatAnnouncementDate(value: string, locale: string) {
@@ -163,13 +253,13 @@ export default function CalendarScreen({
     month: "long",
     year: "numeric",
   });
-  const calendarCacheKey = `calendar-screen:${year}-${monthIndex}`;
+  const calendarCacheKey = `calendar-screen:${isManager ? "manager" : "employee"}:${year}-${monthIndex}`;
   const initialSnapshot = useMemo(
     () =>
-      peekScreenCache<{
-        shifts: Awaited<ReturnType<typeof loadMyShifts>>;
-        tasks: Awaited<ReturnType<typeof loadMyTasks>>;
-      }>(calendarCacheKey, CALENDAR_SCREEN_CACHE_TTL_MS),
+      peekScreenCache<CalendarScreenCacheValue>(
+        calendarCacheKey,
+        CALENDAR_SCREEN_CACHE_TTL_MS,
+      ),
     [calendarCacheKey],
   );
   const newsCacheKey = useMemo(() => getNewsScreenCacheKey(false), []);
@@ -191,6 +281,40 @@ export default function CalendarScreen({
   const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>(
     initialSnapshot?.value.tasks ?? [],
   );
+  const [managerEmployees, setManagerEmployees] = useState<ManagerEmployee[]>(
+    initialSnapshot?.value.managerEmployees ?? [],
+  );
+  const [managerGroups, setManagerGroups] = useState<ManagerGroup[]>(
+    initialSnapshot?.value.managerGroups ?? [],
+  );
+  const [managerShifts, setManagerShifts] = useState<ManagerScheduleShift[]>(
+    initialSnapshot?.value.managerShifts ?? [],
+  );
+  const [shiftTemplates, setShiftTemplates] = useState<ManagerShiftTemplate[]>(
+    initialSnapshot?.value.shiftTemplates ?? [],
+  );
+  const [managerFilterSheetVisible, setManagerFilterSheetVisible] =
+    useState(false);
+  const [selectedManagerEmployeeIds, setSelectedManagerEmployeeIds] = useState<
+    string[]
+  >([]);
+  const [selectedManagerGroupIds, setSelectedManagerGroupIds] = useState<
+    string[]
+  >([]);
+  const [expandedManagerEmployeeId, setExpandedManagerEmployeeId] = useState<
+    string | null
+  >(null);
+  const [expandedManagerGroupIds, setExpandedManagerGroupIds] = useState<
+    string[]
+  >([]);
+  const [failedAvatarEmployeeIds, setFailedAvatarEmployeeIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [assignShiftSheetVisible, setAssignShiftSheetVisible] = useState(false);
+  const [assignShiftEmployeeId, setAssignShiftEmployeeId] = useState("");
+  const [assignShiftTemplateId, setAssignShiftTemplateId] = useState("");
+  const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
+  const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
     initialNewsSnapshot?.value ?? [],
   );
@@ -203,10 +327,7 @@ export default function CalendarScreen({
   const todayStart = useMemo(() => startOfDay(today), [today]);
 
   useEffect(() => {
-    return subscribeScreenCache<{
-      shifts: Awaited<ReturnType<typeof loadMyShifts>>;
-      tasks: Awaited<ReturnType<typeof loadMyTasks>>;
-    }>(calendarCacheKey, (entry) => {
+    return subscribeScreenCache<CalendarScreenCacheValue>(calendarCacheKey, (entry) => {
       if (!entry) {
         return;
       }
@@ -216,6 +337,10 @@ export default function CalendarScreen({
       );
       setShifts(entry.value.shifts);
       setTasks(entry.value.tasks);
+      setManagerEmployees(entry.value.managerEmployees ?? []);
+      setManagerGroups(entry.value.managerGroups ?? []);
+      setManagerShifts(entry.value.managerShifts ?? []);
+      setShiftTemplates(entry.value.shiftTemplates ?? []);
       setLoading(false);
     });
   }, [calendarCacheKey, language]);
@@ -264,10 +389,10 @@ export default function CalendarScreen({
     let cancelled = false;
 
     async function loadData() {
-      const cached = await readScreenCache<{
-        shifts: Awaited<ReturnType<typeof loadMyShifts>>;
-        tasks: Awaited<ReturnType<typeof loadMyTasks>>;
-      }>(calendarCacheKey, CALENDAR_SCREEN_CACHE_TTL_MS);
+      const cached = await readScreenCache<CalendarScreenCacheValue>(
+        calendarCacheKey,
+        CALENDAR_SCREEN_CACHE_TTL_MS,
+      );
 
       if (cached && !cancelled) {
         void primeTaskTranslations(cached.value.tasks, language).catch(
@@ -275,6 +400,10 @@ export default function CalendarScreen({
         );
         setShifts(cached.value.shifts);
         setTasks(cached.value.tasks);
+        setManagerEmployees(cached.value.managerEmployees ?? []);
+        setManagerGroups(cached.value.managerGroups ?? []);
+        setManagerShifts(cached.value.managerShifts ?? []);
+        setShiftTemplates(cached.value.shiftTemplates ?? []);
         setLoading(false);
         if (!cached.isStale) {
           return;
@@ -288,21 +417,50 @@ export default function CalendarScreen({
       try {
         const rangeStart = new Date(year, monthIndex - 1, 1);
         const rangeEnd = new Date(year, monthIndex + 1, 0);
-        const [nextShifts, nextTasks] = await Promise.all([
-          loadMyShifts(),
-          loadMyTasks({
-            dateFrom: formatDateKey(rangeStart),
-            dateTo: formatDateKey(rangeEnd),
-          }),
-        ]);
+        const rangeQuery = {
+          dateFrom: formatDateKey(rangeStart),
+          dateTo: formatDateKey(rangeEnd),
+        };
+        const [
+          nextShifts,
+          nextTasks,
+          nextManagerEmployees,
+          nextManagerGroups,
+          nextManagerShifts,
+          nextShiftTemplates,
+        ] = isManager
+          ? await Promise.all([
+              Promise.resolve([] as CalendarShift[]),
+              loadManagerTasks(rangeQuery),
+              loadManagerEmployees(),
+              loadManagerGroups(),
+              loadManagerShifts(),
+              loadManagerShiftTemplates(),
+            ])
+          : await Promise.all([
+              loadMyShifts(),
+              loadMyTasks(rangeQuery),
+              Promise.resolve([] as ManagerEmployee[]),
+              Promise.resolve([] as ManagerGroup[]),
+              Promise.resolve([] as ManagerScheduleShift[]),
+              Promise.resolve([] as ManagerShiftTemplate[]),
+            ]);
 
         if (!cancelled) {
           await primeTaskTranslations(nextTasks, language);
           setShifts(nextShifts);
           setTasks(nextTasks);
+          setManagerEmployees(nextManagerEmployees);
+          setManagerGroups(nextManagerGroups);
+          setManagerShifts(nextManagerShifts);
+          setShiftTemplates(nextShiftTemplates);
           void writeScreenCache(calendarCacheKey, {
             shifts: nextShifts,
             tasks: nextTasks,
+            managerEmployees: nextManagerEmployees,
+            managerGroups: nextManagerGroups,
+            managerShifts: nextManagerShifts,
+            shiftTemplates: nextShiftTemplates,
           });
         }
       } catch (nextError) {
@@ -325,7 +483,7 @@ export default function CalendarScreen({
     return () => {
       cancelled = true;
     };
-  }, [calendarCacheKey, initialSnapshot, language, monthIndex, t, year]);
+  }, [calendarCacheKey, initialSnapshot, isManager, language, monthIndex, t, year]);
 
   useEffect(() => {
     if (selectedDay > daysInMonth) {
@@ -428,8 +586,19 @@ export default function CalendarScreen({
       }
     });
 
+    managerShifts.forEach((shift) => {
+      const shiftDate = new Date(shift.shiftDate);
+      if (
+        !Number.isNaN(shiftDate.getTime()) &&
+        shiftDate.getFullYear() === year &&
+        shiftDate.getMonth() === monthIndex
+      ) {
+        days.add(shiftDate.getDate());
+      }
+    });
+
     return days;
-  }, [itemsByDateKey, monthIndex, shiftByDateKey, year]);
+  }, [itemsByDateKey, managerShifts, monthIndex, shiftByDateKey, year]);
 
   const overdueTasks = useMemo(() => {
     return tasks
@@ -458,6 +627,241 @@ export default function CalendarScreen({
       .slice(0, 3);
   }, [announcements]);
 
+  const managerEmployeeDirectory = useMemo(() => {
+    const map = new Map<string, ManagerEmployee>();
+
+    managerEmployees.forEach((employee) => {
+      map.set(employee.id, employee);
+    });
+
+    tasks.forEach((task) => {
+      const employee = buildManagerEmployeeFromTask(task);
+      if (employee && !map.has(employee.id)) {
+        map.set(employee.id, employee);
+      }
+    });
+
+    managerGroups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (map.has(membership.employee.id)) {
+          return;
+        }
+
+        map.set(membership.employee.id, {
+          id: membership.employee.id,
+          firstName: membership.employee.firstName,
+          lastName: membership.employee.lastName,
+          employeeNumber: membership.employee.employeeNumber,
+          email: "",
+          department: null,
+          position: null,
+          primaryLocation: null,
+        });
+      });
+    });
+
+    managerShifts.forEach((shift) => {
+      if (map.has(shift.employee.id)) {
+        return;
+      }
+
+      map.set(shift.employee.id, {
+        id: shift.employee.id,
+        firstName: shift.employee.firstName,
+        lastName: shift.employee.lastName,
+        employeeNumber: shift.employee.employeeNumber,
+        email: "",
+        department: null,
+        position: shift.position ?? null,
+        primaryLocation: shift.location ?? null,
+      });
+    });
+
+    return map;
+  }, [managerEmployees, managerGroups, managerShifts, tasks]);
+
+  const sortedManagerEmployees = useMemo(() => {
+    return Array.from(managerEmployeeDirectory.values()).sort((left, right) =>
+      buildEmployeeName(left.firstName, left.lastName).localeCompare(
+        buildEmployeeName(right.firstName, right.lastName),
+        locale,
+      ),
+    );
+  }, [locale, managerEmployeeDirectory]);
+
+  const selectedGroupEmployeeIds = useMemo(() => {
+    const ids = new Set<string>();
+    managerGroups.forEach((group) => {
+      if (!selectedManagerGroupIds.includes(group.id)) {
+        return;
+      }
+
+      group.memberships.forEach((membership) => {
+        ids.add(membership.employeeId);
+      });
+    });
+
+    return ids;
+  }, [managerGroups, selectedManagerGroupIds]);
+
+  const activeManagerEmployeeIdSet = useMemo(() => {
+    if (
+      selectedManagerEmployeeIds.length === 0 &&
+      selectedManagerGroupIds.length === 0
+    ) {
+      return new Set(sortedManagerEmployees.map((employee) => employee.id));
+    }
+
+    const ids = new Set<string>(selectedManagerEmployeeIds);
+    selectedGroupEmployeeIds.forEach((id) => ids.add(id));
+    return ids;
+  }, [
+    selectedGroupEmployeeIds,
+    selectedManagerEmployeeIds,
+    selectedManagerGroupIds.length,
+    sortedManagerEmployees,
+  ]);
+
+  const visibleManagerEmployees = useMemo(
+    () =>
+      sortedManagerEmployees.filter((employee) =>
+        activeManagerEmployeeIdSet.has(employee.id),
+      ),
+    [activeManagerEmployeeIdSet, sortedManagerEmployees],
+  );
+
+  const managerFilterLabel = useMemo(() => {
+    const selectedCount = activeManagerEmployeeIdSet.size;
+
+    if (
+      selectedManagerEmployeeIds.length === 0 &&
+      selectedManagerGroupIds.length === 0
+    ) {
+      return t("calendar.managerAllEmployees");
+    }
+
+    if (
+      selectedManagerGroupIds.length === 1 &&
+      selectedManagerEmployeeIds.length === 0
+    ) {
+      return (
+        managerGroups.find((group) => group.id === selectedManagerGroupIds[0])
+          ?.name ?? t("calendar.managerSelectedEmployees", { count: selectedCount })
+      );
+    }
+
+    if (
+      selectedManagerEmployeeIds.length === 1 &&
+      selectedManagerGroupIds.length === 0
+    ) {
+      const employee = managerEmployeeDirectory.get(selectedManagerEmployeeIds[0]);
+      return employee
+        ? buildEmployeeName(employee.firstName, employee.lastName)
+        : t("calendar.managerSelectedEmployees", { count: selectedCount });
+    }
+
+    return t("calendar.managerSelectedEmployees", { count: selectedCount });
+  }, [
+    activeManagerEmployeeIdSet.size,
+    managerEmployeeDirectory,
+    managerGroups,
+    selectedManagerEmployeeIds,
+    selectedManagerGroupIds,
+    t,
+  ]);
+
+  const managerShiftsForSelectedDay = useMemo(() => {
+    return managerShifts.filter((shift) => {
+      const date = new Date(shift.shiftDate);
+      return !Number.isNaN(date.getTime()) && formatDateKey(date) === selectedDayKey;
+    });
+  }, [managerShifts, selectedDayKey]);
+
+  const managerShiftByEmployeeId = useMemo(() => {
+    return new Map(
+      managerShiftsForSelectedDay.map((shift) => [shift.employeeId, shift]),
+    );
+  }, [managerShiftsForSelectedDay]);
+
+  const managerTasksForSelectedDay = useMemo(() => {
+    return tasks
+      .filter((task) => {
+        const date = getTaskCalendarDate(task);
+        return date && formatDateKey(date) === selectedDayKey;
+      })
+      .sort((left, right) => {
+        const leftDate = getTaskCalendarDate(left)?.getTime() ?? 0;
+        const rightDate = getTaskCalendarDate(right)?.getTime() ?? 0;
+        return leftDate - rightDate;
+      });
+  }, [selectedDayKey, tasks]);
+
+  const managerEmployeeRows = useMemo(() => {
+    return visibleManagerEmployees.map((employee) => {
+      const assignedTasks = managerTasksForSelectedDay.filter(
+        (task) => getTaskAssigneeId(task) === employee.id,
+      );
+      const plannedTasks = assignedTasks.filter(
+        (task) => task.status !== "CANCELLED",
+      );
+      const doneTasks = plannedTasks.filter((task) => task.status === "DONE");
+
+      return {
+        employee,
+        shift: managerShiftByEmployeeId.get(employee.id) ?? null,
+        assignedTasks,
+        plannedTasks,
+        doneTasks,
+      };
+    });
+  }, [
+    managerShiftByEmployeeId,
+    managerTasksForSelectedDay,
+    visibleManagerEmployees,
+  ]);
+
+  const managerDaySummary = useMemo(() => {
+    const total = managerEmployeeRows.reduce(
+      (sum, row) => sum + row.plannedTasks.length,
+      0,
+    );
+    const done = managerEmployeeRows.reduce(
+      (sum, row) => sum + row.doneTasks.length,
+      0,
+    );
+    const employeesWithOpenTasks = managerEmployeeRows.filter((row) =>
+      row.plannedTasks.some((task) => isTaskOpen(task.status)),
+    ).length;
+
+    return {
+      done,
+      total,
+      employees: managerEmployeeRows.length,
+      shifts: managerShiftsForSelectedDay.length,
+      employeesWithOpenTasks,
+    };
+  }, [managerEmployeeRows, managerShiftsForSelectedDay.length]);
+
+  useEffect(() => {
+    if (!assignShiftSheetVisible) {
+      return;
+    }
+
+    if (!assignShiftEmployeeId && visibleManagerEmployees[0]) {
+      setAssignShiftEmployeeId(visibleManagerEmployees[0].id);
+    }
+
+    if (!assignShiftTemplateId && shiftTemplates[0]) {
+      setAssignShiftTemplateId(shiftTemplates[0].id);
+    }
+  }, [
+    assignShiftEmployeeId,
+    assignShiftSheetVisible,
+    assignShiftTemplateId,
+    shiftTemplates,
+    visibleManagerEmployees,
+  ]);
+
   useEffect(() => {
     if (loading) {
       return;
@@ -466,8 +870,21 @@ export default function CalendarScreen({
     void writeScreenCache(calendarCacheKey, {
       shifts,
       tasks,
+      managerEmployees,
+      managerGroups,
+      managerShifts,
+      shiftTemplates,
     });
-  }, [calendarCacheKey, loading, shifts, tasks]);
+  }, [
+    calendarCacheKey,
+    loading,
+    managerEmployees,
+    managerGroups,
+    managerShifts,
+    shiftTemplates,
+    shifts,
+    tasks,
+  ]);
 
   const selectedShift = shiftByDateKey.get(selectedDayKey) ?? null;
   const selectedItems = itemsByDateKey.get(selectedDayKey) ?? [];
@@ -518,6 +935,120 @@ export default function CalendarScreen({
     day: "numeric",
   });
   const rescheduleActionsOffset = 15;
+  const canAssignShiftForSelectedDay =
+    startOfDay(selectedDate).getTime() >= todayStart.getTime();
+
+  function toggleManagerEmployeeFilter(employeeId: string) {
+    hapticSelection();
+    setSelectedManagerEmployeeIds((current) =>
+      current.includes(employeeId)
+        ? current.filter((id) => id !== employeeId)
+        : [...current, employeeId],
+    );
+  }
+
+  function toggleManagerGroupFilter(groupId: string) {
+    hapticSelection();
+    setSelectedManagerGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId],
+    );
+  }
+
+  function toggleManagerGroupExpanded(groupId: string) {
+    hapticSelection();
+    setExpandedManagerGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId],
+    );
+  }
+
+  function clearManagerFilter() {
+    hapticSelection();
+    setSelectedManagerEmployeeIds([]);
+    setSelectedManagerGroupIds([]);
+  }
+
+  function toggleManagerEmployeeExpanded(employeeId: string) {
+    hapticSelection();
+    setExpandedManagerEmployeeId((current) =>
+      current === employeeId ? null : employeeId,
+    );
+  }
+
+  function markAvatarFailed(employeeId: string) {
+    setFailedAvatarEmployeeIds((current) => {
+      if (current.has(employeeId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(employeeId);
+      return next;
+    });
+  }
+
+  function openAssignShiftSheet(employeeId?: string) {
+    hapticSelection();
+    setAssignShiftError(null);
+    setAssignShiftEmployeeId(employeeId ?? visibleManagerEmployees[0]?.id ?? "");
+    setAssignShiftTemplateId(shiftTemplates[0]?.id ?? "");
+    setAssignShiftSheetVisible(true);
+  }
+
+  async function submitManagerShiftAssignment() {
+    if (!assignShiftEmployeeId || !assignShiftTemplateId) {
+      setAssignShiftError(t("calendar.assignShiftValidation"));
+      return;
+    }
+
+    if (!canAssignShiftForSelectedDay) {
+      setAssignShiftError(t("calendar.assignShiftPastDate"));
+      return;
+    }
+
+    setAssignShiftSubmitting(true);
+    setAssignShiftError(null);
+
+    try {
+      const createdShift = await createManagerShift({
+        employeeId: assignShiftEmployeeId,
+        templateId: assignShiftTemplateId,
+        shiftDate: selectedDayKey,
+      });
+
+      setManagerShifts((current) => [createdShift, ...current]);
+      setAssignShiftSheetVisible(false);
+      setAssignShiftEmployeeId("");
+      setAssignShiftTemplateId("");
+    } catch (nextError) {
+      setAssignShiftError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("calendar.assignShiftError"),
+      );
+    } finally {
+      setAssignShiftSubmitting(false);
+    }
+  }
+
+  function renderManagerTaskLeading(task: TaskItem) {
+    if (isTaskMeeting(task)) {
+      return <Ionicons color="#6d73ff" name="videocam-outline" size={18} />;
+    }
+
+    if (task.requiresPhoto) {
+      return <Ionicons color="#6d73ff" name="camera-outline" size={18} />;
+    }
+
+    if (task.status === "DONE") {
+      return <Ionicons color="#16a34a" name="checkmark-circle" size={18} />;
+    }
+
+    return <Ionicons color="#9aa6b2" name="ellipse-outline" size={18} />;
+  }
 
   function changeMonth(offset: number) {
     hapticSelection();
@@ -918,6 +1449,281 @@ export default function CalendarScreen({
               </View>
             ) : null}
 
+            {isManager ? (
+              <View className="gap-4">
+                <PressableScale
+                  className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-4 shadow-sm shadow-[#1f2687]/10"
+                  haptic="selection"
+                  onPress={() => setManagerFilterSheetVisible(true)}
+                >
+                  <View className="flex-row items-center justify-between gap-4">
+                    <View className="min-w-0 flex-1">
+                      <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.2px] text-[#8a96ab]">
+                        {t("calendar.managerFilter")}
+                      </Text>
+                      <Text
+                        className="mt-1 font-display text-[19px] font-bold text-foreground"
+                        numberOfLines={1}
+                      >
+                        {managerFilterLabel}
+                      </Text>
+                    </View>
+                    <View className="h-11 w-11 items-center justify-center rounded-2xl bg-[#eef4ff]">
+                      <Ionicons color="#315cf6" name="options-outline" size={20} />
+                    </View>
+                  </View>
+                </PressableScale>
+
+                <View className="rounded-[30px] border border-white/40 bg-white/78 p-5 shadow-sm shadow-[#1f2687]/10">
+                  <View className="flex-row items-start justify-between gap-4">
+                    <View className="flex-1">
+                      <Text className="font-display text-[22px] font-bold text-foreground">
+                        {selectedDayLabel}
+                      </Text>
+                      <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
+                        {t("calendar.managerDaySummary", {
+                          done: managerDaySummary.done,
+                          total: managerDaySummary.total,
+                          shifts: managerDaySummary.shifts,
+                        })}
+                      </Text>
+                    </View>
+                    <PressableScale
+                      className={`min-h-[44px] rounded-2xl px-4 py-3 ${
+                        canAssignShiftForSelectedDay
+                          ? "bg-[#2563eb]"
+                          : "bg-[#dbe3ef]"
+                      }`}
+                      disabled={!canAssignShiftForSelectedDay}
+                      haptic="selection"
+                      onPress={() => openAssignShiftSheet()}
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <Ionicons color="#ffffff" name="calendar-outline" size={16} />
+                        <Text className="font-display text-[13px] font-semibold text-white">
+                          {t("calendar.assignShift")}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                  </View>
+
+                  <View className="mt-4 flex-row gap-2">
+                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
+                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                        {t("calendar.managerProgress")}
+                      </Text>
+                      <Text
+                        className="mt-1 font-display text-[22px] font-bold text-foreground"
+                        style={{ fontVariant: ["tabular-nums"] }}
+                      >
+                        {managerDaySummary.done}/{managerDaySummary.total}
+                      </Text>
+                    </View>
+                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
+                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                        {t("calendar.managerNeedsAttention")}
+                      </Text>
+                      <Text
+                        className="mt-1 font-display text-[22px] font-bold text-foreground"
+                        style={{ fontVariant: ["tabular-nums"] }}
+                      >
+                        {managerDaySummary.employeesWithOpenTasks}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {loading ? (
+                  <View className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-5 shadow-sm shadow-[#1f2687]/10">
+                    <Text className="font-body text-sm text-muted-foreground">
+                      {t("common.loading")}
+                    </Text>
+                  </View>
+                ) : managerEmployeeRows.length ? (
+                  <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
+                    {managerEmployeeRows.map((row, index) => {
+                      const isExpanded =
+                        expandedManagerEmployeeId === row.employee.id;
+                      const showAvatar =
+                        row.employee.avatar &&
+                        !failedAvatarEmployeeIds.has(row.employee.id);
+                      const subtitle = getEmployeeSubtitle(row.employee);
+                      const isLast = index === managerEmployeeRows.length - 1;
+
+                      return (
+                        <Animated.View
+                          entering={FadeInUp.delay(index * 18)
+                            .duration(170)
+                            .withInitialValues({
+                              opacity: 0,
+                              transform: [{ translateY: 8 }],
+                            })}
+                          key={row.employee.id}
+                        >
+                          <PressableScale
+                            className="px-5 py-5"
+                            haptic="selection"
+                            onPress={() =>
+                              toggleManagerEmployeeExpanded(row.employee.id)
+                            }
+                          >
+                            <View className="flex-row items-center gap-3">
+                              <View className="w-5 items-center">
+                                <Ionicons
+                                  color="#6b7a90"
+                                  name={isExpanded ? "chevron-up" : "chevron-down"}
+                                  size={20}
+                                />
+                              </View>
+                              {showAvatar ? (
+                                <Image
+                                  className="h-13 w-13 rounded-2xl"
+                                  onError={() => markAvatarFailed(row.employee.id)}
+                                  resizeMode="cover"
+                                  source={row.employee.avatar}
+                                />
+                              ) : (
+                                <View className="h-13 w-13 items-center justify-center rounded-2xl bg-[#eef2ff]">
+                                  <Text className="font-display text-[15px] font-extrabold text-foreground">
+                                    {getEmployeeInitials(
+                                      row.employee.firstName,
+                                      row.employee.lastName,
+                                    )}
+                                  </Text>
+                                </View>
+                              )}
+                              <View className="min-w-0 flex-1">
+                                <Text
+                                  className="font-display text-[18px] font-bold text-foreground"
+                                  numberOfLines={1}
+                                >
+                                  {buildEmployeeName(
+                                    row.employee.firstName,
+                                    row.employee.lastName,
+                                  )}
+                                </Text>
+                                <Text
+                                  className="mt-1 font-body text-[13px] leading-5 text-[#7b8798]"
+                                  numberOfLines={1}
+                                >
+                                  {row.shift
+                                    ? `${row.shift.template.name} · ${formatShiftRange(row.shift, locale)}`
+                                    : subtitle}
+                                </Text>
+                              </View>
+                              <View className="items-end">
+                                <Text
+                                  className="font-display text-[18px] font-bold text-foreground"
+                                  style={{ fontVariant: ["tabular-nums"] }}
+                                >
+                                  {row.doneTasks.length}/{row.plannedTasks.length}
+                                </Text>
+                                <Text className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.8px] text-[#8a96ab]">
+                                  {t("calendar.tasksShort")}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {isExpanded ? (
+                              <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
+                                <View className="flex-row items-center justify-between gap-3">
+                                  <Text className="font-body text-[14px] font-semibold text-[#42526b]">
+                                    {t("manager.tasksToday")}
+                                  </Text>
+                                  {row.shift ? (
+                                    <View className="rounded-full bg-[#e8fff3] px-3 py-1.5">
+                                      <Text className="font-body text-[12px] font-semibold text-[#0f766e]">
+                                        {formatShiftRange(row.shift, locale)}
+                                      </Text>
+                                    </View>
+                                  ) : canAssignShiftForSelectedDay ? (
+                                    <PressableScale
+                                      className="rounded-full bg-[#eef4ff] px-3 py-1.5"
+                                      haptic="selection"
+                                      onPress={() =>
+                                        openAssignShiftSheet(row.employee.id)
+                                      }
+                                    >
+                                      <Text className="font-body text-[12px] font-semibold text-[#315cf6]">
+                                        {t("calendar.assignShiftShort")}
+                                      </Text>
+                                    </PressableScale>
+                                  ) : null}
+                                </View>
+
+                                {row.assignedTasks.length ? (
+                                  <View className="gap-1">
+                                    {row.assignedTasks.map((task) => {
+                                      const isDone = task.status === "DONE";
+                                      const title = getTaskTitle(task, {
+                                        normalize: true,
+                                        hideSourceBeforeReady: true,
+                                      });
+                                      const note =
+                                        getTaskMeetingLocation(task, {
+                                          hideSourceBeforeReady: true,
+                                        }) ||
+                                        getTaskBody(task, {
+                                          hideSourceBeforeReady: true,
+                                        });
+
+                                      return (
+                                        <View
+                                          className="flex-row items-start gap-3 px-1 py-2"
+                                          key={task.id}
+                                        >
+                                          <View className="w-6 items-center pt-0.5">
+                                            {renderManagerTaskLeading(task)}
+                                          </View>
+                                          <View className="flex-1">
+                                            <Text
+                                              className={`font-body text-[15px] leading-6 ${
+                                                isDone
+                                                  ? "text-[#16a34a] line-through"
+                                                  : "text-foreground"
+                                              }`}
+                                            >
+                                              {title || task.title}
+                                            </Text>
+                                            {note ? (
+                                              <Text
+                                                className="mt-0.5 font-body text-[12px] leading-5 text-[#7b8798]"
+                                                numberOfLines={2}
+                                              >
+                                                {note}
+                                              </Text>
+                                            ) : null}
+                                          </View>
+                                        </View>
+                                      );
+                                    })}
+                                  </View>
+                                ) : (
+                                  <View className="rounded-2xl bg-[#f8fbff] px-4 py-5">
+                                    <Text className="text-center font-body text-[13px] leading-5 text-[#6b7280]">
+                                      {t("manager.noEmployeeTasks")}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            ) : null}
+                          </PressableScale>
+
+                          {!isLast ? <View className="h-px bg-[#edf1f7]" /> : null}
+                        </Animated.View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-6 shadow-sm shadow-[#1f2687]/10">
+                    <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
+                      {t("calendar.managerNoEmployeesForFilter")}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
             {overdueTasks.length > 0 ? (
               <PressableScale
                 className="rounded-3xl border border-warning/25 bg-white/78 p-5 shadow-sm shadow-[#1f2687]/10"
@@ -937,9 +1743,6 @@ export default function CalendarScreen({
                       {t("calendar.overdueManagerTitle", {
                         count: overdueTasks.length,
                       })}
-                    </Text>
-                    <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
-                      {t("calendar.overdueManagerBody")}
                     </Text>
                   </View>
                   <Ionicons
@@ -1027,64 +1830,66 @@ export default function CalendarScreen({
               </View>
             ) : null}
 
-            <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
-              <View className="flex-row items-start justify-between gap-4">
-                <View className="flex-1">
-                  <Text className="font-display text-xl font-bold text-foreground">
-                    {selectedDayLabel}
-                  </Text>
-                  <Text className="mt-1 font-body text-sm text-muted-foreground">
-                    {loading
-                      ? t("common.loading")
-                      : selectedShift
-                        ? `${selectedShift.template.name} · ${new Date(selectedShift.startsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })} - ${new Date(selectedShift.endsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`
-                        : selectedDayRelation === "past"
-                          ? t("calendar.noShiftRecorded")
-                          : t("calendar.dayOff")}
-                  </Text>
-                  {selectedShift ? (
-                    <Text className="mt-1 font-body text-sm text-muted-foreground">
-                      {selectedShift.location.name}
-                    </Text>
-                  ) : null}
-                </View>
-                <Text
-                  className="font-body text-xs font-semibold"
-                  style={{ color: selectedShift ? "#169c56" : "#6b7280" }}
-                >
-                  {selectedShift ? t("calendar.workDay") : t("calendar.dayOff")}
-                </Text>
-              </View>
-            </View>
-
-            <View>
-              <View className="mb-3 flex-row items-center justify-between gap-3 px-5">
-                <Text className="font-display text-lg font-semibold text-foreground">
-                  {selectedDayRelation === "past"
-                    ? t("calendar.activityOnDay")
-                    : t("calendar.planForDay")}
-                </Text>
-                {selectedSummaryText ? (
-                  <View className="rounded-full bg-[#eef4ff] px-3 py-1.5">
-                    <Text className="font-body text-xs font-semibold text-[#4f6df5]">
-                      {selectedSummaryText}
+            {!isManager ? (
+              <>
+                <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
+                  <View className="flex-row items-start justify-between gap-4">
+                    <View className="flex-1">
+                      <Text className="font-display text-xl font-bold text-foreground">
+                        {selectedDayLabel}
+                      </Text>
+                      <Text className="mt-1 font-body text-sm text-muted-foreground">
+                        {loading
+                          ? t("common.loading")
+                          : selectedShift
+                            ? `${selectedShift.template.name} · ${new Date(selectedShift.startsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })} - ${new Date(selectedShift.endsAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`
+                            : selectedDayRelation === "past"
+                              ? t("calendar.noShiftRecorded")
+                              : t("calendar.dayOff")}
+                      </Text>
+                      {selectedShift ? (
+                        <Text className="mt-1 font-body text-sm text-muted-foreground">
+                          {selectedShift.location.name}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text
+                      className="font-body text-xs font-semibold"
+                      style={{ color: selectedShift ? "#169c56" : "#6b7280" }}
+                    >
+                      {selectedShift ? t("calendar.workDay") : t("calendar.dayOff")}
                     </Text>
                   </View>
-                ) : null}
-              </View>
-
-              {loading ? (
-                <View className="rounded-2xl border border-white/30 bg-white/70 px-5 py-5 shadow-sm shadow-[#1f2687]/10">
-                  <Text className="font-body text-sm text-muted-foreground">
-                    {t("common.loading")}
-                  </Text>
                 </View>
-              ) : selectedItems.length > 0 ? (
-                selectedItems.map((item) => (
-                  <View
-                    key={item.id}
-                    className="mb-2 rounded-2xl border border-white/30 bg-white/70 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-                  >
+
+                <View>
+                  <View className="mb-3 flex-row items-center justify-between gap-3 px-5">
+                    <Text className="font-display text-lg font-semibold text-foreground">
+                      {selectedDayRelation === "past"
+                        ? t("calendar.activityOnDay")
+                        : t("calendar.planForDay")}
+                    </Text>
+                    {selectedSummaryText ? (
+                      <View className="rounded-full bg-[#eef4ff] px-3 py-1.5">
+                        <Text className="font-body text-xs font-semibold text-[#4f6df5]">
+                          {selectedSummaryText}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {loading ? (
+                    <View className="rounded-2xl border border-white/30 bg-white/70 px-5 py-5 shadow-sm shadow-[#1f2687]/10">
+                      <Text className="font-body text-sm text-muted-foreground">
+                        {t("common.loading")}
+                      </Text>
+                    </View>
+                  ) : selectedItems.length > 0 ? (
+                    selectedItems.map((item) => (
+                      <View
+                        key={item.id}
+                        className="mb-2 rounded-2xl border border-white/30 bg-white/70 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                      >
                     <View className="flex-row items-center justify-between">
                       <View className="mr-3 h-11 w-11 items-center justify-center rounded-full bg-[#eef4ff]">
                         <Ionicons
@@ -1165,10 +1970,491 @@ export default function CalendarScreen({
                   </Text>
                 </View>
               )}
-            </View>
+                </View>
+              </>
+            ) : null}
           </View>
         </ScrollView>
       </View>
+
+      <BottomSheetModal
+        onClose={() => setManagerFilterSheetVisible(false)}
+        sheetClassName="rounded-t-[32px]"
+        solidBackground
+        visible={managerFilterSheetVisible}
+      >
+        <View
+          className="max-h-[78vh] gap-4 px-5 pt-8"
+          style={{ paddingBottom: insets.bottom + 20 }}
+        >
+          <View className="items-center">
+            <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
+              {t("calendar.managerFilterTitle")}
+            </Text>
+            <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
+              {t("calendar.managerFilterBody")}
+            </Text>
+          </View>
+
+          <PressableScale
+            className={`rounded-[24px] border px-4 py-4 ${
+              selectedManagerEmployeeIds.length === 0 &&
+              selectedManagerGroupIds.length === 0
+                ? "border-primary bg-[#eef4ff]"
+                : "border-[#e7ecf5] bg-white"
+            }`}
+            haptic="selection"
+            onPress={clearManagerFilter}
+          >
+            <View className="flex-row items-center gap-3">
+              <View
+                className={`h-7 w-7 items-center justify-center rounded-full border ${
+                  selectedManagerEmployeeIds.length === 0 &&
+                  selectedManagerGroupIds.length === 0
+                    ? "border-primary bg-primary"
+                    : "border-[#d7deeb] bg-white"
+                }`}
+              >
+                {selectedManagerEmployeeIds.length === 0 &&
+                selectedManagerGroupIds.length === 0 ? (
+                  <Ionicons color="#ffffff" name="checkmark" size={15} />
+                ) : null}
+              </View>
+              <View className="flex-1">
+                <Text className="font-display text-[16px] font-bold text-foreground">
+                  {t("calendar.managerAllEmployees")}
+                </Text>
+                <Text className="mt-1 font-body text-[13px] text-muted-foreground">
+                  {t("calendar.managerAllEmployeesHint")}
+                </Text>
+              </View>
+            </View>
+          </PressableScale>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View className="gap-3 pb-3">
+              {managerGroups.length ? (
+                <View className="gap-3">
+                  <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                    {t("manager.meetingGroups")}
+                  </Text>
+                  {managerGroups.map((group) => {
+                    const isSelected = selectedManagerGroupIds.includes(group.id);
+                    const isExpanded = expandedManagerGroupIds.includes(group.id);
+
+                    return (
+                      <View
+                        className="rounded-[24px] border border-[#e7ecf5] bg-white px-4 py-4"
+                        key={group.id}
+                      >
+                        <View className="flex-row items-center gap-3">
+                          <PressableScale
+                            className={`h-7 w-7 items-center justify-center rounded-full border ${
+                              isSelected
+                                ? "border-primary bg-primary"
+                                : "border-[#d7deeb] bg-white"
+                            }`}
+                            haptic="selection"
+                            onPress={() => toggleManagerGroupFilter(group.id)}
+                          >
+                            {isSelected ? (
+                              <Ionicons color="#ffffff" name="checkmark" size={15} />
+                            ) : null}
+                          </PressableScale>
+                          <View className="flex-1">
+                            <Text className="font-display text-[16px] font-bold text-foreground">
+                              {group.name}
+                            </Text>
+                            <Text className="mt-1 font-body text-[13px] text-muted-foreground">
+                              {t("manager.groupMembersCount", {
+                                count: group.memberships.length,
+                              })}
+                            </Text>
+                          </View>
+                          <PressableScale
+                            className="h-9 w-9 items-center justify-center rounded-full bg-[#f4f7fb]"
+                            haptic="selection"
+                            onPress={() => toggleManagerGroupExpanded(group.id)}
+                          >
+                            <Ionicons
+                              color="#4b5563"
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={18}
+                            />
+                          </PressableScale>
+                        </View>
+
+                        {isExpanded ? (
+                          <View className="mt-4 border-t border-[#e7ecf5] pt-2">
+                            {group.memberships.map((membership, index) => {
+                              const employee =
+                                managerEmployeeDirectory.get(membership.employeeId) ??
+                                ({
+                                  id: membership.employee.id,
+                                  firstName: membership.employee.firstName,
+                                  lastName: membership.employee.lastName,
+                                  employeeNumber: membership.employee.employeeNumber,
+                                  email: "",
+                                  department: null,
+                                  position: null,
+                                  primaryLocation: null,
+                                } satisfies ManagerEmployee);
+                              const selectedByEmployee =
+                                selectedManagerEmployeeIds.includes(employee.id);
+                              const selectedByGroup = selectedGroupEmployeeIds.has(
+                                employee.id,
+                              );
+
+                              return (
+                                <PressableScale
+                                  className={`px-1 py-3 ${
+                                    index < group.memberships.length - 1
+                                      ? "border-b border-[#e7ecf5]"
+                                      : ""
+                                  }`}
+                                  haptic="selection"
+                                  key={membership.id}
+                                  onPress={() =>
+                                    toggleManagerEmployeeFilter(employee.id)
+                                  }
+                                >
+                                  <View className="flex-row items-center gap-3">
+                                    <View
+                                      className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                        selectedByEmployee || selectedByGroup
+                                          ? "border-primary bg-primary"
+                                          : "border-[#d7deeb] bg-white"
+                                      }`}
+                                    >
+                                      {selectedByEmployee || selectedByGroup ? (
+                                        <Ionicons
+                                          color="#ffffff"
+                                          name="checkmark"
+                                          size={13}
+                                        />
+                                      ) : null}
+                                    </View>
+                                    <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
+                                      <Text className="font-display text-[12px] font-extrabold text-foreground">
+                                        {getEmployeeInitials(
+                                          employee.firstName,
+                                          employee.lastName,
+                                        )}
+                                      </Text>
+                                    </View>
+                                    <View className="flex-1">
+                                      <Text className="font-body text-[14px] font-semibold text-foreground">
+                                        {buildEmployeeName(
+                                          employee.firstName,
+                                          employee.lastName,
+                                        )}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                </PressableScale>
+                              );
+                            })}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <View className="gap-2">
+                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                  {t("manager.meetingEmployees")}
+                </Text>
+                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                  {sortedManagerEmployees.length ? (
+                    sortedManagerEmployees.map((employee, index) => {
+                      const selectedByEmployee =
+                        selectedManagerEmployeeIds.includes(employee.id);
+                      const selectedByGroup = selectedGroupEmployeeIds.has(
+                        employee.id,
+                      );
+                      const showAvatar =
+                        employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
+
+                      return (
+                        <PressableScale
+                          className={`px-4 py-3 ${
+                            index < sortedManagerEmployees.length - 1
+                              ? "border-b border-[#e7ecf5]"
+                              : ""
+                          }`}
+                          haptic="selection"
+                          key={employee.id}
+                          onPress={() => toggleManagerEmployeeFilter(employee.id)}
+                        >
+                          <View className="flex-row items-center gap-3">
+                            <View
+                              className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                selectedByEmployee || selectedByGroup
+                                  ? "border-primary bg-primary"
+                                  : "border-[#d7deeb] bg-white"
+                              }`}
+                            >
+                              {selectedByEmployee || selectedByGroup ? (
+                                <Ionicons
+                                  color="#ffffff"
+                                  name="checkmark"
+                                  size={13}
+                                />
+                              ) : null}
+                            </View>
+                            {showAvatar ? (
+                              <Image
+                                className="h-10 w-10 rounded-full"
+                                onError={() => markAvatarFailed(employee.id)}
+                                resizeMode="cover"
+                                source={employee.avatar}
+                              />
+                            ) : (
+                              <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
+                                <Text className="font-display text-[12px] font-extrabold text-foreground">
+                                  {getEmployeeInitials(
+                                    employee.firstName,
+                                    employee.lastName,
+                                  )}
+                                </Text>
+                              </View>
+                            )}
+                            <View className="min-w-0 flex-1">
+                              <Text
+                                className="font-body text-[14px] font-semibold text-foreground"
+                                numberOfLines={1}
+                              >
+                                {buildEmployeeName(
+                                  employee.firstName,
+                                  employee.lastName,
+                                )}
+                              </Text>
+                              <Text
+                                className="mt-1 font-body text-[12px] text-muted-foreground"
+                                numberOfLines={1}
+                              >
+                                {getEmployeeSubtitle(employee)}
+                              </Text>
+                            </View>
+                          </View>
+                        </PressableScale>
+                      );
+                    })
+                  ) : (
+                    <View className="px-4 py-5">
+                      <Text className="text-center font-body text-sm text-muted-foreground">
+                        {t("manager.noEmployees")}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <Button
+            className="min-h-12 rounded-2xl"
+            fullWidth
+            label={t("calendar.applyFilter")}
+            onPress={() => setManagerFilterSheetVisible(false)}
+          />
+        </View>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        onClose={() => {
+          setAssignShiftSheetVisible(false);
+          setAssignShiftError(null);
+        }}
+        sheetClassName="rounded-t-[32px]"
+        solidBackground
+        visible={assignShiftSheetVisible}
+      >
+        <View
+          className="max-h-[78vh] gap-4 px-5 pt-8"
+          style={{ paddingBottom: insets.bottom + 20 }}
+        >
+          <View className="items-center">
+            <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
+              {t("calendar.assignShiftTitle")}
+            </Text>
+            <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
+              {selectedDayLabel}
+            </Text>
+          </View>
+
+          {assignShiftError ? (
+            <View className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
+              <Text className="font-body text-sm leading-6 text-danger">
+                {assignShiftError}
+              </Text>
+            </View>
+          ) : null}
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View className="gap-4 pb-3">
+              <View className="gap-2">
+                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                  {t("calendar.assignShiftEmployee")}
+                </Text>
+                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                  {visibleManagerEmployees.map((employee, index) => {
+                    const isSelected = assignShiftEmployeeId === employee.id;
+                    const showAvatar =
+                      employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
+
+                    return (
+                      <PressableScale
+                        className={`px-4 py-3 ${
+                          index < visibleManagerEmployees.length - 1
+                            ? "border-b border-[#e7ecf5]"
+                            : ""
+                        }`}
+                        haptic="selection"
+                        key={employee.id}
+                        onPress={() => setAssignShiftEmployeeId(employee.id)}
+                      >
+                        <View className="flex-row items-center gap-3">
+                          <View
+                            className={`h-6 w-6 items-center justify-center rounded-full border ${
+                              isSelected
+                                ? "border-primary bg-primary"
+                                : "border-[#d7deeb] bg-white"
+                            }`}
+                          >
+                            {isSelected ? (
+                              <Ionicons color="#ffffff" name="checkmark" size={13} />
+                            ) : null}
+                          </View>
+                          {showAvatar ? (
+                            <Image
+                              className="h-10 w-10 rounded-full"
+                              onError={() => markAvatarFailed(employee.id)}
+                              resizeMode="cover"
+                              source={employee.avatar}
+                            />
+                          ) : (
+                            <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
+                              <Text className="font-display text-[12px] font-extrabold text-foreground">
+                                {getEmployeeInitials(
+                                  employee.firstName,
+                                  employee.lastName,
+                                )}
+                              </Text>
+                            </View>
+                          )}
+                          <Text
+                            className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
+                            numberOfLines={1}
+                          >
+                            {buildEmployeeName(
+                              employee.firstName,
+                              employee.lastName,
+                            )}
+                          </Text>
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View className="gap-2">
+                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                  {t("calendar.assignShiftTemplate")}
+                </Text>
+                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                  {shiftTemplates.length ? (
+                    shiftTemplates.map((template, index) => {
+                      const isSelected = assignShiftTemplateId === template.id;
+
+                      return (
+                        <PressableScale
+                          className={`px-4 py-3 ${
+                            index < shiftTemplates.length - 1
+                              ? "border-b border-[#e7ecf5]"
+                              : ""
+                          }`}
+                          haptic="selection"
+                          key={template.id}
+                          onPress={() => setAssignShiftTemplateId(template.id)}
+                        >
+                          <View className="flex-row items-center gap-3">
+                            <View
+                              className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                isSelected
+                                  ? "border-primary bg-primary"
+                                  : "border-[#d7deeb] bg-white"
+                              }`}
+                            >
+                              {isSelected ? (
+                                <Ionicons
+                                  color="#ffffff"
+                                  name="checkmark"
+                                  size={13}
+                                />
+                              ) : null}
+                            </View>
+                            <View className="flex-1">
+                              <Text className="font-body text-[14px] font-semibold text-foreground">
+                                {template.name}
+                              </Text>
+                              <Text className="mt-1 font-body text-[12px] text-muted-foreground">
+                                {template.startsAtLocal} - {template.endsAtLocal}
+                              </Text>
+                            </View>
+                          </View>
+                        </PressableScale>
+                      );
+                    })
+                  ) : (
+                    <View className="px-4 py-5">
+                      <Text className="text-center font-body text-sm text-muted-foreground">
+                        {t("calendar.noShiftTemplates")}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1">
+              <Button
+                className="min-h-12 rounded-2xl border-[#dce4f2] bg-white"
+                fullWidth
+                label={t("profile.cancel")}
+                onPress={() => setAssignShiftSheetVisible(false)}
+                textClassName="text-foreground"
+                variant="secondary"
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                className="min-h-12 rounded-2xl"
+                disabled={
+                  assignShiftSubmitting ||
+                  !assignShiftEmployeeId ||
+                  !assignShiftTemplateId ||
+                  !canAssignShiftForSelectedDay
+                }
+                fullWidth
+                label={
+                  assignShiftSubmitting
+                    ? t("common.processing")
+                    : t("calendar.assignShiftSave")
+                }
+                onPress={() => {
+                  void submitManagerShiftAssignment();
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </BottomSheetModal>
 
       <BottomSheetModal
         onClose={() => setOverdueSheetVisible(false)}

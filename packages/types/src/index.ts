@@ -37,6 +37,9 @@ export type AttendanceStatusResponse = {
     deviceMustBePrimary: boolean;
   };
   breakPolicy: {
+    enabled: boolean;
+    companyEnabled: boolean;
+    employeeEnabled: boolean;
     defaultBreakIsPaid: boolean;
     maxBreakMinutes: number;
     mandatoryBreakThresholdMinutes: number;
@@ -75,6 +78,8 @@ export type AttendanceActionResponse = {
   earlyLeaveMinutes?: number;
   breakMinutes?: number;
   paidBreakMinutes?: number;
+  breakId?: string;
+  isPaid?: boolean;
   leaderboardCelebration?: LeaderboardCelebration | null;
 };
 
@@ -537,6 +542,7 @@ export type LeaderboardDailyActivity = {
 
 export type LeaderboardEntry = {
   rank: number;
+  isPrivate?: boolean;
   employee: {
     id: string;
     firstName: string;
@@ -579,6 +585,11 @@ export type LeaderboardOverviewResponse = {
     dailyActivity: LeaderboardDailyActivity[];
   };
   leaderboard: LeaderboardEntry[];
+  visibility: {
+    hidePeersFromEmployees: boolean;
+    canManage: boolean;
+    peersHiddenForViewer: boolean;
+  };
 };
 
 export type AnnouncementAudience = 'ALL' | 'GROUP' | 'EMPLOYEE' | 'DEPARTMENT' | 'LOCATION';
@@ -877,6 +888,7 @@ export type PayrollPolicy = {
   leavePaidRatio: number;
   sickLeavePaidRatio: number;
   standardShiftMinutes: number;
+  breaksEnabled: boolean;
   defaultBreakIsPaid: boolean;
   maxBreakMinutes: number;
   mandatoryBreakThresholdMinutes: number;

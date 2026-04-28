@@ -17,6 +17,7 @@ import {
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
+import { BillingService } from '../billing/billing.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -26,7 +27,9 @@ import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
+import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
+import { EmployeeInvitationsMailerService } from './employee-invitations.mailer';
 
 type PrismaTx = Prisma.TransactionClient | PrismaService;
 
@@ -35,6 +38,27 @@ const EMPLOYEE_REVIEW_TRANSACTION_OPTIONS = {
   timeout: 20_000,
 } as const;
 
+const EMPLOYEE_LIST_INCLUDE = {
+  user: {
+    include: {
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
+  },
+  company: true,
+  department: true,
+  primaryLocation: true,
+  position: true,
+  biometricProfile: {
+    select: {
+      enrollmentStatus: true,
+    },
+  },
+} satisfies Prisma.EmployeeInclude;
+
 @Injectable()
 export class EmployeesService {
   private readonly logger = new Logger(EmployeesService.name);
@@ -42,12 +66,14 @@ export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly billingService: BillingService,
     private readonly notificationsService: NotificationsService,
     private readonly storageService: StorageService,
+    private readonly invitationsMailer: EmployeeInvitationsMailerService,
   ) {}
 
-  list(tenantId: string, query: ListEmployeesQueryDto) {
-    return this.prisma.employee.findMany({
+  async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
+    const employees = await this.prisma.employee.findMany({
       where: {
         tenantId,
         OR: query.search
@@ -59,28 +85,45 @@ export class EmployeesService {
             ]
           : undefined,
       },
-      include: {
-        user: {
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        },
-        company: true,
-        department: true,
-        primaryLocation: true,
-        position: true,
-        biometricProfile: {
-          select: {
-            enrollmentStatus: true,
-          },
-        },
-      },
+      include: EMPLOYEE_LIST_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+
+    if (!actorUserId || query.search?.trim()) {
+      return employees;
+    }
+
+    const currentEmployeeIndex = employees.findIndex(
+      (employee) => employee.userId === actorUserId,
+    );
+
+    if (currentEmployeeIndex >= 0) {
+      if (currentEmployeeIndex === 0) {
+        return employees;
+      }
+
+      const currentEmployee = employees[currentEmployeeIndex];
+      if (!currentEmployee) {
+        return employees;
+      }
+
+      return [
+        currentEmployee,
+        ...employees.slice(0, currentEmployeeIndex),
+        ...employees.slice(currentEmployeeIndex + 1),
+      ];
+    }
+
+    const currentEmployee = await this.prisma.employee.findUnique({
+      where: { userId: actorUserId },
+      include: EMPLOYEE_LIST_INCLUDE,
+    });
+
+    if (!currentEmployee || currentEmployee.tenantId !== tenantId) {
+      return employees;
+    }
+
+    return [currentEmployee, ...employees];
   }
 
   async stats(tenantId: string, query: EmployeeStatsQueryDto) {
@@ -207,6 +250,38 @@ export class EmployeesService {
     return this.getManagerAccess(tenantId, employeeId);
   }
 
+  async updateBreaksAccess(
+    tenantId: string,
+    actorUserId: string,
+    employeeId: string,
+    breaksEnabled: boolean,
+  ) {
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId },
+      select: { id: true, breaksEnabled: true },
+    });
+
+    await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: { breaksEnabled },
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: employee.id,
+      action: breaksEnabled ? 'employee.breaks_enabled' : 'employee.breaks_disabled',
+      metadata: {
+        employeeId: employee.id,
+        previousBreaksEnabled: employee.breaksEnabled,
+        breaksEnabled,
+      },
+    });
+
+    return this.getById(tenantId, employeeId);
+  }
+
   async getMe(user: JwtUser) {
     const employee = await this.prisma.employee.findFirst({
       where: {
@@ -275,6 +350,8 @@ export class EmployeesService {
     if (existingUser) {
       throw new ConflictException('User with this email already exists.');
     }
+
+    await this.billingService.assertCanAddSeatOccupant(tenantId);
 
     const passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
 
@@ -360,24 +437,46 @@ export class EmployeesService {
 
     return {
       token: refreshed.token,
-      email: refreshed.invitation.email,
+      email: refreshed.invitation.email ?? rawEmail.trim().toLowerCase(),
       status: refreshed.invitation.status,
       registrationCompleted: Boolean(refreshed.invitation.userId),
       companyName: refreshed.invitation.company?.name ?? refreshed.invitation.tenant.name,
-      companyCode: refreshed.invitation.company?.code ?? null,
       tenantName: refreshed.invitation.tenant.name,
       tenantSlug: refreshed.invitation.tenant.slug,
     };
   }
 
   async createInvitation(tenantId: string, actorUserId: string, dto: CreateEmployeeInvitationDto) {
-    const email = dto.email.toLowerCase().trim();
-    const existingUser = await this.prisma.user.findFirst({
-      where: { tenantId, email },
-    });
+    const email = dto.email?.toLowerCase().trim() || null;
+    const phone = this.normalizePhone(dto.phone);
 
-    if (existingUser) {
-      throw new ConflictException('Такой email уже зарегистрирован.');
+    if (!email && !phone) {
+      throw new BadRequestException('Укажите email или телефон сотрудника.');
+    }
+
+    if (email && phone) {
+      throw new BadRequestException('Укажите только email или только телефон сотрудника.');
+    }
+
+    if (email) {
+      const existingUser = await this.prisma.user.findFirst({
+        where: { tenantId, email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Такой email уже зарегистрирован.');
+      }
+    }
+
+    if (phone) {
+      const existingEmployee = await this.prisma.employee.findFirst({
+        where: { tenantId, phone },
+        select: { id: true },
+      });
+
+      if (existingEmployee) {
+        throw new ConflictException('Сотрудник с таким телефоном уже зарегистрирован.');
+      }
     }
 
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
@@ -394,37 +493,157 @@ export class EmployeesService {
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
-    const invitation = await this.prisma.employeeInvitation.upsert({
+    const existingInvitation = await this.prisma.employeeInvitation.findFirst({
       where: {
-        tenantId_email: {
-          tenantId,
-          email,
-        },
-      },
-      create: {
         tenantId,
-        companyId: tenant.companies[0]?.id ?? null,
-        email,
-        invitedByUserId: actorUserId,
-        tokenHash,
-        expiresAt,
-        status: EmployeeInvitationStatus.INVITED,
+        ...(email ? { email } : { phone }),
       },
-      update: {
-        companyId: tenant.companies[0]?.id ?? null,
-        invitedByUserId: actorUserId,
-        tokenHash,
-        expiresAt,
-        status: EmployeeInvitationStatus.INVITED,
-        lastSentAt: new Date(),
-        resentCount: 0,
-        submittedAt: null,
-        approvedAt: null,
-        approvedByUserId: null,
-        rejectedAt: null,
-        rejectedReason: null,
-        userId: null,
-        employeeId: null,
+    });
+
+    if (!existingInvitation) {
+      await this.billingService.assertCanAddSeatOccupant(tenantId);
+    }
+
+    const invitationPayload = {
+      companyId: tenant.companies[0]?.id ?? null,
+      email,
+      phone,
+      invitedByUserId: actorUserId,
+      tokenHash,
+      expiresAt,
+      status: EmployeeInvitationStatus.INVITED,
+      lastSentAt: new Date(),
+      resentCount: 0,
+      submittedAt: null,
+      approvedAt: null,
+      approvedByUserId: null,
+      rejectedAt: null,
+      rejectedReason: null,
+      userId: null,
+      employeeId: null,
+    };
+
+    const invitation = existingInvitation
+      ? await this.prisma.employeeInvitation.update({
+          where: { id: existingInvitation.id },
+          data: invitationPayload,
+        })
+      : await this.prisma.employeeInvitation.create({
+          data: {
+            tenantId,
+            ...invitationPayload,
+          },
+        });
+
+    if (email) {
+      await this.invitationsMailer.sendInvitationEmail({
+        email,
+        companyName: tenant.companies[0]?.name ?? tenant.name,
+        tenantName: tenant.name,
+        token,
+      });
+    } else if (phone) {
+      await this.invitationsMailer.sendInvitationSms({
+        phone,
+        companyName: tenant.companies[0]?.name ?? tenant.name,
+        tenantName: tenant.name,
+        token,
+      });
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee_invitation',
+      entityId: invitation.id,
+      action: email ? 'employee.join_email_registered' : 'employee.join_phone_registered',
+      metadata: { email, phone, expiresAt: expiresAt.toISOString() },
+    });
+
+    return {
+      id: invitation.id,
+      email: invitation.email,
+      phone: invitation.phone,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt.toISOString(),
+      submittedAt: invitation.submittedAt?.toISOString() ?? null,
+      resentCount: invitation.resentCount,
+      firstName: invitation.firstName ?? null,
+      lastName: invitation.lastName ?? null,
+      middleName: invitation.middleName ?? null,
+      approvedShiftTemplateId: invitation.approvedShiftTemplateId ?? null,
+      approvedGroupId: invitation.approvedGroupId ?? null,
+      companyName: tenant.companies[0]?.name ?? tenant.name,
+      tenantName: tenant.name,
+    };
+  }
+
+  async updateInvitationSetup(
+    tenantId: string,
+    actorUserId: string,
+    invitationId: string,
+    dto: UpdateEmployeeInvitationSetupDto,
+  ) {
+    const invitation = await this.prisma.employeeInvitation.findFirst({
+      where: { id: invitationId, tenantId },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found.');
+    }
+
+    if (
+      invitation.status !== EmployeeInvitationStatus.INVITED &&
+      invitation.status !== EmployeeInvitationStatus.PENDING_APPROVAL &&
+      invitation.status !== EmployeeInvitationStatus.REJECTED
+    ) {
+      throw new BadRequestException('Invitation setup can no longer be changed.');
+    }
+
+    const firstName = dto.firstName.trim();
+    const lastName = dto.lastName.trim();
+    const middleName = dto.middleName?.trim() || null;
+    const shiftTemplateId = dto.shiftTemplateId.trim();
+
+    if (!firstName || !lastName) {
+      throw new BadRequestException('Укажите имя и фамилию сотрудника.');
+    }
+
+    if (!shiftTemplateId) {
+      throw new BadRequestException('Выберите смену для сотрудника.');
+    }
+
+    const shiftTemplate = await this.prisma.shiftTemplate.findFirst({
+      where: { tenantId, id: shiftTemplateId },
+      select: { id: true },
+    });
+
+    if (!shiftTemplate) {
+      throw new BadRequestException('Selected shift template was not found.');
+    }
+
+    const rawGroupId = dto.groupId?.trim();
+    const requestedGroupId = rawGroupId ? rawGroupId : null;
+
+    if (requestedGroupId) {
+      const approvedGroup = await this.prisma.workGroup.findFirst({
+        where: { tenantId, id: requestedGroupId },
+        select: { id: true },
+      });
+
+      if (!approvedGroup) {
+        throw new BadRequestException('Selected work group was not found.');
+      }
+    }
+
+    const updated = await this.prisma.employeeInvitation.update({
+      where: { id: invitation.id },
+      data: {
+        firstName,
+        lastName,
+        middleName,
+        approvedShiftTemplateId: shiftTemplate.id,
+        approvedGroupId: requestedGroupId,
       },
     });
 
@@ -433,17 +652,28 @@ export class EmployeesService {
       actorUserId,
       entityType: 'employee_invitation',
       entityId: invitation.id,
-      action: 'employee.join_email_registered',
-      metadata: { email, expiresAt: expiresAt.toISOString() },
+      action: 'employee.invitation_setup_updated',
+      metadata: {
+        shiftTemplateId: shiftTemplate.id,
+        groupId: requestedGroupId,
+        email: updated.email,
+        phone: updated.phone,
+      },
     });
 
     return {
-      id: invitation.id,
-      email: invitation.email,
-      status: invitation.status,
-      expiresAt: invitation.expiresAt.toISOString(),
-      companyName: tenant.companies[0]?.name ?? tenant.name,
-      tenantName: tenant.name,
+      id: updated.id,
+      email: updated.email,
+      phone: updated.phone,
+      status: updated.status,
+      expiresAt: updated.expiresAt.toISOString(),
+      submittedAt: updated.submittedAt?.toISOString() ?? null,
+      resentCount: updated.resentCount,
+      firstName: updated.firstName ?? null,
+      lastName: updated.lastName ?? null,
+      middleName: updated.middleName ?? null,
+      approvedShiftTemplateId: updated.approvedShiftTemplateId ?? null,
+      approvedGroupId: updated.approvedGroupId ?? null,
     };
   }
 
@@ -475,15 +705,32 @@ export class EmployeesService {
       throw new BadRequestException('Приглашение истекло. Добавьте email заново.');
     }
 
+    const token = randomBytes(24).toString('hex');
     const updated = await this.prisma.employeeInvitation.update({
       where: { id: invitation.id },
       data: {
-        tokenHash: this.hashToken(randomBytes(24).toString('hex')),
+        tokenHash: this.hashToken(token),
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         lastSentAt: new Date(),
         resentCount: { increment: 1 },
       },
     });
+
+    if (updated.email) {
+      await this.invitationsMailer.sendInvitationEmail({
+        email: updated.email,
+        companyName: invitation.tenant.companies[0]?.name ?? invitation.tenant.name,
+        tenantName: invitation.tenant.name,
+        token,
+      });
+    } else if (updated.phone) {
+      await this.invitationsMailer.sendInvitationSms({
+        phone: updated.phone,
+        companyName: invitation.tenant.companies[0]?.name ?? invitation.tenant.name,
+        tenantName: invitation.tenant.name,
+        token,
+      });
+    }
 
     await this.auditService.log({
       tenantId,
@@ -491,7 +738,7 @@ export class EmployeesService {
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: 'employee.join_email_refreshed',
-      metadata: { email: invitation.email, resentCount: updated.resentCount },
+      metadata: { email: invitation.email, phone: invitation.phone, resentCount: updated.resentCount },
     });
 
     return {
@@ -510,7 +757,6 @@ export class EmployeesService {
         company: {
           select: {
             name: true,
-            code: true,
           },
         },
       },
@@ -532,7 +778,6 @@ export class EmployeesService {
       tenantName: invitation.tenant.name,
       tenantSlug: invitation.tenant.slug,
       companyName: invitation.company?.name ?? null,
-      companyCode: invitation.company?.code ?? null,
       expiresAt: invitation.expiresAt.toISOString(),
       submittedAt: invitation.submittedAt?.toISOString() ?? null,
       registrationCompleted: Boolean(invitation.userId),
@@ -569,10 +814,21 @@ export class EmployeesService {
       throw new BadRequestException('Invitation expired.');
     }
 
+    const submittedEmail = dto.email?.trim().toLowerCase() || null;
+    const registrationEmail = invitation.email?.trim().toLowerCase() || submittedEmail;
+
+    if (!registrationEmail) {
+      throw new BadRequestException('Укажите email сотрудника.');
+    }
+
+    if (invitation.email && submittedEmail && invitation.email.trim().toLowerCase() !== submittedEmail) {
+      throw new BadRequestException('Email не совпадает с приглашением.');
+    }
+
     const existingUser = await this.prisma.user.findFirst({
       where: {
         tenantId: invitation.tenantId,
-        email: invitation.email,
+        email: registrationEmail,
       },
     });
 
@@ -616,7 +872,7 @@ export class EmployeesService {
 
     const avatar = await this.uploadOptionalAvatarSafely(
       invitation.tenantId,
-      invitation.email,
+      registrationEmail,
       dto.avatarDataUrl,
       'registerFromInvitation',
     );
@@ -628,7 +884,7 @@ export class EmployeesService {
         const user = await tx.user.create({
           data: {
             tenantId: invitation.tenantId,
-            email: invitation.email,
+            email: registrationEmail,
             passwordHash,
             status: UserStatus.ACTIVE,
             workspaceAccessAllowed: shouldAutoApprove,
@@ -690,6 +946,7 @@ export class EmployeesService {
         const updatedInvitation = await tx.employeeInvitation.update({
           where: { id: invitation.id },
           data: {
+            email: registrationEmail,
             userId: user.id,
             employeeId: employee.id,
             status: EmployeeInvitationStatus.APPROVED,
@@ -725,7 +982,7 @@ export class EmployeesService {
       entityId: invitation.id,
       action: 'employee.profile_submitted',
       metadata: {
-        email: invitation.email,
+        email: registrationEmail,
         autoApproved: shouldAutoApprove,
         preApproved: isPreApproved,
         migratedFromPendingApproval: canRegisterPendingInvitation,
@@ -796,9 +1053,14 @@ export class EmployeesService {
       }
     }
 
+    if (dto.decision === 'APPROVE' && !invitation.userId && !invitation.email) {
+      throw new BadRequestException('У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.');
+    }
+
+    const invitationEmail = invitation.email;
     const avatar = await this.uploadOptionalAvatarSafely(
       tenantId,
-      invitation.email,
+      invitationEmail ?? invitation.phone ?? invitation.id,
       dto.avatarDataUrl,
       'reviewInvitation',
     );
@@ -884,6 +1146,10 @@ export class EmployeesService {
     }
 
     if (!invitation.userId) {
+      if (!invitationEmail) {
+        throw new BadRequestException('У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.');
+      }
+
       const generatedPassword = this.generateTemporaryPassword();
       const passwordHash = await bcrypt.hash(generatedPassword, 10);
 
@@ -891,7 +1157,7 @@ export class EmployeesService {
         const existingUser = await tx.user.findFirst({
           where: {
             tenantId,
-            email: invitation.email,
+            email: invitationEmail,
           },
           select: { id: true },
         });
@@ -911,7 +1177,7 @@ export class EmployeesService {
         const user = await tx.user.create({
           data: {
             tenantId,
-            email: invitation.email,
+            email: invitationEmail,
             passwordHash,
             status: UserStatus.ACTIVE,
             workspaceAccessAllowed: true,
@@ -989,7 +1255,7 @@ export class EmployeesService {
         entityId: invitation.id,
         action: 'employee.review_approved_credentials_generated',
         metadata: {
-          email: invitation.email,
+          email: invitationEmail,
           employeeId: approved.employeeId,
           shiftTemplateId: approvedShiftTemplate?.id ?? null,
           groupId: requestedGroupId,
@@ -1001,7 +1267,7 @@ export class EmployeesService {
         id: approved.id,
         status: approved.status,
         employeeId: approved.employeeId,
-        email: invitation.email,
+        email: invitationEmail,
         generatedPassword,
       };
     }
@@ -1264,6 +1530,11 @@ export class EmployeesService {
     return email.trim().toLowerCase();
   }
 
+  private normalizePhone(phone?: string | null) {
+    const normalized = phone?.trim().replace(/[^\d+]/g, '') ?? '';
+    return normalized || null;
+  }
+
   private async findInvitationByJoinEmail(rawEmail: string) {
     const email = this.normalizeJoinEmail(rawEmail);
     if (!email) {
@@ -1277,7 +1548,6 @@ export class EmployeesService {
         company: {
           select: {
             name: true,
-            code: true,
           },
         },
       },
@@ -1333,7 +1603,6 @@ export class EmployeesService {
         company: {
           select: {
             name: true,
-            code: true,
           },
         },
       },

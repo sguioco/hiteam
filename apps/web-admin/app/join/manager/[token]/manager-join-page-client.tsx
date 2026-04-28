@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BriefcaseBusiness, Check, ChevronDown, Globe, Loader2, Mail, ShieldCheck, ZoomIn } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Globe, Loader2, Mail, ZoomIn } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toAdminHref } from "@/lib/admin-routes";
 import { AuthSession, persistSession, saveTenantSlug } from "@/lib/auth";
@@ -501,7 +501,7 @@ export default function ManagerJoinPageClient({
           realBackend: true,
           body: JSON.stringify({
             tenantSlug: invitation.tenantSlug,
-            email: invitation.email,
+            email: invitationEmail,
             password: form.password,
           }),
         });
@@ -557,6 +557,7 @@ export default function ManagerJoinPageClient({
   }
 
   if (!invitation) return null;
+  const invitationEmail = invitation.email ?? "";
 
   if (invitation.registrationCompleted) {
     return (
@@ -567,8 +568,8 @@ export default function ManagerJoinPageClient({
           </h1>
           <p className="mt-3 text-sm text-gray-500">
             {locale === "ru"
-              ? `Для ${invitation.email} аккаунт уже создан. Войдите в систему и завершите настройку организации.`
-              : `The account for ${invitation.email} has already been created. Sign in to finish organization setup.`}
+              ? `Для ${invitationEmail} аккаунт уже создан. Войдите в систему и завершите настройку организации.`
+              : `The account for ${invitationEmail} has already been created. Sign in to finish organization setup.`}
           </p>
           <Link
             className="solid-button mt-6 inline-flex"
@@ -610,13 +611,8 @@ export default function ManagerJoinPageClient({
                       {invitation.companyName ?? invitation.tenantName}
                     </div>
                     <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                      <ShieldCheck className="h-4 w-4" />
-                      {locale === "ru" ? "Код компании:" : "Company code:"}{" "}
-                      <strong className="text-foreground">{invitation.companyCode ?? "—"}</strong>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                       <Mail className="h-4 w-4" />
-                      {invitation.email}
+                      {invitationEmail}
                     </div>
                   </div>
 
@@ -645,7 +641,7 @@ export default function ManagerJoinPageClient({
               <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <label htmlFor="manager-email" className="text-sm font-medium">Email</label>
-                  <Input className={textFieldClassName} id="manager-email" disabled value={invitation.email} />
+                  <Input className={textFieldClassName} id="manager-email" disabled value={invitationEmail} />
                 </div>
 
                 <div className="space-y-1.5">

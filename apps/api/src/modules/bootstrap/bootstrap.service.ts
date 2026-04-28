@@ -245,7 +245,7 @@ export class BootstrapService {
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
       this.collaborationService.listManagerTasks(user.sub, resolvedRange),
       withTimeoutFallback(
-        this.employeesService.list(user.tenantId, {}).catch(() => []),
+        this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
         1500,
         [],
       ),
@@ -277,7 +277,7 @@ export class BootstrapService {
     const query = { dateFrom, dateTo };
 
     const [employees, history, anomalies, liveSessions, audit] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}),
+      this.employeesService.list(user.tenantId, {}, user.sub),
       this.attendanceService.teamHistory(user.tenantId, query),
       this.attendanceService.teamAnomalies(user.tenantId, query),
       this.attendanceService.liveTeam(user.tenantId),
@@ -305,7 +305,7 @@ export class BootstrapService {
       scheduleTemplates,
       organizationSetup,
     ] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}),
+      this.employeesService.list(user.tenantId, {}, user.sub),
       withTimeoutFallback(
         this.attendanceService.liveTeam(user.tenantId).catch(() => []),
         1000,
@@ -424,7 +424,7 @@ export class BootstrapService {
     ] = await Promise.all([
       this.scheduleService.listTemplates(user.tenantId),
       this.scheduleService.listShifts(user.tenantId),
-      this.employeesService.list(user.tenantId, {}),
+      this.employeesService.list(user.tenantId, {}, user.sub),
       this.orgService.listLocations(user.tenantId),
       this.orgService.listDepartments(user.tenantId),
       this.orgService.listPositions(user.tenantId),
@@ -508,7 +508,7 @@ export class BootstrapService {
       this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null),
       this.requestsService.inbox(user.sub).catch(() => []),
       this.loadDashboardManagerTaskBoard(user),
-      this.employeesService.list(user.tenantId, {}).catch(() => []),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
       this.collaborationService.listGroups(user.sub).catch(() => []),
       this.scheduleService
         .listShifts(user.tenantId)
@@ -602,7 +602,7 @@ export class BootstrapService {
 
     const [items, employees, groups] = await Promise.all([
       this.collaborationService.listAnnouncementsForManager(user.sub),
-      this.employeesService.list(user.tenantId, {}),
+      this.employeesService.list(user.tenantId, {}, user.sub),
       this.collaborationService.listGroups(user.sub),
     ]);
 
@@ -634,7 +634,7 @@ export class BootstrapService {
       result?: 'FAILED' | 'PASSED' | 'REVIEW';
     } = biometricResult ? { result: biometricResult } : {};
     const [employees, reviews] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}),
+      this.employeesService.list(user.tenantId, {}, user.sub),
       this.biometricService.getTeamReviews(user.tenantId, query),
     ]);
 

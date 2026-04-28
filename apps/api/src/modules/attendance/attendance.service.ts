@@ -72,19 +72,23 @@ export class AttendanceService {
     const attendanceState = this.mapAttendanceState(session?.status ?? null);
     const activeBreak = session?.breaks[0] ?? null;
     const breakPolicy = policy ?? {
+      breaksEnabled: false,
       defaultBreakIsPaid: false,
       maxBreakMinutes: 60,
       mandatoryBreakThresholdMinutes: 360,
       mandatoryBreakDurationMinutes: 30,
     };
-    const mandatoryBreakDue = session
+    const companyBreaksEnabled = breakPolicy.breaksEnabled;
+    const employeeBreaksEnabled = employee.breaksEnabled;
+    const breaksEnabled = companyBreaksEnabled && employeeBreaksEnabled;
+    const mandatoryBreakDue = session && breaksEnabled
       ? this.isMandatoryBreakDue(session, activeBreak, breakPolicy)
       : false;
 
     return {
       employeeId: employee.id,
       attendanceState,
-      allowedActions: this.resolveAllowedActions(attendanceState),
+      allowedActions: this.resolveAllowedActions(attendanceState, breaksEnabled),
       location: {
         id: shift?.location.id ?? employee.primaryLocation.id,
         name: shift?.location.name ?? employee.primaryLocation.name,
@@ -117,6 +121,9 @@ export class AttendanceService {
         deviceMustBePrimary: true,
       },
       breakPolicy: {
+        enabled: breaksEnabled,
+        companyEnabled: companyBreaksEnabled,
+        employeeEnabled: employeeBreaksEnabled,
         defaultBreakIsPaid: breakPolicy.defaultBreakIsPaid,
         maxBreakMinutes: breakPolicy.maxBreakMinutes,
         mandatoryBreakThresholdMinutes: breakPolicy.mandatoryBreakThresholdMinutes,
@@ -261,6 +268,14 @@ export class AttendanceService {
     const policy = await this.prisma.payrollPolicy.findUnique({
       where: { tenantId: employee.tenantId },
     });
+
+    if (!(policy?.breaksEnabled ?? false)) {
+      throw new BadRequestException('Breaks are not enabled for this company.');
+    }
+
+    if (!employee.breaksEnabled) {
+      throw new BadRequestException('Breaks are not enabled for this employee.');
+    }
 
     const session = await this.prisma.attendanceSession.findFirst({
       where: {
@@ -1855,9 +1870,10 @@ export class AttendanceService {
 
   private resolveAllowedActions(
     attendanceState: 'not_checked_in' | 'checked_in' | 'on_break' | 'checked_out',
+    breaksEnabled: boolean,
   ): Array<'check_in' | 'check_out' | 'start_break' | 'end_break'> {
     if (attendanceState === 'checked_in') {
-      return ['start_break', 'check_out'];
+      return breaksEnabled ? ['start_break', 'check_out'] : ['check_out'];
     }
 
     if (attendanceState === 'on_break') {
@@ -2127,11 +2143,16 @@ export class AttendanceService {
 
     return {
       eventId: event.id,
+      sessionId: args.sessionId,
+      result: 'accepted',
       breakDurationMinutes,
+      breakMinutes: args.activeBreakIsPaid ? 0 : breakDurationMinutes,
+      paidBreakMinutes: args.activeBreakIsPaid ? breakDurationMinutes : 0,
       unpaidBreakIncrement: args.activeBreakIsPaid ? 0 : breakDurationMinutes,
       paidBreakIncrement: args.activeBreakIsPaid ? breakDurationMinutes : 0,
       exceededPolicy,
       recordedAt: event.serverRecordedAt.toISOString(),
+      distanceMeters: Math.round(args.context.distanceMeters),
     };
   }
 

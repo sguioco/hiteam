@@ -490,7 +490,7 @@ export async function updateMyBannerTheme(
 
 export async function loadPublicInvitation(token: string): Promise<{
   id: string;
-  email: string;
+  email: string | null;
   status: string;
   tenantName: string;
   tenantSlug: string;
@@ -526,7 +526,6 @@ export async function lookupInvitationByEmail(email: string): Promise<{
   status: string;
   registrationCompleted: boolean;
   companyName: string;
-  companyCode: string | null;
   tenantName: string;
   tenantSlug: string;
 }> {
@@ -550,27 +549,10 @@ export async function lookupInvitationByEmail(email: string): Promise<{
   return response.json();
 }
 
-export async function submitCompanyJoinRequest(payload: {
-  code: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  birthDate: string;
-  avatarDataUrl: string;
-}): Promise<{
-  id: string;
-  status: "PENDING_APPROVAL";
-  tenantName: string;
-  companyName: string;
-}> {
-  void payload;
-  throw new Error("Legacy company-code join flow has been removed.");
-}
-
 export async function registerFromInvitation(
   token: string,
   payload: {
+    email?: string;
     password: string;
     firstName: string;
     lastName: string;
@@ -715,6 +697,72 @@ export async function loadMyShifts(): Promise<
   return authRequest("/schedule/me");
 }
 
+export type ManagerShiftTemplateItem = {
+  id: string;
+  name: string;
+  code: string;
+  startsAtLocal: string;
+  endsAtLocal: string;
+  location: {
+    id: string;
+    name: string;
+  } | null;
+  position: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+export type ManagerScheduleShiftItem = {
+  id: string;
+  shiftDate: string;
+  startsAt: string;
+  endsAt: string;
+  employeeId: string;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  };
+  location: {
+    id: string;
+    name: string;
+  };
+  position: {
+    id: string;
+    name: string;
+  };
+  template: ManagerShiftTemplateItem;
+};
+
+export async function loadManagerShiftTemplates(): Promise<
+  ManagerShiftTemplateItem[]
+> {
+  const response = await authRequest<
+    ManagerShiftTemplateItem[] | { templates: ManagerShiftTemplateItem[] }
+  >("/schedule/templates");
+  return Array.isArray(response) ? response : (response.templates ?? []);
+}
+
+export async function loadManagerShifts(): Promise<ManagerScheduleShiftItem[]> {
+  const response = await authRequest<
+    ManagerScheduleShiftItem[] | { shifts: ManagerScheduleShiftItem[] }
+  >("/schedule/shifts");
+  return Array.isArray(response) ? response : (response.shifts ?? []);
+}
+
+export async function createManagerShift(payload: {
+  templateId: string;
+  employeeId: string;
+  shiftDate: string;
+}) {
+  return authRequest<ManagerScheduleShiftItem>("/schedule/shifts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export type AttendanceActionName =
   | "check-in"
   | "check-out"
@@ -742,7 +790,7 @@ export async function submitAttendanceAction(
       biometricVerificationId: payload.biometricVerificationId,
       deviceFingerprint,
       notes: payload.notes ?? "Mobile attendance action",
-      isPaidBreak: payload.isPaidBreak ?? false,
+      isPaidBreak: payload.isPaidBreak,
     }),
   });
 }
@@ -752,6 +800,18 @@ export async function loadLeaderboardOverview(
 ): Promise<LeaderboardOverviewResponse> {
   const query = monthKey ? `?month=${encodeURIComponent(monthKey)}` : "";
   return authRequest<LeaderboardOverviewResponse>(`/leaderboard/overview${query}`);
+}
+
+export async function updateLeaderboardSettings(payload: {
+  hidePeersFromEmployees: boolean;
+}) {
+  return authRequest<{ hidePeersFromEmployees: boolean }>(
+    "/leaderboard/settings",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {

@@ -40,7 +40,7 @@ export class EmployeeInvitationsMailerService {
         html: [
           `<p>Компания <strong>${params.companyName}</strong> приглашает вас присоединиться к ${params.tenantName}.</p>`,
           `<p><a href="${inviteUrl}">Принять приглашение</a></p>`,
-          '<p>Ссылка действует 3 дня.</p>',
+          '<p>Если ссылка не открывается, попросите менеджера отправить приглашение повторно.</p>',
         ].join(''),
       }),
     });
@@ -52,5 +52,26 @@ export class EmployeeInvitationsMailerService {
     }
 
     return { provider: 'resend', inviteUrl };
+  }
+
+  async sendInvitationSms(params: {
+    phone: string;
+    companyName: string;
+    tenantName: string;
+    token: string;
+  }) {
+    const baseUrl = (
+      this.configService.get<string>('WEB_ADMIN_BASE_URL') ??
+      this.configService.get<string>('APP_BASE_URL') ??
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
+    const inviteUrl = `${baseUrl}/join/${params.token}`;
+
+    // SMS provider is intentionally a stub for now. Wire Twilio/SMS.ru/etc here later.
+    this.logger.warn(
+      `SMS provider is not configured. Invitation for ${params.phone} (${params.companyName}/${params.tenantName}) logged only: ${inviteUrl}`,
+    );
+
+    return { provider: 'log', inviteUrl };
   }
 }

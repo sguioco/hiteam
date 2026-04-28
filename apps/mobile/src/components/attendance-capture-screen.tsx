@@ -14,6 +14,7 @@ import type {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
+  type AttendanceActionName,
   loadAttendanceStatus,
   loadBiometricPolicy,
   submitAttendanceAction,
@@ -46,7 +47,7 @@ import { PressableScale } from "../../components/ui/pressable-scale";
 import { BrandWordmark } from "./brand-wordmark";
 
 type AttendanceCaptureScreenProps = {
-  action: "check-in" | "check-out";
+  action: AttendanceActionName;
 };
 
 type LocationCheckState =
@@ -146,9 +147,26 @@ export function AttendanceCaptureScreen({
   });
 
   const isCheckIn = action === "check-in";
-  const intent = isCheckIn ? "attendance-check-in" : "attendance-check-out";
+  const isCheckOut = action === "check-out";
+  const isBreakStart = action === "break/start";
+  const isBreakEnd = action === "break/end";
+  const isBreakAction = isBreakStart || isBreakEnd;
+  const actionTitle = isCheckIn
+    ? t("workspace.checkIn")
+    : isCheckOut
+      ? t("departure.sayBye")
+      : isBreakStart
+        ? t("workspace.startBreak")
+        : t("workspace.endBreak");
+  const intent = isCheckIn
+    ? "attendance-check-in"
+    : isCheckOut
+      ? "attendance-check-out"
+      : isBreakStart
+        ? "attendance-break-start"
+        : "attendance-break-end";
   const copy = {
-    title: isCheckIn ? t("workspace.checkIn") : t("departure.sayBye"),
+    title: actionTitle,
     cameraPermission: t("biometricMobile.cameraPermission"),
     cameraPermissionCta: t("biometricMobile.cameraPermissionCta"),
     cameraPermissionSettingsCta: t(
@@ -163,16 +181,28 @@ export function AttendanceCaptureScreen({
     locationOutsideTitle: t("attendanceCapture.locationOutsideTitle"),
     locationOutsideBody: t("attendanceCapture.locationOutsideBody"),
     retryLocation: t("attendanceCapture.retryLocation"),
-    captureFace: isCheckIn ? t("workspace.checkIn") : t("departure.sayBye"),
+    captureFace: actionTitle,
     verifyingFace: t("attendanceCapture.verifyingFace"),
     enrollingFace: t("attendanceCapture.enrollingFace"),
     faceEnrollComplete: t("attendanceCapture.faceEnrollComplete"),
     processingAction: isCheckIn
       ? t("arrival.processing")
-      : t("departure.processing"),
+      : isCheckOut
+        ? t("departure.processing")
+        : isBreakStart
+          ? language === "ru"
+            ? "Начинаем перерыв..."
+            : "Starting break..."
+          : language === "ru"
+            ? "Заканчиваем перерыв..."
+            : "Ending break...",
     faceReady: isCheckIn
       ? t("attendanceCapture.faceReadyCheckIn")
-      : t("attendanceCapture.faceReadyCheckOut"),
+      : isCheckOut
+        ? t("attendanceCapture.faceReadyCheckOut")
+        : language === "ru"
+          ? "Лицо подтверждено. Обновляем перерыв."
+          : "Face verified. Updating break.",
     mapTitle: t("attendanceCapture.mapTitle"),
     targetLabel: t("attendanceCapture.targetLabel"),
     currentLabel: t("attendanceCapture.currentLabel"),
@@ -274,10 +304,22 @@ export function AttendanceCaptureScreen({
   function hasInvalidAttendanceState(
     nextStatus: Awaited<ReturnType<typeof loadAttendanceStatus>>,
   ) {
-    return isCheckIn
-      ? nextStatus.attendanceState !== "not_checked_in"
-      : nextStatus.attendanceState === "not_checked_in" ||
-          nextStatus.attendanceState === "checked_out";
+    if (isCheckIn) {
+      return (
+        nextStatus.attendanceState !== "not_checked_in" ||
+        !nextStatus.allowedActions.includes("check_in")
+      );
+    }
+
+    if (isCheckOut) {
+      return !nextStatus.allowedActions.includes("check_out");
+    }
+
+    if (isBreakStart) {
+      return !nextStatus.allowedActions.includes("start_break");
+    }
+
+    return !nextStatus.allowedActions.includes("end_break");
   }
 
   function applyLatestStatus(
@@ -349,9 +391,13 @@ export function AttendanceCaptureScreen({
       setError(
         nextError instanceof Error
           ? nextError.message
-          : isCheckIn
-            ? t("arrival.loadError")
-            : t("departure.loadError"),
+          : isBreakAction
+            ? language === "ru"
+              ? "Не удалось загрузить данные перерыва."
+              : "Unable to load break data."
+            : isCheckIn
+              ? t("arrival.loadError")
+              : t("departure.loadError"),
       );
     } finally {
       setLoading(false);
@@ -487,9 +533,13 @@ export function AttendanceCaptureScreen({
       setMessage(
         isCheckIn
           ? t("arrival.locationCaptured", { accuracy: snapshot.accuracyMeters })
-          : t("departure.locationCaptured", {
-              accuracy: snapshot.accuracyMeters,
-            }),
+          : isCheckOut
+            ? t("departure.locationCaptured", {
+                accuracy: snapshot.accuracyMeters,
+              })
+            : language === "ru"
+              ? `Локация подтверждена, точность ${snapshot.accuracyMeters} м`
+              : `Location confirmed with ${snapshot.accuracyMeters} m accuracy`,
       );
       return nextState;
     } catch (nextError) {
@@ -499,13 +549,21 @@ export function AttendanceCaptureScreen({
 
       let errorMessage = isCheckIn
         ? t("arrival.locationCaptureFailed")
-        : t("departure.locationCaptureFailed");
+        : isCheckOut
+          ? t("departure.locationCaptureFailed")
+          : language === "ru"
+            ? "Не удалось подтвердить местоположение для перерыва."
+            : "Unable to capture location for break.";
 
       if (isPreciseLocationError(nextError)) {
         if (nextError.code === "LOCATION_PERMISSION_REQUIRED") {
           errorMessage = isCheckIn
             ? t("arrival.locationPermissionRequired")
-            : t("departure.locationPermissionRequired");
+            : isCheckOut
+              ? t("departure.locationPermissionRequired")
+              : language === "ru"
+                ? "Разрешите доступ к геолокации, чтобы обновить перерыв."
+                : "Allow location access to update the break.";
         } else if (nextError.code === "PRECISE_LOCATION_REQUIRED") {
           errorMessage = isCheckIn
             ? t("arrival.locationPreciseRequired")
@@ -679,7 +737,11 @@ export function AttendanceCaptureScreen({
       biometricVerificationId: verificationId,
       notes: isCheckIn
         ? "Mobile attendance check-in"
-        : "Mobile attendance check-out",
+        : isCheckOut
+          ? "Mobile attendance check-out"
+          : isBreakStart
+            ? "Mobile attendance break start"
+            : "Mobile attendance break end",
     })
       .then((attendanceResult) => {
         const reconciledStatus = optimisticStatus
@@ -688,6 +750,10 @@ export function AttendanceCaptureScreen({
               attendanceResult as {
                 sessionId: string;
                 recordedAt: string;
+                breakId?: string;
+                isPaid?: boolean;
+                breakMinutes?: number;
+                paidBreakMinutes?: number;
               },
             )
           : null;
@@ -716,6 +782,10 @@ export function AttendanceCaptureScreen({
     actionResult: {
       sessionId: string;
       recordedAt: string;
+      breakId?: string;
+      isPaid?: boolean;
+      breakMinutes?: number;
+      paidBreakMinutes?: number;
     },
   ): AttendanceStatusResponse | null {
     if (!currentStatus) {
@@ -726,7 +796,9 @@ export function AttendanceCaptureScreen({
       return {
         ...currentStatus,
         attendanceState: "checked_in",
-        allowedActions: ["check_out", "start_break"],
+        allowedActions: currentStatus.breakPolicy.enabled
+          ? ["check_out", "start_break"]
+          : ["check_out"],
         activeSession: {
           id: actionResult.sessionId,
           startedAt: actionResult.recordedAt,
@@ -735,6 +807,51 @@ export function AttendanceCaptureScreen({
           paidBreakMinutes: 0,
           activeBreak: null,
         },
+      };
+    }
+
+    if (isBreakStart) {
+      const activeSession = currentStatus.activeSession ?? {
+        id: actionResult.sessionId,
+        startedAt: actionResult.recordedAt,
+        endedAt: null,
+        breakMinutes: 0,
+        paidBreakMinutes: 0,
+        activeBreak: null,
+      };
+
+      return {
+        ...currentStatus,
+        attendanceState: "on_break",
+        allowedActions: ["end_break", "check_out"],
+        activeSession: {
+          ...activeSession,
+          activeBreak: {
+            id: actionResult.breakId ?? `pending-break-${actionResult.recordedAt}`,
+            startedAt: actionResult.recordedAt,
+            isPaid: actionResult.isPaid ?? currentStatus.breakPolicy.defaultBreakIsPaid,
+          },
+        },
+      };
+    }
+
+    if (isBreakEnd) {
+      return {
+        ...currentStatus,
+        attendanceState: "checked_in",
+        allowedActions: currentStatus.breakPolicy.enabled
+          ? ["start_break", "check_out"]
+          : ["check_out"],
+        activeSession: currentStatus.activeSession
+          ? {
+              ...currentStatus.activeSession,
+              breakMinutes:
+                currentStatus.activeSession.breakMinutes + (actionResult.breakMinutes ?? 0),
+              paidBreakMinutes:
+                currentStatus.activeSession.paidBreakMinutes + (actionResult.paidBreakMinutes ?? 0),
+              activeBreak: null,
+            }
+          : null,
       };
     }
 
