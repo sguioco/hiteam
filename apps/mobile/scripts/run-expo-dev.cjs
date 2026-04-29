@@ -149,13 +149,16 @@ async function main() {
         ? 'localhost'
         : 'lan'
       : requestedHostMode;
+  const shouldUseExpoOfflineFlag = !onlineMode && resolvedHostMode === 'lan';
   const args = ['start', '--port', String(port)];
 
   if (clearCache) {
     args.push('--clear');
   }
 
-  if (resolvedHostMode === 'tunnel') {
+  if (shouldUseExpoOfflineFlag) {
+    args.push('--offline');
+  } else if (resolvedHostMode === 'tunnel') {
     args.push('--tunnel');
   } else if (resolvedHostMode === 'localhost') {
     args.push('--localhost');
@@ -163,18 +166,24 @@ async function main() {
     args.push('--lan');
   }
 
-  if (!onlineMode) {
-    args.push('--offline');
-  }
-
   if (useLocalhostTransport) {
     console.warn(
       `[smart/mobile] Режим запуска: localhost через adb reverse, Expo URL будет указывать на 127.0.0.1:${port}.`,
     );
+    if (!onlineMode) {
+      console.warn(
+        '[smart/mobile] Expo CLI не разрешает совмещать --offline и --localhost; запускаю без --offline.',
+      );
+    }
   } else {
     console.warn(
-      `[smart/mobile] Режим запуска: ${resolvedHostMode}${onlineMode ? '' : ' (offline)'}.`,
+      `[smart/mobile] Режим запуска: ${resolvedHostMode}${shouldUseExpoOfflineFlag ? ' (offline)' : ''}.`,
     );
+    if (!onlineMode && !shouldUseExpoOfflineFlag) {
+      console.warn(
+        `[smart/mobile] Expo CLI не разрешает совмещать --offline и --${resolvedHostMode}; запускаю без --offline.`,
+      );
+    }
   }
 
   if (clearCache) {
