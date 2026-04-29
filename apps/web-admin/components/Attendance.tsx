@@ -17,7 +17,6 @@ import {
   LogIn,
   LogOut,
   Search,
-  X,
 } from "lucide-react";
 import type { SortDescriptor } from "react-aria-components";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
@@ -1007,7 +1006,7 @@ export default function Attendance({
               {selectedCard ? (
                 <aside className="w-full shrink-0 xl:sticky xl:top-6 xl:w-[360px]">
                   <div className="dashboard-card space-y-5">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="relative">
                           <AttendanceAvatar
@@ -1034,14 +1033,6 @@ export default function Attendance({
                           </p>
                         </div>
                       </div>
-
-                      <button
-                        className="rounded-xl p-2 text-[color:var(--muted-foreground)] transition hover:bg-[color:var(--panel-muted)] hover:text-[color:var(--foreground)]"
-                        onClick={() => setSelectedId(null)}
-                        type="button"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                     </div>
 
                     <div className="rounded-[22px] border border-[rgba(40,75,255,0.14)] bg-[linear-gradient(180deg,rgba(225,231,255,0.92)_0%,rgba(255,255,255,0.96)_100%)] p-4">
@@ -1069,23 +1060,26 @@ export default function Attendance({
                       </div>
                     </div>
 
-                    <div className="grid gap-0">
-                      <div className="flex items-center justify-between gap-4 py-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-4 py-3">
+                      <div className="min-w-0">
                         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogIn className="h-3.5 w-3.5" />
                           {runtimeLocalize("Приход", "Check-in", locale)}
                         </div>
-                        <div className="text-base font-semibold text-[color:var(--foreground)]">
+                        <div className="mt-2 text-base font-semibold tabular-nums text-[color:var(--foreground)]">
                           {formatTime(selectedCard.arrival)}
                         </div>
                       </div>
-                      <Separator className="bg-[color:var(--border)]" />
-                      <div className="flex items-center justify-between gap-4 py-3">
+                      <Separator
+                        className="bg-[color:var(--border)]"
+                        orientation="vertical"
+                      />
+                      <div className="min-w-0">
                         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
                           <LogOut className="h-3.5 w-3.5" />
                           {runtimeLocalize("Уход", "Check-out", locale)}
                         </div>
-                        <div className="text-base font-semibold text-[color:var(--foreground)]">
+                        <div className="mt-2 text-base font-semibold tabular-nums text-[color:var(--foreground)]">
                           {formatTime(selectedCard.departure)}
                         </div>
                       </div>

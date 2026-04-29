@@ -231,14 +231,53 @@
   box-sizing: border-box;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.42) rgba(248, 250, 252, 0.18);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(248, 250, 252, 0.18);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: rgba(148, 163, 184, 0.42);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.58);
+}
+
 @layer utilities {
   .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+    -ms-overflow-style: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.42) rgba(248, 250, 252, 0.18);
   }
 
   .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+    display: block;
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar-track {
+    background: rgba(248, 250, 252, 0.18);
+  }
+
+  .scrollbar-hide::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-color: rgba(148, 163, 184, 0.42);
+    background-clip: content-box;
   }
 }
 
@@ -858,12 +897,12 @@
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
 }
 
 .activity-feed-shell::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .activity-feed-groups {
@@ -1032,12 +1071,12 @@
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
 }
 
 .today-attendance-list::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .today-attendance-row {
@@ -1209,12 +1248,12 @@
 }
 
 .actions-center-scroll {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
 }
 
 .actions-center-scroll::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .actions-center-card {
@@ -7116,7 +7155,12 @@ body {
 }
 
 .manager-create-dialog {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: min(760px, calc(100vh - 2rem));
+  max-height: calc(100vh - 2rem);
   width: min(820px, calc(100vw - 2rem));
+  overflow: hidden;
 }
 
 .manager-board {
@@ -7406,7 +7450,7 @@ body {
 }
 
 .radio-inputs::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .radio-inputs .radio {
@@ -7611,7 +7655,7 @@ body {
 }
 
 .dynamic-toogle::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .dynamic-toogle__item {
@@ -8074,12 +8118,12 @@ body {
   min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
 }
 
 .manager-week-day-list::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .manager-week-task {
@@ -8985,7 +9029,19 @@ body {
 
 .manager-task-form {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.manager-task-form-body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .manager-create-mode {
@@ -9115,6 +9171,8 @@ body {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid rgba(24, 24, 27, 0.08);
 }
 
 .schedule-shift-dialog-actions {
@@ -9382,7 +9440,7 @@ body {
 
   .radio-inputs {
     overflow-x: auto;
-    scrollbar-width: none;
+    scrollbar-width: thin;
   }
 
   .radio-inputs.is-nowrap .radio {
@@ -9659,11 +9717,11 @@ body {
   height: 100%;
   overflow-x: auto;
   overflow-y: visible;
-  scrollbar-width: none;
+  scrollbar-width: thin;
 }
 
 .manager-performance-chart-scroll::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .manager-performance-chart-column::after {
@@ -9831,12 +9889,12 @@ body {
   width: calc(100% + 12px);
   margin: 0 -6px;
   padding: 10px 2px 12px 6px;
-  scrollbar-width: none;
+  scrollbar-width: thin;
   align-self: stretch;
 }
 
 .manager-performance-task-list::-webkit-scrollbar {
-  display: none;
+  display: block;
 }
 
 .manager-performance-task-item {
@@ -11148,8 +11206,8 @@ body {
 }
 
 .team-tasks-photo-dialog-grid::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 8px;
+  height: 8px;
 }
 
 .team-tasks-photo-dialog-card {

@@ -1748,18 +1748,19 @@ export default function DashboardHome({
                     className="manager-task-form"
                     onSubmit={handleCreateTask}
                   >
-                    <Input
-                      onChange={(e) =>
-                        setTaskDraft((c) => ({ ...c, title: e.target.value }))
-                      }
-                      placeholder={
-                        taskDraft.mode === "meeting"
-                          ? localize(locale, "Тема встречи", "Meeting title")
-                          : localize(locale, "Что нужно сделать", "What needs to be done")
-                      }
-                      value={taskDraft.title}
-                    />
-                    <div className="manager-form-block">
+                    <div className="manager-task-form-body">
+                      <Input
+                        onChange={(e) =>
+                          setTaskDraft((c) => ({ ...c, title: e.target.value }))
+                        }
+                        placeholder={
+                          taskDraft.mode === "meeting"
+                            ? localize(locale, "Тема встречи", "Meeting title")
+                            : localize(locale, "Что нужно сделать", "What needs to be done")
+                        }
+                        value={taskDraft.title}
+                      />
+                      <div className="manager-form-block">
                       <div className="manager-form-block-head">
                         <strong>
                           {taskDraft.targetMode === "employees"
@@ -1894,26 +1895,26 @@ export default function DashboardHome({
                           {localize(locale, "Группы ещё не созданы.", "Groups have not been created yet.")}
                         </div>
                       )}
-                    </div>
-                    <Textarea
-                      onChange={(e) =>
-                        setTaskDraft((c) => ({
-                          ...c,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder={
-                        taskDraft.mode === "meeting"
-                          ? localize(
-                              locale,
-                              "Что обсудить и что нужно подготовить",
-                              "What should be discussed and prepared",
-                            )
-                          : localize(locale, "Короткое описание задачи", "Short task description")
-                      }
-                      value={taskDraft.description}
-                    />
-                    <div className="manager-task-form-grid">
+                      </div>
+                      <Textarea
+                        onChange={(e) =>
+                          setTaskDraft((c) => ({
+                            ...c,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder={
+                          taskDraft.mode === "meeting"
+                            ? localize(
+                                locale,
+                                "Что обсудить и что нужно подготовить",
+                                "What should be discussed and prepared",
+                              )
+                            : localize(locale, "Короткое описание задачи", "Short task description")
+                        }
+                        value={taskDraft.description}
+                      />
+                      <div className="manager-task-form-grid">
                       <Select
                         onValueChange={(v) =>
                           setTaskDraft((c) => ({
@@ -1979,10 +1980,10 @@ export default function DashboardHome({
                         type="datetime-local"
                         value={taskDraft.dueAt}
                       />
-                    </div>
-                    {taskDraft.mode === "task" ? (
-                      <>
-                        <div className="grid grid-cols-2 gap-4">
+                      </div>
+                      {taskDraft.mode === "task" ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
                           <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
                             <Checkbox
                               checked={taskDraft.isRecurring}
@@ -2011,9 +2012,9 @@ export default function DashboardHome({
                               {localize(locale, "Требуется фото-подтверждение", "Photo confirmation required")}
                             </span>
                           </label>
-                        </div>
-                        {taskDraft.isRecurring ? (
-                          <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4 sm:grid-cols-2">
+                          </div>
+                          {taskDraft.isRecurring ? (
+                            <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4 sm:grid-cols-2">
                             <label className="grid gap-2 text-sm font-heading">
                               <span>{localize(locale, "Периодичность", "Frequency")}</span>
                               <Select
@@ -2105,14 +2106,14 @@ export default function DashboardHome({
                                 value={taskDraft.endDate || ""}
                               />
                             </label>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                    {canCheckWorkdays &&
-                    taskDraft.dueAt &&
-                    selectedAssigneeDayStatuses.length ? (
-                      <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {canCheckWorkdays &&
+                      taskDraft.dueAt &&
+                      selectedAssigneeDayStatuses.length ? (
+                        <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <strong className="font-heading text-sm text-[color:var(--foreground)]">
                             {localize(locale, "Рабочий день сотрудников", "Employees' workday")}
@@ -2141,11 +2142,11 @@ export default function DashboardHome({
                             </span>
                           ))}
                         </div>
-                      </div>
-                    ) : null}
-                    {taskDraft.mode === "meeting" ? (
-                      <>
-                        <div className="manager-create-mode manager-create-mode--compact">
+                        </div>
+                      ) : null}
+                      {taskDraft.mode === "meeting" ? (
+                        <>
+                          <div className="manager-create-mode manager-create-mode--compact">
                           <button
                             className={
                               taskDraft.meetingMode === "online"
@@ -2210,8 +2211,9 @@ export default function DashboardHome({
                             value={taskDraft.meetingLocation}
                           />
                         )}
-                      </>
-                    ) : null}
+                        </>
+                      ) : null}
+                    </div>
                     <div className="manager-task-form-actions">
                       <span className="manager-form-hint">
                         {taskDraft.mode === "meeting"

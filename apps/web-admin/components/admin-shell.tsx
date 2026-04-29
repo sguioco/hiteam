@@ -68,6 +68,7 @@ import {
   type RouteClickEvent,
 } from "../lib/navigation";
 import { primeWorkspaceExperience } from "../lib/workspace-warmup";
+import { CHUNK_PENDING_ROUTE_STORAGE_KEY } from "../lib/chunk-load-recovery";
 
 type NavItem = {
   href: string;
@@ -252,6 +253,22 @@ function formatNotificationTimestamp(value: string, locale: Locale) {
 
 function hasStudioBackground(pathname: string) {
   return Boolean(pathname);
+}
+
+function rememberPendingRoute(href: string) {
+  try {
+    window.sessionStorage.setItem(CHUNK_PENDING_ROUTE_STORAGE_KEY, href);
+  } catch {
+    // Ignore storage failures; the global chunk handler can still reload.
+  }
+}
+
+function clearPendingRoute() {
+  try {
+    window.sessionStorage.removeItem(CHUNK_PENDING_ROUTE_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 function resolveDemoSidebarProfile(
@@ -1035,7 +1052,11 @@ export function AdminShell({
       }
 
       for (const href of prefetchRoutes.slice(0, 8)) {
-        void router.prefetch(href);
+        try {
+          router.prefetch(href);
+        } catch {
+          // Navigation will load the route directly if prefetch fails.
+        }
       }
     };
 
@@ -1113,6 +1134,7 @@ export function AdminShell({
     clearRouteLoadingTimer();
     clearRouteLoadingFallback();
     pendingRouteHrefRef.current = null;
+    clearPendingRoute();
     setRouteLoading(false);
   }
 
@@ -1124,11 +1146,16 @@ export function AdminShell({
       return;
     }
 
-    void router.prefetch(href);
+    try {
+      router.prefetch(href);
+    } catch {
+      // Keep the click flow alive; the route can still be loaded directly.
+    }
     setNotificationsOpen(false);
     setAccountMenuOpen(false);
     resetRouteLoadingState();
     pendingRouteHrefRef.current = href;
+    rememberPendingRoute(href);
     routeLoadingTimerRef.current = window.setTimeout(() => {
       setRouteLoading(true);
       routeLoadingTimerRef.current = null;
