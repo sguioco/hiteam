@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import {
   ApprovalInboxItem,
   AttendanceAnomalyResponse,
+  AttendanceBootstrapResponse,
   AttendanceHistoryResponse,
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
@@ -480,6 +481,24 @@ function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
+function addDays(value: Date, amount: number) {
+  const next = new Date(value.getTime());
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function formatDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function startOfMonth(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), 1);
 }
@@ -847,10 +866,27 @@ export default function DashboardHome({
   const isDemoSession = isDemoAccessToken(session?.accessToken);
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
+  const attendanceTodayKey = useMemo(() => formatDateKey(startOfDay(new Date())), []);
+  const attendanceMinDateKey = useMemo(
+    () => formatDateKey(addDays(parseDateKey(attendanceTodayKey), -7)),
+    [attendanceTodayKey],
+  );
+  const attendanceMaxDateKey = useMemo(
+    () => formatDateKey(addDays(parseDateKey(attendanceTodayKey), 1)),
+    [attendanceTodayKey],
+  );
   const dashboardCacheKey = useMemo(
     () => (session ? buildDashboardCacheKey(session, isEmployeeMode) : null),
     [isEmployeeMode, session],
   );
+  const [dashboardAttendanceDate, setDashboardAttendanceDate] =
+    useState(attendanceTodayKey);
+  const [dashboardAttendanceHistory, setDashboardAttendanceHistory] =
+    useState<AttendanceHistoryResponse | null>(null);
+  const [dashboardAttendanceAnomalies, setDashboardAttendanceAnomalies] =
+    useState<AttendanceAnomalyResponse | null>(null);
+  const [dashboardAttendanceLoading, setDashboardAttendanceLoading] =
+    useState(false);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
     initialData?.liveSessions ?? [],
   );
@@ -1010,6 +1046,69 @@ export default function DashboardHome({
   });
 
   useEffect(() => {
+    if (isEmployeeMode) {
+      return;
+    }
+
+    if (dashboardAttendanceDate === attendanceTodayKey) {
+      setDashboardAttendanceHistory(null);
+      setDashboardAttendanceAnomalies(null);
+      setDashboardAttendanceLoading(false);
+      return;
+    }
+
+    const currentSession = getSession();
+    if (!currentSession || isDemoSession) {
+      setDashboardAttendanceHistory(null);
+      setDashboardAttendanceAnomalies(null);
+      setDashboardAttendanceLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDashboardAttendanceLoading(true);
+    setDashboardAttendanceHistory(null);
+    setDashboardAttendanceAnomalies(null);
+
+    const query = new URLSearchParams({
+      dateFrom: dashboardAttendanceDate,
+      dateTo: dashboardAttendanceDate,
+    }).toString();
+
+    void apiRequest<AttendanceBootstrapResponse>(`/bootstrap/attendance?${query}`, {
+      token: currentSession.accessToken,
+      skipClientCache: true,
+    })
+      .then((snapshot) => {
+        if (cancelled) return;
+        setDashboardAttendanceHistory(snapshot.history);
+        setDashboardAttendanceAnomalies(snapshot.anomalies);
+        if (snapshot.employees.length) {
+          setEmployees(snapshot.employees);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDashboardAttendanceHistory(null);
+        setDashboardAttendanceAnomalies(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDashboardAttendanceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    attendanceTodayKey,
+    dashboardAttendanceDate,
+    isDemoSession,
+    isEmployeeMode,
+  ]);
+
+  useEffect(() => {
     if (!session) return;
 
     const attendanceSocket = createAttendanceLiveSocket(session.accessToken);
@@ -1035,6 +1134,23 @@ export default function DashboardHome({
 
     return () => window.clearTimeout(timeoutId);
   }, [message, messageAction]);
+
+  const dashboardAttendanceCanGoPrevious =
+    dashboardAttendanceDate > attendanceMinDateKey;
+  const dashboardAttendanceCanGoNext = dashboardAttendanceDate < attendanceMaxDateKey;
+
+  function setDashboardAttendanceDay(nextDate: Date) {
+    const nextKey = formatDateKey(startOfDay(nextDate));
+    if (nextKey < attendanceMinDateKey || nextKey > attendanceMaxDateKey) {
+      return;
+    }
+
+    setDashboardAttendanceDate(nextKey);
+  }
+
+  function shiftDashboardAttendanceDay(amount: number) {
+    setDashboardAttendanceDay(addDays(parseDateKey(dashboardAttendanceDate), amount));
+  }
 
   const managerEmployee = useMemo(
     () =>
@@ -2420,11 +2536,23 @@ export default function DashboardHome({
                     locale={locale}
                   />
                   <TodayAttendancePanel
-                    anomalies={anomalies}
+                    anomalies={
+                      dashboardAttendanceDate === attendanceTodayKey
+                        ? anomalies
+                        : dashboardAttendanceAnomalies
+                    }
+                    canGoNext={dashboardAttendanceCanGoNext}
+                    canGoPrevious={dashboardAttendanceCanGoPrevious}
                     employees={employees}
+                    history={dashboardAttendanceHistory}
+                    isLoading={dashboardAttendanceLoading}
                     liveSessions={liveSessions}
                     locale={locale}
+                    onNextDay={() => shiftDashboardAttendanceDay(1)}
+                    onPreviousDay={() => shiftDashboardAttendanceDay(-1)}
+                    onToday={() => setDashboardAttendanceDate(attendanceTodayKey)}
                     scheduleShifts={scheduleShifts}
+                    selectedDate={dashboardAttendanceDate}
                   />
                 </div>
               )}

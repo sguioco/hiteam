@@ -270,18 +270,21 @@ const ShiftStatusCard = ({
 
   const shiftMeta = useMemo(() => {
     const now = new Date();
+    const isFieldWorker = status?.workMode === 'FIELD';
     const nextCheckInShift = status?.shift ?? status?.nextShift ?? null;
     const nextCheckInShiftStart = nextCheckInShift
       ? new Date(nextCheckInShift.startsAt)
       : null;
     const canCheckIn =
-      status?.attendanceState === 'not_checked_in' &&
+      (status?.attendanceState === 'not_checked_in' ||
+        (isFieldWorker && status?.attendanceState === 'checked_out')) &&
       status.allowedActions.includes('check_in') &&
-      Boolean(
-        nextCheckInShiftStart &&
-          !Number.isNaN(nextCheckInShiftStart.getTime()) &&
-          now.getTime() >= nextCheckInShiftStart.getTime() - 2 * 60 * 60 * 1000,
-      );
+      (isFieldWorker ||
+        Boolean(
+          nextCheckInShiftStart &&
+            !Number.isNaN(nextCheckInShiftStart.getTime()) &&
+            now.getTime() >= nextCheckInShiftStart.getTime() - 2 * 60 * 60 * 1000,
+        ));
 
     if (loading) {
       return {
@@ -295,6 +298,49 @@ const ShiftStatusCard = ({
         statusVariant: 'default' as const,
         buttonLabel: null,
         buttonTone: 'neutral' as const,
+      };
+    }
+
+    if (isFieldWorker) {
+      const isActiveVisit =
+        status?.attendanceState === 'checked_in' ||
+        status?.attendanceState === 'on_break';
+      const startedAt = status?.activeSession?.startedAt
+        ? new Date(status.activeSession.startedAt)
+        : null;
+      const visitMinutes =
+        isActiveVisit && startedAt
+          ? Math.max(0, (now.getTime() - startedAt.getTime()) / 60000)
+          : 0;
+
+      return {
+        title: null,
+        body: '',
+        timing: isActiveVisit && startedAt
+          ? `${formatClockTime(startedAt.toISOString(), locale, displayTimeZone)} - ...`
+          : language === 'ru'
+            ? 'Свободный выезд'
+            : 'Field visit',
+        locationLabel:
+          language === 'ru'
+            ? 'GPS будет записан при отметке'
+            : 'GPS is recorded on each action',
+        statusText: isActiveVisit
+          ? language === 'ru'
+            ? `Выезд открыт ${formatDuration(visitMinutes, language)}`
+            : `Visit open for ${formatDuration(visitMinutes, language)}`
+          : language === 'ru'
+            ? 'Можно начать новый выезд'
+            : 'Ready for a new visit',
+        statusColor: isActiveVisit ? '#86efac' : '#dbeafe',
+        statusIcon: isActiveVisit ? ('checkmark-circle' as const) : ('navigate-outline' as const),
+        statusVariant: 'default' as const,
+        buttonLabel: isActiveVisit
+          ? t('workspace.checkOut')
+          : canCheckIn
+            ? t('workspace.checkIn')
+            : null,
+        buttonTone: isActiveVisit ? ('danger' as const) : canCheckIn ? ('success' as const) : ('neutral' as const),
       };
     }
 

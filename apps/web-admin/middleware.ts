@@ -5,6 +5,7 @@ import { decodeSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 const PUBLIC_EXACT_PATHS = new Set([
   "/",
   "/login",
+  "/mobile",
   "/signup",
 ]);
 

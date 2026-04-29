@@ -27,7 +27,9 @@ import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import {
   createManagerShift,
+  loadEmployeesBootstrap,
   loadManagerScheduleBootstrap,
+  loadManagerTasksBootstrap,
   loadMyAnnouncements,
   rescheduleMyTask,
   updateMyTaskStatus,
@@ -187,6 +189,24 @@ function formatShiftRange(shift: ManagerScheduleShift, locale: string) {
   });
 
   return `${start} - ${end}`;
+}
+
+function normalizeManagerShiftCandidate(
+  shift: unknown,
+): ManagerScheduleShift | null {
+  const candidate = shift as Partial<ManagerScheduleShift> | null;
+
+  if (
+    !candidate?.id ||
+    !candidate.shiftDate ||
+    !candidate.employeeId ||
+    !candidate.employee?.id ||
+    !candidate.template?.id
+  ) {
+    return null;
+  }
+
+  return candidate as ManagerScheduleShift;
 }
 
 function formatAnnouncementDate(value: string, locale: string) {
@@ -430,22 +450,65 @@ export default function CalendarScreen({
         let nextShiftTemplates: ManagerShiftTemplate[] = [];
         let partialLoadError: string | null = null;
 
-        const scheduleSnapshot = await loadManagerScheduleBootstrap(rangeQuery);
-        const scheduleData = scheduleSnapshot.initialData;
+        try {
+          const scheduleSnapshot = await loadManagerScheduleBootstrap(rangeQuery);
+          const scheduleData = scheduleSnapshot.initialData;
 
-        if (!scheduleData) {
-          throw new Error(t("today.loadError"));
-        }
+          if (!scheduleData) {
+            throw new Error(t("today.loadError"));
+          }
 
-        nextTasks = scheduleData.taskBoard?.tasks ?? cached?.value.tasks ?? [];
+          nextTasks = scheduleData.taskBoard?.tasks ?? cached?.value.tasks ?? [];
 
-        if (isManager) {
-          nextManagerEmployees = scheduleData.employees;
-          nextManagerGroups = scheduleData.groups ?? [];
-          nextManagerShifts = scheduleData.shifts;
-          nextShiftTemplates = scheduleData.templates;
-        } else {
-          nextShifts = scheduleData.shifts;
+          if (isManager) {
+            nextManagerEmployees = scheduleData.employees;
+            nextManagerGroups = scheduleData.groups ?? [];
+            nextManagerShifts = scheduleData.shifts;
+            nextShiftTemplates = scheduleData.templates;
+          } else {
+            nextShifts = scheduleData.shifts;
+          }
+        } catch (scheduleError) {
+          if (!isManager) {
+            throw scheduleError;
+          }
+
+          const [tasksResult, employeesResult] = await Promise.allSettled([
+            loadManagerTasksBootstrap(rangeQuery),
+            loadEmployeesBootstrap(),
+          ]);
+
+          if (
+            tasksResult.status === "rejected" &&
+            employeesResult.status === "rejected"
+          ) {
+            throw scheduleError;
+          }
+
+          if (tasksResult.status === "fulfilled") {
+            nextTasks = tasksResult.value.tasks;
+            nextManagerEmployees = tasksResult.value.employees;
+            nextManagerGroups = tasksResult.value.groups ?? [];
+          } else {
+            nextTasks = cached?.value.tasks ?? [];
+          }
+
+          if (employeesResult.status === "fulfilled") {
+            nextManagerEmployees = employeesResult.value.employeeRecords.length
+              ? employeesResult.value.employeeRecords
+              : nextManagerEmployees;
+            nextManagerGroups = employeesResult.value.groups.length
+              ? employeesResult.value.groups
+              : nextManagerGroups;
+            nextManagerShifts = employeesResult.value.scheduleShifts
+              .map(normalizeManagerShiftCandidate)
+              .filter(
+                (shift): shift is ManagerScheduleShift => shift !== null,
+              );
+            nextShiftTemplates = employeesResult.value.scheduleTemplates;
+          }
+
+          partialLoadError = null;
         }
 
         if (!cancelled) {

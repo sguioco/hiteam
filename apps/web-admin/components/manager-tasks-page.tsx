@@ -128,6 +128,18 @@ type TaskRenderRow =
       renderKey: string;
     };
 
+type TaskSearchMatch = {
+  actorName: string;
+  creatorName: string;
+  employeeId: string | null;
+  employeeName: string;
+  id: string;
+  statusLabel: string;
+  statusTone: "success" | "warning" | "gray" | "error";
+  timeLabel: string;
+  title: string;
+};
+
 function localize(locale: string, ru: string, en: string) {
   return locale === "ru" ? ru : en;
 }
@@ -377,6 +389,37 @@ function formatTimeOfDay(value: string | null | undefined, locale: string) {
   });
 }
 
+function formatDateTimeLabel(value: string | null | undefined, locale: string) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = formatDateLabel(value, locale);
+  const hasExplicitTime = /\d{2}:\d{2}/.test(value);
+
+  if (!hasExplicitTime) {
+    return date;
+  }
+
+  return `${date}, ${formatTimeOfDay(value, locale)}`;
+}
+
+function getTaskCompletionActor(task: TaskItem) {
+  const statusActivity = task.activities
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    )
+    .find(
+      (activity) =>
+        activity.kind === "STATUS_CHANGED" &&
+        (task.status === "DONE" || /\bDONE\b/i.test(activity.body ?? "")),
+    );
+
+  return statusActivity?.actorEmployee ?? task.assigneeEmployee ?? task.managerEmployee;
+}
+
 function getInclusiveDayCount(start: Date, end: Date) {
   const startValue = startOfDay(start).getTime();
   const endValue = startOfDay(end).getTime();
@@ -553,6 +596,9 @@ export function ManagerTasksPage({
   const { locale } = useI18n();
   const session = getSession();
   const accessToken = session?.accessToken ?? null;
+  const canSeeTaskCreator = session
+    ? hasManagerAccess(session.user.roleCodes)
+    : false;
   const [accessChecked, setAccessChecked] = useState(false);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
@@ -1137,6 +1183,97 @@ export function ManagerTasksPage({
     [isHistoricalRange, locale],
   );
 
+  const searchQuery = employeeSearch.trim().toLowerCase();
+  const taskSearchMatches = useMemo<TaskSearchMatch[]>(() => {
+    if (!searchQuery) {
+      return [];
+    }
+
+    return visibleTasks
+      .map((task) => {
+        const title = getTaskTitle(task, { normalize: true });
+        const haystack = [title, task.title].join(" ").toLowerCase();
+
+        if (!haystack.includes(searchQuery)) {
+          return null;
+        }
+
+        const isDone = task.status === "DONE";
+        const isMissed = isTaskOverdue(task, today);
+        const isCancelled = task.status === "CANCELLED";
+        const actor = isDone
+          ? getTaskCompletionActor(task)
+          : task.assigneeEmployee ?? task.managerEmployee;
+        const employeeName = task.assigneeEmployee
+          ? getEmployeeName(task.assigneeEmployee, locale)
+          : task.group?.name ?? localize(locale, "Команда", "Team");
+        const statusLabel = isDone
+          ? localize(locale, "Сделана", "Done")
+          : isMissed
+            ? localize(locale, "Пропущена", "Missed")
+            : isCancelled
+              ? localize(locale, "Отменена", "Cancelled")
+              : localize(locale, "Открыта", "Open");
+        const timeSource = isDone
+          ? task.completedAt ?? task.updatedAt
+          : isMissed
+            ? task.dueAt ?? task.occurrenceDate
+            : isCancelled
+              ? task.updatedAt
+              : task.dueAt ?? task.occurrenceDate ?? task.createdAt;
+
+        return {
+          match: {
+            actorName: getEmployeeName(actor, locale),
+            creatorName: getEmployeeName(task.managerEmployee, locale),
+            employeeId: task.assigneeEmployeeId,
+            employeeName,
+            id: task.id,
+            statusLabel,
+            statusTone: isDone
+              ? "success"
+              : isMissed
+                ? "error"
+                : isCancelled
+                  ? "gray"
+                  : "warning",
+            timeLabel: formatDateTimeLabel(timeSource, locale),
+            title,
+          } satisfies TaskSearchMatch,
+          sortTime:
+            (timeSource ? new Date(timeSource).getTime() : NaN) ||
+            getTaskAnchorDate(task)?.getTime() ||
+            0,
+        };
+      })
+      .filter(
+        (item): item is { match: TaskSearchMatch; sortTime: number } =>
+          Boolean(item),
+      )
+      .sort((left, right) => right.sortTime - left.sortTime)
+      .map((item) => item.match);
+  }, [getTaskTitle, locale, searchQuery, today, visibleTasks]);
+
+  const taskSearchMatchIds = useMemo(
+    () => new Set(taskSearchMatches.map((match) => match.id)),
+    [taskSearchMatches],
+  );
+
+  const taskSearchEmployeeIds = useMemo(
+    () =>
+      new Set(
+        taskSearchMatches
+          .map((match) => match.employeeId)
+          .filter((employeeId): employeeId is string => Boolean(employeeId)),
+      ),
+    [taskSearchMatches],
+  );
+
+  const visibleTaskSearchMatches = useMemo(
+    () => taskSearchMatches.slice(0, 8),
+    [taskSearchMatches],
+  );
+
   const groupOptions = useMemo(
     () =>
       groups
@@ -1153,14 +1290,18 @@ export function ManagerTasksPage({
 
   const filteredRows = useMemo(() => {
     const minTasks = Number(taskCountFilter) || 0;
-    const searchQuery = employeeSearch.trim().toLowerCase();
     const selectedGroupName = groupFilter
       ? groups.find((group) => group.id === groupFilter)?.name ?? null
       : null;
 
     return tableRows.filter((row) => {
+      const matchesTaskSearch = row.entry.tasks.some((task) =>
+        taskSearchMatchIds.has(task.id),
+      );
+
       if (
         searchQuery &&
+        !matchesTaskSearch &&
         ![row.employeeName, row.employeeSubtitle ?? "", row.teams.join(" ")]
           .join(" ")
           .toLowerCase()
@@ -1200,13 +1341,14 @@ export function ManagerTasksPage({
       return true;
     });
   }, [
-    employeeSearch,
     groupFilter,
     groups,
+    searchQuery,
     statusFilter,
     tableRows,
     taskCountFilter,
     taskPresenceFilter,
+    taskSearchMatchIds,
   ]);
 
   const teamSummary = useMemo(() => {
@@ -1279,6 +1421,8 @@ export function ManagerTasksPage({
     () =>
       sortedRows.length
         ? sortedRows.flatMap((row) => {
+        const isExpanded =
+          expandedEmployeeIds.includes(row.id) || taskSearchEmployeeIds.has(row.id);
         const items: TaskRenderRow[] = [
           {
             ...row,
@@ -1287,7 +1431,7 @@ export function ManagerTasksPage({
           },
         ];
 
-        if (expandedEmployeeIds.includes(row.id)) {
+        if (isExpanded) {
           items.push({
             kind: "details",
             renderKey: `${row.id}:details`,
@@ -1303,7 +1447,7 @@ export function ManagerTasksPage({
               renderKey: "empty-filter-results",
             },
           ],
-    [expandedEmployeeIds, sortedRows],
+    [expandedEmployeeIds, sortedRows, taskSearchEmployeeIds],
   );
 
   useEffect(() => {
@@ -1483,12 +1627,20 @@ export function ManagerTasksPage({
       <>
         <div className="team-tasks-task-line-main">
           {renderTaskStatusIcon(task, taskMeta)}
-          <span
-            className={`team-tasks-task-line-title ${
-              done ? "is-done" : overdue ? "is-overdue" : ""
-            }`}
-          >
-            {title}
+          <span className="team-tasks-task-line-copy">
+            <span
+              className={`team-tasks-task-line-title ${
+                done ? "is-done" : overdue ? "is-overdue" : ""
+              }`}
+            >
+              {title}
+            </span>
+            {canSeeTaskCreator ? (
+              <span className="team-tasks-task-line-creator">
+                {localize(locale, "Создал", "Created by")}:{" "}
+                {getEmployeeName(task.managerEmployee, locale)}
+              </span>
+            ) : null}
           </span>
         </div>
         <div className="team-tasks-task-line-side">
@@ -1800,12 +1952,72 @@ export function ManagerTasksPage({
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                   placeholder={localize(
                     locale,
-                    "Поиск сотрудника...",
-                    "Search employee...",
+                    "Поиск сотрудника или задачи...",
+                    "Search employee or task...",
                   )}
                   value={employeeSearch}
                 />
               </div>
+              {searchQuery && visibleTaskSearchMatches.length ? (
+                <div className="team-tasks-search-results" aria-live="polite">
+                  <div className="team-tasks-search-results-head">
+                    <strong>
+                      {localize(locale, "Найденные задачи", "Found tasks")}
+                    </strong>
+                    <span>
+                      {visibleTaskSearchMatches.length}
+                      {taskSearchMatches.length > visibleTaskSearchMatches.length
+                        ? ` ${localize(locale, "из", "of")} ${taskSearchMatches.length}`
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="team-tasks-search-result-list">
+                    {visibleTaskSearchMatches.map((match) => (
+                      <button
+                        className="team-tasks-search-result"
+                        key={match.id}
+                        onClick={() => {
+                          if (match.employeeId) {
+                            setExpandedEmployeeIds((current) =>
+                              current.includes(match.employeeId)
+                                ? current
+                                : [...current, match.employeeId],
+                            );
+                          }
+                        }}
+                        type="button"
+                      >
+                        <div className="team-tasks-search-result-main">
+                          <span
+                            className={`team-tasks-search-result-status is-${match.statusTone}`}
+                          >
+                            {match.statusLabel}
+                          </span>
+                          <strong>{match.title}</strong>
+                          <span>
+                            {localize(locale, "Когда", "When")}: {match.timeLabel}
+                          </span>
+                        </div>
+                        <div className="team-tasks-search-result-side">
+                          <span>
+                            {localize(locale, "Сотрудник", "Employee")}:{" "}
+                            {match.employeeName}
+                          </span>
+                          <span>
+                            {localize(locale, "Кем", "By")}: {match.actorName}
+                          </span>
+                          {canSeeTaskCreator ? (
+                            <span>
+                              {localize(locale, "Создал", "Created by")}:{" "}
+                              {match.creatorName}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="team-tasks-table-card">
                 <div className="team-tasks-table-shell">
                   <Table
@@ -1850,10 +2062,10 @@ export function ManagerTasksPage({
                             <Table.Cell className="team-tasks-empty-cell" colSpan={4}>
                               {localize(
                                 locale,
-                                hasActiveFilters
+                                hasActiveFilters || Boolean(searchQuery)
                                   ? "По этим фильтрам сотрудники не найдены"
                                   : "В выбранном периоде задач пока нет",
-                                hasActiveFilters
+                                hasActiveFilters || Boolean(searchQuery)
                                   ? "No employees match these filters"
                                   : "No tasks were found in this range",
                               )}
@@ -1863,8 +2075,17 @@ export function ManagerTasksPage({
                       }
 
                       if (item.kind === "details") {
-                        const recurringTasks = item.row.entry.tasks.filter((task) => task.isRecurring);
-                        const regularTasks = item.row.entry.tasks.filter((task) => !task.isRecurring);
+                        const hasRowTaskSearchMatches = item.row.entry.tasks.some((task) =>
+                          taskSearchMatchIds.has(task.id),
+                        );
+                        const detailTasks =
+                          hasRowTaskSearchMatches
+                            ? item.row.entry.tasks.filter((task) =>
+                                taskSearchMatchIds.has(task.id),
+                              )
+                            : item.row.entry.tasks;
+                        const recurringTasks = detailTasks.filter((task) => task.isRecurring);
+                        const regularTasks = detailTasks.filter((task) => !task.isRecurring);
 
                         return (
                           <Table.Row
@@ -1875,7 +2096,7 @@ export function ManagerTasksPage({
                           >
                             <Table.Cell className="team-tasks-detail-cell" colSpan={4}>
                               <div className="team-tasks-detail-panel">
-                                {item.row.entry.tasks.length ? (
+                                {detailTasks.length ? (
                                   <div className="team-tasks-inline-details">
                                     <div className="team-tasks-detail-list">
                                       {renderTaskCollection(regularTasks)}
@@ -1899,8 +2120,12 @@ export function ManagerTasksPage({
                                     <div className="team-tasks-group-empty">
                                       {localize(
                                         locale,
-                                        "На выбранный день задач нет",
-                                        "No tasks for the selected day",
+                                        hasRowTaskSearchMatches
+                                          ? "По этому названию задач нет"
+                                          : "На выбранный день задач нет",
+                                        hasRowTaskSearchMatches
+                                          ? "No tasks match this title"
+                                          : "No tasks for the selected day",
                                       )}
                                     </div>
                                   </div>
@@ -1915,7 +2140,11 @@ export function ManagerTasksPage({
                         <Table.Row
                           className={`team-tasks-table-row ${
                             item.isComplete ? "is-complete" : ""
-                          } ${expandedEmployeeIds.includes(item.id) ? "is-open" : ""
+                          } ${
+                            expandedEmployeeIds.includes(item.id) ||
+                            taskSearchEmployeeIds.has(item.id)
+                              ? "is-open"
+                              : ""
                           }`}
                           id={item.renderKey}
                         >

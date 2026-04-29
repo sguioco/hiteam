@@ -4,6 +4,7 @@ import {
   AttendanceEventType,
   AttendanceResult,
   AttendanceSessionStatus,
+  EmployeeWorkMode,
   NotificationType,
   Prisma,
 } from '@prisma/client';
@@ -50,6 +51,7 @@ export class AttendanceService {
       this.scheduleService.findNextShift(employee.id),
       this.prisma.payrollPolicy.findUnique({ where: { tenantId: employee.tenantId } }),
     ]);
+    const isFieldEmployee = employee.workMode === EmployeeWorkMode.FIELD;
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -87,16 +89,19 @@ export class AttendanceService {
 
     return {
       employeeId: employee.id,
+      workMode: employee.workMode,
       attendanceState,
       allowedActions: this.resolveAllowedActions(attendanceState, breaksEnabled),
       location: {
-        id: shift?.location.id ?? employee.primaryLocation.id,
-        name: shift?.location.name ?? employee.primaryLocation.name,
-        radiusMeters: shift?.location.geofenceRadiusMeters ?? employee.primaryLocation.geofenceRadiusMeters,
-        latitude: shift?.location.latitude ?? employee.primaryLocation.latitude,
-        longitude: shift?.location.longitude ?? employee.primaryLocation.longitude,
+        id: isFieldEmployee ? employee.primaryLocation.id : shift?.location.id ?? employee.primaryLocation.id,
+        name: isFieldEmployee ? 'Field visit' : shift?.location.name ?? employee.primaryLocation.name,
+        radiusMeters: isFieldEmployee
+          ? 0
+          : shift?.location.geofenceRadiusMeters ?? employee.primaryLocation.geofenceRadiusMeters,
+        latitude: isFieldEmployee ? employee.primaryLocation.latitude : shift?.location.latitude ?? employee.primaryLocation.latitude,
+        longitude: isFieldEmployee ? employee.primaryLocation.longitude : shift?.location.longitude ?? employee.primaryLocation.longitude,
       },
-      shift: shift
+      shift: shift && !isFieldEmployee
         ? {
             id: shift.id,
             label: shift.template.name,
@@ -106,7 +111,7 @@ export class AttendanceService {
           }
         : null,
       nextShift:
-        !shift && nextShift
+        !isFieldEmployee && !shift && nextShift
           ? {
               id: nextShift.id,
               label: nextShift.template.name,
@@ -117,6 +122,7 @@ export class AttendanceService {
           : null,
       verification: {
         locationRequired: true,
+        geofenceRequired: !isFieldEmployee,
         selfieRequired: true,
         deviceMustBePrimary: true,
       },
@@ -155,8 +161,10 @@ export class AttendanceService {
       include: { primaryLocation: true },
     });
 
-    const shift = await this.scheduleService.findCurrentShift(employee.id);
-    if (!shift) {
+    const isFieldEmployee = employee.workMode === EmployeeWorkMode.FIELD;
+    const scheduledShift = await this.scheduleService.findCurrentShift(employee.id);
+    const shift = isFieldEmployee ? null : scheduledShift;
+    if (!shift && !isFieldEmployee) {
       throw new BadRequestException('No scheduled shift found for today.');
     }
 
@@ -172,8 +180,9 @@ export class AttendanceService {
     }
 
     const context = await this.validateActionContext(employee, userId, dto, {
-      location: shift.location,
+      location: isFieldEmployee ? employee.primaryLocation : shift!.location,
       eventType: AttendanceEventType.CHECK_IN,
+      enforceGeofence: !isFieldEmployee,
     });
 
     const event = await this.prisma.$transaction(async (tx) => {
@@ -189,7 +198,7 @@ export class AttendanceService {
           accuracyMeters: dto.accuracyMeters,
           distanceMeters: context.distanceMeters,
           notes: dto.notes,
-          locationId: shift.location.id,
+          locationId: context.location.id,
           deviceId: context.device.id,
         },
       });
@@ -214,13 +223,15 @@ export class AttendanceService {
       return createdEvent;
     });
 
-    const lateMinutes = Math.max(0, Math.round((event.occurredAt.getTime() - shift.startsAt.getTime()) / 60000));
+    const lateMinutes = shift
+      ? Math.max(0, Math.round((event.occurredAt.getTime() - shift.startsAt.getTime()) / 60000))
+      : 0;
 
     const session = await this.prisma.attendanceSession.create({
       data: {
         tenantId: employee.tenantId,
         employeeId: employee.id,
-        shiftId: shift.id,
+        shiftId: shift?.id ?? null,
         checkInEventId: event.id,
         startedAt: event.occurredAt,
         status: AttendanceSessionStatus.OPEN,
@@ -237,14 +248,15 @@ export class AttendanceService {
       metadata: {
         eventId: event.id,
         distanceMeters: Math.round(context.distanceMeters),
-        shiftId: shift.id,
+        shiftId: shift?.id ?? null,
         lateMinutes,
+        workMode: employee.workMode,
       },
     });
 
     await this.publishTeamSnapshot(employee.tenantId);
     const leaderboardCelebration =
-      lateMinutes <= shift.template.gracePeriodMinutes
+      shift && lateMinutes <= shift.template.gracePeriodMinutes
         ? await this.leaderboardService.getCheckInCelebration(userId).catch(() => null)
         : null;
 
@@ -307,6 +319,7 @@ export class AttendanceService {
     const context = await this.validateActionContext(employee, userId, dto, {
       location: session.shift?.location ?? employee.primaryLocation,
       eventType: AttendanceEventType.BREAK_START,
+      enforceGeofence: employee.workMode !== EmployeeWorkMode.FIELD,
     });
 
     const event = await this.prisma.attendanceEvent.create({
@@ -405,6 +418,7 @@ export class AttendanceService {
     const context = await this.validateActionContext(employee, userId, dto, {
       location: session.shift?.location ?? employee.primaryLocation,
       eventType: AttendanceEventType.BREAK_END,
+      enforceGeofence: employee.workMode !== EmployeeWorkMode.FIELD,
     });
 
     const result = await this.closeBreak({
@@ -454,9 +468,11 @@ export class AttendanceService {
       throw new BadRequestException('No open attendance session found.');
     }
 
+    const isFieldEmployee = employee.workMode === EmployeeWorkMode.FIELD;
     const context = await this.validateActionContext(employee, userId, dto, {
       location: session.shift?.location ?? employee.primaryLocation,
       eventType: AttendanceEventType.CHECK_OUT,
+      enforceGeofence: !isFieldEmployee,
     });
 
     let unpaidBreakIncrement = 0;
@@ -525,10 +541,12 @@ export class AttendanceService {
     });
 
     const totalMinutes = Math.max(0, Math.round((event.occurredAt.getTime() - session.startedAt.getTime()) / 60000));
-    const earlyLeaveMinutes = Math.max(
-      0,
-      Math.round(((session.shift?.endsAt ?? event.occurredAt).getTime() - event.occurredAt.getTime()) / 60000),
-    );
+    const earlyLeaveMinutes = isFieldEmployee
+      ? 0
+      : Math.max(
+          0,
+          Math.round(((session.shift?.endsAt ?? event.occurredAt).getTime() - event.occurredAt.getTime()) / 60000),
+        );
 
     const updatedSession = await this.prisma.attendanceSession.update({
       where: { id: session.id },
@@ -558,6 +576,7 @@ export class AttendanceService {
         totalMinutes,
         distanceMeters: Math.round(context.distanceMeters),
         shiftId: session.shiftId,
+        workMode: employee.workMode,
         earlyLeaveMinutes,
         unpaidBreakIncrement,
         paidBreakIncrement,
@@ -1893,6 +1912,7 @@ export class AttendanceService {
     dto: AttendanceActionDto,
     context: {
       eventType: AttendanceEventType;
+      enforceGeofence?: boolean;
       location: {
         id: string;
         latitude: number;
@@ -1927,7 +1947,7 @@ export class AttendanceService {
       context.location.longitude,
     );
 
-    if (distanceMeters > context.location.geofenceRadiusMeters) {
+    if (context.enforceGeofence !== false && distanceMeters > context.location.geofenceRadiusMeters) {
       await this.recordRejectedAttendanceAttempt({
         actorUserId,
         dto,
@@ -2328,9 +2348,15 @@ export class AttendanceService {
         employeeId: session.employee.id,
         employeeName: `${session.employee.firstName} ${session.employee.lastName}`,
         employeeNumber: session.employee.employeeNumber,
+        workMode: session.employee.workMode,
         department: session.employee.department.name,
-        location: session.shift?.location.name ?? session.employee.primaryLocation.name,
-        shiftLabel: session.shift?.template.name ?? null,
+        location: session.employee.workMode === EmployeeWorkMode.FIELD
+          ? 'Field visit'
+          : session.shift?.location.name ?? session.employee.primaryLocation.name,
+        shiftLabel:
+          session.employee.workMode === EmployeeWorkMode.FIELD
+            ? null
+            : session.shift?.template.name ?? null,
         status: this.serializeSessionStatus(session.status),
         startedAt: session.startedAt.toISOString(),
         endedAt: session.endedAt?.toISOString() ?? null,
@@ -2343,6 +2369,8 @@ export class AttendanceService {
         checkInEvent: {
           eventId: session.checkInEvent.id,
           occurredAt: session.checkInEvent.occurredAt.toISOString(),
+          latitude: session.checkInEvent.latitude,
+          longitude: session.checkInEvent.longitude,
           distanceMeters: Math.round(session.checkInEvent.distanceMeters),
           notes: session.checkInEvent.notes,
         },
@@ -2350,6 +2378,8 @@ export class AttendanceService {
           ? {
               eventId: session.checkOutEvent.id,
               occurredAt: session.checkOutEvent.occurredAt.toISOString(),
+              latitude: session.checkOutEvent.latitude,
+              longitude: session.checkOutEvent.longitude,
               distanceMeters: Math.round(session.checkOutEvent.distanceMeters),
               notes: session.checkOutEvent.notes,
             }
@@ -2402,6 +2432,7 @@ export class AttendanceService {
       firstName: string;
       lastName: string;
       employeeNumber: string;
+      workMode: EmployeeWorkMode;
       department: { name: string };
       primaryLocation: { name: string };
     };
@@ -2421,8 +2452,14 @@ export class AttendanceService {
       employeeName: `${session.employee.firstName} ${session.employee.lastName}`,
       employeeNumber: session.employee.employeeNumber,
       department: session.employee.department.name,
-      location: session.employee.primaryLocation.name,
-      shiftLabel: session.shift?.template.name ?? null,
+      location:
+        session.employee.workMode === EmployeeWorkMode.FIELD
+          ? 'Field visit'
+          : session.employee.primaryLocation.name,
+      shiftLabel:
+        session.employee.workMode === EmployeeWorkMode.FIELD
+          ? null
+          : session.shift?.template.name ?? null,
       status: this.serializeSessionStatus(session.status),
       startedAt: session.startedAt.toISOString(),
       endedAt: session.endedAt?.toISOString() ?? null,

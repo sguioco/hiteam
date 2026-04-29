@@ -782,6 +782,7 @@ function normalizeManagerEmployee(emp: any): ManagerEmployeeItem {
     email: emp.user?.email ?? emp.email ?? "",
     employeeNumber: emp.employeeNumber,
     gender: emp.gender ?? null,
+    workMode: emp.workMode ?? "STATIONARY",
     department: emp.department
       ? {
           id: emp.department.id,
@@ -844,8 +845,12 @@ export async function loadManagerScheduleBootstrap(query?: {
     ...response,
     initialData: {
       ...response.initialData,
-      employees: response.initialData.employees.map(normalizeManagerEmployee),
+      employees: (response.initialData.employees ?? []).map(
+        normalizeManagerEmployee,
+      ),
       groups: response.initialData.groups ?? [],
+      shifts: response.initialData.shifts ?? [],
+      templates: response.initialData.templates ?? [],
       taskBoard: response.initialData.taskBoard,
     },
   };

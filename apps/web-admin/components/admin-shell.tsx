@@ -16,6 +16,7 @@ import {
   ListTodo,
   ScanFace,
   Settings2,
+  Smartphone,
   Trophy,
   UsersRound,
   Plus,
@@ -828,6 +829,7 @@ export function AdminShell({
   const newsHref = toAdminHref("/news");
   const profileHref = toAdminHref("/profile");
   const notificationsHref = toAdminHref("/notifications");
+  const mobileAppHref = "/mobile";
   const contentHasStudioBackground = hasStudioBackground(pathname);
 
   const navItems = useMemo<NavItem[]>(() => {
@@ -852,6 +854,11 @@ export function AdminShell({
           href: newsHref,
           label: locale === "ru" ? "Новости" : "News",
           icon: FileText,
+        },
+        {
+          href: mobileAppHref,
+          label: locale === "ru" ? "Приложение" : "Mobile app",
+          icon: Smartphone,
         },
         {
           href: scheduleHref,
@@ -894,6 +901,12 @@ export function AdminShell({
       icon: FileText,
     });
 
+    items.push({
+      href: mobileAppHref,
+      label: locale === "ru" ? "Приложение" : "Mobile app",
+      icon: Smartphone,
+    });
+
     if (!managerOnly) {
       items.push({
         href: toAdminHref("/employees"),
@@ -928,6 +941,7 @@ export function AdminShell({
     leaderboardHref,
     locale,
     managerOnly,
+    mobileAppHref,
     newsHref,
     scheduleHref,
     session?.user.roleCodes,

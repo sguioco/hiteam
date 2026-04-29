@@ -306,7 +306,11 @@ export function AttendanceCaptureScreen({
   ) {
     if (isCheckIn) {
       return (
-        nextStatus.attendanceState !== "not_checked_in" ||
+        (nextStatus.attendanceState !== "not_checked_in" &&
+          !(
+            nextStatus.workMode === "FIELD" &&
+            nextStatus.attendanceState === "checked_out"
+          )) ||
         !nextStatus.allowedActions.includes("check_in")
       );
     }
@@ -511,8 +515,14 @@ export function AttendanceCaptureScreen({
         baseStatus.location.latitude,
         baseStatus.location.longitude,
       );
+      const shouldEnforceGeofence =
+        baseStatus.workMode !== "FIELD" &&
+        baseStatus.verification.geofenceRequired !== false;
 
-      if (nextDistanceMeters > baseStatus.location.radiusMeters) {
+      if (
+        shouldEnforceGeofence &&
+        nextDistanceMeters > baseStatus.location.radiusMeters
+      ) {
         const nextState = {
           state: "outside",
           snapshot,
@@ -858,7 +868,8 @@ export function AttendanceCaptureScreen({
     return {
       ...currentStatus,
       attendanceState: "checked_out",
-      allowedActions: [],
+      allowedActions:
+        currentStatus.workMode === "FIELD" ? ["check_in"] : [],
       activeSession: null,
     };
   }

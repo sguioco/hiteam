@@ -110,6 +110,7 @@ type EmployeeStatus =
   | "dismissed";
 type ViewMode = "employees" | "groups";
 type InviteContactMethod = "email" | "phone";
+type EmployeeWorkMode = "STATIONARY" | "FIELD";
 type InvitationDialogMode = "setup" | "review";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
 type TaskDialogState =
@@ -185,6 +186,28 @@ const initialTaskDraft = {
 const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
 const reviewInfoBoxClassName =
   "flex min-h-11 items-center rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted-foreground";
+const employeeWorkModeOptions: Array<{
+  value: EmployeeWorkMode;
+  labelRu: string;
+  labelEn: string;
+  descriptionRu: string;
+  descriptionEn: string;
+}> = [
+  {
+    value: "STATIONARY",
+    labelRu: "Штатный",
+    labelEn: "Stationary",
+    descriptionRu: "Check-in только в радиусе локации организации.",
+    descriptionEn: "Check-in is limited to the organization location radius.",
+  },
+  {
+    value: "FIELD",
+    labelRu: "Выездной",
+    labelEn: "Field",
+    descriptionRu: "Несколько Say hi / Say bye в день, GPS пишется по месту.",
+    descriptionEn: "Multiple Say hi / Say bye visits per day, GPS is recorded on site.",
+  },
+];
 const EMPLOYEES_DIRECTORY_CACHE_TTL_MS = 2 * 60 * 1000;
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
@@ -204,6 +227,17 @@ function buildAddEmployeePromptStorageKey(
 
 function isBillingSeatLimitMessage(message: string) {
   return /оплаченных мест|billing|paid seats|seat/i.test(message);
+}
+
+function normalizeEmployeeWorkMode(workMode?: string | null): EmployeeWorkMode {
+  return workMode === "FIELD" ? "FIELD" : "STATIONARY";
+}
+
+function getEmployeeWorkModeLabel(workMode: EmployeeWorkMode | undefined, locale: "ru" | "en") {
+  const option = employeeWorkModeOptions.find((item) => item.value === workMode);
+  return option
+    ? runtimeLocalize(option.labelRu, option.labelEn, locale)
+    : runtimeLocalize("Штатный", "Stationary", locale);
 }
 
 function buildEmployeeName(employee: {
@@ -473,6 +507,7 @@ const Employees = ({
   >("general");
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [breaksUpdating, setBreaksUpdating] = useState(false);
+  const [workModeUpdating, setWorkModeUpdating] = useState(false);
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => buildExpandedGroupsFromSnapshot(initialData),
@@ -481,11 +516,14 @@ const Employees = ({
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteContactMethod, setInviteContactMethod] =
     useState<InviteContactMethod>("email");
+  const [inviteWorkMode, setInviteWorkMode] =
+    useState<EmployeeWorkMode>("STATIONARY");
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [mobileLinkCopied, setMobileLinkCopied] = useState(false);
   const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
   const [copiedInviteField, setCopiedInviteField] = useState<
     "email" | "password" | null
@@ -524,6 +562,7 @@ const Employees = ({
     avatarDataUrl: "",
     avatarPreview: "",
     grantManagerAccess: false,
+    workMode: "STATIONARY" as EmployeeWorkMode,
   });
 
   const [moveDialogEmployeeId, setMoveDialogEmployeeId] = useState<
@@ -882,6 +921,10 @@ const Employees = ({
       employeeRecords.find((employee) => employee.id === selectedEmployeeId)?.breaksEnabled ??
       false,
   );
+  const selectedEmployeeWorkMode = normalizeEmployeeWorkMode(
+    selectedEmployeeDetails?.workMode ??
+      employeeRecords.find((employee) => employee.id === selectedEmployeeId)?.workMode,
+  );
   const navigatingEmployee = useMemo(
     () =>
       navigatingEmployeeId
@@ -1229,6 +1272,45 @@ const Employees = ({
     }
   }
 
+  async function updateSelectedEmployeeWorkMode(nextWorkMode: EmployeeWorkMode) {
+    const session = getSession();
+    if (!session || !selectedEmployeeId || nextWorkMode === selectedEmployeeWorkMode) return;
+
+    setWorkModeUpdating(true);
+    try {
+      const updatedEmployee = await apiRequest<EmployeeDetails>(
+        `/employees/${selectedEmployeeId}/work-mode`,
+        {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({ workMode: nextWorkMode }),
+        },
+      );
+
+      setSelectedEmployeeDetails((current) =>
+        current ? { ...current, workMode: updatedEmployee.workMode } : updatedEmployee,
+      );
+      setEmployeeRecords((current) =>
+        current.map((employee) =>
+          employee.id === updatedEmployee.id
+            ? { ...employee, workMode: updatedEmployee.workMode }
+            : employee,
+        ),
+      );
+      setPageMessage(
+        runtimeLocalize("Тип сотрудника обновлён", "Employee type updated", locale),
+      );
+    } catch (error) {
+      setPageMessage(
+        error instanceof Error
+          ? error.message
+          : runtimeLocalize("Не удалось обновить тип сотрудника", "Unable to update employee type", locale),
+      );
+    } finally {
+      setWorkModeUpdating(false);
+    }
+  }
+
   function dismissAddEmployeePrompt() {
     if (addEmployeePromptStorageKey) {
       writeBrowserStorageItem(
@@ -1293,13 +1375,14 @@ const Employees = ({
         token: session.accessToken,
         body: JSON.stringify(
           inviteContactMethod === "email"
-            ? { email: contactValue }
-            : { phone: contactValue },
+            ? { email: contactValue, workMode: inviteWorkMode }
+            : { phone: contactValue, workMode: inviteWorkMode },
         ),
       });
       setInviteDialogOpen(false);
       setInviteEmail("");
       setInvitePhone("");
+      setInviteWorkMode("STATIONARY");
       openInvitation(invitation, "setup");
       await loadDirectory();
     } catch (requestError) {
@@ -1347,6 +1430,28 @@ const Employees = ({
           locale,
         ),
       );
+    }
+  }
+
+  async function copyMobileAppLink() {
+    const href =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/mobile`
+        : "/mobile";
+
+    try {
+      await navigator.clipboard.writeText(href);
+      setMobileLinkCopied(true);
+      window.setTimeout(() => setMobileLinkCopied(false), 1800);
+      setPageMessage(
+        runtimeLocalize(
+          "Ссылка на приложение скопирована.",
+          "Mobile app link copied.",
+          locale,
+        ),
+      );
+    } catch {
+      setPageMessage(href);
     }
   }
 
@@ -1435,6 +1540,7 @@ const Employees = ({
       avatarDataUrl: "",
       avatarPreview: invitation.avatarUrl ?? "",
       grantManagerAccess: false,
+      workMode: normalizeEmployeeWorkMode(invitation.workMode),
     });
   }
 
@@ -1466,7 +1572,7 @@ const Employees = ({
       return;
     }
 
-    if (!shiftTemplateId) {
+    if (reviewForm.workMode === "STATIONARY" && !shiftTemplateId) {
       setReviewError(
         runtimeLocalize(
           "Выберите смену для сотрудника.",
@@ -1490,11 +1596,13 @@ const Employees = ({
             firstName,
             lastName,
             middleName: reviewForm.middleName.trim() || undefined,
-            shiftTemplateId,
+            shiftTemplateId:
+              reviewForm.workMode === "STATIONARY" ? shiftTemplateId : "",
             groupId:
               reviewForm.groupId === "__none"
                 ? ""
                 : reviewForm.groupId || undefined,
+            workMode: reviewForm.workMode,
           }),
         },
       );
@@ -1545,7 +1653,7 @@ const Employees = ({
             gender: reviewForm.gender,
             phone: reviewForm.phone,
             shiftTemplateId:
-              decision === "APPROVE"
+              decision === "APPROVE" && reviewForm.workMode === "STATIONARY"
                 ? reviewForm.shiftTemplateId || undefined
                 : undefined,
             groupId:
@@ -1561,6 +1669,7 @@ const Employees = ({
               decision === "APPROVE"
                 ? reviewForm.grantManagerAccess
                 : undefined,
+            workMode: reviewForm.workMode,
           }),
         },
       );
@@ -2177,6 +2286,17 @@ const Employees = ({
               </button>
             </div>
             <Button
+              className="rounded-xl font-heading"
+              onClick={() => void copyMobileAppLink()}
+              type="button"
+              variant="outline"
+            >
+              <Copy className="h-4 w-4" />
+              {mobileLinkCopied
+                ? runtimeLocalize("Скопировано", "Copied", locale)
+                : runtimeLocalize("Ссылка на приложение", "Mobile app link", locale)}
+            </Button>
+            <Button
               className={`rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90 ${
                 viewMode === "employees" && shouldPulseAddEmployee
                   ? "employees-add-employee-pulse"
@@ -2446,7 +2566,15 @@ const Employees = ({
         </div>
       </div>
 
-      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+      <Dialog
+        open={inviteDialogOpen}
+        onOpenChange={(open) => {
+          setInviteDialogOpen(open);
+          if (!open) {
+            setInviteWorkMode("STATIONARY");
+          }
+        }}
+      >
         <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
@@ -2510,6 +2638,33 @@ const Employees = ({
                 value={inviteContactMethod === "email" ? inviteEmail : invitePhone}
               />
             </label>
+            <div className="grid gap-2 text-sm font-heading">
+              <span>{runtimeLocalize("Тип сотрудника", "Employee type", locale)}</span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {employeeWorkModeOptions.map((option) => {
+                  const selected = inviteWorkMode === option.value;
+                  return (
+                    <button
+                      className={`rounded-2xl border p-3 text-left transition ${
+                        selected
+                          ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] text-[color:var(--foreground)]"
+                          : "border-border bg-secondary/20 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+                      }`}
+                      key={option.value}
+                      onClick={() => setInviteWorkMode(option.value)}
+                      type="button"
+                    >
+                      <span className="block font-semibold">
+                        {runtimeLocalize(option.labelRu, option.labelEn, locale)}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5">
+                        {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {inviteError ? (
               <div className="error-box">{inviteError}</div>
             ) : null}
@@ -2922,8 +3077,46 @@ const Employees = ({
                     </label>
                   </>
                 ) : null}
+                <div className="grid gap-2 text-sm font-heading sm:col-span-2">
+                  <span>{runtimeLocalize("Тип сотрудника", "Employee type", locale)}</span>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {employeeWorkModeOptions.map((option) => {
+                      const selected = reviewForm.workMode === option.value;
+                      return (
+                        <button
+                          className={`rounded-2xl border p-3 text-left transition ${
+                            selected
+                              ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] text-[color:var(--foreground)]"
+                              : "border-border bg-secondary/20 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+                          }`}
+                          key={option.value}
+                          onClick={() =>
+                            setReviewForm((current) => ({
+                              ...current,
+                              workMode: option.value,
+                              shiftTemplateId:
+                                option.value === "FIELD" ? "" : current.shiftTemplateId,
+                            }))
+                          }
+                          type="button"
+                        >
+                          <span className="block font-semibold">
+                            {runtimeLocalize(option.labelRu, option.labelEn, locale)}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5">
+                            {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Смена*", "Shift*", locale)}</span>
+                  <span>
+                    {reviewForm.workMode === "FIELD"
+                      ? runtimeLocalize("Смена", "Shift", locale)
+                      : runtimeLocalize("Смена*", "Shift*", locale)}
+                  </span>
                   <AppSelectField
                     value={reviewForm.shiftTemplateId}
                     onValueChange={(value) => {
@@ -2947,7 +3140,9 @@ const Employees = ({
                         label: runtimeLocalize("+ Добавить смену", "+ Add shift", locale),
                       },
                     ]}
-                    triggerClassName={reviewFieldClassName}
+                    triggerClassName={`${reviewFieldClassName} ${
+                      reviewForm.workMode === "FIELD" ? "pointer-events-none opacity-50" : ""
+                    }`}
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
@@ -3409,6 +3604,56 @@ const Employees = ({
                               selectedEmployee.hireDate,
                           )}
                         </p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading">
+                      <div className="flex flex-col gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {runtimeLocalize("Тип сотрудника", "Employee type", locale)}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[color:var(--accent)]">
+                            {getEmployeeWorkModeLabel(selectedEmployeeWorkMode, locale)}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                            {selectedEmployeeWorkMode === "FIELD"
+                              ? runtimeLocalize(
+                                  "Выездной сотрудник может делать несколько Say hi / Say bye в день. Координаты пишутся в каждом событии.",
+                                  "A field employee can make multiple Say hi / Say bye visits per day. Coordinates are stored on every event.",
+                                  locale,
+                                )
+                              : runtimeLocalize(
+                                  "Штатный сотрудник отмечается в радиусе основной локации или смены.",
+                                  "A stationary employee checks in within the primary location or shift radius.",
+                                  locale,
+                                )}
+                          </p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {employeeWorkModeOptions.map((option) => {
+                            const selected = selectedEmployeeWorkMode === option.value;
+                            return (
+                              <button
+                                className={`rounded-2xl border p-3 text-left transition ${
+                                  selected
+                                    ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] text-[color:var(--foreground)]"
+                                    : "border-border bg-[color:var(--panel-muted)] text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+                                } ${workModeUpdating || detailsLoading ? "opacity-70" : ""}`}
+                                disabled={workModeUpdating || detailsLoading}
+                                key={option.value}
+                                onClick={() => void updateSelectedEmployeeWorkMode(option.value)}
+                                type="button"
+                              >
+                                <span className="block text-sm font-semibold">
+                                  {runtimeLocalize(option.labelRu, option.labelEn, locale)}
+                                </span>
+                                <span className="mt-1 block text-xs leading-5">
+                                  {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                     <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading">

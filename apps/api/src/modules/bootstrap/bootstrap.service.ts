@@ -541,15 +541,41 @@ export class BootstrapService {
       requests,
       taskBoard,
     ] = await Promise.all([
-      this.scheduleService.listTemplates(user.tenantId),
-      this.scheduleService.listShifts(user.tenantId),
-      this.employeesService.list(user.tenantId, {}, user.sub),
-      this.collaborationService.listGroups(user.sub).catch(() => []),
-      this.orgService.listLocations(user.tenantId),
-      this.orgService.listDepartments(user.tenantId),
-      this.orgService.listPositions(user.tenantId),
-      this.requestsService.inbox(user.sub).catch(() => []),
-      this.collaborationService.listManagerTasks(user.sub, taskQuery).catch(() => null),
+      this.scheduleService.listTemplates(user.tenantId).catch(() => []),
+      this.scheduleService.listShifts(user.tenantId).catch(() => []),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      withTimeoutFallback(
+        this.collaborationService.listGroups(user.sub).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.orgService.listLocations(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.orgService.listDepartments(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.orgService.listPositions(user.tenantId).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.requestsService.inbox(user.sub).catch(() => []),
+        1200,
+        [],
+      ),
+      withTimeoutFallback(
+        this.collaborationService
+          .listManagerTasks(user.sub, taskQuery)
+          .catch(() => null),
+        1500,
+        null,
+      ),
     ]);
 
     return {

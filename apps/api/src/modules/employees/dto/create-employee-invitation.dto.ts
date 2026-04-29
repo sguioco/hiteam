@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class CreateEmployeeInvitationDto {
   @IsOptional()
@@ -8,4 +8,9 @@ export class CreateEmployeeInvitationDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STATIONARY', 'FIELD'])
+  workMode?: 'STATIONARY' | 'FIELD';
 }

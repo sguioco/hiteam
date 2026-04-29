@@ -77,6 +77,11 @@ const DEMO_REMOTE_AVATARS = {
   denis:
     "https://www.untitledui.com/images/avatars/transparent/scott-clayton?bg=%23E0E0E0",
 } as const;
+const DEMO_TASK_PHOTO_ASSETS = [
+  require("../../assets/1st.webp"),
+  require("../../assets/2nd.webp"),
+  require("../../assets/3rd.webp"),
+] as const;
 const DEMO_OWNER_DISPLAY_NAME = {
   firstName: "Alex",
   lastName: "Petrov",
@@ -374,6 +379,29 @@ function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
     }));
 }
 
+function buildDemoTaskPhotoProof(
+  employee: ManagerEmployee,
+  index: number,
+  createdAt: string,
+) {
+  const asset = DEMO_TASK_PHOTO_ASSETS[index % DEMO_TASK_PHOTO_ASSETS.length];
+
+  return {
+    id: `demo-task-photo-proof-${employee.id}-${index + 1}`,
+    fileName: `demo-task-proof-${index + 1}.webp`,
+    storageKey: `demo/manager/tasks/${employee.id}/${index + 1}.webp`,
+    url: Image.resolveAssetSource(asset).uri,
+    deletedAt: null,
+    supersededByProofId: null,
+    createdAt,
+    uploadedByEmployee: {
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+    },
+  };
+}
+
 function buildEmployeeName(
   firstName?: string | null,
   lastName?: string | null,
@@ -612,20 +640,27 @@ function buildDemoTasks(employees: ManagerEmployee[]): TaskItem[] {
   };
 
   return employees.flatMap((employee, index) => {
+    const baseTaskStatus =
+      index % 3 === 0 ? "DONE" : index % 2 === 0 ? "IN_PROGRESS" : "TODO";
+    const baseTaskRequiresPhoto = index % 2 === 0;
+    const baseTaskCompletedAt = index % 3 === 0 ? isoAt(0, 10, 20) : null;
+    const baseTaskPhotoProofs =
+      baseTaskRequiresPhoto && baseTaskStatus === "DONE"
+        ? [buildDemoTaskPhotoProof(employee, index, isoAt(0, 10, 18))]
+        : [];
     const baseTask: TaskItem = {
       id: `demo-task-${employee.id}-1`,
       title: `Morning floor check ${index + 1}`,
       description:
         "Check the work zone, confirm supplies, and post a short status update for the shift.",
-      status:
-        index % 3 === 0 ? "DONE" : index % 2 === 0 ? "IN_PROGRESS" : "TODO",
+      status: baseTaskStatus,
       priority: index % 4 === 0 ? "HIGH" : "MEDIUM",
-      requiresPhoto: index % 2 === 0,
+      requiresPhoto: baseTaskRequiresPhoto,
       isRecurring: false,
       taskTemplateId: null,
       occurrenceDate: null,
       dueAt: isoAt(0, 11 + (index % 4), 0),
-      completedAt: index % 3 === 0 ? isoAt(0, 10, 20) : null,
+      completedAt: baseTaskCompletedAt,
       createdAt: isoAt(-1, 18, 0),
       updatedAt: isoAt(0, 10 + (index % 3), 0),
       groupId: null,
@@ -642,7 +677,7 @@ function buildDemoTasks(employees: ManagerEmployee[]): TaskItem[] {
       group: null,
       checklistItems: [],
       activities: [],
-      photoProofs: [],
+      photoProofs: baseTaskPhotoProofs,
     };
 
     const meetingTask: TaskItem = {
@@ -1494,7 +1529,9 @@ export default function ManagerScreen({
                                       task,
                                       locale,
                                     ).length;
-                                    const canOpenPhotos = photoCount > 0;
+                                    const canOpenPhotos =
+                                      task.requiresPhoto &&
+                                      (isDone || photoCount > 0);
                                     const title = getTaskTitle(task, {
                                       normalize: true,
                                       hideSourceBeforeReady: true,

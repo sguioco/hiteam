@@ -246,6 +246,7 @@ export function LivePageTranslation({
     return !(
       pathname === "/" ||
       pathname.startsWith("/login") ||
+      pathname.startsWith("/mobile") ||
       pathname.startsWith("/signup") ||
       pathname.startsWith("/join") ||
       pathname.startsWith("/hi-team")

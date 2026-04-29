@@ -14,6 +14,7 @@ import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitatio
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateEmployeeBreaksDto } from './dto/update-employee-breaks.dto';
 import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
+import { UpdateEmployeeWorkModeDto } from './dto/update-employee-work-mode.dto';
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 import { EmployeesService } from './employees.service';
@@ -133,6 +134,22 @@ export class EmployeesController {
       user.sub,
       employeeId,
       dto.breaksEnabled,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch(':employeeId/work-mode')
+  updateWorkMode(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: UpdateEmployeeWorkModeDto,
+  ) {
+    return this.employeesService.updateWorkMode(
+      user.tenantId,
+      user.sub,
+      employeeId,
+      dto.workMode,
     );
   }
 

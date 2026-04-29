@@ -40,6 +40,18 @@ function buildSnapshot<T>(entry: CacheEnvelope<T>, maxAgeMs?: number): CacheSnap
   };
 }
 
+function areCacheValuesEqual(left: unknown, right: unknown) {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
 function notifyCacheListeners(key: string, entry: CacheEnvelope<unknown> | null) {
   const listeners = cacheListeners.get(key);
 
@@ -144,13 +156,18 @@ export function subscribeScreenCache<T>(
 }
 
 export async function writeScreenCache<T>(key: string, value: T) {
+  const previous = memoryCache.get(key) as CacheEnvelope<T> | undefined;
   const envelope: CacheEnvelope<T> = {
     storedAt: Date.now(),
     value,
   };
+  const shouldNotify = !previous || !areCacheValuesEqual(previous.value, value);
 
   memoryCache.set(key, envelope);
-  notifyCacheListeners(key, envelope);
+
+  if (shouldNotify) {
+    notifyCacheListeners(key, envelope);
+  }
 
   if (!canUseFileSystem()) {
     return;

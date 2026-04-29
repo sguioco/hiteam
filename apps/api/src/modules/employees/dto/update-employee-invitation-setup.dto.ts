@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class UpdateEmployeeInvitationSetupDto {
   @IsString()
@@ -11,10 +11,16 @@ export class UpdateEmployeeInvitationSetupDto {
   @IsString()
   middleName?: string;
 
+  @IsOptional()
   @IsString()
-  shiftTemplateId!: string;
+  shiftTemplateId?: string;
 
   @IsOptional()
   @IsString()
   groupId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STATIONARY', 'FIELD'])
+  workMode?: 'STATIONARY' | 'FIELD';
 }

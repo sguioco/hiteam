@@ -1030,7 +1030,9 @@
   flex-direction: column;
   min-height: 0;
   padding: 14px 16px 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .today-attendance-body.is-empty {
@@ -1041,7 +1043,11 @@
 }
 
 .today-attendance-head {
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
 }
 
 .today-attendance-head h2 {
@@ -1049,6 +1055,81 @@
   font-size: 1rem;
   line-height: 1.1;
   letter-spacing: 0.02em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.today-attendance-date-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.today-attendance-nav-button,
+.today-attendance-today-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(18, 24, 37, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--foreground);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.today-attendance-nav-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.today-attendance-today-button {
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 0 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.today-attendance-nav-button:hover,
+.today-attendance-today-button:hover,
+.today-attendance-today-button.is-active {
+  border-color: rgba(40, 75, 255, 0.22);
+  background: rgba(40, 75, 255, 0.08);
+  color: #284bff;
+}
+
+.today-attendance-nav-button:active,
+.today-attendance-today-button:active {
+  transform: translateY(1px);
+}
+
+.today-attendance-nav-button:disabled,
+.today-attendance-today-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  transform: none;
+}
+
+.today-attendance-title-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.today-attendance-date-label {
+  color: rgba(18, 24, 37, 0.48);
+  font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1069,8 +1150,9 @@
   flex: 1 1 auto;
   gap: 0;
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
+  align-content: start;
+  overflow: visible;
+  padding-right: 0;
   -ms-overflow-style: auto;
   scrollbar-width: thin;
 }
@@ -10369,6 +10451,119 @@ body {
   padding-bottom: 14px;
 }
 
+.team-tasks-search-results {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(20, 27, 45, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.team-tasks-search-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+}
+
+.team-tasks-search-results-head strong {
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.team-tasks-search-result-list {
+  display: grid;
+  gap: 8px;
+}
+
+.team-tasks-search-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid rgba(20, 27, 45, 0.08);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.88);
+  color: var(--foreground);
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.team-tasks-search-result:hover {
+  border-color: rgba(109, 115, 255, 0.22);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.team-tasks-search-result-main,
+.team-tasks-search-result-side {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.team-tasks-search-result-main strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-tasks-search-result-main span:not(.team-tasks-search-result-status),
+.team-tasks-search-result-side span {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-tasks-search-result-status {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.team-tasks-search-result-status.is-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.team-tasks-search-result-status.is-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.team-tasks-search-result-status.is-gray {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.team-tasks-search-result-status.is-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
 .team-tasks-filter-menu {
   position: relative;
   flex-shrink: 0;
@@ -11060,12 +11255,18 @@ body {
 
 .team-tasks-task-line-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-width: 0;
   grid-column: 1 / 4;
   padding-left: 20px;
   padding-right: 20px;
+}
+
+.team-tasks-task-line-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .team-tasks-task-line-side {
@@ -11152,6 +11353,15 @@ body {
   color: var(--foreground);
   font-size: 1rem;
   line-height: 1.45;
+}
+
+.team-tasks-task-line-creator {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .team-tasks-task-line-title.is-done {
@@ -11296,6 +11506,7 @@ body {
   .team-tasks-task-line-button,
   .team-tasks-task-line-static,
   .team-tasks-task-camera-mark,
+  .team-tasks-search-result,
   .team-tasks-inline-link {
     transition: none;
   }
@@ -11316,6 +11527,16 @@ body {
 @media (max-width: 760px) {
   .team-tasks-filter-menu {
     width: 100%;
+  }
+
+  .team-tasks-search-result {
+    grid-template-columns: 1fr;
+  }
+
+  .team-tasks-search-result-main strong,
+  .team-tasks-search-result-main span:not(.team-tasks-search-result-status),
+  .team-tasks-search-result-side span {
+    white-space: normal;
   }
 
   .team-tasks-filter-toggle {

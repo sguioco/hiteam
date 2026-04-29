@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import {
   EmployeeInvitationStatus,
   EmployeeStatus,
+  EmployeeWorkMode,
   NotificationType,
   Prisma,
   UserStatus,
@@ -58,6 +59,8 @@ const EMPLOYEE_LIST_INCLUDE = {
     },
   },
 } satisfies Prisma.EmployeeInclude;
+
+type EmployeeWorkModeInput = 'STATIONARY' | 'FIELD' | null | undefined;
 
 @Injectable()
 export class EmployeesService {
@@ -282,6 +285,39 @@ export class EmployeesService {
     return this.getById(tenantId, employeeId);
   }
 
+  async updateWorkMode(
+    tenantId: string,
+    actorUserId: string,
+    employeeId: string,
+    workMode: EmployeeWorkModeInput,
+  ) {
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId },
+      select: { id: true, workMode: true },
+    });
+    const nextWorkMode = this.normalizeWorkMode(workMode);
+
+    await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: { workMode: nextWorkMode },
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: employee.id,
+      action: 'employee.work_mode_updated',
+      metadata: {
+        employeeId: employee.id,
+        previousWorkMode: employee.workMode,
+        workMode: nextWorkMode,
+      },
+    });
+
+    return this.getById(tenantId, employeeId);
+  }
+
   async getMe(user: JwtUser) {
     const employee = await this.prisma.employee.findFirst({
       where: {
@@ -400,6 +436,7 @@ export class EmployeesService {
           employeeNumber: dto.employeeNumber,
           firstName: dto.firstName,
           lastName: dto.lastName,
+          workMode: this.normalizeWorkMode(dto.workMode),
           birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
           status: EmployeeStatus.ACTIVE,
           hireDate: new Date(dto.hireDate),
@@ -492,6 +529,7 @@ export class EmployeesService {
     const token = randomBytes(24).toString('hex');
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const workMode = this.normalizeWorkMode(dto.workMode);
 
     const existingInvitation = await this.prisma.employeeInvitation.findFirst({
       where: {
@@ -521,6 +559,7 @@ export class EmployeesService {
       rejectedReason: null,
       userId: null,
       employeeId: null,
+      workMode,
     };
 
     const invitation = existingInvitation
@@ -557,7 +596,7 @@ export class EmployeesService {
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: email ? 'employee.join_email_registered' : 'employee.join_phone_registered',
-      metadata: { email, phone, expiresAt: expiresAt.toISOString() },
+      metadata: { email, phone, expiresAt: expiresAt.toISOString(), workMode },
     });
 
     return {
@@ -573,6 +612,7 @@ export class EmployeesService {
       middleName: invitation.middleName ?? null,
       approvedShiftTemplateId: invitation.approvedShiftTemplateId ?? null,
       approvedGroupId: invitation.approvedGroupId ?? null,
+      workMode: invitation.workMode,
       companyName: tenant.companies[0]?.name ?? tenant.name,
       tenantName: tenant.name,
     };
@@ -603,22 +643,26 @@ export class EmployeesService {
     const firstName = dto.firstName.trim();
     const lastName = dto.lastName.trim();
     const middleName = dto.middleName?.trim() || null;
-    const shiftTemplateId = dto.shiftTemplateId.trim();
+    const workMode = this.normalizeWorkMode(dto.workMode ?? invitation.workMode);
+    const shiftTemplateId = dto.shiftTemplateId?.trim() ?? '';
 
     if (!firstName || !lastName) {
       throw new BadRequestException('Укажите имя и фамилию сотрудника.');
     }
 
-    if (!shiftTemplateId) {
+    if (workMode === EmployeeWorkMode.STATIONARY && !shiftTemplateId) {
       throw new BadRequestException('Выберите смену для сотрудника.');
     }
 
-    const shiftTemplate = await this.prisma.shiftTemplate.findFirst({
-      where: { tenantId, id: shiftTemplateId },
-      select: { id: true },
-    });
+    const shiftTemplate =
+      workMode === EmployeeWorkMode.STATIONARY
+        ? await this.prisma.shiftTemplate.findFirst({
+            where: { tenantId, id: shiftTemplateId },
+            select: { id: true },
+          })
+        : null;
 
-    if (!shiftTemplate) {
+    if (workMode === EmployeeWorkMode.STATIONARY && !shiftTemplate) {
       throw new BadRequestException('Selected shift template was not found.');
     }
 
@@ -642,7 +686,8 @@ export class EmployeesService {
         firstName,
         lastName,
         middleName,
-        approvedShiftTemplateId: shiftTemplate.id,
+        workMode,
+        approvedShiftTemplateId: shiftTemplate?.id ?? null,
         approvedGroupId: requestedGroupId,
       },
     });
@@ -654,7 +699,8 @@ export class EmployeesService {
       entityId: invitation.id,
       action: 'employee.invitation_setup_updated',
       metadata: {
-        shiftTemplateId: shiftTemplate.id,
+        workMode,
+        shiftTemplateId: shiftTemplate?.id ?? null,
         groupId: requestedGroupId,
         email: updated.email,
         phone: updated.phone,
@@ -674,6 +720,7 @@ export class EmployeesService {
       middleName: updated.middleName ?? null,
       approvedShiftTemplateId: updated.approvedShiftTemplateId ?? null,
       approvedGroupId: updated.approvedGroupId ?? null,
+      workMode: updated.workMode,
     };
   }
 
@@ -784,6 +831,7 @@ export class EmployeesService {
       firstName: invitation.firstName ?? null,
       lastName: invitation.lastName ?? null,
       phone: invitation.phone ?? null,
+      workMode: invitation.workMode,
     };
   }
 
@@ -902,7 +950,8 @@ export class EmployeesService {
 
         const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
         const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
-        const approvedShiftTemplate = invitation.approvedShiftTemplateId
+        const approvedShiftTemplate =
+          invitation.workMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId
           ? await tx.shiftTemplate.findFirst({
               where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
             })
@@ -925,6 +974,7 @@ export class EmployeesService {
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
             middleName: dto.middleName?.trim() || null,
+            workMode: this.normalizeWorkMode(invitation.workMode),
             birthDate: new Date(dto.birthDate),
             gender: dto.gender,
             phone: dto.phone.trim(),
@@ -939,7 +989,10 @@ export class EmployeesService {
           await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
         }
 
-        if (invitation.approvedShiftTemplateId) {
+        if (
+          invitation.workMode === EmployeeWorkMode.STATIONARY &&
+          invitation.approvedShiftTemplateId
+        ) {
           await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
         }
 
@@ -1019,10 +1072,11 @@ export class EmployeesService {
     }
 
     const grantManagerAccess = dto.decision === 'APPROVE' && dto.grantManagerAccess === true;
+    const workMode = this.normalizeWorkMode(dto.workMode ?? invitation.workMode);
     const requestedShiftTemplateId =
-      dto.decision === 'APPROVE'
+      dto.decision === 'APPROVE' && workMode === EmployeeWorkMode.STATIONARY
         ? dto.shiftTemplateId?.trim() || invitation.approvedShiftTemplateId || null
-        : invitation.approvedShiftTemplateId || null;
+        : null;
     const approvedShiftTemplate =
       requestedShiftTemplateId
         ? await this.prisma.shiftTemplate.findFirst({
@@ -1030,7 +1084,11 @@ export class EmployeesService {
           })
         : null;
 
-    if (dto.decision === 'APPROVE' && !approvedShiftTemplate) {
+    if (
+      dto.decision === 'APPROVE' &&
+      workMode === EmployeeWorkMode.STATIONARY &&
+      !approvedShiftTemplate
+    ) {
       throw new BadRequestException('Пожалуйста, выберите смену перед подтверждением анкеты.');
     }
 
@@ -1074,6 +1132,7 @@ export class EmployeesService {
       phone: dto.phone?.trim() ?? invitation.phone,
       avatarStorageKey: avatar?.key ?? invitation.avatarStorageKey,
       avatarUrl: avatar?.url ?? invitation.avatarUrl,
+      workMode,
       companyId: invitation.companyId ?? null,
       approvedShiftTemplateId: approvedShiftTemplate?.id ?? null,
       approvedGroupId: requestedGroupId,
@@ -1114,6 +1173,7 @@ export class EmployeesService {
           birthDate: updatePayload.birthDate ?? undefined,
           gender: updatePayload.gender ?? undefined,
           phone: updatePayload.phone ?? undefined,
+          workMode: updatePayload.workMode,
           avatarStorageKey: updatePayload.avatarStorageKey ?? null,
           avatarUrl: updatePayload.avatarUrl ?? null,
           status: EmployeeStatus.INACTIVE,
@@ -1217,6 +1277,7 @@ export class EmployeesService {
             firstName: updatePayload.firstName!,
             lastName: updatePayload.lastName!,
             middleName: updatePayload.middleName ?? null,
+            workMode: updatePayload.workMode,
             birthDate: updatePayload.birthDate!,
             gender: updatePayload.gender!,
             phone: updatePayload.phone!,
@@ -1294,6 +1355,7 @@ export class EmployeesService {
                 firstName: updatePayload.firstName!,
                 lastName: updatePayload.lastName!,
                 middleName: updatePayload.middleName ?? null,
+                workMode: updatePayload.workMode,
                 birthDate: updatePayload.birthDate!,
                 gender: updatePayload.gender!,
                 phone: updatePayload.phone!,
@@ -1314,6 +1376,7 @@ export class EmployeesService {
                 firstName: updatePayload.firstName!,
                 lastName: updatePayload.lastName!,
                 middleName: updatePayload.middleName ?? null,
+                workMode: updatePayload.workMode,
                 birthDate: updatePayload.birthDate!,
                 gender: updatePayload.gender!,
                 phone: updatePayload.phone!,
@@ -1520,6 +1583,12 @@ export class EmployeesService {
     await tx.shift.createMany({
       data: newShifts,
     });
+  }
+
+  private normalizeWorkMode(workMode: EmployeeWorkModeInput) {
+    return workMode === EmployeeWorkMode.FIELD || workMode === 'FIELD'
+      ? EmployeeWorkMode.FIELD
+      : EmployeeWorkMode.STATIONARY;
   }
 
   private hashToken(token: string) {

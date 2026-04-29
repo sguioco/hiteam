@@ -83,11 +83,16 @@ type NewsLocationDraft = {
   longitude: number;
 };
 
+type NewsLocationSuggestion = NewsLocationDraft & {
+  id: string;
+};
+
 const CREATE_NEWS_SUBMIT_BUTTON_OFFSET = 20;
 const CREATE_NEWS_SUBMIT_BUTTON_HEIGHT = 56;
 const CREATE_NEWS_SUBMIT_BUTTON_BASE_BOTTOM = 0;
 const CREATE_NEWS_SUBMIT_BUTTON_SIDE_PADDING = 20;
 const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
+const NEWS_LOCATION_SUGGESTION_LIMIT = 5;
 const NEWS_LOCATION_DELTA = {
   latitudeDelta: 0.012,
   longitudeDelta: 0.012,
@@ -159,6 +164,10 @@ function buildNewsLocationRegion(latitude: number, longitude: number): Region {
 
 function formatCoordinateAddress(latitude: number, longitude: number) {
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+}
+
+function buildLocationSuggestionId(latitude: number, longitude: number, index: number) {
+  return `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${index}`;
 }
 
 function formatReverseGeocodeAddress(
@@ -274,6 +283,14 @@ export default function CreateNewsScreen() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationSearchLoading, setLocationSearchLoading] = useState(false);
   const [locationAddressQuery, setLocationAddressQuery] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState<
+    NewsLocationSuggestion[]
+  >([]);
+  const [locationSuggestionsLoading, setLocationSuggestionsLoading] =
+    useState(false);
+  const [locationSuggestionsReady, setLocationSuggestionsReady] = useState(false);
+  const [locationSuggestionsSuppressed, setLocationSuggestionsSuppressed] =
+    useState(false);
   const [locationMapRegion, setLocationMapRegion] = useState<Region>(() =>
     buildNewsLocationRegion(
       DEFAULT_NEWS_LOCATION_COORDINATE.latitude,
@@ -357,6 +374,13 @@ export default function CreateNewsScreen() {
   const submitButtonBottom = insets.bottom + CREATE_NEWS_SUBMIT_BUTTON_BASE_BOTTOM;
   const submitButtonContentPadding =
     submitButtonBottom + CREATE_NEWS_SUBMIT_BUTTON_HEIGHT + Math.max(CREATE_NEWS_SUBMIT_BUTTON_OFFSET, 0) + 28;
+  const locationSuggestionQuery = locationAddressQuery.trim();
+  const shouldShowLocationSuggestions =
+    !locationSuggestionsSuppressed &&
+    locationSuggestionQuery.length >= 3 &&
+    (locationSuggestionsLoading ||
+      locationSuggestionsReady ||
+      locationSuggestions.length > 0);
 
   useEffect(() => {
     let active = true;
@@ -393,6 +417,96 @@ export default function CreateNewsScreen() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (locationSuggestionsSuppressed || locationSuggestionQuery.length < 3) {
+      setLocationSuggestions([]);
+      setLocationSuggestionsLoading(false);
+      setLocationSuggestionsReady(false);
+      return;
+    }
+
+    let active = true;
+    setLocationSuggestionsReady(false);
+    setLocationSuggestionsLoading(false);
+    setLocationSuggestions([]);
+
+    const timer = setTimeout(() => {
+      setLocationSuggestionsLoading(true);
+
+      void (async () => {
+        try {
+          const canLookupAddress = await ensureLocationLookupPermission();
+
+          if (!canLookupAddress) {
+            if (active) {
+              setLocationSuggestions([]);
+            }
+            return;
+          }
+
+          const results = await Location.geocodeAsync(locationSuggestionQuery);
+          const suggestions = await Promise.all(
+            results.slice(0, NEWS_LOCATION_SUGGESTION_LIMIT).map(
+              async (result, index): Promise<NewsLocationSuggestion> => {
+                let address = locationSuggestionQuery;
+
+                try {
+                  const [geo] = await Location.reverseGeocodeAsync({
+                    latitude: result.latitude,
+                    longitude: result.longitude,
+                  });
+                  address = formatReverseGeocodeAddress(geo, locationSuggestionQuery);
+                } catch {
+                  address = locationSuggestionQuery;
+                }
+
+                return {
+                  id: buildLocationSuggestionId(
+                    result.latitude,
+                    result.longitude,
+                    index,
+                  ),
+                  address,
+                  latitude: result.latitude,
+                  longitude: result.longitude,
+                };
+              },
+            ),
+          );
+          const uniqueSuggestions = Array.from(
+            suggestions
+              .reduce((map, suggestion) => {
+                const key = `${suggestion.address.toLowerCase()}|${suggestion.latitude.toFixed(5)}|${suggestion.longitude.toFixed(5)}`;
+                if (!map.has(key)) {
+                  map.set(key, suggestion);
+                }
+                return map;
+              }, new Map<string, NewsLocationSuggestion>())
+              .values(),
+          );
+
+          if (active) {
+            setLocationSuggestions(uniqueSuggestions);
+          }
+        } catch {
+          if (active) {
+            setLocationSuggestions([]);
+          }
+        } finally {
+          if (active) {
+            setLocationSuggestionsLoading(false);
+            setLocationSuggestionsReady(true);
+          }
+        }
+      })();
+    }, 350);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [language, locationSuggestionQuery, locationSuggestionsSuppressed]);
 
   function openCropper(source: NewsImageSource) {
     setCropSource(source);
@@ -671,10 +785,37 @@ export default function CreateNewsScreen() {
     }
   }
 
+  function resetLocationSuggestions(suppressed = true) {
+    setLocationSuggestions([]);
+    setLocationSuggestionsLoading(false);
+    setLocationSuggestionsReady(false);
+    setLocationSuggestionsSuppressed(suppressed);
+  }
+
+  function handleLocationAddressQueryChange(value: string) {
+    setLocationAddressQuery(value);
+    setLocationSuggestionsSuppressed(false);
+
+    if (!value.trim()) {
+      resetLocationSuggestions(false);
+    }
+  }
+
   function commitLocationAttachment(next: NewsLocationDraft) {
+    resetLocationSuggestions(true);
     setLocationAttachment(next);
     setLocationAddressQuery(next.address);
     setLocationMapRegion(buildNewsLocationRegion(next.latitude, next.longitude));
+  }
+
+  function handleSelectLocationSuggestion(suggestion: NewsLocationSuggestion) {
+    hapticSelection();
+    Keyboard.dismiss();
+    commitLocationAttachment({
+      address: suggestion.address,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    });
   }
 
   async function ensureLocationLookupPermission() {
@@ -739,6 +880,7 @@ export default function CreateNewsScreen() {
     }
 
     Keyboard.dismiss();
+    resetLocationSuggestions(true);
     setLocationSearchLoading(true);
 
     try {
@@ -1224,6 +1366,7 @@ export default function CreateNewsScreen() {
                   onPress={() => {
                     setLocationAttachment(null);
                     setLocationAddressQuery('');
+                    resetLocationSuggestions(false);
                   }}
                 >
                   <Text className="text-[12px] font-semibold text-[#dc2626]">
@@ -1248,7 +1391,7 @@ export default function CreateNewsScreen() {
                 autoCorrect={false}
                 className="min-h-10 flex-1 text-[15px] text-foreground"
                 keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
-                onChangeText={setLocationAddressQuery}
+                onChangeText={handleLocationAddressQueryChange}
                 onSubmitEditing={() => void handleSearchLocationAddress()}
                 placeholder={localizeText(
                   language,
@@ -1272,6 +1415,59 @@ export default function CreateNewsScreen() {
                 </Text>
               </PressableScale>
             </View>
+
+            {shouldShowLocationSuggestions ? (
+              <View className="overflow-hidden rounded-[20px] border border-[#e7ecf5] bg-white">
+                {locationSuggestionsLoading ? (
+                  <View className="min-h-12 flex-row items-center gap-3 px-4 py-3">
+                    <Ionicons color="#64748b" name="search-outline" size={17} />
+                    <Text className="text-[13px] font-medium text-muted-foreground">
+                      {localizeText(language, 'Ищем адреса...', 'Searching addresses...')}
+                    </Text>
+                  </View>
+                ) : locationSuggestions.length > 0 ? (
+                  locationSuggestions.map((suggestion, index) => (
+                    <PressableScale
+                      key={suggestion.id}
+                      className={`min-h-12 flex-row items-center gap-3 px-4 py-3 ${
+                        index > 0 ? 'border-t border-[#edf2f7]' : ''
+                      }`}
+                      haptic="selection"
+                      onPress={() => handleSelectLocationSuggestion(suggestion)}
+                    >
+                      <View className="h-8 w-8 items-center justify-center rounded-full bg-[#eef2ff]">
+                        <Ionicons color="#6d73ff" name="location-outline" size={16} />
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-[13px] font-semibold text-foreground"
+                          numberOfLines={2}
+                          style={textDirectionStyle}
+                        >
+                          {suggestion.address}
+                        </Text>
+                        <Text className="mt-0.5 text-[10px] text-muted-foreground">
+                          {formatCoordinateAddress(
+                            suggestion.latitude,
+                            suggestion.longitude,
+                          )}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                  ))
+                ) : (
+                  <View className="min-h-12 justify-center px-4 py-3">
+                    <Text className="text-center text-[13px] font-medium text-muted-foreground">
+                      {localizeText(
+                        language,
+                        'Адреса не найдены. Попробуй уточнить запрос.',
+                        'No address suggestions. Try a more specific query.',
+                      )}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
 
             <View className="flex-row gap-2">
               <PressableScale
@@ -1361,14 +1557,28 @@ export default function CreateNewsScreen() {
             />
 
             {scheduleEnabled ? (
-              <View className="gap-3">
-                <View className="flex-row gap-3">
+              <View className="gap-2 rounded-[24px] border border-white/40 bg-white/70 px-3 py-3 shadow-sm shadow-[#1f2687]/10">
+                <View className="rounded-[18px] bg-[#f8fbff] px-4 py-3">
+                  <Text className="text-[11px] font-bold uppercase tracking-[1px] text-muted-foreground">
+                    {localizeText(language, 'Публикация', 'Publish at')}
+                  </Text>
+                  <Text className="mt-1 text-[15px] font-semibold leading-5 text-foreground">
+                    {`${formatDateLabel(scheduledAt, language)}, ${formatTimeLabel(scheduledAt)}`}
+                  </Text>
+                </View>
+
+                <View className="gap-2">
                   {Platform.OS === 'ios' ? (
                     <>
-                      <View className="min-h-[82px] flex-1 justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10">
-                        <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                          {localizeText(language, 'Дата', 'Date')}
-                        </Text>
+                      <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">
+                        <View className="flex-1">
+                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
+                            {localizeText(language, 'Дата', 'Date')}
+                          </Text>
+                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                            {formatDateLabel(scheduledAt, language)}
+                          </Text>
+                        </View>
                         <DateTimePicker
                           accentColor="#6d73ff"
                           display="compact"
@@ -1379,10 +1589,15 @@ export default function CreateNewsScreen() {
                           value={scheduledAt}
                         />
                       </View>
-                      <View className="min-h-[82px] flex-1 justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10">
-                        <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                          {localizeText(language, 'Время', 'Time')}
-                        </Text>
+                      <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">
+                        <View className="flex-1">
+                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
+                            {localizeText(language, 'Время', 'Time')}
+                          </Text>
+                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground">
+                            {formatTimeLabel(scheduledAt)}
+                          </Text>
+                        </View>
                         <DateTimePicker
                           accentColor="#6d73ff"
                           display="compact"
@@ -1396,45 +1611,42 @@ export default function CreateNewsScreen() {
                   ) : (
                     <>
                       <PressableScale
-                        className="min-h-[82px] flex-1 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                        className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3"
+                        contentStyle={styles.fullWidth}
                         haptic="selection"
                         onPress={openScheduleDatePicker}
+                        style={styles.fullWidth}
                       >
-                        <View className="flex-row items-center justify-between gap-2">
+                        <View className="flex-1 pr-3">
                           <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
                             {localizeText(language, 'Дата', 'Date')}
                           </Text>
-                          <Ionicons color="#94a3b8" name="calendar-outline" size={16} />
+                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                            {formatDateLabel(scheduledAt, language)}
+                          </Text>
                         </View>
-                        <Text className="mt-2 text-[15px] font-semibold text-foreground" numberOfLines={2}>
-                          {formatDateLabel(scheduledAt, language)}
-                        </Text>
+                        <Ionicons color="#94a3b8" name="calendar-outline" size={18} />
                       </PressableScale>
                       <PressableScale
-                        className="min-h-[82px] flex-1 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                        className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3"
+                        contentStyle={styles.fullWidth}
                         haptic="selection"
                         onPress={openScheduleTimePicker}
+                        style={styles.fullWidth}
                       >
-                        <View className="flex-row items-center justify-between gap-2">
+                        <View className="flex-1 pr-3">
                           <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
                             {localizeText(language, 'Время', 'Time')}
                           </Text>
-                          <Ionicons color="#94a3b8" name="time-outline" size={16} />
+                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground">
+                            {formatTimeLabel(scheduledAt)}
+                          </Text>
                         </View>
-                        <Text className="mt-2 text-[15px] font-semibold text-foreground">
-                          {formatTimeLabel(scheduledAt)}
-                        </Text>
+                        <Ionicons color="#94a3b8" name="time-outline" size={18} />
                       </PressableScale>
                     </>
                   )}
                 </View>
-                <Text className="text-[13px] leading-6 text-muted-foreground">
-                  {localizeText(
-                    language,
-                    `Публикация: ${formatDateLabel(scheduledAt, language)} в ${formatTimeLabel(scheduledAt)}`,
-                    `Publish at ${formatDateLabel(scheduledAt, language)} ${formatTimeLabel(scheduledAt)}`,
-                  )}
-                </Text>
               </View>
             ) : null}
           </View>
@@ -1646,6 +1858,9 @@ export default function CreateNewsScreen() {
 }
 
 const styles = StyleSheet.create({
+  fullWidth: {
+    width: '100%',
+  },
   optionBox: {
     alignItems: 'center',
     borderRadius: 6,
@@ -1671,7 +1886,7 @@ const styles = StyleSheet.create({
   },
   optionPressable: {
     justifyContent: 'center',
-    minHeight: 28,
+    minHeight: 40,
   },
   optionRow: {
     alignItems: 'center',

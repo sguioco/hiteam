@@ -1,4 +1,5 @@
 export type AttendanceState = 'not_checked_in' | 'checked_in' | 'on_break' | 'checked_out';
+export type EmployeeWorkMode = 'STATIONARY' | 'FIELD';
 
 export type ManagerKpi = {
   label: string;
@@ -8,6 +9,7 @@ export type ManagerKpi = {
 
 export type AttendanceStatusResponse = {
   employeeId: string;
+  workMode?: EmployeeWorkMode;
   attendanceState: AttendanceState;
   allowedActions: Array<'check_in' | 'check_out' | 'start_break' | 'end_break'>;
   location: {
@@ -33,6 +35,7 @@ export type AttendanceStatusResponse = {
   } | null;
   verification: {
     locationRequired: boolean;
+    geofenceRequired?: boolean;
     selfieRequired: boolean;
     deviceMustBePrimary: boolean;
   };
@@ -444,6 +447,7 @@ export type EmployeeApiRecord = {
   email?: string | null;
   avatar?: any;
   avatarUrl?: string | null;
+  workMode?: EmployeeWorkMode;
   breaksEnabled?: boolean;
   status?: string | null;
   biometricProfile?: {
@@ -529,6 +533,7 @@ export type InvitationRecord = {
   rejectedReason?: string | null;
   approvedShiftTemplateId?: string | null;
   approvedGroupId?: string | null;
+  workMode?: EmployeeWorkMode;
 };
 
 export type OrganizationSetupResponse = {
@@ -547,6 +552,7 @@ export type ManagerEmployeeItem = {
   primaryLocation: (NamedEntityOption & { timezone?: string | null }) | null;
   avatar?: any;
   avatarUrl?: string | null;
+  workMode?: EmployeeWorkMode;
 };
 
 export type ScheduleShiftTemplateRecord = {
@@ -1168,6 +1174,7 @@ export type PayrollSummaryResponse = {
     employeeId: string;
     employeeName: string;
     employeeNumber: string;
+    workMode?: EmployeeWorkMode;
     department: string;
     position: string;
     scheduledMinutes: number;
@@ -1266,6 +1273,7 @@ export type AttendanceHistoryResponse = {
     employeeId: string;
     employeeName: string;
     employeeNumber: string;
+    workMode?: EmployeeWorkMode;
     department: string;
     location: string;
     shiftLabel: string | null;
@@ -1281,12 +1289,16 @@ export type AttendanceHistoryResponse = {
     checkInEvent: {
       eventId: string;
       occurredAt: string;
+      latitude?: number;
+      longitude?: number;
       distanceMeters: number;
       notes: string | null;
     };
     checkOutEvent: {
       eventId: string;
       occurredAt: string;
+      latitude?: number;
+      longitude?: number;
       distanceMeters: number;
       notes: string | null;
     } | null;

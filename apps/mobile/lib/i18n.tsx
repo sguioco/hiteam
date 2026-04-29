@@ -914,6 +914,10 @@ const translations = {
     "manager.meetingPastTimeNotAllowed": "Нельзя выбрать прошедшее время.",
     "manager.meetingEndAfterStart":
       "Время окончания должно быть позже времени начала.",
+    "manager.photoViewerTitle": "Фото-отчёт",
+    "manager.photoViewerHint":
+      "Фото, которые сотрудник прикрепил к выполненной задаче.",
+    "manager.noTaskPhotos": "Для этой задачи фото пока не прикреплены.",
     "manager.createTaskRecurring": "Сделать регулярной задачей",
     "manager.createTaskPhotoProof": "Требуется фото-подтверждение",
     "manager.createTaskSubmit": "Создать задачу",
@@ -1818,6 +1822,10 @@ const translations = {
     "manager.meetingClearEndTime": "Clear end time",
     "manager.meetingPastTimeNotAllowed": "Past time is not allowed.",
     "manager.meetingEndAfterStart": "End time must be after start time.",
+    "manager.photoViewerTitle": "Photo report",
+    "manager.photoViewerHint":
+      "Photos the employee attached to the completed task.",
+    "manager.noTaskPhotos": "No photos are attached to this task yet.",
     "manager.createTaskRecurring": "Make recurring",
     "manager.createTaskPhotoProof": "Require photo proof",
     "manager.createTaskSubmit": "Create task",

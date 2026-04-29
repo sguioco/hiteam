@@ -49,4 +49,9 @@ export class ReviewEmployeeInvitationDto {
   @IsOptional()
   @IsBoolean()
   grantManagerAccess?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STATIONARY', 'FIELD'])
+  workMode?: 'STATIONARY' | 'FIELD';
 }

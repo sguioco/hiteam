@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { AttendanceAnomalyResponse, AttendanceLiveSession } from "@smart/types";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  AttendanceAnomalyResponse,
+  AttendanceHistoryResponse,
+  AttendanceLiveSession,
+} from "@smart/types";
 import type { EmployeeScheduleShift } from "@/lib/employee-workdays";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { localizePersonName } from "@/lib/transliteration";
@@ -26,15 +31,23 @@ type TodayAttendanceShift = EmployeeScheduleShift & {
 };
 
 type TodayAttendanceShiftWithEmployee = TodayAttendanceShift & {
-  employee: { id: string };
+  employee: { id: string; firstName?: string; lastName?: string };
 };
 
 type TodayAttendancePanelProps = {
   locale: "ru" | "en";
   employees: TodayAttendanceEmployee[];
+  history: AttendanceHistoryResponse | null;
+  isLoading?: boolean;
   liveSessions: AttendanceLiveSession[];
   anomalies: AttendanceAnomalyResponse | null;
   scheduleShifts: TodayAttendanceShift[];
+  selectedDate: string;
+  canGoNext: boolean;
+  canGoPrevious: boolean;
+  onNextDay: () => void;
+  onPreviousDay: () => void;
+  onToday: () => void;
 };
 
 type AttendanceRowTone = "late" | "early" | "neutral";
@@ -68,6 +81,27 @@ function formatDuration(totalMinutes: number, locale: "ru" | "en") {
   }
 
   return locale === "ru" ? `${hours} ч ${minutes} мин` : `${hours}h ${minutes}min`;
+}
+
+function formatDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatSelectedDayLabel(value: string, locale: "ru" | "en") {
+  return parseDateKey(value)
+    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+      day: "numeric",
+      month: "short",
+    })
+    .replace(/\.$/, "");
 }
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -214,25 +248,85 @@ function getArrivalState(options: {
   };
 }
 
+function getHistoryArrivalState(
+  row: AttendanceHistoryResponse["rows"][number],
+  locale: "ru" | "en",
+) {
+  if (row.lateMinutes > 0) {
+    return {
+      note: localize(
+        locale,
+        `Опоздание на ${formatDuration(row.lateMinutes, locale)}`,
+        `Late by ${formatDuration(row.lateMinutes, locale)}`,
+      ),
+      time: formatTime(row.startedAt, locale),
+      tone: "late" as AttendanceRowTone,
+    };
+  }
+
+  if (row.earlyLeaveMinutes > 0) {
+    return {
+      note: localize(
+        locale,
+        `Ранний уход на ${formatDuration(row.earlyLeaveMinutes, locale)}`,
+        `Left early by ${formatDuration(row.earlyLeaveMinutes, locale)}`,
+      ),
+      time: formatTime(row.startedAt, locale),
+      tone: "early" as AttendanceRowTone,
+    };
+  }
+
+  return {
+    note:
+      row.status === "checked_out"
+        ? localize(locale, "Смена завершена", "Shift completed")
+        : localize(locale, "На месте", "On site"),
+    time: formatTime(row.startedAt, locale),
+    tone: "neutral" as AttendanceRowTone,
+  };
+}
+
 export function TodayAttendancePanel({
   locale,
   employees,
+  history,
+  isLoading = false,
   liveSessions,
   anomalies,
   scheduleShifts,
+  selectedDate,
+  canGoNext,
+  canGoPrevious,
+  onNextDay,
+  onPreviousDay,
+  onToday,
 }: TodayAttendancePanelProps) {
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = formatDateKey(now);
+  const isToday = selectedDate === todayKey;
   const sessionByEmployeeId = new Map(
-    liveSessions.map((session) => [session.employeeId, session] as const),
+    isToday ? liveSessions.map((session) => [session.employeeId, session] as const) : [],
   );
   const anomalyByEmployeeId = new Map(
     (anomalies?.items ?? []).map((item) => [item.employeeId, item] as const),
   );
+  const historyByEmployeeId = new Map<
+    string,
+    AttendanceHistoryResponse["rows"][number]
+  >();
+  for (const row of history?.rows ?? []) {
+    const previous = historyByEmployeeId.get(row.employeeId);
+    if (
+      !previous ||
+      new Date(row.startedAt).getTime() < new Date(previous.startedAt).getTime()
+    ) {
+      historyByEmployeeId.set(row.employeeId, row);
+    }
+  }
 
   const todaysShifts = scheduleShifts.filter(
     (shift): shift is TodayAttendanceShiftWithEmployee =>
-      shift.shiftDate.slice(0, 10) === todayKey && Boolean(shift.employee?.id),
+      shift.shiftDate.slice(0, 10) === selectedDate && Boolean(shift.employee?.id),
   );
 
   const uniqueShiftMap = new Map<string, TodayAttendanceShiftWithEmployee>();
@@ -242,12 +336,28 @@ export function TodayAttendancePanel({
     }
   });
 
-  const rows = Array.from(uniqueShiftMap.values())
-    .filter((shift) => {
-      const session = sessionByEmployeeId.get(shift.employee.id);
-      const shiftStart = resolveShiftStart(shift);
+  const employeeIds = new Set<string>([
+    ...Array.from(uniqueShiftMap.keys()),
+    ...Array.from(historyByEmployeeId.keys()),
+    ...Array.from(sessionByEmployeeId.keys()),
+  ]);
 
-      if (session) {
+  const rows = Array.from(employeeIds)
+    .filter((employeeId) => {
+      const shift = uniqueShiftMap.get(employeeId);
+      const session = sessionByEmployeeId.get(employeeId);
+      const historyRow = historyByEmployeeId.get(employeeId);
+      const shiftStart = shift ? resolveShiftStart(shift) : null;
+
+      if (session || historyRow) {
+        return true;
+      }
+
+      if (!shift) {
+        return false;
+      }
+
+      if (!isToday) {
         return true;
       }
 
@@ -257,18 +367,22 @@ export function TodayAttendancePanel({
 
       return shiftStart.getTime() <= now.getTime();
     })
-    .map((shift) => {
-      const employee = employees.find((item) => item.id === shift.employee.id);
-      const session = sessionByEmployeeId.get(shift.employee.id);
-      const anomaly = anomalyByEmployeeId.get(shift.employee.id);
-      const shiftStart = resolveShiftStart(shift);
-      const arrivalState = getArrivalState({
-        anomalySummary: anomaly?.summary ?? null,
-        locale,
-        now,
-        session,
-        shiftStart,
-      });
+    .map((employeeId) => {
+      const shift = uniqueShiftMap.get(employeeId);
+      const employee = employees.find((item) => item.id === employeeId);
+      const session = sessionByEmployeeId.get(employeeId);
+      const historyRow = historyByEmployeeId.get(employeeId);
+      const anomaly = anomalyByEmployeeId.get(employeeId);
+      const shiftStart = shift ? resolveShiftStart(shift) : null;
+      const arrivalState = historyRow
+        ? getHistoryArrivalState(historyRow, locale)
+        : getArrivalState({
+            anomalySummary: anomaly?.summary ?? null,
+            locale,
+            now,
+            session,
+            shiftStart,
+          });
       const arrivalDeltaMinutes =
         session && shiftStart
           ? Math.round(
@@ -279,13 +393,17 @@ export function TodayAttendancePanel({
             ? Math.max(
                 0,
                 Math.round((now.getTime() - shiftStart.getTime()) / 60_000),
-              )
-            : 0;
+            )
+          : 0;
+      const shiftEmployeeName =
+        `${shift?.employee.lastName ?? ""} ${shift?.employee.firstName ?? ""}`.trim();
+      const fallbackName =
+        historyRow?.employeeName ?? session?.employeeName ?? shiftEmployeeName;
       const fullName = employee
         ? `${employee.lastName} ${employee.firstName}`.trim()
-        : session?.employeeName ?? localize(locale, "Сотрудник", "Employee");
+        : fallbackName || localize(locale, "Сотрудник", "Employee");
       return {
-        id: shift.employee.id,
+        id: employeeId,
         avatarUrl:
           employee?.avatarUrl ||
           getMockAvatarDataUrl(
@@ -293,13 +411,20 @@ export function TodayAttendancePanel({
               ? `${employee.firstName} ${employee.lastName}`.trim()
               : fullName,
           ),
-        department: employee?.department?.name ?? session?.department ?? "—",
+        department:
+          employee?.department?.name ??
+          historyRow?.department ??
+          session?.department ??
+          "—",
         note: arrivalState.note,
-        shiftLabel: resolveShiftLabel(shift, session, locale),
+        shiftLabel:
+          historyRow?.shiftLabel ??
+          resolveShiftLabel(shift, session, locale) ??
+          localize(locale, "Смена не назначена", "No shift assigned"),
         time: arrivalState.time,
         timeTone: arrivalState.tone,
         fullName,
-        hasSession: Boolean(session),
+        hasSession: Boolean(session || historyRow),
         arrivalDeltaMinutes,
       };
     })
@@ -310,8 +435,10 @@ export function TodayAttendancePanel({
         left.fullName.localeCompare(right.fullName, locale === "ru" ? "ru-RU" : "en-US"),
     );
 
-  const presentCount = rows.filter((row) => sessionByEmployeeId.has(row.id)).length;
-  const expectedCount = rows.length || liveSessions.length;
+  const presentCount = rows.filter(
+    (row) => sessionByEmployeeId.has(row.id) || historyByEmployeeId.has(row.id),
+  ).length;
+  const expectedCount = rows.length || (isToday ? liveSessions.length : 0);
   const translatableTexts = useMemo(
     () =>
       rows.flatMap((row) => [row.department, row.note, row.shiftLabel].filter(Boolean)),
@@ -331,9 +458,42 @@ export function TodayAttendancePanel({
   return (
     <div className="dashboard-card today-attendance-panel">
       <div className="today-attendance-head">
-        <h2>{localize(locale, "Посещаемость сегодня", "Today attendance")}</h2>
+        <div className="today-attendance-date-controls">
+          <button
+            aria-label={localize(locale, "Предыдущий день", "Previous day")}
+            className="today-attendance-nav-button"
+            disabled={!canGoPrevious || isLoading}
+            onClick={onPreviousDay}
+            type="button"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            aria-label={localize(locale, "Следующий день", "Next day")}
+            className="today-attendance-nav-button"
+            disabled={!canGoNext || isLoading}
+            onClick={onNextDay}
+            type="button"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <button
+          className={`today-attendance-today-button${isToday ? " is-active" : ""}`}
+          disabled={isLoading}
+          onClick={onToday}
+          type="button"
+        >
+          Today
+        </button>
+        <div className="today-attendance-title-group">
+          <h2>{localize(locale, "Attendance", "Attendance")}</h2>
+          <span className="today-attendance-date-label">
+            {formatSelectedDayLabel(selectedDate, locale)}
+          </span>
+        </div>
         <span className="today-attendance-head-count">
-          {presentCount}/{expectedCount}
+          {isLoading ? "..." : `${presentCount}/${expectedCount}`}
         </span>
       </div>
 

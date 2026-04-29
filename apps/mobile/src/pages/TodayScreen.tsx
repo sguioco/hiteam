@@ -292,7 +292,9 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     }
 
     if (
-      effectiveAttendanceStatus.attendanceState === 'not_checked_in' &&
+      (effectiveAttendanceStatus.attendanceState === 'not_checked_in' ||
+        (effectiveAttendanceStatus.workMode === 'FIELD' &&
+          effectiveAttendanceStatus.attendanceState === 'checked_out')) &&
       effectiveAttendanceStatus.allowedActions.includes('check_in')
     ) {
       router.push(resolveAttendanceActionHref('check-in'));

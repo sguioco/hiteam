@@ -16,6 +16,7 @@ import {
   CalendarDays,
   LogIn,
   LogOut,
+  MapPin,
   Search,
 } from "lucide-react";
 import type { SortDescriptor } from "react-aria-components";
@@ -53,6 +54,10 @@ type AttendanceCard = {
   schedule: string;
   arrival: string | null;
   departure: string | null;
+  checkInLatitude: number | null;
+  checkInLongitude: number | null;
+  checkOutLatitude: number | null;
+  checkOutLongitude: number | null;
   checkInDistanceMeters: number | null;
   checkOutDistanceMeters: number | null;
   workedMinutes: number;
@@ -202,6 +207,14 @@ function formatDistance(value: number | null) {
   return getRuntimeLocale() === "ru"
     ? `${Math.round(value)} м`
     : `${Math.round(value)} m`;
+}
+
+function formatCoordinates(latitude: number | null, longitude: number | null) {
+  if (latitude === null || longitude === null) {
+    return "—";
+  }
+
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
 function getInitials(name: string) {
@@ -621,6 +634,10 @@ export default function Attendance({
           schedule: row?.shiftLabel ?? runtimeLocalize("Смена не назначена", "No shift assigned", locale),
           arrival: row?.startedAt ?? null,
           departure: row?.endedAt ?? null,
+          checkInLatitude: row?.checkInEvent.latitude ?? null,
+          checkInLongitude: row?.checkInEvent.longitude ?? null,
+          checkOutLatitude: row?.checkOutEvent?.latitude ?? null,
+          checkOutLongitude: row?.checkOutEvent?.longitude ?? null,
           checkInDistanceMeters: row?.checkInEvent.distanceMeters ?? null,
           checkOutDistanceMeters: row?.checkOutEvent?.distanceMeters ?? null,
           workedMinutes: row?.workedMinutes ?? 0,
@@ -1081,6 +1098,27 @@ export default function Attendance({
                         </div>
                         <div className="mt-2 text-base font-semibold tabular-nums text-[color:var(--foreground)]">
                           {formatTime(selectedCard.departure)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[18px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] p-4 text-xs text-[color:var(--muted-foreground)]">
+                      <div className="mb-2 inline-flex items-center gap-2 font-semibold uppercase tracking-[0.18em]">
+                        <MapPin className="h-3.5 w-3.5" />
+                        GPS
+                      </div>
+                      <div className="grid gap-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span>{runtimeLocalize("Приход", "Check-in", locale)}</span>
+                          <span className="font-medium tabular-nums text-[color:var(--foreground)]">
+                            {formatCoordinates(selectedCard.checkInLatitude, selectedCard.checkInLongitude)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>{runtimeLocalize("Уход", "Check-out", locale)}</span>
+                          <span className="font-medium tabular-nums text-[color:var(--foreground)]">
+                            {formatCoordinates(selectedCard.checkOutLatitude, selectedCard.checkOutLongitude)}
+                          </span>
                         </div>
                       </div>
                     </div>

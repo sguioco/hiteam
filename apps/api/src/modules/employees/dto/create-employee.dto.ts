@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class CreateEmployeeDto {
   @IsEmail()
@@ -38,4 +38,9 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsBoolean()
   grantManagerAccess?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STATIONARY', 'FIELD'])
+  workMode?: 'STATIONARY' | 'FIELD';
 }
