@@ -1744,7 +1744,6 @@ export class EmployeesService {
       data: {
         tenantId,
         name: 'General Company',
-        code: `GENERAL-${tenantId.slice(0, 8).toUpperCase()}`,
       },
     });
 
