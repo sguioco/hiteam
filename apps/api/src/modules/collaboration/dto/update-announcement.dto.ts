@@ -1,4 +1,18 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from "class-validator";
+import {
+  CreateAnnouncementAttachmentDto,
+  CreateAnnouncementAttachmentLocationDto,
+} from "./create-announcement.dto";
 
 export class UpdateAnnouncementDto {
   @IsOptional()
@@ -27,4 +41,33 @@ export class UpdateAnnouncementDto {
   @IsOptional()
   @IsBoolean()
   removeImage?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1200)
+  linkUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  removeLink?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateAnnouncementAttachmentLocationDto)
+  attachmentLocation?: CreateAnnouncementAttachmentLocationDto;
+
+  @IsOptional()
+  @IsBoolean()
+  removeAttachmentLocation?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => CreateAnnouncementAttachmentDto)
+  attachments?: CreateAnnouncementAttachmentDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  removeAttachments?: boolean;
 }

@@ -9,9 +9,10 @@ import { Badge } from '../../components/ui/badge';
 import { Card } from '../../components/ui/card';
 import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import { createManagerTask, loadManagerEmployees } from '../../lib/api';
+import { createManagerTask, loadEmployeesBootstrap } from '../../lib/api';
 import {
   buildDepartmentFallbackGroups,
+  mapApiGroups,
   type EmployeeOption,
   type GroupMemberOption,
   type GroupOption,
@@ -105,9 +106,10 @@ export default function CreateMeetingScreen() {
 
   useEffect(() => {
     async function init() {
-      const [employeesResult] = await Promise.allSettled([loadManagerEmployees()]);
-      const employeeList = employeesResult.status === 'fulfilled' ? employeesResult.value : [];
-      const resolvedGroups: GroupOption[] = [];
+      const [bootstrapResult] = await Promise.allSettled([loadEmployeesBootstrap()]);
+      const snapshot = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null;
+      const employeeList = snapshot?.employeeRecords ?? [];
+      const resolvedGroups: GroupOption[] = snapshot ? mapApiGroups(snapshot.groups) : [];
       const fallbackGroups = buildDepartmentFallbackGroups(employeeList);
       const groupList = mergeGroupOptions(resolvedGroups, fallbackGroups);
 

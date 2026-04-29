@@ -1,8 +1,7 @@
-import type { WorkGroupItem } from '@smart/types';
-import type { loadManagerEmployees } from './api';
+import type { ManagerEmployeeItem, WorkGroupItem } from '@smart/types';
 import { resolveEmployeeAvatarSource } from './employee-avatar';
 
-export type EmployeeOption = Awaited<ReturnType<typeof loadManagerEmployees>>[number];
+export type EmployeeOption = ManagerEmployeeItem;
 
 export type GroupMemberOption = {
   departmentName?: string;

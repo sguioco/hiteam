@@ -10,11 +10,18 @@ import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { OrgService } from '../org/org.service';
 import { RequestsService } from '../requests/requests.service';
 import { ScheduleService } from '../schedule/schedule.service';
+import type { ListManagerTasksQueryDto } from '../collaboration/dto/list-manager-tasks-query.dto';
 
 const ADMIN_ROLES = ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'] as const;
 
 function isEmployeeOnlyRole(roleCodes: string[]) {
   return !roleCodes.some((role) => ADMIN_ROLES.includes(role as (typeof ADMIN_ROLES)[number]));
+}
+
+function canManageEmployeeRoles(roleCodes: string[]) {
+  return roleCodes.some((role) =>
+    ['tenant_owner', 'hr_admin', 'operations_admin'].includes(role),
+  );
 }
 
 function addDays(value: Date, amount: number) {
@@ -86,6 +93,38 @@ function resolveBootstrapTaskRange(dateFrom?: string, dateTo?: string) {
   return {
     dateFrom: dateFrom ?? dateTo ?? today,
     dateTo: dateTo ?? dateFrom ?? today,
+  };
+}
+
+function resolveRequestsBootstrapRange(dateFrom?: string, dateTo?: string) {
+  const today = new Date();
+  const monthStart = startOfMonthLocal(today);
+  const monthEnd = endOfMonthLocal(today);
+
+  return {
+    dateFrom: dateFrom ?? formatDateKey(monthStart),
+    dateTo: dateTo ?? formatDateKey(monthEnd),
+  };
+}
+
+function resolveCollaborationBootstrapQuery(
+  query: Record<string, string | undefined>,
+) {
+  const days = query.days ? Number(query.days) : 30;
+  const taskQuery: ListManagerTasksQueryDto = {
+    search: query.search,
+    status: query.status as ListManagerTasksQueryDto['status'],
+    priority: query.priority as ListManagerTasksQueryDto['priority'],
+    groupId: query.groupId,
+    assigneeEmployeeId: query.assigneeEmployeeId,
+    departmentId: query.departmentId,
+    locationId: query.locationId,
+    onlyOverdue: query.onlyOverdue,
+  };
+
+  return {
+    days: Number.isFinite(days) && days > 0 ? days : 30,
+    taskQuery,
   };
 }
 
@@ -243,7 +282,7 @@ export class BootstrapService {
     const resolvedRange = resolveBootstrapTaskRange(dateFrom, dateTo);
 
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
-      this.collaborationService.listManagerTasks(user.sub, resolvedRange),
+      this.collaborationService.listManagerTasks(user.sub, resolvedRange).catch(() => null),
       withTimeoutFallback(
         this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
         1500,
@@ -262,10 +301,51 @@ export class BootstrapService {
     ]);
 
     return {
-      tasks: taskBoard.tasks,
+      tasks: taskBoard?.tasks ?? [],
       employees,
       groups,
       liveSessions,
+    };
+  }
+
+  async collaboration(user: JwtUser, query: Record<string, string | undefined>) {
+    const { days, taskQuery } = resolveCollaborationBootstrapQuery(query);
+
+    const [
+      overview,
+      analytics,
+      taskBoard,
+      automationPolicy,
+      taskTemplates,
+      announcementTemplates,
+      employees,
+      announcements,
+      chats,
+    ] = await Promise.all([
+      this.collaborationService.managerOverview(user.sub).catch(() => null),
+      this.collaborationService.managerAnalytics(user.sub, days).catch(() => null),
+      this.collaborationService.listManagerTasks(user.sub, taskQuery).catch(() => null),
+      this.collaborationService.getTaskAutomationPolicy(user.sub).catch(() => null),
+      this.collaborationService.listTaskTemplates(user.sub).catch(() => []),
+      this.collaborationService.listAnnouncementTemplates(user.sub).catch(() => []),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.collaborationService
+        .listAnnouncementsForManager(user.sub)
+        .catch(() => []),
+      this.collaborationService.listChats(user.sub).catch(() => []),
+    ]);
+
+    return {
+      overview,
+      analytics,
+      taskBoard,
+      automationPolicy,
+      taskTemplates,
+      announcementTemplates,
+      employees,
+      announcements,
+      chats,
+      windowDays: days,
     };
   }
 
@@ -304,6 +384,7 @@ export class BootstrapService {
       workdaySnapshot,
       scheduleTemplates,
       organizationSetup,
+      groups,
     ] = await Promise.all([
       this.employeesService.list(user.tenantId, {}, user.sub),
       withTimeoutFallback(
@@ -348,6 +429,11 @@ export class BootstrapService {
         1000,
         { company: null },
       ),
+      withTimeoutFallback(
+        this.collaborationService.listGroups(user.sub).catch(() => []),
+        1000,
+        [],
+      ),
     ]);
 
     return {
@@ -359,6 +445,37 @@ export class BootstrapService {
       scheduleTemplates,
       organizationSetup,
       canCheckWorkdays: workdaySnapshot.canCheckWorkdays,
+      groups,
+    };
+  }
+
+  async employeeDetail(user: JwtUser, employeeId: string) {
+    const [employee, history, anomalies, biometricHistory, managerAccess] =
+      await Promise.all([
+        this.employeesService.getById(user.tenantId, employeeId).catch(() => null),
+        this.attendanceService
+          .employeeHistory(user.tenantId, employeeId, {})
+          .catch(() => null),
+        this.attendanceService
+          .teamAnomalies(user.tenantId, { employeeId })
+          .catch(() => null),
+        this.biometricService
+          .getEmployeeHistory(user.tenantId, employeeId, 50)
+          .catch(() => null),
+        canManageEmployeeRoles(user.roleCodes)
+          ? this.employeesService
+              .getManagerAccess(user.tenantId, employeeId)
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+    return {
+      employeeId,
+      employee,
+      history,
+      anomalies,
+      biometricHistory,
+      managerAccess,
     };
   }
 
@@ -375,10 +492,10 @@ export class BootstrapService {
     };
 
     if (mode === 'employee') {
-      const employeeTasks = await this.collaborationService.listMyTasks(
-        user.sub,
-        taskQuery,
-      );
+      const [employeeTasks, shifts] = await Promise.all([
+        this.collaborationService.listMyTasks(user.sub, taskQuery),
+        this.scheduleService.myShifts(user.sub).catch(() => []),
+      ]);
 
       return {
         mode,
@@ -388,8 +505,9 @@ export class BootstrapService {
           visibleDateTo: resolvedVisibleDateTo,
           isMockMode: false,
           templates: [],
-          shifts: [],
+          shifts,
           employees: [],
+          groups: [],
           locations: [],
           departments: [],
           positions: [],
@@ -416,6 +534,7 @@ export class BootstrapService {
       templates,
       shifts,
       employees,
+      groups,
       locations,
       departments,
       positions,
@@ -425,6 +544,7 @@ export class BootstrapService {
       this.scheduleService.listTemplates(user.tenantId),
       this.scheduleService.listShifts(user.tenantId),
       this.employeesService.list(user.tenantId, {}, user.sub),
+      this.collaborationService.listGroups(user.sub).catch(() => []),
       this.orgService.listLocations(user.tenantId),
       this.orgService.listDepartments(user.tenantId),
       this.orgService.listPositions(user.tenantId),
@@ -442,6 +562,7 @@ export class BootstrapService {
         templates,
         shifts,
         employees,
+        groups,
         locations,
         departments,
         positions,
@@ -451,63 +572,96 @@ export class BootstrapService {
     };
   }
 
-  async dashboard(user: JwtUser) {
+  async dashboard(user: JwtUser, dateFrom?: string, dateTo?: string) {
     const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
-    const historyQuery = {
-      dateFrom: startOfSixMonthWindow(new Date()).toISOString(),
-      dateTo: new Date().toISOString(),
-    };
+    const historyQuery =
+      dateFrom || dateTo
+        ? {
+            dateFrom: dateFrom ?? dateTo,
+            dateTo: dateTo ?? dateFrom,
+          }
+        : {
+            dateFrom: startOfSixMonthWindow(new Date()).toISOString(),
+            dateTo: new Date().toISOString(),
+          };
+    const taskQuery =
+      dateFrom || dateTo
+        ? {
+            dateFrom,
+            dateTo,
+          }
+        : undefined;
 
     if (mode === 'employee') {
-      const [employeeTasks, personalHistory] = await Promise.all([
-        this.collaborationService.listMyTasks(user.sub),
+      const [
+        profile,
+        attendanceStatus,
+        scheduleShifts,
+        employeeTasks,
+        personalHistory,
+      ] = await Promise.all([
+        this.employeesService.getMe(user).catch(() => null),
+        this.attendanceService.getMyStatus(user.sub).catch(() => null),
+        this.scheduleService.myShifts(user.sub).catch(() => []),
+        this.collaborationService.listMyTasks(user.sub, taskQuery),
         this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
       ]);
+
+      const taskBoard = {
+        tasks: employeeTasks,
+        totals: {
+          total: employeeTasks.length,
+          overdue: employeeTasks.filter(
+            (task) =>
+              task.status !== 'DONE' &&
+              Boolean(task.dueAt) &&
+              new Date(task.dueAt as string).getTime() < Date.now(),
+          ).length,
+          active: employeeTasks.filter((task) => task.status !== 'DONE').length,
+          done: employeeTasks.filter((task) => task.status === 'DONE').length,
+        },
+      };
 
       return {
         mode,
         initialData: {
+          profile,
+          attendanceStatus,
           liveSessions: [],
           anomalies: null,
           requests: [],
           employees: [],
           groups: [],
-          scheduleShifts: [],
+          scheduleShifts,
           canCheckWorkdays: false,
           personalHistory,
-          taskBoard: {
-            tasks: employeeTasks,
-            totals: {
-              total: employeeTasks.length,
-              overdue: employeeTasks.filter(
-                (task) =>
-                  task.status !== 'DONE' &&
-                  Boolean(task.dueAt) &&
-                  new Date(task.dueAt as string).getTime() < Date.now(),
-              ).length,
-              active: employeeTasks.filter((task) => task.status !== 'DONE').length,
-              done: employeeTasks.filter((task) => task.status === 'DONE').length,
-            },
-          },
+          taskBoard,
+          personalTaskBoard: taskBoard,
         },
       };
     }
 
     const [
+      profile,
+      attendanceStatus,
       liveSessions,
       anomalies,
       requests,
       taskBoard,
+      personalTasks,
       employees,
       groups,
       scheduleShifts,
       personalHistory,
       dailyActivity,
     ] = await Promise.all([
+      this.employeesService.getMe(user).catch(() => null),
+      this.attendanceService.getMyStatus(user.sub).catch(() => null),
       this.attendanceService.liveTeam(user.tenantId).catch(() => []),
       this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null),
       this.requestsService.inbox(user.sub).catch(() => []),
       this.loadDashboardManagerTaskBoard(user),
+      this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
       this.collaborationService.listGroups(user.sub).catch(() => []),
       this.scheduleService
@@ -531,16 +685,70 @@ export class BootstrapService {
     return {
       mode,
       initialData: {
+        profile,
+        attendanceStatus,
         liveSessions,
         anomalies,
         requests,
         taskBoard,
+        personalTaskBoard: {
+          tasks: personalTasks,
+          totals: {
+            total: personalTasks.length,
+            overdue: personalTasks.filter(
+              (task) =>
+                task.status !== 'DONE' &&
+                Boolean(task.dueAt) &&
+                new Date(task.dueAt as string).getTime() < Date.now(),
+            ).length,
+            active: personalTasks.filter((task) => task.status !== 'DONE').length,
+            done: personalTasks.filter((task) => task.status === 'DONE').length,
+          },
+        },
         employees,
         groups,
         scheduleShifts: scheduleShifts.scheduleShifts,
         canCheckWorkdays: scheduleShifts.canCheckWorkdays,
         personalHistory,
         dailyActivity,
+      },
+    };
+  }
+
+  async requests(user: JwtUser, dateFrom?: string, dateTo?: string) {
+    const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
+    const range = resolveRequestsBootstrapRange(dateFrom, dateTo);
+
+    if (mode === 'employee') {
+      const [balances, items, calendar, tasks] = await Promise.all([
+        this.requestsService.getMyBalances(user.sub).catch(() => null),
+        this.requestsService.listMine(user.sub).catch(() => []),
+        this.requestsService.getMyCalendar(user.sub, range).catch(() => null),
+        this.collaborationService.listMyTasks(user.sub, range).catch(() => []),
+      ]);
+
+      return {
+        mode,
+        initialData: {
+          inbox: [],
+          balances,
+          items,
+          calendar,
+          tasks,
+          ...range,
+        },
+      };
+    }
+
+    return {
+      mode,
+      initialData: {
+        inbox: await this.requestsService.inbox(user.sub).catch(() => []),
+        balances: null,
+        items: [],
+        calendar: null,
+        tasks: [],
+        ...range,
       },
     };
   }

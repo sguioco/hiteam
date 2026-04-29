@@ -35,6 +35,26 @@ function getResolvedText(locale: AppLanguage, text: string) {
   return translationCache.get(getCacheKey(locale, text)) ?? text;
 }
 
+function buildResolvedTextMap(locale: AppLanguage, texts: string[]) {
+  return Object.fromEntries(
+    texts.map((text) => [text, getResolvedText(locale, text)]),
+  );
+}
+
+function areTextMapsEqual(
+  current: Record<string, string>,
+  next: Record<string, string>,
+) {
+  const currentKeys = Object.keys(current);
+  const nextKeys = Object.keys(next);
+
+  if (currentKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return nextKeys.every((key) => current[key] === next[key]);
+}
+
 async function hydrateLocaleCache(locale: AppLanguage) {
   if (hydratedLocales.has(locale)) {
     return;
@@ -155,21 +175,22 @@ export async function primeLiveTextMap(texts: string[], locale: AppLanguage) {
 }
 
 export function useLiveTextMap(texts: string[], locale: AppLanguage) {
-  const uniqueTexts = useMemo(() => normalizeTexts(texts), [texts]);
+  const normalizedTextKey = JSON.stringify(normalizeTexts(texts));
+  const uniqueTexts = useMemo(
+    () => JSON.parse(normalizedTextKey) as string[],
+    [normalizedTextKey],
+  );
   const [textMap, setTextMap] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
-    ),
+    buildResolvedTextMap(locale, uniqueTexts),
   );
 
   useEffect(() => {
     let cancelled = false;
 
-    setTextMap(
-      Object.fromEntries(
-        uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
-      ),
-    );
+    setTextMap((current) => {
+      const next = buildResolvedTextMap(locale, uniqueTexts);
+      return areTextMapsEqual(current, next) ? current : next;
+    });
 
     void primeLiveTextMap(uniqueTexts, locale)
       .then((resolved) => {
@@ -177,18 +198,19 @@ export function useLiveTextMap(texts: string[], locale: AppLanguage) {
           return;
         }
 
-        setTextMap(resolved);
+        setTextMap((current) =>
+          areTextMapsEqual(current, resolved) ? current : resolved,
+        );
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
 
-        setTextMap(
-          Object.fromEntries(
-            uniqueTexts.map((text) => [text, getResolvedText(locale, text)]),
-          ),
-        );
+        setTextMap((current) => {
+          const next = buildResolvedTextMap(locale, uniqueTexts);
+          return areTextMapsEqual(current, next) ? current : next;
+        });
       });
 
     return () => {

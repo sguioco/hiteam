@@ -1,3 +1,4 @@
+import type { ManagerScheduleBootstrapResponse } from "@smart/types";
 import Schedule, { type ScheduleInitialData } from "@/components/Schedule";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
@@ -9,10 +10,10 @@ async function loadInitialScheduleData(): Promise<{
   const session = await requireServerSession();
 
   try {
-    return await serverApiRequestWithSession<{
-      initialData: ScheduleInitialData | null;
-      mode: "admin" | "employee";
-    }>(session, "/bootstrap/schedule");
+    return await serverApiRequestWithSession<ManagerScheduleBootstrapResponse>(
+      session,
+      "/bootstrap/schedule",
+    );
   } catch {
     return {
       mode: "admin",

@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { JwtUser } from '../../common/interfaces/jwt-user.interface';
@@ -22,6 +22,15 @@ export class BootstrapController {
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('collaboration')
+  collaboration(
+    @CurrentUser() user: JwtUser,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.bootstrapService.collaboration(user, query);
+  }
+
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('attendance')
   attendance(
     @CurrentUser() user: JwtUser,
@@ -37,6 +46,15 @@ export class BootstrapController {
     return this.bootstrapService.employees(user);
   }
 
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('employees/:employeeId')
+  employeeDetail(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+  ) {
+    return this.bootstrapService.employeeDetail(user, employeeId);
+  }
+
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('schedule')
   schedule(
@@ -49,8 +67,22 @@ export class BootstrapController {
 
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('dashboard')
-  dashboard(@CurrentUser() user: JwtUser) {
-    return this.bootstrapService.dashboard(user);
+  dashboard(
+    @CurrentUser() user: JwtUser,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.bootstrapService.dashboard(user, dateFrom, dateTo);
+  }
+
+  @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('requests')
+  requests(
+    @CurrentUser() user: JwtUser,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.bootstrapService.requests(user, dateFrom, dateTo);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

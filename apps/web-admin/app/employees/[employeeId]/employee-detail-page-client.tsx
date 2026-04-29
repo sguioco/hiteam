@@ -17,8 +17,11 @@ import {
 } from "lucide-react";
 import {
   AttendanceAnomalyResponse,
+  EmployeeDetailBootstrapResponse,
+  EmployeeDetailRecord,
   AttendanceHistoryResponse,
   EmployeeBiometricHistoryResponse,
+  EmployeeManagerAccessResponse,
 } from "@smart/types";
 import { AdminShell } from "../../../components/admin-shell";
 import { Table } from "../../../components/application/table/table";
@@ -37,35 +40,11 @@ import {
   getRuntimeLocaleTag,
 } from "../../../lib/runtime-locale";
 
-type EmployeeDetails = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  employeeNumber: string;
-  hireDate: string;
-  avatarUrl?: string | null;
-  user: { email: string };
-  department: { name: string };
-  company: { name: string };
-  primaryLocation: { name: string };
-  position: { name: string };
-  devices: Array<{
-    id: string;
-    platform: string;
-    deviceName: string | null;
-    isPrimary: boolean;
-  }>;
-};
+type EmployeeDetails = EmployeeDetailRecord;
 
 type Tab = "info" | "attendance" | "biometric" | "anomalies";
 
-type EmployeeManagerAccess = {
-  employeeId: string;
-  roleCodes: string[];
-  hasAdminRole: boolean;
-  hasManagerAccess: boolean;
-  canToggleManagerAccess: boolean;
-};
+type EmployeeManagerAccess = EmployeeManagerAccessResponse;
 
 function formatHours(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -183,14 +162,7 @@ function SectionState({
   );
 }
 
-export type EmployeeDetailPageInitialData = {
-  anomalies: AttendanceAnomalyResponse | null;
-  biometricHistory: EmployeeBiometricHistoryResponse | null;
-  employee: EmployeeDetails | null;
-  employeeId: string;
-  history: AttendanceHistoryResponse | null;
-  managerAccess: EmployeeManagerAccess | null;
-};
+export type EmployeeDetailPageInitialData = EmployeeDetailBootstrapResponse;
 
 export default function EmployeeCardPageClient({
   initialData,
@@ -241,82 +213,31 @@ export default function EmployeeCardPageClient({
     const session = getSession();
     if (!session || !targetEmployeeId) return;
 
-    const [
-      employeeData,
-      historyData,
-      anomaliesData,
-      biometricData,
-      managerAccessData,
-    ] = await Promise.all([
-      settleRequest(
-        apiRequest<EmployeeDetails>(`/employees/${targetEmployeeId}`, {
+    const result = await settleRequest(
+      apiRequest<EmployeeDetailPageInitialData>(
+        `/bootstrap/employees/${targetEmployeeId}`,
+        {
           token: session.accessToken,
-        }),
+        },
       ),
-      settleRequest(
-        apiRequest<AttendanceHistoryResponse>(
-          `/attendance/employees/${targetEmployeeId}/history`,
-          { token: session.accessToken },
-        ),
-      ),
-      settleRequest(
-        apiRequest<AttendanceAnomalyResponse>(
-          `/attendance/team/anomalies?employeeId=${targetEmployeeId}`,
-          {
-            token: session.accessToken,
-          },
-        ),
-      ),
-      settleRequest(
-        apiRequest<EmployeeBiometricHistoryResponse>(
-          `/biometric/employees/${targetEmployeeId}/history`,
-          { token: session.accessToken },
-        ),
-      ),
-      canManageRoles
-        ? settleRequest(
-            apiRequest<EmployeeManagerAccess>(
-              `/employees/${targetEmployeeId}/manager-access`,
-              {
-                token: session.accessToken,
-              },
-            ),
-          )
-        : Promise.resolve({ ok: true as const, data: null }),
-    ]);
+    );
 
-    const hasPartialFailure =
-      !employeeData.ok ||
-      !historyData.ok ||
-      !anomaliesData.ok ||
-      !biometricData.ok ||
-      !managerAccessData.ok;
-
-    if (employeeData.ok) {
-      setEmployee(employeeData.data);
-    }
-    if (historyData.ok) {
-      setHistory(historyData.data);
-    }
-    if (anomaliesData.ok) {
-      setAnomalies(anomaliesData.data);
-    }
-    if (biometricData.ok) {
-      setBiometricHistory(biometricData.data);
-    }
-    if (managerAccessData.ok) {
-      setManagerAccess(managerAccessData.data);
-    }
-
-    if (hasPartialFailure) {
+    if (!result.ok) {
       setNotice({
         kind: "error",
         text:
           locale === "ru"
-            ? "Часть данных сотрудника не загрузилась. Основная информация сохранена."
-            : "Some employee data failed to load. Core information is still shown.",
+            ? "Не удалось загрузить данные сотрудника."
+            : "Failed to load employee data.",
       });
+      return;
     }
+
+    setEmployee(result.data.employee);
+    setHistory(result.data.history);
+    setAnomalies(result.data.anomalies);
+    setBiometricHistory(result.data.biometricHistory);
+    setManagerAccess(result.data.managerAccess);
   }
 
   useEffect(() => {

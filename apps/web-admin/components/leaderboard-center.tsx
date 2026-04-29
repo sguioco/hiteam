@@ -1,6 +1,9 @@
 "use client";
 
-import { type LeaderboardOverviewResponse } from "@smart/types";
+import {
+  type LeaderboardBootstrapResponse,
+  type LeaderboardOverviewResponse,
+} from "@smart/types";
 import {
   BarChart3,
   CheckCircle2,
@@ -395,12 +398,13 @@ export function LeaderboardCenter({
     }
 
     try {
-      const nextOverview = await apiRequest<LeaderboardOverviewResponse>(
-        `/leaderboard/overview?month=${encodeURIComponent(monthKey)}`,
+      const snapshot = await apiRequest<LeaderboardBootstrapResponse>(
+        `/bootstrap/leaderboard?month=${encodeURIComponent(monthKey)}`,
         {
           token: session?.accessToken,
         },
       );
+      const nextOverview = snapshot.initialData;
       setOverview(nextOverview);
       setError(null);
     } catch (loadError) {

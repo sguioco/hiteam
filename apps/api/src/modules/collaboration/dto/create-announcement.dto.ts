@@ -14,7 +14,7 @@ import {
 } from 'class-validator';
 import { ANNOUNCEMENT_AUDIENCES } from '../../../common/constants/prisma-enum-values';
 
-class CreateAnnouncementAttachmentDto {
+export class CreateAnnouncementAttachmentDto {
   @IsString()
   @MaxLength(180)
   fileName!: string;
@@ -23,7 +23,7 @@ class CreateAnnouncementAttachmentDto {
   dataUrl!: string;
 }
 
-class CreateAnnouncementAttachmentLocationDto {
+export class CreateAnnouncementAttachmentLocationDto {
   @IsString()
   @MaxLength(320)
   address!: string;

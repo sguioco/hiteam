@@ -3,6 +3,7 @@
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import { ChevronDown, ChevronRight, ListTodo, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { DashboardBootstrapResponse } from "@smart/types";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
 import { AdminShell } from "@/components/admin-shell";
 import {
@@ -22,12 +23,6 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type PeriodPreset = "7d" | "14d" | "custom";
-
-type DashboardBootstrapResponse = {
-  initialData: {
-    dailyActivity?: DashboardActivityItem[];
-  };
-};
 
 export type ActivityPageInitialData = {
   items: DashboardActivityItem[];
@@ -124,7 +119,10 @@ async function fetchActivitySnapshot(
     );
 
     return {
-      items: snapshot.initialData.dailyActivity ?? [],
+      items:
+        (snapshot.initialData.dailyActivity as
+          | DashboardActivityItem[]
+          | undefined) ?? [],
     };
   }
 }

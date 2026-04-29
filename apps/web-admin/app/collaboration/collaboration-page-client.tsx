@@ -9,6 +9,8 @@ import {
   CollaborationTaskBoardResponse,
   ChatThreadItem,
   CollaborationOverviewResponse,
+  CollaborationBootstrapResponse,
+  EmployeeApiRecord,
   TaskItem,
   TaskAutomationPolicy,
   TaskAutomationRunResponse,
@@ -30,19 +32,7 @@ import {
 } from '../../lib/task-priority';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 
-type EmployeeOption = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  department?: {
-    id: string;
-    name: string;
-  } | null;
-  primaryLocation?: {
-    id: string;
-    name: string;
-  } | null;
-};
+type EmployeeOption = EmployeeApiRecord;
 
 const DEFAULT_TASK_BOARD_FILTERS = {
   search: '',
@@ -55,18 +45,8 @@ const DEFAULT_TASK_BOARD_FILTERS = {
   onlyOverdue: false,
 };
 
-export type CollaborationPageInitialData = {
-  analytics: CollaborationAnalyticsResponse | null;
-  announcementTemplates: AnnouncementTemplateItem[];
-  announcements: AnnouncementItem[];
-  automationPolicy: TaskAutomationPolicy | null;
-  chats: ChatThreadItem[];
-  employees: EmployeeOption[];
-  overview: CollaborationOverviewResponse | null;
-  taskBoard: CollaborationTaskBoardResponse | null;
-  taskTemplates: TaskTemplateItem[];
-  windowDays: number;
-};
+export type CollaborationPageInitialData =
+  CollaborationBootstrapResponse<EmployeeOption>;
 
 export default function CollaborationPageClient({
   initialData,
@@ -188,9 +168,10 @@ export default function CollaborationPageClient({
   const [taskBoardFilters, setTaskBoardFilters] = useState(DEFAULT_TASK_BOARD_FILTERS);
   const didUseInitialData = useRef(Boolean(initialData));
 
-  function buildTaskBoardQuery() {
+  function buildBootstrapQuery() {
     const searchParams = new URLSearchParams();
 
+    searchParams.set('days', String(windowDays));
     if (taskBoardFilters.search.trim()) searchParams.set('search', taskBoardFilters.search.trim());
     if (taskBoardFilters.status) searchParams.set('status', taskBoardFilters.status);
     if (taskBoardFilters.priority) searchParams.set('priority', taskBoardFilters.priority);
@@ -200,41 +181,33 @@ export default function CollaborationPageClient({
     if (taskBoardFilters.locationId) searchParams.set('locationId', taskBoardFilters.locationId);
     if (taskBoardFilters.onlyOverdue) searchParams.set('onlyOverdue', 'true');
 
-    const query = searchParams.toString();
-    return query ? `/collaboration/tasks?${query}` : '/collaboration/tasks';
+    return `/bootstrap/collaboration?${searchParams.toString()}`;
   }
 
   async function loadData() {
     const session = getSession();
     if (!session) return;
 
-    const [overviewData, analyticsData, taskBoardData, automationPolicyData, taskTemplatesData, announcementTemplatesData, employeesData, announcementsData, chatsData] = await Promise.all([
-      apiRequest<CollaborationOverviewResponse>('/collaboration/overview', { token: session.accessToken }),
-      apiRequest<CollaborationAnalyticsResponse>(`/collaboration/analytics?days=${windowDays}`, {
-        token: session.accessToken,
-      }),
-      apiRequest<CollaborationTaskBoardResponse>(buildTaskBoardQuery(), { token: session.accessToken }),
-      apiRequest<TaskAutomationPolicy>('/collaboration/automation/policy', { token: session.accessToken }),
-      apiRequest<TaskTemplateItem[]>('/collaboration/task-templates', { token: session.accessToken }),
-      apiRequest<AnnouncementTemplateItem[]>('/collaboration/announcement-templates', { token: session.accessToken }),
-      apiRequest<EmployeeOption[]>('/employees', { token: session.accessToken }),
-      apiRequest<AnnouncementItem[]>('/collaboration/announcements', { token: session.accessToken }),
-      apiRequest<ChatThreadItem[]>('/collaboration/chats', { token: session.accessToken }),
-    ]);
+    const snapshot = await apiRequest<CollaborationBootstrapResponse<EmployeeOption>>(buildBootstrapQuery(), {
+      token: session.accessToken,
+    });
 
-    setOverview(overviewData);
-    setAnalytics(analyticsData);
-    setTaskBoard(taskBoardData);
-    setAutomationPolicy(automationPolicyData);
-    setTaskTemplates(taskTemplatesData);
-    setAnnouncementTemplates(announcementTemplatesData);
-    setEmployees(employeesData);
-    setAnnouncements(announcementsData);
-    setChats(chatsData);
-    setSelectedChatId((current) => current || chatsData[0]?.id || '');
+    setOverview(snapshot.overview);
+    setAnalytics(snapshot.analytics);
+    setTaskBoard(snapshot.taskBoard);
+    setAutomationPolicy(snapshot.automationPolicy);
+    setTaskTemplates(snapshot.taskTemplates);
+    setAnnouncementTemplates(snapshot.announcementTemplates);
+    setEmployees(snapshot.employees);
+    setAnnouncements(snapshot.announcements);
+    setChats(snapshot.chats);
+    setSelectedChatId((current) => current || snapshot.chats[0]?.id || '');
     setGroupMembersDraft(
       Object.fromEntries(
-        overviewData.groups.map((group) => [group.id, group.memberships.map((membership) => membership.employeeId)]),
+        (snapshot.overview?.groups ?? []).map((group) => [
+          group.id,
+          group.memberships.map((membership) => membership.employeeId),
+        ]),
       ),
     );
   }

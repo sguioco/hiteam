@@ -17,6 +17,9 @@ import {
   AttendanceHistoryResponse,
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
+  DashboardBootstrapInitialData,
+  DashboardBootstrapResponse,
+  EmployeeProfileResponse,
   TaskItem,
   WorkGroupItem,
 } from "@smart/types";
@@ -153,16 +156,11 @@ type DashboardMessageAction = {
   label: string;
 };
 
-type DashboardCachePayload = {
-  liveSessions: AttendanceLiveSession[];
-  anomalies: AttendanceAnomalyResponse | null;
-  requests: ApprovalInboxItem[];
-  taskBoard: CollaborationTaskBoardResponse | null;
-  employees: EmployeeDirectoryItem[];
-  groups: WorkGroupItem[];
+type DashboardCachePayload = Omit<
+  DashboardBootstrapInitialData<EmployeeDirectoryItem, EmployeeProfileResponse | null>,
+  "dailyActivity" | "scheduleShifts"
+> & {
   scheduleShifts: EmployeeScheduleShift[];
-  canCheckWorkdays: boolean;
-  personalHistory: AttendanceHistoryResponse | null;
   dailyActivity?: DashboardActivityItem[];
 };
 
@@ -930,15 +928,17 @@ export default function DashboardHome({
     }
 
     try {
-      const snapshot = await apiRequest<{
-        initialData: DashboardCachePayload;
-        mode: "admin" | "employee";
-      }>("/bootstrap/dashboard", {
+      const snapshot = await apiRequest<
+        DashboardBootstrapResponse<EmployeeDirectoryItem, EmployeeProfileResponse | null>
+      >("/bootstrap/dashboard", {
         token: currentSession.accessToken,
         skipClientCache: options?.force ?? false,
       });
 
-      applyDashboardSnapshot(snapshot.initialData, dashboardCacheKey);
+      applyDashboardSnapshot(
+        snapshot.initialData as DashboardCachePayload,
+        dashboardCacheKey,
+      );
     } catch (error) {
       if (!options?.silent) {
         setMessageAction(null);

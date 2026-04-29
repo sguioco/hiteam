@@ -1,4 +1,5 @@
 import type { AuthSession } from "@/lib/auth";
+import type { DashboardBootstrapResponse } from "@smart/types";
 import ProfilePageClient from "./profile-page-client";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
@@ -11,10 +12,11 @@ type ProfileEmployee = {
 
 async function loadInitialProfileData(session: AuthSession) {
   try {
-    return await serverApiRequestWithSession<ProfileEmployee | null>(
+    const snapshot = await serverApiRequestWithSession<DashboardBootstrapResponse>(
       session,
-      "/employees/me",
+      "/bootstrap/dashboard",
     );
+    return snapshot.initialData.profile;
   } catch {
     return null;
   }

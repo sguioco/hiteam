@@ -6,14 +6,14 @@ import { Text } from '../../components/ui/text';
 import { Card } from '../../components/ui/card';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { BrandWordmark } from '../../src/components/brand-wordmark';
-import { loadBiometricPolicy, loadMyShifts } from '../../lib/api';
+import { loadBiometricPolicy, loadTodayBootstrap } from '../../lib/api';
 import { signOutLocally, updateAuthFlowState } from '../../lib/auth-flow';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { getPreciseLocationAccessStatus, type PreciseLocationAccessStatus } from '../../lib/location';
 import { markLocationOnboardingComplete } from '../../lib/onboarding';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
+type ShiftItem = Awaited<ReturnType<typeof loadTodayBootstrap>>['shifts'][number];
 
 export default function WorkspaceReadyOnboardingScreen() {
   const router = useRouter();
@@ -177,14 +177,14 @@ export default function WorkspaceReadyOnboardingScreen() {
       setError(null);
 
       try {
-        const myShifts = await loadMyShifts();
+        const todayBootstrap = await loadTodayBootstrap();
         const nextLocationStatus = await getPreciseLocationAccessStatus();
 
         if (cancelled) {
           return;
         }
 
-        setShifts(myShifts);
+        setShifts(todayBootstrap.shifts);
         setLocationStatus(nextLocationStatus);
       } catch (nextError) {
         if (!cancelled) {

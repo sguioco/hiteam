@@ -14,22 +14,19 @@ import Animated, {
   FadeOutRight,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { AnnouncementItem, TaskItem } from "@smart/types";
+import type { AnnouncementItem, TaskItem, WorkGroupItem } from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
 import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import {
   createManagerShift,
-  loadManagerEmployees,
-  loadManagerGroups,
-  loadManagerShifts,
-  loadManagerShiftTemplates,
-  loadManagerTasks,
+  loadManagerScheduleBootstrap,
   loadMyAnnouncements,
-  loadMyShifts,
-  loadMyTasks,
   rescheduleMyTask,
   updateMyTaskStatus,
+  type ManagerEmployeeItem,
+  type ManagerScheduleShiftItem,
+  type ManagerShiftTemplateItem,
 } from "../../lib/api";
 import {
   getDateLocale,
@@ -75,13 +72,13 @@ type CalendarScreenProps = {
   overdueSheetSignal?: number;
 };
 
-type CalendarShift = Awaited<ReturnType<typeof loadMyShifts>>[number];
-type ManagerEmployee = Awaited<ReturnType<typeof loadManagerEmployees>>[number];
-type ManagerGroup = Awaited<ReturnType<typeof loadManagerGroups>>[number];
-type ManagerScheduleShift = Awaited<ReturnType<typeof loadManagerShifts>>[number];
-type ManagerShiftTemplate = Awaited<
-  ReturnType<typeof loadManagerShiftTemplates>
->[number];
+type CalendarShift = NonNullable<
+  Awaited<ReturnType<typeof loadManagerScheduleBootstrap>>["initialData"]
+>["shifts"][number];
+type ManagerEmployee = ManagerEmployeeItem;
+type ManagerGroup = WorkGroupItem;
+type ManagerScheduleShift = ManagerScheduleShiftItem;
+type ManagerShiftTemplate = ManagerShiftTemplateItem;
 
 type CalendarScreenCacheValue = {
   shifts: CalendarShift[];
@@ -275,10 +272,10 @@ export default function CalendarScreen({
   );
   const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
-  const [shifts, setShifts] = useState<
-    Awaited<ReturnType<typeof loadMyShifts>>
-  >(initialSnapshot?.value.shifts ?? []);
-  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>(
+  const [shifts, setShifts] = useState<CalendarShift[]>(
+    initialSnapshot?.value.shifts ?? [],
+  );
+  const [tasks, setTasks] = useState<TaskItem[]>(
     initialSnapshot?.value.tasks ?? [],
   );
   const [managerEmployees, setManagerEmployees] = useState<ManagerEmployee[]>(
@@ -421,30 +418,31 @@ export default function CalendarScreen({
           dateFrom: formatDateKey(rangeStart),
           dateTo: formatDateKey(rangeEnd),
         };
-        const [
-          nextShifts,
-          nextTasks,
-          nextManagerEmployees,
-          nextManagerGroups,
-          nextManagerShifts,
-          nextShiftTemplates,
-        ] = isManager
-          ? await Promise.all([
-              Promise.resolve([] as CalendarShift[]),
-              loadManagerTasks(rangeQuery),
-              loadManagerEmployees(),
-              loadManagerGroups(),
-              loadManagerShifts(),
-              loadManagerShiftTemplates(),
-            ])
-          : await Promise.all([
-              loadMyShifts(),
-              loadMyTasks(rangeQuery),
-              Promise.resolve([] as ManagerEmployee[]),
-              Promise.resolve([] as ManagerGroup[]),
-              Promise.resolve([] as ManagerScheduleShift[]),
-              Promise.resolve([] as ManagerShiftTemplate[]),
-            ]);
+        let nextShifts: CalendarShift[] = [];
+        let nextTasks: TaskItem[] = [];
+        let nextManagerEmployees: ManagerEmployee[] = [];
+        let nextManagerGroups: ManagerGroup[] = [];
+        let nextManagerShifts: ManagerScheduleShift[] = [];
+        let nextShiftTemplates: ManagerShiftTemplate[] = [];
+        let partialLoadError: string | null = null;
+
+        const scheduleSnapshot = await loadManagerScheduleBootstrap(rangeQuery);
+        const scheduleData = scheduleSnapshot.initialData;
+
+        if (!scheduleData) {
+          throw new Error(t("today.loadError"));
+        }
+
+        nextTasks = scheduleData.taskBoard?.tasks ?? cached?.value.tasks ?? [];
+
+        if (isManager) {
+          nextManagerEmployees = scheduleData.employees;
+          nextManagerGroups = scheduleData.groups ?? [];
+          nextManagerShifts = scheduleData.shifts;
+          nextShiftTemplates = scheduleData.templates;
+        } else {
+          nextShifts = scheduleData.shifts;
+        }
 
         if (!cancelled) {
           await primeTaskTranslations(nextTasks, language);
@@ -462,6 +460,7 @@ export default function CalendarScreen({
             managerShifts: nextManagerShifts,
             shiftTemplates: nextShiftTemplates,
           });
+          setError(partialLoadError);
         }
       } catch (nextError) {
         if (!cancelled) {
@@ -507,10 +506,7 @@ export default function CalendarScreen({
   });
 
   const shiftByDateKey = useMemo(() => {
-    const map = new Map<
-      string,
-      Awaited<ReturnType<typeof loadMyShifts>>[number]
-    >();
+    const map = new Map<string, CalendarShift>();
 
     shifts.forEach((shift) => {
       const shiftDate = new Date(shift.shiftDate);
@@ -769,6 +765,9 @@ export default function CalendarScreen({
     selectedManagerGroupIds,
     t,
   ]);
+  const managerFilterSheetItemCount =
+    1 + managerGroups.length + sortedManagerEmployees.length;
+  const shouldScrollManagerFilterSheet = managerFilterSheetItemCount > 5;
 
   const managerShiftsForSelectedDay = useMemo(() => {
     return managerShifts.filter((shift) => {
@@ -1452,25 +1451,18 @@ export default function CalendarScreen({
             {isManager ? (
               <View className="gap-4">
                 <PressableScale
-                  className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-4 shadow-sm shadow-[#1f2687]/10"
+                  className="min-h-[58px] rounded-[24px] bg-white px-5 py-4 shadow-sm shadow-[#1f2687]/10"
                   haptic="selection"
                   onPress={() => setManagerFilterSheetVisible(true)}
                 >
                   <View className="flex-row items-center justify-between gap-4">
-                    <View className="min-w-0 flex-1">
-                      <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.2px] text-[#8a96ab]">
-                        {t("calendar.managerFilter")}
-                      </Text>
-                      <Text
-                        className="mt-1 font-display text-[19px] font-bold text-foreground"
-                        numberOfLines={1}
-                      >
-                        {managerFilterLabel}
-                      </Text>
-                    </View>
-                    <View className="h-11 w-11 items-center justify-center rounded-2xl bg-[#eef4ff]">
-                      <Ionicons color="#315cf6" name="options-outline" size={20} />
-                    </View>
+                    <Text
+                      className="min-w-0 flex-1 font-display text-[19px] font-bold text-foreground"
+                      numberOfLines={1}
+                    >
+                      {managerFilterLabel}
+                    </Text>
+                    <Ionicons color="#315cf6" name="options-outline" size={22} />
                   </View>
                 </PressableScale>
 
@@ -1979,63 +1971,75 @@ export default function CalendarScreen({
 
       <BottomSheetModal
         onClose={() => setManagerFilterSheetVisible(false)}
-        sheetClassName="rounded-t-[32px]"
-        solidBackground
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
         visible={managerFilterSheetVisible}
       >
-        <View
-          className="max-h-[78vh] gap-4 px-5 pt-8"
-          style={{ paddingBottom: insets.bottom + 20 }}
-        >
-          <View className="items-center">
-            <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
+        <View className="mb-4 flex-row items-start justify-between gap-4">
+          <View className="flex-1">
+            <Text className="font-display text-[24px] font-bold text-foreground">
               {t("calendar.managerFilterTitle")}
             </Text>
-            <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
-              {t("calendar.managerFilterBody")}
-            </Text>
           </View>
-
           <PressableScale
-            className={`rounded-[24px] border px-4 py-4 ${
-              selectedManagerEmployeeIds.length === 0 &&
-              selectedManagerGroupIds.length === 0
-                ? "border-primary bg-[#eef4ff]"
-                : "border-[#e7ecf5] bg-white"
-            }`}
+            className="h-10 min-w-[72px] items-center justify-center rounded-full px-3"
             haptic="selection"
-            onPress={clearManagerFilter}
+            onPress={() => setManagerFilterSheetVisible(false)}
           >
-            <View className="flex-row items-center gap-3">
-              <View
-                className={`h-7 w-7 items-center justify-center rounded-full border ${
-                  selectedManagerEmployeeIds.length === 0 &&
-                  selectedManagerGroupIds.length === 0
-                    ? "border-primary bg-primary"
-                    : "border-[#d7deeb] bg-white"
-                }`}
-              >
-                {selectedManagerEmployeeIds.length === 0 &&
-                selectedManagerGroupIds.length === 0 ? (
-                  <Ionicons color="#ffffff" name="checkmark" size={15} />
-                ) : null}
-              </View>
-              <View className="flex-1">
-                <Text className="font-display text-[16px] font-bold text-foreground">
-                  {t("calendar.managerAllEmployees")}
-                </Text>
-                <Text className="mt-1 font-body text-[13px] text-muted-foreground">
-                  {t("calendar.managerAllEmployeesHint")}
-                </Text>
-              </View>
-            </View>
+            <Text className="text-[15px] font-semibold text-foreground">
+              {t("common.done")}
+            </Text>
           </PressableScale>
+        </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View className="gap-3 pb-3">
+        {loading ? (
+          <Text className="text-[14px] text-muted-foreground">
+            {t("common.loading")}
+          </Text>
+        ) : (
+          <View className={shouldScrollManagerFilterSheet ? "max-h-[440px]" : ""}>
+            <ScrollView
+              scrollEnabled={shouldScrollManagerFilterSheet}
+              showsVerticalScrollIndicator={false}
+            >
+              <View className="gap-4">
+                <PressableScale
+                  className={`rounded-[24px] border px-4 py-4 shadow-sm shadow-[#1f2687]/10 ${
+                    selectedManagerEmployeeIds.length === 0 &&
+                    selectedManagerGroupIds.length === 0
+                      ? "border-primary bg-[#eef4ff]"
+                      : "border-white/30 bg-white"
+                  }`}
+                  haptic="selection"
+                  onPress={clearManagerFilter}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View
+                      className={`h-7 w-7 items-center justify-center rounded-full border ${
+                        selectedManagerEmployeeIds.length === 0 &&
+                        selectedManagerGroupIds.length === 0
+                          ? "border-primary bg-primary"
+                          : "border-[#d7deeb] bg-white"
+                      }`}
+                    >
+                      {selectedManagerEmployeeIds.length === 0 &&
+                      selectedManagerGroupIds.length === 0 ? (
+                        <Ionicons color="#ffffff" name="checkmark" size={15} />
+                      ) : null}
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="font-display text-[16px] font-bold text-foreground"
+                        numberOfLines={1}
+                      >
+                        {t("calendar.managerAllEmployees")}
+                      </Text>
+                    </View>
+                  </View>
+                </PressableScale>
+
               {managerGroups.length ? (
                 <View className="gap-3">
-                  <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                  <Text className="text-[12px] font-bold uppercase tracking-[1.2px] text-muted-foreground">
                     {t("manager.meetingGroups")}
                   </Text>
                   {managerGroups.map((group) => {
@@ -2044,7 +2048,7 @@ export default function CalendarScreen({
 
                     return (
                       <View
-                        className="rounded-[24px] border border-[#e7ecf5] bg-white px-4 py-4"
+                        className="rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
                         key={group.id}
                       >
                         <View className="flex-row items-center gap-3">
@@ -2162,11 +2166,11 @@ export default function CalendarScreen({
                 </View>
               ) : null}
 
-              <View className="gap-2">
-                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+              <View className="gap-3">
+                <Text className="text-[12px] font-bold uppercase tracking-[1.2px] text-muted-foreground">
                   {t("manager.meetingEmployees")}
                 </Text>
-                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                <View className="rounded-[24px] border border-white/30 bg-white px-4 py-2 shadow-sm shadow-[#1f2687]/10">
                   {sortedManagerEmployees.length ? (
                     sortedManagerEmployees.map((employee, index) => {
                       const selectedByEmployee =
@@ -2179,7 +2183,7 @@ export default function CalendarScreen({
 
                       return (
                         <PressableScale
-                          className={`px-4 py-3 ${
+                          className={`py-3 ${
                             index < sortedManagerEmployees.length - 1
                               ? "border-b border-[#e7ecf5]"
                               : ""
@@ -2243,9 +2247,9 @@ export default function CalendarScreen({
                       );
                     })
                   ) : (
-                    <View className="px-4 py-5">
+                    <View className="py-5">
                       <Text className="text-center font-body text-sm text-muted-foreground">
-                        {t("manager.noEmployees")}
+                        {t("manager.meetingNoEmployees")}
                       </Text>
                     </View>
                   )}
@@ -2253,14 +2257,8 @@ export default function CalendarScreen({
               </View>
             </View>
           </ScrollView>
-
-          <Button
-            className="min-h-12 rounded-2xl"
-            fullWidth
-            label={t("calendar.applyFilter")}
-            onPress={() => setManagerFilterSheetVisible(false)}
-          />
-        </View>
+          </View>
+        )}
       </BottomSheetModal>
 
       <BottomSheetModal

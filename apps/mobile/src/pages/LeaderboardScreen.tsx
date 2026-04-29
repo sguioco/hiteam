@@ -215,7 +215,7 @@ export default function LeaderboardScreen({
   }
 
   async function handleLeaderboardPrivacyToggle() {
-    if (!overview?.visibility.canManage || savingVisibility) {
+    if (!overview?.visibility?.canManage || savingVisibility) {
       return;
     }
 
@@ -357,7 +357,7 @@ export default function LeaderboardScreen({
     (entry) => entry.employee.id === overview.me.employeeId,
   );
   const canManageLeaderboardVisibility =
-    isManager && Boolean(overview?.visibility.canManage);
+    isManager && Boolean(overview?.visibility?.canManage);
   const dailyMaxPoints = overview?.me.todayMaxPoints ?? overview?.summary.maxDailyPoints ?? 15;
   const todayPoints = overview?.me.todayPoints ?? 0;
   const todayTotalCaption = copy(
@@ -478,7 +478,7 @@ export default function LeaderboardScreen({
           <PressableScale
             accessibilityRole="checkbox"
             accessibilityState={{
-              checked: Boolean(overview?.visibility.hidePeersFromEmployees),
+              checked: Boolean(overview?.visibility?.hidePeersFromEmployees),
               disabled: savingVisibility,
             }}
             className="mt-3 min-h-[54px] flex-row items-center gap-3 rounded-[18px] border border-[#e5ebf5] bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10"
@@ -488,12 +488,12 @@ export default function LeaderboardScreen({
           >
             <View
               className={`h-6 w-6 items-center justify-center rounded-[8px] border ${
-                overview?.visibility.hidePeersFromEmployees
+                overview?.visibility?.hidePeersFromEmployees
                   ? "border-[#2559ff] bg-[#2559ff]"
                   : "border-[#cfd8ea] bg-white"
               }`}
             >
-              {overview?.visibility.hidePeersFromEmployees ? (
+              {overview?.visibility?.hidePeersFromEmployees ? (
                 <Ionicons color="#ffffff" name="checkmark" size={15} />
               ) : null}
             </View>

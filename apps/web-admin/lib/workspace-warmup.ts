@@ -45,14 +45,9 @@ function buildWarmupPaths(session: AuthSession) {
   if (isEmployeeOnlyRole(session.user.roleCodes)) {
     return [
       ...sharedPaths,
-      "/attendance/me/status",
-      "/schedule/me",
-      `/collaboration/tasks/me?dateFrom=${dateFrom}&dateTo=${dateTo}`,
       "/collaboration/inbox-summary/me",
       "/collaboration/chats",
-      "/requests/me",
-      "/requests/me/balances",
-      `/requests/me/calendar?dateFrom=${dateFrom}&dateTo=${dateTo}`,
+      `/bootstrap/requests?dateFrom=${dateFrom}&dateTo=${dateTo}`,
     ];
   }
 
@@ -63,9 +58,8 @@ function buildWarmupPaths(session: AuthSession) {
     "/bootstrap/employees",
     "/bootstrap/schedule",
     "/bootstrap/organization",
-    "/requests/inbox",
-    "/collaboration/overview",
-    "/collaboration/analytics?days=14",
+    "/bootstrap/collaboration?days=14",
+    `/bootstrap/requests?dateFrom=${dateFrom}&dateTo=${dateTo}`,
   ];
 }
 

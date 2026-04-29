@@ -17,8 +17,15 @@ import {
 } from "lucide-react";
 import {
   ApprovalInboxItem,
+  AttendanceBootstrapResponse,
   AttendanceHistoryResponse,
-  CollaborationTaskBoardResponse,
+  DashboardBootstrapResponse,
+  EmployeeApiRecord,
+  ManagerScheduleBootstrapResponse,
+  NamedEntityOption,
+  ScheduleBootstrapInitialData,
+  ScheduleShiftRecord,
+  ScheduleShiftTemplateRecord,
   TaskItem,
 } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
@@ -61,78 +68,13 @@ type TabKey =
 type PeriodMode = "week" | "month";
 type CalendarEventFilter = "all" | "shifts" | "tasks" | "meetings";
 
-type Option = {
-  id: string;
-  name: string;
-};
-
-type EmployeeApiRecord = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string | null;
-  employeeNumber: string;
-  hireDate: string;
-  avatarUrl?: string | null;
-  department?: Option | null;
-  primaryLocation?: Option | null;
-  position?: Option | null;
-};
-
-type ShiftTemplateRecord = {
-  id: string;
-  name: string;
-  code: string;
-  startsAtLocal: string;
-  endsAtLocal: string;
-  weekDaysJson?: string | null;
-  gracePeriodMinutes: number;
-  createdAt: string;
-  updatedAt: string;
-  location: Option;
-  position: Option;
-};
-
-type ShiftRecord = {
-  id: string;
-  shiftDate: string;
-  startsAt: string;
-  endsAt: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  employee: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-  location: Option;
-  position: Option;
-  template: {
-    id: string;
-    name: string;
-    code: string;
-    startsAtLocal: string;
-    endsAtLocal: string;
-  };
-};
+type Option = NamedEntityOption;
+type ShiftTemplateRecord = ScheduleShiftTemplateRecord;
+type ShiftRecord = ScheduleShiftRecord;
 
 type AttendanceHistoryRow = AttendanceHistoryResponse["rows"][number];
 
-export type ScheduleInitialData = {
-  departments: Option[];
-  employees: EmployeeApiRecord[];
-  isMockMode: boolean;
-  locations: Option[];
-  mode: "admin" | "employee";
-  positions: Option[];
-  requests: ApprovalInboxItem[];
-  shifts: ShiftRecord[];
-  taskBoard: CollaborationTaskBoardResponse | null;
-  templates: ShiftTemplateRecord[];
-  visibleDateFrom: string;
-  visibleDateTo: string;
-};
+export type ScheduleInitialData = ScheduleBootstrapInitialData;
 
 type EnrichedShift = {
   id: string;
@@ -1591,13 +1533,13 @@ export default function Schedule({
     }
 
     try {
-      const snapshot = await apiRequest<{
-        initialData: ScheduleInitialData | null;
-        mode: "admin" | "employee";
-      }>(`/bootstrap/schedule?${bootstrapQuery}`, {
-        token: session.accessToken,
-        skipClientCache: options?.force ?? false,
-      });
+      const snapshot = await apiRequest<ManagerScheduleBootstrapResponse>(
+        `/bootstrap/schedule?${bootstrapQuery}`,
+        {
+          token: session.accessToken,
+          skipClientCache: options?.force ?? false,
+        },
+      );
 
       if (!snapshot.initialData) {
         throw new Error(ui.scheduleLoadError);
@@ -1673,14 +1615,17 @@ export default function Schedule({
     }
 
     let cancelled = false;
-    const endpoint = isEmployeeMode
-      ? "/attendance/me/history"
-      : "/attendance/team/history";
     const query = new URLSearchParams(historicalRange).toString();
 
-    void apiRequest<AttendanceHistoryResponse>(`${endpoint}?${query}`, {
-      token: sessionAccessToken,
-    })
+    const request = isEmployeeMode
+      ? apiRequest<DashboardBootstrapResponse>(`/bootstrap/dashboard?${query}`, {
+          token: sessionAccessToken,
+        }).then((snapshot) => snapshot.initialData.personalHistory)
+      : apiRequest<AttendanceBootstrapResponse>(`/bootstrap/attendance?${query}`, {
+          token: sessionAccessToken,
+        }).then((snapshot) => snapshot.history);
+
+    void request
       .then((snapshot) => {
         if (!cancelled) {
           setAttendanceHistory(snapshot);
@@ -1810,16 +1755,11 @@ export default function Schedule({
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,
+            employeeNumber: employee.employeeNumber,
           },
           location: template.location,
           position: template.position,
-          template: {
-            id: template.id,
-            name: template.name,
-            code: template.code,
-            startsAtLocal: template.startsAtLocal,
-            endsAtLocal: template.endsAtLocal,
-          },
+          template,
         },
         ...current,
       ]);
@@ -1998,16 +1938,11 @@ export default function Schedule({
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,
+            employeeNumber: employee.employeeNumber,
           },
           location: template.location,
           position: template.position,
-          template: {
-            id: template.id,
-            name: template.name,
-            code: template.code,
-            startsAtLocal: template.startsAtLocal,
-            endsAtLocal: template.endsAtLocal,
-          },
+          template,
         })),
       );
 

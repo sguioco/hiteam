@@ -79,9 +79,11 @@ function resolveCacheTtlMs(path: string, options?: ApiRequestOptions) {
   if (/\/auth\/bootstrap$/.test(path)) return 20_000;
   if (/\/bootstrap\/tasks$/.test(path)) return 20_000;
   if (/\/bootstrap\/attendance(?:\?|$)/.test(path)) return 15_000;
+  if (/\/bootstrap\/employees\/[^/?]+(?:\?|$)/.test(path)) return 30_000;
   if (/\/bootstrap\/employees$/.test(path)) return 30_000;
   if (/\/bootstrap\/schedule(?:\?|$)/.test(path)) return 30_000;
-  if (/\/bootstrap\/dashboard$/.test(path)) return 15_000;
+  if (/\/bootstrap\/dashboard(?:\?|$)/.test(path)) return 15_000;
+  if (/\/bootstrap\/requests(?:\?|$)/.test(path)) return 20_000;
   if (/\/bootstrap\/activity(?:\?|$)/.test(path)) return 20_000;
   if (/\/bootstrap\/analytics(?:\?|$)/.test(path)) return 20_000;
   if (/\/bootstrap\/organization$/.test(path)) return 60_000;

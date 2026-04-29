@@ -2,25 +2,22 @@ import { Image, type ImageSourcePropType } from "react-native";
 import type {
   AnnouncementItem,
   AttendanceStatusResponse,
+  EmployeeRequestItem,
+  MyTimeOffBalancesResponse,
+  RequestsCalendarResponse,
   TaskItem,
 } from "@smart/types";
 import { hasManagerAccess } from "./auth-flow";
 import type { AppLanguage } from "./i18n";
 import {
-  loadAttendanceStatus,
   loadLeaderboardOverview,
   loadMyChats,
-  loadManagerAnnouncements,
-  loadManagerEmployees,
-  loadManagerLiveSessions,
-  loadManagerTasks,
-  loadMyAnnouncements,
+  loadManagerTasksBootstrap,
+  loadManagerScheduleBootstrap,
   loadMyProfile,
-  loadMyRequestCalendar,
-  loadMyRequests,
-  loadMyShifts,
-  loadMyTasks,
-  loadMyTimeOffBalances,
+  loadNewsBootstrap,
+  loadRequestsBootstrap,
+  loadTodayBootstrap,
 } from "./api";
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
 import {
@@ -33,11 +30,11 @@ import { primeLiveTextMap } from "./use-live-text-map";
 import { primeTaskTranslations } from "./use-translated-task-copy";
 
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
-type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>;
-type TodayTasks = Awaited<ReturnType<typeof loadMyTasks>>;
-type RequestsBalances = Awaited<ReturnType<typeof loadMyTimeOffBalances>>;
-type RequestsItems = Awaited<ReturnType<typeof loadMyRequests>>;
-type RequestsCalendar = Awaited<ReturnType<typeof loadMyRequestCalendar>>;
+type ShiftItem = Awaited<ReturnType<typeof loadTodayBootstrap>>["shifts"];
+type TodayTasks = TaskItem[];
+type RequestsBalances = MyTimeOffBalancesResponse;
+type RequestsItems = EmployeeRequestItem[];
+type RequestsCalendar = RequestsCalendarResponse;
 type ChatThreads = Awaited<ReturnType<typeof loadMyChats>>;
 
 export type TodayScreenCacheValue = {
@@ -223,20 +220,16 @@ export async function warmTodayScreenCache(
   const { previousDateKey, nextDateKey } = buildTodayDateRange(
     nextProfile.primaryLocation?.timezone,
   );
-  const [attendanceStatus, shifts, tasks] = await Promise.all([
-    loadAttendanceStatus(),
-    loadMyShifts(),
-    loadMyTasks({
-      dateFrom: previousDateKey,
-      dateTo: nextDateKey,
-    }),
-  ]);
+  const todayBootstrap = await loadTodayBootstrap({
+    dateFrom: previousDateKey,
+    dateTo: nextDateKey,
+  });
 
   const payload: TodayScreenCacheValue = resolveDemoOwnerTodayScreenData({
-    attendanceStatus,
-    profile: nextProfile,
-    shifts,
-    tasks,
+    attendanceStatus: todayBootstrap.attendanceStatus,
+    profile: todayBootstrap.profile ?? nextProfile,
+    shifts: todayBootstrap.shifts,
+    tasks: todayBootstrap.tasks,
   });
 
   if (language) {
@@ -257,13 +250,13 @@ async function warmCalendarScreenCache(
   language?: AppLanguage,
 ) {
   const { rangeStart, rangeEnd } = buildCalendarDateRange(date);
-  const [shifts, tasks] = await Promise.all([
-    loadMyShifts(),
-    loadMyTasks({
-      dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
-      dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
-    }),
-  ]);
+  const scheduleBootstrap = await loadManagerScheduleBootstrap({
+    dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
+    dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
+  });
+  const scheduleData = scheduleBootstrap.initialData;
+  const shifts = scheduleData?.shifts ?? [];
+  const tasks = scheduleData?.taskBoard?.tasks ?? [];
 
   const payload = {
     shifts,
@@ -282,9 +275,8 @@ async function warmCalendarScreenCache(
 }
 
 async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {
-  const items = isManager
-    ? await loadManagerAnnouncements()
-    : await loadMyAnnouncements();
+  const bootstrap = await loadNewsBootstrap();
+  const items = bootstrap.initialData.items;
 
   if (language) {
     await primeLiveTextMap(collectAnnouncementTexts(items), language);
@@ -307,15 +299,12 @@ export async function warmRequestsScreenCache(
   language?: AppLanguage,
 ) {
   const { dateFrom, dateTo } = buildRequestsDateRange(date);
-  const [balances, items, calendar, tasks] = await Promise.all([
-    loadMyTimeOffBalances(),
-    loadMyRequests(),
-    loadMyRequestCalendar(dateFrom, dateTo),
-    loadMyTasks({
-      dateFrom,
-      dateTo,
-    }),
-  ]);
+  const snapshot = await loadRequestsBootstrap({ dateFrom, dateTo });
+  const { balances, items, calendar, tasks } = snapshot.initialData;
+
+  if (!balances || !calendar) {
+    throw new Error("Requests bootstrap is missing employee data.");
+  }
 
   const payload: RequestsScreenCacheValue = {
     balances,
@@ -348,14 +337,13 @@ async function warmManagerScreenCache(
   const { previousDateKey, nextDateKey } = buildTodayDateRange(
     nextProfile.primaryLocation?.timezone,
   );
-  const [employees, liveSessions, tasks] = await Promise.all([
-    loadManagerEmployees(),
-    loadManagerLiveSessions(),
-    loadManagerTasks({
-      dateFrom: previousDateKey,
-      dateTo: nextDateKey,
-    }),
-  ]);
+  const bootstrap = await loadManagerTasksBootstrap({
+    dateFrom: previousDateKey,
+    dateTo: nextDateKey,
+  });
+  const employees = bootstrap.employees;
+  const liveSessions = bootstrap.liveSessions;
+  const tasks = bootstrap.tasks;
 
   if (language) {
     await primeTaskTranslations(tasks, language);

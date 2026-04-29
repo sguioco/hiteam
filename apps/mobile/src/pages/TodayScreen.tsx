@@ -18,14 +18,14 @@ import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
 import TaskList from '../components/TaskList';
-import { loadAttendanceStatus, loadMyProfile, loadMyShifts, loadMyTasks, updateMyTaskStatus } from '../../lib/api';
+import { loadTodayBootstrap, updateMyTaskStatus } from '../../lib/api';
 import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from '../../lib/task-utils';
 import { collapseDuplicateTodayTasks, countOverdueTodayTasks, taskAnchorsDateKey } from '../../lib/today-task-state';
 
 type TodayScreenProps = {
   onOpenOverdue?: () => void;
 };
-type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
+type ShiftItem = TodayScreenCacheValue['shifts'][number];
 
 function addDays(date: Date, amount: number) {
   const next = new Date(date);
@@ -70,11 +70,11 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResponse | null>(
     initialResolved.attendanceStatus,
   );
-  const [profile, setProfile] = useState<Awaited<ReturnType<typeof loadMyProfile>> | null>(
+  const [profile, setProfile] = useState<TodayScreenCacheValue['profile']>(
     initialResolved.profile,
   );
   const [shifts, setShifts] = useState<ShiftItem[]>(initialResolved.shifts);
-  const [tasks, setTasks] = useState<Awaited<ReturnType<typeof loadMyTasks>>>(initialResolved.tasks);
+  const [tasks, setTasks] = useState<TodayScreenCacheValue['tasks']>(initialResolved.tasks);
   const [attendanceLoading, setAttendanceLoading] = useState(!initialSnapshot);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -92,29 +92,25 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     setAttendanceError(null);
 
     try {
-      const nextProfile = await loadMyProfile();
       const now = new Date();
+      const businessTimezoneHint = profile?.primaryLocation?.timezone ?? null;
       const previousDateKey = formatDateKeyInTimeZone(
         addDays(now, -1),
-        nextProfile.primaryLocation?.timezone,
+        businessTimezoneHint,
       );
       const nextDayDateKey = formatDateKeyInTimeZone(
         addDays(now, 1),
-        nextProfile.primaryLocation?.timezone,
+        businessTimezoneHint,
       );
-      const [nextStatus, nextShifts, nextTasks] = await Promise.all([
-        loadAttendanceStatus(),
-        loadMyShifts(),
-        loadMyTasks({
-          dateFrom: previousDateKey,
-          dateTo: nextDayDateKey,
-        }),
-      ]);
+      const todayBootstrap = await loadTodayBootstrap({
+        dateFrom: previousDateKey,
+        dateTo: nextDayDateKey,
+      });
       const resolvedData = resolveDemoOwnerTodayScreenData({
-        attendanceStatus: nextStatus,
-        profile: nextProfile,
-        shifts: nextShifts,
-        tasks: nextTasks,
+        attendanceStatus: todayBootstrap.attendanceStatus,
+        profile: todayBootstrap.profile,
+        shifts: todayBootstrap.shifts,
+        tasks: todayBootstrap.tasks,
       });
       setAttendanceStatus(resolvedData.attendanceStatus);
       setProfile(resolvedData.profile);
@@ -126,7 +122,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     } finally {
       setAttendanceLoading(false);
     }
-  }, [language, t]);
+  }, [language, profile?.primaryLocation?.timezone, t]);
 
   useEffect(() => {
     return subscribeScreenCache<TodayScreenCacheValue>(

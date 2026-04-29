@@ -4,6 +4,7 @@ import {
   AnnouncementAttachmentItem,
   AnnouncementAttachmentLocation,
   AnnouncementImageAspectRatio,
+  NewsBootstrapResponse,
   WorkGroupItem,
   AnnouncementItem,
   AnnouncementReadReceipt,
@@ -86,6 +87,10 @@ type NewsDraft = {
   imageDataUrl: string | null;
   imageAspectRatio: AnnouncementImageAspectRatio;
   imageFileName: string;
+  removeExistingImage: boolean;
+  removeExistingAttachments: boolean;
+  removeExistingLink: boolean;
+  removeExistingLocation: boolean;
   scheduleEnabled: boolean;
   scheduledDate: string;
   scheduledTime: string;
@@ -105,6 +110,10 @@ const EMPTY_DRAFT: NewsDraft = {
   imageDataUrl: null,
   imageAspectRatio: "16:9",
   imageFileName: "",
+  removeExistingImage: false,
+  removeExistingAttachments: false,
+  removeExistingLink: false,
+  removeExistingLocation: false,
   scheduleEnabled: false,
   scheduledDate: "",
   scheduledTime: "09:00",
@@ -115,16 +124,15 @@ const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_DOCUMENT_ACCEPT =
   ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.zip,.rar,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-zip-compressed";
 
-type NewsCenterCachePayload = {
-  items: AnnouncementItem[];
-  employees: Array<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    employeeNumber: string;
-  }>;
-  groups: WorkGroupItem[];
+type NewsCenterEmployeeItem = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
 };
+
+type NewsCenterCachePayload =
+  NewsBootstrapResponse<NewsCenterEmployeeItem>["initialData"];
 
 export type NewsCenterInitialData = NewsCenterCachePayload;
 
@@ -476,20 +484,12 @@ export function NewsCenter({
   const [readerMap, setReaderMap] = useState<Record<string, AnnouncementReadReceipt[]>>({});
   const [readerDialogItem, setReaderDialogItem] = useState<AnnouncementItem | null>(null);
   const [expandedReaderGroupKeys, setExpandedReaderGroupKeys] = useState<string[]>([]);
-  const [employees, setEmployees] = useState<
-    Array<{
-      id: string;
-      firstName: string;
-      lastName: string;
-      employeeNumber: string;
-    }>
-  >(initialData?.employees ?? []);
+  const [employees, setEmployees] = useState<NewsCenterEmployeeItem[]>(
+    initialData?.employees ?? [],
+  );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
   const isManagerView = mode === "manager";
   const didUseInitialData = useRef(Boolean(initialData));
-  const didUseInitialDirectory = useRef(
-    Boolean(initialData) && mode === "manager",
-  );
 
   function applyCachedSnapshot(snapshot: NewsCenterCachePayload) {
     setItems(snapshot.items);
@@ -508,15 +508,20 @@ export function NewsCenter({
     }
 
     try {
-      const path = isManagerView
-        ? "/collaboration/announcements"
-        : "/collaboration/announcements/me";
-      const nextItems = await apiRequest<AnnouncementItem[]>(path, {
-        token: session.accessToken,
-        skipClientCache: options?.force ?? false,
-      });
+      const snapshot = await apiRequest<NewsBootstrapResponse<NewsCenterEmployeeItem>>(
+        "/bootstrap/news",
+        {
+          token: session.accessToken,
+          skipClientCache: options?.force ?? false,
+        },
+      );
+      const nextItems = snapshot.initialData.items;
       setError(null);
       setItems(nextItems);
+      if (isManagerView) {
+        setEmployees(snapshot.initialData.employees ?? []);
+        setGroups(snapshot.initialData.groups ?? []);
+      }
     } catch (loadError) {
       if (!options?.silent) {
         setError(
@@ -566,53 +571,6 @@ export function NewsCenter({
     const timeout = window.setTimeout(() => setFeedback(null), 2600);
     return () => window.clearTimeout(timeout);
   }, [feedback]);
-
-  useEffect(() => {
-    if (!isManagerView) {
-      return;
-    }
-
-    if (!session) {
-      return;
-    }
-
-    if (didUseInitialDirectory.current) {
-      didUseInitialDirectory.current = false;
-      return;
-    }
-
-    let active = true;
-
-    void apiRequest<{
-      initialData: NewsCenterInitialData | null;
-      mode: "admin" | "employee";
-    }>("/bootstrap/news", {
-        token: session.accessToken,
-      }).then((snapshot) => {
-      if (!active) {
-        return;
-      }
-
-      if (!snapshot.initialData) {
-        setEmployees([]);
-        setGroups([]);
-      } else {
-        setEmployees(snapshot.initialData.employees);
-        setGroups(snapshot.initialData.groups);
-      }
-    }).catch(() => {
-      if (!active) {
-        return;
-      }
-
-      setEmployees([]);
-      setGroups([]);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [initialData, isManagerView]);
 
   useEffect(() => {
     if (!cacheKey || loading) {
@@ -892,6 +850,10 @@ export function NewsCenter({
       imageDataUrl: null,
       imageAspectRatio: item.imageAspectRatio ?? "16:9",
       imageFileName: "",
+      removeExistingImage: false,
+      removeExistingAttachments: false,
+      removeExistingLink: false,
+      removeExistingLocation: false,
       scheduleEnabled: Boolean(item.scheduledFor && !item.publishedAt),
       scheduledDate: item.scheduledFor
         ? formatDateInput(new Date(item.scheduledFor))
@@ -912,6 +874,7 @@ export function NewsCenter({
     if (!session) {
       return;
     }
+    const currentItem = items.find((item) => item.id === announcementId);
 
     if (!editingDraft.title.trim() || !editingDraft.body.trim()) {
       setError(
@@ -937,6 +900,21 @@ export function NewsCenter({
             title: editingDraft.title.trim(),
             body: editingDraft.body.trim(),
             isPinned: editingDraft.isPinned,
+            ...(currentItem?.imageUrl
+              ? { removeImage: editingDraft.removeExistingImage }
+              : {}),
+            ...(currentItem?.attachments?.length
+              ? { removeAttachments: editingDraft.removeExistingAttachments }
+              : {}),
+            ...(currentItem?.linkUrl
+              ? { removeLink: editingDraft.removeExistingLink }
+              : {}),
+            ...(currentItem?.attachmentLocation
+              ? {
+                  removeAttachmentLocation:
+                    editingDraft.removeExistingLocation,
+                }
+              : {}),
           }),
         },
       );
@@ -2165,6 +2143,128 @@ export function NewsCenter({
                               onChange={(event) => setEditingDraft((current) => ({ ...current, body: event.target.value }))}
                               value={editingDraft.body}
                             />
+                            {item.imageUrl ||
+                            item.attachments?.length ||
+                            item.linkUrl ||
+                            item.attachmentLocation ? (
+                              <div className="grid gap-2 rounded-[22px] bg-white/70 p-2 shadow-sm shadow-slate-900/[0.04]">
+                                <div className="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted-foreground)]">
+                                  {localize(locale, "Вложения", "Attachments")}
+                                </div>
+                                {item.imageUrl ? (
+                                  <button
+                                    className={`flex min-h-11 items-center justify-between gap-3 rounded-[18px] px-3 py-2 text-left text-sm transition ${
+                                      editingDraft.removeExistingImage
+                                        ? "bg-rose-50 text-rose-700"
+                                        : "bg-slate-50 text-[color:var(--foreground)] hover:bg-slate-100"
+                                    }`}
+                                    onClick={() =>
+                                      setEditingDraft((current) => ({
+                                        ...current,
+                                        removeExistingImage:
+                                          !current.removeExistingImage,
+                                      }))
+                                    }
+                                    type="button"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-3">
+                                      <ImagePlus className="size-4 shrink-0" />
+                                      <span>{localize(locale, "Фото новости", "News image")}</span>
+                                    </span>
+                                    <span className="shrink-0 text-xs font-semibold">
+                                      {editingDraft.removeExistingImage
+                                        ? localize(locale, "Вернуть", "Undo")
+                                        : localize(locale, "Открепить", "Detach")}
+                                    </span>
+                                  </button>
+                                ) : null}
+                                {item.attachments?.length ? (
+                                  <button
+                                    className={`flex min-h-11 items-center justify-between gap-3 rounded-[18px] px-3 py-2 text-left text-sm transition ${
+                                      editingDraft.removeExistingAttachments
+                                        ? "bg-rose-50 text-rose-700"
+                                        : "bg-slate-50 text-[color:var(--foreground)] hover:bg-slate-100"
+                                    }`}
+                                    onClick={() =>
+                                      setEditingDraft((current) => ({
+                                        ...current,
+                                        removeExistingAttachments:
+                                          !current.removeExistingAttachments,
+                                      }))
+                                    }
+                                    type="button"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-3">
+                                      <Paperclip className="size-4 shrink-0" />
+                                      <span>
+                                        {localize(locale, "Файлы", "Files")} · {item.attachments.length}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 text-xs font-semibold">
+                                      {editingDraft.removeExistingAttachments
+                                        ? localize(locale, "Вернуть", "Undo")
+                                        : localize(locale, "Открепить", "Detach")}
+                                    </span>
+                                  </button>
+                                ) : null}
+                                {item.linkUrl ? (
+                                  <button
+                                    className={`flex min-h-11 items-center justify-between gap-3 rounded-[18px] px-3 py-2 text-left text-sm transition ${
+                                      editingDraft.removeExistingLink
+                                        ? "bg-rose-50 text-rose-700"
+                                        : "bg-slate-50 text-[color:var(--foreground)] hover:bg-slate-100"
+                                    }`}
+                                    onClick={() =>
+                                      setEditingDraft((current) => ({
+                                        ...current,
+                                        removeExistingLink:
+                                          !current.removeExistingLink,
+                                      }))
+                                    }
+                                    type="button"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-3">
+                                      <Link2 className="size-4 shrink-0" />
+                                      <span className="truncate">{item.linkUrl}</span>
+                                    </span>
+                                    <span className="shrink-0 text-xs font-semibold">
+                                      {editingDraft.removeExistingLink
+                                        ? localize(locale, "Вернуть", "Undo")
+                                        : localize(locale, "Открепить", "Detach")}
+                                    </span>
+                                  </button>
+                                ) : null}
+                                {item.attachmentLocation ? (
+                                  <button
+                                    className={`flex min-h-11 items-center justify-between gap-3 rounded-[18px] px-3 py-2 text-left text-sm transition ${
+                                      editingDraft.removeExistingLocation
+                                        ? "bg-rose-50 text-rose-700"
+                                        : "bg-slate-50 text-[color:var(--foreground)] hover:bg-slate-100"
+                                    }`}
+                                    onClick={() =>
+                                      setEditingDraft((current) => ({
+                                        ...current,
+                                        removeExistingLocation:
+                                          !current.removeExistingLocation,
+                                      }))
+                                    }
+                                    type="button"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-3">
+                                      <MapPin className="size-4 shrink-0" />
+                                      <span className="truncate">
+                                        {item.attachmentLocation.address}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 text-xs font-semibold">
+                                      {editingDraft.removeExistingLocation
+                                        ? localize(locale, "Вернуть", "Undo")
+                                        : localize(locale, "Открепить", "Detach")}
+                                    </span>
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                             <div className="flex flex-wrap gap-2">
                               <button
                                 className={`inline-flex h-11 items-center justify-center rounded-2xl border px-4 text-sm font-medium transition ${

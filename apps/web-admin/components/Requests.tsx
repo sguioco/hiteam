@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApprovalInboxItem,
+  RequestsBootstrapResponse,
   RequestStatus,
   RequestType,
 } from "@smart/types";
@@ -437,12 +438,12 @@ export default function Requests({
         return;
       }
 
-      const data = await apiRequest<ApprovalInboxItem[]>("/requests/inbox", {
+      const snapshot = await apiRequest<RequestsBootstrapResponse>("/bootstrap/requests", {
         token: session.accessToken,
         skipClientCache: options?.force ?? false,
       });
       setError(null);
-      setItems(data);
+      setItems(snapshot.initialData.inbox);
       setIsMockMode(false);
     } catch (loadError) {
       if (isDemoSession) {

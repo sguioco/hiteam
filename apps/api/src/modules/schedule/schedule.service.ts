@@ -164,6 +164,7 @@ export class ScheduleService {
     return this.prisma.shift.findMany({
       where: { employeeId: employee.id },
       include: {
+        employee: true,
         location: true,
         position: true,
         template: true,

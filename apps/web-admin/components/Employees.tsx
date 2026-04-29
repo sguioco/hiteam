@@ -26,7 +26,13 @@ import {
 import {
   AttendanceLiveSession,
   CollaborationOverviewResponse,
+  EmployeeApiRecord,
   EmployeeBiometricHistoryResponse,
+  EmployeeDetailBootstrapResponse,
+  EmployeeDetails,
+  EmployeesBootstrapResponse,
+  InvitationRecord,
+  ScheduleShiftTemplateRecord,
   TaskItem,
 } from "@smart/types";
 import type { SortDescriptor } from "react-aria-components";
@@ -82,78 +88,6 @@ import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/ru
 import { navigateWithClickSupport } from "@/lib/navigation";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
-type EmployeeApiRecord = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string | null;
-  employeeNumber: string;
-  hireDate: string;
-  birthDate?: string | null;
-  gender?: string | null;
-  phone?: string | null;
-  avatarUrl?: string | null;
-  breaksEnabled?: boolean;
-  status?: string | null;
-  biometricProfile?: {
-    enrollmentStatus?: "NOT_STARTED" | "PENDING" | "ENROLLED" | "FAILED" | null;
-  } | null;
-  user?: {
-    id: string;
-    email: string;
-    roles?: Array<{
-      role?: {
-        code: string;
-      } | null;
-    }> | null;
-  } | null;
-  company?: {
-    id: string;
-    name: string;
-  } | null;
-  department?: {
-    id: string;
-    name: string;
-  } | null;
-  primaryLocation?: {
-    id: string;
-    name: string;
-  } | null;
-  position?: {
-    id: string;
-    name: string;
-  } | null;
-};
-
-type EmployeeDetails = EmployeeApiRecord & {
-  devices?: Array<{
-    id: string;
-    platform: string;
-    deviceName: string | null;
-    isPrimary: boolean;
-  }>;
-};
-
-type InvitationRecord = {
-  id: string;
-  companyId?: string | null;
-  email: string | null;
-  status: "INVITED" | "PENDING_APPROVAL" | "REJECTED";
-  expiresAt: string;
-  submittedAt: string | null;
-  resentCount: number;
-  firstName?: string | null;
-  lastName?: string | null;
-  middleName?: string | null;
-  birthDate?: string | null;
-  gender?: string | null;
-  phone?: string | null;
-  avatarUrl?: string | null;
-  rejectedReason?: string | null;
-  approvedShiftTemplateId?: string | null;
-  approvedGroupId?: string | null;
-};
-
 type ReviewInvitationResponse = {
   id: string;
   status: string;
@@ -162,38 +96,8 @@ type ReviewInvitationResponse = {
   generatedPassword?: string;
 };
 
-type ShiftTemplateRecord = {
-  id: string;
-  name: string;
-  startsAtLocal: string;
-  endsAtLocal: string;
-  location: {
-    id: string;
-    name: string;
-  };
-  position: {
-    id: string;
-    name: string;
-  };
-};
-
-type OrganizationSetupResponse = {
-  company: {
-    id: string;
-    name: string;
-  } | null;
-};
-
-type EmployeesDirectorySnapshot = {
-  employeeRecords: EmployeeApiRecord[];
-  liveSessions: AttendanceLiveSession[];
-  overview: CollaborationOverviewResponse | null;
-  pendingInvitations: InvitationRecord[];
-  scheduleShifts: EmployeeScheduleShift[];
-  scheduleTemplates: ShiftTemplateRecord[];
-  organizationSetup: OrganizationSetupResponse | null;
-  canCheckWorkdays: boolean;
-};
+type ShiftTemplateRecord = ScheduleShiftTemplateRecord;
+type EmployeesDirectorySnapshot = EmployeesBootstrapResponse;
 
 export type EmployeesInitialData = EmployeesDirectorySnapshot;
 
@@ -746,15 +650,17 @@ const Employees = ({
         }),
       });
 
-      const res = await apiRequest<ShiftTemplateRecord[]>(
-        "/schedule/templates",
+      const snapshot = await apiRequest<EmployeesDirectorySnapshot>(
+        "/bootstrap/employees",
         {
           token: session.accessToken,
+          skipClientCache: true,
         },
       );
+      applyDirectorySnapshot(snapshot, buildEmployeesDirectoryCacheKey(session));
 
+      const res = snapshot.scheduleTemplates;
       if (res && res.length > 0) {
-        setScheduleTemplates(res);
         const created =
           res.find(
             (t) =>
@@ -1235,20 +1141,15 @@ const Employees = ({
     setDetailsLoading(true);
     setSelectedEmployeeDetails(null);
     setSelectedEmployeeBiometric(null);
-    void Promise.all([
-      apiRequest<EmployeeDetails>(`/employees/${selectedEmployeeId}`, {
+    void apiRequest<EmployeeDetailBootstrapResponse>(
+      `/bootstrap/employees/${selectedEmployeeId}`,
+      {
         token: session.accessToken,
-      }),
-      apiRequest<EmployeeBiometricHistoryResponse>(
-        `/biometric/employees/${selectedEmployeeId}/history`,
-        {
-          token: session.accessToken,
-        },
-      ).catch(() => null),
-    ])
-      .then(([employee, biometric]) => {
-        setSelectedEmployeeDetails(employee);
-        setSelectedEmployeeBiometric(biometric);
+      },
+    )
+      .then((snapshot) => {
+        setSelectedEmployeeDetails(snapshot.employee);
+        setSelectedEmployeeBiometric(snapshot.biometricHistory);
       })
       .catch(() => {
         setSelectedEmployeeDetails(null);

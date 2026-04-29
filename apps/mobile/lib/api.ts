@@ -6,23 +6,38 @@ import {
   AttendanceActionResponse,
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
+  AttendanceBootstrapResponse,
   ApprovalInboxItem,
   AnnouncementAudience,
   AnnouncementImageAspectRatio,
+  BiometricBootstrapResponse,
   BiometricJobItem,
   BiometricPolicyResponse,
+  EmployeesBootstrapResponse,
   EmployeeInboxResponse,
   EmployeeInboxSummary,
   EmployeeRequestItem,
   RequestsCalendarResponse,
+  RequestsBootstrapResponse,
   AnnouncementItem,
   MyTimeOffBalancesResponse,
   AttendanceLiveSession,
   ChatThreadItem,
+  CollaborationBootstrapResponse,
+  DashboardBootstrapResponse,
+  EmployeeScheduleShiftItem,
+  EmployeeProfileResponse,
+  LeaderboardBootstrapResponse,
   LeaderboardOverviewResponse,
+  ManagerEmployeeItem,
+  ManagerScheduleBootstrapResponse,
+  ManagerScheduleShiftItem,
+  ManagerShiftTemplateItem,
+  ManagerTasksBootstrapResponse,
   TaskItem,
   TaskTemplateItem,
   WorkGroupItem,
+  NewsBootstrapResponse,
 } from "@smart/types";
 import type { BannerTheme } from "./banner-theme";
 import {
@@ -433,54 +448,18 @@ export async function signInWithEmail(
   });
 }
 
-export async function loadMyProfile(): Promise<{
-  id: string;
-  firstName: string;
-  lastName: string;
-  middleName: string | null;
-  birthDate: string | null;
-  gender: string | null;
-  phone: string | null;
-  employeeNumber: string;
-  status: string;
-  avatarUrl: string | null;
-  company: {
-    id: string;
-    name: string;
-    code: string;
-  } | null;
-  department: {
-    id: string;
-    name: string;
-  } | null;
-  primaryLocation: {
-    id: string;
-    name: string;
-    timezone?: string | null;
-  } | null;
-  position: {
-    id: string;
-    name: string;
-  } | null;
-  user: {
-    id: string;
-    email: string;
-    bannerTheme: BannerTheme | null;
-  };
-  devices: Array<{
-    id: string;
-    deviceName: string;
-    platform: "IOS" | "ANDROID" | "WEB";
-    isPrimary: boolean;
-  }>;
-}> {
-  return authRequest("/employees/me");
+export async function loadMyProfile(): Promise<EmployeeProfileResponse> {
+  const response = await loadDashboardBootstrap();
+  if (!response.initialData.profile) {
+    throw new Error("Profile is unavailable.");
+  }
+  return response.initialData.profile;
 }
 
 export async function updateMyBannerTheme(
   theme: BannerTheme,
-): Promise<Awaited<ReturnType<typeof loadMyProfile>>> {
-  return authRequest("/employees/me/preferences", {
+): Promise<EmployeeProfileResponse> {
+  return authRequest<EmployeeProfileResponse>("/employees/me/preferences", {
     method: "PATCH",
     body: JSON.stringify({
       bannerTheme: theme,
@@ -671,85 +650,212 @@ export async function bootstrapPushNotifications(): Promise<void> {
 }
 
 export async function loadAttendanceStatus(): Promise<AttendanceStatusResponse> {
-  return authRequest<AttendanceStatusResponse>("/attendance/me/status");
+  const response = await loadDashboardBootstrap();
+  const status = response.initialData.attendanceStatus;
+
+  if (!status) {
+    throw new Error("Attendance status is not available.");
+  }
+
+  return status;
 }
 
-export async function loadMyShifts(): Promise<
-  Array<{
-    id: string;
-    shiftDate: string;
-    startsAt: string;
-    endsAt: string;
-    location: {
-      id: string;
-      name: string;
-    };
-    position: {
-      id: string;
-      name: string;
-    };
-    template: {
-      id: string;
-      name: string;
-    };
-  }>
-> {
-  return authRequest("/schedule/me");
+export type MobileDashboardBootstrapResponse = DashboardBootstrapResponse<
+  ManagerEmployeeItem,
+  EmployeeProfileResponse | null
+>;
+
+export async function loadDashboardBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<MobileDashboardBootstrapResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (query?.dateFrom) {
+    searchParams.set("dateFrom", query.dateFrom);
+  }
+
+  if (query?.dateTo) {
+    searchParams.set("dateTo", query.dateTo);
+  }
+
+  const suffix = searchParams.toString();
+  const response = await authRequest<DashboardBootstrapResponse>(
+    `/bootstrap/dashboard${suffix ? `?${suffix}` : ""}`,
+  );
+
+  return {
+    ...response,
+    initialData: {
+      ...response.initialData,
+      employees: (response.initialData.employees ?? []).map(
+        normalizeManagerEmployee,
+      ),
+      groups: response.initialData.groups ?? [],
+      liveSessions: response.initialData.liveSessions ?? [],
+      requests: response.initialData.requests ?? [],
+      scheduleShifts: response.initialData.scheduleShifts ?? [],
+      taskBoard: response.initialData.taskBoard ?? null,
+      personalTaskBoard: response.initialData.personalTaskBoard ?? null,
+      attendanceStatus: response.initialData.attendanceStatus ?? null,
+      profile:
+        (response.initialData.profile as EmployeeProfileResponse | null) ??
+        null,
+      personalHistory: response.initialData.personalHistory ?? null,
+      anomalies: response.initialData.anomalies ?? null,
+      canCheckWorkdays: response.initialData.canCheckWorkdays ?? false,
+    },
+  };
 }
 
-export type ManagerShiftTemplateItem = {
-  id: string;
-  name: string;
-  code: string;
-  startsAtLocal: string;
-  endsAtLocal: string;
-  location: {
-    id: string;
-    name: string;
-  } | null;
-  position: {
-    id: string;
-    name: string;
-  } | null;
+export async function loadTodayBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<{
+  attendanceStatus: AttendanceStatusResponse | null;
+  profile: EmployeeProfileResponse | null;
+  shifts: EmployeeScheduleShiftItem[];
+  tasks: TaskItem[];
+}> {
+  const response = await loadDashboardBootstrap(query);
+  const initialData = response.initialData;
+
+  return {
+    attendanceStatus: initialData.attendanceStatus,
+    profile: initialData.profile,
+    shifts: initialData.scheduleShifts,
+    tasks: initialData.taskBoard?.tasks ?? [],
+  };
+}
+
+export type MobileAttendanceBootstrapResponse = Omit<
+  AttendanceBootstrapResponse,
+  "employees"
+> & {
+  employees: ManagerEmployeeItem[];
 };
 
-export type ManagerScheduleShiftItem = {
-  id: string;
-  shiftDate: string;
-  startsAt: string;
-  endsAt: string;
-  employeeId: string;
-  employee: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    employeeNumber: string;
+export async function loadAttendanceBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<MobileAttendanceBootstrapResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (query?.dateFrom) {
+    searchParams.set("dateFrom", query.dateFrom);
+  }
+
+  if (query?.dateTo) {
+    searchParams.set("dateTo", query.dateTo);
+  }
+
+  const suffix = searchParams.toString();
+  const response = await authRequest<AttendanceBootstrapResponse>(
+    `/bootstrap/attendance${suffix ? `?${suffix}` : ""}`,
+  );
+
+  return {
+    ...response,
+    employees: (response.employees ?? []).map(normalizeManagerEmployee),
+    liveSessions: response.liveSessions ?? [],
+    history: response.history ?? null,
+    anomalies: response.anomalies ?? null,
+    audit: response.audit ?? null,
   };
-  location: {
-    id: string;
-    name: string;
+}
+
+export async function loadMyShifts(): Promise<EmployeeScheduleShiftItem[]> {
+  const response = await loadManagerScheduleBootstrap();
+  return response.initialData?.shifts ?? [];
+}
+
+function normalizeManagerEmployee(emp: any): ManagerEmployeeItem {
+  return {
+    id: emp.id,
+    firstName: emp.firstName,
+    lastName: emp.lastName,
+    email: emp.user?.email ?? emp.email ?? "",
+    employeeNumber: emp.employeeNumber,
+    gender: emp.gender ?? null,
+    department: emp.department
+      ? {
+          id: emp.department.id,
+          name: emp.department.name,
+        }
+      : null,
+    position: emp.position
+      ? {
+          id: emp.position.id,
+          name: emp.position.name,
+        }
+      : null,
+    primaryLocation: emp.primaryLocation
+      ? {
+          id: emp.primaryLocation.id,
+          name: emp.primaryLocation.name,
+          timezone: emp.primaryLocation.timezone ?? null,
+        }
+      : null,
+    avatar: resolveEmployeeAvatarSource({
+      avatar: emp.avatar,
+      avatarUrl: emp.avatarUrl,
+      email: emp.user?.email ?? emp.email,
+      employeeNumber: emp.employeeNumber,
+      firstName: emp.firstName,
+      gender: emp.gender,
+      id: emp.id,
+      lastName: emp.lastName,
+    }),
   };
-  position: {
-    id: string;
-    name: string;
+}
+
+export async function loadManagerScheduleBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<ManagerScheduleBootstrapResponse<ManagerEmployeeItem>> {
+  const searchParams = new URLSearchParams();
+
+  if (query?.dateFrom) {
+    searchParams.set("dateFrom", query.dateFrom);
+  }
+
+  if (query?.dateTo) {
+    searchParams.set("dateTo", query.dateTo);
+  }
+
+  const suffix = searchParams.toString();
+  const response = await authRequest<ManagerScheduleBootstrapResponse>(
+    `/bootstrap/schedule${suffix ? `?${suffix}` : ""}`,
+  );
+
+  if (!response.initialData) {
+    return {
+      ...response,
+      initialData: null,
+    };
+  }
+
+  return {
+    ...response,
+    initialData: {
+      ...response.initialData,
+      employees: response.initialData.employees.map(normalizeManagerEmployee),
+      groups: response.initialData.groups ?? [],
+      taskBoard: response.initialData.taskBoard,
+    },
   };
-  template: ManagerShiftTemplateItem;
-};
+}
 
 export async function loadManagerShiftTemplates(): Promise<
   ManagerShiftTemplateItem[]
 > {
-  const response = await authRequest<
-    ManagerShiftTemplateItem[] | { templates: ManagerShiftTemplateItem[] }
-  >("/schedule/templates");
-  return Array.isArray(response) ? response : (response.templates ?? []);
+  const response = await loadManagerScheduleBootstrap();
+  return response.initialData?.templates ?? [];
 }
 
 export async function loadManagerShifts(): Promise<ManagerScheduleShiftItem[]> {
-  const response = await authRequest<
-    ManagerScheduleShiftItem[] | { shifts: ManagerScheduleShiftItem[] }
-  >("/schedule/shifts");
-  return Array.isArray(response) ? response : (response.shifts ?? []);
+  const response = await loadManagerScheduleBootstrap();
+  return response.initialData?.shifts ?? [];
 }
 
 export async function createManagerShift(payload: {
@@ -799,7 +905,11 @@ export async function loadLeaderboardOverview(
   monthKey?: string,
 ): Promise<LeaderboardOverviewResponse> {
   const query = monthKey ? `?month=${encodeURIComponent(monthKey)}` : "";
-  return authRequest<LeaderboardOverviewResponse>(`/leaderboard/overview${query}`);
+  const response = await authRequest<LeaderboardBootstrapResponse>(
+    `/bootstrap/leaderboard${query}`,
+  );
+
+  return response.initialData;
 }
 
 export async function updateLeaderboardSettings(payload: {
@@ -816,6 +926,32 @@ export async function updateLeaderboardSettings(payload: {
 
 export async function loadBiometricPolicy(): Promise<BiometricPolicyResponse> {
   return authRequest<BiometricPolicyResponse>("/biometric/policy");
+}
+
+export type MobileBiometricBootstrapResponse = Omit<
+  BiometricBootstrapResponse,
+  "employees"
+> & {
+  employees: ManagerEmployeeItem[];
+};
+
+export async function loadBiometricBootstrap(
+  result?: "PASSED" | "FAILED" | "REVIEW" | "__all" | "",
+): Promise<MobileBiometricBootstrapResponse> {
+  const suffix =
+    result && result !== "__all"
+      ? `?result=${encodeURIComponent(result)}`
+      : "";
+  const response = await authRequest<BiometricBootstrapResponse>(
+    `/bootstrap/biometric${suffix}`,
+  );
+
+  return {
+    ...response,
+    employees: (response.employees ?? []).map(normalizeManagerEmployee),
+    reviews: response.reviews ?? null,
+    result: response.result ?? "__all",
+  };
 }
 
 export async function startBiometricEnrollment() {
@@ -888,19 +1024,44 @@ export async function loadMyBiometricJob(
 }
 
 export async function loadMyTimeOffBalances(): Promise<MyTimeOffBalancesResponse> {
-  return authRequest<MyTimeOffBalancesResponse>("/requests/me/balances");
+  const response = await loadRequestsBootstrap();
+  if (!response.initialData.balances) {
+    throw new Error("Time off balances are unavailable.");
+  }
+  return response.initialData.balances;
 }
 
 export async function loadMyRequests(): Promise<EmployeeRequestItem[]> {
-  return authRequest<EmployeeRequestItem[]>("/requests/me");
+  const response = await loadRequestsBootstrap();
+  return response.initialData.items;
 }
 
 export async function loadMyRequestCalendar(
   dateFrom: string,
   dateTo: string,
 ): Promise<RequestsCalendarResponse> {
-  return authRequest<RequestsCalendarResponse>(
-    `/requests/me/calendar?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+  const response = await loadRequestsBootstrap({ dateFrom, dateTo });
+  if (!response.initialData.calendar) {
+    throw new Error("Request calendar is unavailable.");
+  }
+  return response.initialData.calendar;
+}
+
+export async function loadRequestsBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<RequestsBootstrapResponse> {
+  const params = new URLSearchParams();
+  if (query?.dateFrom) {
+    params.set("dateFrom", query.dateFrom);
+  }
+  if (query?.dateTo) {
+    params.set("dateTo", query.dateTo);
+  }
+
+  const queryString = params.toString();
+  return authRequest<RequestsBootstrapResponse>(
+    `/bootstrap/requests${queryString ? `?${queryString}` : ""}`,
   );
 }
 
@@ -936,23 +1097,15 @@ export async function loadMyTasks(query?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<TaskItem[]> {
-  const searchParams = new URLSearchParams();
+  const response = await loadDashboardBootstrap({
+    dateFrom: query?.dateFrom ?? query?.date,
+    dateTo: query?.dateTo ?? query?.date,
+  });
 
-  if (query?.date) {
-    searchParams.set("date", query.date);
-  }
-
-  if (query?.dateFrom) {
-    searchParams.set("dateFrom", query.dateFrom);
-  }
-
-  if (query?.dateTo) {
-    searchParams.set("dateTo", query.dateTo);
-  }
-
-  const suffix = searchParams.toString();
-  return authRequest<TaskItem[]>(
-    `/collaboration/tasks/me${suffix ? `?${suffix}` : ""}`,
+  return (
+    response.initialData.personalTaskBoard?.tasks ??
+    response.initialData.taskBoard?.tasks ??
+    []
   );
 }
 
@@ -1032,11 +1185,29 @@ export async function addMyTaskComment(taskId: string, body: string) {
 }
 
 export async function loadMyAnnouncements(): Promise<AnnouncementItem[]> {
-  return authRequest<AnnouncementItem[]>("/collaboration/announcements/me");
+  const response = await loadNewsBootstrap();
+  return response.initialData.items;
 }
 
 export async function loadManagerAnnouncements(): Promise<AnnouncementItem[]> {
-  return authRequest<AnnouncementItem[]>("/collaboration/announcements");
+  const response = await loadNewsBootstrap();
+  return response.initialData.items;
+}
+
+export async function loadNewsBootstrap(): Promise<NewsBootstrapResponse<ManagerEmployeeItem>> {
+  const response = await authRequest<NewsBootstrapResponse>("/bootstrap/news");
+
+  return {
+    ...response,
+    initialData: {
+      ...response.initialData,
+      employees: (response.initialData.employees ?? []).map(
+        normalizeManagerEmployee,
+      ),
+      groups: response.initialData.groups ?? [],
+      items: response.initialData.items ?? [],
+    },
+  };
 }
 
 export async function createManagerAnnouncement(input: {
@@ -1118,6 +1289,20 @@ export async function updateManagerAnnouncement(
     imageDataUrl?: string;
     imageAspectRatio?: AnnouncementImageAspectRatio;
     removeImage?: boolean;
+    linkUrl?: string;
+    removeLink?: boolean;
+    attachmentLocation?: {
+      address: string;
+      latitude: number;
+      longitude: number;
+      placeId?: string;
+    };
+    removeAttachmentLocation?: boolean;
+    attachments?: Array<{
+      dataUrl: string;
+      fileName: string;
+    }>;
+    removeAttachments?: boolean;
   },
 ) {
   return authRequest<AnnouncementItem>(
@@ -1186,17 +1371,13 @@ export async function markMyNotificationRead(notificationId: string) {
 export async function loadManagerLiveSessions(): Promise<
   AttendanceLiveSession[]
 > {
-  const response = await authRequest<
-    AttendanceLiveSession[] | { sessions: AttendanceLiveSession[] }
-  >("/attendance/team/live");
-  return Array.isArray(response) ? response : (response.sessions ?? []);
+  const response = await loadAttendanceBootstrap();
+  return response.liveSessions;
 }
 
 export async function loadManagerApprovalInbox(): Promise<ApprovalInboxItem[]> {
-  const response = await authRequest<
-    ApprovalInboxItem[] | { items: ApprovalInboxItem[] }
-  >("/requests/inbox");
-  return Array.isArray(response) ? response : (response.items ?? []);
+  const response = await loadRequestsBootstrap();
+  return response.initialData.inbox;
 }
 
 export async function loadManagerTasks(query?: {
@@ -1204,11 +1385,70 @@ export async function loadManagerTasks(query?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<TaskItem[]> {
+  if (query?.date || query?.dateFrom || query?.dateTo) {
+    const response = await loadManagerTasksBootstrap({
+      dateFrom: query.dateFrom ?? query.date,
+      dateTo: query.dateTo ?? query.date,
+    });
+    return response.tasks;
+  }
+
+  const response = await loadCollaborationBootstrap();
+  return response.taskBoard?.tasks ?? [];
+}
+
+export async function loadCollaborationBootstrap(query?: {
+  days?: number;
+  search?: string;
+  status?: string;
+  priority?: string;
+  groupId?: string;
+  assigneeEmployeeId?: string;
+  departmentId?: string;
+  locationId?: string;
+  onlyOverdue?: boolean;
+}): Promise<CollaborationBootstrapResponse<ManagerEmployeeItem>> {
   const searchParams = new URLSearchParams();
 
-  if (query?.date) {
-    searchParams.set("date", query.date);
+  if (query?.days) {
+    searchParams.set("days", String(query.days));
   }
+
+  for (const key of [
+    "search",
+    "status",
+    "priority",
+    "groupId",
+    "assigneeEmployeeId",
+    "departmentId",
+    "locationId",
+  ] as const) {
+    const value = query?.[key];
+    if (value) {
+      searchParams.set(key, value);
+    }
+  }
+
+  if (query?.onlyOverdue !== undefined) {
+    searchParams.set("onlyOverdue", query.onlyOverdue ? "true" : "false");
+  }
+
+  const suffix = searchParams.toString();
+  const response = await authRequest<CollaborationBootstrapResponse>(
+    `/bootstrap/collaboration${suffix ? `?${suffix}` : ""}`,
+  );
+
+  return {
+    ...response,
+    employees: (response.employees ?? []).map(normalizeManagerEmployee),
+  };
+}
+
+export async function loadManagerTasksBootstrap(query?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<ManagerTasksBootstrapResponse<ManagerEmployeeItem>> {
+  const searchParams = new URLSearchParams();
 
   if (query?.dateFrom) {
     searchParams.set("dateFrom", query.dateFrom);
@@ -1219,15 +1459,17 @@ export async function loadManagerTasks(query?: {
   }
 
   const suffix = searchParams.toString();
-  const response = await authRequest<
-    TaskItem[] | { items?: TaskItem[]; tasks?: TaskItem[] }
-  >(`/collaboration/tasks${suffix ? `?${suffix}` : ""}`);
+  const response = await authRequest<ManagerTasksBootstrapResponse>(
+    `/bootstrap/tasks${suffix ? `?${suffix}` : ""}`,
+  );
 
-  if (Array.isArray(response)) {
-    return response;
-  }
-
-  return response.tasks ?? response.items ?? [];
+  return {
+    ...response,
+    employees: response.employees.map(normalizeManagerEmployee),
+    groups: response.groups ?? [],
+    liveSessions: response.liveSessions ?? [],
+    tasks: response.tasks ?? [],
+  };
 }
 
 export async function loadManagerAttendanceHistory(
@@ -1240,80 +1482,43 @@ export async function loadManagerAttendanceHistory(
   );
 }
 
-export async function loadManagerEmployees(): Promise<
-  Array<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    employeeNumber: string;
-    gender?: string | null;
-    department: {
-      id: string;
-      name: string;
-    } | null;
-    position: {
-      id: string;
-      name: string;
-    } | null;
-    primaryLocation: {
-      id: string;
-      name: string;
-      timezone?: string | null;
-    } | null;
-    avatar?: any;
-  }>
-> {
-  const response = await authRequest<any>("/employees");
-  const items = Array.isArray(response) ? response : (response.items ?? []);
-  return items.map((emp: any) => ({
-    id: emp.id,
-    firstName: emp.firstName,
-    lastName: emp.lastName,
-    email: emp.user?.email ?? "",
-    employeeNumber: emp.employeeNumber,
-    gender: emp.gender ?? null,
-    department: emp.department
-      ? {
-          id: emp.department.id,
-          name: emp.department.name,
-        }
-      : null,
-    position: emp.position
-      ? {
-          id: emp.position.id,
-          name: emp.position.name,
-        }
-      : null,
-    primaryLocation: emp.primaryLocation
-      ? {
-          id: emp.primaryLocation.id,
-          name: emp.primaryLocation.name,
-          timezone: emp.primaryLocation.timezone ?? null,
-        }
-      : null,
-    avatar: resolveEmployeeAvatarSource({
-      avatar: emp.avatar,
-      avatarUrl: emp.avatarUrl,
-      email: emp.user?.email,
-      employeeNumber: emp.employeeNumber,
-      firstName: emp.firstName,
-      gender: emp.gender,
-      id: emp.id,
-      lastName: emp.lastName,
-    }),
-  }));
+export type MobileEmployeesBootstrapResponse = Omit<
+  EmployeesBootstrapResponse,
+  "employeeRecords"
+> & {
+  employeeRecords: ManagerEmployeeItem[];
+  groups: WorkGroupItem[];
+};
+
+export async function loadEmployeesBootstrap(): Promise<MobileEmployeesBootstrapResponse> {
+  const response = await authRequest<EmployeesBootstrapResponse>(
+    "/bootstrap/employees",
+  );
+
+  return {
+    ...response,
+    employeeRecords: (response.employeeRecords ?? []).map(
+      normalizeManagerEmployee,
+    ),
+    liveSessions: response.liveSessions ?? [],
+    groups: response.groups ?? response.overview?.groups ?? [],
+    pendingInvitations: response.pendingInvitations ?? [],
+    scheduleShifts: response.scheduleShifts ?? [],
+    scheduleTemplates: response.scheduleTemplates ?? [],
+    organizationSetup: response.organizationSetup ?? null,
+    overview: response.overview ?? null,
+    canCheckWorkdays: response.canCheckWorkdays ?? false,
+  };
+}
+
+export async function loadManagerEmployees(): Promise<ManagerEmployeeItem[]> {
+  const response = await loadEmployeesBootstrap();
+  return response.employeeRecords;
 }
 
 export async function loadManagerGroups(): Promise<WorkGroupItem[]> {
-  const response = await authRequest<
-    WorkGroupItem[] | { groups: WorkGroupItem[] }
-  >("/collaboration/groups");
-  if (Array.isArray(response)) {
-    return response;
-  }
-
-  return response.groups ?? [];
+  const response = await loadEmployeesBootstrap();
+  return response.groups;
 }
 
 export async function createManagerTask(payload: {
@@ -1360,9 +1565,8 @@ export async function createManagerTaskTemplate(payload: {
 export async function loadEmployeesList(): Promise<
   { id: string; firstName: string; lastName: string }[]
 > {
-  const response = await authRequest<any>("/employees");
-  const items = Array.isArray(response) ? response : (response.items ?? []);
-  return items.map((emp: any) => ({
+  const response = await loadEmployeesBootstrap();
+  return response.employeeRecords.map((emp) => ({
     id: emp.id,
     firstName: emp.firstName,
     lastName: emp.lastName,

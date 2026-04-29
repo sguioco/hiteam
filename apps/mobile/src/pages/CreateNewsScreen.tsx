@@ -32,7 +32,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppGradientBackground } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
-import { createManagerAnnouncement, loadManagerEmployees, loadManagerGroups } from '../../lib/api';
+import { createManagerAnnouncement, loadEmployeesBootstrap } from '../../lib/api';
 import { clearScreenCache } from '../../lib/screen-cache';
 import { getNewsScreenCacheKey } from '../../lib/workspace-cache';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
@@ -363,17 +363,14 @@ export default function CreateNewsScreen() {
 
     async function init() {
       try {
-        const [employeesResult, groupsResult] = await Promise.all([
-          loadManagerEmployees(),
-          loadManagerGroups(),
-        ]);
+        const snapshot = await loadEmployeesBootstrap();
 
         if (!active) {
           return;
         }
 
-        const mappedGroups = mapApiGroups(groupsResult);
-        setEmployees(employeesResult);
+        const mappedGroups = mapApiGroups(snapshot.groups);
+        setEmployees(snapshot.employeeRecords);
         setGroups(mappedGroups);
         setExpandedGroupIds(mappedGroups.map((group) => group.id));
       } catch {

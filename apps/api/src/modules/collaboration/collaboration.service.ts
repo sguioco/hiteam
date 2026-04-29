@@ -1576,6 +1576,30 @@ export class CollaborationService {
     }
 
     let imageUpdateData: Prisma.AnnouncementUpdateInput = {};
+    let attachmentsUpdateData: Prisma.AnnouncementUpdateInput = {};
+    const linkUpdateData: Prisma.AnnouncementUpdateInput = dto.removeLink
+      ? { linkUrl: null }
+      : dto.linkUrl !== undefined
+        ? { linkUrl: dto.linkUrl.trim() || null }
+        : {};
+    const locationUpdateData: Prisma.AnnouncementUpdateInput =
+      dto.removeAttachmentLocation
+        ? {
+            attachmentLocationAddress: null,
+            attachmentLocationPlaceId: null,
+            attachmentLocationLatitude: null,
+            attachmentLocationLongitude: null,
+          }
+        : dto.attachmentLocation
+          ? {
+              attachmentLocationAddress:
+                dto.attachmentLocation.address?.trim() || null,
+              attachmentLocationPlaceId:
+                dto.attachmentLocation.placeId?.trim() || null,
+              attachmentLocationLatitude: dto.attachmentLocation.latitude,
+              attachmentLocationLongitude: dto.attachmentLocation.longitude,
+            }
+          : {};
 
     if (dto.removeImage) {
       imageUpdateData = {
@@ -1595,6 +1619,33 @@ export class CollaborationService {
       };
     }
 
+    if ((dto.attachments?.length ?? 0) > ANNOUNCEMENT_ATTACHMENT_LIMIT) {
+      throw new BadRequestException(
+        `Announcement supports up to ${ANNOUNCEMENT_ATTACHMENT_LIMIT} attachments.`,
+      );
+    }
+
+    if (dto.removeAttachments) {
+      attachmentsUpdateData = {
+        attachmentsJson: null,
+      };
+    } else if (dto.attachments !== undefined) {
+      const uploadedAttachments = await Promise.all(
+        dto.attachments.map((attachment, index) =>
+          this.uploadAnnouncementAttachment(
+            employee.tenantId,
+            announcementId,
+            attachment.fileName,
+            attachment.dataUrl,
+            index,
+          ),
+        ),
+      );
+      attachmentsUpdateData = {
+        attachmentsJson: JSON.stringify(uploadedAttachments),
+      };
+    }
+
     const updated = await this.prisma.announcement.update({
       where: { id: announcementId },
       data: {
@@ -1602,6 +1653,9 @@ export class CollaborationService {
         ...(dto.body !== undefined ? { body: dto.body.trim() } : {}),
         ...(dto.isPinned !== undefined ? { isPinned: dto.isPinned } : {}),
         ...imageUpdateData,
+        ...linkUpdateData,
+        ...locationUpdateData,
+        ...attachmentsUpdateData,
       },
       include: {
         authorEmployee: true,
@@ -1637,6 +1691,11 @@ export class CollaborationService {
       metadata: {
         title: updated.title,
         isPinned: updated.isPinned,
+        linkUrl: updated.linkUrl,
+        hasAttachmentLocation: Boolean(updated.attachmentLocationAddress),
+        attachmentCount: this.parseAnnouncementAttachments(
+          updated.attachmentsJson ?? null,
+        ).length,
       },
     });
 

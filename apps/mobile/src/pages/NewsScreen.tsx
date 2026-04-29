@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Image, Linking, ScrollView, TextInput, View } from 'react-native';
@@ -19,8 +19,7 @@ import { Screen } from '../../components/ui/screen';
 import { useAuthFlowState, hasManagerAccess } from '../../lib/auth-flow';
 import {
   deleteManagerAnnouncement,
-  loadManagerAnnouncements,
-  loadMyAnnouncements,
+  loadNewsBootstrap,
   markMyAnnouncementRead,
   updateManagerAnnouncement,
 } from '../../lib/api';
@@ -216,6 +215,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const [editingTitle, setEditingTitle] = useState('');
   const [editingBody, setEditingBody] = useState('');
   const [editingPinned, setEditingPinned] = useState(false);
+  const [editingRemoveImage, setEditingRemoveImage] = useState(false);
+  const [editingRemoveLink, setEditingRemoveLink] = useState(false);
+  const [editingRemoveAttachments, setEditingRemoveAttachments] = useState(false);
+  const [editingRemoveLocation, setEditingRemoveLocation] = useState(false);
   const announcementTextMap = useLiveTextMap(
     useMemo(
       () => items.flatMap((item) => [item.title, item.body]).filter(Boolean),
@@ -299,9 +302,8 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     setError(null);
 
     try {
-      const nextItemsRaw = isManager
-        ? await loadManagerAnnouncements()
-        : await loadMyAnnouncements();
+      const newsBootstrap = await loadNewsBootstrap();
+      const nextItemsRaw = newsBootstrap.initialData.items;
       const nextItems = normalizeAnnouncementItems(nextItemsRaw);
       await primeLiveTextMap(
         nextItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
@@ -436,6 +438,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     setEditingTitle(item.title);
     setEditingBody(item.body);
     setEditingPinned(item.isPinned);
+    setEditingRemoveImage(false);
+    setEditingRemoveLink(false);
+    setEditingRemoveAttachments(false);
+    setEditingRemoveLocation(false);
   }
 
   async function handleTogglePinned(item: AnnouncementItem) {
@@ -475,6 +481,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         title: editingTitle.trim(),
         body: editingBody.trim(),
         isPinned: editingPinned,
+        removeImage: editingRemoveImage,
+        removeLink: editingRemoveLink,
+        removeAttachments: editingRemoveAttachments,
+        removeAttachmentLocation: editingRemoveLocation,
       });
       setItems((current) => current.map((entry) => (entry.id === editingItem.id ? updated : entry)));
       setEditingItem(null);
@@ -512,6 +522,177 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         },
       },
     ]);
+  }
+
+  function renderEditDetachRow(input: {
+    icon: ComponentProps<typeof Ionicons>['name'];
+    label: string;
+    detail?: string | null;
+    removed: boolean;
+    onToggle: () => void;
+  }) {
+    return (
+      <PressableScale
+        className={`min-h-[58px] flex-row items-center gap-3 rounded-[20px] px-4 py-3 ${
+          input.removed ? 'bg-[#fff1f2]' : 'bg-white'
+        }`}
+        haptic="selection"
+        onPress={input.onToggle}
+      >
+        <View
+          className={`h-10 w-10 items-center justify-center rounded-full ${
+            input.removed ? 'bg-[#ffe4e6]' : 'bg-[#eef4ff]'
+          }`}
+        >
+          <Ionicons
+            color={input.removed ? '#e11d48' : '#315cf6'}
+            name={input.icon}
+            size={18}
+          />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text
+            className={`font-body text-[14px] font-semibold ${
+              input.removed ? 'text-[#9f1239]' : 'text-foreground'
+            }`}
+            numberOfLines={1}
+          >
+            {input.label}
+          </Text>
+          {input.detail ? (
+            <Text
+              className="mt-1 font-body text-[12px] text-muted-foreground"
+              numberOfLines={1}
+            >
+              {input.detail}
+            </Text>
+          ) : null}
+        </View>
+        <Text
+          className={`font-body text-[13px] font-semibold ${
+            input.removed ? 'text-[#9f1239]' : 'text-danger'
+          }`}
+        >
+          {input.removed
+            ? localizeText(language, 'Вернуть', 'Undo')
+            : localizeText(language, 'Открепить', 'Detach')}
+        </Text>
+      </PressableScale>
+    );
+  }
+
+  function renderEditForm() {
+    const editableItem = editingItem;
+    const editableAttachments = editableItem
+      ? getAnnouncementAttachments(editableItem)
+      : [];
+    const hasEditableContent = Boolean(
+      editableItem?.imageUrl ||
+        editableItem?.linkUrl ||
+        editableAttachments.length ||
+        editableItem?.attachmentLocation,
+    );
+
+    return (
+      <ScrollView
+        className="max-h-[560px]"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="gap-4 pb-1">
+          <TextInput
+            className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
+            onChangeText={setEditingTitle}
+            placeholder={copy.editorTitlePlaceholder}
+            style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
+            value={editingTitle}
+          />
+
+          <TextInput
+            className="min-h-[160px] w-full rounded-2xl border-2 border-border bg-white px-4 py-4 text-[16px] text-foreground"
+            multiline
+            numberOfLines={7}
+            onChangeText={setEditingBody}
+            placeholder={copy.editorBodyPlaceholder}
+            style={textDirectionStyle}
+            textAlignVertical="top"
+            value={editingBody}
+          />
+
+          <PressableScale
+            className="flex-row items-center gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+            haptic="selection"
+            onPress={() => setEditingPinned((current) => !current)}
+          >
+            <View className={`h-6 w-6 items-center justify-center rounded-md border-2 ${editingPinned ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
+              {editingPinned ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
+            </View>
+            <Text className="text-[14px] font-semibold text-foreground">{copy.pin}</Text>
+          </PressableScale>
+
+          {hasEditableContent ? (
+            <View className="gap-2">
+              <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                {localizeText(language, 'Вложения', 'Attachments')}
+              </Text>
+              {editableItem?.imageUrl
+                ? renderEditDetachRow({
+                    icon: 'image-outline',
+                    label: localizeText(language, 'Фото новости', 'News image'),
+                    detail: editingRemoveImage
+                      ? localizeText(language, 'Будет откреплено', 'Will be detached')
+                      : null,
+                    removed: editingRemoveImage,
+                    onToggle: () => setEditingRemoveImage((current) => !current),
+                  })
+                : null}
+              {editableItem?.linkUrl
+                ? renderEditDetachRow({
+                    icon: 'link-outline',
+                    label: localizeText(language, 'Ссылка', 'Link'),
+                    detail: editableItem.linkUrl,
+                    removed: editingRemoveLink,
+                    onToggle: () => setEditingRemoveLink((current) => !current),
+                  })
+                : null}
+              {editableAttachments.length
+                ? renderEditDetachRow({
+                    icon: 'document-attach-outline',
+                    label: localizeText(language, 'Файлы', 'Files'),
+                    detail: localizeText(
+                      language,
+                      `${editableAttachments.length} файл(ов)`,
+                      `${editableAttachments.length} file(s)`,
+                    ),
+                    removed: editingRemoveAttachments,
+                    onToggle: () =>
+                      setEditingRemoveAttachments((current) => !current),
+                  })
+                : null}
+              {editableItem?.attachmentLocation
+                ? renderEditDetachRow({
+                    icon: 'location-outline',
+                    label: localizeText(language, 'Геолокация', 'Geolocation'),
+                    detail: editableItem.attachmentLocation.address,
+                    removed: editingRemoveLocation,
+                    onToggle: () => setEditingRemoveLocation((current) => !current),
+                  })
+                : null}
+            </View>
+          ) : null}
+
+          <PressableScale
+            className={`rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
+            disabled={submitting}
+            haptic="selection"
+            onPress={() => void handleSaveEdit()}
+          >
+            <Text className="text-center font-display text-[16px] font-semibold text-white">
+              {copy.save}
+            </Text>
+          </PressableScale>
+        </View>
+      </ScrollView>
+    );
   }
 
   const content = (
@@ -920,48 +1101,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
             </PressableScale>
           </View>
 
-          <View className="gap-4">
-            <TextInput
-              className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
-              onChangeText={setEditingTitle}
-              placeholder={copy.editorTitlePlaceholder}
-              style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
-              value={editingTitle}
-            />
-
-            <TextInput
-              className="min-h-[180px] w-full rounded-2xl border-2 border-border bg-white px-4 py-4 text-[16px] text-foreground"
-              multiline
-              numberOfLines={8}
-              onChangeText={setEditingBody}
-              placeholder={copy.editorBodyPlaceholder}
-              style={textDirectionStyle}
-              textAlignVertical="top"
-              value={editingBody}
-            />
-
-            <PressableScale
-              className="flex-row items-center gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-              haptic="selection"
-              onPress={() => setEditingPinned((current) => !current)}
-            >
-              <View className={`h-6 w-6 items-center justify-center rounded-md border-2 ${editingPinned ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
-                {editingPinned ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
-              </View>
-              <Text className="text-[14px] font-semibold text-foreground">{copy.pin}</Text>
-            </PressableScale>
-
-            <PressableScale
-              className={`rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
-              disabled={submitting}
-              haptic="selection"
-              onPress={() => void handleSaveEdit()}
-            >
-              <Text className="text-center font-display text-[16px] font-semibold text-white">
-                {copy.save}
-              </Text>
-            </PressableScale>
-          </View>
+          {renderEditForm()}
         </BottomSheetModal>
       </>
     );
@@ -1002,48 +1142,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           </PressableScale>
         </View>
 
-        <View className="gap-4">
-          <TextInput
-            className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
-            onChangeText={setEditingTitle}
-            placeholder={copy.editorTitlePlaceholder}
-            style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
-            value={editingTitle}
-          />
-
-          <TextInput
-            className="min-h-[180px] w-full rounded-2xl border-2 border-border bg-white px-4 py-4 text-[16px] text-foreground"
-            multiline
-            numberOfLines={8}
-            onChangeText={setEditingBody}
-            placeholder={copy.editorBodyPlaceholder}
-            style={textDirectionStyle}
-            textAlignVertical="top"
-            value={editingBody}
-          />
-
-          <PressableScale
-            className="flex-row items-center gap-3 rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-            haptic="selection"
-            onPress={() => setEditingPinned((current) => !current)}
-          >
-            <View className={`h-6 w-6 items-center justify-center rounded-md border-2 ${editingPinned ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
-              {editingPinned ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
-            </View>
-            <Text className="text-[14px] font-semibold text-foreground">{copy.pin}</Text>
-          </PressableScale>
-
-          <PressableScale
-            className={`rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
-            disabled={submitting}
-            haptic="selection"
-            onPress={() => void handleSaveEdit()}
-          >
-            <Text className="text-center font-display text-[16px] font-semibold text-white">
-              {copy.save}
-            </Text>
-          </PressableScale>
-        </View>
+        {renderEditForm()}
       </BottomSheetModal>
     </>
   );

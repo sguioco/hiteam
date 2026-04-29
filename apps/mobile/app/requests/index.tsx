@@ -20,10 +20,7 @@ import { Screen } from '../../components/ui/screen';
 import {
   addRequestComment,
   createMyRequest,
-  loadMyRequestCalendar,
-  loadMyRequests,
-  loadMyTasks,
-  loadMyTimeOffBalances,
+  loadRequestsBootstrap,
 } from '../../lib/api';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
@@ -166,15 +163,17 @@ export default function RequestsScreen() {
 
     try {
       const { dateFrom, dateTo } = getMonthWindow(viewDate);
-      const [nextBalances, nextItems, nextCalendar, nextTasks] = await Promise.all([
-        loadMyTimeOffBalances(),
-        loadMyRequests(),
-        loadMyRequestCalendar(dateFrom.toISOString(), dateTo.toISOString()),
-        loadMyTasks({
-          dateFrom: dateFrom.toISOString().slice(0, 10),
-          dateTo: dateTo.toISOString().slice(0, 10),
-        }),
-      ]);
+      const snapshot = await loadRequestsBootstrap({
+        dateFrom: dateFrom.toISOString().slice(0, 10),
+        dateTo: dateTo.toISOString().slice(0, 10),
+      });
+      const nextBalances = snapshot.initialData.balances;
+      const nextItems = snapshot.initialData.items;
+      const nextCalendar = snapshot.initialData.calendar;
+      const nextTasks = snapshot.initialData.tasks;
+      if (!nextBalances || !nextCalendar) {
+        throw new Error(t('requests.loadError'));
+      }
       await primeTaskTranslations(nextTasks, language);
       const payload: RequestsScreenCacheValue = {
         balances: nextBalances,

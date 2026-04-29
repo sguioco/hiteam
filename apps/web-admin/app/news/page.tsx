@@ -1,3 +1,4 @@
+import type { NewsBootstrapResponse } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
 import { NewsCenter, type NewsCenterInitialData } from "@/components/news-center";
 import { requireServerSession } from "@/lib/server-auth";
@@ -10,10 +11,10 @@ async function loadInitialNewsData(): Promise<{
   const session = await requireServerSession();
 
   try {
-    const response = await serverApiRequestWithSession<{
-      initialData: NewsCenterInitialData | null;
-      mode: "admin" | "employee";
-    }>(session, "/bootstrap/news");
+    const response = await serverApiRequestWithSession<NewsBootstrapResponse>(
+      session,
+      "/bootstrap/news",
+    );
 
     return response;
   } catch {

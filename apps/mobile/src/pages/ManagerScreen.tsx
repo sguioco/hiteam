@@ -23,10 +23,9 @@ import { Button } from "../../components/ui/button";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomSheetModal from "../components/BottomSheetModal";
 import {
-  loadManagerEmployees,
-  loadManagerLiveSessions,
-  loadManagerTasks,
+  loadManagerTasksBootstrap,
   loadMyProfile,
+  type ManagerEmployeeItem,
 } from "../../lib/api";
 import {
   getDateLocale,
@@ -50,9 +49,7 @@ import {
   MANAGER_SCREEN_CACHE_TTL_MS,
 } from "../../lib/workspace-cache";
 
-type ManagerEmployee = Awaited<
-  ReturnType<typeof loadManagerEmployees>
->[number] & {
+type ManagerEmployee = ManagerEmployeeItem & {
   avatar?: any;
 };
 
@@ -920,29 +917,12 @@ export default function ManagerScreen({
       cachedTimeZone,
     );
 
-    const [profileResult, employeesResult, liveSessionsResult] =
-      await Promise.allSettled([
-        loadMyProfile(),
-        loadManagerEmployees(),
-        loadManagerLiveSessions(),
-      ]);
+    const [profileResult] = await Promise.allSettled([loadMyProfile()]);
 
     const nextProfile =
       profileResult.status === "fulfilled"
         ? profileResult.value
         : (cached?.value.profile ?? null);
-    const nextEmployeesDefault =
-      employeesResult.status === "fulfilled"
-        ? Array.isArray(employeesResult.value)
-          ? employeesResult.value
-          : []
-        : (cached?.value.employees ?? []);
-    const nextLiveSessionsDefault =
-      liveSessionsResult.status === "fulfilled"
-        ? Array.isArray(liveSessionsResult.value)
-          ? liveSessionsResult.value
-          : []
-        : (cached?.value.liveSessions ?? []);
 
     const resolvedTimeZone =
       nextProfile?.primaryLocation?.timezone ?? cachedTimeZone;
@@ -956,24 +936,30 @@ export default function ManagerScreen({
     );
 
     let nextTasks = cached?.value.tasks ?? [];
+    let nextEmployeesDefault = cached?.value.employees ?? [];
+    let nextLiveSessionsDefault = cached?.value.liveSessions ?? [];
 
     try {
-      nextTasks = await loadManagerTasks({
+      const bootstrap = await loadManagerTasksBootstrap({
         dateFrom: resolvedPreviousDateKey,
         dateTo: resolvedNextDayDateKey,
       });
+      nextTasks = bootstrap.tasks;
+      nextEmployeesDefault = bootstrap.employees;
+      nextLiveSessionsDefault = bootstrap.liveSessions;
     } catch {
       try {
-        nextTasks = await loadManagerTasks({
+        const bootstrap = await loadManagerTasksBootstrap({
           dateFrom: initialPreviousDateKey,
           dateTo: initialNextDayDateKey,
         });
+        nextTasks = bootstrap.tasks;
+        nextEmployeesDefault = bootstrap.employees;
+        nextLiveSessionsDefault = bootstrap.liveSessions;
       } catch {
-        try {
-          nextTasks = await loadManagerTasks();
-        } catch {
-          nextTasks = cached?.value.tasks ?? [];
-        }
+        nextTasks = cached?.value.tasks ?? [];
+        nextEmployeesDefault = cached?.value.employees ?? [];
+        nextLiveSessionsDefault = cached?.value.liveSessions ?? [];
       }
     }
 

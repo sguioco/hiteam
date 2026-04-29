@@ -24,6 +24,85 @@ const DEMO_OWNER_LOCATION_FALLBACK = {
   longitude: 82.9204,
 } as const;
 
+type DemoOwnerTaskOverride = Pick<
+  TaskItem,
+  'status' | 'completedAt' | 'updatedAt' | 'photoProofs'
+>;
+
+const demoOwnerTaskOverrides = new Map<string, DemoOwnerTaskOverride>();
+
+function rememberDemoOwnerTaskOverrides(tasks: TodayTasks) {
+  for (const task of tasks) {
+    if (!isDemoOwnerTaskId(task.id)) {
+      continue;
+    }
+
+    demoOwnerTaskOverrides.set(task.id, {
+      status: task.status,
+      completedAt: task.completedAt,
+      updatedAt: task.updatedAt,
+      photoProofs: task.photoProofs,
+    });
+  }
+}
+
+function applyDemoOwnerTaskOverrides(tasks: TodayTasks): TodayTasks {
+  return tasks.map((task) => {
+    const override = demoOwnerTaskOverrides.get(task.id);
+
+    if (!override) {
+      return task;
+    }
+
+    return {
+      ...task,
+      ...override,
+    };
+  });
+}
+
+function areDemoOwnerPhotoProofsEqual(
+  left: TaskPhotoProofItem[],
+  right: TaskPhotoProofItem[],
+) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((proof, index) => {
+    const other = right[index];
+
+    return (
+      other &&
+      proof.id === other.id &&
+      proof.url === other.url &&
+      proof.deletedAt === other.deletedAt &&
+      proof.supersededByProofId === other.supersededByProofId &&
+      proof.createdAt === other.createdAt
+    );
+  });
+}
+
+function canReuseDemoOwnerTasks(currentTasks: TodayTasks, nextTasks: TodayTasks) {
+  if (currentTasks.length !== nextTasks.length) {
+    return false;
+  }
+
+  return currentTasks.every((task, index) => {
+    const nextTask = nextTasks[index];
+
+    return (
+      nextTask &&
+      task.id === nextTask.id &&
+      task.status === nextTask.status &&
+      task.completedAt === nextTask.completedAt &&
+      task.updatedAt === nextTask.updatedAt &&
+      task.dueAt === nextTask.dueAt &&
+      areDemoOwnerPhotoProofsEqual(task.photoProofs, nextTask.photoProofs)
+    );
+  });
+}
+
 function getDemoOwnerDateParts(dayOffset = 0) {
   const target = new Date(Date.now() + dayOffset * 24 * 60 * 60 * 1000);
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -352,7 +431,11 @@ export function resolveDemoOwnerTodayScreenData(input: {
   }
 
   const shifts = buildDemoOwnerTodayShifts(profile);
-  const tasks = buildDemoOwnerTodayTasks(profile);
+  rememberDemoOwnerTaskOverrides(input.tasks);
+  const nextTasks = applyDemoOwnerTaskOverrides(buildDemoOwnerTodayTasks(profile));
+  const tasks = canReuseDemoOwnerTasks(input.tasks, nextTasks)
+    ? input.tasks
+    : nextTasks;
   const attendanceStatus = buildDemoOwnerAttendanceStatus(
     profile,
     input.attendanceStatus,

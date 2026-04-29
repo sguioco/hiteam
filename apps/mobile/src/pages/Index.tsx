@@ -18,7 +18,7 @@ import type {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppGradientBackground } from "../../components/ui/screen";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
-import { loadAttendanceStatus, loadMyProfile, loadMyShifts } from "../../lib/api";
+import { loadMyProfile, loadTodayBootstrap } from "../../lib/api";
 import { createCollaborationSocket } from "../../lib/collaboration-socket";
 import { createNotificationsSocket } from "../../lib/notifications-socket";
 import BottomNav from "../components/BottomNav";
@@ -59,7 +59,7 @@ import { getTodayNavBadgeState } from "../../lib/today-task-state";
 
 type Tab = "calendar" | "today" | "manage" | "leaderboard" | "news" | "profile";
 type ProfileCacheValue = Awaited<ReturnType<typeof loadMyProfile>>;
-type ShiftItem = Awaited<ReturnType<typeof loadMyShifts>>[number];
+type ShiftItem = TodayScreenCacheValue["shifts"][number];
 type StartShiftPromptState = {
   minutesUntilStart: number;
 };
@@ -547,15 +547,17 @@ const Index = () => {
 
     const refreshStartShiftPrompt = async () => {
       try {
-        const [attendanceStatus, shifts] = await Promise.all([
-          loadAttendanceStatus(),
-          loadMyShifts(),
-        ]);
+        const todayBootstrap = await loadTodayBootstrap();
         if (cancelled) {
           return;
         }
 
-        const nextPrompt = buildStartShiftPrompt(attendanceStatus, shifts);
+        const nextPrompt = todayBootstrap.attendanceStatus
+          ? buildStartShiftPrompt(
+              todayBootstrap.attendanceStatus,
+              todayBootstrap.shifts,
+            )
+          : null;
         setStartShiftPrompt(nextPrompt);
         setStartShiftPromptVisible(Boolean(nextPrompt));
       } catch {

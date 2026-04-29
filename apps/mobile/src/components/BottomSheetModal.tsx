@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
   runOnJS,
@@ -14,6 +14,7 @@ type BottomSheetModalProps = {
   onClose: () => void;
   children: ReactNode;
   sheetClassName?: string;
+  sheetStyle?: StyleProp<ViewStyle>;
   backdropOpacity?: number;
   solidBackground?: boolean;
 };
@@ -25,6 +26,7 @@ const BottomSheetModal = ({
   children,
   onClose,
   sheetClassName = '',
+  sheetStyle: customSheetStyle,
   solidBackground = false,
   visible,
 }: BottomSheetModalProps) => {
@@ -111,7 +113,7 @@ const BottomSheetModal = ({
         ) : null}
         <Animated.View
           className={`overflow-hidden ${sheetClassName}`}
-          style={sheetStyle}
+          style={[sheetStyle, customSheetStyle]}
         >
           {solidBackground ? (
             <View className="absolute inset-0 bg-white" />

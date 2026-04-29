@@ -2,9 +2,11 @@
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
+  AttendanceBootstrapResponse,
   AttendanceHistoryResponse,
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
+  ManagerTasksBootstrapResponse,
   TaskItem,
   TaskPriority,
   TaskStatus,
@@ -527,12 +529,8 @@ function hasCompletedEmployeeRegistration(
 
 const TASKS_CACHE_TTL_MS = 60_000;
 
-type ManagerTasksCachePayload = {
-  tasks: TaskItem[];
-  employees: EmployeeDirectoryItem[];
-  groups: WorkGroupItem[];
-  liveSessions: AttendanceLiveSession[];
-};
+type ManagerTasksCachePayload =
+  ManagerTasksBootstrapResponse<EmployeeDirectoryItem>;
 
 export type ManagerTasksPageInitialData = ManagerTasksCachePayload;
 
@@ -830,7 +828,7 @@ export function ManagerTasksPage({
       dateTo: resolvedDateTo,
     }).toString();
 
-    void apiRequest<AttendanceHistoryResponse>(`/attendance/team/history?${query}`, {
+    void apiRequest<AttendanceBootstrapResponse>(`/bootstrap/attendance?${query}`, {
       token: accessToken,
     })
       .then((snapshot) => {
@@ -838,7 +836,7 @@ export function ManagerTasksPage({
           return;
         }
 
-        setAttendanceHistory(snapshot);
+        setAttendanceHistory(snapshot.history);
       })
       .catch((loadError) => {
         if (cancelled) {

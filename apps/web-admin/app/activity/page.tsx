@@ -1,15 +1,10 @@
+import type { DashboardBootstrapResponse } from "@smart/types";
 import type { DashboardActivityItem } from "@/components/dashboard/DailyActivityPanel";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 import ActivityPageClient, {
   type ActivityPageInitialData,
 } from "./activity-page-client";
-
-type DashboardBootstrapResponse = {
-  initialData: {
-    dailyActivity?: DashboardActivityItem[];
-  };
-};
 
 async function loadInitialActivityData(): Promise<ActivityPageInitialData | null> {
   const session = await requireServerSession();
@@ -27,7 +22,10 @@ async function loadInitialActivityData(): Promise<ActivityPageInitialData | null
       );
 
       return {
-        items: snapshot.initialData.dailyActivity ?? [],
+        items:
+          (snapshot.initialData.dailyActivity as
+            | DashboardActivityItem[]
+            | undefined) ?? [],
       };
     } catch {
       return null;

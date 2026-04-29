@@ -689,14 +689,14 @@ export function AdminShell({
         return;
       }
 
-      void apiRequest<OrganizationHeaderState>("/org/setup", {
+      void apiRequest<{ setup: OrganizationHeaderState }>("/bootstrap/organization", {
         token: currentSession.accessToken,
       })
-        .then((nextOrganization) => {
+        .then((snapshot) => {
           applyHeaderSnapshot(
             {
               employeeCount,
-              organization: nextOrganization,
+              organization: snapshot.setup,
               accountProfile,
             },
             shellHeaderCacheKey,

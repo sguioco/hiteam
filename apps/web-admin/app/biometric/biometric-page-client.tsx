@@ -8,7 +8,11 @@ import {
   ScanFace,
   Users,
 } from 'lucide-react';
-import { BiometricReviewResponse } from '@smart/types';
+import {
+  BiometricBootstrapResponse,
+  BiometricReviewResponse,
+  EmployeeApiRecord,
+} from '@smart/types';
 import type { SortDescriptor } from 'react-aria-components';
 import { AdminShell } from '../../components/admin-shell';
 import { Avatar } from '../../components/base/avatar/avatar';
@@ -27,15 +31,7 @@ import { useI18n } from '../../lib/i18n';
 import { getMockAvatarDataUrl } from '../../lib/mock-avatar';
 import { navigateWithClickSupport } from '../../lib/navigation';
 
-type EmployeeOption = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  employeeNumber: string;
-  avatarUrl?: string | null;
-  department?: { name: string } | null;
-  primaryLocation?: { name: string } | null;
-};
+type EmployeeOption = EmployeeApiRecord;
 
 const resultOptions = ['', 'PASSED', 'FAILED', 'REVIEW'] as const;
 type BiometricSortColumn =
@@ -92,11 +88,7 @@ function formatDateTime(iso: string, locale: 'ru' | 'en') {
   });
 }
 
-export type BiometricPageInitialData = {
-  employees: EmployeeOption[];
-  result: string;
-  reviews: BiometricReviewResponse | null;
-};
+export type BiometricPageInitialData = BiometricBootstrapResponse;
 
 export default function BiometricReviewPageClient({
   initialData,

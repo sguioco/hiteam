@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { KeyRound, LogOut, Mail, Shield, UploadCloud, UserRound } from 'lucide-react';
+import type { DashboardBootstrapResponse } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
 import { AuthSession, destroySession, getSession, isEmployeeOnlyRole, redirectToLogin } from '../../lib/auth';
@@ -57,11 +58,12 @@ export default function ProfilePageClient({
       return;
     }
 
-    void apiRequest<ProfileEmployee | null>('/employees/me', {
+    void apiRequest<DashboardBootstrapResponse>('/bootstrap/dashboard', {
       token: s.accessToken,
       realBackend: true,
     })
-      .then((employee) => {
+      .then((snapshot) => {
+        const employee = snapshot.initialData.profile;
         setEmployee(employee);
 
         if (employee?.avatarUrl) {

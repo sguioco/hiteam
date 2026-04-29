@@ -1,63 +1,17 @@
 "use client";
 
-import type { ApprovalInboxItem } from "@smart/types";
+import type {
+  ApprovalInboxItem,
+  EmployeeApiRecord,
+  NamedEntityOption,
+  ScheduleShiftRecord,
+  ScheduleShiftTemplateRecord,
+} from "@smart/types";
 type MockLocale = "en" | "ru";
 
-type Option = {
-  id: string;
-  name: string;
-};
-
-type EmployeeApiRecord = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string | null;
-  employeeNumber: string;
-  hireDate: string;
-  avatarUrl?: string | null;
-  department?: Option | null;
-  primaryLocation?: Option | null;
-  position?: Option | null;
-};
-
-type ShiftTemplateRecord = {
-  id: string;
-  name: string;
-  code: string;
-  startsAtLocal: string;
-  endsAtLocal: string;
-  weekDaysJson?: string | null;
-  gracePeriodMinutes: number;
-  createdAt: string;
-  updatedAt: string;
-  location: Option;
-  position: Option;
-};
-
-type ShiftRecord = {
-  id: string;
-  shiftDate: string;
-  startsAt: string;
-  endsAt: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  employee: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-  location: Option;
-  position: Option;
-  template: {
-    id: string;
-    name: string;
-    code: string;
-    startsAtLocal: string;
-    endsAtLocal: string;
-  };
-};
+type Option = NamedEntityOption;
+type ShiftTemplateRecord = ScheduleShiftTemplateRecord;
+type ShiftRecord = ScheduleShiftRecord;
 
 export type MockScheduleData = {
   employees: EmployeeApiRecord[];
@@ -598,16 +552,11 @@ export function createMockScheduleData(
           id: assignment.employee.id,
           firstName: assignment.employee.firstName,
           lastName: assignment.employee.lastName,
+          employeeNumber: assignment.employee.employeeNumber,
         },
         location: assignment.template.location,
         position: assignment.template.position,
-        template: {
-          id: assignment.template.id,
-          name: assignment.template.name,
-          code: assignment.template.code,
-          startsAtLocal: assignment.template.startsAtLocal,
-          endsAtLocal: assignment.template.endsAtLocal,
-        },
+        template: assignment.template,
       });
     }
   }

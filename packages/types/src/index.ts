@@ -426,6 +426,324 @@ export type CollaborationOverviewResponse = {
   }>;
 };
 
+export type NamedEntityOption = {
+  id: string;
+  name: string;
+};
+
+export type EmployeeApiRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string | null;
+  employeeNumber: string;
+  hireDate: string;
+  birthDate?: string | null;
+  gender?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  avatar?: any;
+  avatarUrl?: string | null;
+  breaksEnabled?: boolean;
+  status?: string | null;
+  biometricProfile?: {
+    enrollmentStatus?: 'NOT_STARTED' | 'PENDING' | 'ENROLLED' | 'FAILED' | null;
+  } | null;
+  user?: {
+    id?: string;
+    email?: string;
+    roles?: Array<{
+      role?: {
+        code: string;
+      } | null;
+    }> | null;
+  } | null;
+  company?: NamedEntityOption | null;
+  department?: NamedEntityOption | null;
+  primaryLocation?: (NamedEntityOption & { timezone?: string | null }) | null;
+  position?: NamedEntityOption | null;
+};
+
+export type EmployeeDetails = EmployeeApiRecord & {
+  devices?: Array<{
+    id: string;
+    platform: string;
+    deviceName: string | null;
+    isPrimary: boolean;
+  }>;
+};
+
+export type EmployeeDetailRecord = EmployeeApiRecord & {
+  user: {
+    email: string;
+    id?: string;
+    roles?: Array<{
+      role?: {
+        code: string;
+      } | null;
+    }> | null;
+  };
+  department: NamedEntityOption;
+  company: NamedEntityOption;
+  primaryLocation: NamedEntityOption;
+  position: NamedEntityOption;
+  devices: Array<{
+    id: string;
+    platform: string;
+    deviceName: string | null;
+    isPrimary: boolean;
+  }>;
+};
+
+export type EmployeeProfileResponse = EmployeeApiRecord & {
+  status: string;
+  company: (NamedEntityOption & { code?: string | null }) | null;
+  user: {
+    id: string;
+    email: string;
+    bannerTheme: string | null;
+  };
+  devices: Array<{
+    id: string;
+    deviceName: string | null;
+    platform: 'IOS' | 'ANDROID' | 'WEB';
+    isPrimary: boolean;
+  }>;
+};
+
+export type InvitationRecord = {
+  id: string;
+  companyId?: string | null;
+  email: string | null;
+  status: 'INVITED' | 'PENDING_APPROVAL' | 'REJECTED';
+  expiresAt: string;
+  submittedAt: string | null;
+  resentCount: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  middleName?: string | null;
+  birthDate?: string | null;
+  gender?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  rejectedReason?: string | null;
+  approvedShiftTemplateId?: string | null;
+  approvedGroupId?: string | null;
+};
+
+export type OrganizationSetupResponse = {
+  company: NamedEntityOption | null;
+};
+
+export type ManagerEmployeeItem = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  employeeNumber: string;
+  gender?: string | null;
+  department: NamedEntityOption | null;
+  position: NamedEntityOption | null;
+  primaryLocation: (NamedEntityOption & { timezone?: string | null }) | null;
+  avatar?: any;
+  avatarUrl?: string | null;
+};
+
+export type ScheduleShiftTemplateRecord = {
+  id: string;
+  name: string;
+  code: string;
+  startsAtLocal: string;
+  endsAtLocal: string;
+  weekDaysJson?: string | null;
+  gracePeriodMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+  location: NamedEntityOption;
+  position: NamedEntityOption;
+};
+
+export type ManagerShiftTemplateItem = ScheduleShiftTemplateRecord & {
+  code: string;
+};
+
+export type ScheduleShiftRecord = {
+  id: string;
+  shiftDate: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  employeeId?: string;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  };
+  location: NamedEntityOption;
+  position: NamedEntityOption;
+  template: ScheduleShiftTemplateRecord;
+};
+
+export type ManagerScheduleShiftItem = ScheduleShiftRecord & {
+  employeeId: string;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  };
+  template: ManagerShiftTemplateItem;
+};
+
+export type EmployeeScheduleShiftItem = {
+  id: string;
+  shiftDate: string;
+  startsAt: string;
+  endsAt: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  employee?: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    employeeNumber?: string;
+  };
+  location: NamedEntityOption;
+  position: NamedEntityOption;
+  template: NamedEntityOption & Partial<ScheduleShiftTemplateRecord>;
+};
+
+export type ScheduleBootstrapInitialData<TEmployee = EmployeeApiRecord> = {
+  departments: NamedEntityOption[];
+  employees: TEmployee[];
+  groups: WorkGroupItem[];
+  isMockMode: boolean;
+  locations: NamedEntityOption[];
+  mode: 'admin' | 'employee';
+  positions: NamedEntityOption[];
+  requests: ApprovalInboxItem[];
+  shifts: ManagerScheduleShiftItem[];
+  taskBoard: CollaborationTaskBoardResponse | null;
+  templates: ManagerShiftTemplateItem[];
+  visibleDateFrom: string;
+  visibleDateTo: string;
+};
+
+export type ManagerScheduleBootstrapResponse<TEmployee = EmployeeApiRecord> = {
+  mode: 'admin' | 'employee';
+  initialData: ScheduleBootstrapInitialData<TEmployee> | null;
+};
+
+export type EmployeesBootstrapResponse = {
+  employeeRecords: EmployeeApiRecord[];
+  liveSessions: AttendanceLiveSession[];
+  overview: CollaborationOverviewResponse | null;
+  pendingInvitations: InvitationRecord[];
+  scheduleShifts: EmployeeScheduleShiftItem[];
+  scheduleTemplates: ScheduleShiftTemplateRecord[];
+  organizationSetup: OrganizationSetupResponse | null;
+  canCheckWorkdays: boolean;
+  groups: WorkGroupItem[];
+};
+
+export type EmployeeManagerAccessResponse = {
+  employeeId: string;
+  roleCodes: string[];
+  hasAdminRole: boolean;
+  hasManagerAccess: boolean;
+  canToggleManagerAccess: boolean;
+};
+
+export type EmployeeDetailBootstrapResponse = {
+  anomalies: AttendanceAnomalyResponse | null;
+  biometricHistory: EmployeeBiometricHistoryResponse | null;
+  employee: EmployeeDetailRecord | null;
+  employeeId: string;
+  history: AttendanceHistoryResponse | null;
+  managerAccess: EmployeeManagerAccessResponse | null;
+};
+
+export type AttendanceBootstrapResponse = {
+  anomalies: AttendanceAnomalyResponse | null;
+  audit: AttendanceAuditResponse | null;
+  dateFrom: string;
+  dateTo: string;
+  employees: EmployeeApiRecord[];
+  history: AttendanceHistoryResponse | null;
+  liveSessions: AttendanceLiveSession[];
+};
+
+export type ManagerTasksBootstrapResponse<TEmployee = EmployeeApiRecord> = {
+  tasks: TaskItem[];
+  employees: TEmployee[];
+  groups: WorkGroupItem[];
+  liveSessions: AttendanceLiveSession[];
+};
+
+export type NewsBootstrapResponse<TEmployee = EmployeeApiRecord> = {
+  mode: 'admin' | 'employee';
+  initialData: {
+    items: AnnouncementItem[];
+    employees: TEmployee[];
+    groups: WorkGroupItem[];
+  };
+};
+
+export type LeaderboardBootstrapResponse = {
+  mode: 'admin' | 'employee';
+  initialData: LeaderboardOverviewResponse;
+};
+
+export type BiometricBootstrapResponse = {
+  employees: EmployeeApiRecord[];
+  result: string;
+  reviews: BiometricReviewResponse | null;
+};
+
+export type DashboardBootstrapInitialData<
+  TEmployee = EmployeeApiRecord,
+  TProfile = EmployeeProfileResponse | null,
+> = {
+  anomalies: AttendanceAnomalyResponse | null;
+  attendanceStatus: AttendanceStatusResponse | null;
+  canCheckWorkdays: boolean;
+  dailyActivity?: unknown[];
+  employees: TEmployee[];
+  groups: WorkGroupItem[];
+  liveSessions: AttendanceLiveSession[];
+  personalHistory: AttendanceHistoryResponse | null;
+  personalTaskBoard?: CollaborationTaskBoardResponse | null;
+  profile: TProfile;
+  requests: ApprovalInboxItem[];
+  scheduleShifts: EmployeeScheduleShiftItem[];
+  taskBoard: CollaborationTaskBoardResponse | null;
+};
+
+export type DashboardBootstrapResponse<
+  TEmployee = EmployeeApiRecord,
+  TProfile = EmployeeProfileResponse | null,
+> = {
+  mode: 'admin' | 'employee';
+  initialData: DashboardBootstrapInitialData<TEmployee, TProfile>;
+};
+
+export type RequestsBootstrapResponse = {
+  mode: 'admin' | 'employee';
+  initialData: {
+    inbox: ApprovalInboxItem[];
+    balances: MyTimeOffBalancesResponse | null;
+    items: EmployeeRequestItem[];
+    calendar: RequestsCalendarResponse | null;
+    tasks: TaskItem[];
+    dateFrom: string;
+    dateTo: string;
+  };
+};
+
 export type CollaborationAnalyticsResponse = {
   windowDays: number;
   rangeStart: string;
@@ -775,6 +1093,19 @@ export type ChatThreadItem = {
     };
   }>;
   messages: ChatMessageItem[];
+};
+
+export type CollaborationBootstrapResponse<TEmployee = EmployeeApiRecord> = {
+  analytics: CollaborationAnalyticsResponse | null;
+  announcementTemplates: AnnouncementTemplateItem[];
+  announcements: AnnouncementItem[];
+  automationPolicy: TaskAutomationPolicy | null;
+  chats: ChatThreadItem[];
+  employees: TEmployee[];
+  overview: CollaborationOverviewResponse | null;
+  taskBoard: CollaborationTaskBoardResponse | null;
+  taskTemplates: TaskTemplateItem[];
+  windowDays: number;
 };
 
 export type EmployeeInboxKind = 'TASK' | 'CHAT' | 'NOTIFICATION' | 'ANNOUNCEMENT';

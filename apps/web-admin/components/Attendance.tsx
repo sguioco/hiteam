@@ -5,8 +5,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttendanceAuditResponse,
   AttendanceAnomalyResponse,
+  AttendanceBootstrapResponse,
   AttendanceHistoryResponse,
   AttendanceLiveSession,
+  EmployeeApiRecord,
 } from "@smart/types";
 import {
   Activity,
@@ -34,16 +36,7 @@ type TodayFilter = "all" | "online" | "late" | "break" | "offline";
 type Preset = "week" | "2weeks" | "custom";
 type AttendanceStatus = Exclude<TodayFilter, "all">;
 
-type EmployeeRecord = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  employeeNumber: string;
-  position: { name: string } | null;
-  department: { name: string } | null;
-  primaryLocation: { name: string } | null;
-  avatarUrl?: string | null;
-};
+type EmployeeRecord = EmployeeApiRecord;
 
 type AttendanceCard = {
   id: string;
@@ -98,15 +91,7 @@ type PeriodSortColumn =
 
 type AuditItem = AttendanceAuditResponse["items"][number];
 
-export type AttendanceInitialData = {
-  anomalies: AttendanceAnomalyResponse | null;
-  audit: AttendanceAuditResponse | null;
-  dateFrom: string;
-  dateTo: string;
-  employees: EmployeeRecord[];
-  history: AttendanceHistoryResponse | null;
-  liveSessions: AttendanceLiveSession[];
-};
+export type AttendanceInitialData = AttendanceBootstrapResponse;
 
 const statusDotClass: Record<AttendanceStatus, string> = {
   online: "bg-[color:var(--accent)]",

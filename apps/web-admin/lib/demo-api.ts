@@ -1908,6 +1908,272 @@ function buildTaskBoard(state: DemoState) {
   };
 }
 
+function filterDemoTasks(state: DemoState, searchParams: URLSearchParams) {
+  const search = searchParams.get("search")?.trim().toLowerCase() ?? "";
+  const status = searchParams.get("status")?.trim() ?? "";
+  const priority = searchParams.get("priority")?.trim() ?? "";
+  const groupId = searchParams.get("groupId")?.trim() ?? "";
+  const assigneeEmployeeId =
+    searchParams.get("assigneeEmployeeId")?.trim() ?? "";
+  const departmentId = searchParams.get("departmentId")?.trim() ?? "";
+  const locationId = searchParams.get("locationId")?.trim() ?? "";
+  const onlyOverdue = searchParams.get("onlyOverdue") === "true";
+  const now = Date.now();
+
+  return state.tasks.filter((task) => {
+    if (search) {
+      const haystack = [task.title, task.description ?? ""].join(" ").toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    if (status && task.status !== status) return false;
+    if (priority && task.priority !== priority) return false;
+    if (groupId && task.groupId !== groupId) return false;
+    if (assigneeEmployeeId && task.assigneeEmployee?.id !== assigneeEmployeeId) {
+      return false;
+    }
+    if (
+      departmentId &&
+      task.assigneeEmployee?.department?.id !== departmentId
+    ) {
+      return false;
+    }
+    if (
+      locationId &&
+      task.assigneeEmployee?.primaryLocation?.id !== locationId
+    ) {
+      return false;
+    }
+    if (
+      onlyOverdue &&
+      (!task.dueAt ||
+        new Date(task.dueAt).getTime() >= now ||
+        task.status === "DONE" ||
+        task.status === "CANCELLED")
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function buildTaskBoardFromTasks(tasks: DemoState["tasks"]) {
+  const sortedTasks = [...tasks].sort((left, right) => {
+    if (!left.dueAt && !right.dueAt) return 0;
+    if (!left.dueAt) return 1;
+    if (!right.dueAt) return -1;
+    return left.dueAt.localeCompare(right.dueAt);
+  });
+  const now = Date.now();
+
+  return {
+    totals: {
+      total: sortedTasks.length,
+      overdue: sortedTasks.filter(
+        (task) =>
+          task.dueAt &&
+          new Date(task.dueAt).getTime() < now &&
+          task.status !== "DONE",
+      ).length,
+      active: sortedTasks.filter(
+        (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
+      ).length,
+      done: sortedTasks.filter((task) => task.status === "DONE").length,
+    },
+    tasks: sortedTasks,
+  };
+}
+
+function buildDemoCollaborationAnalytics(state: DemoState, days: number) {
+  const tasks = state.tasks;
+  const completedTasks = tasks.filter((task) => task.status === "DONE");
+  const activeTasks = tasks.filter(
+    (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
+  );
+  const now = Date.now();
+  const overdueTasks = activeTasks.filter(
+    (task) => task.dueAt && new Date(task.dueAt).getTime() < now,
+  );
+  const urgentOpen = activeTasks.filter((task) => task.priority === "URGENT");
+  const dueSoon = activeTasks.filter((task) => {
+    if (!task.dueAt) return false;
+    const dueAt = new Date(task.dueAt).getTime();
+    return dueAt >= now && dueAt <= now + 3 * 24 * 60 * 60 * 1000;
+  });
+
+  return {
+    windowDays: days,
+    rangeStart: createIsoAt(-days, 0, 0),
+    summary: {
+      totalTasks: tasks.length,
+      completedTasks: completedTasks.length,
+      activeTasks: activeTasks.length,
+      overdueTasks: overdueTasks.length,
+      urgentOpenTasks: urgentOpen.length,
+      completionRate: tasks.length ? (completedTasks.length / tasks.length) * 100 : 0,
+      averageCompletionHours: null,
+      averageChecklistCompletionRate: 0,
+      groupsCount: state.groups.length,
+      activeChats: 0,
+      announcementsPublished: state.announcements.length,
+      slaRiskTasks: dueSoon.length,
+      slaBreachedTasks: overdueTasks.length,
+    },
+    sla: {
+      dueSoonThresholdDays: 3,
+      riskTasks: dueSoon.length,
+      breachedTasks: overdueTasks.length,
+    },
+    employeePerformance: state.employees.map((employee) => {
+      const employeeTasks = tasks.filter(
+        (task) => task.assigneeEmployee?.id === employee.id,
+      );
+      const employeeCompleted = employeeTasks.filter(
+        (task) => task.status === "DONE",
+      );
+      const employeeActive = employeeTasks.filter(
+        (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
+      );
+      const employeeOverdue = employeeActive.filter(
+        (task) => task.dueAt && new Date(task.dueAt).getTime() < now,
+      );
+
+      return {
+        employee: {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          employeeNumber: employee.employeeNumber,
+        },
+        totalTasks: employeeTasks.length,
+        completedTasks: employeeCompleted.length,
+        activeTasks: employeeActive.length,
+        overdueTasks: employeeOverdue.length,
+        completionRate: employeeTasks.length
+          ? (employeeCompleted.length / employeeTasks.length) * 100
+          : 0,
+        averageCompletionHours: null,
+        checklistCompletionRate: 0,
+      };
+    }),
+    groupPerformance: state.groups.map((group) => {
+      const groupTasks = tasks.filter((task) => task.groupId === group.id);
+      const groupCompleted = groupTasks.filter((task) => task.status === "DONE");
+      const groupActive = groupTasks.filter(
+        (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
+      );
+      const groupOverdue = groupActive.filter(
+        (task) => task.dueAt && new Date(task.dueAt).getTime() < now,
+      );
+
+      return {
+        group: {
+          id: group.id,
+          name: group.name,
+          description: group.description,
+        },
+        membersCount: group.memberships.length,
+        totalTasks: groupTasks.length,
+        completedTasks: groupCompleted.length,
+        activeTasks: groupActive.length,
+        overdueTasks: groupOverdue.length,
+        completionRate: groupTasks.length
+          ? (groupCompleted.length / groupTasks.length) * 100
+          : 0,
+        averageCompletionHours: null,
+        members: group.memberships.map((membership) => ({
+          employee: membership.employee,
+          totalTasks: tasks.filter(
+            (task) => task.assigneeEmployee?.id === membership.employeeId,
+          ).length,
+          completedTasks: tasks.filter(
+            (task) =>
+              task.assigneeEmployee?.id === membership.employeeId &&
+              task.status === "DONE",
+          ).length,
+          activeTasks: tasks.filter(
+            (task) =>
+              task.assigneeEmployee?.id === membership.employeeId &&
+              (task.status === "TODO" || task.status === "IN_PROGRESS"),
+          ).length,
+          overdueTasks: tasks.filter(
+            (task) =>
+              task.assigneeEmployee?.id === membership.employeeId &&
+              task.dueAt &&
+              new Date(task.dueAt).getTime() < now,
+          ).length,
+          completionRate: 0,
+        })),
+      };
+    }),
+    departmentPerformance: state.departments.map((department) => {
+      const departmentTasks = tasks.filter(
+        (task) => task.assigneeEmployee?.department?.id === department.id,
+      );
+      const departmentCompleted = departmentTasks.filter(
+        (task) => task.status === "DONE",
+      );
+      const departmentActive = departmentTasks.filter(
+        (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
+      );
+      const departmentOverdue = departmentActive.filter(
+        (task) => task.dueAt && new Date(task.dueAt).getTime() < now,
+      );
+
+      return {
+        department,
+        totalTasks: departmentTasks.length,
+        completedTasks: departmentCompleted.length,
+        activeTasks: departmentActive.length,
+        overdueTasks: departmentOverdue.length,
+        completionRate: departmentTasks.length
+          ? (departmentCompleted.length / departmentTasks.length) * 100
+          : 0,
+        averageCompletionHours: null,
+      };
+    }),
+    deadlineBoard: {
+      overdue: overdueTasks,
+      dueSoon,
+      urgentOpen,
+    },
+  };
+}
+
+function buildDemoCollaborationBootstrap(
+  state: DemoState,
+  token: string | undefined,
+  searchParams: URLSearchParams,
+) {
+  const snapshot = cloneState(state);
+  const days = Number(searchParams.get("days") ?? "30");
+  const windowDays = Number.isFinite(days) && days > 0 ? days : 30;
+
+  return {
+    overview: buildCollaborationOverview(snapshot),
+    analytics: buildDemoCollaborationAnalytics(snapshot, windowDays),
+    taskBoard: buildTaskBoardFromTasks(filterDemoTasks(snapshot, searchParams)),
+    automationPolicy: {
+      id: "demo-task-automation-policy",
+      tenantId: "demo-tenant",
+      reminderLeadDays: 1,
+      reminderRepeatHours: 24,
+      escalationDelayDays: 2,
+      escalateToManager: true,
+      notifyAssignee: true,
+      sendChatMessages: false,
+      createdAt: createIsoAt(-30, 9, 0),
+      updatedAt: createIsoAt(-1, 9, 0),
+    },
+    taskTemplates: [],
+    announcementTemplates: [],
+    employees: buildDemoEmployeeRecords(snapshot),
+    announcements: buildDemoNewsBootstrap(snapshot, token).items,
+    chats: [],
+    windowDays,
+  };
+}
+
 function buildDemoAnnouncementRecipients(state: DemoState, announcement: any) {
   const deduped = new Map<string, DemoEmployee>();
   const register = (employee: DemoEmployee | null | undefined) => {
@@ -2488,6 +2754,7 @@ function buildDemoEmployeesBootstrap(state: DemoState) {
     pendingInvitations: snapshot.invitations,
     scheduleShifts: snapshot.shifts,
     scheduleTemplates: snapshot.templates,
+    groups: snapshot.groups,
     organizationSetup: {
       company: snapshot.organization.company
         ? {
@@ -2498,6 +2765,168 @@ function buildDemoEmployeesBootstrap(state: DemoState) {
         : null,
     },
     canCheckWorkdays: true,
+  };
+}
+
+function buildDemoEmployeeManagerAccess(state: DemoState, employeeId: string) {
+  const employee = state.employees.find((item) => item.id === employeeId);
+  if (!employee) {
+    throw new Error("Сотрудник не найден.");
+  }
+
+  const storedRoles =
+    employee.user && Array.isArray((employee.user as any).roles)
+      ? (employee.user as any).roles
+          .map((assignment: any) => assignment?.role?.code)
+          .filter(Boolean)
+      : [];
+  const roleCodes =
+    employee.user?.email === DEMO_ADMIN_EMAIL ? ["tenant_owner"] : storedRoles;
+  const hasAdminRole = roleCodes.some((roleCode: string) =>
+    ["tenant_owner", "hr_admin", "operations_admin"].includes(roleCode),
+  );
+
+  return {
+    employeeId: employee.id,
+    roleCodes,
+    hasAdminRole,
+    hasManagerAccess: hasAdminRole || roleCodes.includes("manager"),
+    canToggleManagerAccess: Boolean(employee.user) && !hasAdminRole,
+  };
+}
+
+function buildDemoEmployeeDetailBootstrap(
+  state: DemoState,
+  employeeId: string,
+  token?: string,
+) {
+  const snapshot = cloneState(state);
+  const employee = snapshot.employees.find((item) => item.id === employeeId);
+
+  if (!employee) {
+    throw new Error("Сотрудник не найден.");
+  }
+
+  const anomalies = buildAttendanceAnomalies(snapshot);
+
+  return {
+    employeeId,
+    employee: {
+      ...employee,
+      user: employee.user
+        ? {
+            ...employee.user,
+            roles:
+              employee.user.email === DEMO_ADMIN_EMAIL
+                ? [{ role: { code: "tenant_owner" } }]
+                : ((employee.user as any).roles ?? []),
+          }
+        : null,
+    },
+    history: buildAttendanceHistory(snapshot, employeeId, null, null),
+    anomalies: {
+      ...anomalies,
+      items: anomalies.items.filter((item) => item.employeeId === employeeId),
+      totals: {
+        critical: anomalies.items.filter(
+          (item) => item.employeeId === employeeId && item.severity === "critical",
+        ).length,
+        warning: anomalies.items.filter(
+          (item) => item.employeeId === employeeId && item.severity === "warning",
+        ).length,
+      },
+    },
+    biometricHistory: buildEmployeeBiometricHistory(snapshot, employeeId),
+    managerAccess:
+      currentDemoRole(token) === "admin"
+        ? buildDemoEmployeeManagerAccess(snapshot, employeeId)
+        : null,
+  };
+}
+
+function buildDemoRequestsBootstrap(
+  state: DemoState,
+  token: string | undefined,
+  searchParams: URLSearchParams,
+) {
+  const snapshot = cloneState(state);
+  const mode = currentDemoRole(token) === "employee" ? "employee" : "admin";
+  const employeeId = currentEmployeeId(token);
+  const dateFrom =
+    searchParams.get("dateFrom") ??
+    dateKey(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const dateTo =
+    searchParams.get("dateTo") ??
+    dateKey(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+
+  if (mode === "admin") {
+    return {
+      mode,
+      initialData: {
+        inbox: snapshot.requests,
+        balances: null,
+        items: [],
+        calendar: null,
+        tasks: [],
+        dateFrom,
+        dateTo,
+      },
+    };
+  }
+
+  const items = snapshot.requests
+    .map((entry) => entry.request)
+    .filter((request) => request?.employee?.id === employeeId)
+    .map((request) => ({
+      ...request,
+      currentStep:
+        request.approvalSteps?.find((step: any) => step.status === "PENDING")
+          ?.sequence ?? 1,
+      attachments: request.attachments ?? [],
+      comments: request.comments ?? [],
+    }));
+  const tasks = buildDemoEmployeeShowcaseTaskBoard(snapshot, employeeId).tasks;
+
+  return {
+    mode,
+    initialData: {
+      inbox: [],
+      balances: {
+        employeeId,
+        balances: [
+          {
+            kind: "VACATION",
+            allowanceDays: 24,
+            usedDays: 6,
+            pendingDays: items.filter((item) => item.status === "PENDING")
+              .length,
+            availableDays: 18,
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            kind: "PERSONAL_DAY_OFF",
+            allowanceDays: 3,
+            usedDays: 1,
+            pendingDays: 0,
+            availableDays: 2,
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        sickLeave: {
+          approvedRequests: 1,
+          approvedDays: 2,
+        },
+      },
+      items,
+      calendar: {
+        dateFrom,
+        dateTo,
+        requests: items,
+      },
+      tasks,
+      dateFrom,
+      dateTo,
+    },
   };
 }
 
@@ -3296,12 +3725,93 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
   const role = currentDemoRole(token);
   const employeeId = currentEmployeeId(token);
   const isEmployee = role === "employee";
+  const currentEmployee =
+    snapshot.employees.find((employee) => employee.id === employeeId) ??
+    snapshot.employees[0] ??
+    null;
+  const scheduleShifts = isEmployee
+    ? buildDemoEmployeeShowcaseScheduleShifts(snapshot, employeeId)
+    : snapshot.shifts;
+  const taskBoard = buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token);
+  const personalTaskBoard = buildDemoEmployeeShowcaseTaskBoard(snapshot, employeeId);
+  const currentShift = scheduleShifts.find((shift) => {
+    const now = Date.now();
+    return (
+      new Date(shift.startsAt).getTime() <= now &&
+      new Date(shift.endsAt).getTime() >= now
+    );
+  });
+  const nextShift = scheduleShifts.find(
+    (shift) => new Date(shift.startsAt).getTime() > Date.now(),
+  );
+  const profile = currentEmployee
+    ? {
+        ...currentEmployee,
+        user: {
+          id: currentEmployee.user?.id ?? `user-${currentEmployee.id}`,
+          email: currentEmployee.user?.email ?? DEMO_ADMIN_EMAIL,
+          bannerTheme: "blue",
+        },
+      }
+    : null;
+  const attendanceStatus = currentEmployee
+    ? {
+        employeeId: currentEmployee.id,
+        attendanceState: "not_checked_in",
+        allowedActions: ["check_in"],
+        location: {
+          id: currentEmployee.primaryLocation?.id ?? "demo-location",
+          name: currentEmployee.primaryLocation?.name ?? "Main salon",
+          radiusMeters: 120,
+          latitude: 55.0302,
+          longitude: 82.9204,
+        },
+        shift: currentShift
+          ? {
+              id: currentShift.id,
+              label: currentShift.template.name,
+              startsAt: currentShift.startsAt,
+              endsAt: currentShift.endsAt,
+              locationName: currentShift.location.name,
+            }
+          : null,
+        nextShift:
+          !currentShift && nextShift
+            ? {
+                id: nextShift.id,
+                label: nextShift.template.name,
+                startsAt: nextShift.startsAt,
+                endsAt: nextShift.endsAt,
+                locationName: nextShift.location.name,
+              }
+            : null,
+        verification: {
+          locationRequired: true,
+          selfieRequired: true,
+          deviceMustBePrimary: true,
+        },
+        breakPolicy: {
+          enabled: currentEmployee.breaksEnabled,
+          companyEnabled: true,
+          employeeEnabled: currentEmployee.breaksEnabled,
+          defaultBreakIsPaid: false,
+          maxBreakMinutes: 60,
+          mandatoryBreakThresholdMinutes: 360,
+          mandatoryBreakDurationMinutes: 30,
+          mandatoryBreakDue: false,
+        },
+        activeSession: null,
+      }
+    : null;
 
   return {
+    profile,
+    attendanceStatus,
     liveSessions: buildAttendanceLive(snapshot),
     anomalies: buildAttendanceAnomalies(snapshot),
     requests: snapshot.requests,
-    taskBoard: buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token),
+    taskBoard,
+    personalTaskBoard,
     employees: snapshot.employees.map((employee) => ({
       id: employee.id,
       firstName: employee.firstName,
@@ -3319,9 +3829,7 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
           .length,
       },
     })),
-    scheduleShifts: isEmployee
-      ? buildDemoEmployeeShowcaseScheduleShifts(snapshot, employeeId)
-      : snapshot.shifts,
+    scheduleShifts,
     canCheckWorkdays: true,
     dailyActivity: buildDemoDailyActivity(snapshot),
     personalHistory: isEmployee
@@ -3858,6 +4366,7 @@ export function getDemoScheduleBootstrap(
 ) {
   const snapshot = cloneState(loadState());
   const mode = currentDemoRole(token) === "employee" ? "employee" : "admin";
+  const employeeId = currentEmployeeId(token);
 
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -3868,26 +4377,33 @@ export function getDemoScheduleBootstrap(
   return {
     initialData: {
       departments: snapshot.departments,
-      employees: snapshot.employees.map((employee) => ({
-        id: employee.id,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        middleName: employee.middleName,
-        employeeNumber: employee.employeeNumber,
-        hireDate: employee.hireDate,
-        avatarUrl: employee.avatarUrl,
-        department: employee.department,
-        primaryLocation: employee.primaryLocation,
-        position: employee.position,
-      })),
+      employees:
+        mode === "employee"
+          ? []
+          : snapshot.employees.map((employee) => ({
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              middleName: employee.middleName,
+              employeeNumber: employee.employeeNumber,
+              hireDate: employee.hireDate,
+              avatarUrl: employee.avatarUrl,
+              department: employee.department,
+              primaryLocation: employee.primaryLocation,
+              position: employee.position,
+            })),
+      groups: mode === "employee" ? [] : snapshot.groups,
       isMockMode: false,
       locations: snapshot.locations,
       mode,
       positions: snapshot.positions,
       requests: snapshot.requests,
-      shifts: snapshot.shifts,
+      shifts:
+        mode === "employee"
+          ? buildDemoEmployeeShowcaseScheduleShifts(snapshot, employeeId)
+          : snapshot.shifts,
       taskBoard: buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token),
-      templates: snapshot.templates,
+      templates: mode === "employee" ? [] : snapshot.templates,
       visibleDateFrom,
       visibleDateTo,
     },
@@ -4286,6 +4802,37 @@ export async function demoApiRequest<T>(
     return employee as T;
   }
 
+  const employeeManagerAccessMatch = pathname.match(
+    /^\/employees\/([^/]+)\/manager-access$/,
+  );
+  if (employeeManagerAccessMatch && method === "GET") {
+    return buildDemoEmployeeManagerAccess(
+      currentState,
+      employeeManagerAccessMatch[1],
+    ) as T;
+  }
+
+  if (employeeManagerAccessMatch && method === "PATCH") {
+    const payload = parseBody<{ grantManagerAccess?: boolean }>(options?.body);
+    const next = updateState((state) => {
+      const employee = state.employees.find(
+        (item) => item.id === employeeManagerAccessMatch[1],
+      );
+      if (!employee?.user) {
+        throw new Error("Сотрудник не найден.");
+      }
+
+      (employee.user as any).roles = payload.grantManagerAccess
+        ? [{ role: { code: "manager" } }]
+        : [];
+    });
+
+    return buildDemoEmployeeManagerAccess(
+      next,
+      employeeManagerAccessMatch[1],
+    ) as T;
+  }
+
   const employeeBreaksMatch = pathname.match(/^\/employees\/([^/]+)\/breaks$/);
   if (employeeBreaksMatch && method === "PATCH") {
     const payload = parseBody<{ breaksEnabled?: boolean }>(options?.body);
@@ -4470,6 +5017,21 @@ export async function demoApiRequest<T>(
     return buildBootstrapTasks(currentState) as T;
   }
 
+  if (pathname === "/bootstrap/collaboration" && method === "GET") {
+    return buildDemoCollaborationBootstrap(currentState, token, url.searchParams) as T;
+  }
+
+  const employeeDetailBootstrapMatch = pathname.match(
+    /^\/bootstrap\/employees\/([^/]+)$/,
+  );
+  if (employeeDetailBootstrapMatch && method === "GET") {
+    return buildDemoEmployeeDetailBootstrap(
+      currentState,
+      employeeDetailBootstrapMatch[1],
+      token,
+    ) as T;
+  }
+
   if (pathname === "/bootstrap/employees" && method === "GET") {
     return buildDemoEmployeesBootstrap(currentState) as T;
   }
@@ -4480,6 +5042,10 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/bootstrap/dashboard" && method === "GET") {
     return getDemoDashboardBootstrap(token) as T;
+  }
+
+  if (pathname === "/bootstrap/requests" && method === "GET") {
+    return buildDemoRequestsBootstrap(currentState, token, url.searchParams) as T;
   }
 
   if (pathname === "/bootstrap/activity" && method === "GET") {
@@ -4852,6 +5418,37 @@ export async function demoApiRequest<T>(
         typeof payload.isPinned === "boolean"
           ? payload.isPinned
           : announcement.isPinned;
+      if (payload.removeImage) {
+        announcement.imageUrl = null;
+        announcement.imageAspectRatio = null;
+      } else if (payload.imageDataUrl) {
+        announcement.imageUrl = payload.imageDataUrl;
+        announcement.imageAspectRatio =
+          payload.imageAspectRatio ?? announcement.imageAspectRatio;
+      }
+      if (payload.removeLink) {
+        announcement.linkUrl = null;
+      } else if (payload.linkUrl !== undefined) {
+        announcement.linkUrl = payload.linkUrl || null;
+      }
+      if (payload.removeAttachmentLocation) {
+        announcement.attachmentLocation = null;
+      } else if (payload.attachmentLocation !== undefined) {
+        announcement.attachmentLocation = payload.attachmentLocation;
+      }
+      if (payload.removeAttachments) {
+        announcement.attachments = [];
+      } else if (Array.isArray(payload.attachments)) {
+        announcement.attachments = payload.attachments.map(
+          (attachment: any, index: number) => ({
+            id: `${announcement.id}-attachment-${index + 1}`,
+            fileName: attachment.fileName ?? `attachment-${index + 1}`,
+            contentType: attachment.contentType ?? null,
+            sizeBytes: attachment.sizeBytes ?? null,
+            url: attachment.dataUrl ?? attachment.url ?? "#",
+          }),
+        );
+      }
       announcement.updatedAt = new Date().toISOString();
       updatedAnnouncement = { ...announcement };
 

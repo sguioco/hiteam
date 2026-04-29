@@ -1,3 +1,4 @@
+import type { LeaderboardBootstrapResponse } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
 import {
   LeaderboardCenter,
@@ -14,10 +15,10 @@ async function loadInitialLeaderboardData(month?: string): Promise<{
   const query = month?.trim() ? `?month=${encodeURIComponent(month.trim())}` : "";
 
   try {
-    return await serverApiRequestWithSession<{
-      initialData: LeaderboardCenterInitialData | null;
-      mode: "admin" | "employee";
-    }>(session, `/bootstrap/leaderboard${query}`);
+    return await serverApiRequestWithSession<LeaderboardBootstrapResponse>(
+      session,
+      `/bootstrap/leaderboard${query}`,
+    );
   } catch {
     return {
       mode: "admin",

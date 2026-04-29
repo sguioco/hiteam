@@ -1,4 +1,4 @@
-import type { ApprovalInboxItem } from "@smart/types";
+import type { RequestsBootstrapResponse } from "@smart/types";
 import Requests from "@/components/Requests";
 import { AdminShell } from "@/components/admin-shell";
 import { requireServerSession } from "@/lib/server-auth";
@@ -8,10 +8,11 @@ async function loadInitialRequests() {
   const session = await requireServerSession();
 
   try {
-    return await serverApiRequestWithSession<ApprovalInboxItem[]>(
+    const snapshot = await serverApiRequestWithSession<RequestsBootstrapResponse>(
       session,
-      "/requests/inbox",
+      "/bootstrap/requests",
     );
+    return snapshot.initialData.inbox;
   } catch {
     return null;
   }

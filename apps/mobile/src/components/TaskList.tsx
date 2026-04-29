@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInUp, LinearTransition } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { addMyTaskPhotoProof, deleteMyTaskPhotoProof } from '../../lib/api';
@@ -118,6 +119,7 @@ export default function TaskList({
   onTaskUpdate,
 }: TaskListProps) {
   const { language, t, tp } = useI18n();
+  const insets = useSafeAreaInsets();
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const locale = getDateLocale(language);
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
@@ -155,8 +157,12 @@ export default function TaskList({
     ? PHOTO_REPORT_LAYOUT.withPhotos
     : PHOTO_REPORT_LAYOUT.withoutPhotos;
   const photoPreviewHeight = Math.max(
-    190,
-    Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
+    170,
+    Math.min(viewportWidth - 58, viewportHeight * 0.34, 300),
+  );
+  const photoReportSheetMaxHeight = Math.max(
+    520,
+    viewportHeight - insets.top - 18,
   );
 
   useEffect(() => {
@@ -666,6 +672,10 @@ export default function TaskList({
       <BottomSheetModal
         onClose={closeTaskModal}
         sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetStyle={{
+          maxHeight: photoReportSheetMaxHeight,
+          paddingBottom: Math.max(insets.bottom + 20, 32),
+        }}
         visible={activeTask !== null}
       >
         {activeTask ? (
@@ -681,13 +691,7 @@ export default function TaskList({
                     {t('today.photoDefaultHint')}
                   </Text>
                 </View>
-                <PressableScale
-                  className="h-8 w-8 items-center justify-center"
-                  haptic="selection"
-                  onPress={closeTaskModal}
-                >
-                  <Ionicons color="#111827" name="close" size={18} />
-                </PressableScale>
+                <View className="w-10" />
               </View>
 
               {mediaError ? (
@@ -843,13 +847,10 @@ export default function TaskList({
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="selection"
-                    onPress={() => {
-                      reopenRegularTask(activeTask.id);
-                      setActiveTaskId(null);
-                    }}
+                    onPress={closeTaskModal}
                   >
                     <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
-                      {t('today.taskReopen')}
+                      {t('today.taskDone')}
                     </Text>
                   </PressableScale>
                 </View>
