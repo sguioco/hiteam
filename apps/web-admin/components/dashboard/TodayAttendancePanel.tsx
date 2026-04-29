@@ -25,6 +25,10 @@ type TodayAttendanceShift = EmployeeScheduleShift & {
   } | null;
 };
 
+type TodayAttendanceShiftWithEmployee = TodayAttendanceShift & {
+  employee: { id: string };
+};
+
 type TodayAttendancePanelProps = {
   locale: "ru" | "en";
   employees: TodayAttendanceEmployee[];
@@ -227,10 +231,11 @@ export function TodayAttendancePanel({
   );
 
   const todaysShifts = scheduleShifts.filter(
-    (shift) => shift.shiftDate.slice(0, 10) === todayKey && shift.employee?.id,
+    (shift): shift is TodayAttendanceShiftWithEmployee =>
+      shift.shiftDate.slice(0, 10) === todayKey && Boolean(shift.employee?.id),
   );
 
-  const uniqueShiftMap = new Map<string, TodayAttendanceShift>();
+  const uniqueShiftMap = new Map<string, TodayAttendanceShiftWithEmployee>();
   todaysShifts.forEach((shift) => {
     if (!uniqueShiftMap.has(shift.employee.id)) {
       uniqueShiftMap.set(shift.employee.id, shift);

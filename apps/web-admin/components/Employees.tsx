@@ -606,12 +606,18 @@ const Employees = ({
         id: "mock-pos",
         name: runtimeLocalize("Сотрудник", "Employee", locale),
       };
+      const createdAt = new Date().toISOString();
 
       const newTemplate: ShiftTemplateRecord = {
         id: `mock-template-${Date.now()}`,
         name: templateDraft.name.trim(),
+        code: templateDraft.name.trim().toLowerCase().replace(/\s+/g, "-"),
         startsAtLocal: templateDraft.startsAtLocal,
         endsAtLocal: templateDraft.endsAtLocal,
+        weekDaysJson: JSON.stringify(templateDraft.weekDays),
+        gracePeriodMinutes: 10,
+        createdAt,
+        updatedAt: createdAt,
         location,
         position,
       };

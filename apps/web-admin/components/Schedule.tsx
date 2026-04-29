@@ -19,6 +19,7 @@ import {
   ApprovalInboxItem,
   AttendanceBootstrapResponse,
   AttendanceHistoryResponse,
+  CollaborationTaskBoardResponse,
   DashboardBootstrapResponse,
   EmployeeApiRecord,
   ManagerScheduleBootstrapResponse,
