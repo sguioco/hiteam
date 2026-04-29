@@ -14,7 +14,14 @@ import Animated, {
   FadeOutRight,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { AnnouncementItem, TaskItem, WorkGroupItem } from "@smart/types";
+import type {
+  AnnouncementItem,
+  ManagerEmployeeItem,
+  ManagerScheduleShiftItem,
+  ManagerShiftTemplateItem,
+  TaskItem,
+  WorkGroupItem,
+} from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
 import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
@@ -24,9 +31,6 @@ import {
   loadMyAnnouncements,
   rescheduleMyTask,
   updateMyTaskStatus,
-  type ManagerEmployeeItem,
-  type ManagerScheduleShiftItem,
-  type ManagerShiftTemplateItem,
 } from "../../lib/api";
 import {
   getDateLocale,

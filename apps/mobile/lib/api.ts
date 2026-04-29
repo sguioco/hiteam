@@ -39,6 +39,11 @@ import {
   WorkGroupItem,
   NewsBootstrapResponse,
 } from "@smart/types";
+export type {
+  ManagerEmployeeItem,
+  ManagerScheduleShiftItem,
+  ManagerShiftTemplateItem,
+} from "@smart/types";
 import type { BannerTheme } from "./banner-theme";
 import {
   getCurrentDeviceFingerprint,

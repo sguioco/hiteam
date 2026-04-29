@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   AttendanceHistoryResponse,
   AttendanceLiveSession,
+  ManagerEmployeeItem,
   TaskItem,
 } from "@smart/types";
 import { Badge } from "../../components/ui/badge";
@@ -25,7 +26,6 @@ import BottomSheetModal from "../components/BottomSheetModal";
 import {
   loadManagerTasksBootstrap,
   loadMyProfile,
-  type ManagerEmployeeItem,
 } from "../../lib/api";
 import {
   getDateLocale,

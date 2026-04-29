@@ -2,7 +2,7 @@
 
 export type EmployeeScheduleShift = {
   shiftDate: string;
-  employee: {
+  employee?: {
     id: string;
   };
 };
