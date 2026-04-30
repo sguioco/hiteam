@@ -8,7 +8,17 @@ type TranslateRequestBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as TranslateRequestBody;
+  let body: TranslateRequestBody;
+
+  try {
+    body = (await request.json()) as TranslateRequestBody;
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body." },
+      { status: 400 },
+    );
+  }
+
   const texts = Array.isArray(body.texts) ? body.texts : [];
   const targetLocale =
     body.targetLocale === "ru" || body.targetLocale === "en"

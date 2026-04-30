@@ -34,6 +34,7 @@ import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 export type LeaderboardCenterInitialData = LeaderboardOverviewResponse;
 
 type LeaderboardCenterTab = "table" | "progress";
+type MonthTransitionDirection = "previous" | "next" | null;
 
 const LEADERBOARD_CACHE_TTL_MS = 30_000;
 
@@ -377,6 +378,8 @@ export function LeaderboardCenter({
   const initialMonthKey = initialData?.month.key ?? currentMonthKey;
   const initialDataMonthKey = useRef(initialData?.month.key ?? null);
   const [selectedMonthKey, setSelectedMonthKey] = useState(initialMonthKey);
+  const [monthTransitionDirection, setMonthTransitionDirection] =
+    useState<MonthTransitionDirection>(null);
   const [tab, setTab] = useState<LeaderboardCenterTab>("table");
   const [overview, setOverview] = useState<LeaderboardOverviewResponse | null>(
     initialData ?? null,
@@ -497,7 +500,7 @@ export function LeaderboardCenter({
   }, [locale, selectedMonthKey, session?.accessToken]);
 
   async function handleLeaderboardPrivacyChange(checked: boolean) {
-    if (!overview?.visibility.canManage || savingVisibility) {
+    if (!overview?.visibility?.canManage || savingVisibility) {
       return;
     }
 
@@ -536,6 +539,11 @@ export function LeaderboardCenter({
     }
   }
 
+  function handleMonthShift(delta: -1 | 1) {
+    setMonthTransitionDirection(delta < 0 ? "previous" : "next");
+    setSelectedMonthKey((current) => shiftMonthKey(current, delta));
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -556,7 +564,8 @@ export function LeaderboardCenter({
   const isPastMonth = selectedMonthKey < currentMonthKey;
   const canGoForward = selectedMonthKey < currentMonthKey;
   const leaderboard = overview?.leaderboard ?? [];
-  const peersHiddenForViewer = overview?.visibility.peersHiddenForViewer ?? false;
+  const peersHiddenForViewer =
+    overview?.visibility?.peersHiddenForViewer ?? false;
   const topLeaders = peersHiddenForViewer ? [] : leaderboard.slice(0, 3);
   const monthLabel = formatMonthLabel(
     overview?.month.key ?? selectedMonthKey,
@@ -585,11 +594,17 @@ export function LeaderboardCenter({
     ? Math.max(0, firstPlacePoints - overview.me.points)
     : 0;
   const recentDailyActivity = overview?.me.dailyActivity?.slice(-7) ?? [];
+  const monthTransitionClass = monthTransitionDirection
+    ? `is-${monthTransitionDirection}`
+    : "";
 
   return (
     <div className="flex min-h-0 flex-col gap-5">
       {topLeaders.length > 0 ? (
-        <section className="px-1">
+        <section
+          className={`leaderboard-month-surface px-1 ${monthTransitionClass}`}
+          key={`leaders-${selectedMonthKey}`}
+        >
           <div className="grid gap-3 md:grid-cols-3 md:items-end">
             {topLeaders.map((entry) => {
               const fullName = getEmployeeFullName(entry);
@@ -669,7 +684,10 @@ export function LeaderboardCenter({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex flex-wrap items-center gap-4">
+        <div
+          className={`leaderboard-month-surface flex flex-wrap items-center gap-4 ${monthTransitionClass}`}
+          key={`summary-${selectedMonthKey}`}
+        >
           <div className="flex min-w-[82px] flex-col items-center text-center">
             <strong className="block text-2xl font-normal leading-none tracking-[-0.04em] tabular-nums text-[color:var(--foreground)]">
               {overview
@@ -707,11 +725,11 @@ export function LeaderboardCenter({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {overview?.visibility.canManage ? (
+          {overview?.visibility?.canManage ? (
             <div
               aria-disabled={savingVisibility}
               aria-pressed={overview.visibility.hidePeersFromEmployees}
-              className="flex min-h-12 items-center gap-3 rounded-xl border border-[rgba(15,23,42,0.08)] bg-white/90 px-3 text-left text-sm shadow-[0_12px_28px_rgba(15,23,42,0.05)] transition-colors hover:bg-white"
+              className="flex min-h-12 cursor-pointer items-center gap-3 px-1 text-left text-sm transition-colors"
               onClick={() =>
                 handleLeaderboardPrivacyChange(
                   !overview.visibility.hidePeersFromEmployees,
@@ -790,15 +808,18 @@ export function LeaderboardCenter({
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[rgba(15,23,42,0.08)] bg-white/90 px-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <button
               className="schedule-calendar-nav-button"
-              onClick={() =>
-                setSelectedMonthKey((current) => shiftMonthKey(current, -1))
-              }
+              onClick={() => handleMonthShift(-1)}
               type="button"
             >
               <ChevronLeft className="size-4" />
             </button>
-            <div className="min-w-[220px] px-2 text-center text-base font-medium tracking-[-0.03em] text-[color:var(--foreground)]">
-              {monthLabel}
+            <div className="leaderboard-month-label-frame min-w-[220px] px-2 text-center text-base font-medium tracking-[-0.03em] text-[color:var(--foreground)]">
+              <span
+                className={`leaderboard-month-label ${monthTransitionClass}`}
+                key={monthLabel}
+              >
+                {monthLabel}
+              </span>
             </div>
             <button
               className="schedule-calendar-nav-button"
@@ -808,7 +829,7 @@ export function LeaderboardCenter({
                   return;
                 }
 
-                setSelectedMonthKey((current) => shiftMonthKey(current, 1));
+                handleMonthShift(1);
               }}
               type="button"
             >
@@ -818,14 +839,18 @@ export function LeaderboardCenter({
         </div>
       </div>
 
-      {error ? (
-        <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
-      ) : null}
+      <div
+        className={`leaderboard-month-content ${monthTransitionClass}`}
+        key={selectedMonthKey}
+      >
+        {error ? (
+          <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
 
-      {tab === "table" ? (
-        <div className="team-tasks-table-card h-[min(62vh,640px)]">
+        {tab === "table" ? (
+          <div className="team-tasks-table-card h-[min(62vh,640px)]">
           {loading ? (
             <div className="flex h-full items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
               {localize(
@@ -986,9 +1011,9 @@ export function LeaderboardCenter({
               </Table>
             </div>
           )}
-        </div>
-      ) : (
-        <article className="h-[min(72vh,800px)] overflow-hidden">
+          </div>
+        ) : (
+          <article className="h-[min(72vh,800px)] overflow-hidden">
           {loading ? (
             <div className="flex h-full items-center justify-center rounded-2xl bg-white px-5 text-center text-sm font-heading text-muted-foreground">
               {localize(
@@ -1345,8 +1370,9 @@ export function LeaderboardCenter({
               </div>
             </div>
           )}
-        </article>
-      )}
+          </article>
+        )}
+      </div>
     </div>
   );
 }

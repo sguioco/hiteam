@@ -141,60 +141,62 @@ export class BillingService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSummary(tenantId: string) {
-    const [{ activeEmployeeCount, pendingInvitationCount, usedSeats }, pricing] =
-      await Promise.all([this.countSeatUsage(tenantId), this.resolvePricing(tenantId)]);
+    const subscription = await this.ensureSubscription(tenantId);
+    const candidateFirstPaidAt =
+      subscription.firstPaidAt ?? (subscription.paidSeats > 0 ? subscription.updatedAt : null);
+    const billingPeriod = this.getBillingPeriod(candidateFirstPaidAt);
+    const usagePeriod = billingPeriod ?? this.getCalendarMonthPeriod();
+    const [{ activeEmployeeCount, pendingInvitationCount, usedSeats, billableSeats }, pricing] =
+      await Promise.all([this.countSeatUsage(tenantId, usagePeriod), this.resolvePricing(tenantId)]);
 
-    const subscription = await this.ensureSubscription(tenantId, usedSeats);
     const paidSeats = subscription.paidSeats;
-    const availableSeats = Math.max(0, paidSeats - usedSeats);
+    const requiredSeats = Math.max(paidSeats, billableSeats);
+    const missingSeats = Math.max(0, requiredSeats - paidSeats);
+    const firstPaidAt = await this.ensureFirstPaidAt(subscription, missingSeats);
+    const activeBillingPeriod = this.getBillingPeriod(firstPaidAt);
+    const serviceActive = Boolean(firstPaidAt) && missingSeats === 0;
+    const status = serviceActive ? subscription.status : 'PAYMENT_REQUIRED';
 
     return {
-      status: subscription.status,
+      status,
       paidSeats,
+      requiredSeats,
       usedSeats,
-      availableSeats,
+      billableSeats,
+      availableSeats: Math.max(0, paidSeats - usedSeats),
+      missingSeats,
       activeEmployeeCount,
       pendingInvitationCount,
-      monthlyTotal: paidSeats * pricing.unitAmount,
-      nextSeatAmount: pricing.unitAmount,
+      monthlyTotal: requiredSeats * pricing.unitAmount,
+      amountDue: missingSeats * pricing.unitAmount,
+      billingStartedAt: firstPaidAt?.toISOString() ?? null,
+      currentPeriodStart: activeBillingPeriod?.start.toISOString() ?? null,
+      currentPeriodEnd: activeBillingPeriod?.end.toISOString() ?? null,
+      serviceActive,
       price: pricing,
     };
   }
 
-  async addSeats(tenantId: string, seats: number) {
-    const normalizedSeats = Math.max(1, Math.floor(seats));
-    const { usedSeats } = await this.countSeatUsage(tenantId);
-    await this.ensureSubscription(tenantId, usedSeats);
-
-    await this.prisma.billingSubscription.update({
-      where: { tenantId },
-      data: {
-        paidSeats: {
-          increment: normalizedSeats,
-        },
-      },
-    });
-
-    return this.getSummary(tenantId);
-  }
-
   async assertCanAddSeatOccupant(tenantId: string) {
     const summary = await this.getSummary(tenantId);
+    return summary;
+  }
 
-    if (summary.availableSeats > 0) {
-      return summary;
-    }
+  async isServiceActive(tenantId: string) {
+    const summary = await this.getSummary(tenantId);
+    return summary.serviceActive;
+  }
 
-    throw new HttpException(
+  buildPaymentRequiredException() {
+    return new HttpException(
       {
-        message:
-          'Недостаточно оплаченных мест. Добавьте место в Billing, чтобы пригласить сотрудника.',
+        message: 'Необходимо оплатить недостающие места в Billing, чтобы сотрудники могли пользоваться сервисом.',
       },
       HttpStatus.PAYMENT_REQUIRED,
     );
   }
 
-  private async ensureSubscription(tenantId: string, usedSeats: number) {
+  private async ensureSubscription(tenantId: string) {
     const existing = await this.prisma.billingSubscription.findUnique({
       where: { tenantId },
     });
@@ -206,18 +208,58 @@ export class BillingService {
     return this.prisma.billingSubscription.create({
       data: {
         tenantId,
-        paidSeats: Math.max(1, usedSeats),
+        paidSeats: 0,
       },
     });
   }
 
-  private async countSeatUsage(tenantId: string) {
-    const [activeEmployeeCount, pendingInvitationCount] = await Promise.all([
+  private async ensureFirstPaidAt(
+    subscription: {
+      id: string;
+      paidSeats: number;
+      firstPaidAt: Date | null;
+      updatedAt: Date;
+    },
+    missingSeats: number,
+  ) {
+    if (subscription.firstPaidAt || subscription.paidSeats <= 0 || missingSeats > 0) {
+      return subscription.firstPaidAt;
+    }
+
+    const updated = await this.prisma.billingSubscription.update({
+      where: { id: subscription.id },
+      data: { firstPaidAt: subscription.updatedAt },
+      select: { firstPaidAt: true },
+    });
+
+    return updated.firstPaidAt;
+  }
+
+  private async countSeatUsage(
+    tenantId: string,
+    period: { start: Date; end: Date },
+  ) {
+    const [
+      activeEmployeeCount,
+      recentlyTerminatedEmployeeCount,
+      pendingInvitationCount,
+      recentStandaloneInvitationCount,
+    ] = await Promise.all([
       this.prisma.employee.count({
         where: {
           tenantId,
           status: {
             not: EmployeeStatus.TERMINATED,
+          },
+        },
+      }),
+      this.prisma.employee.count({
+        where: {
+          tenantId,
+          status: EmployeeStatus.TERMINATED,
+          updatedAt: {
+            gte: period.start,
+            lt: period.end,
           },
         },
       }),
@@ -230,13 +272,92 @@ export class BillingService {
           },
         },
       }),
+      this.prisma.employeeInvitation.count({
+        where: {
+          tenantId,
+          userId: null,
+          employeeId: null,
+          invitedAt: {
+            gte: period.start,
+            lt: period.end,
+          },
+        },
+      }),
     ]);
+    const billableInvitationCount = Math.max(
+      pendingInvitationCount,
+      recentStandaloneInvitationCount,
+    );
 
     return {
       activeEmployeeCount,
       pendingInvitationCount,
       usedSeats: activeEmployeeCount + pendingInvitationCount,
+      billableSeats:
+        activeEmployeeCount + recentlyTerminatedEmployeeCount + billableInvitationCount,
     };
+  }
+
+  private getCalendarMonthPeriod(referenceDate = new Date()) {
+    const start = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1));
+
+    return { start, end };
+  }
+
+  private getBillingPeriod(firstPaidAt: Date | null, referenceDate = new Date()) {
+    if (!firstPaidAt) {
+      return null;
+    }
+
+    let monthOffset =
+      (referenceDate.getUTCFullYear() - firstPaidAt.getUTCFullYear()) * 12 +
+      (referenceDate.getUTCMonth() - firstPaidAt.getUTCMonth());
+    let start = this.addUtcMonths(firstPaidAt, monthOffset);
+
+    if (start > referenceDate) {
+      monthOffset -= 1;
+      start = this.addUtcMonths(firstPaidAt, monthOffset);
+    }
+
+    let end = this.addUtcMonths(firstPaidAt, monthOffset + 1);
+
+    if (referenceDate >= end) {
+      monthOffset += 1;
+      start = end;
+      end = this.addUtcMonths(firstPaidAt, monthOffset + 1);
+    }
+
+    return { start, end };
+  }
+
+  private addUtcMonths(anchor: Date, monthOffset: number) {
+    const targetMonth = new Date(
+      Date.UTC(
+        anchor.getUTCFullYear(),
+        anchor.getUTCMonth() + monthOffset,
+        1,
+        anchor.getUTCHours(),
+        anchor.getUTCMinutes(),
+        anchor.getUTCSeconds(),
+        anchor.getUTCMilliseconds(),
+      ),
+    );
+    const lastDayOfTargetMonth = new Date(
+      Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+
+    return new Date(
+      Date.UTC(
+        targetMonth.getUTCFullYear(),
+        targetMonth.getUTCMonth(),
+        Math.min(anchor.getUTCDate(), lastDayOfTargetMonth),
+        anchor.getUTCHours(),
+        anchor.getUTCMinutes(),
+        anchor.getUTCSeconds(),
+        anchor.getUTCMilliseconds(),
+      ),
+    );
   }
 
   private async resolvePricing(tenantId: string) {

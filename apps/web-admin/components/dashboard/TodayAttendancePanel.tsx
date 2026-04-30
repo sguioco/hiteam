@@ -459,33 +459,35 @@ export function TodayAttendancePanel({
     <div className="dashboard-card today-attendance-panel">
       <div className="today-attendance-head">
         <div className="today-attendance-date-controls">
+          <div className="today-attendance-nav-group">
+            <button
+              aria-label={localize(locale, "Предыдущий день", "Previous day")}
+              className="today-attendance-nav-button"
+              disabled={!canGoPrevious || isLoading}
+              onClick={onPreviousDay}
+              type="button"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              aria-label={localize(locale, "Следующий день", "Next day")}
+              className="today-attendance-nav-button"
+              disabled={!canGoNext || isLoading}
+              onClick={onNextDay}
+              type="button"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
           <button
-            aria-label={localize(locale, "Предыдущий день", "Previous day")}
-            className="today-attendance-nav-button"
-            disabled={!canGoPrevious || isLoading}
-            onClick={onPreviousDay}
+            className={`today-attendance-today-button${isToday ? " is-active" : ""}`}
+            disabled={isLoading}
+            onClick={onToday}
             type="button"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            aria-label={localize(locale, "Следующий день", "Next day")}
-            className="today-attendance-nav-button"
-            disabled={!canGoNext || isLoading}
-            onClick={onNextDay}
-            type="button"
-          >
-            <ChevronRight className="h-4 w-4" />
+            {localize(locale, "Сегодня", "Today")}
           </button>
         </div>
-        <button
-          className={`today-attendance-today-button${isToday ? " is-active" : ""}`}
-          disabled={isLoading}
-          onClick={onToday}
-          type="button"
-        >
-          Today
-        </button>
         <div className="today-attendance-title-group">
           <h2>{localize(locale, "Attendance", "Attendance")}</h2>
           <span className="today-attendance-date-label">

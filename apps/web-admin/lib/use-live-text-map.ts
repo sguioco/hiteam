@@ -11,41 +11,116 @@ import {
 import { getLocalTextTranslation } from "./local-text-translation";
 
 const clientCache = new Map<string, string>();
+const pendingCache = new Map<string, Promise<Record<string, string>>>();
+const TEXT_LIST_SEPARATOR = "\u0000";
+
+function normalizeTranslationText(text: string) {
+  return text.trim();
+}
+
+function normalizeTextList(texts: string[]) {
+  return Array.from(
+    new Set(texts.map(normalizeTranslationText).filter(Boolean)),
+  );
+}
 
 function getCacheKey(locale: Locale, text: string) {
-  return `${locale}:${text}`;
+  return `${locale}:${normalizeTranslationText(text)}`;
 }
 
 function primeLocalTranslations(texts: string[], locale: Locale) {
   hydrateClientTranslationCache();
 
   for (const text of texts) {
-    const persistedTranslation = getClientTranslation(locale, text);
+    const normalizedText = normalizeTranslationText(text);
+    const persistedTranslation = getClientTranslation(locale, normalizedText);
     if (persistedTranslation) {
-      clientCache.set(getCacheKey(locale, text), persistedTranslation);
+      clientCache.set(getCacheKey(locale, normalizedText), persistedTranslation);
       continue;
     }
 
-    const translated = getLocalTextTranslation(text, locale);
+    const translated = getLocalTextTranslation(normalizedText, locale);
     if (translated) {
-      clientCache.set(getCacheKey(locale, text), translated);
-      setClientTranslation(locale, text, translated);
+      clientCache.set(getCacheKey(locale, normalizedText), translated);
+      setClientTranslation(locale, normalizedText, translated);
     }
   }
 }
 
 function getResolvedText(locale: Locale, text: string) {
+  const normalizedText = normalizeTranslationText(text);
+
   return (
-    clientCache.get(getCacheKey(locale, text)) ??
-    getLocalTextTranslation(text, locale) ??
-    text
+    clientCache.get(getCacheKey(locale, normalizedText)) ??
+    getLocalTextTranslation(normalizedText, locale) ??
+    normalizedText
   );
 }
 
+async function requestMissingTranslations(
+  missing: string[],
+  locale: Locale,
+): Promise<Record<string, string>> {
+  const requestKey = `${locale}:${[...missing].sort().join(TEXT_LIST_SEPARATOR)}`;
+  const existing = pendingCache.get(requestKey);
+  if (existing) {
+    return existing;
+  }
+
+  const requestPromise = fetch("/api/translate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      texts: missing,
+      targetLocale: locale,
+    }),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Translation request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as {
+        translations?: Record<string, string>;
+      };
+      const translations = payload.translations ?? {};
+      const resolved: Record<string, string> = {};
+
+      for (const source of missing) {
+        const normalizedSource = normalizeTranslationText(source);
+        const translated = translations[normalizedSource] ?? normalizedSource;
+        resolved[normalizedSource] = translated || normalizedSource;
+        clientCache.set(
+          getCacheKey(locale, normalizedSource),
+          resolved[normalizedSource],
+        );
+        setClientTranslation(
+          locale,
+          normalizedSource,
+          resolved[normalizedSource],
+        );
+      }
+
+      return resolved;
+    })
+    .finally(() => {
+      pendingCache.delete(requestKey);
+    });
+
+  pendingCache.set(requestKey, requestPromise);
+  return requestPromise;
+}
+
 export function useLiveTextMap(texts: string[], locale: Locale) {
-  const uniqueTexts = useMemo(
-    () => Array.from(new Set(texts.map((text) => text.trim()).filter(Boolean))),
+  const textsKey = useMemo(
+    () => normalizeTextList(texts).join(TEXT_LIST_SEPARATOR),
     [texts],
+  );
+  const uniqueTexts = useMemo(
+    () => (textsKey ? textsKey.split(TEXT_LIST_SEPARATOR) : []),
+    [textsKey],
   );
   const [textMap, setTextMap] = useState<Record<string, string>>(() =>
     (primeLocalTranslations(uniqueTexts, locale),
@@ -78,32 +153,10 @@ export function useLiveTextMap(texts: string[], locale: Locale) {
 
     let cancelled = false;
 
-    void fetch("/api/translate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        texts: missing,
-        targetLocale: locale,
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Translation request failed with ${response.status}`);
-        }
-
-        return (await response.json()) as { translations?: Record<string, string> };
-      })
-      .then((payload) => {
+    void requestMissingTranslations(missing, locale)
+      .then(() => {
         if (cancelled) {
           return;
-        }
-
-        const translations = payload.translations ?? {};
-        for (const [source, translated] of Object.entries(translations)) {
-          clientCache.set(getCacheKey(locale, source), translated || source);
-          setClientTranslation(locale, source, translated || source);
         }
 
         setTextMap((current) => ({

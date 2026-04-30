@@ -299,12 +299,13 @@ model Tenant {
 }
 
 model BillingSubscription {
-  id        String   @id @default(uuid())
-  tenantId  String   @unique
-  paidSeats Int      @default(1)
-  status    String   @default("ACTIVE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(uuid())
+  tenantId    String    @unique
+  paidSeats   Int       @default(0)
+  status      String    @default("ACTIVE")
+  firstPaidAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

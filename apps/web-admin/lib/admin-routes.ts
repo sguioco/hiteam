@@ -5,6 +5,7 @@ export const ADMIN_ROUTE_PREFIXES = [
   "/analytics",
   "/attendance",
   "/biometric",
+  "/billing",
   "/collaboration",
   "/diagnostics",
   "/employees",

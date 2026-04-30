@@ -2,12 +2,16 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import { ALLOW_PENDING_ACCESS_KEY } from '../decorators/allow-pending-access.decorator';
 import { JwtUser } from '../interfaces/jwt-user.interface';
+import { BillingService } from '../../modules/billing/billing.service';
 
 @Injectable()
 export class WorkspaceAccessGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly billingService: BillingService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{ user?: JwtUser }>();
     const user = request?.user;
 
@@ -15,19 +19,37 @@ export class WorkspaceAccessGuard implements CanActivate {
       return true;
     }
 
-    if (user.workspaceAccessAllowed || !user.roleCodes.includes('employee')) {
+    const hasEmployeeRole = user.roleCodes.includes('employee');
+    const hasPrivilegedRole = user.roleCodes.some((roleCode) =>
+      ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'].includes(roleCode),
+    );
+
+    if (!hasEmployeeRole) {
       return true;
     }
 
-    const isAllowed = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_ACCESS_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    if (!user.workspaceAccessAllowed) {
+      const isAllowed = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_ACCESS_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
 
-    if (isAllowed) {
+      if (isAllowed) {
+        return true;
+      }
+
+      throw new ForbiddenException('Your account is pending manager approval.');
+    }
+
+    if (hasPrivilegedRole) {
       return true;
     }
 
-    throw new ForbiddenException('Your account is pending manager approval.');
+    const serviceActive = await this.billingService.isServiceActive(user.tenantId);
+    if (!serviceActive) {
+      throw this.billingService.buildPaymentRequiredException();
+    }
+
+    return true;
   }
 }

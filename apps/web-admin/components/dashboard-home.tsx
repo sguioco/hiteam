@@ -125,6 +125,8 @@ type TaskDraft = {
   groupId: string;
   priority: TaskItem["priority"];
   dueAt: string;
+  dueTimeLocal: string;
+  hasDueTime: boolean;
   requiresPhoto: boolean;
   isRecurring: boolean;
   frequency: "DAILY" | "WEEKLY" | "MONTHLY";
@@ -336,6 +338,8 @@ const initialTaskDraft: TaskDraft = {
   groupId: "",
   priority: "MEDIUM",
   dueAt: "",
+  dueTimeLocal: "18:00",
+  hasDueTime: false,
   requiresPhoto: false,
   isRecurring: false,
   frequency: "DAILY",
@@ -1195,6 +1199,11 @@ export default function DashboardHome({
   }, [dashboardTasks, isEmployeeMode, managerEmployee]);
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
     useTranslatedTaskCopy(dashboardTasks, locale);
+  const activeTaskDueAt =
+    taskDraft.mode === "meeting" ||
+    (taskDraft.hasDueTime && !taskDraft.isRecurring)
+      ? taskDraft.dueAt
+      : "";
   const employeeWorkdayLookup = useMemo(
     () => buildEmployeeWorkdayLookup(scheduleShifts),
     [scheduleShifts],
@@ -1202,7 +1211,7 @@ export default function DashboardHome({
   const selectedAssigneeDayStatuses = useMemo(() => {
     if (
       !canCheckWorkdays ||
-      !taskDraft.dueAt ||
+      !activeTaskDueAt ||
       taskDraft.targetMode !== "employees"
     ) {
       return [];
@@ -1214,7 +1223,7 @@ export default function DashboardHome({
         const status = getEmployeeWorkdayStatus(
           employeeWorkdayLookup,
           employeeId,
-          taskDraft.dueAt,
+          activeTaskDueAt,
         );
 
         if (!employee || !status) {
@@ -1241,10 +1250,10 @@ export default function DashboardHome({
       .sort((left, right) => Number(left.isWorkday) - Number(right.isWorkday));
   }, [
     canCheckWorkdays,
+    activeTaskDueAt,
     employeeWorkdayLookup,
     employees,
     taskDraft.assigneeEmployeeIds,
-    taskDraft.dueAt,
     taskDraft.targetMode,
   ]);
   const hasDayOffAssignee = selectedAssigneeDayStatuses.some(
@@ -1588,6 +1597,15 @@ export default function DashboardHome({
     const hasTargets = isEmployeeTargetMode
       ? assigneeEmployeeIds.length > 0
       : Boolean(selectedGroupId);
+    const taskDueAt =
+      taskDraft.mode === "meeting" ||
+      (taskDraft.hasDueTime && !taskDraft.isRecurring)
+        ? taskDraft.dueAt
+        : "";
+    const taskDueTimeLocal =
+      taskDraft.mode === "task" && taskDraft.hasDueTime
+        ? taskDraft.dueTimeLocal
+        : "";
 
     if (!hasTargets) {
       setMessageAction(null);
@@ -1599,8 +1617,8 @@ export default function DashboardHome({
       return;
     }
 
-    if (taskDraft.dueAt) {
-      const dueDate = new Date(taskDraft.dueAt);
+    if (taskDueAt) {
+      const dueDate = new Date(taskDueAt);
       if (Number.isNaN(dueDate.getTime()) || dueDate < new Date()) {
         setMessageAction(null);
         setMessage(
@@ -1655,6 +1673,7 @@ export default function DashboardHome({
                   new Date().toISOString().split("T")[0],
                 endDate: taskDraft.endDate || undefined,
                 dueAfterDays: 0,
+                dueTimeLocal: taskDueTimeLocal || undefined,
                 assigneeEmployeeId,
               }),
             }),
@@ -1677,6 +1696,7 @@ export default function DashboardHome({
               taskDraft.startDate || new Date().toISOString().split("T")[0],
             endDate: taskDraft.endDate || undefined,
             dueAfterDays: 0,
+            dueTimeLocal: taskDueTimeLocal || undefined,
             groupId: selectedGroupId,
           }),
         });
@@ -1695,7 +1715,7 @@ export default function DashboardHome({
               description: payloadDescription,
               assigneeEmployeeId,
               priority: taskDraft.priority,
-              dueAt: taskDraft.dueAt || undefined,
+              dueAt: taskDueAt || undefined,
               requiresPhoto:
                 taskDraft.mode === "task" && taskDraft.requiresPhoto
                   ? true
@@ -1716,7 +1736,7 @@ export default function DashboardHome({
           description: payloadDescription,
           groupId: selectedGroupId,
           priority: taskDraft.priority,
-          dueAt: taskDraft.dueAt || undefined,
+          dueAt: taskDueAt || undefined,
           requiresPhoto:
             taskDraft.mode === "task" && taskDraft.requiresPhoto
               ? true
@@ -1729,7 +1749,7 @@ export default function DashboardHome({
     setCreateTaskOpen(false);
     setTaskDayOffConfirmOpen(false);
     setMessageAction({
-      href: `/schedule?date=${(taskDraft.dueAt || new Date().toISOString()).slice(0, 10)}&eventType=${
+      href: `/schedule?date=${(taskDueAt || new Date().toISOString()).slice(0, 10)}&eventType=${
         taskDraft.mode === "meeting" ? "meetings" : "tasks"
       }`,
       label: localize(locale, "Открыть в календаре", "Open in calendar"),
@@ -1772,6 +1792,11 @@ export default function DashboardHome({
     (taskDraft.targetMode === "employees"
       ? taskDraft.assigneeEmployeeIds.length > 0
       : Boolean(taskDraft.groupId.trim())) &&
+    (taskDraft.mode !== "task" ||
+      !taskDraft.hasDueTime ||
+      (taskDraft.isRecurring
+        ? Boolean(taskDraft.dueTimeLocal)
+        : Boolean(taskDraft.dueAt))) &&
     (taskDraft.mode === "task" ||
       (Boolean(taskDraft.dueAt) &&
         (taskDraft.meetingMode === "online"
@@ -2083,19 +2108,60 @@ export default function DashboardHome({
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        onChange={(e) =>
-                          setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
-                        }
-                        min={minTaskDateTime}
-                        placeholder={
-                          taskDraft.mode === "meeting"
-                            ? localize(locale, "Дата и время встречи", "Meeting date and time")
-                            : localize(locale, "Срок", "Due date")
-                        }
-                        type="datetime-local"
-                        value={taskDraft.dueAt}
-                      />
+                      {taskDraft.mode === "meeting" ? (
+                        <Input
+                          onChange={(e) =>
+                            setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
+                          }
+                          min={minTaskDateTime}
+                          placeholder={localize(
+                            locale,
+                            "Дата и время встречи",
+                            "Meeting date and time",
+                          )}
+                          type="datetime-local"
+                          value={taskDraft.dueAt}
+                        />
+                      ) : (
+                        <div className="grid gap-2 rounded-2xl border border-border/70 bg-secondary/20 p-3">
+                          <label className="inline-flex cursor-pointer items-center gap-3">
+                            <Checkbox
+                              checked={taskDraft.hasDueTime}
+                              onCheckedChange={(checked) =>
+                                setTaskDraft((current) => ({
+                                  ...current,
+                                  hasDueTime: checked === true,
+                                  dueAt:
+                                    checked === true && !current.isRecurring
+                                      ? current.dueAt ||
+                                        formatDateTimeLocalInput(
+                                          new Date(Date.now() + 60 * 60 * 1000),
+                                        )
+                                      : "",
+                                  dueTimeLocal:
+                                    checked === true
+                                      ? current.dueTimeLocal || "18:00"
+                                      : current.dueTimeLocal,
+                                }))
+                              }
+                            />
+                            <span className="text-sm font-heading leading-none">
+                              {localize(locale, "Сделать до времени", "Set deadline time")}
+                            </span>
+                          </label>
+                          {!taskDraft.isRecurring && taskDraft.hasDueTime ? (
+                            <Input
+                              className="h-11"
+                              onChange={(e) =>
+                                setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
+                              }
+                              min={minTaskDateTime}
+                              type="datetime-local"
+                              value={taskDraft.dueAt}
+                            />
+                          ) : null}
+                        </div>
+                      )}
                       </div>
                       {taskDraft.mode === "task" ? (
                         <>
@@ -2208,6 +2274,22 @@ export default function DashboardHome({
                                 </div>
                               </label>
                             ) : null}
+                            {taskDraft.hasDueTime ? (
+                              <label className="col-span-full grid gap-2 text-sm font-heading">
+                                <span>{localize(locale, "Время выполнения", "Due time")}</span>
+                                <Input
+                                  className="h-11"
+                                  onChange={(event) =>
+                                    setTaskDraft((current) => ({
+                                      ...current,
+                                      dueTimeLocal: event.target.value,
+                                    }))
+                                  }
+                                  type="time"
+                                  value={taskDraft.dueTimeLocal}
+                                />
+                              </label>
+                            ) : null}
                             <label className="col-span-full grid gap-2 text-sm font-heading">
                               <span>{localize(locale, "Дата окончания (необязательно)", "End date (optional)")}</span>
                               <Input
@@ -2227,7 +2309,7 @@ export default function DashboardHome({
                         </>
                       ) : null}
                       {canCheckWorkdays &&
-                      taskDraft.dueAt &&
+                      activeTaskDueAt &&
                       selectedAssigneeDayStatuses.length ? (
                         <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

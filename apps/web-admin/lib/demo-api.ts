@@ -114,6 +114,8 @@ type DemoState = {
   notifications: any[];
   invitations: any[];
   billingPaidSeats: number;
+  billingRequiredSeats: number;
+  billingFirstPaidAt: string | null;
   shifts: any[];
   templates: any[];
   payrollPolicy: any;
@@ -144,6 +146,73 @@ function dateKey(value = new Date()) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function createDemoBillingFirstPaidAt() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+function addUtcMonths(anchor: Date, monthOffset: number) {
+  const targetMonth = new Date(
+    Date.UTC(
+      anchor.getUTCFullYear(),
+      anchor.getUTCMonth() + monthOffset,
+      1,
+      anchor.getUTCHours(),
+      anchor.getUTCMinutes(),
+      anchor.getUTCSeconds(),
+      anchor.getUTCMilliseconds(),
+    ),
+  );
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+
+  return new Date(
+    Date.UTC(
+      targetMonth.getUTCFullYear(),
+      targetMonth.getUTCMonth(),
+      Math.min(anchor.getUTCDate(), lastDayOfTargetMonth),
+      anchor.getUTCHours(),
+      anchor.getUTCMinutes(),
+      anchor.getUTCSeconds(),
+      anchor.getUTCMilliseconds(),
+    ),
+  );
+}
+
+function getBillingPeriodFromFirstPayment(firstPaidAt?: string | null) {
+  if (!firstPaidAt) {
+    return null;
+  }
+
+  const anchor = new Date(firstPaidAt);
+  const referenceDate = new Date();
+
+  if (Number.isNaN(anchor.getTime())) {
+    return null;
+  }
+
+  let monthOffset =
+    (referenceDate.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+    (referenceDate.getUTCMonth() - anchor.getUTCMonth());
+  let start = addUtcMonths(anchor, monthOffset);
+
+  if (start > referenceDate) {
+    monthOffset -= 1;
+    start = addUtcMonths(anchor, monthOffset);
+  }
+
+  let end = addUtcMonths(anchor, monthOffset + 1);
+
+  if (referenceDate >= end) {
+    monthOffset += 1;
+    start = end;
+    end = addUtcMonths(anchor, monthOffset + 1);
+  }
+
+  return { start, end };
 }
 
 function buildTaskId(prefix: string) {
@@ -1292,6 +1361,8 @@ function createInitialState(): DemoState {
     notifications,
     invitations,
     billingPaidSeats: 18,
+    billingRequiredSeats: 18,
+    billingFirstPaidAt: createDemoBillingFirstPaidAt(),
     shifts: [
       ...scheduleData.shifts.filter((shift) => shift.shiftDate !== dateKey()),
       ...todayDemoShifts,
@@ -1325,6 +1396,27 @@ function loadState(): DemoState {
 
     if (typeof normalized.billingPaidSeats !== "number") {
       normalized.billingPaidSeats = seedState.billingPaidSeats;
+      changed = true;
+    }
+
+    if (typeof normalized.billingRequiredSeats !== "number") {
+      normalized.billingRequiredSeats = Math.max(
+        seedState.billingRequiredSeats,
+        normalized.billingPaidSeats,
+        normalized.employees.length + normalized.invitations.length,
+      );
+      changed = true;
+    }
+
+    if (
+      typeof normalized.billingFirstPaidAt !== "string" &&
+      normalized.billingFirstPaidAt !== null
+    ) {
+      normalized.billingFirstPaidAt =
+        normalized.billingPaidSeats > 0 &&
+        normalized.billingPaidSeats >= normalized.billingRequiredSeats
+          ? seedState.billingFirstPaidAt
+          : null;
       changed = true;
     }
 
@@ -4717,17 +4809,32 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/billing/summary" && method === "GET") {
     const usedSeats = currentState.employees.length + currentState.invitations.length;
+    const requiredSeats = Math.max(
+      currentState.billingPaidSeats,
+      currentState.billingRequiredSeats,
+      usedSeats,
+    );
+    const missingSeats = Math.max(0, requiredSeats - currentState.billingPaidSeats);
+    const billingPeriod = getBillingPeriodFromFirstPayment(currentState.billingFirstPaidAt);
+    const serviceActive = Boolean(currentState.billingFirstPaidAt) && missingSeats === 0;
     const unitAmount = 3;
     const currency = "USD";
     return {
-      status: "ACTIVE",
+      status: serviceActive ? "ACTIVE" : "PAYMENT_REQUIRED",
       paidSeats: currentState.billingPaidSeats,
+      requiredSeats,
       usedSeats,
+      billableSeats: requiredSeats,
       availableSeats: Math.max(0, currentState.billingPaidSeats - usedSeats),
+      missingSeats,
       activeEmployeeCount: currentState.employees.length,
       pendingInvitationCount: currentState.invitations.length,
-      monthlyTotal: currentState.billingPaidSeats * unitAmount,
-      nextSeatAmount: unitAmount,
+      monthlyTotal: requiredSeats * unitAmount,
+      amountDue: missingSeats * unitAmount,
+      billingStartedAt: currentState.billingFirstPaidAt,
+      currentPeriodStart: billingPeriod?.start.toISOString() ?? null,
+      currentPeriodEnd: billingPeriod?.end.toISOString() ?? null,
+      serviceActive,
       price: {
         regionCode: "standard",
         regionLabel: "Standard",
@@ -4736,36 +4843,6 @@ export async function demoApiRequest<T>(
         unitAmount,
         approxUsd: null,
         locationConfigured: Boolean(currentState.organization.location),
-      },
-    } as T;
-  }
-
-  if (pathname === "/billing/seats" && method === "POST") {
-    const payload = parseBody<{ seats?: number }>(options?.body);
-    const seats = Math.max(1, Math.floor(Number(payload.seats ?? 1)));
-    const nextState = updateState((state) => {
-      state.billingPaidSeats += seats;
-    });
-    const usedSeats = nextState.employees.length + nextState.invitations.length;
-    const unitAmount = 3;
-    const currency = "USD";
-    return {
-      status: "ACTIVE",
-      paidSeats: nextState.billingPaidSeats,
-      usedSeats,
-      availableSeats: Math.max(0, nextState.billingPaidSeats - usedSeats),
-      activeEmployeeCount: nextState.employees.length,
-      pendingInvitationCount: nextState.invitations.length,
-      monthlyTotal: nextState.billingPaidSeats * unitAmount,
-      nextSeatAmount: unitAmount,
-      price: {
-        regionCode: "standard",
-        regionLabel: "Standard",
-        country: nextState.organization.location?.country ?? "Thailand",
-        currency,
-        unitAmount,
-        approxUsd: null,
-        locationConfigured: Boolean(nextState.organization.location),
       },
     } as T;
   }
@@ -4863,9 +4940,6 @@ export async function demoApiRequest<T>(
 
   if (pathname === "/employees/invitations" && method === "POST") {
     const payload = parseBody<{ email?: string; phone?: string }>(options?.body);
-    if (currentState.employees.length + currentState.invitations.length >= currentState.billingPaidSeats) {
-      throw new Error("Недостаточно оплаченных мест. Добавьте место в Billing, чтобы пригласить сотрудника.");
-    }
     const nextState = updateState((state) => {
       const invitation = {
         id: buildTaskId("invitation"),
@@ -4886,6 +4960,10 @@ export async function demoApiRequest<T>(
         approvedGroupId: null,
       };
       state.invitations.unshift(invitation);
+      state.billingRequiredSeats = Math.max(
+        state.billingRequiredSeats,
+        state.employees.length + state.invitations.length,
+      );
     });
     return nextState.invitations[0] as T;
   }

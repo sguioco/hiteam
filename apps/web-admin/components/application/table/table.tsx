@@ -169,12 +169,20 @@ interface TableHeadProps extends AriaColumnProps, Omit<ThHTMLAttributes<HTMLTabl
     tooltip?: string;
 }
 
-const TableHead = ({ className, tooltip, label, children, ...props }: TableHeadProps) => {
+function getColumnAriaLabel(label: string | undefined, children: TableHeadProps["children"]) {
+    if (label) return label;
+    if (typeof children === "string" || typeof children === "number") return String(children);
+    return undefined;
+}
+
+const TableHead = ({ className, tooltip, label, children, "aria-label": ariaLabelProp, ...props }: TableHeadProps) => {
     const { selectionBehavior } = useTableOptions();
+    const ariaLabel = ariaLabelProp ?? getColumnAriaLabel(label, children);
 
     return (
         <AriaColumn
             {...props}
+            aria-label={ariaLabel}
             className={(state) =>
                 cx(
                     "relative p-0 px-6 py-2 outline-hidden focus-visible:z-1 focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-bg-primary focus-visible:ring-inset",

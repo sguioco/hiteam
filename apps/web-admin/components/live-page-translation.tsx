@@ -26,8 +26,12 @@ type TranslationPayload = {
   targetLocale: Locale;
 };
 
+function normalizeTranslationText(text: string) {
+  return text.trim();
+}
+
 function getCacheKey(locale: Locale, text: string) {
-  return `${locale}:${text}`;
+  return `${locale}:${normalizeTranslationText(text)}`;
 }
 
 function isTranslatableText(value: string) {
@@ -45,38 +49,40 @@ function looksLikePersonName(value: string) {
 }
 
 function getTranslatedValue(text: string, locale: Locale) {
+  const normalizedText = normalizeTranslationText(text);
+
   if (locale === "ru") {
     return text;
   }
 
   hydrateClientTranslationCache();
 
-  const localTranslation = getLocalTextTranslation(text, locale);
+  const localTranslation = getLocalTextTranslation(normalizedText, locale);
   if (localTranslation) {
-    clientCache.set(getCacheKey(locale, text), localTranslation);
-    setClientTranslation(locale, text, localTranslation);
+    clientCache.set(getCacheKey(locale, normalizedText), localTranslation);
+    setClientTranslation(locale, normalizedText, localTranslation);
     return localTranslation;
   }
 
-  const persistedTranslation = getClientTranslation(locale, text);
+  const persistedTranslation = getClientTranslation(locale, normalizedText);
   if (persistedTranslation) {
-    clientCache.set(getCacheKey(locale, text), persistedTranslation);
+    clientCache.set(getCacheKey(locale, normalizedText), persistedTranslation);
     return persistedTranslation;
   }
 
-  const cached = clientCache.get(getCacheKey(locale, text));
+  const cached = clientCache.get(getCacheKey(locale, normalizedText));
   if (cached) {
     return cached;
   }
 
-  if (looksLikePersonName(text)) {
-    const transliterated = localizePersonName(text, locale);
-    clientCache.set(getCacheKey(locale, text), transliterated);
-    setClientTranslation(locale, text, transliterated);
+  if (looksLikePersonName(normalizedText)) {
+    const transliterated = localizePersonName(normalizedText, locale);
+    clientCache.set(getCacheKey(locale, normalizedText), transliterated);
+    setClientTranslation(locale, normalizedText, transliterated);
     return transliterated;
   }
 
-  return text;
+  return normalizedText;
 }
 
 function collectTextNodes(root: HTMLElement) {
@@ -131,7 +137,9 @@ function collectTranslatableAttributes(root: HTMLElement) {
 async function requestTranslations(texts: string[], locale: Locale) {
   hydrateClientTranslationCache();
 
-  const missing = texts.filter(
+  const missing = Array.from(
+    new Set(texts.map(normalizeTranslationText).filter(Boolean)),
+  ).filter(
     (text) =>
       !clientCache.has(getCacheKey(locale, text)) &&
       !hasClientTranslation(locale, text),
@@ -168,8 +176,16 @@ async function requestTranslations(texts: string[], locale: Locale) {
       };
 
       for (const [source, translated] of Object.entries(body.translations ?? {})) {
-        clientCache.set(getCacheKey(locale, source), translated || source);
-        setClientTranslation(locale, source, translated || source);
+        const normalizedSource = normalizeTranslationText(source);
+        clientCache.set(
+          getCacheKey(locale, normalizedSource),
+          translated || normalizedSource,
+        );
+        setClientTranslation(
+          locale,
+          normalizedSource,
+          translated || normalizedSource,
+        );
       }
     })
     .finally(() => {
@@ -289,9 +305,11 @@ export function LivePageTranslation({
           [
             ...textNodes
               .map((node) => originalTextMap.get(node) ?? node.textContent ?? "")
+              .map(normalizeTranslationText)
               .filter(isTranslatableText),
             ...attributeEntries
               .map(({ element, attribute }) => element.getAttribute(attribute) ?? "")
+              .map(normalizeTranslationText)
               .filter(isTranslatableText),
           ],
         ),

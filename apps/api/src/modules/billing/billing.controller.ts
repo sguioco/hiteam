@@ -1,10 +1,9 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AddBillingSeatsDto } from './dto/add-billing-seats.dto';
 import { BillingService } from './billing.service';
 
 @Controller('billing')
@@ -16,10 +15,5 @@ export class BillingController {
   @Get('summary')
   summary(@CurrentUser() user: JwtUser) {
     return this.billingService.getSummary(user.tenantId);
-  }
-
-  @Post('seats')
-  addSeats(@CurrentUser() user: JwtUser, @Body() dto: AddBillingSeatsDto) {
-    return this.billingService.addSeats(user.tenantId, dto.seats);
   }
 }

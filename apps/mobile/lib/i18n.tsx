@@ -869,6 +869,7 @@ const translations = {
     "manager.createTaskTitle": "Создать задачу",
     "manager.createTaskTitlePlaceholder": "Название задачи",
     "manager.createTaskDueTime": "Время выполнения",
+    "manager.createTaskDeadlineToggle": "Сделать до времени",
     "manager.createTaskDescriptionPlaceholder": "Добавьте описание задачи",
     "manager.createTaskSelectedAssignees": "Исполнители: {count}",
     "manager.createTaskAssigneeRequired":
@@ -1779,6 +1780,7 @@ const translations = {
     "manager.createTaskTitle": "Create task",
     "manager.createTaskTitlePlaceholder": "Task title",
     "manager.createTaskDueTime": "Due time",
+    "manager.createTaskDeadlineToggle": "Set deadline time",
     "manager.createTaskDescriptionPlaceholder": "Add task description",
     "manager.createTaskSelectedAssignees": "Selected assignees: {count}",
     "manager.createTaskAssigneeRequired": "Select at least one assignee.",

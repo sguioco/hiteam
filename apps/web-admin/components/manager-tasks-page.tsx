@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Camera,
   Check,
+  ChevronDown,
   Circle,
   CircleX,
   ExternalLink,
@@ -131,11 +132,16 @@ type TaskRenderRow =
 type TaskSearchMatch = {
   actorName: string;
   creatorName: string;
+  dateDay: string;
+  dateMonth: string;
+  employeeAvatarUrl: string | null;
   employeeId: string | null;
+  employeeInitials: string;
   employeeName: string;
   id: string;
+  photoProofs: { id: string; url: string }[];
   statusLabel: string;
-  statusTone: "success" | "warning" | "gray" | "error";
+  statusTone: "success" | "neutral" | "gray" | "error";
   timeLabel: string;
   title: string;
 };
@@ -271,6 +277,24 @@ function getScheduledTaskDate(task: TaskItem) {
   return null;
 }
 
+function getTaskDeadlineDate(task: TaskItem) {
+  if (task.dueAt) {
+    const dueAt = new Date(task.dueAt);
+    if (!Number.isNaN(dueAt.getTime())) {
+      return dueAt;
+    }
+  }
+
+  if (task.occurrenceDate) {
+    const occurrenceDate = new Date(task.occurrenceDate);
+    if (!Number.isNaN(occurrenceDate.getTime())) {
+      return endOfDay(occurrenceDate);
+    }
+  }
+
+  return null;
+}
+
 function isTaskOpen(status: TaskStatus) {
   return status !== "DONE" && status !== "CANCELLED";
 }
@@ -286,6 +310,21 @@ function isTaskOverdue(task: TaskItem, referenceDate: Date) {
   }
 
   return endOfDay(dueAt).getTime() < startOfDay(referenceDate).getTime();
+}
+
+function isTaskCompletedLate(task: TaskItem) {
+  if (task.status !== "DONE" || !task.completedAt) {
+    return false;
+  }
+
+  const completedAt = new Date(task.completedAt);
+  const deadlineAt = getTaskDeadlineDate(task);
+
+  if (Number.isNaN(completedAt.getTime()) || !deadlineAt) {
+    return false;
+  }
+
+  return completedAt.getTime() > deadlineAt.getTime();
 }
 
 function getActivePhotoProofs(task: TaskItem) {
@@ -316,6 +355,66 @@ function formatDateLabel(value: string | Date | null | undefined, locale: string
   }
 
   return formatted;
+}
+
+function formatSearchDateParts(
+  value: string | Date | null | undefined,
+  locale: string,
+) {
+  if (!value) {
+    return { day: "—", month: "" };
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return { day: "—", month: "" };
+  }
+
+  const dateLocale = locale === "ru" ? "ru-RU" : "en-US";
+
+  return {
+    day: parsed.toLocaleDateString(dateLocale, { day: "2-digit" }),
+    month: parsed
+      .toLocaleDateString(dateLocale, { month: "short" })
+      .replace(".", "")
+      .toUpperCase(),
+  };
+}
+
+function formatSearchStatusDate(
+  value: string | Date | null | undefined,
+  locale: string,
+  options?: { includeTime?: boolean },
+) {
+  if (!value) {
+    return "—";
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+
+  const dateLabel = parsed
+    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+      day: "numeric",
+      month: "short",
+    })
+    .replace(".", "");
+
+  if (!options?.includeTime) {
+    return dateLabel;
+  }
+
+  const timeLabel = parsed.toLocaleTimeString(locale === "ru" ? "ru-RU" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return `${dateLabel}, ${timeLabel}`;
 }
 
 function formatResolvedRangeLabel(start: Date, end: Date, locale: string) {
@@ -1183,6 +1282,11 @@ export function ManagerTasksPage({
     [isHistoricalRange, locale],
   );
 
+  const employeeById = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, employee])),
+    [employees],
+  );
+
   const searchQuery = employeeSearch.trim().toLowerCase();
   const taskSearchMatches = useMemo<TaskSearchMatch[]>(() => {
     if (!searchQuery) {
@@ -1199,8 +1303,10 @@ export function ManagerTasksPage({
         }
 
         const isDone = task.status === "DONE";
+        const completedLate = isTaskCompletedLate(task);
         const isMissed = isTaskOverdue(task, today);
         const isCancelled = task.status === "CANCELLED";
+        const lateStatusIncludesTime = Boolean(task.dueAt);
         const actor = isDone
           ? getTaskCompletionActor(task)
           : task.assigneeEmployee ?? task.managerEmployee;
@@ -1208,12 +1314,34 @@ export function ManagerTasksPage({
           ? getEmployeeName(task.assigneeEmployee, locale)
           : task.group?.name ?? localize(locale, "Команда", "Team");
         const statusLabel = isDone
-          ? localize(locale, "Сделана", "Done")
+          ? completedLate
+            ? localize(
+                locale,
+                `Выполнено ${formatSearchStatusDate(
+                  task.completedAt,
+                  locale,
+                  { includeTime: lateStatusIncludesTime },
+                )} вместо ${formatSearchStatusDate(
+                  getTaskDeadlineDate(task),
+                  locale,
+                  { includeTime: lateStatusIncludesTime },
+                )}`,
+                `Done ${formatSearchStatusDate(
+                  task.completedAt,
+                  locale,
+                  { includeTime: lateStatusIncludesTime },
+                )} instead of ${formatSearchStatusDate(
+                  getTaskDeadlineDate(task),
+                  locale,
+                  { includeTime: lateStatusIncludesTime },
+                )}`,
+              )
+            : "DONE"
           : isMissed
-            ? localize(locale, "Пропущена", "Missed")
+            ? localize(locale, "Не сделано", "Not done")
             : isCancelled
               ? localize(locale, "Отменена", "Cancelled")
-              : localize(locale, "Открыта", "Open");
+              : "";
         const timeSource = isDone
           ? task.completedAt ?? task.updatedAt
           : isMissed
@@ -1221,22 +1349,45 @@ export function ManagerTasksPage({
             : isCancelled
               ? task.updatedAt
               : task.dueAt ?? task.occurrenceDate ?? task.createdAt;
+        const dateParts = formatSearchDateParts(timeSource, locale);
+        const directoryEmployee = task.assigneeEmployeeId
+          ? employeeById.get(task.assigneeEmployeeId) ?? null
+          : null;
+        const employeeInitials = task.assigneeEmployee
+          ? getEmployeeInitials(task.assigneeEmployee)
+          : (task.group?.name.slice(0, 2).toUpperCase() ?? "TM");
+        const photoProofs = getActivePhotoProofs(task)
+          .filter(
+            (proof): proof is (typeof task.photoProofs)[number] & { url: string } =>
+              Boolean(proof.url),
+          )
+          .map((proof) => ({
+            id: proof.id,
+            url: proof.url,
+          }));
 
         return {
           match: {
             actorName: getEmployeeName(actor, locale),
             creatorName: getEmployeeName(task.managerEmployee, locale),
+            dateDay: dateParts.day,
+            dateMonth: dateParts.month,
+            employeeAvatarUrl: directoryEmployee?.avatarUrl ?? null,
             employeeId: task.assigneeEmployeeId,
+            employeeInitials,
             employeeName,
             id: task.id,
+            photoProofs,
             statusLabel,
             statusTone: isDone
-              ? "success"
+              ? completedLate
+                ? "error"
+                : "success"
               : isMissed
                 ? "error"
                 : isCancelled
                   ? "gray"
-                  : "warning",
+                  : "neutral",
             timeLabel: formatDateTimeLabel(timeSource, locale),
             title,
           } satisfies TaskSearchMatch,
@@ -1252,7 +1403,7 @@ export function ManagerTasksPage({
       )
       .sort((left, right) => right.sortTime - left.sortTime)
       .map((item) => item.match);
-  }, [getTaskTitle, locale, searchQuery, today, visibleTasks]);
+  }, [employeeById, getTaskTitle, locale, searchQuery, today, visibleTasks]);
 
   const taskSearchMatchIds = useMemo(
     () => new Set(taskSearchMatches.map((match) => match.id)),
@@ -1455,11 +1606,20 @@ export function ManagerTasksPage({
       return;
     }
 
-    setExpandedEmployeeIds((current) =>
-      current.filter((employeeId) =>
+    setExpandedEmployeeIds((current) => {
+      const next = current.filter((employeeId) =>
         sortedRows.some((row) => row.id === employeeId),
-      ),
-    );
+      );
+
+      if (
+        next.length === current.length &&
+        next.every((employeeId, index) => employeeId === current[index])
+      ) {
+        return current;
+      }
+
+      return next;
+    });
   }, [expandedEmployeeIds.length, sortedRows]);
 
   useEffect(() => {
@@ -1973,9 +2133,24 @@ export function ManagerTasksPage({
                   </div>
                   <div className="team-tasks-search-result-list">
                     {visibleTaskSearchMatches.map((match) => (
-                      <button
-                        className="team-tasks-search-result"
+                      <article
+                        aria-label={`${match.title}, ${match.employeeName}, ${match.timeLabel}`}
+                        className={`team-tasks-search-result is-${match.statusTone}`}
                         key={match.id}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          if (match.employeeId) {
+                            setExpandedEmployeeIds((current) =>
+                              current.includes(match.employeeId)
+                                ? current
+                                : [...current, match.employeeId],
+                            );
+                          }
+                        }}
                         onClick={() => {
                           if (match.employeeId) {
                             setExpandedEmployeeIds((current) =>
@@ -1985,35 +2160,59 @@ export function ManagerTasksPage({
                             );
                           }
                         }}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                       >
+                        <time className="team-tasks-search-result-date">
+                          <span>{match.dateDay}</span>
+                          <span>{match.dateMonth}</span>
+                        </time>
                         <div className="team-tasks-search-result-main">
-                          <span
-                            className={`team-tasks-search-result-status is-${match.statusTone}`}
-                          >
-                            {match.statusLabel}
-                          </span>
                           <strong>{match.title}</strong>
-                          <span>
-                            {localize(locale, "Когда", "When")}: {match.timeLabel}
-                          </span>
-                        </div>
-                        <div className="team-tasks-search-result-side">
-                          <span>
-                            {localize(locale, "Сотрудник", "Employee")}:{" "}
-                            {match.employeeName}
-                          </span>
-                          <span>
-                            {localize(locale, "Кем", "By")}: {match.actorName}
-                          </span>
-                          {canSeeTaskCreator ? (
-                            <span>
-                              {localize(locale, "Создал", "Created by")}:{" "}
-                              {match.creatorName}
+                          {match.statusLabel ? (
+                            <span
+                              className={`team-tasks-search-result-status is-${match.statusTone}`}
+                            >
+                              {match.statusLabel}
                             </span>
                           ) : null}
                         </div>
-                      </button>
+                        <div className="team-tasks-search-result-side">
+                          <Avatar
+                            alt={match.employeeName}
+                            className="team-tasks-search-result-avatar"
+                            initials={match.employeeInitials}
+                            size="sm"
+                            src={match.employeeAvatarUrl}
+                          />
+                          <span>{match.employeeName}</span>
+                        </div>
+                        <div className="team-tasks-search-result-action">
+                          {match.photoProofs.length > 0 ? (
+                            <button
+                              aria-label={localize(
+                                locale,
+                                "Посмотреть фото задачи",
+                                "View task photo",
+                              )}
+                              className="team-tasks-search-result-photo-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setPhotoProofDialogTask({
+                                  title: match.title,
+                                  proofs: match.photoProofs,
+                                });
+                              }}
+                              onKeyDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                              type="button"
+                            >
+                              <Camera className="size-4" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
                     ))}
                   </div>
                 </div>
@@ -2136,25 +2335,33 @@ export function ManagerTasksPage({
                         );
                       }
 
+                      const isEmployeeOpen =
+                        expandedEmployeeIds.includes(item.id) ||
+                        taskSearchEmployeeIds.has(item.id);
+
                       return (
                         <Table.Row
                           className={`team-tasks-table-row ${
                             item.isComplete ? "is-complete" : ""
-                          } ${
-                            expandedEmployeeIds.includes(item.id) ||
-                            taskSearchEmployeeIds.has(item.id)
-                              ? "is-open"
-                              : ""
-                          }`}
+                          } ${isEmployeeOpen ? "is-open" : ""}`}
                           id={item.renderKey}
                         >
                           <Table.Cell className="align-middle">
                             <button
+                              aria-expanded={isEmployeeOpen}
                               className="team-tasks-row-button team-tasks-row-button--identity"
                               onClick={() => toggleExpandedEmployee(item.id)}
                               type="button"
                             >
                               <div className="flex items-center gap-3">
+                                <span
+                                  className={`team-tasks-row-chevron ${
+                                    isEmployeeOpen ? "is-open" : ""
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  <ChevronDown size={16} strokeWidth={2.3} />
+                                </span>
                                 <Avatar
                                   alt={item.employeeName}
                                   className="shrink-0"
@@ -2202,7 +2409,7 @@ export function ManagerTasksPage({
                               onClick={() => toggleExpandedEmployee(item.id)}
                               type="button"
                             >
-                              <strong className="text-[1.05rem] font-semibold text-[color:var(--foreground)]">
+                              <strong className="team-tasks-row-progress-label text-[1.05rem] font-semibold text-[color:var(--foreground)]">
                                 {item.tasksProgressLabel}
                               </strong>
                             </button>

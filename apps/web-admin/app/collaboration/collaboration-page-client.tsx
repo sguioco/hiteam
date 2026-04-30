@@ -108,6 +108,7 @@ export default function CollaborationPageClient({
     locationId: '',
     priority: 'MEDIUM' as WebAdminTaskPriority,
     dueAt: '',
+    hasDueTime: false,
     requiresPhoto: false,
     checklist: [''],
   });
@@ -483,7 +484,7 @@ export default function CollaborationPageClient({
         locationId: taskDraft.targetMode === 'location' ? taskDraft.locationId || undefined : undefined,
         priority: taskDraft.priority,
         requiresPhoto: taskDraft.requiresPhoto || undefined,
-        dueAt: taskDraft.dueAt || undefined,
+        dueAt: taskDraft.hasDueTime ? taskDraft.dueAt || undefined : undefined,
         checklist: taskDraft.checklist.map((item) => item.trim()).filter((item) => item.length > 0),
       }),
     });
@@ -498,6 +499,7 @@ export default function CollaborationPageClient({
       locationId: '',
       priority: 'MEDIUM',
       dueAt: '',
+      hasDueTime: false,
       requiresPhoto: false,
       checklist: [''],
     });
@@ -1242,7 +1244,29 @@ export default function CollaborationPageClient({
                 }
                 options={taskPriorityOptions}
               />
-              <input onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))} placeholder={t('collaboration.dueAt')} type="date" value={taskDraft.dueAt} />
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
+                <input
+                  checked={taskDraft.hasDueTime}
+                  onChange={(event) =>
+                    setTaskDraft((current) => ({
+                      ...current,
+                      hasDueTime: event.target.checked,
+                      dueAt: event.target.checked ? current.dueAt : '',
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>{t('collaboration.dueAt')}</span>
+              </label>
+              {taskDraft.hasDueTime ? (
+                <input
+                  onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))}
+                  placeholder={t('collaboration.dueAt')}
+                  required
+                  type="datetime-local"
+                  value={taskDraft.dueAt}
+                />
+              ) : null}
               <label className="inline-flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
                 <input
                   checked={taskDraft.requiresPhoto}

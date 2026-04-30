@@ -175,6 +175,8 @@ const initialTaskDraft = {
   description: "",
   priority: "MEDIUM" as TaskItem["priority"],
   dueAt: "",
+  dueTimeLocal: "18:00",
+  hasDueTime: false,
   requiresPhoto: false,
   isRecurring: false,
   frequency: "DAILY" as "DAILY" | "WEEKLY" | "MONTHLY",
@@ -978,7 +980,12 @@ const Employees = ({
     [scheduleShifts],
   );
   const taskDayStatus = useMemo(() => {
-    if (!canCheckWorkdays || taskDialog?.mode !== "employee") {
+    if (
+      !canCheckWorkdays ||
+      taskDialog?.mode !== "employee" ||
+      !taskDraft.hasDueTime ||
+      !taskDraft.dueAt
+    ) {
       return null;
     }
 
@@ -987,7 +994,13 @@ const Employees = ({
       taskDialog.targetId,
       taskDraft.dueAt,
     );
-  }, [canCheckWorkdays, employeeWorkdayLookup, taskDialog, taskDraft.dueAt]);
+  }, [
+    canCheckWorkdays,
+    employeeWorkdayLookup,
+    taskDialog,
+    taskDraft.dueAt,
+    taskDraft.hasDueTime,
+  ]);
 
   const biometricPreviewUrl = useMemo(() => {
     if (selectedEmployeeBiometric?.profile?.templateUrl) {
@@ -1833,6 +1846,33 @@ const Employees = ({
 
     setTaskError(null);
 
+    if (taskDraft.hasDueTime) {
+      if (taskDraft.isRecurring) {
+        if (!taskDraft.dueTimeLocal) {
+          setTaskError(
+            runtimeLocalize(
+              "Выберите время выполнения.",
+              "Select a due time.",
+              locale,
+            ),
+          );
+          return;
+        }
+      } else {
+        const dueDate = taskDraft.dueAt ? new Date(taskDraft.dueAt) : null;
+        if (!dueDate || Number.isNaN(dueDate.getTime()) || dueDate < new Date()) {
+          setTaskError(
+            runtimeLocalize(
+              "Выберите будущую дату и время выполнения.",
+              "Select a future due date and time.",
+              locale,
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     if (
       !allowDayOff &&
       canCheckWorkdays &&
@@ -1864,6 +1904,9 @@ const Employees = ({
               taskDraft.startDate || new Date().toISOString().split("T")[0],
             endDate: taskDraft.endDate || undefined,
             dueAfterDays: 0,
+            dueTimeLocal: taskDraft.hasDueTime
+              ? taskDraft.dueTimeLocal || undefined
+              : undefined,
             assigneeEmployeeId:
               taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
             groupId:
@@ -1879,7 +1922,7 @@ const Employees = ({
             description: taskDraft.description || undefined,
             priority: taskDraft.priority,
             requiresPhoto: taskDraft.requiresPhoto || undefined,
-            dueAt: taskDraft.dueAt || undefined,
+            dueAt: taskDraft.hasDueTime ? taskDraft.dueAt || undefined : undefined,
             assigneeEmployeeId:
               taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
             groupId:
@@ -2729,7 +2772,7 @@ const Employees = ({
               className="rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
               onClick={() => {
                 setSeatLimitDialogOpen(false);
-                router.push(toAdminHref("/organization/billing"));
+                router.push(toAdminHref("/billing"));
               }}
               type="button"
             >
@@ -4014,19 +4057,33 @@ const Employees = ({
                 />
               </label>
               {!taskDraft.isRecurring ? (
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Срок", "Due date", locale)}</span>
-                  <Input
-                    className="h-11"
-                    onChange={(event) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        dueAt: event.target.value,
-                      }))
-                    }
-                    type="datetime-local"
-                    value={taskDraft.dueAt}
-                  />
+                <label className="grid gap-2 rounded-2xl border border-border/70 bg-secondary/20 p-3 text-sm font-heading">
+                  <span className="inline-flex cursor-pointer items-center gap-3">
+                    <Checkbox
+                      checked={taskDraft.hasDueTime}
+                      onCheckedChange={(checked) =>
+                        setTaskDraft((current) => ({
+                          ...current,
+                          hasDueTime: checked === true,
+                          dueAt: checked === true ? current.dueAt : "",
+                        }))
+                      }
+                    />
+                    <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
+                  </span>
+                  {taskDraft.hasDueTime ? (
+                    <Input
+                      className="h-11"
+                      onChange={(event) =>
+                        setTaskDraft((current) => ({
+                          ...current,
+                          dueAt: event.target.value,
+                        }))
+                      }
+                      type="datetime-local"
+                      value={taskDraft.dueAt}
+                    />
+                  ) : null}
                   {taskDialog?.mode === "employee" &&
                   canCheckWorkdays &&
                   taskDayStatus ? (
@@ -4113,6 +4170,37 @@ const Employees = ({
                     type="date"
                     value={taskDraft.startDate}
                   />
+                </label>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span className="inline-flex cursor-pointer items-center gap-3">
+                    <Checkbox
+                      checked={taskDraft.hasDueTime}
+                      onCheckedChange={(checked) =>
+                        setTaskDraft((current) => ({
+                          ...current,
+                          hasDueTime: checked === true,
+                          dueTimeLocal:
+                            checked === true
+                              ? current.dueTimeLocal || "18:00"
+                              : current.dueTimeLocal,
+                        }))
+                      }
+                    />
+                    <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
+                  </span>
+                  {taskDraft.hasDueTime ? (
+                    <Input
+                      className="h-11"
+                      onChange={(event) =>
+                        setTaskDraft((current) => ({
+                          ...current,
+                          dueTimeLocal: event.target.value,
+                        }))
+                      }
+                      type="time"
+                      value={taskDraft.dueTimeLocal}
+                    />
+                  ) : null}
                 </label>
                 {taskDraft.frequency === "WEEKLY" ? (
                   <label className="col-span-full grid gap-2 text-sm font-heading">

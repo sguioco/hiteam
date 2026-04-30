@@ -118,6 +118,7 @@ export default function CreateTaskScreen() {
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [description, setDescription] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
+  const [hasDueTime, setHasDueTime] = useState(false);
   const [requiresPhoto, setRequiresPhoto] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(preselectedEmployeeId ? [preselectedEmployeeId] : []);
@@ -325,7 +326,7 @@ export default function CreateTaskScreen() {
       return;
     }
 
-    if (isDateTimeInPast(selectedDate, dueTime)) {
+    if (hasDueTime && isDateTimeInPast(selectedDate, dueTime)) {
       Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
       return;
     }
@@ -344,7 +345,7 @@ export default function CreateTaskScreen() {
               assigneeEmployeeId,
               description: description.trim() || undefined,
               dueAfterDays: 0,
-              dueTimeLocal: formatTime(dueTime.hour, dueTime.minute),
+              dueTimeLocal: hasDueTime ? formatTime(dueTime.hour, dueTime.minute) : undefined,
               frequency: 'DAILY',
               isActive: true,
               priority,
@@ -360,7 +361,7 @@ export default function CreateTaskScreen() {
             createManagerTask({
               assigneeEmployeeId,
               description: description.trim() || undefined,
-              dueAt: buildDateTime(selectedDate, dueTime).toISOString(),
+              dueAt: hasDueTime ? buildDateTime(selectedDate, dueTime).toISOString() : undefined,
               priority,
               requiresPhoto,
               title: title.trim(),
@@ -429,14 +430,18 @@ export default function CreateTaskScreen() {
             </ScrollView>
           </View>
 
-          <PressableScale
-            className="rounded-[24px] border-2 border-border bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-            haptic="selection"
-            onPress={() => setTimePickerOpen(true)}
-          >
-            <Text className="text-[13px] font-bold uppercase tracking-[1px] text-muted-foreground">{t('manager.createTaskDueTime')}</Text>
-            <Text className="mt-2 text-[24px] font-extrabold text-foreground">{formatTime(dueTime.hour, dueTime.minute)}</Text>
-          </PressableScale>
+          <TaskOptionCheckbox checked={hasDueTime} label={t('manager.createTaskDeadlineToggle')} onPress={() => setHasDueTime((current) => !current)} />
+
+          {hasDueTime ? (
+            <PressableScale
+              className="rounded-[24px] border-2 border-border bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+              haptic="selection"
+              onPress={() => setTimePickerOpen(true)}
+            >
+              <Text className="text-[13px] font-bold uppercase tracking-[1px] text-muted-foreground">{t('manager.createTaskDueTime')}</Text>
+              <Text className="mt-2 text-[24px] font-extrabold text-foreground">{formatTime(dueTime.hour, dueTime.minute)}</Text>
+            </PressableScale>
+          ) : null}
 
           <View className="flex-row items-start px-1">
             {PRIORITY_OPTIONS.map((option, index) => {
