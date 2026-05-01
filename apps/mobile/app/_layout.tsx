@@ -115,7 +115,7 @@ export default function RootLayout() {
       try {
         await Asset.loadAsync([
           require('../hero.mp4'),
-          require('../hero.webm'),
+          require('../hero_android.webm'),
           require('../timelapse-mobile.mp4'),
           require('../timelapse-poster.jpg'),
         ]);

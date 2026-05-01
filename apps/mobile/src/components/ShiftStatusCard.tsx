@@ -16,7 +16,7 @@ import { type AppLanguage, useI18n, pluralizeRu } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 
 const HERO_BANNER_VIDEO_SOURCE =
-  Platform.OS === 'ios' ? require('../../hero.mp4') : require('../../hero.webm');
+  Platform.OS === 'ios' ? require('../../hero.mp4') : require('../../hero_android.webm');
 
 type ShiftStatusCardProps = {
   greetingName?: string | null;

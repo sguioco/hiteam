@@ -14,7 +14,7 @@ $scriptRoot = if ($PSScriptRoot) {
 }
 
 if ([string]::IsNullOrWhiteSpace($InputPath)) {
-  $InputPath = Join-Path $scriptRoot 'hero.webm'
+  $InputPath = Join-Path $scriptRoot 'hero_android.webm'
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
