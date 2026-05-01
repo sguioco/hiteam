@@ -107,6 +107,110 @@ function resolveRequestsBootstrapRange(dateFrom?: string, dateTo?: string) {
   };
 }
 
+function parseLeaderboardMonth(month?: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month?.trim() ?? '');
+  if (!match) {
+    return startOfMonthLocal(new Date());
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const requested = new Date(year, monthIndex, 1);
+  const current = startOfMonthLocal(new Date());
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(monthIndex) ||
+    monthIndex < 0 ||
+    monthIndex > 11 ||
+    requested.getTime() > current.getTime()
+  ) {
+    return current;
+  }
+
+  return requested;
+}
+
+function buildEmptyLeaderboardOverview(month?: string) {
+  const monthStart = parseLeaderboardMonth(month);
+  const monthEnd = endOfMonthLocal(monthStart);
+
+  return {
+    month: {
+      key: formatDateKey(monthStart).slice(0, 7),
+      startsAt: monthStart.toISOString(),
+      endsAt: monthEnd.toISOString(),
+      todayKey: formatDateKey(new Date()),
+    },
+    summary: {
+      participants: 0,
+      maxDailyPoints: 15,
+    },
+    me: {
+      employeeId: '',
+      rank: 0,
+      points: 0,
+      todayPoints: 0,
+      todayMaxPoints: 15,
+      streak: 0,
+      progress: [
+        {
+          key: 'on_time_arrival',
+          earnedPoints: 0,
+          maxPoints: 5,
+          completed: false,
+          details: {
+            checkedAt: null,
+            shiftBoundaryAt: null,
+            dueTaskCount: 0,
+            completedDueTaskCount: 0,
+            dueChecklistItemCount: 0,
+            completedDueChecklistItemCount: 0,
+            overdueCount: 0,
+          },
+        },
+        {
+          key: 'on_time_departure',
+          earnedPoints: 0,
+          maxPoints: 5,
+          completed: false,
+          details: {
+            checkedAt: null,
+            shiftBoundaryAt: null,
+            dueTaskCount: 0,
+            completedDueTaskCount: 0,
+            dueChecklistItemCount: 0,
+            completedDueChecklistItemCount: 0,
+            overdueCount: 0,
+          },
+        },
+        {
+          key: 'tasks_and_checklists',
+          earnedPoints: 0,
+          maxPoints: 5,
+          completed: false,
+          details: {
+            checkedAt: null,
+            shiftBoundaryAt: null,
+            dueTaskCount: 0,
+            completedDueTaskCount: 0,
+            dueChecklistItemCount: 0,
+            completedDueChecklistItemCount: 0,
+            overdueCount: 0,
+          },
+        },
+      ],
+      dailyActivity: [],
+    },
+    leaderboard: [],
+    visibility: {
+      hidePeersFromEmployees: false,
+      canManage: false,
+      peersHiddenForViewer: false,
+    },
+  };
+}
+
 function resolveCollaborationBootstrapQuery(
   query: Record<string, string | undefined>,
 ) {
@@ -357,11 +461,11 @@ export class BootstrapService {
     const query = { dateFrom, dateTo };
 
     const [employees, history, anomalies, liveSessions, audit] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}, user.sub),
-      this.attendanceService.teamHistory(user.tenantId, query),
-      this.attendanceService.teamAnomalies(user.tenantId, query),
-      this.attendanceService.liveTeam(user.tenantId),
-      this.attendanceService.teamAudit(user.tenantId, query),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.attendanceService.teamHistory(user.tenantId, query).catch(() => null),
+      this.attendanceService.teamAnomalies(user.tenantId, query).catch(() => null),
+      this.attendanceService.liveTeam(user.tenantId).catch(() => []),
+      this.attendanceService.teamAudit(user.tenantId, query).catch(() => null),
     ]);
 
     return {
@@ -386,7 +490,11 @@ export class BootstrapService {
       organizationSetup,
       groups,
     ] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}, user.sub),
+      withTimeoutFallback(
+        this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+        1500,
+        [],
+      ),
       withTimeoutFallback(
         this.attendanceService.liveTeam(user.tenantId).catch(() => []),
         1000,
@@ -493,7 +601,7 @@ export class BootstrapService {
 
     if (mode === 'employee') {
       const [employeeTasks, shifts] = await Promise.all([
-        this.collaborationService.listMyTasks(user.sub, taskQuery),
+        this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
         this.scheduleService.myShifts(user.sub).catch(() => []),
       ]);
 
@@ -629,7 +737,7 @@ export class BootstrapService {
         this.employeesService.getMe(user).catch(() => null),
         this.attendanceService.getMyStatus(user.sub).catch(() => null),
         this.scheduleService.myShifts(user.sub).catch(() => []),
-        this.collaborationService.listMyTasks(user.sub, taskQuery),
+        this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
         this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
       ]);
 
@@ -807,11 +915,18 @@ export class BootstrapService {
   }
 
   async organization(user: JwtUser) {
-    const setup = await this.orgService.getSetup(user.tenantId);
+    const setup = await this.orgService.getSetup(user.tenantId).catch(() => ({
+      configured: false,
+      company: null,
+      location: null,
+      defaultGeofenceRadiusMeters: 100,
+    }));
     const employeeStats = setup.company?.id
-      ? await this.employeesService.stats(user.tenantId, {
-          companyId: setup.company.id,
-        })
+      ? await this.employeesService
+          .stats(user.tenantId, {
+            companyId: setup.company.id,
+          })
+          .catch(() => ({ total: 0 }))
       : { total: 0 };
 
     return {
@@ -827,7 +942,9 @@ export class BootstrapService {
       return {
         mode,
         initialData: {
-          items: await this.collaborationService.listMyAnnouncements(user.sub),
+          items: await this.collaborationService
+            .listMyAnnouncements(user.sub)
+            .catch(() => []),
           employees: [],
           groups: [],
         },
@@ -835,9 +952,9 @@ export class BootstrapService {
     }
 
     const [items, employees, groups] = await Promise.all([
-      this.collaborationService.listAnnouncementsForManager(user.sub),
-      this.employeesService.list(user.tenantId, {}, user.sub),
-      this.collaborationService.listGroups(user.sub),
+      this.collaborationService.listAnnouncementsForManager(user.sub).catch(() => []),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.collaborationService.listGroups(user.sub).catch(() => []),
     ]);
 
     return {
@@ -852,10 +969,19 @@ export class BootstrapService {
 
   async leaderboard(user: JwtUser, month?: string) {
     const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
+    const fallback = buildEmptyLeaderboardOverview(month);
 
     return {
       mode,
-      initialData: await this.leaderboardService.getOverview(user.sub, month),
+      initialData: await this.leaderboardService
+        .getOverview(user.sub, month)
+        .catch(() => ({
+          ...fallback,
+          me: {
+            ...fallback.me,
+            employeeId: user.sub,
+          },
+        })),
     };
   }
 
@@ -868,8 +994,8 @@ export class BootstrapService {
       result?: 'FAILED' | 'PASSED' | 'REVIEW';
     } = biometricResult ? { result: biometricResult } : {};
     const [employees, reviews] = await Promise.all([
-      this.employeesService.list(user.tenantId, {}, user.sub),
-      this.biometricService.getTeamReviews(user.tenantId, query),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.biometricService.getTeamReviews(user.tenantId, query).catch(() => null),
     ]);
 
     return {

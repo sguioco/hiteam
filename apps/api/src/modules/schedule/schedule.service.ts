@@ -17,6 +17,72 @@ function buildTemplateCodeBase(value: string) {
   return normalized || 'SHIFT';
 }
 
+const LOCATION_SELECT = {
+  id: true,
+  name: true,
+  address: true,
+  latitude: true,
+  longitude: true,
+  geofenceRadiusMeters: true,
+  timezone: true,
+} satisfies Prisma.LocationSelect;
+
+const POSITION_SELECT = {
+  id: true,
+  name: true,
+} satisfies Prisma.PositionSelect;
+
+const SHIFT_EMPLOYEE_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  employeeNumber: true,
+} satisfies Prisma.EmployeeSelect;
+
+const SHIFT_TEMPLATE_SELECT = {
+  id: true,
+  name: true,
+  code: true,
+  startsAtLocal: true,
+  endsAtLocal: true,
+  weekDaysJson: true,
+  gracePeriodMinutes: true,
+  createdAt: true,
+  updatedAt: true,
+  location: {
+    select: LOCATION_SELECT,
+  },
+  position: {
+    select: POSITION_SELECT,
+  },
+} satisfies Prisma.ShiftTemplateSelect;
+
+const SHIFT_SELECT = {
+  id: true,
+  shiftDate: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  employeeId: true,
+  locationId: true,
+  positionId: true,
+  templateId: true,
+  employee: {
+    select: SHIFT_EMPLOYEE_SELECT,
+  },
+  location: {
+    select: LOCATION_SELECT,
+  },
+  position: {
+    select: POSITION_SELECT,
+  },
+  template: {
+    select: SHIFT_TEMPLATE_SELECT,
+  },
+} satisfies Prisma.ShiftSelect;
+
 @Injectable()
 export class ScheduleService {
   constructor(
@@ -27,10 +93,7 @@ export class ScheduleService {
   listTemplates(tenantId: string) {
     return this.prisma.shiftTemplate.findMany({
       where: { tenantId },
-      include: {
-        location: true,
-        position: true,
-      },
+      select: SHIFT_TEMPLATE_SELECT,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -38,12 +101,7 @@ export class ScheduleService {
   listShifts(tenantId: string) {
     return this.prisma.shift.findMany({
       where: { tenantId },
-      include: {
-        employee: true,
-        location: true,
-        position: true,
-        template: true,
-      },
+      select: SHIFT_SELECT,
       orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
       take: 50,
     });
@@ -71,10 +129,7 @@ export class ScheduleService {
 
     const template = await this.prisma.shiftTemplate.create({
       data: createInput,
-      include: {
-        location: true,
-        position: true,
-      },
+      select: SHIFT_TEMPLATE_SELECT,
     });
 
     await this.auditService.log({
@@ -92,7 +147,14 @@ export class ScheduleService {
   async createShift(tenantId: string, actorUserId: string, dto: CreateShiftDto) {
     const template = await this.prisma.shiftTemplate.findFirst({
       where: { tenantId, id: dto.templateId },
-      include: { location: true, position: true },
+      select: {
+        id: true,
+        name: true,
+        locationId: true,
+        positionId: true,
+        startsAtLocal: true,
+        endsAtLocal: true,
+      },
     });
 
     if (!template) {
@@ -130,12 +192,7 @@ export class ScheduleService {
         startsAt,
         endsAt,
       },
-      include: {
-        employee: true,
-        location: true,
-        position: true,
-        template: true,
-      },
+      select: SHIFT_SELECT,
     });
 
     await this.auditService.log({
@@ -163,12 +220,7 @@ export class ScheduleService {
     const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
     return this.prisma.shift.findMany({
       where: { employeeId: employee.id },
-      include: {
-        employee: true,
-        location: true,
-        position: true,
-        template: true,
-      },
+      select: SHIFT_SELECT,
       orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
       take: 30,
     });
@@ -186,9 +238,15 @@ export class ScheduleService {
         },
       },
       include: {
-        location: true,
-        position: true,
-        template: true,
+        location: {
+          select: LOCATION_SELECT,
+        },
+        position: {
+          select: POSITION_SELECT,
+        },
+        template: {
+          select: SHIFT_TEMPLATE_SELECT,
+        },
       },
       orderBy: { startsAt: 'asc' },
     });
@@ -213,9 +271,15 @@ export class ScheduleService {
         },
       },
       include: {
-        location: true,
-        position: true,
-        template: true,
+        location: {
+          select: LOCATION_SELECT,
+        },
+        position: {
+          select: POSITION_SELECT,
+        },
+        template: {
+          select: SHIFT_TEMPLATE_SELECT,
+        },
       },
       orderBy: { startsAt: 'asc' },
     });

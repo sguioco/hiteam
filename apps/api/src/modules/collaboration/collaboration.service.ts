@@ -48,6 +48,20 @@ const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
 const TASK_META_MARKER = "[smart-task-meta]";
 
+const MINIMAL_EMPLOYEE_SELECT = {
+  id: true,
+  tenantId: true,
+  userId: true,
+  departmentId: true,
+  primaryLocationId: true,
+  firstName: true,
+  lastName: true,
+  employeeNumber: true,
+  gender: true,
+  avatarStorageKey: true,
+  avatarUrl: true,
+} satisfies Prisma.EmployeeSelect;
+
 @Injectable()
 export class CollaborationService {
   constructor(
@@ -62,6 +76,10 @@ export class CollaborationService {
   async listGroups(userId: string) {
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
+      select: {
+        id: true,
+        tenantId: true,
+      },
     });
 
     return this.prisma.workGroup.findMany({
@@ -72,7 +90,9 @@ export class CollaborationService {
       include: {
         memberships: {
           include: {
-            employee: true,
+            employee: {
+              select: MINIMAL_EMPLOYEE_SELECT,
+            },
           },
           orderBy: {
             createdAt: "asc",

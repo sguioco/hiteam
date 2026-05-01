@@ -26,6 +26,7 @@ import BottomSheetModal from "../components/BottomSheetModal";
 import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import {
+  createManagerShiftTemplate,
   createManagerShift,
   loadEmployeesBootstrap,
   loadManagerScheduleBootstrap,
@@ -58,6 +59,7 @@ import {
 } from "../../lib/use-translated-task-copy";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import {
   getNewsScreenCacheKey,
   NEWS_SCREEN_CACHE_TTL_MS,
@@ -95,7 +97,23 @@ type CalendarScreenCacheValue = {
   shiftTemplates?: ManagerShiftTemplate[];
 };
 
+type ShiftTemplateDraft = {
+  name: string;
+  startsAt: TimeValue;
+  endsAt: TimeValue;
+  weekDays: number[];
+};
+
 const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
+
+function createDefaultShiftTemplateDraft(): ShiftTemplateDraft {
+  return {
+    name: "",
+    startsAt: { hour: 9, minute: 0 },
+    endsAt: { hour: 18, minute: 0 },
+    weekDays: [1, 2, 3, 4, 5],
+  };
+}
 
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
@@ -112,6 +130,22 @@ function combineDateAndTime(date: Date, time: TimeValue) {
   const next = new Date(date);
   next.setHours(time.hour, time.minute, 0, 0);
   return next;
+}
+
+function formatLocalTime(value: TimeValue) {
+  return `${`${value.hour}`.padStart(2, "0")}:${`${value.minute}`.padStart(2, "0")}`;
+}
+
+function buildTemplateCode(value: string) {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, "-")
+    .toUpperCase()
+    .slice(0, 24);
+
+  return normalized || "SHIFT";
 }
 
 function isOverdueTask(task: TaskItem, referenceDate: Date) {
@@ -336,6 +370,14 @@ export default function CalendarScreen({
   const [assignShiftTemplateId, setAssignShiftTemplateId] = useState("");
   const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
   const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
+  const [templateComposerVisible, setTemplateComposerVisible] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState<ShiftTemplateDraft>(() =>
+    createDefaultShiftTemplateDraft(),
+  );
+  const [templateTimePickerTarget, setTemplateTimePickerTarget] = useState<
+    "start" | "end" | null
+  >(null);
+  const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
     initialNewsSnapshot?.value ?? [],
   );
@@ -1061,7 +1103,58 @@ export default function CalendarScreen({
     setAssignShiftError(null);
     setAssignShiftEmployeeId(employeeId ?? visibleManagerEmployees[0]?.id ?? "");
     setAssignShiftTemplateId(shiftTemplates[0]?.id ?? "");
+    setTemplateComposerVisible(shiftTemplates.length === 0);
     setAssignShiftSheetVisible(true);
+  }
+
+  function toggleTemplateDraftWeekDay(day: number) {
+    hapticSelection();
+    setTemplateDraft((current) => {
+      const weekDays = current.weekDays.includes(day)
+        ? current.weekDays.filter((value) => value !== day)
+        : [...current.weekDays, day].sort((left, right) => left - right);
+
+      return {
+        ...current,
+        weekDays,
+      };
+    });
+  }
+
+  async function submitShiftTemplateCreation() {
+    const name = templateDraft.name.trim();
+
+    if (!name || templateDraft.weekDays.length === 0) {
+      setAssignShiftError(t("calendar.shiftTemplateValidation"));
+      return;
+    }
+
+    setTemplateSubmitting(true);
+    setAssignShiftError(null);
+
+    try {
+      const createdTemplate = await createManagerShiftTemplate({
+        name,
+        code: buildTemplateCode(name),
+        startsAtLocal: formatLocalTime(templateDraft.startsAt),
+        endsAtLocal: formatLocalTime(templateDraft.endsAt),
+        weekDays: templateDraft.weekDays,
+        gracePeriodMinutes: 10,
+      });
+
+      setShiftTemplates((current) => [createdTemplate, ...current]);
+      setAssignShiftTemplateId(createdTemplate.id);
+      setTemplateDraft(createDefaultShiftTemplateDraft());
+      setTemplateComposerVisible(false);
+    } catch (nextError) {
+      setAssignShiftError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("calendar.shiftTemplateCreateError"),
+      );
+    } finally {
+      setTemplateSubmitting(false);
+    }
   }
 
   async function submitManagerShiftAssignment() {
@@ -2427,9 +2520,31 @@ export default function CalendarScreen({
               </View>
 
               <View className="gap-2">
-                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
-                  {t("calendar.assignShiftTemplate")}
-                </Text>
+                <View className="flex-row items-center justify-between gap-3 px-1">
+                  <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                    {t("calendar.assignShiftTemplate")}
+                  </Text>
+                  {shiftTemplates.length ? (
+                    <PressableScale
+                      className="flex-row items-center gap-1 rounded-full bg-[#eef4ff] px-3 py-2"
+                      haptic="selection"
+                      onPress={() =>
+                        setTemplateComposerVisible((current) => !current)
+                      }
+                    >
+                      <Ionicons
+                        color="#315cf6"
+                        name={templateComposerVisible ? "close" : "add"}
+                        size={14}
+                      />
+                      <Text className="font-body text-[12px] font-extrabold text-[#315cf6]">
+                        {templateComposerVisible
+                          ? t("calendar.shiftTemplateHide")
+                          : t("calendar.shiftTemplateNew")}
+                      </Text>
+                    </PressableScale>
+                  ) : null}
+                </View>
                 <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
                   {shiftTemplates.length ? (
                     shiftTemplates.map((template, index) => {
@@ -2482,6 +2597,114 @@ export default function CalendarScreen({
                     </View>
                   )}
                 </View>
+
+                {templateComposerVisible || shiftTemplates.length === 0 ? (
+                  <View className="mt-1 gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className="font-display text-[18px] font-extrabold text-foreground">
+                          {t("calendar.shiftTemplateNew")}
+                        </Text>
+                        <Text className="mt-1 font-body text-[12px] leading-5 text-muted-foreground">
+                          {t("calendar.shiftTemplateHint")}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="gap-2">
+                      <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                        {t("calendar.shiftTemplateName")}
+                      </Text>
+                      <Input
+                        autoCapitalize="words"
+                        className="border-[#dce4f2] bg-white shadow-none"
+                        editable={!templateSubmitting}
+                        onChangeText={(name) =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            name,
+                          }))
+                        }
+                        placeholder={t("calendar.shiftTemplateNamePlaceholder")}
+                        value={templateDraft.name}
+                      />
+                    </View>
+
+                    <View className="flex-row gap-3">
+                      <PressableScale
+                        className="min-h-14 flex-1 rounded-2xl border border-[#dce4f2] bg-white px-4 py-3"
+                        haptic="selection"
+                        onPress={() => setTemplateTimePickerTarget("start")}
+                      >
+                        <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                          {t("calendar.shiftTemplateStart")}
+                        </Text>
+                        <Text className="mt-1 font-display text-[19px] font-extrabold text-foreground">
+                          {formatLocalTime(templateDraft.startsAt)}
+                        </Text>
+                      </PressableScale>
+                      <PressableScale
+                        className="min-h-14 flex-1 rounded-2xl border border-[#dce4f2] bg-white px-4 py-3"
+                        haptic="selection"
+                        onPress={() => setTemplateTimePickerTarget("end")}
+                      >
+                        <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                          {t("calendar.shiftTemplateEnd")}
+                        </Text>
+                        <Text className="mt-1 font-display text-[19px] font-extrabold text-foreground">
+                          {formatLocalTime(templateDraft.endsAt)}
+                        </Text>
+                      </PressableScale>
+                    </View>
+
+                    <View className="gap-2">
+                      <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                        {t("calendar.shiftTemplateDays")}
+                      </Text>
+                      <View className="flex-row flex-wrap gap-2">
+                        {weekdayLabels.map((label, index) => {
+                          const day = index + 1;
+                          const activeDay = templateDraft.weekDays.includes(day);
+
+                          return (
+                            <PressableScale
+                              className={`min-h-10 min-w-[56px] items-center justify-center rounded-2xl border px-3 ${
+                                activeDay
+                                  ? "border-primary bg-primary"
+                                  : "border-[#dce4f2] bg-white"
+                              }`}
+                              haptic="selection"
+                              key={label}
+                              onPress={() => toggleTemplateDraftWeekDay(day)}
+                            >
+                              <Text
+                                className={`font-body text-[12px] font-extrabold ${
+                                  activeDay ? "text-white" : "text-foreground"
+                                }`}
+                              >
+                                {label}
+                              </Text>
+                            </PressableScale>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    <Button
+                      className="min-h-12 rounded-2xl"
+                      disabled={templateSubmitting || !templateDraft.name.trim()}
+                      fullWidth
+                      label={
+                        templateSubmitting
+                          ? t("common.processing")
+                          : t("calendar.shiftTemplateCreate")
+                      }
+                      onPress={() => {
+                        void submitShiftTemplateCreation();
+                      }}
+                    />
+                  </View>
+                ) : null}
               </View>
             </View>
           </ScrollView>
@@ -2756,6 +2979,29 @@ export default function CalendarScreen({
           value={rescheduleDateValue}
         />
       ) : null}
+
+      <TimeWheelPicker
+        initialValue={
+          templateTimePickerTarget === "end"
+            ? templateDraft.endsAt
+            : templateDraft.startsAt
+        }
+        onApply={(value) => {
+          setTemplateDraft((current) =>
+            templateTimePickerTarget === "end"
+              ? { ...current, endsAt: value }
+              : { ...current, startsAt: value },
+          );
+          setTemplateTimePickerTarget(null);
+        }}
+        onClose={() => setTemplateTimePickerTarget(null)}
+        title={
+          templateTimePickerTarget === "end"
+            ? t("calendar.shiftTemplateEnd")
+            : t("calendar.shiftTemplateStart")
+        }
+        visible={Boolean(templateTimePickerTarget)}
+      />
 
       <TimeWheelPicker
         initialValue={rescheduleTimeValue}

@@ -7,6 +7,25 @@ const DEFAULT_GEOFENCE_RADIUS_METERS = 100;
 const SEEDED_PLACEHOLDER_COMPANY_NAME = 'Beauty Life';
 const SEEDED_PLACEHOLDER_ADDRESS = 'Demo address';
 
+const COMPANY_SETUP_SELECT = {
+  id: true,
+  name: true,
+  logoUrl: true,
+  googlePlaceId: true,
+  createdAt: true,
+} as const;
+
+const LOCATION_SETUP_SELECT = {
+  id: true,
+  name: true,
+  address: true,
+  latitude: true,
+  longitude: true,
+  geofenceRadiusMeters: true,
+  timezone: true,
+  createdAt: true,
+} as const;
+
 function normalizeGeofenceRadius(value?: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_GEOFENCE_RADIUS_METERS;
@@ -82,6 +101,7 @@ export class OrgService {
   async getSetup(tenantId: string) {
     const company = await this.prisma.company.findFirst({
       where: { tenantId },
+      select: COMPANY_SETUP_SELECT,
       orderBy: { createdAt: "desc" },
     });
 
@@ -91,6 +111,7 @@ export class OrgService {
             tenantId,
             companyId: company.id,
           },
+          select: LOCATION_SETUP_SELECT,
           orderBy: { createdAt: "desc" },
         })
       : null;
@@ -122,6 +143,7 @@ export class OrgService {
   listLocations(tenantId: string) {
     return this.prisma.location.findMany({
       where: { tenantId },
+      select: LOCATION_SETUP_SELECT,
       orderBy: { createdAt: "desc" },
     });
   }

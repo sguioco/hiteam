@@ -44,30 +44,84 @@ const MANAGER_ROLE_CODES = new Set([
   "manager",
 ]);
 
-type ViewerEmployee = Prisma.EmployeeGetPayload<{
-  include: {
-    user: {
-      include: {
-        roles: {
-          include: {
-            role: true;
-          };
-        };
+const NAMED_ENTITY_SELECT = {
+  id: true,
+  name: true,
+} satisfies Prisma.DepartmentSelect;
+
+const LOCATION_SELECT = {
+  id: true,
+  name: true,
+  timezone: true,
+} satisfies Prisma.LocationSelect;
+
+const VIEWER_EMPLOYEE_SELECT = {
+  id: true,
+  tenantId: true,
+  firstName: true,
+  lastName: true,
+  employeeNumber: true,
+  avatarUrl: true,
+  user: {
+    select: {
+      email: true,
+      roles: {
+        include: {
+          role: true,
+        },
+      },
+    },
+  },
+  department: {
+    select: NAMED_ENTITY_SELECT,
+  },
+  position: {
+    select: NAMED_ENTITY_SELECT,
+  },
+  primaryLocation: {
+    select: LOCATION_SELECT,
+  },
+} satisfies Prisma.EmployeeSelect;
+
+const TEAM_EMPLOYEE_SELECT = {
+  ...VIEWER_EMPLOYEE_SELECT,
+  user: {
+    select: {
+      email: true,
+    },
+  },
+} satisfies Prisma.EmployeeSelect;
+
+type NamedEntity = {
+  id: string;
+  name: string;
+};
+
+type ViewerEmployee = {
+  id: string;
+  tenantId: string;
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  avatarUrl: string | null;
+  user: {
+    email: string;
+    roles: Array<{
+      role: {
+        code: string;
       };
-    };
-    department: true;
-    position: true;
-    primaryLocation: true;
+    }>;
   };
-}>;
-type TeamEmployee = Prisma.EmployeeGetPayload<{
-  include: {
-    user: true;
-    department: true;
-    position: true;
-    primaryLocation: true;
+  department: NamedEntity | null;
+  position: NamedEntity | null;
+  primaryLocation: (NamedEntity & { timezone: string }) | null;
+};
+
+type TeamEmployee = Omit<ViewerEmployee, "user"> & {
+  user: {
+    email: string;
   };
-}>;
+};
 type EmployeeShift = Prisma.ShiftGetPayload<{
   include: {
     template: true;
@@ -142,7 +196,7 @@ export class LeaderboardService {
       this.prisma.tenant.findUnique({
         where: { id: viewer.tenantId },
         select: { hideLeaderboardPeersFromEmployees: true },
-      }),
+      }).catch(() => null),
     ]);
     const employeeIds = employees.map((employee) => employee.id);
     const hidePeersFromEmployees =
@@ -371,20 +425,7 @@ export class LeaderboardService {
   private async loadViewerEmployee(userId: string) {
     return this.prisma.employee.findUniqueOrThrow({
       where: { userId },
-      include: {
-        user: {
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        },
-        department: true,
-        position: true,
-        primaryLocation: true,
-      },
+      select: VIEWER_EMPLOYEE_SELECT,
     });
   }
 
@@ -394,12 +435,7 @@ export class LeaderboardService {
         tenantId,
         status: EmployeeStatus.ACTIVE,
       },
-      include: {
-        user: true,
-        department: true,
-        position: true,
-        primaryLocation: true,
-      },
+      select: TEAM_EMPLOYEE_SELECT,
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
 
@@ -409,12 +445,7 @@ export class LeaderboardService {
 
     const viewer = await this.prisma.employee.findUnique({
       where: { id: viewerEmployeeId },
-      include: {
-        user: true,
-        department: true,
-        position: true,
-        primaryLocation: true,
-      },
+      select: TEAM_EMPLOYEE_SELECT,
     });
 
     return viewer ? [...employees, viewer] : employees;

@@ -863,6 +863,20 @@ export async function loadManagerShiftTemplates(): Promise<
   return response.initialData?.templates ?? [];
 }
 
+export async function createManagerShiftTemplate(payload: {
+  name: string;
+  code?: string;
+  startsAtLocal: string;
+  endsAtLocal: string;
+  weekDays: number[];
+  gracePeriodMinutes?: number;
+}) {
+  return authRequest<ManagerShiftTemplateItem>("/schedule/templates", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function loadManagerShifts(): Promise<ManagerScheduleShiftItem[]> {
   const response = await loadManagerScheduleBootstrap();
   return response.initialData?.shifts ?? [];

@@ -1569,16 +1569,8 @@ export default function CreateNewsScreen() {
 
                 <View className="gap-2">
                   {Platform.OS === 'ios' ? (
-                    <>
-                      <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">
-                        <View className="flex-1">
-                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                            {localizeText(language, 'Дата', 'Date')}
-                          </Text>
-                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground" numberOfLines={1}>
-                            {formatDateLabel(scheduledAt, language)}
-                          </Text>
-                        </View>
+                    <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">
+                      <View className="flex-1 items-start">
                         <DateTimePicker
                           accentColor="#6d73ff"
                           display="compact"
@@ -1589,15 +1581,7 @@ export default function CreateNewsScreen() {
                           value={scheduledAt}
                         />
                       </View>
-                      <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">
-                        <View className="flex-1">
-                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                            {localizeText(language, 'Время', 'Time')}
-                          </Text>
-                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground">
-                            {formatTimeLabel(scheduledAt)}
-                          </Text>
-                        </View>
+                      <View className="items-end">
                         <DateTimePicker
                           accentColor="#6d73ff"
                           display="compact"
@@ -1607,55 +1591,43 @@ export default function CreateNewsScreen() {
                           value={scheduledAt}
                         />
                       </View>
-                    </>
+                    </View>
                   ) : (
-                    <>
+                    <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-3 py-3">
                       <PressableScale
-                        className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3"
+                        className="min-h-11 items-start justify-center rounded-[15px] bg-[#f8fbff] px-3"
+                        containerClassName="flex-1"
                         contentStyle={styles.fullWidth}
                         haptic="selection"
                         onPress={openScheduleDatePicker}
-                        style={styles.fullWidth}
                       >
-                        <View className="flex-1 pr-3">
-                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                            {localizeText(language, 'Дата', 'Date')}
-                          </Text>
-                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground" numberOfLines={1}>
-                            {formatDateLabel(scheduledAt, language)}
-                          </Text>
-                        </View>
-                        <Ionicons color="#94a3b8" name="calendar-outline" size={18} />
+                        <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                          {formatDateLabel(scheduledAt, language)}
+                        </Text>
                       </PressableScale>
                       <PressableScale
-                        className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3"
-                        contentStyle={styles.fullWidth}
+                        className="min-h-11 min-w-[104px] items-center justify-center rounded-[15px] bg-[#f8fbff] px-3"
                         haptic="selection"
                         onPress={openScheduleTimePicker}
-                        style={styles.fullWidth}
                       >
-                        <View className="flex-1 pr-3">
-                          <Text className="text-[11px] font-semibold uppercase tracking-[1px] text-muted-foreground">
-                            {localizeText(language, 'Время', 'Time')}
-                          </Text>
-                          <Text className="mt-0.5 text-[14px] font-semibold text-foreground">
-                            {formatTimeLabel(scheduledAt)}
-                          </Text>
-                        </View>
-                        <Ionicons color="#94a3b8" name="time-outline" size={18} />
+                        <Text className="text-[14px] font-semibold text-foreground">
+                          {formatTimeLabel(scheduledAt)}
+                        </Text>
                       </PressableScale>
-                    </>
+                    </View>
                   )}
                 </View>
               </View>
             ) : null}
           </View>
 
-          <NewsOptionCheckbox
-            checked={limitParticipants}
-            label={t('manager.createNewsSelectedAudienceOnly')}
-            onPress={() => setLimitParticipants((current) => !current)}
-          />
+          <View className="px-1 py-1">
+            <NewsOptionCheckbox
+              checked={limitParticipants}
+              label={t('manager.createNewsSelectedAudienceOnly')}
+              onPress={() => setLimitParticipants((current) => !current)}
+            />
+          </View>
 
           {limitParticipants ? (
             <View className="rounded-[24px] border border-white/30 bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">

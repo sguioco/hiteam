@@ -39,26 +39,103 @@ const EMPLOYEE_REVIEW_TRANSACTION_OPTIONS = {
   timeout: 20_000,
 } as const;
 
-const EMPLOYEE_LIST_INCLUDE = {
-  user: {
+const NAMED_ENTITY_SELECT = {
+  id: true,
+  name: true,
+} as const;
+
+const COMPANY_SELECT = {
+  id: true,
+  name: true,
+  logoUrl: true,
+} satisfies Prisma.CompanySelect;
+
+const EMPLOYEE_USER_SELECT = {
+  id: true,
+  email: true,
+  roles: {
     include: {
-      roles: {
-        include: {
-          role: true,
-        },
-      },
+      role: true,
     },
   },
-  company: true,
-  department: true,
-  primaryLocation: true,
-  position: true,
+} satisfies Prisma.UserSelect;
+
+const EMPLOYEE_LIST_SELECT = {
+  id: true,
+  tenantId: true,
+  userId: true,
+  companyId: true,
+  departmentId: true,
+  primaryLocationId: true,
+  positionId: true,
+  managerEmployeeId: true,
+  employeeNumber: true,
+  firstName: true,
+  lastName: true,
+  middleName: true,
+  birthDate: true,
+  gender: true,
+  phone: true,
+  avatarStorageKey: true,
+  avatarUrl: true,
+  status: true,
+  hireDate: true,
+  createdAt: true,
+  updatedAt: true,
+  user: {
+    select: EMPLOYEE_USER_SELECT,
+  },
+  company: {
+    select: COMPANY_SELECT,
+  },
+  department: {
+    select: NAMED_ENTITY_SELECT,
+  },
+  primaryLocation: {
+    select: {
+      id: true,
+      name: true,
+      timezone: true,
+    },
+  },
+  position: {
+    select: NAMED_ENTITY_SELECT,
+  },
   biometricProfile: {
     select: {
       enrollmentStatus: true,
     },
   },
-} satisfies Prisma.EmployeeInclude;
+} satisfies Prisma.EmployeeSelect;
+
+const EMPLOYEE_DETAIL_SELECT = {
+  ...EMPLOYEE_LIST_SELECT,
+  primaryLocation: {
+    select: {
+      id: true,
+      name: true,
+      timezone: true,
+    },
+  },
+  devices: true,
+} satisfies Prisma.EmployeeSelect;
+
+const EMPLOYEE_PROFILE_SELECT = {
+  ...EMPLOYEE_DETAIL_SELECT,
+  user: {
+    select: {
+      id: true,
+      email: true,
+      bannerTheme: true,
+    },
+  },
+  invitation: {
+    select: {
+      avatarStorageKey: true,
+      avatarUrl: true,
+    },
+  },
+} satisfies Prisma.EmployeeSelect;
 
 type EmployeeWorkModeInput = 'STATIONARY' | 'FIELD' | null | undefined;
 
@@ -88,7 +165,7 @@ export class EmployeesService {
             ]
           : undefined,
       },
-      include: EMPLOYEE_LIST_INCLUDE,
+      select: EMPLOYEE_LIST_SELECT,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -119,7 +196,7 @@ export class EmployeesService {
 
     const currentEmployee = await this.prisma.employee.findUnique({
       where: { userId: actorUserId },
-      include: EMPLOYEE_LIST_INCLUDE,
+      select: EMPLOYEE_LIST_SELECT,
     });
 
     if (!currentEmployee || currentEmployee.tenantId !== tenantId) {
@@ -143,22 +220,7 @@ export class EmployeesService {
   getById(tenantId: string, employeeId: string) {
     return this.prisma.employee.findFirstOrThrow({
       where: { tenantId, id: employeeId },
-      include: {
-        user: {
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        },
-        company: true,
-        department: true,
-        primaryLocation: true,
-        position: true,
-        devices: true,
-      },
+      select: EMPLOYEE_DETAIL_SELECT,
     });
   }
 
@@ -324,26 +386,7 @@ export class EmployeesService {
         tenantId: user.tenantId,
         userId: user.sub,
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            bannerTheme: true,
-          },
-        },
-        company: true,
-        department: true,
-        primaryLocation: true,
-        position: true,
-        devices: true,
-        invitation: {
-          select: {
-            avatarStorageKey: true,
-            avatarUrl: true,
-          },
-        },
-      },
+      select: EMPLOYEE_PROFILE_SELECT,
     });
 
     if (!employee) {
@@ -1586,7 +1629,7 @@ export class EmployeesService {
   }
 
   private normalizeWorkMode(workMode: EmployeeWorkModeInput) {
-    return workMode === EmployeeWorkMode.FIELD || workMode === 'FIELD'
+    return workMode === EmployeeWorkMode.FIELD
       ? EmployeeWorkMode.FIELD
       : EmployeeWorkMode.STATIONARY;
   }
