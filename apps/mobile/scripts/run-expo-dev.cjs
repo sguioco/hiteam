@@ -115,6 +115,8 @@ async function main() {
 
   const onlineMode = process.argv.includes('--online');
   const clearCache = process.argv.includes('--clear');
+  const skipDependencyValidation =
+    !onlineMode && process.env.EXPO_NO_DEPENDENCY_VALIDATION === undefined;
   const requestedHostMode = process.argv.includes('--lan')
     ? 'lan'
     : process.argv.includes('--tunnel')
@@ -190,11 +192,20 @@ async function main() {
     console.warn('[smart/mobile] Metro cache будет очищен перед стартом.');
   }
 
+  if (skipDependencyValidation) {
+    console.warn(
+      '[smart/mobile] Отключаю Expo dependency validation для локального запуска без сетевых запросов.',
+    );
+  }
+
   const child = spawn(process.execPath, [expoBinPath, ...args], {
     cwd: path.resolve(__dirname, '..'),
     env: {
       ...process.env,
       SMART_LOCAL_DEV: '1',
+      ...(skipDependencyValidation
+        ? { EXPO_NO_DEPENDENCY_VALIDATION: '1' }
+        : {}),
       ...(useLocalhostTransport
         ? { REACT_NATIVE_PACKAGER_HOSTNAME: '127.0.0.1' }
         : {}),

@@ -1731,9 +1731,9 @@ export default function ManagerScreen({
           </PressableScale>
         </View>
 
-        <View className="gap-3">
+        <View>
           <PressableScale
-            className="rounded-[26px] border border-black/15 bg-[#edf4ff] px-5 py-5"
+            className="min-h-[72px] justify-center px-1 py-3"
             haptic="selection"
             onPress={() => openCreateScreen("/manager/create-task")}
           >
@@ -1752,8 +1752,10 @@ export default function ManagerScreen({
             </View>
           </PressableScale>
 
+          <View className="h-px bg-[#dce4f2]" />
+
           <PressableScale
-            className="rounded-[26px] border border-black/15 bg-[#f4f7ff] px-5 py-5"
+            className="min-h-[72px] justify-center px-1 py-3"
             haptic="selection"
             onPress={() => openCreateScreen("/manager/create-meeting")}
           >
@@ -1772,8 +1774,10 @@ export default function ManagerScreen({
             </View>
           </PressableScale>
 
+          <View className="h-px bg-[#dce4f2]" />
+
           <PressableScale
-            className="rounded-[26px] border border-black/15 bg-[#f5f8ff] px-5 py-5"
+            className="min-h-[72px] justify-center px-1 py-3"
             haptic="selection"
             onPress={() => openCreateScreen("/manager/create-news")}
           >

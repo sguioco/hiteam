@@ -443,7 +443,7 @@ const translations = {
     "calendar.managerProgress": "Выполнено",
     "calendar.managerNeedsAttention": "Нужны действия",
     "calendar.managerNoEmployeesForFilter":
-      "По этому фильтру сотрудников нет.",
+      "По этому фильтру сотрудников нет",
     "calendar.tasksShort": "задачи",
     "calendar.applyFilter": "Показать",
     "calendar.assignShift": "Назначить",
@@ -1367,7 +1367,7 @@ const translations = {
     "calendar.managerProgress": "Done",
     "calendar.managerNeedsAttention": "Needs action",
     "calendar.managerNoEmployeesForFilter":
-      "No employees match this filter.",
+      "No employees match this filter",
     "calendar.tasksShort": "tasks",
     "calendar.applyFilter": "Show",
     "calendar.assignShift": "Assign",

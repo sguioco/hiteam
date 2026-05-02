@@ -243,6 +243,14 @@ function normalizeManagerShiftCandidate(
   return candidate as ManagerScheduleShift;
 }
 
+function normalizeManagerScheduleShifts(
+  shifts: unknown[] | undefined,
+): ManagerScheduleShift[] {
+  return (shifts ?? [])
+    .map(normalizeManagerShiftCandidate)
+    .filter((shift): shift is ManagerScheduleShift => shift !== null);
+}
+
 function formatAnnouncementDate(value: string, locale: string) {
   const parsed = new Date(value);
 
@@ -468,7 +476,12 @@ export default function CalendarScreen({
         setManagerShifts(cached.value.managerShifts ?? []);
         setShiftTemplates(cached.value.shiftTemplates ?? []);
         setLoading(false);
-        if (!cached.isStale) {
+        const cachedHasRequiredManagerAssignmentData =
+          !isManager ||
+          ((cached.value.managerEmployees?.length ?? 0) > 0 &&
+            (cached.value.shiftTemplates?.length ?? 0) > 0);
+
+        if (!cached.isStale && cachedHasRequiredManagerAssignmentData) {
           return;
         }
       } else if (!initialSnapshot) {
@@ -507,6 +520,33 @@ export default function CalendarScreen({
             nextManagerGroups = scheduleData.groups ?? [];
             nextManagerShifts = scheduleData.shifts;
             nextShiftTemplates = scheduleData.templates;
+
+            if (
+              nextManagerEmployees.length === 0 ||
+              nextManagerGroups.length === 0 ||
+              nextShiftTemplates.length === 0
+            ) {
+              const employeesSnapshot = await loadEmployeesBootstrap().catch(
+                () => null,
+              );
+
+              if (employeesSnapshot) {
+                nextManagerEmployees = employeesSnapshot.employeeRecords.length
+                  ? employeesSnapshot.employeeRecords
+                  : nextManagerEmployees;
+                nextManagerGroups = employeesSnapshot.groups.length
+                  ? employeesSnapshot.groups
+                  : nextManagerGroups;
+                nextManagerShifts = nextManagerShifts.length
+                  ? nextManagerShifts
+                  : normalizeManagerScheduleShifts(
+                      employeesSnapshot.scheduleShifts,
+                    );
+                nextShiftTemplates = nextShiftTemplates.length
+                  ? nextShiftTemplates
+                  : employeesSnapshot.scheduleTemplates;
+              }
+            }
           } else {
             nextShifts = scheduleData.shifts;
           }
@@ -542,11 +582,9 @@ export default function CalendarScreen({
             nextManagerGroups = employeesResult.value.groups.length
               ? employeesResult.value.groups
               : nextManagerGroups;
-            nextManagerShifts = employeesResult.value.scheduleShifts
-              .map(normalizeManagerShiftCandidate)
-              .filter(
-                (shift): shift is ManagerScheduleShift => shift !== null,
-              );
+            nextManagerShifts = normalizeManagerScheduleShifts(
+              employeesResult.value.scheduleShifts,
+            );
             nextShiftTemplates = employeesResult.value.scheduleTemplates;
           }
 
@@ -834,6 +872,7 @@ export default function CalendarScreen({
       ),
     [activeManagerEmployeeIdSet, sortedManagerEmployees],
   );
+  const assignShiftEmployeeOptions = sortedManagerEmployees;
 
   const managerFilterLabel = useMemo(() => {
     const selectedCount = activeManagerEmployeeIdSet.size;
@@ -955,8 +994,8 @@ export default function CalendarScreen({
       return;
     }
 
-    if (!assignShiftEmployeeId && visibleManagerEmployees[0]) {
-      setAssignShiftEmployeeId(visibleManagerEmployees[0].id);
+    if (!assignShiftEmployeeId && assignShiftEmployeeOptions[0]) {
+      setAssignShiftEmployeeId(assignShiftEmployeeOptions[0].id);
     }
 
     if (!assignShiftTemplateId && shiftTemplates[0]) {
@@ -964,10 +1003,10 @@ export default function CalendarScreen({
     }
   }, [
     assignShiftEmployeeId,
+    assignShiftEmployeeOptions,
     assignShiftSheetVisible,
     assignShiftTemplateId,
     shiftTemplates,
-    visibleManagerEmployees,
   ]);
 
   useEffect(() => {
@@ -1101,9 +1140,12 @@ export default function CalendarScreen({
   function openAssignShiftSheet(employeeId?: string) {
     hapticSelection();
     setAssignShiftError(null);
-    setAssignShiftEmployeeId(employeeId ?? visibleManagerEmployees[0]?.id ?? "");
+    setAssignShiftEmployeeId(
+      employeeId ?? assignShiftEmployeeOptions[0]?.id ?? "",
+    );
     setAssignShiftTemplateId(shiftTemplates[0]?.id ?? "");
-    setTemplateComposerVisible(shiftTemplates.length === 0);
+    setTemplateComposerVisible(false);
+    setTemplateTimePickerTarget(null);
     setAssignShiftSheetVisible(true);
   }
 
@@ -1611,13 +1653,13 @@ export default function CalendarScreen({
             {isManager ? (
               <View className="gap-4">
                 <PressableScale
-                  className="min-h-[58px] rounded-[24px] bg-white px-5 py-4 shadow-sm shadow-[#1f2687]/10"
+                  className="h-[58px] justify-center rounded-[24px] bg-white px-5 shadow-sm shadow-[#1f2687]/10"
                   haptic="selection"
                   onPress={() => setManagerFilterSheetVisible(true)}
                 >
                   <View className="flex-row items-center justify-between gap-4">
                     <Text
-                      className="min-w-0 flex-1 font-display text-[19px] font-bold text-foreground"
+                      className="min-w-0 flex-1 font-display text-[19px] font-bold leading-6 text-foreground"
                       numberOfLines={1}
                     >
                       {managerFilterLabel}
@@ -1626,7 +1668,7 @@ export default function CalendarScreen({
                   </View>
                 </PressableScale>
 
-                <View className="rounded-[30px] border border-white/40 bg-white/78 p-5 shadow-sm shadow-[#1f2687]/10">
+                <View className="gap-4 px-5">
                   <View className="flex-row items-start justify-between gap-4">
                     <View className="flex-1">
                       <Text className="font-display text-[22px] font-bold text-foreground">
@@ -1641,7 +1683,7 @@ export default function CalendarScreen({
                       </Text>
                     </View>
                     <PressableScale
-                      className={`min-h-[44px] rounded-2xl px-4 py-3 ${
+                      className={`h-[58px] justify-center rounded-[24px] px-5 ${
                         canAssignShiftForSelectedDay
                           ? "bg-[#2563eb]"
                           : "bg-[#dbe3ef]"
@@ -1652,14 +1694,14 @@ export default function CalendarScreen({
                     >
                       <View className="flex-row items-center gap-2">
                         <Ionicons color="#ffffff" name="calendar-outline" size={16} />
-                        <Text className="font-display text-[13px] font-semibold text-white">
+                        <Text className="font-display text-[13px] font-semibold leading-[18px] text-white">
                           {t("calendar.assignShift")}
                         </Text>
                       </View>
                     </PressableScale>
                   </View>
 
-                  <View className="mt-4 flex-row gap-2">
+                  <View className="flex-row gap-2">
                     <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
                       <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
                         {t("calendar.managerProgress")}
@@ -1867,7 +1909,7 @@ export default function CalendarScreen({
                     })}
                   </View>
                 ) : (
-                  <View className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-6 shadow-sm shadow-[#1f2687]/10">
+                  <View className="px-5 py-3">
                     <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
                       {t("calendar.managerNoEmployeesForFilter")}
                     </Text>
@@ -2425,6 +2467,8 @@ export default function CalendarScreen({
         onClose={() => {
           setAssignShiftSheetVisible(false);
           setAssignShiftError(null);
+          setTemplateComposerVisible(false);
+          setTemplateTimePickerTarget(null);
         }}
         sheetClassName="rounded-t-[32px]"
         solidBackground
@@ -2458,64 +2502,72 @@ export default function CalendarScreen({
                   {t("calendar.assignShiftEmployee")}
                 </Text>
                 <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
-                  {visibleManagerEmployees.map((employee, index) => {
-                    const isSelected = assignShiftEmployeeId === employee.id;
-                    const showAvatar =
-                      employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
+                  {assignShiftEmployeeOptions.length ? (
+                    assignShiftEmployeeOptions.map((employee, index) => {
+                      const isSelected = assignShiftEmployeeId === employee.id;
+                      const showAvatar =
+                        employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
 
-                    return (
-                      <PressableScale
-                        className={`px-4 py-3 ${
-                          index < visibleManagerEmployees.length - 1
-                            ? "border-b border-[#e7ecf5]"
-                            : ""
-                        }`}
-                        haptic="selection"
-                        key={employee.id}
-                        onPress={() => setAssignShiftEmployeeId(employee.id)}
-                      >
-                        <View className="flex-row items-center gap-3">
-                          <View
-                            className={`h-6 w-6 items-center justify-center rounded-full border ${
-                              isSelected
-                                ? "border-primary bg-primary"
-                                : "border-[#d7deeb] bg-white"
-                            }`}
-                          >
-                            {isSelected ? (
-                              <Ionicons color="#ffffff" name="checkmark" size={13} />
-                            ) : null}
-                          </View>
-                          {showAvatar ? (
-                            <Image
-                              className="h-10 w-10 rounded-full"
-                              onError={() => markAvatarFailed(employee.id)}
-                              resizeMode="cover"
-                              source={employee.avatar}
-                            />
-                          ) : (
-                            <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                              <Text className="font-display text-[12px] font-extrabold text-foreground">
-                                {getEmployeeInitials(
-                                  employee.firstName,
-                                  employee.lastName,
-                                )}
-                              </Text>
+                      return (
+                        <PressableScale
+                          className={`px-4 py-3 ${
+                            index < assignShiftEmployeeOptions.length - 1
+                              ? "border-b border-[#e7ecf5]"
+                              : ""
+                          }`}
+                          haptic="selection"
+                          key={employee.id}
+                          onPress={() => setAssignShiftEmployeeId(employee.id)}
+                        >
+                          <View className="flex-row items-center gap-3">
+                            <View
+                              className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                isSelected
+                                  ? "border-primary bg-primary"
+                                  : "border-[#d7deeb] bg-white"
+                              }`}
+                            >
+                              {isSelected ? (
+                                <Ionicons color="#ffffff" name="checkmark" size={13} />
+                              ) : null}
                             </View>
-                          )}
-                          <Text
-                            className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
-                            numberOfLines={1}
-                          >
-                            {buildEmployeeName(
-                              employee.firstName,
-                              employee.lastName,
+                            {showAvatar ? (
+                              <Image
+                                className="h-10 w-10 rounded-full"
+                                onError={() => markAvatarFailed(employee.id)}
+                                resizeMode="cover"
+                                source={employee.avatar}
+                              />
+                            ) : (
+                              <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
+                                <Text className="font-display text-[12px] font-extrabold text-foreground">
+                                  {getEmployeeInitials(
+                                    employee.firstName,
+                                    employee.lastName,
+                                  )}
+                                </Text>
+                              </View>
                             )}
-                          </Text>
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
+                            <Text
+                              className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
+                              numberOfLines={1}
+                            >
+                              {buildEmployeeName(
+                                employee.firstName,
+                                employee.lastName,
+                              )}
+                            </Text>
+                          </View>
+                        </PressableScale>
+                      );
+                    })
+                  ) : (
+                    <View className="px-4 py-5">
+                      <Text className="text-center font-body text-sm text-muted-foreground">
+                        {t("manager.meetingNoEmployees")}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -2524,26 +2576,29 @@ export default function CalendarScreen({
                   <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
                     {t("calendar.assignShiftTemplate")}
                   </Text>
-                  {shiftTemplates.length ? (
-                    <PressableScale
-                      className="flex-row items-center gap-1 rounded-full bg-[#eef4ff] px-3 py-2"
-                      haptic="selection"
-                      onPress={() =>
-                        setTemplateComposerVisible((current) => !current)
+                  <PressableScale
+                    className="min-h-10 flex-row items-center gap-1 rounded-full bg-[#eef4ff] px-3 py-2"
+                    disabled={templateSubmitting}
+                    haptic="selection"
+                    onPress={() => {
+                      setAssignShiftError(null);
+                      if (templateComposerVisible) {
+                        setTemplateTimePickerTarget(null);
                       }
-                    >
-                      <Ionicons
-                        color="#315cf6"
-                        name={templateComposerVisible ? "close" : "add"}
-                        size={14}
-                      />
-                      <Text className="font-body text-[12px] font-extrabold text-[#315cf6]">
-                        {templateComposerVisible
-                          ? t("calendar.shiftTemplateHide")
-                          : t("calendar.shiftTemplateNew")}
-                      </Text>
-                    </PressableScale>
-                  ) : null}
+                      setTemplateComposerVisible((current) => !current);
+                    }}
+                  >
+                    <Ionicons
+                      color="#315cf6"
+                      name={templateComposerVisible ? "close" : "add"}
+                      size={14}
+                    />
+                    <Text className="font-body text-[12px] font-extrabold text-[#315cf6]">
+                      {templateComposerVisible
+                        ? t("calendar.shiftTemplateHide")
+                        : t("calendar.shiftTemplateNew")}
+                    </Text>
+                  </PressableScale>
                 </View>
                 <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
                   {shiftTemplates.length ? (
@@ -2598,7 +2653,7 @@ export default function CalendarScreen({
                   )}
                 </View>
 
-                {templateComposerVisible || shiftTemplates.length === 0 ? (
+                {templateComposerVisible ? (
                   <View className="mt-1 gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
                     <View className="flex-row items-start justify-between gap-3">
                       <View className="flex-1">
@@ -2715,7 +2770,11 @@ export default function CalendarScreen({
                 className="min-h-12 rounded-2xl border-[#dce4f2] bg-white"
                 fullWidth
                 label={t("profile.cancel")}
-                onPress={() => setAssignShiftSheetVisible(false)}
+                onPress={() => {
+                  setAssignShiftSheetVisible(false);
+                  setTemplateComposerVisible(false);
+                  setTemplateTimePickerTarget(null);
+                }}
                 textClassName="text-foreground"
                 variant="secondary"
               />

@@ -111,7 +111,7 @@ type EmployeeDirectoryItem = {
   lastName: string;
   birthDate?: string | null;
   avatarUrl?: string | null;
-  user?: { id: string } | null;
+  user?: { id?: string } | null;
   company?: { name: string } | null;
   department?: { name: string } | null;
 };

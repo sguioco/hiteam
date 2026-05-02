@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -75,6 +75,36 @@ const PHOTO_REPORT_LAYOUT = {
 } as const;
 
 const PHOTO_REPORT_LIMIT = 7;
+const warmedPhotoUris = new Set<string>();
+
+function prewarmPhotoUris(uris: Array<string | null | undefined>) {
+  const nextUris = Array.from(
+    new Set(
+      uris
+        .map((uri) => uri?.trim())
+        .filter((uri): uri is string => Boolean(uri)),
+    ),
+  ).filter((uri) => !warmedPhotoUris.has(uri));
+
+  if (!nextUris.length) {
+    return;
+  }
+
+  nextUris.forEach((uri) => warmedPhotoUris.add(uri));
+  void Promise.allSettled(nextUris.map((uri) => Image.prefetch(uri)))
+    .then((results) => {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected' || result.value === false) {
+          warmedPhotoUris.delete(nextUris[index]);
+        }
+      });
+    })
+    .catch(() => undefined);
+}
+
+function prewarmTaskPhotos(photos: TaskPhoto[]) {
+  prewarmPhotoUris(photos.map((photo) => photo.uri));
+}
 
 function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?: any) => string): TaskPhoto[] {
   return task.photoProofs
@@ -129,6 +159,7 @@ export default function TaskList({
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [pendingPhotosByTaskId, setPendingPhotosByTaskId] = useState<Record<string, TaskPhoto[]>>({});
+  const warmedTaskPhotoSignatureRef = useRef('');
 
   const activeTasks = tasks.filter((task) => task.status !== 'DONE' && task.status !== 'CANCELLED');
   const completedTasks = tasks.filter((task) => task.status === 'DONE');
@@ -166,6 +197,32 @@ export default function TaskList({
   );
 
   useEffect(() => {
+    const signature = tasks
+      .map((task) =>
+        task.photoProofs
+          .filter((proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url)
+          .map((proof) => proof.url)
+          .join('|'),
+      )
+      .join('::');
+
+    if (!signature || signature === warmedTaskPhotoSignatureRef.current) {
+      return;
+    }
+
+    warmedTaskPhotoSignatureRef.current = signature;
+    Object.values(taskPhotos).forEach(prewarmTaskPhotos);
+  }, [taskPhotos, tasks]);
+
+  useEffect(() => {
+    prewarmTaskPhotos(activeTaskPhotos);
+  }, [activeTaskPhotos]);
+
+  useEffect(() => {
+    prewarmPhotoUris([selectedPhoto?.uri]);
+  }, [selectedPhoto?.uri]);
+
+  useEffect(() => {
     if (!activeTaskPhotos.length) {
       setSelectedPhotoId(null);
       return;
@@ -194,6 +251,7 @@ export default function TaskList({
 
   function openTask(taskId: string) {
     hapticSelection();
+    prewarmTaskPhotos(taskPhotos[taskId] ?? []);
     setActiveTaskId(taskId);
     setMediaError(null);
   }
@@ -324,6 +382,8 @@ export default function TaskList({
         });
 
         onTaskUpdate?.(updatedTask);
+        const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
+        prewarmTaskPhotos(nextPhotos);
         setSelectedPhotoId(nextProof.id);
         hapticSuccess();
         return;
@@ -361,6 +421,7 @@ export default function TaskList({
       const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
       const nextSelected = nextPhotos[nextPhotos.length - 1] ?? null;
 
+      prewarmTaskPhotos(nextPhotos);
       setSelectedPhotoId(nextSelected?.id ?? null);
       hapticSuccess();
     } catch (error) {
@@ -715,7 +776,10 @@ export default function TaskList({
                                 isSelected ? 'border-primary bg-primary' : 'border-[#d7def5] bg-white'
                               }`}
                               haptic="selection"
-                              onPress={() => setSelectedPhotoId(photo.id)}
+                              onPress={() => {
+                                prewarmPhotoUris([photo.uri]);
+                                setSelectedPhotoId(photo.id);
+                              }}
                             >
                               {photo.isPending ? (
                                 <ActivityIndicator
