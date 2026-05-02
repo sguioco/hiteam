@@ -74,16 +74,18 @@ function SystemTopBlur({
   insetTop: number;
   dark?: boolean;
 }) {
-  const height = Math.max(insetTop + 26, 52);
+  const height = Math.max(insetTop + 64, 96);
   const overlayColors = dark
     ? [
-        "rgba(15,23,42,0.42)",
-        "rgba(15,23,42,0.16)",
+        "rgba(15,23,42,0.26)",
+        "rgba(15,23,42,0.08)",
+        "rgba(15,23,42,0.02)",
         "rgba(15,23,42,0)",
       ]
     : [
-        "rgba(255,255,255,0.72)",
-        "rgba(255,255,255,0.28)",
+        "rgba(255,255,255,0.5)",
+        "rgba(255,255,255,0.18)",
+        "rgba(255,255,255,0.04)",
         "rgba(255,255,255,0)",
       ];
 
@@ -97,11 +99,12 @@ function SystemTopBlur({
           <LinearGradient
             colors={[
               "rgba(0,0,0,1)",
-              "rgba(0,0,0,0.72)",
-              "rgba(0,0,0,0.22)",
+              "rgba(0,0,0,0.82)",
+              "rgba(0,0,0,0.44)",
+              "rgba(0,0,0,0.12)",
               "rgba(0,0,0,0)",
             ]}
-            locations={[0, 0.42, 0.76, 1]}
+            locations={[0, 0.36, 0.68, 0.9, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.systemTopBlurMask}
@@ -111,13 +114,13 @@ function SystemTopBlur({
       >
         <BlurView
           className="absolute inset-0"
-          intensity={38}
+          intensity={48}
           tint={dark ? "dark" : "light"}
         />
       </MaskedView>
       <LinearGradient
         colors={overlayColors}
-        locations={[0, 0.58, 1]}
+        locations={[0, 0.48, 0.78, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}
