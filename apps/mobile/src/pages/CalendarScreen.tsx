@@ -136,6 +136,57 @@ function formatLocalTime(value: TimeValue) {
   return `${`${value.hour}`.padStart(2, "0")}:${`${value.minute}`.padStart(2, "0")}`;
 }
 
+const CYRILLIC_TEMPLATE_CODE_MAP: Record<string, string> = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ё: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "i",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "kh",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "sch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
+};
+
+function buildClientTemplateCode(value: string) {
+  const normalized = Array.from(value)
+    .map((char) => CYRILLIC_TEMPLATE_CODE_MAP[char.toLowerCase()] ?? char)
+    .join("")
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, "-")
+    .toUpperCase();
+  const suffix = Date.now().toString(36).slice(-6).toUpperCase();
+  const base = normalized || "SHIFT";
+
+  return `${base.slice(0, Math.max(1, 23 - suffix.length))}-${suffix}`;
+}
+
 function isOverdueTask(task: TaskItem, referenceDate: Date) {
   if (!isTaskOpen(task.status)) {
     return false;
@@ -1169,6 +1220,7 @@ export default function CalendarScreen({
     try {
       const createdTemplate = await createManagerShiftTemplate({
         name,
+        code: buildClientTemplateCode(name),
         startsAtLocal: formatLocalTime(templateDraft.startsAt),
         endsAtLocal: formatLocalTime(templateDraft.endsAt),
         weekDays: templateDraft.weekDays,

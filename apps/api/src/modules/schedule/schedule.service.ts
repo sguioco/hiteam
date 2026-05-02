@@ -59,6 +59,13 @@ function buildTemplateCodeBase(value: string) {
   return normalized || 'SHIFT';
 }
 
+function isPrismaUniqueConstraintError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
+}
+
 const LOCATION_SELECT = {
   id: true,
   name: true,
@@ -98,6 +105,10 @@ const SHIFT_TEMPLATE_SELECT = {
     select: POSITION_SELECT,
   },
 } satisfies Prisma.ShiftTemplateSelect;
+
+type ShiftTemplateRecord = Prisma.ShiftTemplateGetPayload<{
+  select: typeof SHIFT_TEMPLATE_SELECT;
+}>;
 
 const SHIFT_SELECT = {
   id: true,
@@ -154,10 +165,11 @@ export class ScheduleService {
       dto.weekDays && dto.weekDays.length > 0
         ? [...new Set(dto.weekDays)].sort((left, right) => left - right)
         : null;
-    const code = await this.generateTemplateCode(tenantId, dto.code?.trim() || dto.name);
+    const codeSeed = dto.code?.trim() || dto.name;
+    let code = await this.generateTemplateCode(tenantId, codeSeed);
     const locationId = dto.locationId || (await this.resolveDefaultLocationId(tenantId));
     const positionId = dto.positionId || (await this.resolveDefaultPositionId(tenantId));
-    const createInput: Prisma.ShiftTemplateUncheckedCreateInput = {
+    const buildCreateInput = (): Prisma.ShiftTemplateUncheckedCreateInput => ({
       tenantId,
       name: dto.name,
       code,
@@ -167,12 +179,28 @@ export class ScheduleService {
       endsAtLocal: dto.endsAtLocal,
       weekDaysJson: normalizedWeekDays ? JSON.stringify(normalizedWeekDays) : null,
       gracePeriodMinutes: dto.gracePeriodMinutes ?? 10,
-    };
-
-    const template = await this.prisma.shiftTemplate.create({
-      data: createInput,
-      select: SHIFT_TEMPLATE_SELECT,
     });
+
+    let template: ShiftTemplateRecord;
+    try {
+      template = await this.prisma.shiftTemplate.create({
+        data: buildCreateInput(),
+        select: SHIFT_TEMPLATE_SELECT,
+      });
+    } catch (error) {
+      if (!isPrismaUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      code = await this.generateTemplateCode(
+        tenantId,
+        `${codeSeed}-${Date.now().toString(36)}`,
+      );
+      template = await this.prisma.shiftTemplate.create({
+        data: buildCreateInput(),
+        select: SHIFT_TEMPLATE_SELECT,
+      });
+    }
 
     await this.auditService.log({
       tenantId,

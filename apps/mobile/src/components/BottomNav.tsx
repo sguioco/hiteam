@@ -1,5 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, View, type ImageSourcePropType } from "react-native";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+} from "react-native";
+import MaskedView from "@react-native-masked-view/masked-view";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "../../components/ui/text";
 import { useEffect, useState } from "react";
 import Animated, {
@@ -32,6 +41,7 @@ const BottomNav = ({
   const { t } = useI18n();
   const navShellOffset = 75;
   const navContentOffset = 0;
+  const todayButtonTopOffset = -18;
   const navLabelStyle = {
     textAlign: "center" as const,
     includeFontPadding: false,
@@ -126,7 +136,12 @@ const BottomNav = ({
         }
         style={
           floating
-            ? { left: 24, top: -18, width: 74, alignItems: "center" }
+            ? {
+                left: 24,
+                top: todayButtonTopOffset,
+                width: 74,
+                alignItems: "center",
+              }
             : undefined
         }
         onPress={() => {
@@ -174,7 +189,52 @@ const BottomNav = ({
         style={{ paddingBottom: Math.max(insets.bottom - 28, 16) }}
       >
         <View
-          className="overflow-hidden border-t border-[#edf1f7] bg-white shadow-lg shadow-[#1f2687]/10"
+          pointerEvents="none"
+          style={[
+            styles.navBlurLayer,
+            {
+              bottom: 0,
+              top: todayButtonTopOffset,
+            },
+          ]}
+        >
+          <MaskedView
+            maskElement={
+              <LinearGradient
+                colors={[
+                  "rgba(0,0,0,0)",
+                  "rgba(0,0,0,0.22)",
+                  "rgba(0,0,0,0.72)",
+                  "rgba(0,0,0,1)",
+                ]}
+                locations={[0, 0.28, 0.56, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.maskFill}
+              />
+            }
+            style={StyleSheet.absoluteFill}
+          >
+            <BlurView
+              className="absolute inset-0"
+              intensity={38}
+              tint="light"
+            />
+          </MaskedView>
+          <LinearGradient
+            colors={[
+              "rgba(255,255,255,0)",
+              "rgba(255,255,255,0.45)",
+              "rgba(255,255,255,0.88)",
+            ]}
+            locations={[0, 0.46, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+        <View
+          className="overflow-hidden bg-white/82 shadow-lg shadow-[#1f2687]/10"
           style={{ minHeight: 106 + insets.bottom }}
         >
           <View
@@ -214,5 +274,17 @@ const BottomNav = ({
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  navBlurLayer: {
+    left: 0,
+    overflow: "hidden",
+    position: "absolute",
+    right: 0,
+  },
+  maskFill: {
+    flex: 1,
+  },
+});
 
 export default BottomNav;
