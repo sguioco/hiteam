@@ -3,6 +3,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { AppState, Modal, Pressable, StyleSheet, View } from "react-native";
+import MaskedView from "@react-native-masked-view/masked-view";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "../../components/ui/text";
 import Animated, {
   useAnimatedStyle,
@@ -15,7 +18,7 @@ import type {
   AttendanceStatusResponse,
   LeaderboardCelebration,
 } from "@smart/types";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppGradientBackground } from "../../components/ui/screen";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import { loadMyProfile, loadTodayBootstrap } from "../../lib/api";
@@ -63,6 +66,65 @@ type ShiftItem = TodayScreenCacheValue["shifts"][number];
 type StartShiftPromptState = {
   minutesUntilStart: number;
 };
+
+function SystemTopBlur({
+  insetTop,
+  dark = false,
+}: {
+  insetTop: number;
+  dark?: boolean;
+}) {
+  const height = Math.max(insetTop + 26, 52);
+  const overlayColors = dark
+    ? [
+        "rgba(15,23,42,0.42)",
+        "rgba(15,23,42,0.16)",
+        "rgba(15,23,42,0)",
+      ]
+    : [
+        "rgba(255,255,255,0.72)",
+        "rgba(255,255,255,0.28)",
+        "rgba(255,255,255,0)",
+      ];
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[styles.systemTopBlurLayer, { height }]}
+    >
+      <MaskedView
+        maskElement={
+          <LinearGradient
+            colors={[
+              "rgba(0,0,0,1)",
+              "rgba(0,0,0,0.72)",
+              "rgba(0,0,0,0.22)",
+              "rgba(0,0,0,0)",
+            ]}
+            locations={[0, 0.42, 0.76, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.systemTopBlurMask}
+          />
+        }
+        style={StyleSheet.absoluteFill}
+      >
+        <BlurView
+          className="absolute inset-0"
+          intensity={38}
+          tint={dark ? "dark" : "light"}
+        />
+      </MaskedView>
+      <LinearGradient
+        colors={overlayColors}
+        locations={[0, 0.58, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
+  );
+}
 
 function normalizeTab(value: string | string[] | undefined): Tab {
   const nextValue = Array.isArray(value) ? value[0] : value;
@@ -168,6 +230,7 @@ function formatPromptLead(minutesUntilStart: number) {
 
 const Index = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     tab?: string | string[];
     overdue?: string | string[];
@@ -685,6 +748,10 @@ const Index = () => {
           {renderTabScene("news")}
           {renderTabScene("profile")}
         </View>
+        <SystemTopBlur
+          dark={activeTab === "today"}
+          insetTop={insets.top}
+        />
         <BottomNav
           active={activeTab}
           hasBadge={todayHasBadge}
@@ -925,6 +992,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     includeFontPadding: false,
+  },
+  systemTopBlurLayer: {
+    left: 0,
+    overflow: "hidden",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 45,
+  },
+  systemTopBlurMask: {
+    flex: 1,
   },
   tabScene: {
     ...StyleSheet.absoluteFillObject,

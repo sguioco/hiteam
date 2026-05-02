@@ -193,7 +193,7 @@ const BottomNav = ({
           style={[
             styles.navBlurLayer,
             {
-              bottom: 0,
+              height: Math.abs(todayButtonTopOffset),
               top: todayButtonTopOffset,
             },
           ]}
@@ -234,7 +234,7 @@ const BottomNav = ({
           />
         </View>
         <View
-          className="overflow-hidden bg-white/82 shadow-lg shadow-[#1f2687]/10"
+          className="overflow-hidden border-t border-[#edf1f7] bg-white shadow-lg shadow-[#1f2687]/10"
           style={{ minHeight: 106 + insets.bottom }}
         >
           <View
