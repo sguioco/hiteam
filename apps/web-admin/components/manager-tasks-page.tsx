@@ -2143,20 +2143,22 @@ export function ManagerTasksPage({
                           }
 
                           event.preventDefault();
-                          if (match.employeeId) {
+                          const employeeId = match.employeeId;
+                          if (employeeId) {
                             setExpandedEmployeeIds((current) =>
-                              current.includes(match.employeeId)
+                              current.includes(employeeId)
                                 ? current
-                                : [...current, match.employeeId],
+                                : [...current, employeeId],
                             );
                           }
                         }}
                         onClick={() => {
-                          if (match.employeeId) {
+                          const employeeId = match.employeeId;
+                          if (employeeId) {
                             setExpandedEmployeeIds((current) =>
-                              current.includes(match.employeeId)
+                              current.includes(employeeId)
                                 ? current
-                                : [...current, match.employeeId],
+                                : [...current, employeeId],
                             );
                           }
                         }}
