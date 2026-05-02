@@ -10,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/text";
-import { useFocusEffect } from "@react-navigation/native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -920,7 +919,7 @@ export default function ManagerScreen({
 
     if (!cached) {
       setLoading(true);
-    } else if (cached.value && loading) {
+    } else {
       setLoading(false);
     }
 
@@ -938,6 +937,10 @@ export default function ManagerScreen({
       setLiveSessions(cachedResolved.liveSessions);
       setTasks(cachedResolved.tasks);
       setFailedAvatarEmployeeIds(new Set());
+
+      if (!cached.isStale) {
+        return;
+      }
     }
 
     const now = new Date();
@@ -1030,12 +1033,6 @@ export default function ManagerScreen({
   useEffect(() => {
     void loadData();
   }, [loadData]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadData();
-    }, [loadData]),
-  );
 
   const liveSessionByEmployeeId = useMemo(
     () =>

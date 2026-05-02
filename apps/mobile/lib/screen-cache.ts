@@ -106,7 +106,6 @@ export async function readScreenCache<T>(key: string, maxAgeMs?: number) {
     }
 
     memoryCache.set(key, parsed);
-    notifyCacheListeners(key, parsed);
     return buildSnapshot(parsed, maxAgeMs);
   } catch {
     return null;

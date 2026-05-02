@@ -332,14 +332,14 @@ const Index = () => {
     }
 
     void hydrateWorkspaceCaches(roleCodes, language);
-    void warmWorkspaceCaches(roleCodes, { force: true, language });
+    void warmWorkspaceCaches(roleCodes, { language });
 
     const interval = setInterval(() => {
       if (appStateRef.current !== "active") {
         return;
       }
 
-      void warmWorkspaceCaches(roleCodes, { force: true, language });
+      void warmWorkspaceCaches(roleCodes, { language });
     }, WORKSPACE_REFRESH_INTERVAL_MS);
 
     return () => {

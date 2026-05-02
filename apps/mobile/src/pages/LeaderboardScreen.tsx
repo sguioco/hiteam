@@ -106,7 +106,6 @@ export default function LeaderboardScreen({
     let cancelled = false;
 
     async function loadData() {
-      setLoading(true);
       const cached = await readScreenCache<LeaderboardOverviewResponse>(
         leaderboardCacheKey,
         LEADERBOARD_SCREEN_CACHE_TTL_MS,
@@ -118,6 +117,10 @@ export default function LeaderboardScreen({
         if (!cached.isStale) {
           return;
         }
+      }
+
+      if (!cancelled && !cached) {
+        setLoading(true);
       }
 
       try {

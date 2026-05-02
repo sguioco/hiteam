@@ -136,18 +136,6 @@ function formatLocalTime(value: TimeValue) {
   return `${`${value.hour}`.padStart(2, "0")}:${`${value.minute}`.padStart(2, "0")}`;
 }
 
-function buildTemplateCode(value: string) {
-  const normalized = value
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/[\s_-]+/g, "-")
-    .toUpperCase()
-    .slice(0, 24);
-
-  return normalized || "SHIFT";
-}
-
 function isOverdueTask(task: TaskItem, referenceDate: Date) {
   if (!isTaskOpen(task.status)) {
     return false;
@@ -944,23 +932,27 @@ export default function CalendarScreen({
   }, [selectedDayKey, tasks]);
 
   const managerEmployeeRows = useMemo(() => {
-    return visibleManagerEmployees.map((employee) => {
-      const assignedTasks = managerTasksForSelectedDay.filter(
-        (task) => getTaskAssigneeId(task) === employee.id,
-      );
-      const plannedTasks = assignedTasks.filter(
-        (task) => task.status !== "CANCELLED",
-      );
-      const doneTasks = plannedTasks.filter((task) => task.status === "DONE");
+    return visibleManagerEmployees
+      .map((employee) => {
+        const assignedTasks = managerTasksForSelectedDay.filter(
+          (task) => getTaskAssigneeId(task) === employee.id,
+        );
+        const plannedTasks = assignedTasks.filter(
+          (task) => task.status !== "CANCELLED",
+        );
+        const doneTasks = plannedTasks.filter((task) => task.status === "DONE");
 
-      return {
-        employee,
-        shift: managerShiftByEmployeeId.get(employee.id) ?? null,
-        assignedTasks,
-        plannedTasks,
-        doneTasks,
-      };
-    });
+        return {
+          employee,
+          shift: managerShiftByEmployeeId.get(employee.id) ?? null,
+          assignedTasks,
+          plannedTasks,
+          doneTasks,
+        };
+      })
+      .sort(
+        (left, right) => right.plannedTasks.length - left.plannedTasks.length,
+      );
   }, [
     managerShiftByEmployeeId,
     managerTasksForSelectedDay,
@@ -1177,7 +1169,6 @@ export default function CalendarScreen({
     try {
       const createdTemplate = await createManagerShiftTemplate({
         name,
-        code: buildTemplateCode(name),
         startsAtLocal: formatLocalTime(templateDraft.startsAt),
         endsAtLocal: formatLocalTime(templateDraft.endsAt),
         weekDays: templateDraft.weekDays,
@@ -1664,7 +1655,7 @@ export default function CalendarScreen({
                     >
                       {managerFilterLabel}
                     </Text>
-                    <Ionicons color="#315cf6" name="options-outline" size={22} />
+                    <Ionicons color="#315cf6" name="chevron-down" size={22} />
                   </View>
                 </PressableScale>
 
@@ -1683,7 +1674,7 @@ export default function CalendarScreen({
                       </Text>
                     </View>
                     <PressableScale
-                      className={`h-[58px] justify-center rounded-[24px] px-5 ${
+                      className={`h-[40px] justify-center rounded-[20px] px-4 ${
                         canAssignShiftForSelectedDay
                           ? "bg-[#2563eb]"
                           : "bg-[#dbe3ef]"
@@ -1771,13 +1762,13 @@ export default function CalendarScreen({
                               </View>
                               {showAvatar ? (
                                 <Image
-                                  className="h-13 w-13 rounded-2xl"
+                                  className="h-14 w-14 rounded-2xl"
                                   onError={() => markAvatarFailed(row.employee.id)}
                                   resizeMode="cover"
                                   source={row.employee.avatar}
                                 />
                               ) : (
-                                <View className="h-13 w-13 items-center justify-center rounded-2xl bg-[#eef2ff]">
+                                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">
                                   <Text className="font-display text-[15px] font-extrabold text-foreground">
                                     {getEmployeeInitials(
                                       row.employee.firstName,
@@ -1810,11 +1801,15 @@ export default function CalendarScreen({
                                   className="font-display text-[18px] font-bold text-foreground"
                                   style={{ fontVariant: ["tabular-nums"] }}
                                 >
-                                  {row.doneTasks.length}/{row.plannedTasks.length}
+                                  {row.plannedTasks.length > 0
+                                    ? `${row.doneTasks.length}/${row.plannedTasks.length}`
+                                    : `0 ${t("calendar.tasksShort")}`}
                                 </Text>
-                                <Text className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.8px] text-[#8a96ab]">
-                                  {t("calendar.tasksShort")}
-                                </Text>
+                                {row.plannedTasks.length > 0 ? (
+                                  <Text className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.8px] text-[#8a96ab]">
+                                    {t("calendar.tasksShort")}
+                                  </Text>
+                                ) : null}
                               </View>
                             </View>
 
@@ -1825,14 +1820,12 @@ export default function CalendarScreen({
                                     {t("manager.tasksToday")}
                                   </Text>
                                   {row.shift ? (
-                                    <View className="rounded-full bg-[#e8fff3] px-3 py-1.5">
-                                      <Text className="font-body text-[12px] font-semibold text-[#0f766e]">
-                                        {formatShiftRange(row.shift, locale)}
-                                      </Text>
-                                    </View>
+                                    <Text className="font-body text-[12px] font-semibold text-[#0f766e]">
+                                      {formatShiftRange(row.shift, locale)}
+                                    </Text>
                                   ) : canAssignShiftForSelectedDay ? (
                                     <PressableScale
-                                      className="rounded-full bg-[#eef4ff] px-3 py-1.5"
+                                      className="px-1 py-1"
                                       haptic="selection"
                                       onPress={() =>
                                         openAssignShiftSheet(row.employee.id)
@@ -1893,7 +1886,7 @@ export default function CalendarScreen({
                                     })}
                                   </View>
                                 ) : (
-                                  <View className="rounded-2xl bg-[#f8fbff] px-4 py-5">
+                                  <View className="items-center justify-center px-4 py-6">
                                     <Text className="text-center font-body text-[13px] leading-5 text-[#6b7280]">
                                       {t("manager.noEmployeeTasks")}
                                     </Text>
@@ -2310,6 +2303,9 @@ export default function CalendarScreen({
                               const selectedByGroup = selectedGroupEmployeeIds.has(
                                 employee.id,
                               );
+                              const showAvatar =
+                                employee.avatar &&
+                                !failedAvatarEmployeeIds.has(employee.id);
 
                               return (
                                 <PressableScale
@@ -2340,14 +2336,23 @@ export default function CalendarScreen({
                                         />
                                       ) : null}
                                     </View>
-                                    <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                                      <Text className="font-display text-[12px] font-extrabold text-foreground">
-                                        {getEmployeeInitials(
-                                          employee.firstName,
-                                          employee.lastName,
-                                        )}
-                                      </Text>
-                                    </View>
+                                    {showAvatar ? (
+                                      <Image
+                                        className="h-10 w-10 rounded-full"
+                                        onError={() => markAvatarFailed(employee.id)}
+                                        resizeMode="cover"
+                                        source={employee.avatar}
+                                      />
+                                    ) : (
+                                      <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
+                                        <Text className="font-display text-[12px] font-extrabold text-foreground">
+                                          {getEmployeeInitials(
+                                            employee.firstName,
+                                            employee.lastName,
+                                          )}
+                                        </Text>
+                                      </View>
+                                    )}
                                     <View className="flex-1">
                                       <Text className="font-body text-[14px] font-semibold text-foreground">
                                         {buildEmployeeName(
@@ -2571,13 +2576,13 @@ export default function CalendarScreen({
                 </View>
               </View>
 
-              <View className="gap-2">
+              <View className="gap-3">
                 <View className="flex-row items-center justify-between gap-3 px-1">
                   <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
                     {t("calendar.assignShiftTemplate")}
                   </Text>
                   <PressableScale
-                    className="min-h-10 flex-row items-center gap-1 rounded-full bg-[#eef4ff] px-3 py-2"
+                    className="min-h-10 flex-row items-center gap-1 px-1 py-2"
                     disabled={templateSubmitting}
                     haptic="selection"
                     onPress={() => {
@@ -2600,6 +2605,106 @@ export default function CalendarScreen({
                     </Text>
                   </PressableScale>
                 </View>
+
+                {templateComposerVisible ? (
+                  <View className="gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
+                    <View>
+                      <Input
+                        autoCapitalize="words"
+                        autoCorrect={false}
+                        className="border-[#dce4f2] bg-white shadow-none"
+                        editable={!templateSubmitting}
+                        keyboardType={
+                          Platform.OS === "android" ? "visible-password" : "default"
+                        }
+                        onChangeText={(name) =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            name,
+                          }))
+                        }
+                        placeholder={t("calendar.shiftTemplateNamePlaceholder")}
+                        value={templateDraft.name}
+                      />
+                    </View>
+
+                    <View className="flex-row gap-3">
+                      <PressableScale
+                        className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
+                        containerClassName="flex-1"
+                        haptic="selection"
+                        onPress={() => setTemplateTimePickerTarget("start")}
+                      >
+                        <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                          {t("calendar.shiftTemplateStart")}
+                        </Text>
+                        <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
+                          {formatLocalTime(templateDraft.startsAt)}
+                        </Text>
+                      </PressableScale>
+                      <PressableScale
+                        className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
+                        containerClassName="flex-1"
+                        haptic="selection"
+                        onPress={() => setTemplateTimePickerTarget("end")}
+                      >
+                        <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                          {t("calendar.shiftTemplateEnd")}
+                        </Text>
+                        <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
+                          {formatLocalTime(templateDraft.endsAt)}
+                        </Text>
+                      </PressableScale>
+                    </View>
+
+                    <View className="mt-3">
+                      <View className="flex-row items-center justify-between">
+                        {weekdayLabels.map((label, index) => {
+                          const day = index + 1;
+                          const activeDay = templateDraft.weekDays.includes(day);
+
+                          return (
+                            <PressableScale
+                              className={`h-10 w-10 items-center justify-center rounded-full border ${
+                                activeDay
+                                  ? "border-primary bg-primary"
+                                  : "border-[#dce4f2] bg-white"
+                              }`}
+                              haptic="selection"
+                              key={label}
+                              onPress={() => toggleTemplateDraftWeekDay(day)}
+                            >
+                              <Text
+                                className={`font-body text-[11px] font-extrabold ${
+                                  activeDay ? "text-white" : "text-foreground"
+                                }`}
+                                numberOfLines={1}
+                              >
+                                {label}
+                              </Text>
+                            </PressableScale>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    <Button
+                      className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
+                      disabled={templateSubmitting || !templateDraft.name.trim()}
+                      fullWidth
+                      label={
+                        templateSubmitting
+                          ? t("common.processing")
+                          : t("calendar.shiftTemplateCreate")
+                      }
+                      onPress={() => {
+                        void submitShiftTemplateCreation();
+                      }}
+                      textClassName="text-white"
+                    />
+                  </View>
+                ) : null}
+
                 <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
                   {shiftTemplates.length ? (
                     shiftTemplates.map((template, index) => {
@@ -2652,114 +2757,6 @@ export default function CalendarScreen({
                     </View>
                   )}
                 </View>
-
-                {templateComposerVisible ? (
-                  <View className="mt-1 gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
-                    <View className="flex-row items-start justify-between gap-3">
-                      <View className="flex-1">
-                        <Text className="font-display text-[18px] font-extrabold text-foreground">
-                          {t("calendar.shiftTemplateNew")}
-                        </Text>
-                        <Text className="mt-1 font-body text-[12px] leading-5 text-muted-foreground">
-                          {t("calendar.shiftTemplateHint")}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View className="gap-2">
-                      <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                        {t("calendar.shiftTemplateName")}
-                      </Text>
-                      <Input
-                        autoCapitalize="words"
-                        className="border-[#dce4f2] bg-white shadow-none"
-                        editable={!templateSubmitting}
-                        onChangeText={(name) =>
-                          setTemplateDraft((current) => ({
-                            ...current,
-                            name,
-                          }))
-                        }
-                        placeholder={t("calendar.shiftTemplateNamePlaceholder")}
-                        value={templateDraft.name}
-                      />
-                    </View>
-
-                    <View className="flex-row gap-3">
-                      <PressableScale
-                        className="min-h-14 flex-1 rounded-2xl border border-[#dce4f2] bg-white px-4 py-3"
-                        haptic="selection"
-                        onPress={() => setTemplateTimePickerTarget("start")}
-                      >
-                        <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                          {t("calendar.shiftTemplateStart")}
-                        </Text>
-                        <Text className="mt-1 font-display text-[19px] font-extrabold text-foreground">
-                          {formatLocalTime(templateDraft.startsAt)}
-                        </Text>
-                      </PressableScale>
-                      <PressableScale
-                        className="min-h-14 flex-1 rounded-2xl border border-[#dce4f2] bg-white px-4 py-3"
-                        haptic="selection"
-                        onPress={() => setTemplateTimePickerTarget("end")}
-                      >
-                        <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                          {t("calendar.shiftTemplateEnd")}
-                        </Text>
-                        <Text className="mt-1 font-display text-[19px] font-extrabold text-foreground">
-                          {formatLocalTime(templateDraft.endsAt)}
-                        </Text>
-                      </PressableScale>
-                    </View>
-
-                    <View className="gap-2">
-                      <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                        {t("calendar.shiftTemplateDays")}
-                      </Text>
-                      <View className="flex-row flex-wrap gap-2">
-                        {weekdayLabels.map((label, index) => {
-                          const day = index + 1;
-                          const activeDay = templateDraft.weekDays.includes(day);
-
-                          return (
-                            <PressableScale
-                              className={`min-h-10 min-w-[56px] items-center justify-center rounded-2xl border px-3 ${
-                                activeDay
-                                  ? "border-primary bg-primary"
-                                  : "border-[#dce4f2] bg-white"
-                              }`}
-                              haptic="selection"
-                              key={label}
-                              onPress={() => toggleTemplateDraftWeekDay(day)}
-                            >
-                              <Text
-                                className={`font-body text-[12px] font-extrabold ${
-                                  activeDay ? "text-white" : "text-foreground"
-                                }`}
-                              >
-                                {label}
-                              </Text>
-                            </PressableScale>
-                          );
-                        })}
-                      </View>
-                    </View>
-
-                    <Button
-                      className="min-h-12 rounded-2xl"
-                      disabled={templateSubmitting || !templateDraft.name.trim()}
-                      fullWidth
-                      label={
-                        templateSubmitting
-                          ? t("common.processing")
-                          : t("calendar.shiftTemplateCreate")
-                      }
-                      onPress={() => {
-                        void submitShiftTemplateCreation();
-                      }}
-                    />
-                  </View>
-                ) : null}
               </View>
             </View>
           </ScrollView>
@@ -2767,7 +2764,7 @@ export default function CalendarScreen({
           <View className="flex-row items-center gap-3">
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-2xl border-[#dce4f2] bg-white"
+                className="min-h-12 rounded-[20px] border-[#dce4f2] bg-white"
                 fullWidth
                 label={t("profile.cancel")}
                 onPress={() => {
@@ -2781,7 +2778,7 @@ export default function CalendarScreen({
             </View>
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-2xl"
+                className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
                 disabled={
                   assignShiftSubmitting ||
                   !assignShiftEmployeeId ||
@@ -2797,6 +2794,7 @@ export default function CalendarScreen({
                 onPress={() => {
                   void submitManagerShiftAssignment();
                 }}
+                textClassName="text-white"
               />
             </View>
           </View>
