@@ -22,6 +22,7 @@ import {
   AttendanceHistoryResponse,
   EmployeeBiometricHistoryResponse,
   EmployeeManagerAccessResponse,
+  EmployeeWorkMode,
 } from "@smart/types";
 import { AdminShell } from "../../../components/admin-shell";
 import { Table } from "../../../components/application/table/table";
@@ -33,7 +34,11 @@ import {
   DialogTitle,
 } from "../../../components/ui/dialog";
 import { apiRequest } from "../../../lib/api";
-import { getSession, hasDesktopAdminAccess } from "../../../lib/auth";
+import {
+  getSession,
+  hasDesktopAdminAccess,
+  hasManagerAccess as hasWorkspaceManagerAccess,
+} from "../../../lib/auth";
 import { useI18n } from "../../../lib/i18n";
 import {
   getRuntimeLocale,
@@ -91,6 +96,33 @@ function formatDevicePlatform(platform: string, locale: string) {
     default:
       return platform;
   }
+}
+
+function normalizeEmployeeWorkMode(workMode?: string | null): EmployeeWorkMode {
+  return workMode === "FIELD" ? "FIELD" : "STATIONARY";
+}
+
+function getEmployeeWorkModeLabel(workMode: EmployeeWorkMode, locale: string) {
+  if (workMode === "FIELD") {
+    return locale === "ru" ? "Выездной" : "Field";
+  }
+
+  return locale === "ru" ? "Штатный" : "Stationary";
+}
+
+function getEmployeeWorkModeDescription(
+  workMode: EmployeeWorkMode,
+  locale: string,
+) {
+  if (workMode === "FIELD") {
+    return locale === "ru"
+      ? "Не зависит от офисной точки: координаты каждой отметки сохраняются в истории."
+      : "Not tied to the office point: every check-in coordinate is stored in history.";
+  }
+
+  return locale === "ru"
+    ? "Отметки проверяются по основной локации или локации смены."
+    : "Check-ins are validated against the primary or shift location.";
 }
 
 function getEnrollmentStatusLabel(
@@ -189,6 +221,7 @@ export default function EmployeeCardPageClient({
   const [tab, setTab] = useState<Tab>("attendance");
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
   const [roleActionPending, setRoleActionPending] = useState(false);
+  const [workModeActionPending, setWorkModeActionPending] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "success" | "error";
     text: string;
@@ -200,6 +233,9 @@ export default function EmployeeCardPageClient({
     useState<string | null>(null);
   const session = getSession();
   const canManageRoles = hasDesktopAdminAccess(session?.user.roleCodes ?? []);
+  const canManageWorkMode = hasWorkspaceManagerAccess(
+    session?.user.roleCodes ?? [],
+  );
   const initialDataIsComplete = Boolean(
     initialData?.employee &&
       initialData?.history &&
@@ -291,6 +327,13 @@ export default function EmployeeCardPageClient({
   const fullName = employee
     ? `${employee.firstName} ${employee.lastName}`
     : "...";
+  const employeeWorkMode = normalizeEmployeeWorkMode(employee?.workMode);
+  const isFieldManager =
+    employeeWorkMode === "FIELD" && Boolean(managerAccess?.hasManagerAccess);
+  const canPromoteToFieldManager = Boolean(
+    managerAccess &&
+    (managerAccess.hasManagerAccess || managerAccess.canToggleManagerAccess),
+  );
   const employeeInitials = useMemo(
     () => getEmployeeInitials(employee),
     [employee],
@@ -463,6 +506,161 @@ export default function EmployeeCardPageClient({
     }
   }
 
+  async function saveEmployeeWorkMode(nextWorkMode: EmployeeWorkMode) {
+    const session = getSession();
+    if (!session || !employeeId) {
+      throw new Error(
+        locale === "ru" ? "Сессия не найдена." : "Session not found.",
+      );
+    }
+
+    const updatedEmployee = await apiRequest<EmployeeDetails>(
+      `/employees/${employeeId}/work-mode`,
+      {
+        method: "PATCH",
+        token: session.accessToken,
+        body: JSON.stringify({ workMode: nextWorkMode }),
+      },
+    );
+
+    setEmployee((current) =>
+      current
+        ? { ...current, workMode: updatedEmployee.workMode }
+        : updatedEmployee,
+    );
+
+    return updatedEmployee;
+  }
+
+  async function handleUpdateWorkMode(nextWorkMode: EmployeeWorkMode) {
+    if (
+      !employee ||
+      nextWorkMode === employeeWorkMode ||
+      workModeActionPending
+    ) {
+      return;
+    }
+
+    setWorkModeActionPending(true);
+
+    try {
+      await saveEmployeeWorkMode(nextWorkMode);
+      setNotice({
+        kind: "success",
+        text:
+          nextWorkMode === "FIELD"
+            ? locale === "ru"
+              ? "Сотрудник переведён в выездной режим."
+              : "Employee switched to field mode."
+            : locale === "ru"
+              ? "Сотрудник переведён в штатный режим."
+              : "Employee switched to stationary mode.",
+      });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "ru"
+              ? "Не удалось изменить режим сотрудника."
+              : "Failed to update employee mode.",
+      });
+    } finally {
+      setWorkModeActionPending(false);
+    }
+  }
+
+  async function handlePromoteToFieldManager() {
+    const session = getSession();
+    if (!session || !employeeId || !managerAccess) {
+      return;
+    }
+
+    const needsManagerAccess = !managerAccess.hasManagerAccess;
+    const nextWorkMode: EmployeeWorkMode = isFieldManager
+      ? "STATIONARY"
+      : "FIELD";
+    const needsWorkModeChange = employeeWorkMode !== nextWorkMode;
+
+    if (needsManagerAccess && !managerAccess.canToggleManagerAccess) {
+      setNotice({
+        kind: "error",
+        text:
+          locale === "ru"
+            ? "Нельзя выдать менеджерский доступ этому сотруднику."
+            : "Manager access cannot be granted to this employee.",
+      });
+      return;
+    }
+
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(
+        isFieldManager
+          ? locale === "ru"
+            ? "Сделать сотрудника штатным менеджером? Менеджерский доступ останется, отметки снова будут проверяться по офисной точке или смене."
+            : "Make this employee a stationary manager? Manager access stays, check-ins will be validated against the office or shift point again."
+          : locale === "ru"
+            ? "Назначить сотрудника выездным менеджером? Он получит доступ менеджера и сможет отмечаться вне офисной точки."
+            : "Assign this employee as a field manager? They will get manager access and can check in outside the office point.",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRoleActionPending(needsManagerAccess);
+    setWorkModeActionPending(needsWorkModeChange);
+
+    try {
+      if (needsManagerAccess) {
+        const nextAccess = await apiRequest<EmployeeManagerAccess>(
+          `/employees/${employeeId}/manager-access`,
+          {
+            method: "PATCH",
+            token: session.accessToken,
+            body: JSON.stringify({ grantManagerAccess: true }),
+          },
+        );
+        setManagerAccess(nextAccess);
+      }
+
+      if (needsWorkModeChange) {
+        await saveEmployeeWorkMode(nextWorkMode);
+      }
+
+      setNotice({
+        kind: "success",
+        text:
+          nextWorkMode === "FIELD"
+            ? locale === "ru"
+              ? "Сотрудник назначен выездным менеджером."
+              : "Employee assigned as a field manager."
+            : locale === "ru"
+              ? "Сотрудник назначен штатным менеджером."
+              : "Employee assigned as a stationary manager.",
+      });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : nextWorkMode === "FIELD"
+              ? locale === "ru"
+                ? "Не удалось назначить выездного менеджера."
+                : "Failed to assign field manager."
+              : locale === "ru"
+                ? "Не удалось назначить штатного менеджера."
+                : "Failed to assign stationary manager.",
+      });
+    } finally {
+      setRoleActionPending(false);
+      setWorkModeActionPending(false);
+    }
+  }
+
   return (
     <AdminShell>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -537,13 +735,46 @@ export default function EmployeeCardPageClient({
                           ? "Сотрудник"
                           : "Employee"}
                   </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      employeeWorkMode === "FIELD"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {getEmployeeWorkModeLabel(employeeWorkMode, locale)}
+                  </span>
                 </div>
               ) : null}
             </div>
+            {canPromoteToFieldManager ? (
+              <button
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isFieldManager
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-[#546cf2] bg-[#546cf2] text-white hover:bg-[#455bd6]"
+                }`}
+                disabled={roleActionPending || workModeActionPending}
+                onClick={() => void handlePromoteToFieldManager()}
+                type="button"
+              >
+                {roleActionPending || workModeActionPending
+                  ? locale === "ru"
+                    ? "Сохраняем..."
+                    : "Saving..."
+                  : isFieldManager
+                    ? locale === "ru"
+                      ? "Сделать штатным менеджером"
+                      : "Make stationary manager"
+                    : locale === "ru"
+                      ? "Сделать выездным менеджером"
+                      : "Make field manager"}
+              </button>
+            ) : null}
             {canManageRoles && managerAccess?.canToggleManagerAccess ? (
               <button
                 className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={roleActionPending}
+                disabled={roleActionPending || workModeActionPending}
                 onClick={() => void handleToggleManagerAccess()}
                 type="button"
               >
@@ -1078,6 +1309,14 @@ export default function EmployeeCardPageClient({
                         {employee.primaryLocation.name}
                       </dd>
                     </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Режим" : "Mode"}
+                      </dt>
+                      <dd className="font-medium">
+                        {getEmployeeWorkModeLabel(employeeWorkMode, locale)}
+                      </dd>
+                    </div>
                     {managerAccess ? (
                       <div className="flex justify-between">
                         <dt className="text-muted-foreground">
@@ -1100,6 +1339,40 @@ export default function EmployeeCardPageClient({
                     ) : null}
                   </dl>
                 </div>
+                {canManageWorkMode ? (
+                  <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
+                    <h3 className="mb-3 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                      <MapPin className="size-4" />
+                      {locale === "ru" ? "Рабочий режим" : "Work mode"}
+                    </h3>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(["STATIONARY", "FIELD"] as const).map((mode) => {
+                        const selected = employeeWorkMode === mode;
+
+                        return (
+                          <button
+                            className={`rounded-2xl border p-4 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                              selected
+                                ? "border-[#546cf2] bg-[#eef3ff] text-foreground"
+                                : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                            }`}
+                            disabled={workModeActionPending || selected}
+                            key={mode}
+                            onClick={() => void handleUpdateWorkMode(mode)}
+                            type="button"
+                          >
+                            <span className="block font-semibold">
+                              {getEmployeeWorkModeLabel(mode, locale)}
+                            </span>
+                            <span className="mt-1 block leading-5">
+                              {getEmployeeWorkModeDescription(mode, locale)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
                   <h3 className="mb-3 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
                     <Monitor className="size-4" />

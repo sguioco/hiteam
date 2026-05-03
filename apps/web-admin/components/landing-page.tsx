@@ -806,7 +806,7 @@ function getLandingMockupSrc(
   return `/${mockupNumber}${locale}.webp`;
 }
 
-const GooglePlayButton = ({
+export const GooglePlayButton = ({
   size = "md",
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" | "xl" }) => {
@@ -940,7 +940,7 @@ const GooglePlayButton = ({
   );
 };
 
-const AppStoreButton = ({
+export const AppStoreButton = ({
   size = "md",
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { size?: "md" | "lg" | "xl" }) => {

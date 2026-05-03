@@ -20,10 +20,6 @@ import {
   loadTodayBootstrap,
 } from "./api";
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
-import {
-  normalizeDemoOwnerProfile,
-  resolveDemoOwnerTodayScreenData,
-} from "./demo-owner";
 import { readScreenCache, writeScreenCache } from "./screen-cache";
 import { formatDateKeyInTimeZone } from "./timezone";
 import { primeLiveTextMap } from "./use-live-text-map";
@@ -200,9 +196,7 @@ function collectAnnouncementTexts(items: AnnouncementItem[]) {
 }
 
 async function warmProfileScreenCache(profile?: WorkspaceProfile | null) {
-  const nextProfile = normalizeDemoOwnerProfile(
-    profile ?? (await loadMyProfile()),
-  ) as WorkspaceProfile;
+  const nextProfile = profile ?? (await loadMyProfile());
 
   await writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
   await prefetchImageSources([buildProfileAvatarSource(nextProfile)]);
@@ -214,9 +208,7 @@ export async function warmTodayScreenCache(
   profile?: WorkspaceProfile | null,
   language?: AppLanguage,
 ) {
-  const nextProfile = normalizeDemoOwnerProfile(
-    profile ?? (await loadMyProfile()),
-  ) as WorkspaceProfile;
+  const nextProfile = profile ?? (await loadMyProfile());
   const { previousDateKey, nextDateKey } = buildTodayDateRange(
     nextProfile.primaryLocation?.timezone,
   );
@@ -225,12 +217,12 @@ export async function warmTodayScreenCache(
     dateTo: nextDateKey,
   });
 
-  const payload: TodayScreenCacheValue = resolveDemoOwnerTodayScreenData({
+  const payload: TodayScreenCacheValue = {
     attendanceStatus: todayBootstrap.attendanceStatus,
     profile: todayBootstrap.profile ?? nextProfile,
     shifts: todayBootstrap.shifts,
     tasks: todayBootstrap.tasks,
-  });
+  };
 
   if (language) {
     await primeTaskTranslations(payload.tasks, language);

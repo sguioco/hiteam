@@ -36,6 +36,7 @@ type DemoEmployee = {
   phone: string | null;
   avatarUrl: string | null;
   breaksEnabled: boolean;
+  workMode: "STATIONARY" | "FIELD";
   status: string;
   user: {
     id: string;
@@ -556,6 +557,7 @@ function createInitialState(): DemoState {
                 gender,
               ),
         breaksEnabled: false,
+        workMode: index === 1 ? "FIELD" : "STATIONARY",
         status: index < 4 ? "ACTIVE" : "INACTIVE",
         user: {
           id: `user-${employee.id}`,
@@ -4923,6 +4925,27 @@ export async function demoApiRequest<T>(
       employee.breaksEnabled = Boolean(payload.breaksEnabled);
     });
     return next.employees.find((item) => item.id === employeeBreaksMatch[1]) as T;
+  }
+
+  const employeeWorkModeMatch = pathname.match(
+    /^\/employees\/([^/]+)\/work-mode$/,
+  );
+  if (employeeWorkModeMatch && method === "PATCH") {
+    const payload = parseBody<{ workMode?: "STATIONARY" | "FIELD" }>(
+      options?.body,
+    );
+    const next = updateState((state) => {
+      const employee = state.employees.find(
+        (item) => item.id === employeeWorkModeMatch[1],
+      );
+      if (!employee) {
+        throw new Error("Сотрудник не найден.");
+      }
+      employee.workMode = payload.workMode === "FIELD" ? "FIELD" : "STATIONARY";
+    });
+    return next.employees.find(
+      (item) => item.id === employeeWorkModeMatch[1],
+    ) as T;
   }
 
   if (pathname === "/employees/me/access-status" && method === "GET") {

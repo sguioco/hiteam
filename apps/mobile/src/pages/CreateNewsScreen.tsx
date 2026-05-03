@@ -32,7 +32,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppGradientBackground } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
-import { createManagerAnnouncement, loadEmployeesBootstrap } from '../../lib/api';
+import {
+  createManagerAnnouncement,
+  loadEmployeesBootstrap,
+} from '../../lib/api';
 import { clearScreenCache } from '../../lib/screen-cache';
 import { getNewsScreenCacheKey } from '../../lib/workspace-cache';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
@@ -386,29 +389,23 @@ export default function CreateNewsScreen() {
     let active = true;
 
     async function init() {
-      try {
-        const snapshot = await loadEmployeesBootstrap();
+      const employeesResult = await loadEmployeesBootstrap().catch(() => null);
 
-        if (!active) {
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        const mappedGroups = mapApiGroups(snapshot.groups);
-        setEmployees(snapshot.employeeRecords);
+      if (employeesResult) {
+        const mappedGroups = mapApiGroups(employeesResult.groups);
+        setEmployees(employeesResult.employeeRecords);
         setGroups(mappedGroups);
         setExpandedGroupIds(mappedGroups.map((group) => group.id));
-      } catch {
-        if (!active) {
-          return;
-        }
-
+      } else {
         setEmployees([]);
         setGroups([]);
-      } finally {
-        if (active) {
-          setParticipantsLoading(false);
-        }
       }
+
+      setParticipantsLoading(false);
     }
 
     void init();
@@ -1087,29 +1084,36 @@ export default function CreateNewsScreen() {
     setSubmitting(true);
 
     try {
+      const audience = !limitParticipants
+        ? 'ALL'
+        : selectedGroups.length > 0
+          ? 'GROUP'
+          : 'EMPLOYEE';
+      const groupIds = limitParticipants
+        ? selectedGroups.flatMap((group) => group.apiGroupIds)
+        : [];
+      const targetEmployeeIds =
+        limitParticipants && selectedEmployeeIds.length > 0
+          ? selectedEmployeeIds
+          : [];
+      const normalizedLinkUrl = normalizeAnnouncementLink(linkUrl);
+      const scheduledFor = scheduleEnabled ? scheduledAt.toISOString() : null;
+
       await createManagerAnnouncement({
-        audience: !limitParticipants
-          ? 'ALL'
-          : selectedGroups.length > 0
-            ? 'GROUP'
-            : 'EMPLOYEE',
+        audience,
         title: title.trim(),
         body: body.trim(),
-        ...(limitParticipants && selectedGroups.length > 0
-          ? { groupIds: selectedGroups.flatMap((group) => group.apiGroupIds) }
-          : {}),
-        ...(limitParticipants && selectedEmployeeIds.length > 0
-          ? { targetEmployeeIds: selectedEmployeeIds }
-          : {}),
+        ...(groupIds.length ? { groupIds } : {}),
+        ...(targetEmployeeIds.length ? { targetEmployeeIds } : {}),
         ...(imageDraft
           ? {
               imageAspectRatio: imageDraft.aspectRatio,
               imageDataUrl: imageDraft.dataUrl,
             }
           : {}),
-        ...(normalizeAnnouncementLink(linkUrl)
+        ...(normalizedLinkUrl
           ? {
-              linkUrl: normalizeAnnouncementLink(linkUrl) ?? undefined,
+              linkUrl: normalizedLinkUrl,
             }
           : {}),
         ...(attachments.length
@@ -1129,9 +1133,9 @@ export default function CreateNewsScreen() {
               },
             }
           : {}),
-        ...(scheduleEnabled
+        ...(scheduledFor
           ? {
-              scheduledFor: scheduledAt.toISOString(),
+              scheduledFor,
             }
           : {}),
       });

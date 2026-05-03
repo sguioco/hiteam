@@ -19,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TaskItem } from '@smart/types';
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { addMyTaskPhotoProof, deleteMyTaskPhotoProof } from '../../lib/api';
-import { DEMO_OWNER_DISPLAY_NAME, isDemoOwnerTaskId } from '../../lib/demo-owner';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
@@ -120,25 +119,6 @@ function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?:
       }),
       uri: proof.url ?? '',
     }));
-}
-
-function buildLocalDemoPhotoProof(uri: string) {
-  const timestamp = new Date().toISOString();
-
-  return {
-    id: `demo-proof:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
-    fileName: `demo-task-photo-${Date.now()}.jpg`,
-    storageKey: `demo/${Date.now()}.jpg`,
-    url: uri,
-    deletedAt: null,
-    supersededByProofId: null,
-    createdAt: timestamp,
-    uploadedByEmployee: {
-      id: 'demo-owner',
-      firstName: DEMO_OWNER_DISPLAY_NAME.firstName,
-      lastName: DEMO_OWNER_DISPLAY_NAME.lastName,
-    },
-  };
 }
 
 export default function TaskList({
@@ -346,49 +326,6 @@ export default function TaskList({
     }
 
     try {
-      if (isDemoOwnerTaskId(activeTask.id)) {
-        const nextProof = buildLocalDemoPhotoProof(asset.uri);
-        const updatedTask: TaskItem =
-          action === 'edit' && selectedPhotoId
-            ? {
-                ...activeTask,
-                photoProofs: activeTask.photoProofs.map((proof) =>
-                  proof.id === selectedPhotoId
-                    ? {
-                        ...proof,
-                        deletedAt: new Date().toISOString(),
-                        supersededByProofId: nextProof.id,
-                      }
-                    : proof,
-                ).concat(nextProof),
-              }
-            : {
-                ...activeTask,
-                photoProofs: activeTask.photoProofs.concat(nextProof),
-              };
-
-        setPendingPhotosByTaskId((current) => {
-          const nextTaskPhotos = (current[activeTask.id] ?? []).filter((photo) => photo.id !== pendingPhotoId);
-
-          if (nextTaskPhotos.length === 0) {
-            const { [activeTask.id]: _removed, ...rest } = current;
-            return rest;
-          }
-
-          return {
-            ...current,
-            [activeTask.id]: nextTaskPhotos,
-          };
-        });
-
-        onTaskUpdate?.(updatedTask);
-        const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
-        prewarmTaskPhotos(nextPhotos);
-        setSelectedPhotoId(nextProof.id);
-        hapticSuccess();
-        return;
-      }
-
       const base64 = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -524,27 +461,6 @@ export default function TaskList({
       setMediaBusy(true);
       const currentPhotos = taskPhotos[activeTask.id] ?? [];
       const currentIndex = currentPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
-
-      if (isDemoOwnerTaskId(activeTask.id)) {
-        const updatedTask: TaskItem = {
-          ...activeTask,
-          photoProofs: activeTask.photoProofs.map((proof) =>
-            proof.id === selectedPhoto.id
-              ? {
-                  ...proof,
-                  deletedAt: new Date().toISOString(),
-                }
-              : proof,
-          ),
-        };
-        onTaskUpdate?.(updatedTask);
-
-        const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
-        const nextSelected =
-          nextPhotos[currentIndex] ?? nextPhotos[currentIndex - 1] ?? nextPhotos[0] ?? null;
-        setSelectedPhotoId(nextSelected?.id ?? null);
-        return;
-      }
 
       const updatedTask = await deleteMyTaskPhotoProof(activeTask.id, selectedPhoto.id);
       onTaskUpdate?.(updatedTask);

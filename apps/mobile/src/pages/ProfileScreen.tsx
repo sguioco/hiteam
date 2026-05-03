@@ -19,11 +19,6 @@ import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib
 type ProfileScreenProps = {
   active?: boolean;
 };
-const DEMO_OWNER_EMAIL = "owner@demo.smart";
-const DEMO_OWNER_PROFILE_NAME = {
-  firstName: "Alex",
-  lastName: "Petrov",
-};
 
 const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
@@ -46,24 +41,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const [error, setError] = useState<string | null>(null);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
-  const normalizedProfile = useMemo(() => {
-    if (!profile || profile.user.email.toLowerCase() !== DEMO_OWNER_EMAIL) {
-      return profile;
-    }
-
-    if (
-      profile.firstName === DEMO_OWNER_PROFILE_NAME.firstName &&
-      profile.lastName === DEMO_OWNER_PROFILE_NAME.lastName
-    ) {
-      return profile;
-    }
-
-    return {
-      ...profile,
-      firstName: DEMO_OWNER_PROFILE_NAME.firstName,
-      lastName: DEMO_OWNER_PROFILE_NAME.lastName,
-    };
-  }, [profile]);
+  const normalizedProfile = profile;
 
   useEffect(() => {
     return subscribeScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(

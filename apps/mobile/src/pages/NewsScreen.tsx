@@ -302,14 +302,17 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     setError(null);
 
     try {
-      const newsBootstrap = await loadNewsBootstrap();
-      const nextItemsRaw = newsBootstrap.initialData.items;
-      const nextItems = normalizeAnnouncementItems(nextItemsRaw);
+      const newsResult = await loadNewsBootstrap();
+
+      const remoteItems = normalizeAnnouncementItems(
+        newsResult.initialData.items,
+      );
+
       await primeLiveTextMap(
-        nextItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
+        remoteItems.flatMap((item) => [item.title, item.body]).filter(Boolean),
         language,
       );
-      setItems(nextItems);
+      setItems(remoteItems);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('announcements.loadError'));
     } finally {

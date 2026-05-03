@@ -53,6 +53,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  PhoneCountryInput,
+  buildPhoneWithCountryCode,
+  getDefaultPhoneCountryCode,
+} from "@/components/phone-country-input";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -518,10 +523,11 @@ const Employees = ({
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteContactMethod, setInviteContactMethod] =
     useState<InviteContactMethod>("email");
-  const [inviteWorkMode, setInviteWorkMode] =
-    useState<EmployeeWorkMode>("STATIONARY");
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
+  const [invitePhoneCountryCode, setInvitePhoneCountryCode] = useState(
+    getDefaultPhoneCountryCode(locale),
+  );
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
@@ -1368,6 +1374,10 @@ const Employees = ({
       inviteContactMethod === "email"
         ? inviteEmail.trim().toLowerCase()
         : invitePhone.trim();
+    const invitePhoneValue =
+      inviteContactMethod === "phone"
+        ? buildPhoneWithCountryCode(invitePhoneCountryCode, contactValue)
+        : "";
 
     if (!contactValue) {
       setInviteError(
@@ -1388,14 +1398,14 @@ const Employees = ({
         token: session.accessToken,
         body: JSON.stringify(
           inviteContactMethod === "email"
-            ? { email: contactValue, workMode: inviteWorkMode }
-            : { phone: contactValue, workMode: inviteWorkMode },
+            ? { email: contactValue }
+            : { phone: invitePhoneValue },
         ),
       });
       setInviteDialogOpen(false);
       setInviteEmail("");
       setInvitePhone("");
-      setInviteWorkMode("STATIONARY");
+      setInvitePhoneCountryCode(getDefaultPhoneCountryCode(locale));
       openInvitation(invitation, "setup");
       await loadDirectory();
     } catch (requestError) {
@@ -2329,17 +2339,6 @@ const Employees = ({
               </button>
             </div>
             <Button
-              className="rounded-xl font-heading"
-              onClick={() => void copyMobileAppLink()}
-              type="button"
-              variant="outline"
-            >
-              <Copy className="h-4 w-4" />
-              {mobileLinkCopied
-                ? runtimeLocalize("Скопировано", "Copied", locale)
-                : runtimeLocalize("Ссылка на приложение", "Mobile app link", locale)}
-            </Button>
-            <Button
               className={`rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90 ${
                 viewMode === "employees" && shouldPulseAddEmployee
                   ? "employees-add-employee-pulse"
@@ -2367,6 +2366,17 @@ const Employees = ({
                   <UserPlus className="h-4 w-4" /> {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
                 </>
               )}
+            </Button>
+            <Button
+              className="rounded-xl font-heading"
+              onClick={() => void copyMobileAppLink()}
+              type="button"
+              variant="outline"
+            >
+              <Copy className="h-4 w-4" />
+              {mobileLinkCopied
+                ? runtimeLocalize("Скопировано", "Copied", locale)
+                : runtimeLocalize("Ссылка на приложение", "Mobile app link", locale)}
             </Button>
           </div>
         </div>
@@ -2613,9 +2623,6 @@ const Employees = ({
         open={inviteDialogOpen}
         onOpenChange={(open) => {
           setInviteDialogOpen(open);
-          if (!open) {
-            setInviteWorkMode("STATIONARY");
-          }
         }}
       >
         <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
@@ -2636,7 +2643,7 @@ const Employees = ({
               <button
                 className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
                   inviteContactMethod === "email"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-accent text-accent-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => {
@@ -2651,7 +2658,7 @@ const Employees = ({
               <button
                 className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
                   inviteContactMethod === "phone"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-accent text-accent-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => {
@@ -2670,44 +2677,34 @@ const Employees = ({
                   ? runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)
                   : runtimeLocalize("Телефон сотрудника", "Employee phone", locale)}
               </span>
-              <Input
-                onChange={(event) =>
-                  inviteContactMethod === "email"
-                    ? setInviteEmail(event.target.value)
-                    : setInvitePhone(event.target.value)
-                }
-                placeholder={inviteContactMethod === "email" ? "employee@company.ru" : "+7 900 000 00 00"}
-                type={inviteContactMethod === "email" ? "email" : "tel"}
-                value={inviteContactMethod === "email" ? inviteEmail : invitePhone}
-              />
+              {inviteContactMethod === "email" ? (
+                <Input
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  placeholder="employee@company.ru"
+                  type="email"
+                  value={inviteEmail}
+                />
+              ) : (
+                <PhoneCountryInput
+                  countryCode={invitePhoneCountryCode}
+                  countryCodeLabel={runtimeLocalize(
+                    "Телефонный код страны",
+                    "Country dial code",
+                    locale,
+                  )}
+                  id="invite-employee-phone"
+                  locale={locale}
+                  nationalNumber={invitePhone}
+                  onCountryCodeChange={setInvitePhoneCountryCode}
+                  onNationalNumberChange={setInvitePhone}
+                  phoneLabel={runtimeLocalize(
+                    "Телефон сотрудника",
+                    "Employee phone",
+                    locale,
+                  )}
+                />
+              )}
             </label>
-            <div className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Тип сотрудника", "Employee type", locale)}</span>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {employeeWorkModeOptions.map((option) => {
-                  const selected = inviteWorkMode === option.value;
-                  return (
-                    <button
-                      className={`rounded-2xl border p-3 text-left transition ${
-                        selected
-                          ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] text-[color:var(--foreground)]"
-                          : "border-border bg-secondary/20 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-                      }`}
-                      key={option.value}
-                      onClick={() => setInviteWorkMode(option.value)}
-                      type="button"
-                    >
-                      <span className="block font-semibold">
-                        {runtimeLocalize(option.labelRu, option.labelEn, locale)}
-                      </span>
-                      <span className="mt-1 block text-xs leading-5">
-                        {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
             {inviteError ? (
               <div className="error-box">{inviteError}</div>
             ) : null}

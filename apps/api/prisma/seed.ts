@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import {
+  AnnouncementAudience,
   ApprovalStatus,
   AttendanceEventType,
   AttendanceResult,
@@ -890,6 +891,147 @@ async function main(): Promise<void> {
       groupId: group.id,
       employeeId: item.employee.id,
     })),
+  });
+
+  const demoAnnouncementTitles = [
+    'Планёрка по открытию новой недели',
+    'Фотоотчёт по витрине до 18:00',
+    'Индивидуальный onboarding по CRM',
+    'Проверка кассовой зоны перед вечерней сменой',
+  ];
+  const demoAnnouncementNotificationTitles = demoAnnouncementTitles.map(
+    (title) => `Announcement: ${title}`,
+  );
+
+  await prisma.notification.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      type: NotificationType.OPERATIONS_ALERT,
+      title: { in: demoAnnouncementNotificationTitles },
+    },
+  });
+  await prisma.announcement.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      title: { in: demoAnnouncementTitles },
+    },
+  });
+
+  const allAnnouncement = await prisma.announcement.create({
+    data: {
+      tenantId: tenant.id,
+      authorEmployeeId: owner.employee.id,
+      audience: AnnouncementAudience.ALL,
+      title: 'Планёрка по открытию новой недели',
+      body: 'Сегодня в 09:30 короткий синк по загрузке мастеров, SLA по ответам и аномалиям attendance. Сводка и ссылки на материалы уже в рабочем чате.',
+      isPinned: true,
+      linkUrl: 'https://smart.demo/company-weekly-brief',
+      imageStorageKey:
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=1400',
+      imageAspectRatio: '16:9',
+      publishedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 8, 15),
+    },
+  });
+
+  const groupAnnouncement = await prisma.announcement.create({
+    data: {
+      tenantId: tenant.id,
+      authorEmployeeId: owner.employee.id,
+      audience: AnnouncementAudience.GROUP,
+      groupId: group.id,
+      title: 'Фотоотчёт по витрине до 18:00',
+      body: 'Команда утренней смены должна загрузить фото итоговой выкладки и отметить, что ценники обновлены.',
+      imageStorageKey:
+        'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&q=80&w=1400',
+      imageAspectRatio: '4:3',
+      attachmentsJson: JSON.stringify([
+        {
+          id: 'announcement-demo-2-attachment',
+          fileName: 'storefront-checklist.txt',
+          contentType: 'text/plain',
+          sizeBytes: 46,
+          storageKey:
+            'data:text/plain;base64,U3RvcmVmcm9udCBjaGVja2xpc3QgZm9yIGRlbW8gbmV3cy4=',
+        },
+      ]),
+      publishedAt: dateAtUtcOffsetDaysFromNow(
+        DEMO_SHIFT_UTC_OFFSET_HOURS,
+        -1,
+        17,
+        20,
+      ),
+      groupTargets: {
+        create: [{ groupId: group.id }],
+      },
+    },
+  });
+
+  await prisma.announcement.create({
+    data: {
+      tenantId: tenant.id,
+      authorEmployeeId: owner.employee.id,
+      audience: AnnouncementAudience.EMPLOYEE,
+      targetEmployeeId: julia.employee.id,
+      title: 'Индивидуальный onboarding по CRM',
+      body: 'Завтра в 11:00 для нового сотрудника запланирован персональный разбор карточек клиента, сценариев follow-up и быстрых ответов.',
+      linkUrl: 'https://meet.smart.demo/onboarding-crm',
+      scheduledFor: dateAtUtcOffsetDaysFromNow(
+        DEMO_SHIFT_UTC_OFFSET_HOURS,
+        1,
+        11,
+        0,
+      ),
+      employeeTargets: {
+        create: [{ employeeId: julia.employee.id }],
+      },
+    },
+  });
+
+  const locationAnnouncement = await prisma.announcement.create({
+    data: {
+      tenantId: tenant.id,
+      authorEmployeeId: owner.employee.id,
+      audience: AnnouncementAudience.LOCATION,
+      locationId: location.id,
+      title: 'Проверка кассовой зоны перед вечерней сменой',
+      body: 'До 17:30 нужно сверить терминал, печать чеков и подготовить резервную ленту. Если заметите проблему, сразу приложите фото и комментарий.',
+      attachmentLocationAddress: 'Sukhumvit Rd, Bangkok, Thailand',
+      attachmentLocationPlaceId: 'demo-place-id',
+      attachmentLocationLatitude: 13.7563,
+      attachmentLocationLongitude: 100.5018,
+      attachmentsJson: JSON.stringify([
+        {
+          id: 'announcement-demo-4-attachment',
+          fileName: 'cash-zone-checklist.txt',
+          contentType: 'text/plain',
+          sizeBytes: 43,
+          storageKey:
+            'data:text/plain;base64,Q2FzaCB6b25lIGNoZWNrbGlzdCBmb3IgZGVtbyBuZXdzLg==',
+        },
+      ]),
+      publishedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 12, 10),
+    },
+  });
+
+  await prisma.notification.createMany({
+    data: [
+      allAnnouncement,
+      groupAnnouncement,
+      locationAnnouncement,
+    ].flatMap((announcement) =>
+      [alex, julia, sergey, maria].map((item, index) => ({
+        tenantId: tenant.id,
+        userId: item.user.id,
+        type: NotificationType.OPERATIONS_ALERT,
+        title: `Announcement: ${announcement.title}`,
+        body: announcement.body,
+        actionUrl: '/employee/announcements',
+        isRead: index < 2,
+        readAt: index < 2 ? announcement.publishedAt : null,
+        metadataJson: JSON.stringify({ announcementId: announcement.id }),
+        createdAt: announcement.publishedAt ?? new Date(),
+      })),
+    ),
   });
 
   const demoTaskTitles = [

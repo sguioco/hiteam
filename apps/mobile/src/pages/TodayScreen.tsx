@@ -7,7 +7,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { normalizeBannerTheme, useBannerTheme } from '../../lib/banner-theme';
-import { isDemoOwnerProfile, isDemoOwnerTaskId, resolveDemoOwnerTodayScreenData } from '../../lib/demo-owner';
 import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 import { hapticSelection } from '../../lib/haptics';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
@@ -57,24 +56,14 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       ),
     [],
   );
-  const initialResolved = useMemo(
-    () =>
-      resolveDemoOwnerTodayScreenData({
-        attendanceStatus: initialSnapshot?.value.attendanceStatus ?? null,
-        profile: initialSnapshot?.value.profile ?? null,
-        shifts: initialSnapshot?.value.shifts ?? [],
-        tasks: initialSnapshot?.value.tasks ?? [],
-      }),
-    [initialSnapshot],
-  );
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResponse | null>(
-    initialResolved.attendanceStatus,
+    initialSnapshot?.value.attendanceStatus ?? null,
   );
   const [profile, setProfile] = useState<TodayScreenCacheValue['profile']>(
-    initialResolved.profile,
+    initialSnapshot?.value.profile ?? null,
   );
-  const [shifts, setShifts] = useState<ShiftItem[]>(initialResolved.shifts);
-  const [tasks, setTasks] = useState<TodayScreenCacheValue['tasks']>(initialResolved.tasks);
+  const [shifts, setShifts] = useState<ShiftItem[]>(initialSnapshot?.value.shifts ?? []);
+  const [tasks, setTasks] = useState<TodayScreenCacheValue['tasks']>(initialSnapshot?.value.tasks ?? []);
   const [attendanceLoading, setAttendanceLoading] = useState(!initialSnapshot);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -106,17 +95,11 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         dateFrom: previousDateKey,
         dateTo: nextDayDateKey,
       });
-      const resolvedData = resolveDemoOwnerTodayScreenData({
-        attendanceStatus: todayBootstrap.attendanceStatus,
-        profile: todayBootstrap.profile,
-        shifts: todayBootstrap.shifts,
-        tasks: todayBootstrap.tasks,
-      });
-      setAttendanceStatus(resolvedData.attendanceStatus);
-      setProfile(resolvedData.profile);
-      setShifts(resolvedData.shifts);
-      await primeTaskTranslations(resolvedData.tasks, language);
-      setTasks(resolvedData.tasks);
+      setAttendanceStatus(todayBootstrap.attendanceStatus);
+      setProfile(todayBootstrap.profile);
+      setShifts(todayBootstrap.shifts);
+      await primeTaskTranslations(todayBootstrap.tasks, language);
+      setTasks(todayBootstrap.tasks);
     } catch (error) {
       setAttendanceError(error instanceof Error ? error.message : t('today.loadError'));
     } finally {
@@ -132,12 +115,11 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
           return;
         }
 
-        const resolvedData = resolveDemoOwnerTodayScreenData(entry.value);
-        void primeTaskTranslations(resolvedData.tasks, language).catch(() => undefined);
-        setAttendanceStatus(resolvedData.attendanceStatus);
-        setProfile(resolvedData.profile);
-        setShifts(resolvedData.shifts);
-        setTasks(resolvedData.tasks);
+        void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
+        setAttendanceStatus(entry.value.attendanceStatus);
+        setProfile(entry.value.profile);
+        setShifts(entry.value.shifts);
+        setTasks(entry.value.tasks);
         setAttendanceLoading(false);
       },
     );
@@ -153,12 +135,11 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       );
 
       if (cached && !cancelled) {
-        const resolvedData = resolveDemoOwnerTodayScreenData(cached.value);
-        void primeTaskTranslations(resolvedData.tasks, language).catch(() => undefined);
-        setAttendanceStatus(resolvedData.attendanceStatus);
-        setProfile(resolvedData.profile);
-        setShifts(resolvedData.shifts);
-        setTasks(resolvedData.tasks);
+        void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
+        setAttendanceStatus(cached.value.attendanceStatus);
+        setProfile(cached.value.profile);
+        setShifts(cached.value.shifts);
+        setTasks(cached.value.tasks);
         setAttendanceLoading(false);
 
         if (!cached.isStale) {
@@ -181,18 +162,11 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       return;
     }
 
-    const resolvedData = resolveDemoOwnerTodayScreenData({
+    void writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
       attendanceStatus,
       profile,
       shifts,
       tasks,
-    });
-
-    void writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
-      attendanceStatus: resolvedData.attendanceStatus,
-      profile: resolvedData.profile,
-      shifts: resolvedData.shifts,
-      tasks: resolvedData.tasks,
     } satisfies TodayScreenCacheValue);
   }, [attendanceLoading, attendanceStatus, profile, shifts, tasks]);
 
@@ -348,11 +322,6 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         };
       }),
     );
-
-    if (isDemoOwnerProfile(profile) && isDemoOwnerTaskId(taskId)) {
-      setUpdatingTaskIds((current) => current.filter((id) => id !== taskId));
-      return;
-    }
 
     try {
       const updatedTask = await updateMyTaskStatus(taskId, nextStatus);

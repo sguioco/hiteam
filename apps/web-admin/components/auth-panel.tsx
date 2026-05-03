@@ -27,10 +27,12 @@ import {
   removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
-import { getDemoSessionForRole, resetDemoState } from '@/lib/demo-api';
 import {
+  DEMO_ADMIN_EMAIL,
+  DEMO_ADMIN_PASSWORD,
+  DEMO_EMPLOYEE_EMAIL,
+  DEMO_EMPLOYEE_PASSWORD,
   disableDemoMode,
-  enableDemoMode,
   getDemoRoleByCredentials,
   isDemoModeAvailable,
 } from '@/lib/demo-mode';
@@ -371,24 +373,25 @@ export function AuthPanel() {
 
     try {
       const demoRole = getDemoRoleByCredentials(identifier, password);
-      if (demoRole) {
-        enableDemoMode();
-        resetDemoState();
-        const session = getDemoSessionForRole(demoRole);
-        const nextRoute = resolvePostLoginRoute(session);
-        await persistSession(session);
-        navigationStarted = true;
-        window.location.replace(nextRoute);
-        return;
-      }
-
       const session = await apiRequest<AuthSession>('/auth/login', {
         method: 'POST',
         realBackend: true,
         body: JSON.stringify({
-          identifier,
-          password,
-          ...(companyLookupResult?.tenantSlug
+          identifier:
+            demoRole === 'admin'
+              ? DEMO_ADMIN_EMAIL
+              : demoRole === 'employee'
+                ? DEMO_EMPLOYEE_EMAIL
+                : identifier,
+          password:
+            demoRole === 'admin'
+              ? DEMO_ADMIN_PASSWORD
+              : demoRole === 'employee'
+                ? DEMO_EMPLOYEE_PASSWORD
+                : password,
+          ...(demoRole
+            ? { tenantSlug: 'demo' }
+            : companyLookupResult?.tenantSlug
             ? { tenantSlug: companyLookupResult.tenantSlug }
             : {}),
         }),
@@ -458,21 +461,28 @@ export function AuthPanel() {
     setForgotSubmitted(true);
   }
 
-  function handleDemoAccess(role: 'admin' | 'employee') {
+  async function handleDemoAccess(role: 'admin' | 'employee') {
     setLoginError('');
     setLoginLoading(true);
-    enableDemoMode();
-    resetDemoState();
-    const session = getDemoSessionForRole(role);
-    const nextRoute = resolvePostLoginRoute(session);
-    void persistSession(session)
-      .then(() => {
-        window.location.replace(nextRoute);
-      })
-      .catch((error) => {
-        setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
-        setLoginLoading(false);
+    try {
+      const session = await apiRequest<AuthSession>('/auth/login', {
+        method: 'POST',
+        realBackend: true,
+        body: JSON.stringify({
+          identifier: role === 'admin' ? DEMO_ADMIN_EMAIL : DEMO_EMPLOYEE_EMAIL,
+          password:
+            role === 'admin' ? DEMO_ADMIN_PASSWORD : DEMO_EMPLOYEE_PASSWORD,
+          tenantSlug: 'demo',
+        }),
       });
+      disableDemoMode();
+      const nextRoute = resolvePostLoginRoute(session);
+      await persistSession(session);
+      window.location.replace(nextRoute);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
+      setLoginLoading(false);
+    }
   }
 
   function handleTabChange(nextTab: string) {

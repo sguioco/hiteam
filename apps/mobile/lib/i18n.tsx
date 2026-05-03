@@ -861,7 +861,7 @@ const translations = {
     "manager.noCheckInYet": "Ещё не отметился",
     "manager.noCheckInHint": "Сегодня ещё не зафиксировал начало смены.",
     "manager.lateBy": "Опоздание на {minutes} мин",
-    "manager.lateByDuration": "Поздно на {duration}",
+    "manager.lateByDuration": "Позже на {duration}",
     "manager.checkedInAt": "Отметился в {time}",
     "manager.checkedOutAt": "Завершил смену в {time}",
     "manager.leftEarlyBy": "Ушёл раньше на {minutes} мин",

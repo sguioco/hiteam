@@ -13,7 +13,6 @@ import { Text } from "../../components/ui/text";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
-  AttendanceHistoryResponse,
   AttendanceLiveSession,
   ManagerEmployeeItem,
   TaskItem,
@@ -37,7 +36,7 @@ import {
   subscribeScreenCache,
   writeScreenCache,
 } from "../../lib/screen-cache";
-import { appendTaskMeta, parseTaskMeta } from "../../lib/task-meta";
+import { parseTaskMeta } from "../../lib/task-meta";
 import { formatDateKeyInTimeZone } from "../../lib/timezone";
 import {
   primeTaskTranslations,
@@ -59,33 +58,6 @@ type ManagerScreenCacheValue = {
   tasks: TaskItem[];
 };
 
-const MOCK_AVATARS = {
-  female: [
-    require("../../assets/avatars/1.jpg"),
-    require("../../assets/avatars/3.jpg"),
-  ],
-  male: [
-    require("../../assets/avatars/2.jpg"),
-    require("../../assets/avatars/4.jpg"),
-    require("../../assets/avatars/5.jpg"),
-  ],
-};
-
-const DEMO_REMOTE_AVATARS = {
-  ilya: "https://www.untitledui.com/images/avatars/ali-mahdi",
-  denis:
-    "https://www.untitledui.com/images/avatars/transparent/scott-clayton?bg=%23E0E0E0",
-} as const;
-const DEMO_TASK_PHOTO_ASSETS = [
-  require("../../assets/1st.webp"),
-  require("../../assets/2nd.webp"),
-  require("../../assets/3rd.webp"),
-] as const;
-const DEMO_OWNER_DISPLAY_NAME = {
-  firstName: "Alex",
-  lastName: "Petrov",
-};
-
 type ManagerScreenProps = {
   active?: boolean;
   standalone?: boolean;
@@ -96,109 +68,6 @@ type TaskPhoto = {
   capturedAt: string;
   uri: string;
 };
-
-const DEMO_OWNER_EMAIL = "owner@demo.smart";
-
-function isDemoOwnerEmail(email?: string | null) {
-  return email?.trim().toLowerCase() === DEMO_OWNER_EMAIL;
-}
-
-function normalizePersonName<T extends { firstName: string; lastName: string }>(
-  person: T,
-  firstName: string,
-  lastName: string,
-) {
-  return {
-    ...person,
-    firstName,
-    lastName,
-  };
-}
-
-function normalizeDemoOwnerProfile(
-  profile?: Awaited<ReturnType<typeof loadMyProfile>> | null,
-) {
-  if (!profile || !isDemoOwnerEmail(profile.user?.email)) {
-    return profile ?? null;
-  }
-
-  return normalizePersonName(
-    profile,
-    DEMO_OWNER_DISPLAY_NAME.firstName,
-    DEMO_OWNER_DISPLAY_NAME.lastName,
-  );
-}
-
-function normalizeDemoOwnerEmployee(
-  employee: ManagerEmployee,
-  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
-) {
-  if (
-    !ownerProfile ||
-    (employee.id !== ownerProfile.id && !isDemoOwnerEmail(employee.email))
-  ) {
-    return employee;
-  }
-
-  return normalizePersonName(
-    employee,
-    DEMO_OWNER_DISPLAY_NAME.firstName,
-    DEMO_OWNER_DISPLAY_NAME.lastName,
-  );
-}
-
-function normalizeDemoOwnerLiveSession(
-  session: AttendanceLiveSession,
-  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
-) {
-  if (!ownerProfile || session.employeeId !== ownerProfile.id) {
-    return session;
-  }
-
-  return {
-    ...session,
-    employeeName: buildEmployeeName(
-      DEMO_OWNER_DISPLAY_NAME.firstName,
-      DEMO_OWNER_DISPLAY_NAME.lastName,
-    ),
-  };
-}
-
-function normalizeDemoOwnerTask(
-  task: TaskItem,
-  ownerProfile: Awaited<ReturnType<typeof loadMyProfile>> | null,
-) {
-  if (!ownerProfile) {
-    return task;
-  }
-
-  const nextTask = { ...task };
-  let hasChanges = false;
-
-  if (nextTask.managerEmployee?.id === ownerProfile.id) {
-    nextTask.managerEmployee = {
-      ...nextTask.managerEmployee,
-      firstName: DEMO_OWNER_DISPLAY_NAME.firstName,
-      lastName: DEMO_OWNER_DISPLAY_NAME.lastName,
-    };
-    hasChanges = true;
-  }
-
-  if (nextTask.assigneeEmployee?.id === ownerProfile.id) {
-    nextTask.assigneeEmployee = {
-      ...nextTask.assigneeEmployee,
-      firstName: DEMO_OWNER_DISPLAY_NAME.firstName,
-      lastName: DEMO_OWNER_DISPLAY_NAME.lastName,
-    };
-    hasChanges = true;
-  }
-
-  if (!hasChanges) {
-    return task;
-  }
-
-  return nextTask;
-}
 
 function formatLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -219,20 +88,22 @@ function isManagerTaskMeeting(task: TaskItem) {
   return Boolean(parseTaskMeta(task.description).meeting);
 }
 
-function formatAttendanceOffset(minutes: number) {
+function formatAttendanceOffset(minutes: number, locale: string) {
   const totalMinutes = Math.max(0, Math.abs(minutes));
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
+  const hourUnit = locale.startsWith("ru") ? "ч" : "h";
+  const minuteUnit = locale.startsWith("ru") ? "м" : "m";
 
   if (hours > 0 && mins > 0) {
-    return `${hours}h ${mins}m`;
+    return `${hours}${hourUnit} ${mins}${minuteUnit}`;
   }
 
   if (hours > 0) {
-    return `${hours}h`;
+    return `${hours}${hourUnit}`;
   }
 
-  return `${mins}m`;
+  return `${mins}${minuteUnit}`;
 }
 
 type AttendanceDisplay = {
@@ -378,29 +249,6 @@ function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
     }));
 }
 
-function buildDemoTaskPhotoProof(
-  employee: ManagerEmployee,
-  index: number,
-  createdAt: string,
-) {
-  const asset = DEMO_TASK_PHOTO_ASSETS[index % DEMO_TASK_PHOTO_ASSETS.length];
-
-  return {
-    id: `demo-task-photo-proof-${employee.id}-${index + 1}`,
-    fileName: `demo-task-proof-${index + 1}.webp`,
-    storageKey: `demo/manager/tasks/${employee.id}/${index + 1}.webp`,
-    url: Image.resolveAssetSource(asset).uri,
-    deletedAt: null,
-    supersededByProofId: null,
-    createdAt,
-    uploadedByEmployee: {
-      id: employee.id,
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-    },
-  };
-}
-
 function buildEmployeeName(
   firstName?: string | null,
   lastName?: string | null,
@@ -474,360 +322,18 @@ function attendanceSortRank(session: AttendanceLiveSession | null) {
   return 2;
 }
 
-function isDemoOwnerProfile(
-  profile?: Awaited<ReturnType<typeof loadMyProfile>> | null,
-) {
-  const email = profile?.user?.email?.toLowerCase();
-  return email === DEMO_OWNER_EMAIL;
-}
-
-function isoAt(daysOffset: number, hour: number, minute: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
-}
-
-function buildDemoEmployees(): ManagerEmployee[] {
-  const source = [
-    ["Alexander", "Prokhorov", "Operations", "Store Lead", "Downtown", "male"],
-    ["Elena", "Morozova", "Operations", "Store Lead", "Downtown", "female"],
-    ["Alina", "Kuznetsova", "Support", "Customer Care", "Mall West", "female"],
-    [
-      "Maxim",
-      "Lebedev",
-      "Warehouse",
-      "Shift Coordinator",
-      "Warehouse A",
-      "male",
-    ],
-    ["Sofia", "Orlova", "Retail", "Senior Associate", "Mall West", "female"],
-    ["Ilya", "Petrov", "Logistics", "Dispatcher", "Warehouse A", "male"],
-    ["Denis", "Fedorov", "Support", "Team Lead", "Central Plaza", "male"],
-  ] as const;
-
-  let fIdx = 0;
-  let mIdx = 0;
-
-  return source.map(
-    (
-      [firstName, lastName, departmentName, positionName, locationName, gender],
-      index,
-    ) => {
-      const fullName = `${firstName} ${lastName}`;
-      const remoteAvatarUrl =
-        fullName === "Ilya Petrov"
-          ? DEMO_REMOTE_AVATARS.ilya
-          : fullName === "Denis Fedorov"
-            ? DEMO_REMOTE_AVATARS.denis
-            : null;
-      const avatar = remoteAvatarUrl
-        ? { uri: remoteAvatarUrl }
-        : gender === "female"
-          ? MOCK_AVATARS.female[fIdx++ % MOCK_AVATARS.female.length]
-          : MOCK_AVATARS.male[mIdx++ % MOCK_AVATARS.male.length];
-
-      return {
-        id: `demo-employee-${index + 1}`,
-        firstName,
-        lastName,
-        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@hiteam.demo`,
-        employeeNumber: `EMP-${String(410 + index).padStart(4, "0")}`,
-        department: {
-          id: `demo-department-${index + 1}`,
-          name: departmentName,
-        },
-        position: {
-          id: `demo-position-${index + 1}`,
-          name: positionName,
-        },
-        primaryLocation: {
-          id: `demo-location-${index + 1}`,
-          name: locationName,
-        },
-        avatar,
-      };
-    },
-  );
-}
-
-function buildDemoLiveSessions(
-  employees: ManagerEmployee[],
-): AttendanceLiveSession[] {
-  const variants = [
-    {
-      employeeIndex: 1,
-      lateMinutes: 87,
-      minuteOffset: 87,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-    {
-      employeeIndex: 2,
-      lateMinutes: 16,
-      minuteOffset: 16,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-    {
-      employeeIndex: 3,
-      lateMinutes: 0,
-      minuteOffset: 0,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-    {
-      employeeIndex: 4,
-      lateMinutes: -28,
-      minuteOffset: -28,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-    {
-      employeeIndex: 5,
-      lateMinutes: -72,
-      minuteOffset: -72,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-    {
-      employeeIndex: 6,
-      lateMinutes: -12,
-      minuteOffset: -12,
-      earlyLeaveMinutes: 0,
-      status: "on_shift" as const,
-    },
-  ] as const;
-
-  return variants
-    .map((variant) => {
-      const employee = employees[variant.employeeIndex];
-      if (!employee) {
-        return [];
-      }
-
-      const startedAt = isoAt(0, 9, variant.minuteOffset);
-
-      return [
-        {
-          sessionId: `demo-session-${employee.id}`,
-          employeeId: employee.id,
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          employeeNumber: employee.employeeNumber,
-          department: employee.department?.name ?? "Team",
-          location: employee.primaryLocation?.name ?? "Main location",
-          shiftLabel: "09:00 - 18:00",
-          status: variant.status,
-          startedAt,
-          endedAt: null,
-          totalMinutes: 0,
-          breakMinutes: 30,
-          paidBreakMinutes: 15,
-          lateMinutes: variant.lateMinutes,
-          earlyLeaveMinutes: variant.earlyLeaveMinutes,
-        },
-      ];
-    })
-    .flat();
-}
-
-function buildDemoTasks(employees: ManagerEmployee[]): TaskItem[] {
-  const managerEmployee = {
-    id: "demo-manager",
-    firstName: "Alex",
-    lastName: "Johnson",
-  };
-
-  return employees.flatMap((employee, index) => {
-    const baseTaskStatus =
-      index % 3 === 0 ? "DONE" : index % 2 === 0 ? "IN_PROGRESS" : "TODO";
-    const baseTaskRequiresPhoto = index % 2 === 0;
-    const baseTaskCompletedAt = index % 3 === 0 ? isoAt(0, 10, 20) : null;
-    const baseTaskPhotoProofs =
-      baseTaskRequiresPhoto && baseTaskStatus === "DONE"
-        ? [buildDemoTaskPhotoProof(employee, index, isoAt(0, 10, 18))]
-        : [];
-    const baseTask: TaskItem = {
-      id: `demo-task-${employee.id}-1`,
-      title: `Morning floor check ${index + 1}`,
-      description:
-        "Check the work zone, confirm supplies, and post a short status update for the shift.",
-      status: baseTaskStatus,
-      priority: index % 4 === 0 ? "HIGH" : "MEDIUM",
-      requiresPhoto: baseTaskRequiresPhoto,
-      isRecurring: false,
-      taskTemplateId: null,
-      occurrenceDate: null,
-      dueAt: isoAt(0, 11 + (index % 4), 0),
-      completedAt: baseTaskCompletedAt,
-      createdAt: isoAt(-1, 18, 0),
-      updatedAt: isoAt(0, 10 + (index % 3), 0),
-      groupId: null,
-      assigneeEmployeeId: employee.id,
-      managerEmployee,
-      assigneeEmployee: {
-        id: employee.id,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        employeeNumber: employee.employeeNumber,
-        department: employee.department,
-        primaryLocation: employee.primaryLocation,
-      },
-      group: null,
-      checklistItems: [],
-      activities: [],
-      photoProofs: baseTaskPhotoProofs,
-    };
-
-    const meetingTask: TaskItem = {
-      ...baseTask,
-      id: `demo-task-${employee.id}-2`,
-      title: `Service follow-up with ${employee.firstName}`,
-      description:
-        appendTaskMeta(
-          "Review today priorities, blockers, and update the manager once it is done.",
-          {
-            kind: "meeting",
-            meetingMode: index % 2 === 0 ? "offline" : "online",
-            meetingLocation: index % 2 === 0 ? "Meeting Room A" : undefined,
-            meetingLink:
-              index % 2 === 1
-                ? "https://meet.hiteam.demo/manager-sync"
-                : undefined,
-          },
-        ) ?? null,
-      status: index % 2 === 0 ? "TODO" : "DONE",
-      priority: "MEDIUM",
-      dueAt: isoAt(0, 15 + (index % 2), 30),
-      completedAt: index % 2 === 1 ? isoAt(0, 14, 45) : null,
-      createdAt: isoAt(-2, 15, 0),
-      updatedAt: isoAt(0, 12 + (index % 2), 15),
-    };
-
-    return [baseTask, meetingTask];
-  });
-}
-
-function buildDemoHistory(
-  employee: ManagerEmployee,
-): AttendanceHistoryResponse {
-  const rows = Array.from({ length: 14 }, (_, index) => {
-    const daysAgo = 13 - index;
-    const workedMinutes = 480 - ((index + 1) % 4) * 5;
-    const lateMinutes = index % 5 === 0 ? 10 : index % 4 === 0 ? 4 : 0;
-    const earlyLeaveMinutes = index % 6 === 0 ? 12 : 0;
-    const startedAt = isoAt(-daysAgo, 9, lateMinutes);
-    const endedAt = isoAt(-daysAgo, 18, -earlyLeaveMinutes);
-
-    return {
-      sessionId: `demo-history-${employee.id}-${index + 1}`,
-      employeeId: employee.id,
-      employeeName: `${employee.firstName} ${employee.lastName}`,
-      employeeNumber: employee.employeeNumber,
-      department: employee.department?.name ?? "Team",
-      location: employee.primaryLocation?.name ?? "Main location",
-      shiftLabel: "09:00 - 18:00",
-      status: "checked_out" as const,
-      startedAt,
-      endedAt,
-      totalMinutes: workedMinutes + 30,
-      workedMinutes,
-      breakMinutes: 30,
-      paidBreakMinutes: 15,
-      lateMinutes,
-      earlyLeaveMinutes,
-      checkInEvent: {
-        eventId: `demo-check-in-${employee.id}-${index + 1}`,
-        occurredAt: startedAt,
-        distanceMeters: 8,
-        notes: null,
-      },
-      checkOutEvent: {
-        eventId: `demo-check-out-${employee.id}-${index + 1}`,
-        occurredAt: endedAt,
-        distanceMeters: 10,
-        notes: null,
-      },
-      breaks: [],
-    };
-  });
-
-  return {
-    range: {
-      dateFrom: rows[0]?.startedAt ?? isoAt(-13, 9, 0),
-      dateTo: rows[rows.length - 1]?.endedAt ?? isoAt(0, 18, 0),
-    },
-    totals: {
-      sessions: rows.length,
-      workedMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0),
-      breakMinutes: rows.reduce((sum, row) => sum + row.breakMinutes, 0),
-      paidBreakMinutes: rows.reduce(
-        (sum, row) => sum + row.paidBreakMinutes,
-        0,
-      ),
-      lateMinutes: rows.reduce((sum, row) => sum + row.lateMinutes, 0),
-      earlyLeaveMinutes: rows.reduce(
-        (sum, row) => sum + row.earlyLeaveMinutes,
-        0,
-      ),
-    },
-    rows,
-  };
-}
-
-function buildDemoManagerData() {
-  const demoEmployees = buildDemoEmployees();
-  return {
-    employees: demoEmployees,
-    liveSessions: buildDemoLiveSessions(demoEmployees),
-    tasks: buildDemoTasks(demoEmployees),
-  };
-}
-
 function resolveManagerScreenData(
   profile: Awaited<ReturnType<typeof loadMyProfile>> | null | undefined,
   data: Partial<ManagerScreenCacheValue> | null | undefined,
-  preferRemoteData = false,
 ) {
   const fallbackProfile = data?.profile ?? null;
-  const resolvedProfile = normalizeDemoOwnerProfile(profile ?? fallbackProfile);
-  const isDemoOwner = isDemoOwnerProfile(resolvedProfile);
-
-  const normalizeTasks = (tasks: TaskItem[]) =>
-    tasks.map((task) => normalizeDemoOwnerTask(task, resolvedProfile));
-  const normalizeSessions = (liveSessions: AttendanceLiveSession[]) =>
-    liveSessions.map((session) =>
-      normalizeDemoOwnerLiveSession(session, resolvedProfile),
-    );
-  const normalizeEmployees = (employees: ManagerEmployee[]) =>
-    employees.map((employee) =>
-      normalizeDemoOwnerEmployee(employee, resolvedProfile),
-    );
-
-  if (isDemoOwner) {
-    const demoData = buildDemoManagerData();
-    return {
-      profile: resolvedProfile,
-      employees: normalizeEmployees(demoData.employees),
-      liveSessions: normalizeSessions(demoData.liveSessions),
-      tasks: normalizeTasks(demoData.tasks),
-    };
-  }
-
-  if (!preferRemoteData) {
-    return {
-      profile: resolvedProfile,
-      employees: normalizeEmployees(data?.employees ?? []),
-      liveSessions: normalizeSessions(data?.liveSessions ?? []),
-      tasks: normalizeTasks(data?.tasks ?? []),
-    };
-  }
+  const resolvedProfile = profile ?? fallbackProfile;
 
   return {
     profile: resolvedProfile,
-    employees: normalizeEmployees(data?.employees ?? []),
-    liveSessions: normalizeSessions(data?.liveSessions ?? []),
-    tasks: normalizeTasks(data?.tasks ?? []),
+    employees: data?.employees ?? [],
+    liveSessions: data?.liveSessions ?? [],
+    tasks: data?.tasks ?? [],
   };
 }
 
@@ -927,7 +433,6 @@ export default function ManagerScreen({
       const cachedResolved = resolveManagerScreenData(
         cached.value.profile,
         cached.value,
-        isDemoOwnerProfile(cached.value.profile),
       );
       void primeTaskTranslations(cachedResolved.tasks, language).catch(
         () => undefined,
@@ -1265,7 +770,7 @@ export default function ManagerScreen({
       return {
         timeLabel: checkInTime,
         statusLabel: t("manager.lateByDuration", {
-          duration: formatAttendanceOffset(session.lateMinutes),
+          duration: formatAttendanceOffset(session.lateMinutes, locale),
         }),
         statusStyle: "late",
       };
@@ -1275,7 +780,7 @@ export default function ManagerScreen({
       return {
         timeLabel: checkInTime,
         statusLabel: t("manager.earlierBy", {
-          duration: formatAttendanceOffset(session.lateMinutes),
+          duration: formatAttendanceOffset(session.lateMinutes, locale),
         }),
         statusStyle: "early",
       };

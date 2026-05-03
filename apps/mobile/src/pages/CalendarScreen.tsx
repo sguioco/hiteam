@@ -515,16 +515,22 @@ export default function CalendarScreen({
         setManagerShifts(cached.value.managerShifts ?? []);
         setShiftTemplates(cached.value.shiftTemplates ?? []);
         setLoading(false);
+      } else if (!initialSnapshot) {
+        setLoading(true);
+      }
+
+      if (cached && !cancelled) {
         const cachedHasRequiredManagerAssignmentData =
           !isManager ||
           ((cached.value.managerEmployees?.length ?? 0) > 0 &&
             (cached.value.shiftTemplates?.length ?? 0) > 0);
 
-        if (!cached.isStale && cachedHasRequiredManagerAssignmentData) {
+        if (
+          !cached.isStale &&
+          cachedHasRequiredManagerAssignmentData
+        ) {
           return;
         }
-      } else if (!initialSnapshot) {
-        setLoading(true);
       }
 
       setError(null);
@@ -552,11 +558,35 @@ export default function CalendarScreen({
             throw new Error(t("today.loadError"));
           }
 
-          nextTasks = scheduleData.taskBoard?.tasks ?? cached?.value.tasks ?? [];
+          const taskBoard = scheduleData.taskBoard ?? null;
+          let taskFallbackEmployees: ManagerEmployee[] = [];
+          let taskFallbackGroups: ManagerGroup[] = [];
+
+          if (taskBoard) {
+            nextTasks = taskBoard.tasks;
+          } else if (isManager) {
+            const taskSnapshot = await loadManagerTasksBootstrap(
+              rangeQuery,
+            ).catch(() => null);
+
+            if (taskSnapshot) {
+              nextTasks = taskSnapshot.tasks;
+              taskFallbackEmployees = taskSnapshot.employees;
+              taskFallbackGroups = taskSnapshot.groups ?? [];
+            } else {
+              nextTasks = cached?.value.tasks ?? [];
+            }
+          } else {
+            nextTasks = cached?.value.tasks ?? [];
+          }
 
           if (isManager) {
-            nextManagerEmployees = scheduleData.employees;
-            nextManagerGroups = scheduleData.groups ?? [];
+            nextManagerEmployees = scheduleData.employees.length
+              ? scheduleData.employees
+              : taskFallbackEmployees;
+            nextManagerGroups = scheduleData.groups?.length
+              ? scheduleData.groups
+              : taskFallbackGroups;
             nextManagerShifts = scheduleData.shifts;
             nextShiftTemplates = scheduleData.templates;
 

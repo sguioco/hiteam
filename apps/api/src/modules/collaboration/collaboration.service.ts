@@ -1156,7 +1156,7 @@ export class CollaborationService {
       fileName: attachment.fileName,
       contentType: attachment.contentType,
       sizeBytes: attachment.sizeBytes,
-      url: this.storageService.getObjectUrl(attachment.storageKey),
+      url: this.resolveAnnouncementAssetUrl(attachment.storageKey) ?? "",
     }));
 
     const attachmentLocation =
@@ -1178,7 +1178,7 @@ export class CollaborationService {
       groupIds:
         announcement.groupTargets?.map((target) => target.groupId) ?? [],
       imageUrl: announcement.imageStorageKey
-        ? this.storageService.getObjectUrl(announcement.imageStorageKey)
+        ? this.resolveAnnouncementAssetUrl(announcement.imageStorageKey)
         : null,
       targetEmployeeIds:
         announcement.employeeTargets?.map((target) => target.employeeId) ?? [],
@@ -3940,6 +3940,31 @@ export class CollaborationService {
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
 
+  private resolveAnnouncementAssetUrl(storageKey: string) {
+    if (this.isDataUrl(storageKey) || /^https?:\/\//i.test(storageKey)) {
+      return storageKey;
+    }
+
+    return this.storageService.getObjectUrl(storageKey);
+  }
+
+  private isDataUrl(value: string) {
+    return /^data:.+;base64,/i.test(value);
+  }
+
+  private parseDataUrlMetadata(dataUrl: string) {
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+
+    if (!match) {
+      throw new BadRequestException("Announcement asset is not a valid data URL.");
+    }
+
+    return {
+      contentType: match[1],
+      sizeBytes: Buffer.byteLength(match[2], "base64"),
+    };
+  }
+
   async addTaskComment(userId: string, taskId: string, body: string) {
     const dto: AddTaskCommentDto = { body };
     const employee = await this.prisma.employee.findUniqueOrThrow({
@@ -4766,6 +4791,18 @@ export class CollaborationService {
     dataUrl: string,
   ) {
     const extension = this.getDataUrlImageExtension(dataUrl);
+
+    if (!this.storageService.isConfigured()) {
+      const metadata = this.parseDataUrlMetadata(dataUrl);
+
+      return {
+        key: dataUrl,
+        contentType: metadata.contentType,
+        sizeBytes: metadata.sizeBytes,
+        url: dataUrl,
+      };
+    }
+
     const storageKey = `tenants/${tenantId}/announcements/${announcementId}/${Date.now()}-cover.${extension}`;
     return this.storageService.uploadDataUrl(storageKey, dataUrl);
   }
@@ -4789,6 +4826,19 @@ export class CollaborationService {
     const sanitizedFileName =
       fileName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120) ||
       `attachment-${index + 1}`;
+
+    if (!this.storageService.isConfigured()) {
+      const metadata = this.parseDataUrlMetadata(dataUrl);
+
+      return {
+        id: `${Date.now()}-${index}`,
+        fileName,
+        storageKey: dataUrl,
+        contentType: metadata.contentType,
+        sizeBytes: metadata.sizeBytes,
+      };
+    }
+
     const storageKey = `tenants/${tenantId}/announcements/${announcementId}/attachments/${Date.now()}-${index}-${sanitizedFileName}`;
     const uploaded = await this.storageService.uploadDataUrl(storageKey, dataUrl);
 

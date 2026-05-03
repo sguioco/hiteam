@@ -6,7 +6,12 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/screen';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import { createManagerTask, createManagerTaskTemplate, loadEmployeesBootstrap } from '../../lib/api';
+import {
+  createManagerTask,
+  createManagerTaskTemplate,
+  loadEmployeesBootstrap,
+  loadMyProfile,
+} from '../../lib/api';
 import { hapticSelection } from '../../lib/haptics';
 import {
   getDateLocale,
@@ -69,6 +74,39 @@ function formatFullGroupLabel(groupName: string) {
   return `All ${groupName}`;
 }
 
+type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
+
+function buildEmployeeOptionFromProfile(profile: WorkspaceProfile): EmployeeOption {
+  return {
+    id: profile.id,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    email: profile.user?.email ?? profile.email ?? '',
+    employeeNumber: profile.employeeNumber,
+    gender: profile.gender ?? null,
+    department: profile.department ?? null,
+    position: profile.position ?? null,
+    primaryLocation: profile.primaryLocation ?? null,
+    avatar: profile.avatar,
+    avatarUrl: profile.avatarUrl ?? null,
+    workMode: profile.workMode ?? 'STATIONARY',
+  };
+}
+
+function upsertSelfEmployee(
+  employees: EmployeeOption[],
+  profile: WorkspaceProfile | null,
+) {
+  if (!profile) {
+    return employees;
+  }
+
+  const selfEmployee = buildEmployeeOptionFromProfile(profile);
+  const withoutSelf = employees.filter((employee) => employee.id !== selfEmployee.id);
+
+  return [selfEmployee, ...withoutSelf];
+}
+
 type TaskOptionCheckboxProps = {
   checked: boolean;
   label: string;
@@ -128,9 +166,17 @@ export default function CreateTaskScreen() {
 
   useEffect(() => {
     async function init() {
-      const [bootstrapResult] = await Promise.allSettled([loadEmployeesBootstrap()]);
+      const [bootstrapResult, profileResult] = await Promise.allSettled([
+        loadEmployeesBootstrap(),
+        loadMyProfile(),
+      ]);
       const snapshot = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null;
-      const employeeList = snapshot?.employeeRecords ?? [];
+      const profile =
+        profileResult.status === 'fulfilled' ? profileResult.value : null;
+      const employeeList = upsertSelfEmployee(
+        snapshot?.employeeRecords ?? [],
+        profile,
+      );
       const resolvedGroups: GroupOption[] = snapshot ? mapApiGroups(snapshot.groups) : [];
       const fallbackGroups = buildDepartmentFallbackGroups(employeeList);
       const groupList = mergeGroupOptions(resolvedGroups, fallbackGroups);
