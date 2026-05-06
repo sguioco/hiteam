@@ -1774,8 +1774,8 @@ export default function CalendarScreen({
                     </PressableScale>
                   </View>
 
-                  <View className="flex-row gap-2">
-                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
+                  <View>
+                    <View className="rounded-2xl bg-[#f4f7fb] px-3 py-3">
                       <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
                         {t("calendar.managerProgress")}
                       </Text>
@@ -1784,17 +1784,6 @@ export default function CalendarScreen({
                         style={{ fontVariant: ["tabular-nums"] }}
                       >
                         {managerDaySummary.done}/{managerDaySummary.total}
-                      </Text>
-                    </View>
-                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
-                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                        {t("calendar.managerNeedsAttention")}
-                      </Text>
-                      <Text
-                        className="mt-1 font-display text-[22px] font-bold text-foreground"
-                        style={{ fontVariant: ["tabular-nums"] }}
-                      >
-                        {managerDaySummary.employeesWithOpenTasks}
                       </Text>
                     </View>
                   </View>
