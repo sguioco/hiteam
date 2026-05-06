@@ -75,7 +75,7 @@ function SystemTopBlur({
   dark?: boolean;
 }) {
   const height = Math.max(insetTop + 64, 96);
-  const overlayColors = dark
+  const overlayColors: readonly [string, string, string, string] = dark
     ? [
         "rgba(15,23,42,0.26)",
         "rgba(15,23,42,0.08)",

@@ -5043,6 +5043,10 @@ export class CollaborationService {
     managerEmployeeId: string,
     assigneeEmployeeId: string,
   ) {
+    const participantEmployeeIds = Array.from(
+      new Set([managerEmployeeId, assigneeEmployeeId]),
+    );
+
     const existing = await tx.chatThread.findFirst({
       where: {
         tenantId,
@@ -5055,7 +5059,7 @@ export class CollaborationService {
           {
             participants: {
               every: {
-                employeeId: { in: [managerEmployeeId, assigneeEmployeeId] },
+                employeeId: { in: participantEmployeeIds },
               },
             },
           },
@@ -5073,10 +5077,10 @@ export class CollaborationService {
         createdByEmployeeId: managerEmployeeId,
         kind: ChatThreadKind.DIRECT,
         participants: {
-          create: [
-            { tenantId, employeeId: managerEmployeeId },
-            { tenantId, employeeId: assigneeEmployeeId },
-          ],
+          create: participantEmployeeIds.map((employeeId) => ({
+            tenantId,
+            employeeId,
+          })),
         },
       },
     });

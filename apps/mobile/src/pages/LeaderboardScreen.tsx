@@ -151,7 +151,7 @@ export default function LeaderboardScreen({
   }, [leaderboardCacheKey, selectedMonthKey, t]);
 
   function formatMetricPoints(earnedPoints: number, maxPoints: number) {
-    return `+${earnedPoints} / +${maxPoints}`;
+    return `${earnedPoints} / ${maxPoints}`;
   }
 
   function copy(ru: string, en: string) {
@@ -649,12 +649,22 @@ export default function LeaderboardScreen({
                   className="h-12 w-px"
                   style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
                 />
-                <View className="w-[96px] items-center justify-center pl-3">
-                  <Text className="font-display font-bold text-white" style={{ fontVariant: ["tabular-nums"] }}>
-                    <Text className="text-[32px]">{todayPoints}</Text>
-                    <Text className="text-[20px]">/{dailyMaxPoints}</Text>
-                  </Text>
-                  <Text className="text-[10px] font-semibold text-white" numberOfLines={1}>
+                <View className="w-[96px] shrink-0 items-center justify-center pl-3">
+                  <View className="min-h-[38px] flex-row items-end justify-center">
+                    <Text
+                      className="font-display text-[34px] font-bold leading-[38px] text-white"
+                      style={{ fontVariant: ["tabular-nums"] }}
+                    >
+                      {todayPoints}
+                    </Text>
+                    <Text
+                      className="mb-1 font-display text-[18px] font-bold leading-[22px] text-white"
+                      style={{ fontVariant: ["tabular-nums"] }}
+                    >
+                      /{dailyMaxPoints}
+                    </Text>
+                  </View>
+                  <Text className="text-center text-[10px] font-semibold text-white" numberOfLines={1}>
                     {copy("готово сегодня", "done today")}
                   </Text>
                 </View>
@@ -712,11 +722,14 @@ export default function LeaderboardScreen({
                       {getMetricHint(metric)}
                     </Text>
                   </View>
-                  <View className={`rounded-full px-2.5 py-1 ${metric.completed ? "bg-[#dcfce7]" : "bg-[#f1f5f9]"}`}>
-                    <Text className={`text-[10px] font-bold ${metric.completed ? "text-[#12a15f]" : "text-[#64748b]"}`}>
-                      {formatMetricPoints(metric.earnedPoints, metric.maxPoints)}
-                    </Text>
-                  </View>
+                  <Text
+                    className={`min-w-[48px] text-right text-[10px] font-bold ${
+                      metric.completed ? "text-[#12a15f]" : "text-[#64748b]"
+                    }`}
+                    style={{ fontVariant: ["tabular-nums"] }}
+                  >
+                    {formatMetricPoints(metric.earnedPoints, metric.maxPoints)}
+                  </Text>
                   <Ionicons
                     color={metric.completed ? "#17b26a" : "#cbd5e1"}
                     name={metric.completed ? "checkmark-circle-outline" : "ellipse-outline"}

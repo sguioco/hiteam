@@ -403,7 +403,6 @@ export default function ManagerScreen({
       const resolvedData = resolveManagerScreenData(
         entry.value.profile,
         entry.value,
-        true,
       );
       void primeTaskTranslations(resolvedData.tasks, language).catch(
         () => undefined,
