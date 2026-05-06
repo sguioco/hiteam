@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Image, Pressable, ScrollView, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, View, type TextStyle } from "react-native";
 import Animated, {
   FadeInLeft,
   FadeInRight,
@@ -363,6 +363,32 @@ export default function LeaderboardScreen({
     isManager && Boolean(overview?.visibility?.canManage);
   const dailyMaxPoints = overview?.me.todayMaxPoints ?? overview?.summary.maxDailyPoints ?? 15;
   const todayPoints = overview?.me.todayPoints ?? 0;
+  const todayTotalValueStyle: TextStyle = {
+    color: "#ffffff",
+    fontFamily: "Manrope_700Bold",
+    fontSize: Platform.OS === "ios" ? 42 : 44,
+    fontVariant: ["tabular-nums"],
+    includeFontPadding: false,
+    lineHeight: Platform.OS === "ios" ? 44 : 48,
+    textAlign: "center",
+  };
+  const todayTotalMaxStyle: TextStyle = {
+    color: "#ffffff",
+    fontFamily: "Manrope_700Bold",
+    fontSize: Platform.OS === "ios" ? 25 : 27,
+    fontVariant: ["tabular-nums"],
+    includeFontPadding: false,
+    lineHeight: Platform.OS === "ios" ? 31 : 34,
+  };
+  const todayTotalLabelStyle: TextStyle = {
+    color: "#ffffff",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 10,
+    includeFontPadding: false,
+    letterSpacing: 0.35,
+    lineHeight: Platform.OS === "ios" ? 13 : 14,
+    textAlign: "center",
+  };
   const todayTotalCaption = copy(
     "Ты на шаг ближе\nк финишу",
     "You are one step\ncloser to the end",
@@ -661,22 +687,20 @@ export default function LeaderboardScreen({
                   className="h-12 w-px"
                   style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
                 />
-                <View className="w-[96px] shrink-0 items-center justify-center pl-3">
-                  <View className="min-h-[38px] flex-row items-end justify-center">
-                    <Text
-                      className="font-display text-[34px] font-bold leading-[38px] text-white"
-                      style={{ fontVariant: ["tabular-nums"] }}
-                    >
-                      {todayPoints}
-                    </Text>
-                    <Text
-                      className="mb-1 font-display text-[18px] font-bold leading-[22px] text-white"
-                      style={{ fontVariant: ["tabular-nums"] }}
-                    >
-                      /{dailyMaxPoints}
-                    </Text>
-                  </View>
-                  <Text className="text-center text-[10px] font-semibold text-white" numberOfLines={1}>
+                <View className="w-[104px] shrink-0 items-center justify-center pl-3">
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.84}
+                    numberOfLines={1}
+                    style={todayTotalValueStyle}
+                  >
+                    {todayPoints}
+                    <Text style={todayTotalMaxStyle}>/{dailyMaxPoints}</Text>
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={todayTotalLabelStyle}
+                  >
                     {copy("готово сегодня", "done today")}
                   </Text>
                 </View>

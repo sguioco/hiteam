@@ -1403,7 +1403,7 @@ const AuthScreen = () => {
                       >
                         {mode === 'join' ? (
                           <PressableScale
-                            className="mb-4 min-h-[34px] items-center justify-center"
+                            className="min-h-[34px] items-center justify-center"
                             haptic="selection"
                             onPress={() => {
                               Keyboard.dismiss();
@@ -1412,6 +1412,11 @@ const AuthScreen = () => {
                                 current === 'email' ? 'phone' : 'email',
                               );
                             }}
+                            style={
+                              keyboardVisible
+                                ? styles.joinMethodSwitchCompact
+                                : styles.joinMethodSwitch
+                            }
                           >
                             <Text style={joinLinkStyle}>
                               {joinMethod === 'email'
@@ -1603,6 +1608,18 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     marginBottom: 0,
     marginTop: 26,
+  },
+  joinMethodSwitch: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 48,
+  },
+  joinMethodSwitchCompact: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -8,
   },
   signInFooterWrapper: {
     paddingBottom: 0,
