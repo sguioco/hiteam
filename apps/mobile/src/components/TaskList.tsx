@@ -807,33 +807,19 @@ export default function TaskList({
                   </View>
                 </PressableScale>
               ) : activeTask.status === 'DONE' ? (
-                <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
-                  <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="selection"
-                    onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
-                  >
-                    <View className="flex-row items-center justify-center gap-2">
-                      <Ionicons color="#2563eb" name="create-outline" size={18} />
-                      <Text className="font-display text-[16px] font-semibold text-[#11233d]">
-                        {t('today.editPhotos')}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                  <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8deea] bg-white px-4 py-4"
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="selection"
-                    onPress={closeTaskModal}
-                  >
-                    <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
-                      {t('today.taskDone')}
+                <PressableScale
+                  className="min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
+                  disabled={mediaBusy}
+                  haptic="selection"
+                  onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
+                >
+                  <View className="flex-row items-center justify-center gap-2">
+                    <Ionicons color="#2563eb" name="create-outline" size={18} />
+                    <Text className="font-display text-[16px] font-semibold text-[#11233d]">
+                      {t('today.editPhotos')}
                     </Text>
-                  </PressableScale>
-                </View>
+                  </View>
+                </PressableScale>
               ) : (
                 <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
                   <PressableScale
