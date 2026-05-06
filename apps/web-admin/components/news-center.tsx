@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/application/date-picker/date-picker";
 import { ImageAdjustField } from "@/components/image-adjust-field";
@@ -2011,17 +2012,10 @@ export function NewsCenter({
 
       <div className="flex flex-col gap-4">
         {loading ? (
-          Array.from({ length: 3 }).map((_, index) => (
-            <div
-              className="animate-fade-in rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/90 px-6 py-6"
-              key={`news-skeleton-${index}`}
-            >
-              <div className="h-4 w-28 rounded-full bg-slate-100" />
-              <div className="mt-4 h-8 w-3/5 rounded-full bg-slate-100" />
-              <div className="mt-3 h-4 w-full rounded-full bg-slate-100" />
-              <div className="mt-2 h-4 w-4/5 rounded-full bg-slate-100" />
-            </div>
-          ))
+          <WorkspaceLoading
+            className="min-h-[260px] rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/90"
+            label={localize(locale, "Загружаем новости", "Loading news")}
+          />
         ) : orderedItems.length ? (
           <div className="overflow-hidden rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/94 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
             {orderedItems.map((item, index) => {

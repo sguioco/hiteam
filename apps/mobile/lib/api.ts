@@ -507,6 +507,7 @@ export async function loadPublicInvitation(token: string): Promise<{
 export async function lookupInvitationByEmail(email: string): Promise<{
   token: string;
   email: string;
+  phone?: string | null;
   status: string;
   registrationCompleted: boolean;
   companyName: string;
@@ -527,6 +528,36 @@ export async function lookupInvitationByEmail(email: string): Promise<{
   if (!response.ok) {
     throw new Error(
       await readErrorMessage(response, "Unable to verify employee email."),
+    );
+  }
+
+  return response.json();
+}
+
+export async function lookupInvitationByPhone(phone: string): Promise<{
+  token: string;
+  email: string | null;
+  phone: string;
+  status: string;
+  registrationCompleted: boolean;
+  companyName: string;
+  tenantName: string;
+  tenantSlug: string;
+}> {
+  const response = await fetchWithTimeout(
+    "/api/v1/employees/public/join/phone/lookup",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phone }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, "Unable to verify employee phone."),
     );
   }
 

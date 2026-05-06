@@ -5,6 +5,7 @@ import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, Users, Save } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
 import { ImageAdjustField } from "../../components/image-adjust-field";
+import { Swirling } from "../../components/ui/swirling";
 import {
   LocationAddressDetails,
   LocationMapPicker,
@@ -632,7 +633,7 @@ export default function OrganizationPageClient({
           >
             {isSaving ? (
               <span className="flex items-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground/20" />
+                <Swirling className="h-4 w-4" />
                 {locale === "ru" ? "Сохраняем организацию" : "Saving organization"}
               </span>
             ) : saveSuccess ? (

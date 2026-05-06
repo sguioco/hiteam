@@ -333,7 +333,7 @@ const translations = {
     "today.notCheckedIn": "Сначала отметьте приход через Say Hi.",
     "today.openSayHi": "Открыть Say Hi",
     "today.taskList": "ЗАДАЧИ",
-    "today.taskDone": "Выполнено",
+    "today.taskDone": "Готово",
     "today.taskTodo": "К выполнению",
     "today.taskNoTime": "Без фиксированного времени",
     "today.taskMeetingOnline": "Онлайн-встреча",
@@ -403,7 +403,7 @@ const translations = {
     "today.addPhotoBeforeDone":
       "Добавьте хотя бы одну фотографию перед завершением задачи",
     "today.addPhoto": "Добавить фото",
-    "today.editPhotos": "Изменить фото",
+    "today.editPhotos": "Изменить",
     "today.takePhotoNow": "Снять фото",
     "today.chooseFromLibrary": "Выбрать из галереи",
     "today.addOneMorePhoto": "Добавить ещё одно фото",
@@ -444,7 +444,9 @@ const translations = {
     "calendar.managerNeedsAttention": "Нужны действия",
     "calendar.managerNoEmployeesForFilter":
       "По этому фильтру сотрудников нет",
-    "calendar.tasksShort": "задачи",
+    "calendar.managerTaskSearchPlaceholder": "Поиск задач по названию",
+    "calendar.managerNoTasksForSearch": "Задач с таким названием нет",
+    "calendar.tasksShort": "задач",
     "calendar.applyFilter": "Показать",
     "calendar.assignShift": "Назначить",
     "calendar.assignShiftShort": "Смена",
@@ -1327,7 +1329,7 @@ const translations = {
     "today.addPhotoBeforeDone":
       "Add at least one photo before marking this task as completed.",
     "today.addPhoto": "Add photo",
-    "today.editPhotos": "Edit photos",
+    "today.editPhotos": "Edit",
     "today.takePhotoNow": "Take photo",
     "today.chooseFromLibrary": "Choose from library",
     "today.addOneMorePhoto": "Add one more photo",
@@ -1368,6 +1370,8 @@ const translations = {
     "calendar.managerNeedsAttention": "Needs action",
     "calendar.managerNoEmployeesForFilter":
       "No employees match this filter",
+    "calendar.managerTaskSearchPlaceholder": "Search tasks by title",
+    "calendar.managerNoTasksForSearch": "No tasks found with this title",
     "calendar.tasksShort": "tasks",
     "calendar.applyFilter": "Show",
     "calendar.assignShift": "Assign",

@@ -526,6 +526,22 @@ export class EmployeesService {
     };
   }
 
+  async lookupInvitationByPhone(rawPhone: string) {
+    const invitation = await this.findInvitationByJoinPhone(rawPhone);
+    const refreshed = await this.refreshInvitationJoinToken(invitation.id);
+
+    return {
+      token: refreshed.token,
+      email: refreshed.invitation.email,
+      phone: refreshed.invitation.phone ?? this.normalizePhone(rawPhone),
+      status: refreshed.invitation.status,
+      registrationCompleted: Boolean(refreshed.invitation.userId),
+      companyName: refreshed.invitation.company?.name ?? refreshed.invitation.tenant.name,
+      tenantName: refreshed.invitation.tenant.name,
+      tenantSlug: refreshed.invitation.tenant.slug,
+    };
+  }
+
   async createInvitation(tenantId: string, actorUserId: string, dto: CreateEmployeeInvitationDto) {
     const email = dto.email?.toLowerCase().trim() || null;
     const phone = this.normalizePhone(dto.phone);
@@ -1696,6 +1712,60 @@ export class EmployeesService {
 
     if (activeInvitations.length > 1) {
       throw new ConflictException('Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.');
+    }
+
+    return activeInvitations[0];
+  }
+
+  private async findInvitationByJoinPhone(rawPhone: string) {
+    const phone = this.normalizePhone(rawPhone);
+    if (!phone) {
+      throw new BadRequestException('Укажите телефон сотрудника.');
+    }
+
+    const invitations = await this.prisma.employeeInvitation.findMany({
+      where: { phone },
+      include: {
+        tenant: true,
+        company: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 5,
+    });
+
+    const activeInvitations: typeof invitations = [];
+    for (const invitation of invitations) {
+      if (invitation.status === EmployeeInvitationStatus.EXPIRED) {
+        continue;
+      }
+
+      if (
+        invitation.status === EmployeeInvitationStatus.INVITED &&
+        invitation.expiresAt.getTime() <= Date.now()
+      ) {
+        await this.markInvitationExpired(invitation.id).catch(() => undefined);
+        continue;
+      }
+
+      if (
+        invitation.status === EmployeeInvitationStatus.INVITED ||
+        invitation.status === EmployeeInvitationStatus.APPROVED ||
+        invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL
+      ) {
+        activeInvitations.push(invitation);
+      }
+    }
+
+    if (activeInvitations.length === 0) {
+      throw new NotFoundException('Этот телефон не найден в списке сотрудников. Попросите менеджера добавить его.');
+    }
+
+    if (activeInvitations.length > 1) {
+      throw new ConflictException('Этот телефон найден в нескольких организациях. Попросите менеджера отправить точную ссылку.');
     }
 
     return activeInvitations[0];

@@ -37,7 +37,9 @@ const readValidatedServerSession = cache(async (): Promise<AuthSession | null> =
   }
 
   try {
-    await serverApiRequestWithSession(session, "/auth/me");
+    await serverApiRequestWithSession(session, "/auth/me", {
+      signal: AbortSignal.timeout(1200),
+    });
     return session;
   } catch (error) {
     if (isUnauthorizedError(error)) {

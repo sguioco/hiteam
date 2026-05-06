@@ -3,12 +3,13 @@
 import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BriefcaseBusiness, Check, ChevronDown, Globe, Loader2, Mail, ZoomIn } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Globe, Mail, ZoomIn } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toAdminHref } from "@/lib/admin-routes";
 import { AuthSession, persistSession, saveTenantSlug } from "@/lib/auth";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
+import { Swirling } from "@/components/ui/swirling";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { Input } from "@/components/ui/input";
@@ -855,7 +856,7 @@ export default function ManagerJoinPageClient({
                     disabled={submitting}
                     className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                   >
-                    {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {submitting ? <Swirling className="mr-2 h-4 w-4" /> : null}
                     {submitting
                       ? locale === "ru"
                         ? "Создаём..."

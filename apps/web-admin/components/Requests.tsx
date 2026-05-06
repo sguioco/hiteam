@@ -14,7 +14,6 @@ import {
   Check,
   Clock3,
   FileText,
-  LoaderCircle,
   MessageSquare,
   Package,
   Paperclip,
@@ -24,6 +23,8 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Swirling } from "@/components/ui/swirling";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import {
   Dialog,
   DialogContent,
@@ -814,15 +815,13 @@ export default function Requests({
 
         <div className="space-y-3">
           {loading ? (
-            <div
+            <WorkspaceLoading
               className={cn(
-                "flex min-h-[220px] items-center justify-center rounded-[24px] text-sm text-[color:var(--muted-foreground)]",
+                "min-h-[220px] rounded-[24px]",
                 requestBlueSurfaceClass,
               )}
-            >
-              <LoaderCircle className="mr-2 size-4 animate-spin" />
-              {ui.loading}
-            </div>
+              label={ui.loading}
+            />
           ) : filteredItems.length > 0 ? (
             filteredItems.map((item, index) => {
               const typeMeta = requestTypeConfig[item.request.requestType];
@@ -948,7 +947,7 @@ export default function Requests({
                         variant="outline"
                       >
                         {quickRejectBusy ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <Swirling className="size-4" />
                         ) : (
                           <X className="size-4" />
                         )}
@@ -965,7 +964,7 @@ export default function Requests({
                         type="button"
                       >
                         {quickApproveBusy ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <Swirling className="size-4" />
                         ) : (
                           <Check className="size-4" />
                         )}
@@ -1366,7 +1365,7 @@ export default function Requests({
                         variant="secondary"
                       >
                         {commentLoadingId === selectedItem.request.id ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <Swirling className="size-4" />
                         ) : (
                           <MessageSquare className="size-4" />
                         )}
@@ -1403,7 +1402,7 @@ export default function Requests({
                       >
                         {decisionLoadingKey ===
                         `REJECTED:${selectedItem.request.id}` ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <Swirling className="size-4" />
                         ) : (
                           <X className="size-4" />
                         )}
@@ -1419,7 +1418,7 @@ export default function Requests({
                       >
                         {decisionLoadingKey ===
                         `APPROVED:${selectedItem.request.id}` ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <Swirling className="size-4" />
                         ) : (
                           <Check className="size-4" />
                         )}

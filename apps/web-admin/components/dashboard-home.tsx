@@ -39,6 +39,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Button } from "@/components/ui/button";
 import type { RadioItem } from "@/components/ui/Radio";
 import {
@@ -1031,6 +1032,9 @@ export default function DashboardHome({
         if (!cachedDashboard.isStale) {
           return;
         }
+
+        void loadData({ force: true, silent: true });
+        return;
       }
     }
 
@@ -1825,12 +1829,12 @@ export default function DashboardHome({
     >
       <main className="page-shell manager-page-shell">
         <section className="manager-home">
-          <div
-            aria-hidden={!isBootstrapping}
-            className={`dashboard-top-loader${
-              isBootstrapping ? " is-visible" : ""
-            }`}
-          />
+          {isBootstrapping ? (
+            <WorkspaceLoading
+              className="dashboard-workspace-loader"
+              label={localize(locale, "Загружаем", "Loading")}
+            />
+          ) : null}
           <Dialog
             onOpenChange={(open) => {
               setCreateTaskOpen(open);

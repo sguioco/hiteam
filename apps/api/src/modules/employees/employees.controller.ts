@@ -10,6 +10,7 @@ import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dt
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicEmailLookupDto } from './dto/public-email-lookup.dto';
+import { PublicPhoneLookupDto } from './dto/public-phone-lookup.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateEmployeeBreaksDto } from './dto/update-employee-breaks.dto';
@@ -63,6 +64,11 @@ export class EmployeesController {
   @Post('public/join/email/lookup')
   lookupInvitationByEmail(@Body() dto: PublicEmailLookupDto) {
     return this.employeesService.lookupInvitationByEmail(dto.email);
+  }
+
+  @Post('public/join/phone/lookup')
+  lookupInvitationByPhone(@Body() dto: PublicPhoneLookupDto) {
+    return this.employeesService.lookupInvitationByPhone(dto.phone);
   }
 
   @Post('invitations/public/:token/register')

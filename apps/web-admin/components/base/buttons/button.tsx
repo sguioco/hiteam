@@ -4,6 +4,7 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, DetailedHTMLProps, FC,
 import React, { isValidElement } from "react";
 import type { ButtonProps as AriaButtonProps, LinkProps as AriaLinkProps } from "react-aria-components";
 import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
+import { Swirling } from "@/components/ui/swirling";
 import { cx, sortCx } from "@/lib/utils/cx";
 import { isReactComponent } from "@/lib/utils/is-react-component";
 
@@ -231,26 +232,11 @@ export const Button = ({
             {isReactComponent(IconLeading) && <IconLeading data-icon="leading" className={styles.common.icon} />}
 
             {loading && (
-                <svg
-                    fill="none"
+                <Swirling
+                    aria-hidden="true"
                     data-icon="loading"
-                    viewBox="0 0 20 20"
                     className={cx(styles.common.icon, !showTextWhileLoading && "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2")}
-                >
-                    {/* Background circle */}
-                    <circle className="stroke-current opacity-30" cx="10" cy="10" r="8" fill="none" strokeWidth="2" />
-                    {/* Spinning circle */}
-                    <circle
-                        className="origin-center animate-spin stroke-current"
-                        cx="10"
-                        cy="10"
-                        r="8"
-                        fill="none"
-                        strokeWidth="2"
-                        strokeDasharray="12.5 50"
-                        strokeLinecap="round"
-                    />
-                </svg>
+                />
             )}
 
             {children && (

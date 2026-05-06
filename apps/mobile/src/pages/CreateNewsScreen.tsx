@@ -1561,7 +1561,7 @@ export default function CreateNewsScreen() {
             />
 
             {scheduleEnabled ? (
-              <View className="gap-2 rounded-[24px] border border-white/40 bg-white/70 px-3 py-3 shadow-sm shadow-[#1f2687]/10">
+              <View className="gap-2">
                 <View className="rounded-[18px] bg-[#f8fbff] px-4 py-3">
                   <Text className="text-[11px] font-bold uppercase tracking-[1px] text-muted-foreground">
                     {localizeText(language, 'Публикация', 'Publish at')}

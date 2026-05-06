@@ -61,17 +61,24 @@ const taskSkeletonWidths = ['72%', '58%', '66%'] as const;
 
 const PHOTO_REPORT_LAYOUT = {
   withoutPhotos: {
-    shellClassName: 'min-h-[420px] relative',
+    shellClassName: 'flex-1 relative',
+    contentClassName: 'pb-24',
     footerClassName: 'absolute inset-x-0 bottom-0 gap-3',
     addButtonClassName:
       'rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4',
   },
   withPhotos: {
-    shellClassName: 'relative',
-    footerClassName: 'mt-4 gap-6',
+    shellClassName: 'flex-1 relative',
+    contentClassName: 'pb-24',
+    footerClassName: 'absolute inset-x-0 bottom-0 gap-3',
     actionRowClassName: 'flex-row gap-3',
   },
 } as const;
+
+const PHOTO_REPORT_ACTION_BUTTON_CLASS =
+  'flex-1 h-16 min-h-[64px] items-center justify-center rounded-[24px] px-4 py-0';
+const PHOTO_REPORT_ACTION_TEXT_CLASS =
+  'font-display text-[16px] font-semibold leading-5';
 
 const PHOTO_REPORT_LIMIT = 7;
 const warmedPhotoUris = new Set<string>();
@@ -174,6 +181,12 @@ export default function TaskList({
   const photoReportSheetMaxHeight = Math.max(
     520,
     viewportHeight - insets.top - 18,
+  );
+  const photoReportSheetHeight = Math.min(
+    photoReportSheetMaxHeight,
+    activeTaskHasPhotos
+      ? Math.max(620, photoPreviewHeight + 320)
+      : 560,
   );
 
   useEffect(() => {
@@ -339,6 +352,8 @@ export default function TaskList({
         ...(action === 'edit' && selectedPhotoId ? { targetProofId: selectedPhotoId } : {}),
       });
 
+      onTaskUpdate?.(updatedTask);
+
       setPendingPhotosByTaskId((current) => {
         const nextTaskPhotos = (current[activeTask.id] ?? []).filter((photo) => photo.id !== pendingPhotoId);
 
@@ -352,8 +367,6 @@ export default function TaskList({
           [activeTask.id]: nextTaskPhotos,
         };
       });
-
-      onTaskUpdate?.(updatedTask);
 
       const nextPhotos = buildTaskPhotos(updatedTask, locale, t);
       const nextSelected = nextPhotos[nextPhotos.length - 1] ?? null;
@@ -650,6 +663,7 @@ export default function TaskList({
         onClose={closeTaskModal}
         sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
         sheetStyle={{
+          height: photoReportSheetHeight,
           maxHeight: photoReportSheetMaxHeight,
           paddingBottom: Math.max(insets.bottom + 20, 32),
         }}
@@ -657,7 +671,7 @@ export default function TaskList({
       >
         {activeTask ? (
           <View className={photoReportLayout.shellClassName}>
-            <View className={activeTaskHasPhotos ? '' : 'pb-24'}>
+            <View className={photoReportLayout.contentClassName}>
               <View className="mb-4 flex-row items-start justify-between gap-4">
                 <View className="w-10" />
                 <View className="flex-1 items-center">
@@ -809,7 +823,7 @@ export default function TaskList({
               ) : activeTask.status === 'DONE' ? (
                 <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
                   <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
+                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="selection"
@@ -817,19 +831,19 @@ export default function TaskList({
                   >
                     <View className="flex-row items-center justify-center gap-2">
                       <Ionicons color="#2563eb" name="create-outline" size={18} />
-                      <Text className="font-display text-[16px] font-semibold text-[#11233d]">
+                      <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
                         {t('today.editPhotos')}
                       </Text>
                     </View>
                   </PressableScale>
                   <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8deea] bg-white px-4 py-4"
+                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8deea] bg-white`}
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="selection"
                     onPress={closeTaskModal}
                   >
-                    <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
+                    <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
                       {t('today.taskDone')}
                     </Text>
                   </PressableScale>
@@ -837,7 +851,7 @@ export default function TaskList({
               ) : (
                 <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
                   <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] border border-[#d8e5ff] bg-[#eef5ff] px-4 py-4"
+                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="selection"
@@ -845,20 +859,20 @@ export default function TaskList({
                   >
                     <View className="flex-row items-center justify-center gap-2">
                       <Ionicons color="#2563eb" name="create-outline" size={18} />
-                      <Text className="font-display text-[16px] font-semibold text-[#11233d]">
+                      <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
                         {t('today.editPhotos')}
                       </Text>
                     </View>
                   </PressableScale>
 
                   <PressableScale
-                    className="flex-1 min-h-[56px] rounded-[24px] bg-primary px-4 py-4"
+                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} bg-primary`}
                     containerClassName="flex-1"
                     disabled={mediaBusy}
                     haptic="success"
                     onPress={() => void completePhotoTask(activeTask.id)}
                   >
-                    <Text className="text-center font-display text-[16px] font-semibold text-white">
+                    <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-white`}>
                       {t('today.taskDone')}
                     </Text>
                   </PressableScale>

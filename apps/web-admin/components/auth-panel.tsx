@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, Building2, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
+import { ArrowRight, Building2, Eye, EyeOff, Globe } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Swirling } from '@/components/ui/swirling';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -832,7 +833,7 @@ export function AuthPanel() {
                       type="submit"
                     >
                       {(tab === 'signin' && loginLoading) || (tab === 'join' && companyLookupLoading) ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Swirling className="mr-2 h-4 w-4" />
                       ) : null}
                       {sharedPrimaryActionLabel}
                     </Button>
@@ -909,7 +910,7 @@ export function AuthPanel() {
               </Button>
               {!forgotSubmitted ? (
                 <Button className="flex-1" disabled={forgotLoading} type="submit">
-                  {forgotLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {forgotLoading ? <Swirling className="mr-2 h-4 w-4" /> : null}
                   {forgotLoading ? t.forgotSending : t.forgotSend}
                 </Button>
               ) : null}

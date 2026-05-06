@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { preload } from "react-dom";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import {
   AppStoreButton,
@@ -23,6 +24,13 @@ export default async function MobileDownloadPage() {
   const requestHeaders = await headers();
   const locale = resolveLocale(requestHeaders.get("accept-language"));
   const isRu = locale === "ru";
+  const screenshotSrc = isRu ? "/mob_ru.webp" : "/mob_en.webp";
+
+  preload(screenshotSrc, {
+    as: "image",
+    fetchPriority: "high",
+    type: "image/webp",
+  });
 
   return (
     <main className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.18),transparent_25%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.14),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.18),transparent_32%),linear-gradient(180deg,#ecf4ff_0%,#dfeaff_100%)] px-5 py-5 text-[#182131] sm:px-8 lg:px-10">
@@ -68,10 +76,10 @@ export default async function MobileDownloadPage() {
                   <img
                     alt={isRu ? "Скриншот приложения" : "App screenshot"}
                     className="h-full w-full object-cover object-top"
-                    decoding="async"
-                    fetchPriority="low"
-                    loading="lazy"
-                    src={isRu ? "/mob_ru.webp" : "/mob_en.webp"}
+                    decoding="sync"
+                    fetchPriority="high"
+                    loading="eager"
+                    src={screenshotSrc}
                   />
                 </div>
               </div>

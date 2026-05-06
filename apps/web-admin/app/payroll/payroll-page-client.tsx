@@ -23,6 +23,7 @@ import { AdminShell } from '@/components/admin-shell';
 import { Table } from '@/components/application/table/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { WorkspaceLoading } from '@/components/workspace-loading';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -507,7 +508,10 @@ export default function PayrollPageClient({
         )}
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-24 text-sm text-muted-foreground animate-pulse">{locale === 'ru' ? 'Загружаем...' : 'Loading...'}</div>
+          <WorkspaceLoading
+            className="min-h-[240px]"
+            label={locale === 'ru' ? 'Загружаем payroll' : 'Loading payroll'}
+          />
         ) : summary ? (
           <>
             {/* KPI stripe */}

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { SortDescriptor } from "react-aria-components";
 import { AdminShell } from "@/components/admin-shell";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
@@ -2093,44 +2094,42 @@ export function ManagerTasksPage({
         ) : null}
 
         {loading ? (
-          <section className="team-tasks-loading-panel" aria-live="polite">
-            <CalendarDays className="size-4" />
-            <span>
-              {localize(
-                locale,
-                "Собираем задачи команды...",
-                "Loading team tasks...",
-              )}
-            </span>
-          </section>
-            ) : (
+          <WorkspaceLoading
+            className="team-tasks-loading-panel"
+            label={localize(
+              locale,
+              "Собираем задачи команды",
+              "Loading team tasks",
+            )}
+          />
+        ) : (
           <section className="team-tasks-list">
-              <div className="relative mb-2 min-w-[280px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
-                  onChange={(event) => setEmployeeSearch(event.target.value)}
-                  placeholder={localize(
-                    locale,
-                    "Поиск сотрудника или задачи...",
-                    "Search employee or task...",
-                  )}
-                  value={employeeSearch}
-                />
-              </div>
-              {searchQuery && visibleTaskSearchMatches.length ? (
-                <div className="team-tasks-search-results" aria-live="polite">
-                  <div className="team-tasks-search-results-head">
-                    <strong>
-                      {localize(locale, "Найденные задачи", "Found tasks")}
-                    </strong>
-                    <span>
-                      {visibleTaskSearchMatches.length}
-                      {taskSearchMatches.length > visibleTaskSearchMatches.length
-                        ? ` ${localize(locale, "из", "of")} ${taskSearchMatches.length}`
-                        : ""}
-                    </span>
-                  </div>
+            <div className="relative mb-2 min-w-[280px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder={localize(
+                  locale,
+                  "Поиск сотрудника или задачи...",
+                  "Search employee or task...",
+                )}
+                value={employeeSearch}
+              />
+            </div>
+            {searchQuery && visibleTaskSearchMatches.length ? (
+              <div className="team-tasks-search-results" aria-live="polite">
+                <div className="team-tasks-search-results-head">
+                  <strong>
+                    {localize(locale, "Найденные задачи", "Found tasks")}
+                  </strong>
+                  <span>
+                    {visibleTaskSearchMatches.length}
+                    {taskSearchMatches.length > visibleTaskSearchMatches.length
+                      ? ` ${localize(locale, "из", "of")} ${taskSearchMatches.length}`
+                      : ""}
+                  </span>
+                </div>
                   <div className="team-tasks-search-result-list">
                     {visibleTaskSearchMatches.map((match) => (
                       <article

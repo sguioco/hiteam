@@ -7,12 +7,12 @@ import {
   BarChart3,
   Calendar,
   Clock,
-  LoaderCircle,
   TrendingDown,
   TrendingUp,
   Users,
 } from 'lucide-react';
 import { AdminShell } from '../../components/admin-shell';
+import { WorkspaceLoading } from '../../components/workspace-loading';
 import { apiRequest } from '../../lib/api';
 import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
@@ -289,10 +289,10 @@ export default function AnalyticsPageClient({
         ) : null}
 
         {loading ? (
-          <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted-foreground">
-            <LoaderCircle className="mr-2 size-4 animate-spin" />
-            {locale === 'ru' ? 'Загружаем аналитику...' : 'Loading analytics...'}
-          </div>
+          <WorkspaceLoading
+            className="min-h-[320px] rounded-2xl border border-border bg-card"
+            label={locale === 'ru' ? 'Загружаем аналитику' : 'Loading analytics'}
+          />
         ) : (
           <>
             <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -367,6 +367,18 @@ export default function LeaderboardScreen({
     "Ты на шаг ближе\nк финишу",
     "You are one step\ncloser to the end",
   );
+  const topCoverHeight = insets.top + (standalone ? 16 : 18);
+  const leaderboardTopCover = (
+    <View
+      pointerEvents="none"
+      className="absolute inset-x-0 top-0 bg-[#f7f9fd]"
+      style={{
+        elevation: 12,
+        height: topCoverHeight,
+        zIndex: 30,
+      }}
+    />
+  );
 
   const leaderboardHeader = (
     <View
@@ -506,7 +518,7 @@ export default function LeaderboardScreen({
               </Text>
               <Text className="mt-0.5 text-[11px] leading-4 text-[#8b95a7]">
                 {copy(
-                  "Сотрудники видят только места и свой результат.",
+                  "Сотрудники видят только места и свой результат",
                   "Employees see ranks and their own result only.",
                 )}
               </Text>
@@ -684,7 +696,7 @@ export default function LeaderboardScreen({
                 </Text>
                 <Text className="mt-1 text-[11px] leading-4 text-[#77839a]">
                   {copy(
-                    "Ты на пути к победе. Заверши ещё действия, чтобы дойти до дневного максимума.",
+                    "Ты на пути к победе. Заверши ещё действия, чтобы дойти до дневного максимума",
                     "You're on track to win. Complete more actions to reach today's maximum.",
                   )}
                 </Text>
@@ -783,7 +795,7 @@ export default function LeaderboardScreen({
   if (standalone) {
     return (
       <View className="flex-1 bg-[#f7f9fd]">
-        {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
+        {active ? <StatusBar backgroundColor="#f7f9fd" style="dark" translucent /> : null}
         <ScrollView
           className="flex-1 bg-transparent"
           contentContainerStyle={{
@@ -796,6 +808,7 @@ export default function LeaderboardScreen({
           {leaderboardHeader}
           {leaderboardBody}
         </ScrollView>
+        {leaderboardTopCover}
         <BottomNav active="leaderboard" onNavigate={handleStandaloneNavigate} showManage />
       </View>
     );
@@ -803,7 +816,7 @@ export default function LeaderboardScreen({
 
   return (
     <View className="flex-1 bg-[#f7f9fd]">
-      {active ? <StatusBar backgroundColor="transparent" style="dark" translucent /> : null}
+      {active ? <StatusBar backgroundColor="#f7f9fd" style="dark" translucent /> : null}
       <ScrollView
         className="flex-1 bg-transparent"
         contentContainerStyle={{
@@ -816,6 +829,7 @@ export default function LeaderboardScreen({
         {leaderboardHeader}
         {leaderboardBody}
       </ScrollView>
+      {leaderboardTopCover}
     </View>
   );
 }

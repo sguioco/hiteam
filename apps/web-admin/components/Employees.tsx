@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { ImageAdjustField } from "@/components/image-adjust-field";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Input } from "@/components/ui/input";
 import {
   AppSelectField,
@@ -2311,7 +2312,7 @@ const Employees = ({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -2504,9 +2505,14 @@ const Employees = ({
           ) : null}
 
           {directoryLoading ? (
-            <div className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">
-              {runtimeLocalize("Загружаю сотрудников...", "Loading employees...", locale)}
-            </div>
+            <WorkspaceLoading
+              className="rounded-2xl border border-border bg-secondary/20"
+              label={runtimeLocalize(
+                "Загружаю сотрудников",
+                "Loading employees",
+                locale,
+              )}
+            />
           ) : viewMode === "employees" ? (
             sortedEmployees.length > 0 ? (
               renderEmployeesTable(sortedEmployees, { cardClassName: "flex-1" })
@@ -3569,13 +3575,15 @@ const Employees = ({
               </div>
               <div className="space-y-5 p-6">
                 {detailsLoading ? (
-                  <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-6 text-center text-sm font-heading text-muted-foreground">
-                    {runtimeLocalize(
-                      "Загружаю карточку сотрудника...",
-                      "Loading employee card...",
+                  <WorkspaceLoading
+                    className="min-h-[120px] rounded-2xl border border-border bg-secondary/20"
+                    iconClassName="h-9 w-9"
+                    label={runtimeLocalize(
+                      "Загружаю карточку сотрудника",
+                      "Loading employee card",
                       locale,
                     )}
-                  </div>
+                  />
                 ) : null}
                 <div className="flex rounded-2xl border border-border bg-secondary/20 p-1">
                   <button
@@ -4606,23 +4614,18 @@ const Employees = ({
 
       {navigatingEmployeeId ? (
         <div
-          aria-live="polite"
-          className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(244,247,252,0.38)] backdrop-blur-[2px]"
-          role="status"
+          className="pointer-events-none absolute inset-0 z-[30] flex items-center justify-center bg-[rgba(244,247,252,0.38)] backdrop-blur-[2px]"
         >
           <div className="flex items-center gap-4 rounded-[24px] border border-border/80 bg-white/96 px-5 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
-            <div className="session-loader">
-              <span aria-hidden="true" className="session-loader-glow" />
-              <span
-                aria-hidden="true"
-                className="session-loader-ring session-loader-ring-primary"
-              />
-              <span
-                aria-hidden="true"
-                className="session-loader-ring session-loader-ring-secondary"
-              />
-              <span aria-hidden="true" className="session-loader-core" />
-            </div>
+            <WorkspaceLoading
+              className="min-h-0"
+              iconClassName="h-12 w-12"
+              label={runtimeLocalize(
+                "Открываю карточку сотрудника",
+                "Opening employee profile",
+                locale,
+              )}
+            />
             <div className="grid gap-1">
               <strong className="text-sm font-heading text-foreground">
                 {runtimeLocalize(

@@ -15,7 +15,8 @@ import {
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
 import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
-import { Eye, EyeOff, Globe, Hand, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Globe, Hand } from 'lucide-react';
+import { Swirling } from '@/components/ui/swirling';
 import { BrandWordmark } from './brand-wordmark';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -286,7 +287,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
               disabled={loading}
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
             >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading && <Swirling className="mr-2 h-4 w-4" />}
               {loading ? t.signingIn : t.signIn}
             </Button>
 

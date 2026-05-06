@@ -1,11 +1,12 @@
 "use client";
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
-import { ChevronDown, ChevronRight, ListTodo, LoaderCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, ListTodo } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardBootstrapResponse } from "@smart/types";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
 import { AdminShell } from "@/components/admin-shell";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import {
   ActivityTargetAvatars,
   type DashboardActivityItem,
@@ -413,10 +414,10 @@ export default function ActivityPageClient({
         <section className="dashboard-card activity-feed-card">
           <div className="activity-feed-shell scrollbar-hide">
             {loading ? (
-              <div className="activity-page-loading">
-                <LoaderCircle className="size-4 animate-spin" />
-                <span>{localize(locale, "Загружаем activity…", "Loading activity…")}</span>
-              </div>
+              <WorkspaceLoading
+                className="activity-page-loading"
+                label={localize(locale, "Загружаем activity", "Loading activity")}
+              />
             ) : groupedItems.length ? (
               <div className="activity-feed-groups">
                 {groupedItems.map((group) => (

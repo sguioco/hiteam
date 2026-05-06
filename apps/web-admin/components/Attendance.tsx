@@ -25,6 +25,7 @@ import { Table } from "@/components/application/table/table";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { AttendanceAuditMap } from "@/components/AttendanceAuditMap";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
@@ -909,13 +910,14 @@ export default function Attendance({
                 ) : null}
 
                 {isLoading ? (
-                  <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] px-5 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
-                    {runtimeLocalize(
-                      "Загружаю посещаемость...",
-                      "Loading attendance...",
+                  <WorkspaceLoading
+                    className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel-muted)]"
+                    label={runtimeLocalize(
+                      "Загружаю посещаемость",
+                      "Loading attendance",
                       locale,
                     )}
-                  </div>
+                  />
                 ) : null}
 
                 {!isLoading && !error ? (

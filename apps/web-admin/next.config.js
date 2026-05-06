@@ -59,6 +59,24 @@ module.exports = (phase) => {
             },
           ],
         },
+        {
+          source: "/mob_ru.webp",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
+        {
+          source: "/mob_en.webp",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+        },
       ];
     },
   };

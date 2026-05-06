@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { toAdminHref } from "@/lib/admin-routes";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
@@ -277,16 +278,10 @@ export function NewsArchive({
 
       <div className="grid gap-4">
         {loading ? (
-          Array.from({ length: 3 }).map((_, index) => (
-            <div
-              className="animate-fade-in rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/90 px-6 py-6"
-              key={`archive-skeleton-${index}`}
-            >
-              <div className="h-4 w-28 rounded-full bg-slate-100" />
-              <div className="mt-4 h-7 w-3/5 rounded-full bg-slate-100" />
-              <div className="mt-3 h-4 w-2/5 rounded-full bg-slate-100" />
-            </div>
-          ))
+          <WorkspaceLoading
+            className="min-h-[240px] rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/90"
+            label={localize(locale, "Загружаем архив", "Loading archive")}
+          />
         ) : groupedItems.length ? (
           <div className="overflow-hidden rounded-[28px] border border-[rgba(148,163,184,0.18)] bg-white/94 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
             {groupedItems.map((group, groupIndex) => (

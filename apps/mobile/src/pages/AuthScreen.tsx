@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   bootstrapDemoDevice,
   lookupInvitationByEmail,
+  lookupInvitationByPhone,
   signInWithEmail,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
@@ -32,6 +33,7 @@ import { BrandWordmark } from '../components/brand-wordmark';
 import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
+type JoinMethod = 'email' | 'phone';
 type JoinCompanyPayload = {
   companyName: string;
   tenantName: string;
@@ -132,7 +134,9 @@ const AuthScreen = () => {
     [language],
   );
   const [mode, setMode] = useState<AuthMode>('landing');
+  const [joinMethod, setJoinMethod] = useState<JoinMethod>('email');
   const [inviteCode, setInviteCode] = useState('');
+  const [joinPhone, setJoinPhone] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -221,23 +225,37 @@ const AuthScreen = () => {
     () =>
       language === 'ru'
         ? {
-            title: 'Вступить по email',
-            placeholder: 'you@company.com',
+            emailTitle: 'Вступить по email',
+            phoneTitle: 'Вступить по телефону',
+            emailPlaceholder: 'you@company.com',
+            phonePlaceholder: 'Номер телефона',
+            phoneSwitch: 'Вступить по телефону',
+            emailSwitch: 'Вступить по email',
             button: 'Продолжить',
-            checking: 'Проверяем email...',
+            checkingEmail: 'Проверяем email...',
+            checkingPhone: 'Проверяем телефон...',
             description: 'Введите рабочий email, который менеджер добавил в команду.',
             empty: 'Введите рабочий email.',
+            phoneEmpty: 'Введите телефон.',
             invalid: 'Введите корректный email.',
+            phoneInvalid: 'Введите корректный телефон.',
             existing: 'Аккаунт уже создан. Откройте вход и используйте свой пароль.',
           }
         : {
-            title: 'Join with email',
-            placeholder: 'you@company.com',
+            emailTitle: 'Join with email',
+            phoneTitle: 'Join with phone',
+            emailPlaceholder: 'you@company.com',
+            phonePlaceholder: 'Phone number',
+            phoneSwitch: 'Join with phone',
+            emailSwitch: 'Join with email',
             button: 'Continue',
-            checking: 'Checking email...',
+            checkingEmail: 'Checking email...',
+            checkingPhone: 'Checking phone...',
             description: 'Enter the work email your manager added to the team.',
             empty: 'Enter your work email.',
+            phoneEmpty: 'Enter your phone number.',
             invalid: 'Enter a valid work email.',
+            phoneInvalid: 'Enter a valid phone number.',
             existing: 'Your account is already created. Open sign-in and use your password.',
           },
     [language],
@@ -447,6 +465,10 @@ const AuthScreen = () => {
         setJoinProfileSubmitted(false);
       }
 
+      if (nextMode === 'join' && mode !== 'join') {
+        setJoinMethod('email');
+      }
+
       setMode(nextMode);
     });
   }
@@ -516,7 +538,9 @@ const AuthScreen = () => {
 
     startTransition(() => {
       setMode('landing');
+      setJoinMethod('email');
       setInviteCode('');
+      setJoinPhone('');
       setIdentifier('');
       setPassword('');
       setJoinCompany(null);
@@ -527,14 +551,31 @@ const AuthScreen = () => {
 
   async function handleJoinTeam() {
     const trimmedInviteCode = inviteCode.trim().toLowerCase();
+    const trimmedPhone = joinPhone.replace(/[^\d]/g, '').trim();
+    const countryDigits = joinProfileCountryCode.replace(/\D/g, '');
+    const fullPhone = trimmedPhone.startsWith(countryDigits)
+      ? `+${trimmedPhone}`
+      : `${joinProfileCountryCode}${trimmedPhone}`;
 
-    if (!trimmedInviteCode) {
+    if (joinMethod === 'phone') {
+      if (!trimmedPhone) {
+        hapticError();
+        setMessage(joinUi.phoneEmpty);
+        return;
+      }
+
+      if (trimmedPhone.length < 5) {
+        hapticError();
+        setMessage(joinUi.phoneInvalid);
+        return;
+      }
+    } else if (!trimmedInviteCode) {
       hapticError();
       setMessage(joinUi.empty);
       return;
     }
 
-    if (!trimmedInviteCode.includes('@')) {
+    if (joinMethod === 'email' && !trimmedInviteCode.includes('@')) {
       hapticError();
       setMessage(joinUi.invalid);
       return;
@@ -544,11 +585,14 @@ const AuthScreen = () => {
     setMessage(null);
 
     try {
-      const payload = await lookupInvitationByEmail(trimmedInviteCode);
+      const payload =
+        joinMethod === 'phone'
+          ? await lookupInvitationByPhone(fullPhone)
+          : await lookupInvitationByEmail(trimmedInviteCode);
 
       if (payload.registrationCompleted) {
         hapticSelection();
-        setIdentifier(payload.email);
+        setIdentifier(payload.email ?? payload.phone ?? '');
         setInteractionBlocked(true);
         startTransition(() => {
           setMode('signin');
@@ -696,6 +740,8 @@ const AuthScreen = () => {
       setJoinProfileCountryPickerVisible(false);
       setJoinProfileDatePickerVisible(false);
       setInviteCode('');
+      setJoinPhone('');
+      setJoinMethod('email');
       setMode('landing');
     });
   }
@@ -784,7 +830,7 @@ const AuthScreen = () => {
   function renderJoinTitle() {
     return (
       <Text style={styles.joinTitle}>
-        {joinUi.title}
+        {joinMethod === 'phone' ? joinUi.phoneTitle : joinUi.emailTitle}
       </Text>
     );
   }
@@ -1201,26 +1247,68 @@ const AuthScreen = () => {
                       ) : (
                         <View className="gap-3">
                           {mode === 'join' ? (
-                            <TextInput
-                              autoCapitalize="none"
-                              autoCorrect={false}
-                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-                              importantForAutofill="no"
-                              keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
-                              key="join-email-input"
-                              onChangeText={(nextValue) => {
-                                setInviteCode(nextValue);
-                                setMessage(null);
-                              }}
-                              placeholder={joinUi.placeholder}
-                              placeholderTextColor="#7f8da1"
-                              returnKeyType="go"
-                              selectionColor="#26334a"
-                              showSoftInputOnFocus
-                              style={centeredInputDirectionStyle}
-                              textAlign="center"
-                              value={inviteCode}
-                            />
+                            joinMethod === 'phone' ? (
+                              <View className="min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-2">
+                                <PressableScale
+                                  className="h-[46px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
+                                  haptic="selection"
+                                  onPress={() => {
+                                    Keyboard.dismiss();
+                                    setJoinProfileCountryPickerVisible(true);
+                                  }}
+                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
+                                >
+                                  <Text className="text-[15px] text-[#24314b]" style={joinProfileInputStyle}>
+                                    {joinProfileCountryCode}
+                                  </Text>
+                                </PressableScale>
+                                <TextInput
+                                  autoCapitalize="none"
+                                  autoCorrect={false}
+                                  className="min-h-[58px] flex-1 px-4 text-center text-[17px] text-[#0f2530]"
+                                  importantForAutofill="no"
+                                  keyboardType="phone-pad"
+                                  key="join-phone-input"
+                                  onChangeText={(nextValue) => {
+                                    setJoinPhone(nextValue.replace(/[^\d\s()-]/g, ''));
+                                    setMessage(null);
+                                  }}
+                                  placeholder={joinUi.phonePlaceholder}
+                                  placeholderTextColor="#7f8da1"
+                                  returnKeyType="go"
+                                  selectionColor="#26334a"
+                                  showSoftInputOnFocus
+                                  style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                                  textAlign="center"
+                                  value={joinPhone}
+                                />
+                                <View
+                                  pointerEvents="none"
+                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
+                                />
+                              </View>
+                            ) : (
+                              <TextInput
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                                importantForAutofill="no"
+                                keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                                key="join-email-input"
+                                onChangeText={(nextValue) => {
+                                  setInviteCode(nextValue);
+                                  setMessage(null);
+                                }}
+                                placeholder={joinUi.emailPlaceholder}
+                                placeholderTextColor="#7f8da1"
+                                returnKeyType="go"
+                                selectionColor="#26334a"
+                                showSoftInputOnFocus
+                                style={centeredInputDirectionStyle}
+                                textAlign="center"
+                                value={inviteCode}
+                              />
+                            )
                           ) : (
                             <>
                               <TextInput
@@ -1313,6 +1401,26 @@ const AuthScreen = () => {
                           marginBottom: keyboardVisible ? 0 : FORM_FOOTER_BOTTOM_OFFSET,
                         }}
                       >
+                        {mode === 'join' ? (
+                          <PressableScale
+                            className="mb-4 min-h-[34px] items-center justify-center"
+                            haptic="selection"
+                            onPress={() => {
+                              Keyboard.dismiss();
+                              setMessage(null);
+                              setJoinMethod((current) =>
+                                current === 'email' ? 'phone' : 'email',
+                              );
+                            }}
+                          >
+                            <Text style={joinLinkStyle}>
+                              {joinMethod === 'email'
+                                ? joinUi.phoneSwitch
+                                : joinUi.emailSwitch}
+                            </Text>
+                          </PressableScale>
+                        ) : null}
+
                         <PressableScale
                           className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${submitting ? 'opacity-70' : ''
                             }`}
@@ -1324,7 +1432,11 @@ const AuthScreen = () => {
                         >
                           {mode === 'join' ? (
                             <Text style={actionLabelStyle}>
-                              {submitting ? joinUi.checking : joinUi.button}
+                              {submitting
+                                ? joinMethod === 'phone'
+                                  ? joinUi.checkingPhone
+                                  : joinUi.checkingEmail
+                                : joinUi.button}
                             </Text>
                           ) : (
                             <View className="flex-row items-center justify-center gap-3">

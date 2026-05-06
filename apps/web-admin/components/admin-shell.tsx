@@ -43,7 +43,6 @@ import { Locale, useI18n } from "../lib/i18n";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
-import { SessionLoader } from "./session-loader";
 import {
   buildUserDisplayName,
   getDisplayInitials,
@@ -69,6 +68,7 @@ import {
 } from "../lib/navigation";
 import { primeWorkspaceExperience } from "../lib/workspace-warmup";
 import { CHUNK_PENDING_ROUTE_STORAGE_KEY } from "../lib/chunk-load-recovery";
+import { WorkspaceLoading } from "./workspace-loading";
 
 type NavItem = {
   href: string;
@@ -1255,7 +1255,30 @@ export function AdminShell({
   }
 
   if (!ready || !session) {
-    return <SessionLoader label={t("common.checkingSession")} />;
+    return (
+      <div className="admin-frame admin-frame-checking-session">
+        <aside className="sidebar sidebar-untitled sidebar-checking-session">
+          <div className="sidebar-brand sidebar-untitled-brand">
+            <div className="sidebar-untitled-brand-row">
+              <BrandWordmark className="text-[1.8rem]" />
+            </div>
+          </div>
+        </aside>
+
+        <section
+          className={`admin-content admin-content-session-check${
+            contentHasStudioBackground ? " has-studio-background" : ""
+          }`}
+        >
+          <div className="shell-stage session-check-stage">
+            <WorkspaceLoading
+              className="admin-session-check-status"
+              label={t("common.checkingSession")}
+            />
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -1726,26 +1749,11 @@ export function AdminShell({
 
           {children}
           {routeLoading ? (
-            <div
-              className="shell-route-loader"
-              aria-live="polite"
-              role="status"
-            >
-              <div className="session-loader">
-                <span aria-hidden="true" className="session-loader-glow" />
-                <span
-                  aria-hidden="true"
-                  className="session-loader-ring session-loader-ring-primary"
-                />
-                <span
-                  aria-hidden="true"
-                  className="session-loader-ring session-loader-ring-secondary"
-                />
-                <span aria-hidden="true" className="session-loader-core" />
-                <span className="sr-only">
-                  {locale === "ru" ? "Открываю страницу" : "Opening page"}
-                </span>
-              </div>
+            <div className="shell-route-loader">
+              <WorkspaceLoading
+                className="min-h-0"
+                label={locale === "ru" ? "Открываю страницу" : "Opening page"}
+              />
             </div>
           ) : null}
         </div>

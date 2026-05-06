@@ -8,6 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -315,10 +316,10 @@ export default function BillingPageClient({
         </nav>
 
         {loading ? (
-          <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
-            <div className="h-72 animate-pulse rounded-2xl bg-white shadow-[0_14px_38px_rgba(15,23,42,0.07)]" />
-            <div className="h-72 animate-pulse rounded-2xl bg-white shadow-[0_14px_38px_rgba(15,23,42,0.07)]" />
-          </div>
+          <WorkspaceLoading
+            className="min-h-[288px] rounded-2xl bg-white shadow-[0_14px_38px_rgba(15,23,42,0.07)]"
+            label={locale === "ru" ? "Загружаем биллинг" : "Loading billing"}
+          />
         ) : error ? (
           <div className="rounded-2xl bg-red-50 p-6 font-heading text-sm text-red-900 shadow-[0_14px_38px_rgba(220,38,38,0.08)]">
             {error}

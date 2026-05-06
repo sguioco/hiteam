@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Separator } from "@/components/ui/separator";
+import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
@@ -851,25 +852,22 @@ export function LeaderboardCenter({
 
         {tab === "table" ? (
           <div className="team-tasks-table-card h-[min(62vh,640px)]">
-          {loading ? (
-            <div className="flex h-full items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
-              {localize(
-                locale,
-                "Загружаем рейтинг...",
-                "Loading leaderboard...",
-              )}
-            </div>
-          ) : !overview || leaderboard.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
-              {localize(
-                locale,
-                "Пока нет данных для рейтинга.",
-                "No leaderboard data yet.",
-              )}
-            </div>
-          ) : (
-            <div className="team-tasks-table-shell">
-              <Table
+            {loading ? (
+              <WorkspaceLoading
+                className="h-full min-h-0"
+                label={localize(locale, "Загружаем рейтинг", "Loading leaderboard")}
+              />
+            ) : !overview || leaderboard.length === 0 ? (
+              <div className="flex h-full items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
+                {localize(
+                  locale,
+                  "Пока нет данных для рейтинга.",
+                  "No leaderboard data yet.",
+                )}
+              </div>
+            ) : (
+              <div className="team-tasks-table-shell">
+                <Table
                 aria-label={localize(
                   locale,
                   "Таблица рейтинга",
@@ -1008,29 +1006,26 @@ export function LeaderboardCenter({
                     );
                   }}
                 </Table.Body>
-              </Table>
-            </div>
-          )}
+                </Table>
+              </div>
+            )}
           </div>
         ) : (
           <article className="h-[min(72vh,800px)] overflow-hidden">
-          {loading ? (
-            <div className="flex h-full items-center justify-center rounded-2xl bg-white px-5 text-center text-sm font-heading text-muted-foreground">
-              {localize(
-                locale,
-                "Загружаем рейтинг...",
-                "Loading leaderboard...",
-              )}
-            </div>
-          ) : !overview ? (
-            <div className="flex h-full items-center justify-center rounded-2xl bg-white px-5 text-center text-sm font-heading text-muted-foreground">
-              {localize(
-                locale,
-                "Пока нет данных для рейтинга.",
-                "No leaderboard data yet.",
-              )}
-            </div>
-          ) : (
+            {loading ? (
+              <WorkspaceLoading
+                className="h-full min-h-0 rounded-2xl bg-white"
+                label={localize(locale, "Загружаем рейтинг", "Loading leaderboard")}
+              />
+            ) : !overview ? (
+              <div className="flex h-full items-center justify-center rounded-2xl bg-white px-5 text-center text-sm font-heading text-muted-foreground">
+                {localize(
+                  locale,
+                  "Пока нет данных для рейтинга.",
+                  "No leaderboard data yet.",
+                )}
+              </div>
+            ) : (
             <div className="h-full overflow-y-auto pr-1">
               <div className="grid gap-3">
                 <article className="rounded-2xl bg-blue-600 px-5 py-4 text-white shadow-[0_18px_42px_rgba(37,99,235,0.28)]">

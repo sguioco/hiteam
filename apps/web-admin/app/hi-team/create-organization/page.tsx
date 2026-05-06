@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, Globe, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { Copy, ExternalLink, Globe, Mail, ShieldCheck } from "lucide-react";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
+import { Swirling } from "@/components/ui/swirling";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -304,7 +305,7 @@ export default function InternalCreateOrganizationPage() {
                   disabled={loading}
                   className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                 >
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {loading ? <Swirling className="mr-2 h-4 w-4" /> : null}
                   {loading ? t.creating : t.createOrganization}
                 </Button>
               </form>

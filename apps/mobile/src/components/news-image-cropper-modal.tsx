@@ -70,34 +70,6 @@ function resolveAnnouncementAspectRatio(source: NewsImageSource | null): Announc
   return '16:9';
 }
 
-function CropGridOverlay() {
-  return (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-      }}
-    >
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          borderColor: 'rgba(255,255,255,0.92)',
-          borderRadius: 26,
-          borderWidth: 2,
-        }}
-      />
-    </View>
-  );
-}
-
 export function NewsImageCropperModal({
   visible,
   source,
@@ -222,7 +194,6 @@ export function NewsImageCropperModal({
                 cropSize={cropSize}
                 maxScale={8}
                 minScale={1}
-                OverlayComponent={CropGridOverlay}
                 resolution={{
                   height: source.height,
                   width: source.width,

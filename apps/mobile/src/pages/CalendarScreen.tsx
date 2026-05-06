@@ -4,7 +4,14 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { StatusBar } from "expo-status-bar";
-import { Image, Platform, ScrollView, View } from "react-native";
+import {
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Text } from "../../components/ui/text";
 import Animated, {
   FadeInLeft,
@@ -73,6 +80,13 @@ type CalendarDayItem = {
   kind: "task" | "meeting";
   note: string;
   status: "done" | "planned" | "cancelled" | "overdue";
+};
+
+type TaskPhoto = {
+  id: string;
+  label: string;
+  capturedAt: string;
+  uri: string;
 };
 
 type CalendarScreenProps = {
@@ -305,11 +319,36 @@ function formatAnnouncementDate(value: string, locale: string) {
   });
 }
 
+function buildTaskPhotos(task: TaskItem, locale: string): TaskPhoto[] {
+  const photoLabelPrefix = locale.startsWith("ru") ? "Фото" : "Photo";
+
+  return task.photoProofs
+    .filter(
+      (proof) => !proof.deletedAt && !proof.supersededByProofId && proof.url,
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() -
+        new Date(right.createdAt).getTime(),
+    )
+    .map((proof, index) => ({
+      id: proof.id,
+      label: `${photoLabelPrefix} ${index + 1}`,
+      capturedAt: new Date(proof.createdAt).toLocaleTimeString(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+      uri: proof.url ?? "",
+    }));
+}
+
 export default function CalendarScreen({
   active = true,
   overdueSheetSignal = 0,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const { language, t, tp } = useI18n();
   const { roleCodes } = useAuthFlowState();
   const directionalIconStyle = getDirectionalIconStyle(language);
@@ -403,6 +442,7 @@ export default function CalendarScreen({
   const [selectedManagerGroupIds, setSelectedManagerGroupIds] = useState<
     string[]
   >([]);
+  const [managerTaskSearch, setManagerTaskSearch] = useState("");
   const [expandedManagerEmployeeId, setExpandedManagerEmployeeId] = useState<
     string | null
   >(null);
@@ -428,6 +468,10 @@ export default function CalendarScreen({
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
     initialNewsSnapshot?.value ?? [],
   );
+  const [activePhotoTaskId, setActivePhotoTaskId] = useState<string | null>(
+    null,
+  );
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
     useTranslatedTaskCopy(tasks, language);
   const isCurrentMonth =
@@ -821,6 +865,41 @@ export default function CalendarScreen({
         return leftDueAt - rightDueAt;
       });
   }, [tasks, today]);
+  const activePhotoTask = useMemo(
+    () => tasks.find((task) => task.id === activePhotoTaskId) ?? null,
+    [activePhotoTaskId, tasks],
+  );
+  const activeTaskPhotos = useMemo(() => {
+    if (!activePhotoTask) {
+      return [];
+    }
+
+    return buildTaskPhotos(activePhotoTask, locale);
+  }, [activePhotoTask, locale]);
+  const selectedPhoto =
+    activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ??
+    activeTaskPhotos[0] ??
+    null;
+  const photoViewerPreviewHeight = Math.max(
+    190,
+    Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
+  );
+
+  useEffect(() => {
+    if (!activeTaskPhotos.length) {
+      setSelectedPhotoId(null);
+      return;
+    }
+
+    setSelectedPhotoId((current) => {
+      if (current && activeTaskPhotos.some((photo) => photo.id === current)) {
+        return current;
+      }
+
+      return activeTaskPhotos[0]?.id ?? null;
+    });
+  }, [activeTaskPhotos]);
+
   const latestAnnouncements = useMemo(() => {
     return [...announcements]
       .sort((left, right) => {
@@ -993,6 +1072,12 @@ export default function CalendarScreen({
     });
   }, [managerShifts, selectedDayKey]);
 
+  const managerTaskSearchQuery = useMemo(
+    () => managerTaskSearch.trim().toLocaleLowerCase(locale),
+    [locale, managerTaskSearch],
+  );
+  const isManagerTaskSearchActive = managerTaskSearchQuery.length > 0;
+
   const managerShiftByEmployeeId = useMemo(() => {
     return new Map(
       managerShiftsForSelectedDay.map((shift) => [shift.employeeId, shift]),
@@ -1005,12 +1090,28 @@ export default function CalendarScreen({
         const date = getTaskCalendarDate(task);
         return date && formatDateKey(date) === selectedDayKey;
       })
+      .filter((task) => {
+        if (!managerTaskSearchQuery) {
+          return true;
+        }
+
+        const title = getTaskTitle(task, {
+          normalize: true,
+          hideSourceBeforeReady: true,
+        });
+        const searchSource = [title, task.title]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase(locale);
+
+        return searchSource.includes(managerTaskSearchQuery);
+      })
       .sort((left, right) => {
         const leftDate = getTaskCalendarDate(left)?.getTime() ?? 0;
         const rightDate = getTaskCalendarDate(right)?.getTime() ?? 0;
         return leftDate - rightDate;
       });
-  }, [selectedDayKey, tasks]);
+  }, [getTaskTitle, locale, managerTaskSearchQuery, selectedDayKey, tasks]);
 
   const managerEmployeeRows = useMemo(() => {
     return visibleManagerEmployees
@@ -1031,10 +1132,14 @@ export default function CalendarScreen({
           doneTasks,
         };
       })
+      .filter(
+        (row) => !isManagerTaskSearchActive || row.assignedTasks.length > 0,
+      )
       .sort(
         (left, right) => right.plannedTasks.length - left.plannedTasks.length,
       );
   }, [
+    isManagerTaskSearchActive,
     managerShiftByEmployeeId,
     managerTasksForSelectedDay,
     visibleManagerEmployees,
@@ -1308,7 +1413,11 @@ export default function CalendarScreen({
     }
   }
 
-  function renderManagerTaskLeading(task: TaskItem) {
+  function renderManagerTaskLeading(task: TaskItem, photoCount = 0) {
+    if (photoCount > 0) {
+      return <Ionicons color="#6d73ff" name="images-outline" size={18} />;
+    }
+
     if (isTaskMeeting(task)) {
       return <Ionicons color="#6d73ff" name="videocam-outline" size={18} />;
     }
@@ -1343,6 +1452,16 @@ export default function CalendarScreen({
     setCurrentDate(new Date(dueAt.getFullYear(), dueAt.getMonth(), 1));
     setSelectedDay(dueAt.getDate());
     setOverdueSheetVisible(false);
+  }
+
+  function closePhotoViewer() {
+    setActivePhotoTaskId(null);
+    setSelectedPhotoId(null);
+  }
+
+  function openTaskPhotos(task: TaskItem) {
+    hapticSelection();
+    setActivePhotoTaskId(task.id);
   }
 
   function openRescheduleSheet(task: TaskItem) {
@@ -1741,6 +1860,28 @@ export default function CalendarScreen({
                   </View>
                 </PressableScale>
 
+                <View className="h-[52px] flex-row items-center gap-3 rounded-[22px] bg-white px-4 shadow-sm shadow-[#1f2687]/10">
+                  <Ionicons color="#8a96ab" name="search-outline" size={18} />
+                  <Input
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className="min-h-[0px] flex-1 border-0 bg-transparent px-0 py-0 text-[15px] text-foreground shadow-none"
+                    onChangeText={setManagerTaskSearch}
+                    placeholder={t("calendar.managerTaskSearchPlaceholder")}
+                    returnKeyType="search"
+                    value={managerTaskSearch}
+                  />
+                  {managerTaskSearch ? (
+                    <PressableScale
+                      className="h-8 w-8 items-center justify-center rounded-full bg-[#eef3ff]"
+                      haptic="selection"
+                      onPress={() => setManagerTaskSearch("")}
+                    >
+                      <Ionicons color="#6b7a90" name="close" size={16} />
+                    </PressableScale>
+                  ) : null}
+                </View>
+
                 <View className="gap-4 px-5">
                   <View className="flex-row items-start justify-between gap-4">
                     <View className="flex-1">
@@ -1799,6 +1940,7 @@ export default function CalendarScreen({
                   <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
                     {managerEmployeeRows.map((row, index) => {
                       const isExpanded =
+                        isManagerTaskSearchActive ||
                         expandedManagerEmployeeId === row.employee.id;
                       const showAvatar =
                         row.employee.avatar &&
@@ -1883,29 +2025,18 @@ export default function CalendarScreen({
                                 ) : null}
                               </View>
                             </View>
+                          </PressableScale>
 
-                            {isExpanded ? (
-                              <View className="mt-4 gap-3 border-t border-[#e4ebf5] pt-4">
+                          {isExpanded ? (
+                            <View className="gap-3 border-t border-[#e4ebf5] px-5 pb-5 pt-4">
                                 <View className="flex-row items-center justify-between gap-3">
                                   <Text className="font-body text-[14px] font-semibold text-[#42526b]">
                                     {t("manager.tasksToday")}
                                   </Text>
                                   {row.shift ? (
-                                    <Text className="font-body text-[12px] font-semibold text-[#0f766e]">
+                                    <Text className="font-body text-[12px] font-semibold text-[#315cf6]">
                                       {formatShiftRange(row.shift, locale)}
                                     </Text>
-                                  ) : canAssignShiftForSelectedDay ? (
-                                    <PressableScale
-                                      className="px-1 py-1"
-                                      haptic="selection"
-                                      onPress={() =>
-                                        openAssignShiftSheet(row.employee.id)
-                                      }
-                                    >
-                                      <Text className="font-body text-[12px] font-semibold text-[#315cf6]">
-                                        {t("calendar.assignShiftShort")}
-                                      </Text>
-                                    </PressableScale>
                                   ) : null}
                                 </View>
 
@@ -1913,6 +2044,12 @@ export default function CalendarScreen({
                                   <View className="gap-1">
                                     {row.assignedTasks.map((task) => {
                                       const isDone = task.status === "DONE";
+                                      const photoCount = buildTaskPhotos(
+                                        task,
+                                        locale,
+                                      ).length;
+                                      const canOpenPhotos =
+                                        isDone && photoCount > 0;
                                       const title = getTaskTitle(task, {
                                         normalize: true,
                                         hideSourceBeforeReady: true,
@@ -1924,14 +2061,13 @@ export default function CalendarScreen({
                                         getTaskBody(task, {
                                           hideSourceBeforeReady: true,
                                         });
-
-                                      return (
-                                        <View
-                                          className="flex-row items-start gap-3 px-1 py-2"
-                                          key={task.id}
-                                        >
+                                      const rowContent = (
+                                        <View className="flex-row items-start gap-3 px-1 py-2">
                                           <View className="w-6 items-center pt-0.5">
-                                            {renderManagerTaskLeading(task)}
+                                            {renderManagerTaskLeading(
+                                              task,
+                                              photoCount,
+                                            )}
                                           </View>
                                           <View className="flex-1">
                                             <Text
@@ -1954,6 +2090,18 @@ export default function CalendarScreen({
                                           </View>
                                         </View>
                                       );
+
+                                      return canOpenPhotos ? (
+                                        <PressableScale
+                                          haptic="selection"
+                                          key={task.id}
+                                          onPress={() => openTaskPhotos(task)}
+                                        >
+                                          {rowContent}
+                                        </PressableScale>
+                                      ) : (
+                                        <View key={task.id}>{rowContent}</View>
+                                      );
                                     })}
                                   </View>
                                 ) : (
@@ -1963,9 +2111,8 @@ export default function CalendarScreen({
                                     </Text>
                                   </View>
                                 )}
-                              </View>
-                            ) : null}
-                          </PressableScale>
+                            </View>
+                          ) : null}
 
                           {!isLast ? <View className="h-px bg-[#edf1f7]" /> : null}
                         </Animated.View>
@@ -1975,7 +2122,9 @@ export default function CalendarScreen({
                 ) : (
                   <View className="px-5 py-3">
                     <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
-                      {t("calendar.managerNoEmployeesForFilter")}
+                      {isManagerTaskSearchActive
+                        ? t("calendar.managerNoTasksForSearch")
+                        : t("calendar.managerNoEmployeesForFilter")}
                     </Text>
                   </View>
                 )}
@@ -2234,6 +2383,107 @@ export default function CalendarScreen({
           </View>
         </ScrollView>
       </View>
+
+      <BottomSheetModal
+        onClose={closePhotoViewer}
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        visible={activePhotoTask !== null}
+      >
+        {activePhotoTask ? (
+          <View className="relative">
+            <View>
+              <View className="mb-4 flex-row items-start justify-between gap-4">
+                <View className="w-10" />
+                <View className="flex-1 items-center">
+                  <Text className="text-center font-display text-[24px] font-bold text-foreground">
+                    {t("manager.photoViewerTitle")}
+                  </Text>
+                  <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
+                    {t("manager.photoViewerHint")}
+                  </Text>
+                </View>
+                <View className="w-10" />
+              </View>
+
+              <View className="mb-4 h-9">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className="flex-row gap-2">
+                    {activeTaskPhotos.map((photo, index) => {
+                      const isSelected = selectedPhoto?.id === photo.id;
+
+                      return (
+                        <PressableScale
+                          className={`h-9 w-9 items-center justify-center rounded-full border ${
+                            isSelected
+                              ? "border-primary bg-primary"
+                              : "border-[#d7def5] bg-white"
+                          }`}
+                          haptic="selection"
+                          key={photo.id}
+                          onPress={() => setSelectedPhotoId(photo.id)}
+                        >
+                          <Text
+                            className={`font-display text-sm font-bold ${
+                              isSelected ? "text-white" : "text-foreground"
+                            }`}
+                          >
+                            {index + 1}
+                          </Text>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {selectedPhoto ? (
+                <View
+                  className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
+                  style={{ height: photoViewerPreviewHeight }}
+                >
+                  <Image
+                    resizeMode="contain"
+                    source={{ uri: selectedPhoto.uri }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                  <View
+                    className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
+                    style={{ backgroundColor: "rgba(15, 23, 42, 0.38)" }}
+                  >
+                    <Text className="font-display text-[28px] font-bold text-white">
+                      {selectedPhoto.label}
+                    </Text>
+                    <Text className="mt-2 font-body text-sm text-white/90">
+                      {t("today.photoCapturedAt", {
+                        time: selectedPhoto.capturedAt,
+                      })}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View className="items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10">
+                  <Ionicons color="#6d73ff" name="images-outline" size={24} />
+                  <Text className="mt-4 text-center font-body text-sm leading-6 text-muted-foreground">
+                    {t("manager.noTaskPhotos")}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View className="mt-4">
+              <PressableScale
+                className="rounded-[24px] bg-primary px-4 py-4"
+                haptic="selection"
+                onPress={closePhotoViewer}
+              >
+                <Text className="text-center font-display text-[16px] font-semibold text-white">
+                  {t("common.done")}
+                </Text>
+              </PressableScale>
+            </View>
+          </View>
+        ) : null}
+      </BottomSheetModal>
 
       <BottomSheetModal
         onClose={() => setManagerFilterSheetVisible(false)}
