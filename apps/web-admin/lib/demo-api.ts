@@ -5710,6 +5710,9 @@ export async function demoApiRequest<T>(
           ? JSON.stringify(payload.weekDays)
           : null,
         gracePeriodMinutes: Number(payload.gracePeriodMinutes ?? 10),
+        fixedBreakStartsAtLocal: payload.fixedBreakStartsAtLocal ?? null,
+        fixedBreakDurationMinutes: Number(payload.fixedBreakDurationMinutes ?? 0),
+        fixedBreakIsPaid: Boolean(payload.fixedBreakIsPaid),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         location,
@@ -5741,14 +5744,28 @@ export async function demoApiRequest<T>(
         endsAt: new Date(
           `${payload.shiftDate}T${template.endsAtLocal}:00`,
         ).toISOString(),
-        status: "ASSIGNED",
+        fixedBreakStartsAt:
+          Number(payload.fixedBreakDurationMinutes ?? template.fixedBreakDurationMinutes ?? 0) > 0
+            ? new Date(
+                `${payload.shiftDate}T${payload.fixedBreakStartsAtLocal ?? template.fixedBreakStartsAtLocal ?? "13:00"}:00`,
+              ).toISOString()
+            : null,
+        fixedBreakDurationMinutes: Number(
+          payload.fixedBreakDurationMinutes ?? template.fixedBreakDurationMinutes ?? 0,
+        ),
+        fixedBreakIsPaid: Boolean(
+          payload.fixedBreakIsPaid ?? template.fixedBreakIsPaid,
+        ),
+        status: "PUBLISHED",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         employee: {
           id: employee.id,
           firstName: employee.firstName,
           lastName: employee.lastName,
+          employeeNumber: employee.employeeNumber,
         },
+        createdByEmployee: employee,
         location: template.location,
         position: template.position,
         template: {
@@ -5757,8 +5774,61 @@ export async function demoApiRequest<T>(
           code: template.code,
           startsAtLocal: template.startsAtLocal,
           endsAtLocal: template.endsAtLocal,
+          fixedBreakStartsAtLocal: template.fixedBreakStartsAtLocal ?? null,
+          fixedBreakDurationMinutes: template.fixedBreakDurationMinutes ?? 0,
+          fixedBreakIsPaid: Boolean(template.fixedBreakIsPaid),
         },
       });
+    });
+    return undefined as T;
+  }
+
+  const scheduleShiftMatch = pathname.match(/^\/schedule\/shifts\/([^/]+)$/);
+  if (scheduleShiftMatch && method === "PATCH") {
+    const payload = parseBody<any>(options?.body);
+    updateState((state) => {
+      const shift = state.shifts.find((item) => item.id === scheduleShiftMatch[1]);
+      if (!shift) return;
+      const template =
+        state.templates.find((item) => item.id === payload.templateId) ??
+        state.templates.find((item) => item.id === shift.template?.id) ??
+        state.templates[0];
+      const employee =
+        state.employees.find((item) => item.id === payload.employeeId) ??
+        state.employees.find((item) => item.id === shift.employee?.id) ??
+        state.employees[0];
+      const shiftDate = payload.shiftDate ?? shift.shiftDate;
+
+      shift.shiftDate = shiftDate;
+      shift.startsAt = new Date(`${shiftDate}T${template.startsAtLocal}:00`).toISOString();
+      shift.endsAt = new Date(`${shiftDate}T${template.endsAtLocal}:00`).toISOString();
+      shift.fixedBreakStartsAt =
+        Number(payload.fixedBreakDurationMinutes ?? shift.fixedBreakDurationMinutes ?? 0) > 0
+          ? new Date(
+              `${shiftDate}T${payload.fixedBreakStartsAtLocal ?? shift.fixedBreakStartsAtLocal ?? "13:00"}:00`,
+            ).toISOString()
+          : null;
+      shift.fixedBreakDurationMinutes = Number(
+        payload.fixedBreakDurationMinutes ?? shift.fixedBreakDurationMinutes ?? 0,
+      );
+      shift.fixedBreakIsPaid = Boolean(payload.fixedBreakIsPaid ?? shift.fixedBreakIsPaid);
+      shift.employee = employee;
+      shift.location = template.location;
+      shift.position = template.position;
+      shift.template = template;
+      shift.updatedAt = new Date().toISOString();
+    });
+    return undefined as T;
+  }
+
+  const scheduleShiftCancelMatch = pathname.match(/^\/schedule\/shifts\/([^/]+)\/cancel$/);
+  if (scheduleShiftCancelMatch && method === "POST") {
+    updateState((state) => {
+      const shift = state.shifts.find((item) => item.id === scheduleShiftCancelMatch[1]);
+      if (shift) {
+        shift.status = "CANCELLED";
+        shift.updatedAt = new Date().toISOString();
+      }
     });
     return undefined as T;
   }

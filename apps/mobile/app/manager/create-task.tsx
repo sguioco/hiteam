@@ -476,18 +476,44 @@ export default function CreateTaskScreen() {
             </ScrollView>
           </View>
 
-          <TaskOptionCheckbox checked={hasDueTime} label={t('manager.createTaskDeadlineToggle')} onPress={() => setHasDueTime((current) => !current)} />
-
-          {hasDueTime ? (
-            <PressableScale
-              className="rounded-[24px] border-2 border-border bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10"
-              haptic="selection"
-              onPress={() => setTimePickerOpen(true)}
-            >
-              <Text className="text-[13px] font-bold uppercase tracking-[1px] text-muted-foreground">{t('manager.createTaskDueTime')}</Text>
-              <Text className="mt-2 text-[24px] font-extrabold text-foreground">{formatTime(dueTime.hour, dueTime.minute)}</Text>
-            </PressableScale>
-          ) : null}
+          <View className="rounded-[24px] border border-white/30 bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10">
+            <View className="flex-row items-center gap-3">
+              <PressableScale
+                className={`h-6 w-6 items-center justify-center rounded-[7px] border ${
+                  hasDueTime ? 'border-primary bg-primary' : 'border-[#bcc8da] bg-white'
+                }`}
+                haptic="selection"
+                onPress={() => setHasDueTime((current) => !current)}
+              >
+                {hasDueTime ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
+              </PressableScale>
+              <PressableScale
+                className="flex-1"
+                haptic="selection"
+                onPress={() => setHasDueTime((current) => !current)}
+              >
+                <Text className="text-[14px] font-semibold text-foreground">{t('manager.createTaskDeadlineToggle')}</Text>
+                <Text className="mt-1 text-[12px] text-muted-foreground">
+                  {dateOptions.find((option) => option.key === selectedDateKey)?.title}
+                </Text>
+              </PressableScale>
+              <PressableScale
+                className={`min-h-11 min-w-[96px] flex-row items-center justify-center gap-2 rounded-full border px-4 ${
+                  hasDueTime ? 'border-primary/25 bg-primary/10' : 'border-[#d8e2f0] bg-[#f8fafc]'
+                }`}
+                haptic="selection"
+                onPress={() => {
+                  setHasDueTime(true);
+                  setTimePickerOpen(true);
+                }}
+              >
+                <Ionicons color={hasDueTime ? '#546cf2' : '#6b7a90'} name="time-outline" size={17} />
+                <Text className={`text-[14px] font-bold ${hasDueTime ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {hasDueTime ? formatTime(dueTime.hour, dueTime.minute) : language === 'ru' ? 'Время' : 'Time'}
+                </Text>
+              </PressableScale>
+            </View>
+          </View>
 
           <View className="flex-row items-start px-1">
             {PRIORITY_OPTIONS.map((option, index) => {

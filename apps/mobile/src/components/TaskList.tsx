@@ -23,6 +23,7 @@ import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from './BottomSheetModal';
+import { parseTaskDueAt } from '../../lib/task-utils';
 
 type TaskListProps = {
   loading?: boolean;
@@ -110,6 +111,20 @@ function prewarmPhotoUris(uris: Array<string | null | undefined>) {
 
 function prewarmTaskPhotos(photos: TaskPhoto[]) {
   prewarmPhotoUris(photos.map((photo) => photo.uri));
+}
+
+function formatTaskDueTime(task: TaskItem, locale: string) {
+  const dueAt = parseTaskDueAt(task);
+
+  if (!dueAt) {
+    return null;
+  }
+
+  return dueAt.toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?: any) => string): TaskPhoto[] {
@@ -551,6 +566,17 @@ export default function TaskList({
     const photoCount =
       (taskPhotos[task.id]?.length ?? 0) +
       (pendingPhotosByTaskId[task.id]?.length ?? 0);
+    const dueAt = parseTaskDueAt(task);
+    const dueTimeLabel = formatTaskDueTime(task, locale);
+    const isOverdue = Boolean(dueAt && task.status !== 'DONE' && task.status !== 'CANCELLED' && dueAt.getTime() < Date.now());
+    const metaColor = completed ? '#8fa1bb' : isOverdue ? '#ef4444' : '#64748b';
+    const photoMetaLabel = task.requiresPhoto
+      ? completed && photoCount > 0
+        ? t('today.photosSaved', { count: photoCount })
+        : photoCount > 0
+          ? t('today.photosAttached', { count: photoCount })
+          : t('today.photoProofRequired')
+      : null;
 
     return (
       <Animated.View
@@ -581,14 +607,22 @@ export default function TaskList({
             ) : (
               <View className="mt-1 h-4 w-[72%] rounded-full bg-[#e2eaf6]" />
             )}
-            {task.requiresPhoto ? (
-              <Text className={`mt-1 text-[11px] ${completed ? 'text-[#8fa1bb]' : 'text-[#94a3b8]'}`}>
-                {completed && photoCount > 0
-                  ? t('today.photosSaved', { count: photoCount })
-                  : photoCount > 0
-                    ? t('today.photosAttached', { count: photoCount })
-                    : t('today.photoProofRequired')}
-              </Text>
+            {dueTimeLabel || photoMetaLabel ? (
+              <View className="mt-1 flex-row flex-wrap items-center gap-2">
+                {dueTimeLabel ? (
+                  <View className="flex-row items-center gap-1">
+                    <Ionicons color={metaColor} name="time-outline" size={12} />
+                    <Text className="text-[11px] font-semibold" style={{ color: metaColor }}>
+                      {dueTimeLabel}
+                    </Text>
+                  </View>
+                ) : null}
+                {photoMetaLabel ? (
+                  <Text className="text-[11px]" style={{ color: completed ? '#8fa1bb' : '#94a3b8' }}>
+                    {photoMetaLabel}
+                  </Text>
+                ) : null}
+              </View>
             ) : null}
           </View>
         </PressableScale>

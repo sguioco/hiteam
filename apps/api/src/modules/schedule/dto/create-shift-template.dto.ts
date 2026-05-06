@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateShiftTemplateDto {
   @IsString()
@@ -36,4 +36,18 @@ export class CreateShiftTemplateDto {
   @Min(0)
   @Max(180)
   gracePeriodMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  fixedBreakStartsAtLocal?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  fixedBreakDurationMinutes?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  fixedBreakIsPaid?: boolean;
 }

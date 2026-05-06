@@ -52,6 +52,7 @@ import { parseTaskMeta } from "@/lib/task-meta";
 import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -146,6 +147,10 @@ type TaskSearchMatch = {
   timeLabel: string;
   title: string;
 };
+
+function getTaskAssigneeAvatarUrl(task: TaskItem) {
+  return task.assigneeEmployee?.avatarUrl ?? null;
+}
 
 function localize(locale: string, ru: string, en: string) {
   return locale === "ru" ? ru : en;
@@ -1059,7 +1064,7 @@ export function ManagerTasksPage({
         firstName: task.assigneeEmployee.firstName,
         lastName: task.assigneeEmployee.lastName,
         employeeNumber: task.assigneeEmployee.employeeNumber,
-        avatarUrl: null,
+        avatarUrl: getTaskAssigneeAvatarUrl(task),
         department: task.assigneeEmployee.department ?? null,
         primaryLocation: task.assigneeEmployee.primaryLocation ?? null,
         position: null,
@@ -1354,6 +1359,10 @@ export function ManagerTasksPage({
         const directoryEmployee = task.assigneeEmployeeId
           ? employeeById.get(task.assigneeEmployeeId) ?? null
           : null;
+        const employeeAvatarUrl =
+          directoryEmployee?.avatarUrl ??
+          getTaskAssigneeAvatarUrl(task) ??
+          getMockAvatarDataUrl(employeeName || task.id);
         const employeeInitials = task.assigneeEmployee
           ? getEmployeeInitials(task.assigneeEmployee)
           : (task.group?.name.slice(0, 2).toUpperCase() ?? "TM");
@@ -1373,7 +1382,7 @@ export function ManagerTasksPage({
             creatorName: getEmployeeName(task.managerEmployee, locale),
             dateDay: dateParts.day,
             dateMonth: dateParts.month,
-            employeeAvatarUrl: directoryEmployee?.avatarUrl ?? null,
+            employeeAvatarUrl,
             employeeId: task.assigneeEmployeeId,
             employeeInitials,
             employeeName,

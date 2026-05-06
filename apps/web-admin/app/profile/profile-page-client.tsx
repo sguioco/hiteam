@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { KeyRound, LogOut, Mail, Shield, UploadCloud, UserRound } from 'lucide-react';
+import { KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
 import type { DashboardBootstrapResponse } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
+import { Button } from '../../components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { AuthSession, destroySession, getSession, isEmployeeOnlyRole, redirectToLogin } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
@@ -34,6 +43,9 @@ export default function ProfilePageClient({
     initialEmployee?.avatarUrl ?? readStoredProfileAvatar(initialSession.user.email),
   );
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [employee, setEmployee] = useState<ProfileEmployee | null>(initialEmployee ?? null);
   const didUseInitialEmployee = useRef(Boolean(initialEmployee));
 
@@ -82,6 +94,35 @@ export default function ProfilePageClient({
   async function handleSignOut() {
     await destroySession();
     redirectToLogin();
+  }
+
+  async function handleDeleteAccount() {
+    const currentSession = getSession() ?? session;
+
+    setDeleteInFlight(true);
+    setDeleteError(null);
+
+    try {
+      await apiRequest<{ success: true }>('/auth/me', {
+        method: 'DELETE',
+        token: currentSession.accessToken,
+        realBackend: true,
+        skipClientCache: true,
+      });
+      writeStoredProfileAvatar(null, avatarScope);
+      await destroySession();
+      redirectToLogin();
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error
+          ? error.message
+          : locale === 'ru'
+            ? 'Не удалось удалить аккаунт'
+            : 'Unable to delete account',
+      );
+    } finally {
+      setDeleteInFlight(false);
+    }
   }
 
   function handleAvatarChange(nextAvatarDataUrl: string | null) {
@@ -211,6 +252,39 @@ export default function ProfilePageClient({
             </div>
           </div>
 
+          <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6">
+            <h2 className="mb-4 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-red-600">
+              <Trash2 className="size-4" />
+              {locale === 'ru' ? 'Удаление аккаунта' : 'Account deletion'}
+            </h2>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-xl">
+                <p className="font-medium text-red-700">
+                  {locale === 'ru' ? 'Удалить аккаунт' : 'Delete account'}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-red-700/80">
+                  {locale === 'ru'
+                    ? 'Доступ будет отключён, профиль и личные данные будут обезличены'
+                    : 'Access will be disabled, profile and personal data will be anonymized'}
+                </p>
+              </div>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                disabled={deleteInFlight}
+                onClick={() => setDeleteConfirmOpen(true)}
+                type="button"
+              >
+                <Trash2 className="size-4" />
+                {locale === 'ru' ? 'Удалить аккаунт' : 'Delete account'}
+              </button>
+            </div>
+            {deleteError ? (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-white/80 px-4 py-3 text-sm text-red-700">
+                {deleteError}
+              </div>
+            ) : null}
+          </div>
+
           <button
             className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100"
             onClick={handleSignOut}
@@ -220,6 +294,59 @@ export default function ProfilePageClient({
             {locale === 'ru' ? 'Выйти из аккаунта' : 'Sign out'}
           </button>
         </div>
+
+        <Dialog
+          onOpenChange={(open) => {
+            if (deleteInFlight) return;
+            setDeleteConfirmOpen(open);
+            if (!open) {
+              setDeleteError(null);
+            }
+          }}
+          open={deleteConfirmOpen}
+        >
+          <DialogContent className="max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle>
+                {locale === 'ru' ? 'Удалить аккаунт?' : 'Delete account?'}
+              </DialogTitle>
+              <DialogDescription>
+                {locale === 'ru'
+                  ? 'После подтверждения вход будет отключён, профиль будет обезличен, а активные сессии завершены'
+                  : 'After confirmation, sign-in will be disabled, the profile will be anonymized, and active sessions will end'}
+              </DialogDescription>
+            </DialogHeader>
+            {deleteError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {deleteError}
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                disabled={deleteInFlight}
+                onClick={() => setDeleteConfirmOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                {locale === 'ru' ? 'Отмена' : 'Cancel'}
+              </Button>
+              <Button
+                className="bg-red-600 text-white shadow-none hover:bg-red-700"
+                disabled={deleteInFlight}
+                onClick={() => void handleDeleteAccount()}
+                type="button"
+              >
+                {deleteInFlight
+                  ? locale === 'ru'
+                    ? 'Удаляем...'
+                    : 'Deleting...'
+                  : locale === 'ru'
+                    ? 'Удалить'
+                    : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </AdminShell>
   );

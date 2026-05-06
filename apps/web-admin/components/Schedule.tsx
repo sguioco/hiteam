@@ -12,7 +12,9 @@ import {
   FileText,
   Filter,
   History,
+  Pencil,
   Plus,
+  XCircle,
   Users,
 } from "lucide-react";
 import {
@@ -91,12 +93,18 @@ type EnrichedShift = {
   templateName: string;
   templateStartsAtLocal: string;
   templateEndsAtLocal: string;
+  templateId: string;
   locationId: string;
   locationName: string;
   departmentId: string | null;
   departmentName: string;
   roleId: string | null;
   roleName: string;
+  status: string;
+  fixedBreakStartsAt: string | null;
+  fixedBreakDurationMinutes: number;
+  fixedBreakIsPaid: boolean;
+  createdByName: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -111,11 +119,14 @@ type ChangeLogEntry = {
 
 type CalendarTaskEvent = {
   assigneeName: string;
+  avatarSrc: string;
   completedAt: string | null;
   date: Date;
   description: string;
   employeeId: string | null;
   employeeNumber: string;
+  groupId: string | null;
+  groupName: string | null;
   id: string;
   isDone: boolean;
   kind: "task" | "meeting";
@@ -170,6 +181,10 @@ type CreateShiftDraft = {
   employeeId: string;
   templateId: string;
   shiftDate: string;
+  fixedBreakEnabled: boolean;
+  fixedBreakStartsAtLocal: string;
+  fixedBreakDurationMinutes: string;
+  fixedBreakIsPaid: boolean;
 };
 
 type CreateTemplateDraft = {
@@ -177,6 +192,10 @@ type CreateTemplateDraft = {
   startsAtLocal: string;
   endsAtLocal: string;
   weekDays: number[];
+  fixedBreakEnabled: boolean;
+  fixedBreakStartsAtLocal: string;
+  fixedBreakDurationMinutes: string;
+  fixedBreakIsPaid: boolean;
 };
 
 type MassAssignDraft = {
@@ -288,6 +307,10 @@ function isTodayLocal(value: Date) {
   return isSameDayLocal(value, new Date());
 }
 
+function isBeforeTodayLocal(value: Date, referenceDate: Date) {
+  return startOfDayLocal(value).getTime() < startOfDayLocal(referenceDate).getTime();
+}
+
 function startOfDayLocal(value: Date) {
   const next = cloneDate(value);
   next.setHours(0, 0, 0, 0);
@@ -364,6 +387,12 @@ function formatDateInput(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatTimeInput(date: Date) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
 function getActivePhotoProofs(task: TaskItem) {
@@ -592,6 +621,10 @@ const initialTemplateDraft: CreateTemplateDraft = {
   startsAtLocal: "09:00",
   endsAtLocal: "18:00",
   weekDays: [1, 2, 3, 4, 5],
+  fixedBreakEnabled: false,
+  fixedBreakStartsAtLocal: "13:00",
+  fixedBreakDurationMinutes: "30",
+  fixedBreakIsPaid: false,
 };
 
 const EMPTY_SELECT_VALUE = "__empty_select__";
@@ -649,7 +682,14 @@ const scheduleCopy = {
     },
     createShiftValidation: "Выберите сотрудника, шаблон и дату.",
     shiftCreated: "Смена создана.",
+    shiftUpdated: "Смена изменена",
+    shiftCancelled: "Смена отменена",
     templateValidation: "Укажите название, время смены и рабочие дни.",
+    fixedBreak: "Фиксированный перерыв",
+    fixedBreakStart: "Начало перерыва",
+    fixedBreakMinutes: "Длительность, мин",
+    fixedBreakPaid: "Оплачиваемый",
+    fixedBreakValidation: "Укажите длительность фиксированного перерыва.",
     templateCreated: "Шаблон смены создан.",
     noShiftTemplates: "Нет шаблонов смен",
     massAssignValidation: "Выберите шаблон и диапазон дат.",
@@ -666,12 +706,17 @@ const scheduleCopy = {
     createdTemplate: "Создан шаблон",
     createShiftDialogTitle: "Создать смену",
     createShiftDialogDescription: "Назначьте сотрудника на конкретную дату по одному из шаблонов.",
+    editShiftDialogTitle: "Изменить смену",
+    editShiftDialogDescription: "Измените сотрудника, шаблон, дату или перерыв этой смены",
     employee: "Сотрудник",
     selectEmployee: "Выберите сотрудника",
     shiftTemplate: "Шаблон смены",
     selectTemplate: "Выберите шаблон",
     date: "Дата",
     saveShift: "Сохранить смену",
+    editShift: "Изменить",
+    cancelShift: "Отменить",
+    shiftAuthor: "Автор",
     templatesDialogTitle: "Шаблоны смен",
     templatesDialogDescription: "Список действующих шаблонов и форма для создания нового.",
     newTemplate: "Новый шаблон",
@@ -699,6 +744,12 @@ const scheduleCopy = {
     shift: "Смена",
     doneAt: (time: string) => `Выполнена в ${time}`,
     notDone: "Не выполнена",
+    overdueTasksTitle: "Просроченные задачи",
+    overdueTasksSubtitle: "Сгруппированы по командам. В каждой строке видно исполнителя и исходный день",
+    overdueSince: (date: string) => `Просрочено с ${date}`,
+    overdueGroupCount: (count: number) => `${count} задач`,
+    withoutGroup: "Без группы",
+    groupTask: "Групповая задача",
     viewPhotos: (count: number) => (count === 1 ? "Фото" : `${count} фото`),
     photoProofs: "Фотоотчёты",
     photoProofsDescription: "Все фотографии, приложенные к выполнению этой задачи.",
@@ -758,7 +809,14 @@ const scheduleCopy = {
     },
     createShiftValidation: "Select an employee, template, and date.",
     shiftCreated: "Shift created.",
+    shiftUpdated: "Shift updated",
+    shiftCancelled: "Shift cancelled",
     templateValidation: "Fill in the name, shift time, and workdays.",
+    fixedBreak: "Fixed break",
+    fixedBreakStart: "Break start",
+    fixedBreakMinutes: "Duration, min",
+    fixedBreakPaid: "Paid",
+    fixedBreakValidation: "Enter fixed break duration.",
     templateCreated: "Shift template created.",
     noShiftTemplates: "No shift templates",
     massAssignValidation: "Select a template and date range.",
@@ -775,12 +833,17 @@ const scheduleCopy = {
     createdTemplate: "Template created",
     createShiftDialogTitle: "Create shift",
     createShiftDialogDescription: "Assign an employee to a date using one of the templates.",
+    editShiftDialogTitle: "Edit shift",
+    editShiftDialogDescription: "Change the employee, template, date, or break for this shift",
     employee: "Employee",
     selectEmployee: "Select employee",
     shiftTemplate: "Shift template",
     selectTemplate: "Select template",
     date: "Date",
     saveShift: "Save shift",
+    editShift: "Edit",
+    cancelShift: "Cancel",
+    shiftAuthor: "Author",
     templatesDialogTitle: "Shift templates",
     templatesDialogDescription: "Active templates and a form to create a new one.",
     newTemplate: "New template",
@@ -808,6 +871,12 @@ const scheduleCopy = {
     shift: "Shift",
     doneAt: (time: string) => `Done at ${time}`,
     notDone: "Not done",
+    overdueTasksTitle: "Overdue tasks",
+    overdueTasksSubtitle: "Grouped by team. Each row shows the assignee and original day",
+    overdueSince: (date: string) => `Overdue since ${date}`,
+    overdueGroupCount: (count: number) => `${count} tasks`,
+    withoutGroup: "Without group",
+    groupTask: "Group task",
     viewPhotos: (count: number) => (count === 1 ? "Photo" : `${count} photos`),
     photoProofs: "Photo proofs",
     photoProofsDescription: "All photos attached to this completed task.",
@@ -883,6 +952,8 @@ export default function Schedule({
   const didUseInitialData = useRef(Boolean(initialData));
 
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [shiftActionId, setShiftActionId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [massAssignOpen, setMassAssignOpen] = useState(false);
 
@@ -890,6 +961,10 @@ export default function Schedule({
     employeeId: "",
     templateId: "",
     shiftDate: formatDateInput(today),
+    fixedBreakEnabled: false,
+    fixedBreakStartsAtLocal: "13:00",
+    fixedBreakDurationMinutes: "30",
+    fixedBreakIsPaid: false,
   });
   const [templateDraft, setTemplateDraft] =
     useState<CreateTemplateDraft>(initialTemplateDraft);
@@ -913,6 +988,67 @@ export default function Schedule({
         weekDays: nextDays,
       };
     });
+  }
+
+  function getTemplateFixedBreakDefaults(templateId: string) {
+    const template = templates.find((item) => item.id === templateId);
+    const duration = template?.fixedBreakDurationMinutes ?? 0;
+
+    return {
+      fixedBreakEnabled: duration > 0,
+      fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
+      fixedBreakDurationMinutes: String(duration || 30),
+      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
+    };
+  }
+
+  function buildShiftPayload(draft: CreateShiftDraft) {
+    const fixedBreakDuration = Number(draft.fixedBreakDurationMinutes);
+
+    return {
+      employeeId: draft.employeeId,
+      templateId: draft.templateId,
+      shiftDate: draft.shiftDate,
+      fixedBreakStartsAtLocal: draft.fixedBreakEnabled
+        ? draft.fixedBreakStartsAtLocal
+        : undefined,
+      fixedBreakDurationMinutes: draft.fixedBreakEnabled
+        ? fixedBreakDuration
+        : 0,
+      fixedBreakIsPaid: draft.fixedBreakEnabled
+        ? draft.fixedBreakIsPaid
+        : false,
+    };
+  }
+
+  function buildTemplatePayload(draft: CreateTemplateDraft) {
+    const fixedBreakDuration = Number(draft.fixedBreakDurationMinutes);
+
+    return {
+      name: draft.name.trim(),
+      code: buildTemplateCode(draft.name.trim()),
+      startsAtLocal: draft.startsAtLocal,
+      endsAtLocal: draft.endsAtLocal,
+      weekDays: draft.weekDays,
+      fixedBreakStartsAtLocal: draft.fixedBreakEnabled
+        ? draft.fixedBreakStartsAtLocal
+        : undefined,
+      fixedBreakDurationMinutes: draft.fixedBreakEnabled
+        ? fixedBreakDuration
+        : 0,
+      fixedBreakIsPaid: draft.fixedBreakEnabled
+        ? draft.fixedBreakIsPaid
+        : false,
+    };
+  }
+
+  function hasValidFixedBreak(enabled: boolean, duration: string) {
+    if (!enabled) {
+      return true;
+    }
+
+    const parsed = Number(duration);
+    return Number.isFinite(parsed) && parsed > 0;
   }
 
   const tabs: Array<{ key: TabKey; label: string; icon: typeof Calendar }> = [
@@ -980,11 +1116,33 @@ export default function Schedule({
     [employees, ui.noDepartment, ui.noRole],
   );
 
+  const employeeGroupByEmployeeId = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+
+    groups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (!map.has(membership.employeeId)) {
+          map.set(membership.employeeId, {
+            id: group.id,
+            name: group.name,
+          });
+        }
+      });
+    });
+
+    return map;
+  }, [groups]);
+
   const enrichedShifts = useMemo<EnrichedShift[]>(
     () =>
-      shifts.map((shift) => {
+      shifts
+        .filter((shift) => shift.status !== "CANCELLED")
+        .map((shift) => {
         const employeeMeta = employeeById.get(shift.employee.id);
         const employeeName = buildEmployeeName(shift.employee);
+        const createdByName = shift.createdByEmployee
+          ? buildEmployeeName(shift.createdByEmployee)
+          : "";
         return {
           id: shift.id,
           employeeId: shift.employee.id,
@@ -1000,12 +1158,18 @@ export default function Schedule({
           templateName: shift.template.name,
           templateStartsAtLocal: shift.template.startsAtLocal,
           templateEndsAtLocal: shift.template.endsAtLocal,
+          templateId: shift.template.id,
           locationId: shift.location.id,
           locationName: shift.location.name,
           departmentId: employeeMeta?.departmentId ?? null,
           departmentName: employeeMeta?.departmentName ?? ui.noDepartment,
           roleId: employeeMeta?.roleId ?? shift.position.id,
           roleName: employeeMeta?.roleName ?? shift.position.name,
+          status: shift.status,
+          fixedBreakStartsAt: shift.fixedBreakStartsAt ?? null,
+          fixedBreakDurationMinutes: shift.fixedBreakDurationMinutes ?? 0,
+          fixedBreakIsPaid: Boolean(shift.fixedBreakIsPaid),
+          createdByName,
           createdAt: shift.createdAt,
           updatedAt: shift.updatedAt,
         };
@@ -1061,6 +1225,11 @@ export default function Schedule({
         const assigneeName = task.assigneeEmployee
           ? buildEmployeeName(task.assigneeEmployee)
           : task.group?.name ?? "—";
+        const employeeGroup = task.group
+          ? { id: task.group.id, name: task.group.name }
+          : task.assigneeEmployeeId
+            ? employeeGroupByEmployeeId.get(task.assigneeEmployeeId) ?? null
+            : null;
         const location = task.assigneeEmployee?.primaryLocation?.name ?? "—";
         const department = task.assigneeEmployee?.department?.name ?? ui.noDepartment;
         const role = "position" in (task.assigneeEmployee ?? {})
@@ -1068,9 +1237,16 @@ export default function Schedule({
           : ui.noRole;
         const isMeeting = Boolean(meta.meeting) || /^(встреча|meeting):/i.test(task.title);
         const kind: CalendarTaskEvent["kind"] = isMeeting ? "meeting" : "task";
+        const avatarSrc =
+          (task.assigneeEmployeeId
+            ? employeeById.get(task.assigneeEmployeeId)?.avatarSrc
+            : null) ||
+          task.assigneeEmployee?.avatarUrl ||
+          getMockAvatarDataUrl(assigneeName || task.id);
 
         return {
           id: task.id,
+          avatarSrc,
           isDone: task.status === "DONE",
           kind,
           title: isMeeting
@@ -1081,6 +1257,8 @@ export default function Schedule({
           time: formatTime(dueAt, localeTag),
           completedAt: task.completedAt ?? (task.status === "DONE" ? task.updatedAt : null),
           employeeId: task.assigneeEmployeeId,
+          groupId: employeeGroup?.id ?? null,
+          groupName: employeeGroup?.name ?? null,
           assigneeName,
           employeeNumber: task.assigneeEmployee?.employeeNumber ?? "",
           locationId: task.assigneeEmployee?.primaryLocation?.id ?? null,
@@ -1132,6 +1310,8 @@ export default function Schedule({
   }, [
     calendarEventFilter,
     departmentFilter,
+    employeeById,
+    employeeGroupByEmployeeId,
     localeTag,
     locationFilter,
     roleFilter,
@@ -1143,6 +1323,50 @@ export default function Schedule({
     ui.noDepartment,
     ui.noRole,
   ]);
+
+  const overdueTaskGroups = useMemo(() => {
+    const groupMap = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        tasks: CalendarTaskEvent[];
+      }
+    >();
+
+    visibleTaskEvents.forEach((event) => {
+      const visuallyDone = event.isDone || event.photoProofs.length > 0;
+
+      if (event.kind !== "task" || visuallyDone || !isBeforeTodayLocal(event.date, today)) {
+        return;
+      }
+
+      const groupId = event.groupId ?? "without-group";
+      const group = groupMap.get(groupId) ?? {
+        id: groupId,
+        title: event.groupName ?? ui.withoutGroup,
+        tasks: [],
+      };
+
+      group.tasks.push(event);
+      groupMap.set(groupId, group);
+    });
+
+    return Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        tasks: group.tasks.sort(
+          (left, right) =>
+            left.date.getTime() - right.date.getTime() ||
+            left.title.localeCompare(right.title, localeTag),
+        ),
+      }))
+      .sort((left, right) => {
+        if (left.id === "without-group") return 1;
+        if (right.id === "without-group") return -1;
+        return left.title.localeCompare(right.title, localeTag);
+      });
+  }, [localeTag, today, ui.withoutGroup, visibleTaskEvents]);
 
   const attendanceHistoryByEmployeeDay = useMemo(() => {
     const map = new Map<string, AttendanceHistoryRow[]>();
@@ -1678,6 +1902,10 @@ export default function Schedule({
       templateId: current.templateId,
       shiftDate:
         current.shiftDate || formatDateInput(selectedDay ?? currentDate ?? new Date()),
+      fixedBreakEnabled: current.fixedBreakEnabled,
+      fixedBreakStartsAtLocal: current.fixedBreakStartsAtLocal,
+      fixedBreakDurationMinutes: current.fixedBreakDurationMinutes,
+      fixedBreakIsPaid: current.fixedBreakIsPaid,
     }));
   }, [createShiftOpen, currentDate, selectedDay, selectedEmployeeId]);
 
@@ -1710,14 +1938,104 @@ export default function Schedule({
     });
   }
 
+  function resetCreateShiftDraft(nextDate = selectedDay ?? today) {
+    setCreateShiftDraft({
+      employeeId: selectedEmployeeId !== "all" ? selectedEmployeeId : "",
+      templateId: "",
+      shiftDate: formatDateInput(nextDate),
+      fixedBreakEnabled: false,
+      fixedBreakStartsAtLocal: "13:00",
+      fixedBreakDurationMinutes: "30",
+      fixedBreakIsPaid: false,
+    });
+  }
+
+  function openCreateShiftForDay(day = selectedDay ?? today) {
+    setEditingShiftId(null);
+    setCreateShiftDraft({
+      shiftDate: formatDateInput(day),
+      employeeId:
+        selectedEmployeeId !== "all" ? selectedEmployeeId : "",
+      templateId: "",
+      fixedBreakEnabled: false,
+      fixedBreakStartsAtLocal: "13:00",
+      fixedBreakDurationMinutes: "30",
+      fixedBreakIsPaid: false,
+    });
+    setCreateShiftOpen(true);
+  }
+
+  function openEditShiftDialog(shift: EnrichedShift) {
+    setEditingShiftId(shift.id);
+    setCreateShiftDraft({
+      employeeId: shift.employeeId,
+      templateId: shift.templateId,
+      shiftDate: formatDateInput(shift.shiftDate),
+      fixedBreakEnabled: shift.fixedBreakDurationMinutes > 0,
+      fixedBreakStartsAtLocal: shift.fixedBreakStartsAt
+        ? formatTimeInput(parseIsoDate(shift.fixedBreakStartsAt))
+        : "13:00",
+      fixedBreakDurationMinutes: String(
+        shift.fixedBreakDurationMinutes > 0 ? shift.fixedBreakDurationMinutes : 30,
+      ),
+      fixedBreakIsPaid: shift.fixedBreakIsPaid,
+    });
+    setCreateShiftOpen(true);
+  }
+
+  async function handleCancelShift(shiftId: string) {
+    const session = getSession();
+    setShiftActionId(shiftId);
+
+    try {
+      if (!session || isMockMode) {
+        setShifts((current) =>
+          current.map((shift) =>
+            shift.id === shiftId
+              ? {
+                  ...shift,
+                  status: "CANCELLED",
+                  updatedAt: new Date().toISOString(),
+                }
+              : shift,
+          ),
+        );
+        setMessage(ui.shiftCancelled);
+        return;
+      }
+
+      await apiRequest(`/schedule/shifts/${shiftId}/cancel`, {
+        method: "POST",
+        token: session.accessToken,
+      });
+      setMessage(ui.shiftCancelled);
+      await loadData({ silent: true, force: true });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : ui.shiftCancelled);
+    } finally {
+      setShiftActionId(null);
+    }
+  }
+
   async function handleCreateShift() {
     const session = getSession();
+    const wasEditing = Boolean(editingShiftId);
     if (
       !createShiftDraft.employeeId ||
       !createShiftDraft.templateId ||
       !createShiftDraft.shiftDate
     ) {
       setMessage(ui.createShiftValidation);
+      return;
+    }
+
+    if (
+      !hasValidFixedBreak(
+        createShiftDraft.fixedBreakEnabled,
+        createShiftDraft.fixedBreakDurationMinutes,
+      )
+    ) {
+      setMessage(ui.fixedBreakValidation);
       return;
     }
 
@@ -1728,8 +2046,8 @@ export default function Schedule({
     if (Number.isNaN(shiftDate.getTime()) || shiftDate < todayStart) {
       setMessage(
         locale === "ru"
-          ? "Нельзя создать смену на прошедшую дату."
-          : "You cannot create a shift in the past.",
+          ? "Нельзя создать смену на прошедшую дату"
+          : "You cannot create a shift in the past",
       );
       return;
     }
@@ -1742,55 +2060,84 @@ export default function Schedule({
         return;
       }
 
-      const createdAt = new Date().toISOString();
-      setShifts((current) => [
-        {
-          id: `mock-shift-${current.length + 1}`,
-          shiftDate: createShiftDraft.shiftDate,
-          startsAt: new Date(`${createShiftDraft.shiftDate}T${template.startsAtLocal}:00`).toISOString(),
-          endsAt: new Date(`${createShiftDraft.shiftDate}T${template.endsAtLocal}:00`).toISOString(),
-          status: "ASSIGNED",
-          createdAt,
-          updatedAt: createdAt,
-          employee: {
-            id: employee.id,
-            firstName: employee.firstName,
-            lastName: employee.lastName,
-            employeeNumber: employee.employeeNumber,
-          },
-          location: template.location,
-          position: template.position,
-          template,
+      const now = new Date().toISOString();
+      const nextShiftData = {
+        shiftDate: createShiftDraft.shiftDate,
+        startsAt: new Date(`${createShiftDraft.shiftDate}T${template.startsAtLocal}:00`).toISOString(),
+        endsAt: new Date(`${createShiftDraft.shiftDate}T${template.endsAtLocal}:00`).toISOString(),
+        fixedBreakStartsAt: createShiftDraft.fixedBreakEnabled
+          ? new Date(`${createShiftDraft.shiftDate}T${createShiftDraft.fixedBreakStartsAtLocal}:00`).toISOString()
+          : null,
+        fixedBreakDurationMinutes: createShiftDraft.fixedBreakEnabled
+          ? Number(createShiftDraft.fixedBreakDurationMinutes)
+          : 0,
+        fixedBreakIsPaid: createShiftDraft.fixedBreakEnabled
+          ? createShiftDraft.fixedBreakIsPaid
+          : false,
+        employee: {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          employeeNumber: employee.employeeNumber,
         },
-        ...current,
-      ]);
+        location: template.location,
+        position: template.position,
+        template,
+      };
+
+      setShifts((current) =>
+        editingShiftId
+          ? current.map((shift) =>
+              shift.id === editingShiftId
+                ? {
+                    ...shift,
+                    ...nextShiftData,
+                    updatedAt: now,
+                  }
+                : shift,
+            )
+          : [
+              {
+                id: `mock-shift-${current.length + 1}`,
+                ...nextShiftData,
+                status: "PUBLISHED",
+                createdAt: now,
+                updatedAt: now,
+                createdByEmployee: null,
+              },
+              ...current,
+            ],
+      );
       setCreateShiftOpen(false);
-      setCreateShiftDraft({
-        employeeId: selectedEmployeeId !== "all" ? selectedEmployeeId : "",
-        templateId: "",
-        shiftDate: formatDateInput(selectedDay ?? today),
-      });
-      setMessage(ui.shiftCreated);
+      setEditingShiftId(null);
+      resetCreateShiftDraft();
+      setMessage(wasEditing ? ui.shiftUpdated : ui.shiftCreated);
       return;
     }
 
     try {
-      await apiRequest("/schedule/shifts", {
-        method: "POST",
-        token: session.accessToken,
-        body: JSON.stringify(createShiftDraft),
-      });
+      await apiRequest(
+        editingShiftId ? `/schedule/shifts/${editingShiftId}` : "/schedule/shifts",
+        {
+          method: editingShiftId ? "PATCH" : "POST",
+          token: session.accessToken,
+          body: JSON.stringify(buildShiftPayload(createShiftDraft)),
+        },
+      );
 
       setCreateShiftOpen(false);
-      setCreateShiftDraft({
-        employeeId: selectedEmployeeId !== "all" ? selectedEmployeeId : "",
-        templateId: "",
-        shiftDate: formatDateInput(selectedDay ?? today),
-      });
-      setMessage(ui.shiftCreated);
+      setEditingShiftId(null);
+      resetCreateShiftDraft();
+      setMessage(wasEditing ? ui.shiftUpdated : ui.shiftCreated);
       await loadData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : ui.shiftCreated);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : wasEditing
+            ? ui.shiftUpdated
+            : ui.shiftCreated,
+      );
     }
   }
 
@@ -1803,6 +2150,16 @@ export default function Schedule({
       templateDraft.weekDays.length === 0
     ) {
       setMessage(ui.templateValidation);
+      return;
+    }
+
+    if (
+      !hasValidFixedBreak(
+        templateDraft.fixedBreakEnabled,
+        templateDraft.fixedBreakDurationMinutes,
+      )
+    ) {
+      setMessage(ui.fixedBreakValidation);
       return;
     }
 
@@ -1827,6 +2184,15 @@ export default function Schedule({
           endsAtLocal: templateDraft.endsAtLocal,
           weekDaysJson: JSON.stringify(templateDraft.weekDays),
           gracePeriodMinutes: 10,
+          fixedBreakStartsAtLocal: templateDraft.fixedBreakEnabled
+            ? templateDraft.fixedBreakStartsAtLocal
+            : null,
+          fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
+            ? Number(templateDraft.fixedBreakDurationMinutes)
+            : 0,
+          fixedBreakIsPaid: templateDraft.fixedBreakEnabled
+            ? templateDraft.fixedBreakIsPaid
+            : false,
           createdAt,
           updatedAt: createdAt,
           location,
@@ -1851,13 +2217,9 @@ export default function Schedule({
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
-          name: templateDraft.name.trim(),
-          code: buildTemplateCode(templateDraft.name.trim()),
+          ...buildTemplatePayload(templateDraft),
           locationId: location.id,
           positionId: position.id,
-          startsAtLocal: templateDraft.startsAtLocal,
-          endsAtLocal: templateDraft.endsAtLocal,
-          weekDays: templateDraft.weekDays,
           gracePeriodMinutes: 10,
         }),
       });
@@ -1932,6 +2294,11 @@ export default function Schedule({
           shiftDate: formatDateInput(date),
           startsAt: new Date(`${formatDateInput(date)}T${template.startsAtLocal}:00`).toISOString(),
           endsAt: new Date(`${formatDateInput(date)}T${template.endsAtLocal}:00`).toISOString(),
+          fixedBreakStartsAt: (template.fixedBreakDurationMinutes ?? 0) > 0 && template.fixedBreakStartsAtLocal
+            ? new Date(`${formatDateInput(date)}T${template.fixedBreakStartsAtLocal}:00`).toISOString()
+            : null,
+          fixedBreakDurationMinutes: template.fixedBreakDurationMinutes ?? 0,
+          fixedBreakIsPaid: Boolean(template.fixedBreakIsPaid),
           status: "ASSIGNED",
           createdAt,
           updatedAt: createdAt,
@@ -2044,7 +2411,7 @@ export default function Schedule({
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 className="font-heading"
-                onClick={() => setCreateShiftOpen(true)}
+                onClick={() => openCreateShiftForDay(today)}
                 size="lg"
                 type="button"
               >
@@ -2127,7 +2494,7 @@ export default function Schedule({
                   <div className="schedule-calendar-primary-actions">
                     <Button
                       className="font-heading"
-                      onClick={() => setCreateShiftOpen(true)}
+                      onClick={() => openCreateShiftForDay(today)}
                       size="lg"
                       type="button"
                     >
@@ -2370,6 +2737,155 @@ export default function Schedule({
               </section>
             ) : null}
           </>
+        ) : null}
+
+        {activeTab === "schedules" && !isEmployeeMode && overdueTaskGroups.length ? (
+          <section className="mb-5 overflow-hidden rounded-[30px] border border-[rgba(193,68,68,0.16)] bg-[linear-gradient(135deg,rgba(255,244,236,0.92),rgba(255,255,255,0.82)_44%,rgba(255,255,255,0.72))] shadow-[0_18px_48px_rgba(193,68,68,0.08)]">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(193,68,68,0.12)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex size-9 items-center justify-center rounded-2xl bg-[rgba(193,68,68,0.10)] text-[color:var(--danger)]">
+                    <FileText className="size-4" />
+                  </span>
+                  <h2 className="font-heading text-xl font-bold tracking-[-0.04em] text-foreground">
+                    {ui.overdueTasksTitle}
+                  </h2>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {ui.overdueTasksSubtitle}
+                </p>
+              </div>
+              <span className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--danger)] shadow-sm">
+                {ui.overdueGroupCount(
+                  overdueTaskGroups.reduce(
+                    (sum, group) => sum + group.tasks.length,
+                    0,
+                  ),
+                )}
+              </span>
+            </div>
+
+            <div className="grid max-h-[420px] gap-3 overflow-y-auto p-4 lg:grid-cols-2">
+              {overdueTaskGroups.map((group) => (
+                <div
+                  className="overflow-hidden rounded-[24px] border border-[rgba(193,68,68,0.12)] bg-white/86"
+                  key={group.id}
+                >
+                  <div className="flex items-center justify-between gap-3 bg-[rgba(255,248,244,0.82)] px-4 py-3">
+                    <h3 className="min-w-0 truncate font-heading text-sm font-bold uppercase tracking-[0.12em] text-foreground">
+                      {group.title}
+                    </h3>
+                    <span className="shrink-0 rounded-full bg-[rgba(193,68,68,0.08)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--danger)]">
+                      {group.tasks.length}
+                    </span>
+                  </div>
+
+                  <div>
+                    {group.tasks.map((event, index) => {
+                      const dueLabel = formatDateTime(event.date, {
+                        day: "numeric",
+                        month: "long",
+                      }, localeTag);
+                      const assigneeLabel =
+                        event.assigneeName && event.assigneeName !== "—"
+                          ? event.assigneeName
+                          : ui.groupTask;
+
+                      return (
+                        <div
+                          className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[rgba(193,68,68,0.04)] ${
+                            index < group.tasks.length - 1
+                              ? "border-b border-[rgba(193,68,68,0.10)]"
+                              : ""
+                          }`}
+                          key={event.id}
+                          onClick={() => {
+                            setCurrentDate(
+                              new Date(
+                                event.date.getFullYear(),
+                                event.date.getMonth(),
+                                1,
+                              ),
+                            );
+                            setSelectedDay(event.date);
+                          }}
+                          onKeyDown={(keyboardEvent) => {
+                            if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
+                              return;
+                            }
+
+                            keyboardEvent.preventDefault();
+                            setCurrentDate(
+                              new Date(
+                                event.date.getFullYear(),
+                                event.date.getMonth(),
+                                1,
+                              ),
+                            );
+                            setSelectedDay(event.date);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <img
+                            alt={assigneeLabel}
+                            className="mt-0.5 size-10 rounded-2xl object-cover"
+                            src={event.avatarSrc}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-2">
+                              <p className="min-w-0 flex-1 font-heading text-[15px] font-semibold leading-5 text-foreground">
+                                {event.title}
+                              </p>
+                              {event.photoProofs.length ? (
+                                <Button
+                                  className="h-7 rounded-xl px-2 text-[11px]"
+                                  onClick={(clickEvent) => {
+                                    clickEvent.stopPropagation();
+                                    setPhotoProofDialogTask({
+                                      title: event.title,
+                                      proofs: event.photoProofs,
+                                    });
+                                  }}
+                                  onKeyDown={(keyboardEvent) => {
+                                    keyboardEvent.stopPropagation();
+                                  }}
+                                  size="xs"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Camera className="size-3" />
+                                  {event.photoProofs.length}
+                                </Button>
+                              ) : null}
+                            </div>
+                            {event.description ? (
+                              <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground">
+                                {event.description}
+                              </p>
+                            ) : null}
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium">
+                              <span className="text-foreground/80">
+                                {assigneeLabel}
+                              </span>
+                              {event.employeeNumber ? (
+                                <span className="text-muted-foreground">
+                                  {event.employeeNumber}
+                                </span>
+                              ) : null}
+                              <span className="text-[color:var(--danger)]">
+                                {ui.overdueSince(dueLabel)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {activeTab === "schedules" ? (
@@ -2618,14 +3134,26 @@ export default function Schedule({
         ) : null}
       </main>
 
-      <Dialog onOpenChange={setCreateShiftOpen} open={createShiftOpen}>
+      <Dialog
+        onOpenChange={(open) => {
+          setCreateShiftOpen(open);
+          if (!open) {
+            setEditingShiftId(null);
+          }
+        }}
+        open={createShiftOpen}
+      >
         <DialogContent className="max-w-xl rounded-[28px]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {ui.createShiftDialogTitle}
+              {editingShiftId
+                ? ui.editShiftDialogTitle
+                : ui.createShiftDialogTitle}
             </DialogTitle>
             <DialogDescription>
-              {ui.createShiftDialogDescription}
+              {editingShiftId
+                ? ui.editShiftDialogDescription
+                : ui.createShiftDialogDescription}
             </DialogDescription>
           </DialogHeader>
 
@@ -2692,6 +3220,7 @@ export default function Schedule({
                   setCreateShiftDraft((current) => ({
                     ...current,
                     templateId: value,
+                    ...getTemplateFixedBreakDefaults(value),
                   }))
                 }
                 value={createShiftDraft.templateId}
@@ -2738,6 +3267,73 @@ export default function Schedule({
                 type="date"
                 value={createShiftDraft.shiftDate}
               />
+            </div>
+
+            <div className="md:col-span-2 rounded-[22px] border border-border/70 bg-secondary/30 p-4">
+              <label className="flex items-center gap-3 text-sm font-semibold text-foreground">
+                <input
+                  checked={createShiftDraft.fixedBreakEnabled}
+                  className="h-4 w-4 rounded border accent-primary"
+                  onChange={(event) =>
+                    setCreateShiftDraft((current) => ({
+                      ...current,
+                      fixedBreakEnabled: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {ui.fixedBreak}
+              </label>
+
+              {createShiftDraft.fixedBreakEnabled ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {ui.fixedBreakStart}
+                    </span>
+                    <Input
+                      onChange={(event) =>
+                        setCreateShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakStartsAtLocal: event.target.value,
+                        }))
+                      }
+                      type="time"
+                      value={createShiftDraft.fixedBreakStartsAtLocal}
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {ui.fixedBreakMinutes}
+                    </span>
+                    <Input
+                      min={1}
+                      onChange={(event) =>
+                        setCreateShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakDurationMinutes: event.target.value,
+                        }))
+                      }
+                      type="number"
+                      value={createShiftDraft.fixedBreakDurationMinutes}
+                    />
+                  </label>
+                  <label className="flex items-center gap-3 pt-6 text-sm font-semibold text-muted-foreground">
+                    <input
+                      checked={createShiftDraft.fixedBreakIsPaid}
+                      className="h-4 w-4 rounded border accent-primary"
+                      onChange={(event) =>
+                        setCreateShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakIsPaid: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    {ui.fixedBreakPaid}
+                  </label>
+                </div>
+              ) : null}
             </div>
 
             <div className="schedule-shift-dialog-actions">
@@ -2788,6 +3384,12 @@ export default function Schedule({
                       <p className="mt-1 text-xs text-muted-foreground">
                         {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
                       </p>
+                      {(template.fixedBreakDurationMinutes ?? 0) > 0 ? (
+                        <p className="mt-1 text-xs font-medium text-[color:var(--accent-strong)]">
+                          {ui.fixedBreak}: {template.fixedBreakStartsAtLocal} ·{" "}
+                          {template.fixedBreakDurationMinutes} {ui.minutesShort}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </article>
@@ -2833,6 +3435,73 @@ export default function Schedule({
                   type="time"
                   value={templateDraft.endsAtLocal}
                 />
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4">
+                <label className="flex items-center gap-3 text-sm font-semibold text-foreground">
+                  <input
+                    checked={templateDraft.fixedBreakEnabled}
+                    className="h-4 w-4 rounded border accent-primary"
+                    onChange={(event) =>
+                      setTemplateDraft((current) => ({
+                        ...current,
+                        fixedBreakEnabled: event.target.checked,
+                      }))
+                    }
+                    type="checkbox"
+                  />
+                  {ui.fixedBreak}
+                </label>
+
+                {templateDraft.fixedBreakEnabled ? (
+                  <div className="mt-4 grid gap-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {ui.fixedBreakStart}
+                      </span>
+                      <Input
+                        onChange={(event) =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            fixedBreakStartsAtLocal: event.target.value,
+                          }))
+                        }
+                        type="time"
+                        value={templateDraft.fixedBreakStartsAtLocal}
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {ui.fixedBreakMinutes}
+                      </span>
+                      <Input
+                        min={1}
+                        onChange={(event) =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            fixedBreakDurationMinutes: event.target.value,
+                          }))
+                        }
+                        type="number"
+                        value={templateDraft.fixedBreakDurationMinutes}
+                      />
+                    </label>
+                    <label className="flex items-center gap-3 text-sm font-semibold text-muted-foreground">
+                      <input
+                        checked={templateDraft.fixedBreakIsPaid}
+                        className="h-4 w-4 rounded border accent-primary"
+                        onChange={(event) =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            fixedBreakIsPaid: event.target.checked,
+                          }))
+                        }
+                        type="checkbox"
+                      />
+                      {ui.fixedBreakPaid}
+                    </label>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -3122,79 +3791,118 @@ export default function Schedule({
 
                       {entry.detailItems.length && !isCollapsed ? (
                         <div className="mt-3 space-y-1">
-                          {entry.detailItems.map((item) => (
-                            <div
-                              className="flex items-start gap-3 py-1"
-                              key={item.id}
-                            >
-                              <img
-                                alt={item.title}
-                                className="size-9 rounded-full object-cover"
-                                src={item.avatarSrc}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="font-heading text-[15px] font-medium text-foreground">
-                                  {item.title}
-                                </p>
-                                {item.subtitle || item.statusPlacement === "inline" ? (
-                                  <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                                    {item.subtitle ? (
-                                      <p className="text-[13px] text-muted-foreground">
-                                        {item.subtitle}
-                                      </p>
-                                    ) : (
-                                      <span />
-                                    )}
-                                    {item.statusPlacement === "inline" && item.statusLabel ? (
-                                      <span
-                                        className={`shrink-0 font-heading text-[11px] font-semibold uppercase tracking-[0.16em] ${
-                                          getEntryToneTextClass(item.statusTone) ??
-                                          "text-muted-foreground"
-                                        }`}
-                                      >
-                                        {item.statusLabel}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-                                {(item.statusPlacement !== "inline" && item.statusLabel) ||
-                                item.metaLabel ||
-                                item.photoProofs?.length ? (
-                                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                                    {item.statusPlacement !== "inline" &&
-                                    item.statusLabel ? (
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${getStatusBadgeClass(item.statusTone)}`}
-                                      >
-                                        {item.statusLabel}
-                                      </span>
-                                    ) : null}
-                                    {item.metaLabel ? (
-                                      <span className="text-[12px] text-muted-foreground">
-                                        {item.metaLabel}
-                                      </span>
-                                    ) : null}
-                                    {item.photoProofs?.length ? (
-                                      <Button
-                                        onClick={() =>
-                                          setPhotoProofDialogTask({
-                                            title: entry.title,
-                                            proofs: item.photoProofs ?? [],
-                                          })
-                                        }
-                                        size="xs"
-                                        type="button"
-                                        variant="outline"
-                                      >
-                                        <Camera className="size-3" />
-                                        {ui.viewPhotos(item.photoProofs.length)}
-                                      </Button>
-                                    ) : null}
-                                  </div>
-                                ) : null}
+                          {entry.detailItems.map((item) => {
+                            const shift =
+                              entry.kind === "shift"
+                                ? enrichedShifts.find((value) => value.id === item.id) ??
+                                  null
+                                : null;
+
+                            return (
+                              <div
+                                className="flex items-start gap-3 py-1"
+                                key={item.id}
+                              >
+                                <img
+                                  alt={item.title}
+                                  className="size-9 rounded-full object-cover"
+                                  src={item.avatarSrc}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-heading text-[15px] font-medium text-foreground">
+                                    {item.title}
+                                  </p>
+                                  {item.subtitle || item.statusPlacement === "inline" ? (
+                                    <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                      {item.subtitle ? (
+                                        <p className="text-[13px] text-muted-foreground">
+                                          {item.subtitle}
+                                        </p>
+                                      ) : (
+                                        <span />
+                                      )}
+                                      {item.statusPlacement === "inline" && item.statusLabel ? (
+                                        <span
+                                          className={`shrink-0 font-heading text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                                            getEntryToneTextClass(item.statusTone) ??
+                                            "text-muted-foreground"
+                                          }`}
+                                        >
+                                          {item.statusLabel}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                  {shift?.createdByName ? (
+                                    <p className="mt-1 text-[12px] text-muted-foreground">
+                                      {ui.shiftAuthor}: {shift.createdByName}
+                                    </p>
+                                  ) : null}
+                                  {(item.statusPlacement !== "inline" && item.statusLabel) ||
+                                  item.metaLabel ||
+                                  item.photoProofs?.length ||
+                                  shift ? (
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                      {item.statusPlacement !== "inline" &&
+                                      item.statusLabel ? (
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${getStatusBadgeClass(item.statusTone)}`}
+                                        >
+                                          {item.statusLabel}
+                                        </span>
+                                      ) : null}
+                                      {item.metaLabel ? (
+                                        <span className="text-[12px] text-muted-foreground">
+                                          {item.metaLabel}
+                                        </span>
+                                      ) : null}
+                                      {item.photoProofs?.length ? (
+                                        <Button
+                                          onClick={() =>
+                                            setPhotoProofDialogTask({
+                                              title: entry.title,
+                                              proofs: item.photoProofs ?? [],
+                                            })
+                                          }
+                                          size="xs"
+                                          type="button"
+                                          variant="outline"
+                                        >
+                                          <Camera className="size-3" />
+                                          {ui.viewPhotos(item.photoProofs.length)}
+                                        </Button>
+                                      ) : null}
+                                      {shift ? (
+                                        <>
+                                          <Button
+                                            onClick={() => openEditShiftDialog(shift)}
+                                            size="xs"
+                                            type="button"
+                                            variant="outline"
+                                          >
+                                            <Pencil className="size-3" />
+                                            {ui.editShift}
+                                          </Button>
+                                          <Button
+                                            disabled={shiftActionId === shift.id}
+                                            onClick={() => void handleCancelShift(shift.id)}
+                                            size="xs"
+                                            type="button"
+                                            variant="outline"
+                                          >
+                                            <XCircle className="size-3" />
+                                            {shiftActionId === shift.id
+                                              ? "..."
+                                              : ui.cancelShift}
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : null}
                     </article>
@@ -3211,16 +3919,7 @@ export default function Schedule({
           <div className="shrink-0 border-t border-border/70 pt-3">
             <div className="flex justify-end">
               <Button
-                onClick={() => {
-                  setCreateShiftDraft((current) => ({
-                    ...current,
-                    shiftDate: formatDateInput(selectedDay ?? today),
-                    employeeId:
-                      current.employeeId ||
-                      (selectedEmployeeId !== "all" ? selectedEmployeeId : ""),
-                  }));
-                  setCreateShiftOpen(true);
-                }}
+                onClick={() => openCreateShiftForDay(selectedDay ?? today)}
                 type="button"
               >
                 <Plus className="size-4" />

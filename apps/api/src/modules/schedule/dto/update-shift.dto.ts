@@ -1,14 +1,17 @@
 import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class CreateShiftDto {
+export class UpdateShiftDto {
+  @IsOptional()
   @IsString()
-  templateId!: string;
+  templateId?: string;
 
+  @IsOptional()
   @IsString()
-  employeeId!: string;
+  employeeId?: string;
 
+  @IsOptional()
   @IsDateString()
-  shiftDate!: string;
+  shiftDate?: string;
 
   @IsOptional()
   @IsString()

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, UseGuards } from '@nestjs/common';
 import { AllowPendingAccess } from '../../common/decorators/allow-pending-access.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -46,6 +46,13 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: JwtUser) {
     return this.authService.me(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @AllowPendingAccess()
+  @Delete('me')
+  deleteMe(@CurrentUser() user: JwtUser) {
+    return this.authService.deleteAccount(user.sub);
   }
 
   @UseGuards(JwtAuthGuard)

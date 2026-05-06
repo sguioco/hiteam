@@ -42,6 +42,28 @@ function toAttendanceShift(shift: ShiftItem) {
   };
 }
 
+function getTodayTaskDueSortValue(task: TaskItem) {
+  return parseTaskDueAt(task)?.getTime() ?? Number.POSITIVE_INFINITY;
+}
+
+function sortTodayTasksBySchedule(left: TaskItem, right: TaskItem) {
+  const leftOpen = isTaskOpen(left.status);
+  const rightOpen = isTaskOpen(right.status);
+
+  if (leftOpen !== rightOpen) {
+    return leftOpen ? -1 : 1;
+  }
+
+  const leftDue = getTodayTaskDueSortValue(left);
+  const rightDue = getTodayTaskDueSortValue(right);
+
+  if (leftDue !== rightDue) {
+    return leftDue - rightDue;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
 const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -185,11 +207,13 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 
   const todayTasks = useMemo(
     () =>
-      visibleTasks.filter(
-        (task) =>
-          !isTaskMeeting(task) &&
-          taskAnchorsDateKey(task, todayDateKey, businessTimeZone),
-      ),
+      visibleTasks
+        .filter(
+          (task) =>
+            !isTaskMeeting(task) &&
+            taskAnchorsDateKey(task, todayDateKey, businessTimeZone),
+        )
+        .sort(sortTodayTasksBySchedule),
     [businessTimeZone, todayDateKey, visibleTasks],
   );
 

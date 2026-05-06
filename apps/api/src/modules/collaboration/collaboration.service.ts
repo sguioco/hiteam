@@ -6594,6 +6594,7 @@ export class CollaborationService {
       firstName: string;
       lastName: string;
       employeeNumber: string;
+      avatarUrl?: string | null;
       department: { id: string; name: string };
       primaryLocation: { id: string; name: string };
     },
@@ -6648,6 +6649,7 @@ export class CollaborationService {
         firstName: employee.firstName,
         lastName: employee.lastName,
         employeeNumber: employee.employeeNumber,
+        avatarUrl: employee.avatarUrl ?? null,
         department: employee.department
           ? {
               id: employee.department.id,
@@ -7504,6 +7506,7 @@ export class CollaborationService {
           firstName: true,
           lastName: true,
           employeeNumber: true,
+          avatarUrl: true,
           department: {
             select: {
               id: true,

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CreditCard,
-  Info,
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
@@ -130,10 +129,10 @@ function BillingHistoryList({
 }) {
   if (!invoiceRows.length) {
     return (
-      <div className="mt-5 rounded-xl border border-dashed border-[rgba(15,23,42,0.14)] px-4 py-6 font-heading text-sm text-muted-foreground">
+      <div className="mt-5 flex min-h-[72px] items-center justify-center rounded-xl border border-dashed border-[rgba(15,23,42,0.14)] px-4 py-6 text-center font-heading text-sm text-muted-foreground">
         {locale === "ru"
-          ? "История появится после первой полной оплаты."
-          : "Billing history will appear after the first full payment."}
+          ? "История появится после первой полной оплаты"
+          : "Billing history will appear after the first full payment"}
       </div>
     );
   }
@@ -247,8 +246,8 @@ export default function BillingPageClient({
     if (!session) {
       setError(
         locale === "ru"
-          ? "Сессия истекла. Войди заново."
-          : "Session expired. Sign in again.",
+          ? "Сессия истекла. Войди заново"
+          : "Session expired. Sign in again",
       );
       setLoading(false);
       return;
@@ -267,8 +266,8 @@ export default function BillingPageClient({
         requestError instanceof Error
           ? requestError.message
           : locale === "ru"
-            ? "Не удалось загрузить биллинг."
-            : "Failed to load billing.",
+            ? "Не удалось загрузить биллинг"
+            : "Failed to load billing",
       );
     } finally {
       setLoading(false);
@@ -290,8 +289,8 @@ export default function BillingPageClient({
           </h1>
           <p className="max-w-2xl font-heading text-sm text-muted-foreground">
             {locale === "ru"
-              ? "Управляйте местами, тарифом и платежными деталями."
-              : "Manage your seats, plan and billing details."}
+              ? "Управляйте местами, тарифом и платежными деталями"
+              : "Manage your seats, plan and billing details"}
           </p>
         </header>
 
@@ -334,21 +333,20 @@ export default function BillingPageClient({
 
                 <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,1fr)_1px_minmax(220px,0.85fr)] md:items-start">
                   <div className="grid gap-5">
-                    <div className="flex items-start gap-5">
-                      <Users
-                        className="mt-1 size-7 shrink-0 text-[#284bff]"
-                        strokeWidth={1.8}
-                      />
+                    <div className="grid gap-2">
                       <div className="min-w-0">
                         <p className="font-heading text-sm text-muted-foreground">
                           {locale === "ru" ? "Оплаченные места" : "Paid seats"}
                         </p>
-                        <p className="mt-1 font-heading text-4xl font-semibold leading-none tracking-[-0.06em] text-foreground tabular-nums">
-                          {summary.paidSeats} / {summary.requiredSeats}
-                        </p>
-                        <p className="mt-2 font-heading text-sm text-muted-foreground">
-                          {locale === "ru" ? "обязательных мест" : "required seats"}
-                        </p>
+                        <div className="mt-2 flex items-center gap-3">
+                          <Users
+                            className="size-7 shrink-0 text-[#284bff]"
+                            strokeWidth={1.8}
+                          />
+                          <p className="font-heading text-4xl font-semibold leading-none tracking-[-0.06em] text-foreground tabular-nums">
+                            {summary.paidSeats} / {summary.requiredSeats}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -405,13 +403,24 @@ export default function BillingPageClient({
                   </div>
                 </div>
 
-                <div className="mt-7 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-blue-50 px-5 py-4">
+                <div
+                  className={`mt-7 flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4 ${
+                    summary.missingSeats > 0 ? "bg-red-500" : "bg-blue-50"
+                  }`}
+                >
                   <div className="flex items-center gap-4">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#284bff]">
-                      <Users className="size-5" strokeWidth={1.9} />
-                    </div>
+                    <Users
+                      className={`size-8 shrink-0 ${
+                        summary.missingSeats > 0 ? "text-white" : "text-[#284bff]"
+                      }`}
+                      strokeWidth={1.9}
+                    />
                     <div className="font-heading">
-                      <p className="font-semibold text-foreground">
+                      <p
+                        className={`font-semibold ${
+                          summary.missingSeats > 0 ? "text-white" : "text-foreground"
+                        }`}
+                      >
                         {summary.missingSeats > 0
                           ? locale === "ru"
                             ? "Есть неоплаченные места"
@@ -420,20 +429,26 @@ export default function BillingPageClient({
                             ? "Места считаются автоматически"
                             : "Seats update automatically"}
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p
+                        className={`mt-1 text-sm ${
+                          summary.missingSeats > 0
+                            ? "text-white/86"
+                            : "text-muted-foreground"
+                        }`}
+                      >
                         {locale === "ru"
-                          ? "Инвайты добавляют места сразу, увольнения остаются в расчете до конца месяца."
-                          : "Invites reserve seats immediately; dismissals stay billable until month end."}
+                          ? "Инвайты добавляют места сразу, увольнения остаются в расчете до конца месяца"
+                          : "Invites reserve seats immediately; dismissals stay billable until month end"}
                       </p>
                     </div>
                   </div>
                   {summary.missingSeats > 0 ? (
-                    <div className="rounded-xl bg-white px-5 py-3 text-right font-heading">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {locale === "ru" ? "К оплате" : "Amount due"}
-                      </p>
-                      <p className="text-lg font-semibold text-red-600">
+                    <div className="min-w-[112px] text-center font-heading text-white">
+                      <p className="text-xl font-semibold leading-6">
                         {formatMoney(summary.amountDue, summary.price.currency, locale)}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-white/86">
+                        {locale === "ru" ? "К оплате" : "Amount due"}
                       </p>
                     </div>
                   ) : null}
@@ -506,8 +521,8 @@ export default function BillingPageClient({
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {locale === "ru"
-                          ? "После подключения платежи закроют недостающие места."
-                          : "Once connected, payments will cover missing seats."}
+                          ? "После подключения платежи закроют недостающие места"
+                          : "Once connected, payments will cover missing seats"}
                       </p>
                     </div>
                   </div>
@@ -540,19 +555,6 @@ export default function BillingPageClient({
               </article>
             </section>
 
-            <aside className="flex gap-4 rounded-2xl bg-blue-50 px-5 py-4 font-heading text-sm text-slate-700">
-              <Info className="mt-0.5 size-5 shrink-0 text-[#284bff]" />
-              <div>
-                <p className="font-semibold text-foreground">
-                  {locale === "ru" ? "Как работает биллинг" : "How billing works"}
-                </p>
-                <p className="mt-1">
-                  {locale === "ru"
-                    ? "Дата биллинга начинается после первой полной оплаты. Дальше сумма списывается ежемесячно по обязательным местам."
-                    : "Billing starts after the first full payment. After that, required seats are charged monthly."}
-                </p>
-              </div>
-            </aside>
           </>
         ) : summary ? (
           <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">

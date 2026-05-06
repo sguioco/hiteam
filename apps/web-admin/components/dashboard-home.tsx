@@ -2127,8 +2127,8 @@ export default function DashboardHome({
                           value={taskDraft.dueAt}
                         />
                       ) : (
-                        <div className="grid gap-2 rounded-2xl border border-border/70 bg-secondary/20 p-3">
-                          <label className="inline-flex cursor-pointer items-center gap-3">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(190px,240px)]">
+                          <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
                             <Checkbox
                               checked={taskDraft.hasDueTime}
                               onCheckedChange={(checked) =>
@@ -2153,9 +2153,23 @@ export default function DashboardHome({
                               {localize(locale, "Сделать до времени", "Set deadline time")}
                             </span>
                           </label>
-                          {!taskDraft.isRecurring && taskDraft.hasDueTime ? (
+                          {taskDraft.isRecurring ? (
                             <Input
                               className="h-11"
+                              disabled={!taskDraft.hasDueTime}
+                              onChange={(event) =>
+                                setTaskDraft((current) => ({
+                                  ...current,
+                                  dueTimeLocal: event.target.value,
+                                }))
+                              }
+                              type="time"
+                              value={taskDraft.dueTimeLocal}
+                            />
+                          ) : (
+                            <Input
+                              className="h-11"
+                              disabled={!taskDraft.hasDueTime}
                               onChange={(e) =>
                                 setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
                               }
@@ -2163,7 +2177,7 @@ export default function DashboardHome({
                               type="datetime-local"
                               value={taskDraft.dueAt}
                             />
-                          ) : null}
+                          )}
                         </div>
                       )}
                       </div>
@@ -2276,22 +2290,6 @@ export default function DashboardHome({
                                     );
                                   })}
                                 </div>
-                              </label>
-                            ) : null}
-                            {taskDraft.hasDueTime ? (
-                              <label className="col-span-full grid gap-2 text-sm font-heading">
-                                <span>{localize(locale, "Время выполнения", "Due time")}</span>
-                                <Input
-                                  className="h-11"
-                                  onChange={(event) =>
-                                    setTaskDraft((current) => ({
-                                      ...current,
-                                      dueTimeLocal: event.target.value,
-                                    }))
-                                  }
-                                  type="time"
-                                  value={taskDraft.dueTimeLocal}
-                                />
                               </label>
                             ) : null}
                             <label className="col-span-full grid gap-2 text-sm font-heading">

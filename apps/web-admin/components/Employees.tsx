@@ -598,6 +598,10 @@ const Employees = ({
     startsAtLocal: "09:00",
     endsAtLocal: "18:00",
     weekDays: [1, 2, 3, 4, 5],
+    fixedBreakEnabled: false,
+    fixedBreakStartsAtLocal: "13:00",
+    fixedBreakDurationMinutes: "30",
+    fixedBreakIsPaid: false,
   });
   const [createTemplateSubmitting, setCreateTemplateSubmitting] =
     useState(false);
@@ -611,6 +615,10 @@ const Employees = ({
   const [assignShiftDraft, setAssignShiftDraft] = useState({
     templateId: "",
     shiftDate: new Date().toISOString().split("T")[0],
+    fixedBreakEnabled: false,
+    fixedBreakStartsAtLocal: "13:00",
+    fixedBreakDurationMinutes: "30",
+    fixedBreakIsPaid: false,
   });
   const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
   const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
@@ -641,6 +649,21 @@ const Employees = ({
       return;
     }
 
+    const fixedBreakDuration = Number(templateDraft.fixedBreakDurationMinutes);
+    if (
+      templateDraft.fixedBreakEnabled &&
+      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+    ) {
+      setCreateTemplateError(
+        runtimeLocalize(
+          "Укажите длительность фиксированного перерыва",
+          "Enter fixed break duration",
+          locale,
+        ),
+      );
+      return;
+    }
+
     setCreateTemplateSubmitting(true);
     setCreateTemplateError(null);
 
@@ -664,6 +687,15 @@ const Employees = ({
         endsAtLocal: templateDraft.endsAtLocal,
         weekDaysJson: JSON.stringify(templateDraft.weekDays),
         gracePeriodMinutes: 10,
+        fixedBreakStartsAtLocal: templateDraft.fixedBreakEnabled
+          ? templateDraft.fixedBreakStartsAtLocal
+          : null,
+        fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
+          ? fixedBreakDuration
+          : 0,
+        fixedBreakIsPaid: templateDraft.fixedBreakEnabled
+          ? templateDraft.fixedBreakIsPaid
+          : false,
         createdAt,
         updatedAt: createdAt,
         location,
@@ -685,6 +717,10 @@ const Employees = ({
         startsAtLocal: "09:00",
         endsAtLocal: "18:00",
         weekDays: [1, 2, 3, 4, 5],
+        fixedBreakEnabled: false,
+        fixedBreakStartsAtLocal: "13:00",
+        fixedBreakDurationMinutes: "30",
+        fixedBreakIsPaid: false,
       });
       setCreateTemplateSubmitting(false);
       return;
@@ -701,6 +737,15 @@ const Employees = ({
           endsAtLocal: templateDraft.endsAtLocal,
           weekDays: templateDraft.weekDays,
           gracePeriodMinutes: 10,
+          fixedBreakStartsAtLocal: templateDraft.fixedBreakEnabled
+            ? templateDraft.fixedBreakStartsAtLocal
+            : undefined,
+          fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
+            ? fixedBreakDuration
+            : 0,
+          fixedBreakIsPaid: templateDraft.fixedBreakEnabled
+            ? templateDraft.fixedBreakIsPaid
+            : false,
         }),
       });
 
@@ -741,6 +786,10 @@ const Employees = ({
         startsAtLocal: "09:00",
         endsAtLocal: "18:00",
         weekDays: [1, 2, 3, 4, 5],
+        fixedBreakEnabled: false,
+        fixedBreakStartsAtLocal: "13:00",
+        fixedBreakDurationMinutes: "30",
+        fixedBreakIsPaid: false,
       });
     } catch (error) {
       setCreateTemplateError(
@@ -1975,15 +2024,35 @@ const Employees = ({
   }
 
   function openAssignShiftDialog(employee: EmployeeRowView) {
+    const template = scheduleTemplates[0];
+    const fixedBreakDuration = template?.fixedBreakDurationMinutes ?? 0;
     setAssignShiftError(null);
     setAssignShiftDraft({
-      templateId: scheduleTemplates[0]?.id ?? "",
+      templateId: template?.id ?? "",
       shiftDate: new Date().toISOString().split("T")[0],
+      fixedBreakEnabled: fixedBreakDuration > 0,
+      fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
+      fixedBreakDurationMinutes: String(fixedBreakDuration || 30),
+      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
     });
     setAssignShiftDialog({
       employeeId: employee.id,
       employeeName: employee.name,
     });
+  }
+
+  function applyAssignShiftTemplateDefaults(templateId: string) {
+    const template = scheduleTemplates.find((item) => item.id === templateId);
+    const fixedBreakDuration = template?.fixedBreakDurationMinutes ?? 0;
+
+    setAssignShiftDraft((current) => ({
+      ...current,
+      templateId,
+      fixedBreakEnabled: fixedBreakDuration > 0,
+      fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
+      fixedBreakDurationMinutes: String(fixedBreakDuration || 30),
+      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
+    }));
   }
 
   async function handleCreateShift() {
@@ -1993,6 +2062,21 @@ const Employees = ({
     if (!assignShiftDraft.templateId || !assignShiftDraft.shiftDate) {
       setAssignShiftError(
         runtimeLocalize("Выберите шаблон и дату", "Select template and date", locale),
+      );
+      return;
+    }
+
+    const fixedBreakDuration = Number(assignShiftDraft.fixedBreakDurationMinutes);
+    if (
+      assignShiftDraft.fixedBreakEnabled &&
+      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+    ) {
+      setAssignShiftError(
+        runtimeLocalize(
+          "Укажите длительность фиксированного перерыва",
+          "Enter fixed break duration",
+          locale,
+        ),
       );
       return;
     }
@@ -2008,6 +2092,15 @@ const Employees = ({
           employeeId: assignShiftDialog.employeeId,
           templateId: assignShiftDraft.templateId,
           shiftDate: assignShiftDraft.shiftDate,
+          fixedBreakStartsAtLocal: assignShiftDraft.fixedBreakEnabled
+            ? assignShiftDraft.fixedBreakStartsAtLocal
+            : undefined,
+          fixedBreakDurationMinutes: assignShiftDraft.fixedBreakEnabled
+            ? fixedBreakDuration
+            : 0,
+          fixedBreakIsPaid: assignShiftDraft.fixedBreakEnabled
+            ? assignShiftDraft.fixedBreakIsPaid
+            : false,
         }),
       });
 
@@ -3476,6 +3569,70 @@ const Employees = ({
               />
             </div>
 
+            <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4">
+              <label className="flex items-center gap-3 text-sm font-heading font-semibold">
+                <input
+                  checked={templateDraft.fixedBreakEnabled}
+                  className="h-4 w-4 rounded border accent-primary"
+                  onChange={(event) =>
+                    setTemplateDraft((current) => ({
+                      ...current,
+                      fixedBreakEnabled: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
+              </label>
+              {templateDraft.fixedBreakEnabled ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
+                    {runtimeLocalize("Начало", "Start", locale)}
+                    <Input
+                      className="h-11"
+                      onChange={(event) =>
+                        setTemplateDraft((current) => ({
+                          ...current,
+                          fixedBreakStartsAtLocal: event.target.value,
+                        }))
+                      }
+                      type="time"
+                      value={templateDraft.fixedBreakStartsAtLocal}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
+                    {runtimeLocalize("Минут", "Minutes", locale)}
+                    <Input
+                      className="h-11"
+                      min={1}
+                      onChange={(event) =>
+                        setTemplateDraft((current) => ({
+                          ...current,
+                          fixedBreakDurationMinutes: event.target.value,
+                        }))
+                      }
+                      type="number"
+                      value={templateDraft.fixedBreakDurationMinutes}
+                    />
+                  </label>
+                  <label className="flex items-center gap-3 pt-6 text-sm font-heading text-muted-foreground">
+                    <input
+                      checked={templateDraft.fixedBreakIsPaid}
+                      className="h-4 w-4 rounded border accent-primary"
+                      onChange={(event) =>
+                        setTemplateDraft((current) => ({
+                          ...current,
+                          fixedBreakIsPaid: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    {runtimeLocalize("Оплачиваемый", "Paid", locale)}
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
             <div className="space-y-2">
               <div>
                 <p className="text-sm font-medium text-foreground">
@@ -4062,8 +4219,9 @@ const Employees = ({
                 />
               </label>
               {!taskDraft.isRecurring ? (
-                <label className="grid gap-2 rounded-2xl border border-border/70 bg-secondary/20 p-3 text-sm font-heading">
-                  <span className="inline-flex cursor-pointer items-center gap-3">
+                <div className="grid gap-2 text-sm font-heading">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(190px,240px)]">
+                    <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
                     <Checkbox
                       checked={taskDraft.hasDueTime}
                       onCheckedChange={(checked) =>
@@ -4075,10 +4233,10 @@ const Employees = ({
                       }
                     />
                     <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
-                  </span>
-                  {taskDraft.hasDueTime ? (
+                    </label>
                     <Input
                       className="h-11"
+                      disabled={!taskDraft.hasDueTime}
                       onChange={(event) =>
                         setTaskDraft((current) => ({
                           ...current,
@@ -4088,7 +4246,7 @@ const Employees = ({
                       type="datetime-local"
                       value={taskDraft.dueAt}
                     />
-                  ) : null}
+                  </div>
                   {taskDialog?.mode === "employee" &&
                   canCheckWorkdays &&
                   taskDayStatus ? (
@@ -4105,7 +4263,7 @@ const Employees = ({
                         : runtimeLocalize("выходной день", "day off", locale)}
                     </span>
                   ) : null}
-                </label>
+                </div>
               ) : null}
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -4176,8 +4334,8 @@ const Employees = ({
                     value={taskDraft.startDate}
                   />
                 </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span className="inline-flex cursor-pointer items-center gap-3">
+                <div className="grid gap-2 text-sm font-heading sm:grid-cols-[minmax(0,1fr)_minmax(140px,180px)]">
+                  <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
                     <Checkbox
                       checked={taskDraft.hasDueTime}
                       onCheckedChange={(checked) =>
@@ -4192,21 +4350,20 @@ const Employees = ({
                       }
                     />
                     <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
-                  </span>
-                  {taskDraft.hasDueTime ? (
-                    <Input
-                      className="h-11"
-                      onChange={(event) =>
-                        setTaskDraft((current) => ({
-                          ...current,
-                          dueTimeLocal: event.target.value,
-                        }))
-                      }
-                      type="time"
-                      value={taskDraft.dueTimeLocal}
-                    />
-                  ) : null}
-                </label>
+                  </label>
+                  <Input
+                    className="h-11"
+                    disabled={!taskDraft.hasDueTime}
+                    onChange={(event) =>
+                      setTaskDraft((current) => ({
+                        ...current,
+                        dueTimeLocal: event.target.value,
+                      }))
+                    }
+                    type="time"
+                    value={taskDraft.dueTimeLocal}
+                  />
+                </div>
                 {taskDraft.frequency === "WEEKLY" ? (
                   <label className="col-span-full grid gap-2 text-sm font-heading">
                     <span>{runtimeLocalize("Дни недели", "Weekdays", locale)}</span>
@@ -4532,10 +4689,7 @@ const Employees = ({
                     return;
                   }
 
-                  setAssignShiftDraft((current) => ({
-                    ...current,
-                    templateId: value,
-                  }));
+                  applyAssignShiftTemplateDefaults(value);
                 }}
                 value={assignShiftDraft.templateId}
               >
@@ -4587,6 +4741,69 @@ const Employees = ({
                 value={assignShiftDraft.shiftDate}
               />
             </label>
+            <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4">
+              <label className="flex items-center gap-3 text-sm font-heading font-semibold">
+                <input
+                  checked={assignShiftDraft.fixedBreakEnabled}
+                  className="h-4 w-4 rounded border accent-primary"
+                  onChange={(event) =>
+                    setAssignShiftDraft((current) => ({
+                      ...current,
+                      fixedBreakEnabled: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
+              </label>
+              {assignShiftDraft.fixedBreakEnabled ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
+                    {runtimeLocalize("Начало", "Start", locale)}
+                    <Input
+                      className="h-11"
+                      onChange={(event) =>
+                        setAssignShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakStartsAtLocal: event.target.value,
+                        }))
+                      }
+                      type="time"
+                      value={assignShiftDraft.fixedBreakStartsAtLocal}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
+                    {runtimeLocalize("Минут", "Minutes", locale)}
+                    <Input
+                      className="h-11"
+                      min={1}
+                      onChange={(event) =>
+                        setAssignShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakDurationMinutes: event.target.value,
+                        }))
+                      }
+                      type="number"
+                      value={assignShiftDraft.fixedBreakDurationMinutes}
+                    />
+                  </label>
+                  <label className="flex items-center gap-3 pt-6 text-sm font-heading text-muted-foreground">
+                    <input
+                      checked={assignShiftDraft.fixedBreakIsPaid}
+                      className="h-4 w-4 rounded border accent-primary"
+                      onChange={(event) =>
+                        setAssignShiftDraft((current) => ({
+                          ...current,
+                          fixedBreakIsPaid: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    {runtimeLocalize("Оплачиваемый", "Paid", locale)}
+                  </label>
+                </div>
+              ) : null}
+            </div>
             {assignShiftError ? (
               <div className="error-box">{assignShiftError}</div>
             ) : null}

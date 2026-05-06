@@ -7,10 +7,10 @@ import { ActivityIndicator, Image, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { loadMyProfile } from "../../lib/api";
+import { deleteMyAccount, loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getDirectionalIconStyle, getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
-import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
+import { clearScreenCache, peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
 import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
@@ -26,6 +26,9 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
@@ -198,6 +201,28 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
 
   function handleSignOut() {
     setSignOutConfirmOpen(true);
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteInFlight(true);
+    setDeleteError(null);
+
+    try {
+      await deleteMyAccount();
+      await clearScreenCache(PROFILE_SCREEN_CACHE_KEY);
+      hapticSuccess();
+      setDeleteConfirmOpen(false);
+      signOutLocally();
+      router.replace("/");
+    } catch (nextError) {
+      setDeleteError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("profile.deleteAccountError"),
+      );
+    } finally {
+      setDeleteInFlight(false);
+    }
   }
 
   const sheetActionLabelStyle = {
@@ -381,6 +406,29 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
                 </Text>
               </PressableScale>
             </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.delay(125)
+                .duration(180)
+                .withInitialValues({
+                  opacity: 0,
+                  transform: [{ translateY: 8 }],
+                })}
+            >
+              <PressableScale
+                className="flex-row items-center gap-3 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                haptic="warning"
+                onPress={() => {
+                  setDeleteError(null);
+                  setDeleteConfirmOpen(true);
+                }}
+              >
+                <Ionicons color="#f25555" name="trash-outline" size={20} />
+                <Text className="font-body text-[15px] font-medium text-destructive">
+                  {t("profile.deleteAccountButton")}
+                </Text>
+              </PressableScale>
+            </Animated.View>
           </View>
         </ScrollView>
       </View>
@@ -440,6 +488,85 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
                 <Text style={[sheetActionLabelStyle, { color: "#ffffff" }]}>
                   {t("profile.signOut")}
                 </Text>
+              </PressableScale>
+            </View>
+          </BottomSheet.Content>
+        </BottomSheet.Portal>
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          if (!deleteInFlight) {
+            setDeleteConfirmOpen(open);
+            if (!open) {
+              setDeleteError(null);
+            }
+          }
+        }}
+      >
+        <BottomSheet.Portal disableFullWindowOverlay={__DEV__}>
+          <BottomSheet.Overlay
+            style={{ backgroundColor: "rgba(6, 14, 28, 0.42)" }}
+          />
+          <BottomSheet.Content
+            backgroundClassName="rounded-t-[34px] bg-[#f7faff]"
+            enableDynamicSizing={false}
+            snapPoints={["34%"]}
+            className="px-5 pb-7 pt-5"
+            contentContainerClassName="pb-2"
+          >
+            <View className="mb-6 items-center gap-3">
+              <BottomSheet.Title
+                style={{
+                  color: "#111827",
+                  fontFamily: "Manrope_700Bold",
+                  fontSize: 24,
+                  includeFontPadding: false,
+                  lineHeight: 30,
+                  textAlign: "center",
+                }}
+              >
+                {t("profile.deleteAccountTitle")}
+              </BottomSheet.Title>
+              <Text className="px-3 text-center font-body text-[14px] leading-6 text-muted-foreground">
+                {t("profile.deleteAccountBody")}
+              </Text>
+              {deleteError ? (
+                <View className="w-full rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
+                  <Text className="text-center font-body text-[13px] leading-5 text-danger">
+                    {deleteError}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View className="flex-row gap-3">
+              <PressableScale
+                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#eef5ff] px-4 py-4"
+                containerClassName="flex-1"
+                disabled={deleteInFlight}
+                haptic="selection"
+                onPress={() => setDeleteConfirmOpen(false)}
+              >
+                <Text style={[sheetActionLabelStyle, { color: "#234067" }]}>
+                  {t("profile.cancel")}
+                </Text>
+              </PressableScale>
+              <PressableScale
+                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#f25555] px-4 py-4"
+                containerClassName="flex-1"
+                disabled={deleteInFlight}
+                haptic="warning"
+                onPress={() => void handleDeleteAccount()}
+              >
+                {deleteInFlight ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={[sheetActionLabelStyle, { color: "#ffffff" }]}>
+                    {t("profile.deleteAccountConfirm")}
+                  </Text>
+                )}
               </PressableScale>
             </View>
           </BottomSheet.Content>

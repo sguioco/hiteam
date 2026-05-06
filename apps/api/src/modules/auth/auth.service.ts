@@ -637,4 +637,96 @@ export class AuthService {
       workspaceAccessAllowed: user.workspaceAccessAllowed,
     };
   }
+
+  async deleteAccount(userId: string): Promise<{ success: true }> {
+    const disabledPasswordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          tenantId: true,
+          employee: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Account is unavailable.');
+      }
+
+      const employeeId = user.employee?.id;
+
+      await tx.session.deleteMany({ where: { userId: user.id } });
+      await tx.notification.deleteMany({ where: { userId: user.id } });
+      await tx.pushDelivery.deleteMany({ where: { userId: user.id } });
+      await tx.pushDevice.deleteMany({ where: { userId: user.id } });
+
+      if (employeeId) {
+        await tx.biometricArtifact.deleteMany({ where: { employeeId } });
+        await tx.biometricVerification.deleteMany({ where: { employeeId } });
+        await tx.biometricJob.deleteMany({ where: { employeeId } });
+        await tx.biometricProfile.deleteMany({ where: { employeeId } });
+
+        await tx.employee.update({
+          where: { id: employeeId },
+          data: {
+            firstName: 'Deleted',
+            lastName: 'Account',
+            middleName: null,
+            birthDate: null,
+            gender: null,
+            phone: null,
+            avatarStorageKey: null,
+            avatarUrl: null,
+            status: EmployeeStatus.TERMINATED,
+          },
+        });
+
+        await tx.employeeInvitation.updateMany({
+          where: { userId: user.id },
+          data: {
+            email: null,
+            firstName: null,
+            lastName: null,
+            middleName: null,
+            birthDate: null,
+            gender: null,
+            phone: null,
+            avatarStorageKey: null,
+            avatarUrl: null,
+          },
+        });
+      }
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          email: `deleted+${user.id}@deleted.local`,
+          passwordHash: disabledPasswordHash,
+          status: UserStatus.SUSPENDED,
+          workspaceAccessAllowed: false,
+          bannerTheme: 'blue',
+        },
+      });
+
+      return user;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+
+    await this.auditService.log({
+      tenantId: result.tenantId,
+      actorUserId: result.id,
+      entityType: 'user',
+      entityId: result.id,
+      action: 'auth.account_deleted',
+    });
+
+    return { success: true };
+  }
 }

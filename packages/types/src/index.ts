@@ -244,6 +244,7 @@ export type WorkGroupItem = {
       firstName: string;
       lastName: string;
       employeeNumber: string;
+      avatarUrl?: string | null;
     };
   }>;
   _count?: {
@@ -296,6 +297,7 @@ export type TaskItem = {
     firstName: string;
     lastName: string;
     employeeNumber: string;
+    avatarUrl?: string | null;
     department?: {
       id: string;
       name: string;
@@ -563,6 +565,9 @@ export type ScheduleShiftTemplateRecord = {
   endsAtLocal: string;
   weekDaysJson?: string | null;
   gracePeriodMinutes: number;
+  fixedBreakStartsAtLocal?: string | null;
+  fixedBreakDurationMinutes?: number;
+  fixedBreakIsPaid?: boolean;
   createdAt: string;
   updatedAt: string;
   location: NamedEntityOption;
@@ -578,6 +583,9 @@ export type ScheduleShiftRecord = {
   shiftDate: string;
   startsAt: string;
   endsAt: string;
+  fixedBreakStartsAt?: string | null;
+  fixedBreakDurationMinutes?: number;
+  fixedBreakIsPaid?: boolean;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -587,7 +595,14 @@ export type ScheduleShiftRecord = {
     firstName: string;
     lastName: string;
     employeeNumber: string;
+    avatarUrl?: string | null;
   };
+  createdByEmployee?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  } | null;
   location: NamedEntityOption;
   position: NamedEntityOption;
   template: ScheduleShiftTemplateRecord;
@@ -600,6 +615,7 @@ export type ManagerScheduleShiftItem = ScheduleShiftRecord & {
     firstName: string;
     lastName: string;
     employeeNumber: string;
+    avatarUrl?: string | null;
   };
   template: ManagerShiftTemplateItem;
 };

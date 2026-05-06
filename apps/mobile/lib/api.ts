@@ -461,6 +461,12 @@ export async function loadMyProfile(): Promise<EmployeeProfileResponse> {
   return response.initialData.profile;
 }
 
+export async function deleteMyAccount(): Promise<{ success: true }> {
+  return authRequest<{ success: true }>("/auth/me", {
+    method: "DELETE",
+  });
+}
+
 export async function updateMyBannerTheme(
   theme: BannerTheme,
 ): Promise<EmployeeProfileResponse> {
@@ -901,6 +907,9 @@ export async function createManagerShiftTemplate(payload: {
   endsAtLocal: string;
   weekDays: number[];
   gracePeriodMinutes?: number;
+  fixedBreakStartsAtLocal?: string;
+  fixedBreakDurationMinutes?: number;
+  fixedBreakIsPaid?: boolean;
 }) {
   return authRequest<ManagerShiftTemplateItem>("/schedule/templates", {
     method: "POST",
@@ -917,11 +926,40 @@ export async function createManagerShift(payload: {
   templateId: string;
   employeeId: string;
   shiftDate: string;
+  fixedBreakStartsAtLocal?: string;
+  fixedBreakDurationMinutes?: number;
+  fixedBreakIsPaid?: boolean;
 }) {
   return authRequest<ManagerScheduleShiftItem>("/schedule/shifts", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function updateManagerShift(
+  shiftId: string,
+  payload: {
+    templateId?: string;
+    employeeId?: string;
+    shiftDate?: string;
+    fixedBreakStartsAtLocal?: string;
+    fixedBreakDurationMinutes?: number;
+    fixedBreakIsPaid?: boolean;
+  },
+) {
+  return authRequest<ManagerScheduleShiftItem>(`/schedule/shifts/${shiftId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cancelManagerShift(shiftId: string) {
+  return authRequest<ManagerScheduleShiftItem>(
+    `/schedule/shifts/${shiftId}/cancel`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export type AttendanceActionName =

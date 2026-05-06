@@ -30,16 +30,22 @@ import type {
   WorkGroupItem,
 } from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
-import { TimeWheelPicker, type TimeValue } from "../components/TimeWheelPicker";
+import {
+  TimeWheelPicker,
+  TimeWheelPickerPanel,
+  type TimeValue,
+} from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import {
   createManagerShiftTemplate,
   createManagerShift,
+  cancelManagerShift,
   loadEmployeesBootstrap,
   loadManagerScheduleBootstrap,
   loadManagerTasksBootstrap,
   loadMyAnnouncements,
   rescheduleMyTask,
+  updateManagerShift,
   updateMyTaskStatus,
 } from "../../lib/api";
 import {
@@ -55,6 +61,7 @@ import {
   writeScreenCache,
 } from "../../lib/screen-cache";
 import { parseTaskMeta } from "../../lib/task-meta";
+import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import {
   isTaskMeeting,
   isTaskOpen,
@@ -102,6 +109,21 @@ type ManagerGroup = WorkGroupItem;
 type ManagerScheduleShift = ManagerScheduleShiftItem;
 type ManagerShiftTemplate = ManagerShiftTemplateItem;
 
+type ManagerTaskSearchResult = {
+  task: TaskItem;
+  date: Date;
+  dayNumber: number;
+  monthLabel: string;
+  title: string;
+  employee?: ManagerEmployee;
+  employeeName: string;
+  firstName: string;
+  lastName: string;
+  photoCount: number;
+  visuallyDone: boolean;
+  isOverdue: boolean;
+};
+
 type CalendarScreenCacheValue = {
   shifts: CalendarShift[];
   tasks: TaskItem[];
@@ -116,6 +138,10 @@ type ShiftTemplateDraft = {
   startsAt: TimeValue;
   endsAt: TimeValue;
   weekDays: number[];
+  fixedBreakEnabled: boolean;
+  fixedBreakStartsAt: TimeValue;
+  fixedBreakDurationMinutes: string;
+  fixedBreakIsPaid: boolean;
 };
 
 const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
@@ -126,6 +152,10 @@ function createDefaultShiftTemplateDraft(): ShiftTemplateDraft {
     startsAt: { hour: 9, minute: 0 },
     endsAt: { hour: 18, minute: 0 },
     weekDays: [1, 2, 3, 4, 5],
+    fixedBreakEnabled: false,
+    fixedBreakStartsAt: { hour: 13, minute: 0 },
+    fixedBreakDurationMinutes: "30",
+    fixedBreakIsPaid: false,
   };
 }
 
@@ -148,6 +178,19 @@ function combineDateAndTime(date: Date, time: TimeValue) {
 
 function formatLocalTime(value: TimeValue) {
   return `${`${value.hour}`.padStart(2, "0")}:${`${value.minute}`.padStart(2, "0")}`;
+}
+
+function parseLocalTime(value?: string | null): TimeValue | null {
+  const match = value?.match(/^(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+  };
 }
 
 const CYRILLIC_TEMPLATE_CODE_MAP: Record<string, string> = {
@@ -252,6 +295,7 @@ function buildManagerEmployeeFromTask(task: TaskItem): ManagerEmployee | null {
   if (!task.assigneeEmployee) {
     return null;
   }
+  const assigneeAvatarUrl = task.assigneeEmployee.avatarUrl ?? null;
 
   return {
     id: task.assigneeEmployee.id,
@@ -262,6 +306,13 @@ function buildManagerEmployeeFromTask(task: TaskItem): ManagerEmployee | null {
     department: task.assigneeEmployee.department ?? null,
     position: null,
     primaryLocation: task.assigneeEmployee.primaryLocation ?? null,
+    avatar: resolveEmployeeAvatarSource({
+      avatarUrl: assigneeAvatarUrl,
+      employeeNumber: task.assigneeEmployee.employeeNumber,
+      firstName: task.assigneeEmployee.firstName,
+      id: task.assigneeEmployee.id,
+      lastName: task.assigneeEmployee.lastName,
+    }),
   };
 }
 
@@ -276,6 +327,12 @@ function formatShiftRange(shift: ManagerScheduleShift, locale: string) {
   });
 
   return `${start} - ${end}`;
+}
+
+function getManagerShiftGroupId(shift?: ManagerScheduleShift | null) {
+  return shift
+    ? `${shift.template.id}:${shift.startsAt}:${shift.endsAt}`
+    : "without-shift";
 }
 
 function normalizeManagerShiftCandidate(
@@ -446,6 +503,8 @@ export default function CalendarScreen({
   const [expandedManagerEmployeeId, setExpandedManagerEmployeeId] = useState<
     string | null
   >(null);
+  const [expandedManagerShiftGroupIds, setExpandedManagerShiftGroupIds] =
+    useState<string[]>([]);
   const [expandedManagerGroupIds, setExpandedManagerGroupIds] = useState<
     string[]
   >([]);
@@ -453,16 +512,30 @@ export default function CalendarScreen({
     Set<string>
   >(() => new Set());
   const [assignShiftSheetVisible, setAssignShiftSheetVisible] = useState(false);
-  const [assignShiftEmployeeId, setAssignShiftEmployeeId] = useState("");
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [assignShiftEmployeeIds, setAssignShiftEmployeeIds] = useState<
+    string[]
+  >([]);
   const [assignShiftTemplateId, setAssignShiftTemplateId] = useState("");
+  const [assignShiftBreakEnabled, setAssignShiftBreakEnabled] = useState(false);
+  const [assignShiftBreakStartsAt, setAssignShiftBreakStartsAt] =
+    useState<TimeValue>(() => ({ hour: 13, minute: 0 }));
+  const [
+    assignShiftBreakDurationMinutes,
+    setAssignShiftBreakDurationMinutes,
+  ] = useState("30");
+  const [assignShiftBreakIsPaid, setAssignShiftBreakIsPaid] = useState(false);
+  const [assignShiftBreakPickerVisible, setAssignShiftBreakPickerVisible] =
+    useState(false);
   const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
+  const [shiftActionId, setShiftActionId] = useState<string | null>(null);
   const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
   const [templateComposerVisible, setTemplateComposerVisible] = useState(false);
   const [templateDraft, setTemplateDraft] = useState<ShiftTemplateDraft>(() =>
     createDefaultShiftTemplateDraft(),
   );
   const [templateTimePickerTarget, setTemplateTimePickerTarget] = useState<
-    "start" | "end" | null
+    "start" | "end" | "break" | null
   >(null);
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
@@ -858,13 +931,17 @@ export default function CalendarScreen({
 
   const overdueTasks = useMemo(() => {
     return tasks
-      .filter((task) => isOverdueTask(task, today))
+      .filter(
+        (task) =>
+          isOverdueTask(task, today) &&
+          buildTaskPhotos(task, locale).length === 0,
+      )
       .sort((left, right) => {
         const leftDueAt = parseTaskDueAt(left)?.getTime() ?? Infinity;
         const rightDueAt = parseTaskDueAt(right)?.getTime() ?? Infinity;
         return leftDueAt - rightDueAt;
       });
-  }, [tasks, today]);
+  }, [locale, tasks, today]);
   const activePhotoTask = useMemo(
     () => tasks.find((task) => task.id === activePhotoTaskId) ?? null,
     [activePhotoTaskId, tasks],
@@ -947,6 +1024,13 @@ export default function CalendarScreen({
           department: null,
           position: null,
           primaryLocation: null,
+          avatar: resolveEmployeeAvatarSource({
+            avatarUrl: membership.employee.avatarUrl ?? null,
+            employeeNumber: membership.employee.employeeNumber,
+            firstName: membership.employee.firstName,
+            id: membership.employee.id,
+            lastName: membership.employee.lastName,
+          }),
         });
       });
     });
@@ -965,11 +1049,138 @@ export default function CalendarScreen({
         department: null,
         position: shift.position ?? null,
         primaryLocation: shift.location ?? null,
+        avatar: resolveEmployeeAvatarSource({
+          avatarUrl: shift.employee.avatarUrl ?? null,
+          employeeNumber: shift.employee.employeeNumber,
+          firstName: shift.employee.firstName,
+          id: shift.employee.id,
+          lastName: shift.employee.lastName,
+        }),
       });
     });
 
     return map;
   }, [managerEmployees, managerGroups, managerShifts, tasks]);
+
+  const overdueTaskGroups = useMemo(() => {
+    const groupByEmployeeId = new Map<
+      string,
+      { id: string; name: string }
+    >();
+
+    managerGroups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (!groupByEmployeeId.has(membership.employeeId)) {
+          groupByEmployeeId.set(membership.employeeId, {
+            id: group.id,
+            name: group.name,
+          });
+        }
+      });
+    });
+
+    const groups = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        tasks: Array<{
+          avatarSource: ManagerEmployee["avatar"] | null;
+          dateLabel: string;
+          dueAt: Date | null;
+          employeeId: string | null;
+          employeeName: string;
+          firstName: string;
+          lastName: string;
+          photoCount: number;
+          subtitle: string;
+          task: TaskItem;
+          title: string;
+        }>;
+      }
+    >();
+
+    overdueTasks.forEach((task) => {
+      const employeeId = getTaskAssigneeId(task);
+      const employee =
+        (employeeId ? managerEmployeeDirectory.get(employeeId) : null) ??
+        buildManagerEmployeeFromTask(task);
+      const explicitGroup = task.group
+        ? { id: task.group.id, name: task.group.name }
+        : null;
+      const membershipGroup = employeeId
+        ? groupByEmployeeId.get(employeeId) ?? null
+        : null;
+      const group = explicitGroup ?? membershipGroup;
+      const groupId = group?.id ?? "without-group";
+      const groupTitle = group?.name ?? t("calendar.withoutGroup");
+      const firstName = employee?.firstName ?? task.assigneeEmployee?.firstName ?? "";
+      const lastName = employee?.lastName ?? task.assigneeEmployee?.lastName ?? "";
+      const employeeName =
+        buildEmployeeName(firstName, lastName) ||
+        employee?.employeeNumber ||
+        task.group?.name ||
+        t("calendar.groupTask");
+      const dueAt = parseTaskDueAt(task);
+      const dateLabel = dueAt
+        ? dueAt.toLocaleDateString(locale, {
+            month: "long",
+            day: "numeric",
+          })
+        : t("calendar.noTimeSelected");
+      const title =
+        getTaskTitle(task, {
+          normalize: true,
+          hideSourceBeforeReady: true,
+        }) || task.title;
+      const subtitle = getTaskBody(task, {
+        hideSourceBeforeReady: true,
+      });
+      const groupRecord = groups.get(groupId) ?? {
+        id: groupId,
+        title: groupTitle,
+        tasks: [],
+      };
+
+      groupRecord.tasks.push({
+        avatarSource: employee?.avatar ?? null,
+        dateLabel,
+        dueAt,
+        employeeId,
+        employeeName,
+        firstName,
+        lastName,
+        photoCount: buildTaskPhotos(task, locale).length,
+        subtitle,
+        task,
+        title,
+      });
+      groups.set(groupId, groupRecord);
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        tasks: group.tasks.sort((left, right) => {
+          const leftTime = left.dueAt?.getTime() ?? Infinity;
+          const rightTime = right.dueAt?.getTime() ?? Infinity;
+          return leftTime - rightTime || left.title.localeCompare(right.title, locale);
+        }),
+      }))
+      .sort((left, right) => {
+        if (left.id === "without-group") return 1;
+        if (right.id === "without-group") return -1;
+        return left.title.localeCompare(right.title, locale);
+      });
+  }, [
+    getTaskBody,
+    getTaskTitle,
+    locale,
+    managerEmployeeDirectory,
+    managerGroups,
+    overdueTasks,
+    t,
+  ]);
 
   const sortedManagerEmployees = useMemo(() => {
     return Array.from(managerEmployeeDirectory.values()).sort((left, right) =>
@@ -1068,7 +1279,11 @@ export default function CalendarScreen({
   const managerShiftsForSelectedDay = useMemo(() => {
     return managerShifts.filter((shift) => {
       const date = new Date(shift.shiftDate);
-      return !Number.isNaN(date.getTime()) && formatDateKey(date) === selectedDayKey;
+      return (
+        shift.status !== "CANCELLED" &&
+        !Number.isNaN(date.getTime()) &&
+        formatDateKey(date) === selectedDayKey
+      );
     });
   }, [managerShifts, selectedDayKey]);
 
@@ -1090,28 +1305,102 @@ export default function CalendarScreen({
         const date = getTaskCalendarDate(task);
         return date && formatDateKey(date) === selectedDayKey;
       })
-      .filter((task) => {
-        if (!managerTaskSearchQuery) {
-          return true;
-        }
-
-        const title = getTaskTitle(task, {
-          normalize: true,
-          hideSourceBeforeReady: true,
-        });
-        const searchSource = [title, task.title]
-          .filter(Boolean)
-          .join(" ")
-          .toLocaleLowerCase(locale);
-
-        return searchSource.includes(managerTaskSearchQuery);
-      })
       .sort((left, right) => {
         const leftDate = getTaskCalendarDate(left)?.getTime() ?? 0;
         const rightDate = getTaskCalendarDate(right)?.getTime() ?? 0;
         return leftDate - rightDate;
       });
-  }, [getTaskTitle, locale, managerTaskSearchQuery, selectedDayKey, tasks]);
+  }, [selectedDayKey, tasks]);
+
+  const managerTaskSearchResults = useMemo<ManagerTaskSearchResult[]>(() => {
+    if (!managerTaskSearchQuery) {
+      return [];
+    }
+
+    const results: ManagerTaskSearchResult[] = [];
+
+    tasks.forEach((task) => {
+      if (task.status === "CANCELLED") {
+        return;
+      }
+
+      const date = getTaskCalendarDate(task);
+      if (!date) {
+        return;
+      }
+
+      const employeeId = getTaskAssigneeId(task);
+      if (!employeeId || !activeManagerEmployeeIdSet.has(employeeId)) {
+        return;
+      }
+
+      const directoryEmployee = managerEmployeeDirectory.get(employeeId);
+      const firstName =
+        directoryEmployee?.firstName ?? task.assigneeEmployee?.firstName ?? "";
+      const lastName =
+        directoryEmployee?.lastName ?? task.assigneeEmployee?.lastName ?? "";
+      const employeeNumber =
+        directoryEmployee?.employeeNumber ??
+        task.assigneeEmployee?.employeeNumber ??
+        "";
+      const employeeName = buildEmployeeName(firstName, lastName);
+      const title = getTaskTitle(task, {
+        normalize: true,
+        hideSourceBeforeReady: true,
+      });
+      const body = getTaskBody(task, { hideSourceBeforeReady: true });
+      const searchSource = [
+        title,
+        task.title,
+        body,
+        employeeName,
+        employeeNumber,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase(locale);
+
+      if (!searchSource.includes(managerTaskSearchQuery)) {
+        return;
+      }
+
+      const photoCount = buildTaskPhotos(task, locale).length;
+      const visuallyDone = task.status === "DONE" || photoCount > 0;
+
+      results.push({
+        task,
+        date,
+        dayNumber: date.getDate(),
+        monthLabel: date.toLocaleString(locale, { month: "short" }),
+        title: title || task.title,
+        employee: directoryEmployee,
+        employeeName,
+        firstName,
+        lastName,
+        photoCount,
+        visuallyDone,
+        isOverdue: !visuallyDone && isOverdueTask(task, today),
+      });
+    });
+
+    return results.sort((left, right) => {
+      const dateOrder = left.date.getTime() - right.date.getTime();
+      if (dateOrder !== 0) {
+        return dateOrder;
+      }
+
+      return left.title.localeCompare(right.title, locale);
+    });
+  }, [
+    activeManagerEmployeeIdSet,
+    getTaskBody,
+    getTaskTitle,
+    locale,
+    managerEmployeeDirectory,
+    managerTaskSearchQuery,
+    tasks,
+    today,
+  ]);
 
   const managerEmployeeRows = useMemo(() => {
     return visibleManagerEmployees
@@ -1132,18 +1421,64 @@ export default function CalendarScreen({
           doneTasks,
         };
       })
-      .filter(
-        (row) => !isManagerTaskSearchActive || row.assignedTasks.length > 0,
-      )
-      .sort(
-        (left, right) => right.plannedTasks.length - left.plannedTasks.length,
-      );
+      .sort((left, right) => {
+        const leftShift = left.shift
+          ? `${left.shift.startsAt}:${left.shift.endsAt}:${left.shift.template.name}`
+          : "zz-without-shift";
+        const rightShift = right.shift
+          ? `${right.shift.startsAt}:${right.shift.endsAt}:${right.shift.template.name}`
+          : "zz-without-shift";
+        const shiftOrder = leftShift.localeCompare(rightShift, locale);
+
+        if (shiftOrder !== 0) {
+          return shiftOrder;
+        }
+
+        return right.plannedTasks.length - left.plannedTasks.length;
+      });
   }, [
-    isManagerTaskSearchActive,
+    locale,
     managerShiftByEmployeeId,
     managerTasksForSelectedDay,
     visibleManagerEmployees,
   ]);
+
+  const managerShiftGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        subtitle: string;
+        rows: typeof managerEmployeeRows;
+      }
+    >();
+
+    managerEmployeeRows.forEach((row) => {
+      const groupId = getManagerShiftGroupId(row.shift);
+      const title = row.shift
+        ? row.shift.template.name
+        : t("calendar.withoutShift");
+      const subtitle = row.shift
+        ? formatShiftRange(row.shift, locale)
+        : t("calendar.noShiftAssigned");
+      const group = groups.get(groupId) ?? {
+        id: groupId,
+        title,
+        subtitle,
+        rows: [],
+      };
+
+      group.rows.push(row);
+      groups.set(groupId, group);
+    });
+
+    return Array.from(groups.values()).sort((left, right) => {
+      if (left.id === "without-shift") return 1;
+      if (right.id === "without-shift") return -1;
+      return left.subtitle.localeCompare(right.subtitle, locale);
+    });
+  }, [locale, managerEmployeeRows, t]);
 
   const managerDaySummary = useMemo(() => {
     const total = managerEmployeeRows.reduce(
@@ -1172,20 +1507,27 @@ export default function CalendarScreen({
       return;
     }
 
-    if (!assignShiftEmployeeId && assignShiftEmployeeOptions[0]) {
-      setAssignShiftEmployeeId(assignShiftEmployeeOptions[0].id);
-    }
-
     if (!assignShiftTemplateId && shiftTemplates[0]) {
       setAssignShiftTemplateId(shiftTemplates[0].id);
     }
   }, [
-    assignShiftEmployeeId,
-    assignShiftEmployeeOptions,
     assignShiftSheetVisible,
     assignShiftTemplateId,
     shiftTemplates,
   ]);
+
+  useEffect(() => {
+    setExpandedManagerShiftGroupIds((current) => {
+      const availableIds = new Set(managerShiftGroups.map((group) => group.id));
+      const next = current.filter((id) => availableIds.has(id));
+
+      if (next.length > 0 || managerShiftGroups.length === 0) {
+        return next;
+      }
+
+      return managerShiftGroups.map((group) => group.id);
+    });
+  }, [managerShiftGroups]);
 
   useEffect(() => {
     if (loading) {
@@ -1303,6 +1645,26 @@ export default function CalendarScreen({
     );
   }
 
+  function toggleManagerShiftGroupExpanded(groupId: string) {
+    hapticSelection();
+    setExpandedManagerShiftGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId],
+    );
+  }
+
+  function expandAllManagerShiftGroups() {
+    hapticSelection();
+    setExpandedManagerShiftGroupIds(managerShiftGroups.map((group) => group.id));
+  }
+
+  function collapseAllManagerShiftGroups() {
+    hapticSelection();
+    setExpandedManagerShiftGroupIds([]);
+    setExpandedManagerEmployeeId(null);
+  }
+
   function markAvatarFailed(employeeId: string) {
     setFailedAvatarEmployeeIds((current) => {
       if (current.has(employeeId)) {
@@ -1318,13 +1680,78 @@ export default function CalendarScreen({
   function openAssignShiftSheet(employeeId?: string) {
     hapticSelection();
     setAssignShiftError(null);
-    setAssignShiftEmployeeId(
-      employeeId ?? assignShiftEmployeeOptions[0]?.id ?? "",
+    setEditingShiftId(null);
+    const nextTemplateId = shiftTemplates[0]?.id ?? "";
+    setAssignShiftEmployeeIds(
+      employeeId
+        ? [employeeId]
+        : assignShiftEmployeeOptions[0]
+          ? [assignShiftEmployeeOptions[0].id]
+          : [],
     );
-    setAssignShiftTemplateId(shiftTemplates[0]?.id ?? "");
+    setAssignShiftTemplateId(nextTemplateId);
+    applyAssignShiftBreakDefaults(nextTemplateId);
     setTemplateComposerVisible(false);
     setTemplateTimePickerTarget(null);
+    setAssignShiftBreakPickerVisible(false);
     setAssignShiftSheetVisible(true);
+  }
+
+  function openEditShiftSheet(shift: ManagerScheduleShift) {
+    hapticSelection();
+    setAssignShiftError(null);
+    setEditingShiftId(shift.id);
+    setAssignShiftEmployeeIds([shift.employeeId]);
+    setAssignShiftTemplateId(shift.template.id);
+    setAssignShiftBreakEnabled((shift.fixedBreakDurationMinutes ?? 0) > 0);
+    setAssignShiftBreakStartsAt(
+      parseLocalTime(
+        shift.fixedBreakStartsAt
+          ? new Date(shift.fixedBreakStartsAt).toLocaleTimeString("en-GB", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            })
+          : shift.template.fixedBreakStartsAtLocal,
+      ) ?? { hour: 13, minute: 0 },
+    );
+    setAssignShiftBreakDurationMinutes(
+      String(shift.fixedBreakDurationMinutes || 30),
+    );
+    setAssignShiftBreakIsPaid(Boolean(shift.fixedBreakIsPaid));
+    setTemplateComposerVisible(false);
+    setTemplateTimePickerTarget(null);
+    setAssignShiftBreakPickerVisible(false);
+    setAssignShiftSheetVisible(true);
+  }
+
+  function applyAssignShiftBreakDefaults(templateId: string) {
+    const template = shiftTemplates.find((item) => item.id === templateId);
+    const breakDuration = template?.fixedBreakDurationMinutes ?? 0;
+    const breakStartsAt =
+      parseLocalTime(template?.fixedBreakStartsAtLocal) ?? {
+        hour: 13,
+        minute: 0,
+      };
+
+    setAssignShiftBreakEnabled(breakDuration > 0);
+    setAssignShiftBreakStartsAt(breakStartsAt);
+    setAssignShiftBreakDurationMinutes(String(breakDuration || 30));
+    setAssignShiftBreakIsPaid(Boolean(template?.fixedBreakIsPaid));
+  }
+
+  function toggleAssignShiftEmployee(employeeId: string) {
+    setAssignShiftError(null);
+    if (editingShiftId) {
+      setAssignShiftEmployeeIds([employeeId]);
+      return;
+    }
+
+    setAssignShiftEmployeeIds((current) =>
+      current.includes(employeeId)
+        ? current.filter((id) => id !== employeeId)
+        : [...current, employeeId],
+    );
   }
 
   function toggleTemplateDraftWeekDay(day: number) {
@@ -1343,9 +1770,20 @@ export default function CalendarScreen({
 
   async function submitShiftTemplateCreation() {
     const name = templateDraft.name.trim();
+    const fixedBreakDuration = Number(
+      templateDraft.fixedBreakDurationMinutes,
+    );
 
     if (!name || templateDraft.weekDays.length === 0) {
       setAssignShiftError(t("calendar.shiftTemplateValidation"));
+      return;
+    }
+
+    if (
+      templateDraft.fixedBreakEnabled &&
+      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+    ) {
+      setAssignShiftError(t("calendar.fixedBreakValidation"));
       return;
     }
 
@@ -1360,6 +1798,15 @@ export default function CalendarScreen({
         endsAtLocal: formatLocalTime(templateDraft.endsAt),
         weekDays: templateDraft.weekDays,
         gracePeriodMinutes: 10,
+        fixedBreakStartsAtLocal: templateDraft.fixedBreakEnabled
+          ? formatLocalTime(templateDraft.fixedBreakStartsAt)
+          : undefined,
+        fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
+          ? fixedBreakDuration
+          : 0,
+        fixedBreakIsPaid: templateDraft.fixedBreakEnabled
+          ? templateDraft.fixedBreakIsPaid
+          : false,
       });
 
       setShiftTemplates((current) => [createdTemplate, ...current]);
@@ -1378,8 +1825,18 @@ export default function CalendarScreen({
   }
 
   async function submitManagerShiftAssignment() {
-    if (!assignShiftEmployeeId || !assignShiftTemplateId) {
+    const fixedBreakDuration = Number(assignShiftBreakDurationMinutes);
+
+    if (assignShiftEmployeeIds.length === 0 || !assignShiftTemplateId) {
       setAssignShiftError(t("calendar.assignShiftValidation"));
+      return;
+    }
+
+    if (
+      assignShiftBreakEnabled &&
+      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+    ) {
+      setAssignShiftError(t("calendar.fixedBreakValidation"));
       return;
     }
 
@@ -1392,16 +1849,56 @@ export default function CalendarScreen({
     setAssignShiftError(null);
 
     try {
-      const createdShift = await createManagerShift({
-        employeeId: assignShiftEmployeeId,
-        templateId: assignShiftTemplateId,
-        shiftDate: selectedDayKey,
-      });
+      if (editingShiftId) {
+        const updatedShift = await updateManagerShift(editingShiftId, {
+          employeeId: assignShiftEmployeeIds[0],
+          templateId: assignShiftTemplateId,
+          shiftDate: selectedDayKey,
+          fixedBreakStartsAtLocal: assignShiftBreakEnabled
+            ? formatLocalTime(assignShiftBreakStartsAt)
+            : undefined,
+          fixedBreakDurationMinutes: assignShiftBreakEnabled
+            ? fixedBreakDuration
+            : 0,
+          fixedBreakIsPaid: assignShiftBreakEnabled
+            ? assignShiftBreakIsPaid
+            : false,
+        });
 
-      setManagerShifts((current) => [createdShift, ...current]);
+        setManagerShifts((current) =>
+          current.map((shift) =>
+            shift.id === updatedShift.id ? updatedShift : shift,
+          ),
+        );
+        setAssignShiftSheetVisible(false);
+        setEditingShiftId(null);
+        return;
+      }
+
+      const createdShifts = await Promise.all(
+        assignShiftEmployeeIds.map((employeeId) =>
+          createManagerShift({
+            employeeId,
+            templateId: assignShiftTemplateId,
+            shiftDate: selectedDayKey,
+            fixedBreakStartsAtLocal: assignShiftBreakEnabled
+              ? formatLocalTime(assignShiftBreakStartsAt)
+              : undefined,
+            fixedBreakDurationMinutes: assignShiftBreakEnabled
+              ? fixedBreakDuration
+              : 0,
+            fixedBreakIsPaid: assignShiftBreakEnabled
+              ? assignShiftBreakIsPaid
+              : false,
+          }),
+        ),
+      );
+
+      setManagerShifts((current) => [...createdShifts, ...current]);
       setAssignShiftSheetVisible(false);
-      setAssignShiftEmployeeId("");
+      setAssignShiftEmployeeIds([]);
       setAssignShiftTemplateId("");
+      setEditingShiftId(null);
     } catch (nextError) {
       setAssignShiftError(
         nextError instanceof Error
@@ -1410,6 +1907,32 @@ export default function CalendarScreen({
       );
     } finally {
       setAssignShiftSubmitting(false);
+    }
+  }
+
+  async function cancelManagerShiftForDay(shift: ManagerScheduleShift) {
+    hapticSelection();
+    setShiftActionId(shift.id);
+    setAssignShiftError(null);
+
+    try {
+      const cancelledShift = await cancelManagerShift(shift.id);
+      setManagerShifts((current) =>
+        current.map((item) =>
+          item.id === cancelledShift.id ? cancelledShift : item,
+        ),
+      );
+      if (expandedManagerEmployeeId === shift.employeeId) {
+        setExpandedManagerEmployeeId(null);
+      }
+    } catch (nextError) {
+      setAssignShiftError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("calendar.shiftCancelError"),
+      );
+    } finally {
+      setShiftActionId(null);
     }
   }
 
@@ -1915,8 +2438,8 @@ export default function CalendarScreen({
                     </PressableScale>
                   </View>
 
-                  <View>
-                    <View className="rounded-2xl bg-[#f4f7fb] px-3 py-3">
+                  <View className="flex-row items-stretch gap-3">
+                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
                       <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
                         {t("calendar.managerProgress")}
                       </Text>
@@ -1927,6 +2450,33 @@ export default function CalendarScreen({
                         {managerDaySummary.done}/{managerDaySummary.total}
                       </Text>
                     </View>
+                    <PressableScale
+                      className="min-w-[132px] items-center justify-center rounded-2xl bg-[#eef3ff] px-3"
+                      haptic="selection"
+                      onPress={
+                        expandedManagerShiftGroupIds.length ===
+                        managerShiftGroups.length
+                          ? collapseAllManagerShiftGroups
+                          : expandAllManagerShiftGroups
+                      }
+                    >
+                      <Ionicons
+                        color="#315cf6"
+                        name={
+                          expandedManagerShiftGroupIds.length ===
+                          managerShiftGroups.length
+                            ? "contract-outline"
+                            : "expand-outline"
+                        }
+                        size={18}
+                      />
+                      <Text className="mt-1 text-center font-body text-[12px] font-bold text-[#315cf6]">
+                        {expandedManagerShiftGroupIds.length ===
+                        managerShiftGroups.length
+                          ? t("calendar.collapseAll")
+                          : t("calendar.expandAll")}
+                      </Text>
+                    </PressableScale>
                   </View>
                 </View>
 
@@ -1936,9 +2486,154 @@ export default function CalendarScreen({
                       {t("common.loading")}
                     </Text>
                   </View>
+                ) : isManagerTaskSearchActive ? (
+                  managerTaskSearchResults.length ? (
+                    <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
+                      {managerTaskSearchResults.map((result, index) => {
+                        const canOpenPhotos = result.photoCount > 0;
+                        const employeeId =
+                          result.employee?.id ??
+                          result.task.assigneeEmployee?.id ??
+                          result.task.id;
+                        const avatarSource = result.employee?.avatar;
+                        const showAvatar =
+                          avatarSource &&
+                          !failedAvatarEmployeeIds.has(employeeId);
+                        const titleClassName = result.isOverdue
+                          ? "text-[#dc2626]"
+                          : result.visuallyDone
+                            ? "text-[#16a34a] line-through"
+                            : "text-foreground";
+                        const dateToneClassName = result.isOverdue
+                          ? "bg-[#fee2e2]"
+                          : result.visuallyDone
+                            ? "bg-[#dcfce7]"
+                            : "bg-[#eef3ff]";
+                        const dateTextClassName = result.isOverdue
+                          ? "text-[#dc2626]"
+                          : result.visuallyDone
+                            ? "text-[#16a34a]"
+                            : "text-[#315cf6]";
+
+                        return (
+                          <PressableScale
+                            haptic="selection"
+                            key={result.task.id}
+                            onPress={() =>
+                              canOpenPhotos
+                                ? openTaskPhotos(result.task)
+                                : openTaskDay(result.task)
+                            }
+                          >
+                            <View
+                              className={`flex-row items-start gap-3 px-5 py-4 ${
+                                index < managerTaskSearchResults.length - 1
+                                  ? "border-b border-[#edf1f7]"
+                                  : ""
+                              }`}
+                            >
+                              <View
+                                className={`h-14 w-14 items-center justify-center rounded-2xl ${dateToneClassName}`}
+                              >
+                                <Text
+                                  className={`font-display text-[19px] font-extrabold leading-6 ${dateTextClassName}`}
+                                  style={{ fontVariant: ["tabular-nums"] }}
+                                >
+                                  {result.dayNumber}
+                                </Text>
+                                <Text
+                                  className={`font-body text-[10px] font-bold uppercase leading-3 ${dateTextClassName}`}
+                                  numberOfLines={1}
+                                >
+                                  {result.monthLabel}
+                                </Text>
+                              </View>
+
+                              <View className="min-w-0 flex-1">
+                                <View className="flex-row items-start gap-2">
+                                  <Text
+                                    className={`min-w-0 flex-1 font-body text-[15px] font-semibold leading-6 ${titleClassName}`}
+                                    numberOfLines={2}
+                                  >
+                                    {result.title}
+                                  </Text>
+                                  {canOpenPhotos ? (
+                                    <View className="mt-0.5 flex-row items-center gap-1 rounded-full bg-[#eef3ff] px-2 py-1">
+                                      <Ionicons
+                                        color="#315cf6"
+                                        name="images-outline"
+                                        size={13}
+                                      />
+                                      <Text className="font-body text-[11px] font-extrabold text-[#315cf6]">
+                                        {result.photoCount}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                </View>
+
+                                <View className="mt-2 flex-row items-center gap-2">
+                                  {showAvatar ? (
+                                    <Image
+                                      className="h-7 w-7 rounded-full"
+                                      onError={() => markAvatarFailed(employeeId)}
+                                      resizeMode="cover"
+                                      source={avatarSource}
+                                    />
+                                  ) : (
+                                    <View className="h-7 w-7 items-center justify-center rounded-full bg-[#eef2ff]">
+                                      <Text className="font-display text-[9px] font-extrabold text-foreground">
+                                        {getEmployeeInitials(
+                                          result.firstName,
+                                          result.lastName,
+                                        )}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  <Text
+                                    className="min-w-0 flex-1 font-body text-[12px] font-semibold text-[#7b8798]"
+                                    numberOfLines={1}
+                                  >
+                                    {result.employeeName}
+                                  </Text>
+                                  {result.isOverdue ? (
+                                    <Text className="font-body text-[11px] font-extrabold uppercase text-[#dc2626]">
+                                      {t("calendar.statusOverdue")}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              </View>
+                            </View>
+                          </PressableScale>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View className="px-5 py-3">
+                      <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
+                        {t("calendar.managerNoTasksForSearch")}
+                      </Text>
+                    </View>
+                  )
                 ) : managerEmployeeRows.length ? (
                   <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
                     {managerEmployeeRows.map((row, index) => {
+                      const groupId = getManagerShiftGroupId(row.shift);
+                      const group = managerShiftGroups.find(
+                        (item) => item.id === groupId,
+                      );
+                      const previousRow = managerEmployeeRows[index - 1];
+                      const previousGroupId = previousRow
+                        ? getManagerShiftGroupId(previousRow.shift)
+                        : null;
+                      const nextRow = managerEmployeeRows[index + 1];
+                      const nextGroupId = nextRow
+                        ? getManagerShiftGroupId(nextRow.shift)
+                        : null;
+                      const showGroupHeader = groupId !== previousGroupId;
+                      const isLastInGroup = groupId !== nextGroupId;
+                      const isGroupExpanded =
+                        expandedManagerShiftGroupIds.includes(groupId) ||
+                        isManagerTaskSearchActive;
                       const isExpanded =
                         isManagerTaskSearchActive ||
                         expandedManagerEmployeeId === row.employee.id;
@@ -1946,10 +2641,54 @@ export default function CalendarScreen({
                         row.employee.avatar &&
                         !failedAvatarEmployeeIds.has(row.employee.id);
                       const subtitle = getEmployeeSubtitle(row.employee);
-                      const isLast = index === managerEmployeeRows.length - 1;
+                      const authorName = row.shift?.createdByEmployee
+                        ? buildEmployeeName(
+                            row.shift.createdByEmployee.firstName,
+                            row.shift.createdByEmployee.lastName,
+                          )
+                        : "";
 
                       return (
-                        <Animated.View
+                        <View key={`${groupId}:${row.employee.id}`}>
+                          {showGroupHeader ? (
+                            <PressableScale
+                              className="border-b border-[#e4ebf5] bg-[#f8fbff] px-5 py-4"
+                              haptic="selection"
+                              onPress={() => toggleManagerShiftGroupExpanded(groupId)}
+                            >
+                              <View className="flex-row items-center justify-between gap-3">
+                                <View className="min-w-0 flex-1">
+                                  <Text
+                                    className="font-display text-[16px] font-extrabold text-foreground"
+                                    numberOfLines={1}
+                                  >
+                                    {group?.title ?? t("calendar.withoutShift")}
+                                  </Text>
+                                  <Text className="mt-1 font-body text-[12px] font-semibold text-[#315cf6]">
+                                    {group?.subtitle ?? t("calendar.noShiftAssigned")}
+                                  </Text>
+                                </View>
+                                <View className="flex-row items-center gap-2">
+                                  <View className="rounded-full bg-[#eef3ff] px-2.5 py-1">
+                                    <Text className="font-body text-[12px] font-bold text-[#315cf6]">
+                                      {group?.rows.length ?? 0}
+                                    </Text>
+                                  </View>
+                                  <Ionicons
+                                    color="#6b7a90"
+                                    name={
+                                      isGroupExpanded
+                                        ? "chevron-up"
+                                        : "chevron-down"
+                                    }
+                                    size={18}
+                                  />
+                                </View>
+                              </View>
+                            </PressableScale>
+                          ) : null}
+                          {isGroupExpanded ? (
+                            <Animated.View
                           entering={FadeInUp.delay(index * 18)
                             .duration(170)
                             .withInitialValues({
@@ -2040,6 +2779,41 @@ export default function CalendarScreen({
                                   ) : null}
                                 </View>
 
+                                {row.shift ? (
+                                  <View className="gap-3 rounded-[22px] bg-[#f8fbff] px-4 py-3">
+                                    {authorName ? (
+                                      <Text className="font-body text-[12px] font-semibold leading-5 text-[#7b8798]">
+                                        {t("calendar.shiftAuthor")}: {authorName}
+                                      </Text>
+                                    ) : null}
+                                    <View className="flex-row gap-2">
+                                      <PressableScale
+                                        className="h-10 flex-1 items-center justify-center rounded-2xl bg-white"
+                                        haptic="selection"
+                                        onPress={() => openEditShiftSheet(row.shift!)}
+                                      >
+                                        <Text className="font-body text-[13px] font-extrabold text-[#315cf6]">
+                                          {t("calendar.editShift")}
+                                        </Text>
+                                      </PressableScale>
+                                      <PressableScale
+                                        className="h-10 flex-1 items-center justify-center rounded-2xl bg-[#fee2e2]"
+                                        disabled={shiftActionId === row.shift.id}
+                                        haptic="selection"
+                                        onPress={() =>
+                                          void cancelManagerShiftForDay(row.shift!)
+                                        }
+                                      >
+                                        <Text className="font-body text-[13px] font-extrabold text-[#dc2626]">
+                                          {shiftActionId === row.shift.id
+                                            ? t("common.processing")
+                                            : t("calendar.cancelShift")}
+                                        </Text>
+                                      </PressableScale>
+                                    </View>
+                                  </View>
+                                ) : null}
+
                                 {row.assignedTasks.length ? (
                                   <View className="gap-1">
                                     {row.assignedTasks.map((task) => {
@@ -2114,8 +2888,10 @@ export default function CalendarScreen({
                             </View>
                           ) : null}
 
-                          {!isLast ? <View className="h-px bg-[#edf1f7]" /> : null}
-                        </Animated.View>
+                          {!isLastInGroup ? <View className="h-px bg-[#edf1f7]" /> : null}
+                            </Animated.View>
+                          ) : null}
+                        </View>
                       );
                     })}
                   </View>
@@ -2151,6 +2927,30 @@ export default function CalendarScreen({
                         count: overdueTasks.length,
                       })}
                     </Text>
+                    {overdueTaskGroups.length ? (
+                      <View className="mt-3 flex-row flex-wrap gap-2">
+                        {overdueTaskGroups.slice(0, 3).map((group) => (
+                          <View
+                            className="rounded-full bg-[#fff7ed] px-3 py-1.5"
+                            key={group.id}
+                          >
+                            <Text
+                              className="font-body text-[11px] font-extrabold text-[#c17b07]"
+                              numberOfLines={1}
+                            >
+                              {group.title} · {group.tasks.length}
+                            </Text>
+                          </View>
+                        ))}
+                        {overdueTaskGroups.length > 3 ? (
+                          <View className="rounded-full bg-[#f4f7fb] px-3 py-1.5">
+                            <Text className="font-body text-[11px] font-extrabold text-[#7b8798]">
+                              +{overdueTaskGroups.length - 3}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
                   </View>
                   <Ionicons
                     color="#f59e0b"
@@ -2793,8 +3593,10 @@ export default function CalendarScreen({
         onClose={() => {
           setAssignShiftSheetVisible(false);
           setAssignShiftError(null);
+          setEditingShiftId(null);
           setTemplateComposerVisible(false);
           setTemplateTimePickerTarget(null);
+          setAssignShiftBreakPickerVisible(false);
         }}
         sheetClassName="rounded-t-[32px]"
         solidBackground
@@ -2806,7 +3608,9 @@ export default function CalendarScreen({
         >
           <View className="items-center">
             <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
-              {t("calendar.assignShiftTitle")}
+              {editingShiftId
+                ? t("calendar.editShift")
+                : t("calendar.assignShiftTitle")}
             </Text>
             <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
               {selectedDayLabel}
@@ -2826,11 +3630,16 @@ export default function CalendarScreen({
               <View className="gap-2">
                 <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
                   {t("calendar.assignShiftEmployee")}
+                  {!editingShiftId && assignShiftEmployeeIds.length > 0
+                    ? ` (${assignShiftEmployeeIds.length})`
+                    : ""}
                 </Text>
                 <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
                   {assignShiftEmployeeOptions.length ? (
                     assignShiftEmployeeOptions.map((employee, index) => {
-                      const isSelected = assignShiftEmployeeId === employee.id;
+                      const isSelected = assignShiftEmployeeIds.includes(
+                        employee.id,
+                      );
                       const showAvatar =
                         employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
 
@@ -2843,7 +3652,7 @@ export default function CalendarScreen({
                           }`}
                           haptic="selection"
                           key={employee.id}
-                          onPress={() => setAssignShiftEmployeeId(employee.id)}
+                          onPress={() => toggleAssignShiftEmployee(employee.id)}
                         >
                           <View className="flex-row items-center gap-3">
                             <View
@@ -2978,6 +3787,129 @@ export default function CalendarScreen({
                       </PressableScale>
                     </View>
 
+                    <View className="rounded-[24px] border border-[#dce4f2] bg-white p-4">
+                      <PressableScale
+                        className="flex-row items-center gap-3"
+                        haptic="selection"
+                        onPress={() =>
+                          setTemplateDraft((current) => ({
+                            ...current,
+                            fixedBreakEnabled: !current.fixedBreakEnabled,
+                          }))
+                        }
+                      >
+                        <View
+                          className={`h-6 w-6 items-center justify-center rounded-full border ${
+                            templateDraft.fixedBreakEnabled
+                              ? "border-primary bg-primary"
+                              : "border-[#d7deeb] bg-white"
+                          }`}
+                        >
+                          {templateDraft.fixedBreakEnabled ? (
+                            <Ionicons color="#ffffff" name="checkmark" size={13} />
+                          ) : null}
+                        </View>
+                        <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
+                          {t("calendar.fixedBreak")}
+                        </Text>
+                      </PressableScale>
+
+                      {templateDraft.fixedBreakEnabled ? (
+                        <View className="mt-4 gap-3">
+                          <View className="flex-row gap-3">
+                            <PressableScale
+                              className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                              containerClassName="flex-1"
+                              haptic="selection"
+                              onPress={() => setTemplateTimePickerTarget("break")}
+                            >
+                              <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                                {t("calendar.fixedBreakStart")}
+                              </Text>
+                              <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                                {formatLocalTime(templateDraft.fixedBreakStartsAt)}
+                              </Text>
+                            </PressableScale>
+                            <Input
+                              className="h-16 flex-1 border-[#dce4f2] bg-[#f8fbff] shadow-none"
+                              keyboardType="number-pad"
+                              onChangeText={(fixedBreakDurationMinutes) =>
+                                setTemplateDraft((current) => ({
+                                  ...current,
+                                  fixedBreakDurationMinutes,
+                                }))
+                              }
+                              placeholder="30"
+                              value={templateDraft.fixedBreakDurationMinutes}
+                            />
+                          </View>
+                          <PressableScale
+                            className="flex-row items-center gap-3"
+                            haptic="selection"
+                            onPress={() =>
+                              setTemplateDraft((current) => ({
+                                ...current,
+                                fixedBreakIsPaid: !current.fixedBreakIsPaid,
+                              }))
+                            }
+                          >
+                            <View
+                              className={`h-5 w-5 items-center justify-center rounded-full border ${
+                                templateDraft.fixedBreakIsPaid
+                                  ? "border-primary bg-primary"
+                                  : "border-[#d7deeb] bg-white"
+                              }`}
+                            >
+                              {templateDraft.fixedBreakIsPaid ? (
+                                <Ionicons
+                                  color="#ffffff"
+                                  name="checkmark"
+                                  size={11}
+                                />
+                              ) : null}
+                            </View>
+                            <Text className="font-body text-[13px] font-semibold text-muted-foreground">
+                              {t("calendar.fixedBreakPaid")}
+                            </Text>
+                          </PressableScale>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    {templateTimePickerTarget ? (
+                      <View className="rounded-[28px] border border-[#dce4f2] bg-white p-4">
+                        <TimeWheelPickerPanel
+                          active
+                          bottomPadding={0}
+                          initialValue={
+                            templateTimePickerTarget === "break"
+                              ? templateDraft.fixedBreakStartsAt
+                              : templateTimePickerTarget === "end"
+                                ? templateDraft.endsAt
+                                : templateDraft.startsAt
+                          }
+                          onApply={(value) => {
+                            setTemplateDraft((current) =>
+                              templateTimePickerTarget === "break"
+                                ? { ...current, fixedBreakStartsAt: value }
+                                : templateTimePickerTarget === "end"
+                                ? { ...current, endsAt: value }
+                                : { ...current, startsAt: value },
+                            );
+                            setTemplateTimePickerTarget(null);
+                          }}
+                          onClose={() => setTemplateTimePickerTarget(null)}
+                          title={
+                            templateTimePickerTarget === "break"
+                              ? t("calendar.fixedBreakStart")
+                              : templateTimePickerTarget === "end"
+                              ? t("calendar.shiftTemplateEnd")
+                              : t("calendar.shiftTemplateStart")
+                          }
+                        />
+                      </View>
+                    ) : null}
+
                     <View className="mt-3">
                       <View className="flex-row items-center justify-between">
                         {weekdayLabels.map((label, index) => {
@@ -3040,7 +3972,10 @@ export default function CalendarScreen({
                           }`}
                           haptic="selection"
                           key={template.id}
-                          onPress={() => setAssignShiftTemplateId(template.id)}
+                          onPress={() => {
+                            setAssignShiftTemplateId(template.id);
+                            applyAssignShiftBreakDefaults(template.id);
+                          }}
                         >
                           <View className="flex-row items-center gap-3">
                             <View
@@ -3078,6 +4013,97 @@ export default function CalendarScreen({
                     </View>
                   )}
                 </View>
+
+                <View className="rounded-[24px] border border-[#e7ecf5] bg-white p-4">
+                  <PressableScale
+                    className="flex-row items-center gap-3"
+                    haptic="selection"
+                    onPress={() =>
+                      setAssignShiftBreakEnabled((current) => !current)
+                    }
+                  >
+                    <View
+                      className={`h-6 w-6 items-center justify-center rounded-full border ${
+                        assignShiftBreakEnabled
+                          ? "border-primary bg-primary"
+                          : "border-[#d7deeb] bg-white"
+                      }`}
+                    >
+                      {assignShiftBreakEnabled ? (
+                        <Ionicons color="#ffffff" name="checkmark" size={13} />
+                      ) : null}
+                    </View>
+                    <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
+                      {t("calendar.fixedBreak")}
+                    </Text>
+                  </PressableScale>
+
+                  {assignShiftBreakEnabled ? (
+                    <View className="mt-4 gap-3">
+                      <View className="flex-row gap-3">
+                        <PressableScale
+                          className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                          containerClassName="flex-1"
+                          haptic="selection"
+                          onPress={() => setAssignShiftBreakPickerVisible(true)}
+                        >
+                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                            {t("calendar.fixedBreakStart")}
+                          </Text>
+                          <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                            {formatLocalTime(assignShiftBreakStartsAt)}
+                          </Text>
+                        </PressableScale>
+                        <Input
+                          className="h-16 flex-1 border-[#dce4f2] bg-[#f8fbff] shadow-none"
+                          keyboardType="number-pad"
+                          onChangeText={setAssignShiftBreakDurationMinutes}
+                          placeholder="30"
+                          value={assignShiftBreakDurationMinutes}
+                        />
+                      </View>
+
+                      {assignShiftBreakPickerVisible ? (
+                        <View className="rounded-[28px] border border-[#dce4f2] bg-[#f8fbff] p-4">
+                          <TimeWheelPickerPanel
+                            active
+                            bottomPadding={0}
+                            initialValue={assignShiftBreakStartsAt}
+                            onApply={(value) => {
+                              setAssignShiftBreakStartsAt(value);
+                              setAssignShiftBreakPickerVisible(false);
+                            }}
+                            onClose={() => setAssignShiftBreakPickerVisible(false)}
+                            title={t("calendar.fixedBreakStart")}
+                          />
+                        </View>
+                      ) : null}
+
+                      <PressableScale
+                        className="flex-row items-center gap-3"
+                        haptic="selection"
+                        onPress={() =>
+                          setAssignShiftBreakIsPaid((current) => !current)
+                        }
+                      >
+                        <View
+                          className={`h-5 w-5 items-center justify-center rounded-full border ${
+                            assignShiftBreakIsPaid
+                              ? "border-primary bg-primary"
+                              : "border-[#d7deeb] bg-white"
+                          }`}
+                        >
+                          {assignShiftBreakIsPaid ? (
+                            <Ionicons color="#ffffff" name="checkmark" size={11} />
+                          ) : null}
+                        </View>
+                        <Text className="font-body text-[13px] font-semibold text-muted-foreground">
+                          {t("calendar.fixedBreakPaid")}
+                        </Text>
+                      </PressableScale>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </View>
           </ScrollView>
@@ -3090,8 +4116,10 @@ export default function CalendarScreen({
                 label={t("profile.cancel")}
                 onPress={() => {
                   setAssignShiftSheetVisible(false);
+                  setEditingShiftId(null);
                   setTemplateComposerVisible(false);
                   setTemplateTimePickerTarget(null);
+                  setAssignShiftBreakPickerVisible(false);
                 }}
                 textClassName="text-foreground"
                 variant="secondary"
@@ -3102,7 +4130,7 @@ export default function CalendarScreen({
                 className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
                 disabled={
                   assignShiftSubmitting ||
-                  !assignShiftEmployeeId ||
+                  assignShiftEmployeeIds.length === 0 ||
                   !assignShiftTemplateId ||
                   !canAssignShiftForSelectedDay
                 }
@@ -3110,7 +4138,9 @@ export default function CalendarScreen({
                 label={
                   assignShiftSubmitting
                     ? t("common.processing")
-                    : t("calendar.assignShiftSave")
+                    : editingShiftId
+                      ? t("calendar.saveShiftChanges")
+                      : t("calendar.assignShiftSave")
                 }
                 onPress={() => {
                   void submitManagerShiftAssignment();
@@ -3141,60 +4171,130 @@ export default function CalendarScreen({
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <View className="gap-3 pb-2">
-              {overdueTasks.length > 0 ? (
-                overdueTasks.map((task) => {
-                  const dueAt = parseTaskDueAt(task);
-                  const title = getTaskTitle(task, {
-                    normalize: true,
-                    hideSourceBeforeReady: true,
-                  });
-                  const subtitle = getTaskBody(task, {
-                    hideSourceBeforeReady: true,
-                  });
-                  const dateLabel = dueAt
-                    ? dueAt.toLocaleDateString(locale, {
-                        month: "long",
-                        day: "numeric",
-                      })
-                    : t("calendar.noTimeSelected");
-
-                  return (
-                    <View
-                      key={task.id}
-                      className="rounded-[24px] border border-[#e7edf7] bg-white/88 px-4 py-4"
-                    >
-                      <View className="flex-row items-start gap-3">
-                        <View className="mt-0.5 h-10 w-10 items-center justify-center rounded-2xl bg-[#fff4dd]">
-                          <Ionicons
-                            color="#f59e0b"
-                            name="warning-outline"
-                            size={20}
-                          />
-                        </View>
-                        <View className="flex-1">
-                          {title ? (
-                            <Text className="font-body text-[16px] font-semibold text-foreground">
-                              {title}
-                            </Text>
-                          ) : (
-                            <View className="mt-1 h-4 w-[66%] rounded-full bg-[#e2eaf6]" />
-                          )}
-                          {subtitle ? (
-                            <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
-                              {subtitle}
-                            </Text>
-                          ) : (
-                            <View className="mt-2 h-3 w-[48%] rounded-full bg-[#edf3fb]" />
-                          )}
-                          <Text className="mt-2 font-body text-xs font-semibold text-[#c17b07]">
-                            {t("calendar.overdueFrom", { dateLabel })}
-                          </Text>
-                        </View>
+              {overdueTaskGroups.length > 0 ? (
+                overdueTaskGroups.map((group) => (
+                  <View
+                    className="overflow-hidden rounded-[26px] border border-[#e7edf7] bg-white/88"
+                    key={group.id}
+                  >
+                    <View className="flex-row items-center justify-between gap-3 bg-[#f8fbff] px-4 py-3">
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className="font-display text-[17px] font-extrabold text-foreground"
+                          numberOfLines={1}
+                        >
+                          {group.title}
+                        </Text>
                       </View>
-                      {renderOverdueTaskActions(task, true)}
+                      <View className="rounded-full bg-[#fff4dd] px-3 py-1">
+                        <Text className="font-body text-[11px] font-extrabold text-[#c17b07]">
+                          {t("calendar.overdueGroupCount", {
+                            count: group.tasks.length,
+                          })}
+                        </Text>
+                      </View>
                     </View>
-                  );
-                })
+
+                    <View>
+                      {group.tasks.map((item, index) => {
+                        const avatarKey = item.employeeId ?? item.task.id;
+                        const showAvatar =
+                          item.avatarSource &&
+                          !failedAvatarEmployeeIds.has(avatarKey);
+
+                        return (
+                          <View
+                            className={`px-4 py-4 ${
+                              index < group.tasks.length - 1
+                                ? "border-b border-[#edf1f7]"
+                                : ""
+                            }`}
+                            key={item.task.id}
+                          >
+                            <View className="flex-row items-start gap-3">
+                              {showAvatar ? (
+                                <Image
+                                  className="mt-0.5 h-11 w-11 rounded-2xl"
+                                  onError={() => markAvatarFailed(avatarKey)}
+                                  resizeMode="cover"
+                                  source={item.avatarSource}
+                                />
+                              ) : item.employeeId ? (
+                                <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#eef2ff]">
+                                  <Text className="font-display text-[11px] font-extrabold text-foreground">
+                                    {getEmployeeInitials(
+                                      item.firstName,
+                                      item.lastName,
+                                    )}
+                                  </Text>
+                                </View>
+                              ) : (
+                                <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4dd]">
+                                  <Ionicons
+                                    color="#c17b07"
+                                    name="people-outline"
+                                    size={20}
+                                  />
+                                </View>
+                              )}
+
+                              <View className="min-w-0 flex-1">
+                                <View className="flex-row items-start gap-2">
+                                  <Text
+                                    className="min-w-0 flex-1 font-body text-[16px] font-semibold leading-6 text-foreground"
+                                    numberOfLines={2}
+                                  >
+                                    {item.title}
+                                  </Text>
+                                  {item.photoCount > 0 ? (
+                                    <PressableScale
+                                      className="mt-0.5 flex-row items-center gap-1 rounded-full bg-[#eef3ff] px-2 py-1"
+                                      haptic="selection"
+                                      onPress={() => openTaskPhotos(item.task)}
+                                    >
+                                      <Ionicons
+                                        color="#315cf6"
+                                        name="images-outline"
+                                        size={13}
+                                      />
+                                      <Text className="font-body text-[11px] font-extrabold text-[#315cf6]">
+                                        {item.photoCount}
+                                      </Text>
+                                    </PressableScale>
+                                  ) : null}
+                                </View>
+
+                                {item.subtitle ? (
+                                  <Text
+                                    className="mt-1 font-body text-sm leading-6 text-muted-foreground"
+                                    numberOfLines={2}
+                                  >
+                                    {item.subtitle}
+                                  </Text>
+                                ) : null}
+
+                                <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                                  <Text
+                                    className="max-w-[58%] font-body text-xs font-semibold text-[#7b8798]"
+                                    numberOfLines={1}
+                                  >
+                                    {item.employeeName}
+                                  </Text>
+                                  <Text className="font-body text-xs font-semibold text-[#c17b07]">
+                                    {t("calendar.overdueFrom", {
+                                      dateLabel: item.dateLabel,
+                                    })}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                            {renderOverdueTaskActions(item.task, true)}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))
               ) : (
                 <View className="rounded-[24px] border border-[#e7edf7] bg-white/88 px-4 py-6">
                   <Text className="text-center font-body text-sm text-muted-foreground">
@@ -3357,29 +4457,6 @@ export default function CalendarScreen({
           value={rescheduleDateValue}
         />
       ) : null}
-
-      <TimeWheelPicker
-        initialValue={
-          templateTimePickerTarget === "end"
-            ? templateDraft.endsAt
-            : templateDraft.startsAt
-        }
-        onApply={(value) => {
-          setTemplateDraft((current) =>
-            templateTimePickerTarget === "end"
-              ? { ...current, endsAt: value }
-              : { ...current, startsAt: value },
-          );
-          setTemplateTimePickerTarget(null);
-        }}
-        onClose={() => setTemplateTimePickerTarget(null)}
-        title={
-          templateTimePickerTarget === "end"
-            ? t("calendar.shiftTemplateEnd")
-            : t("calendar.shiftTemplateStart")
-        }
-        visible={Boolean(templateTimePickerTarget)}
-      />
 
       <TimeWheelPicker
         initialValue={rescheduleTimeValue}

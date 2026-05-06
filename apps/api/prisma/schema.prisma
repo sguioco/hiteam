@@ -564,6 +564,7 @@ model Employee {
   biometricArtifacts  BiometricArtifact[]
   biometricJobs       BiometricJob[]
   shifts              Shift[]
+  createdShifts       Shift[]                    @relation("ShiftCreatedByEmployee")
   submittedRequests   EmployeeRequest[]          @relation("RequestSubmitter")
   approvalsToAct      RequestApprovalStep[]      @relation("ApprovalActor")
   managedRequests     EmployeeRequest[]          @relation("RequestManager")
@@ -717,6 +718,9 @@ model ShiftTemplate {
   endsAtLocal        String
   weekDaysJson       String?
   gracePeriodMinutes Int      @default(10)
+  fixedBreakStartsAtLocal String?
+  fixedBreakDurationMinutes Int @default(0)
+  fixedBreakIsPaid   Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -734,11 +738,15 @@ model Shift {
   tenantId    String
   templateId  String
   employeeId  String
+  createdByEmployeeId String?
   locationId  String
   positionId  String
   shiftDate   DateTime
   startsAt    DateTime
   endsAt      DateTime
+  fixedBreakStartsAt DateTime?
+  fixedBreakDurationMinutes Int @default(0)
+  fixedBreakIsPaid Boolean @default(false)
   status      ShiftStatus @default(PUBLISHED)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -746,11 +754,13 @@ model Shift {
   tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   template ShiftTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdByEmployee Employee? @relation("ShiftCreatedByEmployee", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
   location Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
   position Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
   attendanceSessions AttendanceSession[]
 
   @@index([tenantId, employeeId, shiftDate])
+  @@index([tenantId, createdByEmployeeId])
 }
 
 model AttendanceEvent {

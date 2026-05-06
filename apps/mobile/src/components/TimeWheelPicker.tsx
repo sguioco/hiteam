@@ -62,6 +62,7 @@ function WheelColumn({
         decelerationRate="fast"
         getItemLayout={(_, index) => ({ index, length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index })}
         keyExtractor={(item) => item}
+        nestedScrollEnabled
         onMomentumScrollEnd={commitIndex}
         onScrollEndDrag={commitIndex}
         ref={listRef}
@@ -86,45 +87,44 @@ function WheelColumn({
   );
 }
 
-export function TimeWheelPicker({
-  allowClear = false,
-  initialValue,
-  onApply,
-  onClear,
-  onClose,
-  title,
-  visible,
-}: {
+type TimeWheelPickerPanelProps = {
+  active?: boolean;
   allowClear?: boolean;
+  bottomPadding?: number;
   initialValue: TimeValue;
   onApply: (value: TimeValue) => void;
   onClear?: () => void;
   onClose: () => void;
   title: string;
-  visible: boolean;
-}) {
+};
+
+export function TimeWheelPickerPanel({
+  allowClear = false,
+  active = true,
+  bottomPadding = 12,
+  initialValue,
+  onApply,
+  onClear,
+  onClose,
+  title,
+}: TimeWheelPickerPanelProps) {
   const { t } = useI18n();
-  const insets = useSafeAreaInsets();
   const hourValues = useMemo(() => Array.from({ length: 24 }, (_, index) => `${index}`.padStart(2, '0')), []);
   const minuteValues = useMemo(() => Array.from({ length: 60 }, (_, index) => `${index}`.padStart(2, '0')), []);
   const [hourIndex, setHourIndex] = useState(initialValue.hour);
   const [minuteIndex, setMinuteIndex] = useState(initialValue.minute);
 
   useEffect(() => {
-    if (!visible) {
+    if (!active) {
       return;
     }
 
     setHourIndex(initialValue.hour);
     setMinuteIndex(initialValue.minute);
-  }, [initialValue.hour, initialValue.minute, visible]);
+  }, [active, initialValue.hour, initialValue.minute]);
 
   return (
-    <BottomSheetModal
-      onClose={onClose}
-      sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
-      visible={visible}
-    >
+    <>
       <View className="mb-4 flex-row items-start justify-between gap-4">
         <View className="flex-1">
           <Text className="font-display text-[24px] font-bold text-foreground">{title}</Text>
@@ -140,7 +140,7 @@ export function TimeWheelPicker({
         <WheelColumn onSelectIndex={setMinuteIndex} selectedIndex={minuteIndex} values={minuteValues} />
       </View>
 
-      <View className="mt-5 gap-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+      <View className="mt-5 gap-3" style={{ paddingBottom: bottomPadding }}>
         {allowClear ? (
           <Button
             className="min-h-14 rounded-[24px] border-[#d8e2f0] bg-white"
@@ -158,6 +158,39 @@ export function TimeWheelPicker({
           variant="primary"
         />
       </View>
+    </>
+  );
+}
+
+export function TimeWheelPicker({
+  allowClear = false,
+  initialValue,
+  onApply,
+  onClear,
+  onClose,
+  title,
+  visible,
+}: TimeWheelPickerPanelProps & {
+  visible: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <BottomSheetModal
+      onClose={onClose}
+      sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
+      visible={visible}
+    >
+      <TimeWheelPickerPanel
+        active={visible}
+        allowClear={allowClear}
+        bottomPadding={Math.max(insets.bottom, 12)}
+        initialValue={initialValue}
+        onApply={onApply}
+        onClear={onClear}
+        onClose={onClose}
+        title={title}
+      />
     </BottomSheetModal>
   );
 }

@@ -153,7 +153,7 @@ export class EmployeesService {
   ) {}
 
   async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
-    const employees = await this.prisma.employee.findMany({
+    const employeeRecords = await this.prisma.employee.findMany({
       where: {
         tenantId,
         OR: query.search
@@ -168,6 +168,14 @@ export class EmployeesService {
       select: EMPLOYEE_LIST_SELECT,
       orderBy: { createdAt: 'desc' },
     });
+    const employees = employeeRecords.map((employee) => ({
+      ...employee,
+      avatarUrl:
+        employee.avatarUrl ??
+        (employee.avatarStorageKey
+          ? this.storageService.getObjectUrl(employee.avatarStorageKey)
+          : null),
+    }));
 
     if (!actorUserId || query.search?.trim()) {
       return employees;
@@ -203,7 +211,17 @@ export class EmployeesService {
       return employees;
     }
 
-    return [currentEmployee, ...employees];
+    return [
+      {
+        ...currentEmployee,
+        avatarUrl:
+          currentEmployee.avatarUrl ??
+          (currentEmployee.avatarStorageKey
+            ? this.storageService.getObjectUrl(currentEmployee.avatarStorageKey)
+            : null),
+      },
+      ...employees,
+    ];
   }
 
   async stats(tenantId: string, query: EmployeeStatsQueryDto) {
@@ -1564,6 +1582,9 @@ export class EmployeesService {
         startsAtLocal: true,
         endsAtLocal: true,
         weekDaysJson: true,
+        fixedBreakStartsAtLocal: true,
+        fixedBreakDurationMinutes: true,
+        fixedBreakIsPaid: true,
       },
     });
 
@@ -1632,6 +1653,12 @@ export class EmployeesService {
         shiftDate: nextShiftDate,
         startsAt: this.mergeDateAndTime(nextShiftDate, template.startsAtLocal),
         endsAt: this.mergeShiftEnd(nextShiftDate, template.startsAtLocal, template.endsAtLocal),
+        fixedBreakStartsAt:
+          template.fixedBreakDurationMinutes > 0 && template.fixedBreakStartsAtLocal
+            ? this.mergeDateAndTime(nextShiftDate, template.fixedBreakStartsAtLocal)
+            : null,
+        fixedBreakDurationMinutes: template.fixedBreakDurationMinutes,
+        fixedBreakIsPaid: template.fixedBreakIsPaid,
       });
     }
 

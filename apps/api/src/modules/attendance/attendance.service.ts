@@ -547,6 +547,13 @@ export class AttendanceService {
           0,
           Math.round(((session.shift?.endsAt ?? event.occurredAt).getTime() - event.occurredAt.getTime()) / 60000),
         );
+    const fixedBreakIncrement = this.resolveFixedBreakIncrement(
+      session.shift,
+      session.breakMinutes + unpaidBreakIncrement,
+      session.paidBreakMinutes + paidBreakIncrement,
+    );
+    unpaidBreakIncrement += fixedBreakIncrement.unpaid;
+    paidBreakIncrement += fixedBreakIncrement.paid;
 
     const updatedSession = await this.prisma.attendanceSession.update({
       where: { id: session.id },
@@ -580,6 +587,7 @@ export class AttendanceService {
         earlyLeaveMinutes,
         unpaidBreakIncrement,
         paidBreakIncrement,
+        fixedBreakIncrement,
       },
     });
 
@@ -595,6 +603,37 @@ export class AttendanceService {
       earlyLeaveMinutes,
       breakMinutes: updatedSession.breakMinutes,
       paidBreakMinutes: updatedSession.paidBreakMinutes,
+    };
+  }
+
+  private resolveFixedBreakIncrement(
+    shift: unknown,
+    currentUnpaidBreakMinutes: number,
+    currentPaidBreakMinutes: number,
+  ) {
+    const fixedBreak = shift as
+      | {
+          fixedBreakDurationMinutes?: number | null;
+          fixedBreakIsPaid?: boolean | null;
+        }
+      | null
+      | undefined;
+    const duration = fixedBreak?.fixedBreakDurationMinutes ?? 0;
+
+    if (duration <= 0) {
+      return { unpaid: 0, paid: 0 };
+    }
+
+    if (fixedBreak?.fixedBreakIsPaid) {
+      return {
+        unpaid: 0,
+        paid: Math.max(0, duration - currentPaidBreakMinutes),
+      };
+    }
+
+    return {
+      unpaid: Math.max(0, duration - currentUnpaidBreakMinutes),
+      paid: 0,
     };
   }
 

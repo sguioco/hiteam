@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ShiftStatus } from '@prisma/client';
+import { AttendanceSessionStatus, Prisma, ShiftStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
 import { CreateShiftDto } from './dto/create-shift.dto';
+import { UpdateShiftDto } from './dto/update-shift.dto';
 
 const CYRILLIC_TEMPLATE_CODE_MAP: Record<string, string> = {
   а: 'a',
@@ -86,6 +87,14 @@ const SHIFT_EMPLOYEE_SELECT = {
   firstName: true,
   lastName: true,
   employeeNumber: true,
+  avatarUrl: true,
+} satisfies Prisma.EmployeeSelect;
+
+const SHIFT_AUTHOR_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  employeeNumber: true,
 } satisfies Prisma.EmployeeSelect;
 
 const SHIFT_TEMPLATE_SELECT = {
@@ -96,6 +105,9 @@ const SHIFT_TEMPLATE_SELECT = {
   endsAtLocal: true,
   weekDaysJson: true,
   gracePeriodMinutes: true,
+  fixedBreakStartsAtLocal: true,
+  fixedBreakDurationMinutes: true,
+  fixedBreakIsPaid: true,
   createdAt: true,
   updatedAt: true,
   location: {
@@ -115,6 +127,9 @@ const SHIFT_SELECT = {
   shiftDate: true,
   startsAt: true,
   endsAt: true,
+  fixedBreakStartsAt: true,
+  fixedBreakDurationMinutes: true,
+  fixedBreakIsPaid: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -124,6 +139,9 @@ const SHIFT_SELECT = {
   templateId: true,
   employee: {
     select: SHIFT_EMPLOYEE_SELECT,
+  },
+  createdByEmployee: {
+    select: SHIFT_AUTHOR_SELECT,
   },
   location: {
     select: LOCATION_SELECT,
@@ -153,11 +171,20 @@ export class ScheduleService {
 
   listShifts(tenantId: string) {
     return this.prisma.shift.findMany({
-      where: { tenantId },
+      where: { tenantId, status: { not: ShiftStatus.CANCELLED } },
       select: SHIFT_SELECT,
       orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
       take: 50,
     });
+  }
+
+  private async resolveActorEmployeeId(tenantId: string, actorUserId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: actorUserId },
+      select: { id: true },
+    });
+
+    return employee?.id ?? null;
   }
 
   async createTemplate(tenantId: string, actorUserId: string, dto: CreateShiftTemplateDto) {
@@ -169,6 +196,11 @@ export class ScheduleService {
     let code = await this.generateTemplateCode(tenantId, codeSeed);
     const locationId = dto.locationId || (await this.resolveDefaultLocationId(tenantId));
     const positionId = dto.positionId || (await this.resolveDefaultPositionId(tenantId));
+    const fixedBreak = this.normalizeFixedBreak(
+      dto.fixedBreakStartsAtLocal,
+      dto.fixedBreakDurationMinutes,
+      dto.fixedBreakIsPaid,
+    );
     const buildCreateInput = (): Prisma.ShiftTemplateUncheckedCreateInput => ({
       tenantId,
       name: dto.name,
@@ -179,6 +211,9 @@ export class ScheduleService {
       endsAtLocal: dto.endsAtLocal,
       weekDaysJson: normalizedWeekDays ? JSON.stringify(normalizedWeekDays) : null,
       gracePeriodMinutes: dto.gracePeriodMinutes ?? 10,
+      fixedBreakStartsAtLocal: fixedBreak.startsAtLocal,
+      fixedBreakDurationMinutes: fixedBreak.durationMinutes,
+      fixedBreakIsPaid: fixedBreak.isPaid,
     });
 
     let template: ShiftTemplateRecord;
@@ -224,6 +259,9 @@ export class ScheduleService {
         positionId: true,
         startsAtLocal: true,
         endsAtLocal: true,
+        fixedBreakStartsAtLocal: true,
+        fixedBreakDurationMinutes: true,
+        fixedBreakIsPaid: true,
       },
     });
 
@@ -250,17 +288,23 @@ export class ScheduleService {
 
     const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal);
     const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
+    const fixedBreak = this.resolveShiftFixedBreak(dto, template, shiftDate);
+    const createdByEmployeeId = await this.resolveActorEmployeeId(tenantId, actorUserId);
 
     const shift = await this.prisma.shift.create({
       data: {
         tenantId,
         templateId: template.id,
         employeeId: employee.id,
+        createdByEmployeeId,
         locationId: template.locationId,
         positionId: template.positionId,
         shiftDate,
         startsAt,
         endsAt,
+        fixedBreakStartsAt: fixedBreak.startsAt,
+        fixedBreakDurationMinutes: fixedBreak.durationMinutes,
+        fixedBreakIsPaid: fixedBreak.isPaid,
       },
       select: SHIFT_SELECT,
     });
@@ -280,6 +324,163 @@ export class ScheduleService {
         shiftDate: shiftDate.toISOString(),
         startsAt: shift.startsAt.toISOString(),
         endsAt: shift.endsAt.toISOString(),
+        fixedBreakStartsAt: shift.fixedBreakStartsAt?.toISOString() ?? null,
+        fixedBreakDurationMinutes: shift.fixedBreakDurationMinutes,
+        fixedBreakIsPaid: shift.fixedBreakIsPaid,
+      },
+    });
+
+    return shift;
+  }
+
+  async updateShift(tenantId: string, actorUserId: string, shiftId: string, dto: UpdateShiftDto) {
+    const existingShift = await this.prisma.shift.findFirst({
+      where: { tenantId, id: shiftId },
+      select: SHIFT_SELECT,
+    });
+
+    if (!existingShift) {
+      throw new NotFoundException('Shift not found.');
+    }
+
+    if (existingShift.status === ShiftStatus.CANCELLED) {
+      throw new BadRequestException('Cancelled shift cannot be edited.');
+    }
+
+    const template = await this.prisma.shiftTemplate.findFirst({
+      where: { tenantId, id: dto.templateId ?? existingShift.templateId },
+      select: {
+        id: true,
+        name: true,
+        locationId: true,
+        positionId: true,
+        startsAtLocal: true,
+        endsAtLocal: true,
+        fixedBreakStartsAtLocal: true,
+        fixedBreakDurationMinutes: true,
+        fixedBreakIsPaid: true,
+      },
+    });
+
+    if (!template) {
+      throw new NotFoundException('Shift template not found.');
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { tenantId, id: dto.employeeId ?? existingShift.employeeId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+
+    const shiftDate = dto.shiftDate
+      ? new Date(dto.shiftDate)
+      : new Date(existingShift.shiftDate);
+    shiftDate.setHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    if (Number.isNaN(shiftDate.getTime()) || shiftDate < todayStart) {
+      throw new BadRequestException('Shift date cannot be in the past.');
+    }
+
+    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal);
+    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
+    const hasBreakOverride =
+      dto.fixedBreakStartsAtLocal !== undefined ||
+      dto.fixedBreakDurationMinutes !== undefined ||
+      dto.fixedBreakIsPaid !== undefined;
+    const fixedBreak =
+      hasBreakOverride || dto.templateId
+        ? this.resolveShiftFixedBreak(dto, template, shiftDate)
+        : {
+            startsAt: existingShift.fixedBreakStartsAt
+              ? new Date(existingShift.fixedBreakStartsAt)
+              : null,
+            durationMinutes: existingShift.fixedBreakDurationMinutes ?? 0,
+            isPaid: Boolean(existingShift.fixedBreakIsPaid),
+          };
+
+    const shift = await this.prisma.shift.update({
+      where: { id: existingShift.id },
+      data: {
+        templateId: template.id,
+        employeeId: employee.id,
+        locationId: template.locationId,
+        positionId: template.positionId,
+        shiftDate,
+        startsAt,
+        endsAt,
+        fixedBreakStartsAt: fixedBreak.startsAt,
+        fixedBreakDurationMinutes: fixedBreak.durationMinutes,
+        fixedBreakIsPaid: fixedBreak.isPaid,
+      },
+      select: SHIFT_SELECT,
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'shift',
+      entityId: shift.id,
+      action: 'schedule.shift_updated',
+      metadata: {
+        employeeId: employee.id,
+        employeeIds: [employee.id],
+        employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+        templateId: template.id,
+        templateName: template.name,
+        shiftDate: shiftDate.toISOString(),
+      },
+    });
+
+    return shift;
+  }
+
+  async cancelShift(tenantId: string, actorUserId: string, shiftId: string) {
+    const existingShift = await this.prisma.shift.findFirst({
+      where: { tenantId, id: shiftId },
+      select: {
+        id: true,
+        employeeId: true,
+        status: true,
+        attendanceSessions: {
+          where: {
+            status: {
+              in: [AttendanceSessionStatus.OPEN, AttendanceSessionStatus.ON_BREAK],
+            },
+          },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!existingShift) {
+      throw new NotFoundException('Shift not found.');
+    }
+
+    if (existingShift.attendanceSessions.length > 0) {
+      throw new BadRequestException('Shift has an open attendance session.');
+    }
+
+    const shift = await this.prisma.shift.update({
+      where: { id: existingShift.id },
+      data: { status: ShiftStatus.CANCELLED },
+      select: SHIFT_SELECT,
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'shift',
+      entityId: shift.id,
+      action: 'schedule.shift_cancelled',
+      metadata: {
+        employeeId: existingShift.employeeId,
+        employeeIds: [existingShift.employeeId],
       },
     });
 
@@ -289,7 +490,7 @@ export class ScheduleService {
   async myShifts(userId: string) {
     const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
     return this.prisma.shift.findMany({
-      where: { employeeId: employee.id },
+      where: { employeeId: employee.id, status: { not: ShiftStatus.CANCELLED } },
       select: SHIFT_SELECT,
       orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
       take: 30,
@@ -365,6 +566,77 @@ export class ScheduleService {
     todayEnd.setHours(23, 59, 59, 999);
 
     return shifts.find((shift) => shift.shiftDate >= todayStart && shift.shiftDate <= todayEnd) ?? null;
+  }
+
+  private normalizeFixedBreak(
+    startsAtLocal: string | undefined,
+    durationMinutes: number | undefined,
+    isPaid: boolean | undefined,
+  ) {
+    const duration = durationMinutes ?? 0;
+
+    if (duration <= 0) {
+      return {
+        startsAtLocal: null,
+        durationMinutes: 0,
+        isPaid: false,
+      };
+    }
+
+    if (!startsAtLocal || !this.isLocalTime(startsAtLocal)) {
+      throw new BadRequestException('Fixed break start time is required.');
+    }
+
+    return {
+      startsAtLocal,
+      durationMinutes: duration,
+      isPaid: Boolean(isPaid),
+    };
+  }
+
+  private resolveShiftFixedBreak(
+    dto: {
+      fixedBreakStartsAtLocal?: string;
+      fixedBreakDurationMinutes?: number;
+      fixedBreakIsPaid?: boolean;
+    },
+    template: {
+      fixedBreakStartsAtLocal: string | null;
+      fixedBreakDurationMinutes: number;
+      fixedBreakIsPaid: boolean;
+    },
+    shiftDate: Date,
+  ) {
+    const hasShiftBreakOverride =
+      dto.fixedBreakStartsAtLocal !== undefined ||
+      dto.fixedBreakDurationMinutes !== undefined ||
+      dto.fixedBreakIsPaid !== undefined;
+    const startsAtLocal = hasShiftBreakOverride
+      ? dto.fixedBreakStartsAtLocal
+      : template.fixedBreakStartsAtLocal ?? undefined;
+    const durationMinutes = hasShiftBreakOverride
+      ? dto.fixedBreakDurationMinutes
+      : template.fixedBreakDurationMinutes;
+    const isPaid = hasShiftBreakOverride
+      ? dto.fixedBreakIsPaid
+      : template.fixedBreakIsPaid;
+    const fixedBreak = this.normalizeFixedBreak(
+      startsAtLocal,
+      durationMinutes,
+      isPaid,
+    );
+
+    return {
+      startsAt: fixedBreak.startsAtLocal
+        ? this.mergeDateAndTime(shiftDate, fixedBreak.startsAtLocal)
+        : null,
+      durationMinutes: fixedBreak.durationMinutes,
+      isPaid: fixedBreak.isPaid,
+    };
+  }
+
+  private isLocalTime(value: string) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
   }
 
   private mergeDateAndTime(baseDate: Date, localTime: string): Date {

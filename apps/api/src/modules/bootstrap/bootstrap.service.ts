@@ -647,7 +647,8 @@ export class BootstrapService {
       departments,
       positions,
       requests,
-      taskBoard,
+      scheduleTaskBoard,
+      overdueTaskBoard,
     ] = await Promise.all([
       this.scheduleService.listTemplates(user.tenantId).catch(() => []),
       this.scheduleService.listShifts(user.tenantId).catch(() => []),
@@ -684,7 +685,16 @@ export class BootstrapService {
         1500,
         null,
       ),
+      withTimeoutFallback(
+        this.collaborationService
+          .listManagerTasks(user.sub, { onlyOverdue: 'true' })
+          .catch(() => null),
+        1500,
+        null,
+      ),
     ]);
+
+    const taskBoard = mergeTaskBoards([scheduleTaskBoard, overdueTaskBoard]);
 
     return {
       mode,
