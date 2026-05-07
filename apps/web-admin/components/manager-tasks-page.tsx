@@ -148,6 +148,11 @@ type TaskSearchMatch = {
   title: string;
 };
 
+type TaskSearchResult = {
+  match: TaskSearchMatch;
+  sortTime: number;
+};
+
 function getTaskAssigneeAvatarUrl(task: TaskItem) {
   return task.assigneeEmployee?.avatarUrl ?? null;
 }
@@ -1300,7 +1305,7 @@ export function ManagerTasksPage({
     }
 
     return visibleTasks
-      .map((task) => {
+      .map((task): TaskSearchResult | null => {
         const title = getTaskTitle(task, { normalize: true });
         const haystack = [title, task.title].join(" ").toLowerCase();
 
@@ -1376,31 +1381,33 @@ export function ManagerTasksPage({
             url: proof.url,
           }));
 
+        const match: TaskSearchMatch = {
+          actorName: getEmployeeName(actor, locale),
+          creatorName: getEmployeeName(task.managerEmployee, locale),
+          dateDay: dateParts.day,
+          dateMonth: dateParts.month,
+          employeeAvatarUrl,
+          employeeId: task.assigneeEmployeeId,
+          employeeInitials,
+          employeeName,
+          id: task.id,
+          photoProofs,
+          statusLabel,
+          statusTone: isDone
+            ? completedLate
+              ? "error"
+              : "success"
+            : isMissed
+              ? "error"
+              : isCancelled
+                ? "gray"
+                : "neutral",
+          timeLabel: formatDateTimeLabel(timeSource, locale),
+          title,
+        };
+
         return {
-          match: {
-            actorName: getEmployeeName(actor, locale),
-            creatorName: getEmployeeName(task.managerEmployee, locale),
-            dateDay: dateParts.day,
-            dateMonth: dateParts.month,
-            employeeAvatarUrl,
-            employeeId: task.assigneeEmployeeId,
-            employeeInitials,
-            employeeName,
-            id: task.id,
-            photoProofs,
-            statusLabel,
-            statusTone: isDone
-              ? completedLate
-                ? "error"
-                : "success"
-              : isMissed
-                ? "error"
-                : isCancelled
-                  ? "gray"
-                  : "neutral",
-            timeLabel: formatDateTimeLabel(timeSource, locale),
-            title,
-          } satisfies TaskSearchMatch,
+          match,
           sortTime:
             (timeSource ? new Date(timeSource).getTime() : NaN) ||
             getTaskAnchorDate(task)?.getTime() ||
@@ -1408,8 +1415,7 @@ export function ManagerTasksPage({
         };
       })
       .filter(
-        (item): item is { match: TaskSearchMatch; sortTime: number } =>
-          Boolean(item),
+        (item): item is TaskSearchResult => item !== null,
       )
       .sort((left, right) => right.sortTime - left.sortTime)
       .map((item) => item.match);

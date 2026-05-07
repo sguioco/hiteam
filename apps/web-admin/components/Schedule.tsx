@@ -925,6 +925,9 @@ export default function Schedule({
   const [employees, setEmployees] = useState<EmployeeApiRecord[]>(
     initialData?.employees ?? [],
   );
+  const [groups, setGroups] = useState<ScheduleInitialData["groups"]>(
+    initialData?.groups ?? [],
+  );
   const [locations, setLocations] = useState<Option[]>(initialData?.locations ?? []);
   const [departments, setDepartments] = useState<Option[]>(
     initialData?.departments ?? [],
@@ -1739,6 +1742,7 @@ export default function Schedule({
       setTemplates(mock.templates);
       setShifts(mock.shifts);
       setEmployees(mock.employees);
+      setGroups([]);
       setLocations(mock.locations);
       setDepartments(mock.departments);
       setPositions(mock.positions);
@@ -1774,6 +1778,7 @@ export default function Schedule({
       setTemplates(snapshot.initialData.templates);
       setShifts(snapshot.initialData.shifts);
       setEmployees(snapshot.initialData.employees);
+      setGroups(snapshot.initialData.groups);
       setLocations(snapshot.initialData.locations);
       setDepartments(snapshot.initialData.departments);
       setPositions(snapshot.initialData.positions);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getPublicRequestUrl } from "@/lib/request-origin";
 import { decodeSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 
 const PUBLIC_EXACT_PATHS = new Set([
@@ -52,7 +53,7 @@ export function middleware(request: NextRequest) {
   const forceAuthPage = searchParams.get("force") === "1";
 
   if (!hasSession && !isPublicRoute) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = getPublicRequestUrl(request, "/login");
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -62,7 +63,7 @@ export function middleware(request: NextRequest) {
     !forceAuthPage &&
     (pathname === "/signup" || pathname === "/login")
   ) {
-    return NextResponse.redirect(new URL("/app", request.url));
+    return NextResponse.redirect(getPublicRequestUrl(request, "/app"));
   }
 
   return NextResponse.next({

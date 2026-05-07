@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPublicRequestOrigin } from "@/lib/request-origin";
 
 const API_URL =
   process.env.INTERNAL_API_URL ??
@@ -15,7 +16,7 @@ function resolveWebBaseUrl(request: NextRequest) {
     return configuredBaseUrl.replace(/\/$/, "");
   }
 
-  return request.nextUrl.origin.replace(/\/$/, "");
+  return getPublicRequestOrigin(request).replace(/\/$/, "");
 }
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { AuthSession } from "@/lib/auth";
 import { isDemoAccessToken } from "@/lib/demo-mode";
+import {
+  getPublicRequestUrl,
+  shouldUseSecureRequestCookies,
+} from "@/lib/request-origin";
 import { serverApiRequest } from "@/lib/server-api";
 import {
   decodeSessionCookie,
@@ -11,16 +15,6 @@ import {
 
 export const runtime = "edge";
 
-function shouldUseSecureCookies(request: NextRequest) {
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-
-  if (forwardedProto) {
-    return forwardedProto.split(",")[0]?.trim() === "https";
-  }
-
-  return request.nextUrl.protocol === "https:";
-}
-
 function normalizeReturnTo(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/app";
@@ -30,13 +24,13 @@ function normalizeReturnTo(value: string | null) {
 }
 
 function buildLoginResponse(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/login?force=1", request.url));
+  const response = NextResponse.redirect(getPublicRequestUrl(request, "/login?force=1"));
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: "",
     httpOnly: true,
     sameSite: "lax",
-    secure: shouldUseSecureCookies(request),
+    secure: shouldUseSecureRequestCookies(request),
     path: "/",
     expires: new Date(0),
   });
@@ -55,7 +49,7 @@ export async function GET(request: NextRequest) {
   const returnTo = normalizeReturnTo(request.nextUrl.searchParams.get("next"));
 
   if (isDemoAccessToken(session.accessToken)) {
-    return NextResponse.redirect(new URL(returnTo, request.url));
+    return NextResponse.redirect(getPublicRequestUrl(request, returnTo));
   }
 
   try {
@@ -63,14 +57,14 @@ export async function GET(request: NextRequest) {
       method: "POST",
       body: JSON.stringify({ refreshToken: session.refreshToken }),
     });
-    const response = NextResponse.redirect(new URL(returnTo, request.url));
+    const response = NextResponse.redirect(getPublicRequestUrl(request, returnTo));
 
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: encodeSessionCookie(nextSession),
       httpOnly: true,
       sameSite: "lax",
-      secure: shouldUseSecureCookies(request),
+      secure: shouldUseSecureRequestCookies(request),
       path: "/",
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     });
