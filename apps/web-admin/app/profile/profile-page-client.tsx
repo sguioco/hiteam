@@ -239,37 +239,15 @@ export default function ProfilePageClient({
               <KeyRound className="size-4" />
               {locale === 'ru' ? 'Безопасность' : 'Security'}
             </h2>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{locale === 'ru' ? 'Пароль' : 'Password'}</p>
-              </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
-                className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/50"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/50"
                 type="button"
               >
                 {locale === 'ru' ? 'Сменить пароль' : 'Change password'}
               </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6">
-            <h2 className="mb-4 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-red-600">
-              <Trash2 className="size-4" />
-              {locale === 'ru' ? 'Удаление аккаунта' : 'Account deletion'}
-            </h2>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="max-w-xl">
-                <p className="font-medium text-red-700">
-                  {locale === 'ru' ? 'Удалить аккаунт' : 'Delete account'}
-                </p>
-                <p className="mt-1 text-sm leading-6 text-red-700/80">
-                  {locale === 'ru'
-                    ? 'Доступ будет отключён, профиль и личные данные будут обезличены'
-                    : 'Access will be disabled, profile and personal data will be anonymized'}
-                </p>
-              </div>
               <button
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
                 disabled={deleteInFlight}
                 onClick={() => setDeleteConfirmOpen(true)}
                 type="button"
@@ -278,11 +256,6 @@ export default function ProfilePageClient({
                 {locale === 'ru' ? 'Удалить аккаунт' : 'Delete account'}
               </button>
             </div>
-            {deleteError ? (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-white/80 px-4 py-3 text-sm text-red-700">
-                {deleteError}
-              </div>
-            ) : null}
           </div>
 
           <button

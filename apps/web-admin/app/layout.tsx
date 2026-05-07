@@ -6,8 +6,7 @@ import './globals.css';
 import { Providers } from './providers';
 import { petersburgHero } from './landing-hero-font';
 import { cn } from "@/lib/utils";
-import { getServerSession } from "@/lib/server-auth";
-import { loadInitialShellBootstrap } from "@/lib/server-shell";
+import { getServerSessionSnapshot } from "@/lib/server-auth";
 import {
   LANDING_HERO_POSTER_SRC,
 } from "@/lib/landing-assets";
@@ -112,13 +111,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     cookieStore.get("smart-admin-locale")?.value,
     isPublicRoute,
   );
-  const initialSession = await getServerSession();
-  const initialShellBootstrap = initialSession
-    ? isPublicRoute
-      ? null
-      : await loadInitialShellBootstrap(initialSession)
-    : null;
-  const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = ${JSON.stringify(initialShellBootstrap).replace(/</g, "\\u003c")};`;
+  const initialSession = isPublicRoute ? null : await getServerSessionSnapshot();
+  const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = null;`;
 
   return (
     <html

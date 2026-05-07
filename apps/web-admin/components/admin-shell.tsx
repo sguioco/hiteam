@@ -42,6 +42,7 @@ import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
+import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import {
   buildUserDisplayName,
@@ -551,44 +552,29 @@ export function AdminShell({
         return;
       }
 
-      try {
-        const snapshot = await apiRequest<ShellBootstrapResponse>(
-          "/auth/bootstrap",
-          {
-            token: currentSession.accessToken,
-            skipClientCache: true,
-          },
-        );
+      finalizeSuccess();
 
-        if (cancelled) {
-          return;
-        }
+      void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
+        token: currentSession.accessToken,
+        skipClientCache: true,
+      })
+        .then((snapshot) => {
+          if (cancelled) {
+            return;
+          }
 
-        if (snapshot.header) {
-          applyHeaderSnapshot(snapshot.header, headerCacheKey);
-        }
+          if (snapshot.header) {
+            applyHeaderSnapshot(snapshot.header, headerCacheKey);
+          }
 
-        if (snapshot.notifications) {
-          applyNotificationsSnapshot(
-            snapshot.notifications,
-            notificationsCacheKey,
-          );
-        }
-
-        finalizeSuccess();
-      } catch {
-        if (cancelled) {
-          return;
-        }
-
-        if (!getSession()) {
-          setSession(null);
-          setReady(false);
-          return;
-        }
-
-        finalizeSuccess();
-      }
+          if (snapshot.notifications) {
+            applyNotificationsSnapshot(
+              snapshot.notifications,
+              notificationsCacheKey,
+            );
+          }
+        })
+        .catch(() => undefined);
     }
 
     void bootstrapShell();
@@ -1257,13 +1243,7 @@ export function AdminShell({
   if (!ready || !session) {
     return (
       <div className="admin-frame admin-frame-checking-session">
-        <aside className="sidebar sidebar-untitled sidebar-checking-session">
-          <div className="sidebar-brand sidebar-untitled-brand">
-            <div className="sidebar-untitled-brand-row">
-              <BrandWordmark className="text-[1.8rem]" />
-            </div>
-          </div>
-        </aside>
+        <AdminShellLoadingSidebar locale={locale} />
 
         <section
           className={`admin-content admin-content-session-check${
