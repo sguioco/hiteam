@@ -31,6 +31,12 @@ import type {
 } from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
 import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_ROW_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from "../components/bottom-sheet-actions";
+import {
   TimeWheelPicker,
   TimeWheelPickerPanel,
   type TimeValue,
@@ -405,7 +411,13 @@ export default function CalendarScreen({
   overdueSheetSignal = 0,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
+  const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
+  const overdueSheetMaxHeight = Math.min(
+    viewportHeight - insets.top - 12,
+    viewportHeight * 0.76,
+  );
+  const overdueListBottomPadding = Math.max(insets.bottom + 28, 54);
   const { language, t, tp } = useI18n();
   const { roleCodes } = useAuthFlowState();
   const directionalIconStyle = getDirectionalIconStyle(language);
@@ -1601,7 +1613,6 @@ export default function CalendarScreen({
     month: "long",
     day: "numeric",
   });
-  const rescheduleActionsOffset = 15;
   const canAssignShiftForSelectedDay =
     startOfDay(selectedDate).getTime() >= todayStart.getTime();
 
@@ -3186,11 +3197,11 @@ export default function CalendarScreen({
 
       <BottomSheetModal
         onClose={closePhotoViewer}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
         visible={activePhotoTask !== null}
       >
         {activePhotoTask ? (
-          <View className="relative">
+          <View className="relative" style={{ paddingBottom: bottomSheetActionBottomOffset }}>
             <View>
               <View className="mb-4 flex-row items-start justify-between gap-4">
                 <View className="w-10" />
@@ -3272,11 +3283,11 @@ export default function CalendarScreen({
 
             <View className="mt-4">
               <PressableScale
-                className="rounded-[24px] bg-primary px-4 py-4"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} bg-primary`}
                 haptic="selection"
                 onPress={closePhotoViewer}
               >
-                <Text className="text-center font-display text-[16px] font-semibold text-white">
+                <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
                   {t("common.done")}
                 </Text>
               </PressableScale>
@@ -3604,7 +3615,7 @@ export default function CalendarScreen({
       >
         <View
           className="max-h-[78vh] gap-4 px-5 pt-8"
-          style={{ paddingBottom: insets.bottom + 20 }}
+          style={{ paddingBottom: bottomSheetActionBottomOffset }}
         >
           <View className="items-center">
             <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
@@ -4108,10 +4119,10 @@ export default function CalendarScreen({
             </View>
           </ScrollView>
 
-          <View className="flex-row items-center gap-3">
+          <View className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-[20px] border-[#dce4f2] bg-white"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#dce4f2] bg-white`}
                 fullWidth
                 label={t("profile.cancel")}
                 onPress={() => {
@@ -4127,7 +4138,7 @@ export default function CalendarScreen({
             </View>
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25`}
                 disabled={
                   assignShiftSubmitting ||
                   assignShiftEmployeeIds.length === 0 ||
@@ -4159,8 +4170,8 @@ export default function CalendarScreen({
         visible={overdueSheetVisible}
       >
         <View
-          className="max-h-[72vh] gap-4 px-5 pt-8"
-          style={{ paddingBottom: insets.bottom + 20 }}
+          className="gap-4 px-5 pt-8"
+          style={{ maxHeight: overdueSheetMaxHeight }}
         >
           <Text className="text-center text-[26px] font-extrabold text-foreground">
             {t("calendar.overdueSheetTitle")}
@@ -4169,8 +4180,13 @@ export default function CalendarScreen({
             {t("calendar.overdueSheetBody")}
           </Text>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View className="gap-3 pb-2">
+          <ScrollView
+            bounces={false}
+            contentContainerStyle={{ paddingBottom: overdueListBottomPadding }}
+            showsVerticalScrollIndicator={false}
+            style={{ flexShrink: 1 }}
+          >
+            <View className="gap-3">
               {overdueTaskGroups.length > 0 ? (
                 overdueTaskGroups.map((group) => (
                   <View
@@ -4320,12 +4336,7 @@ export default function CalendarScreen({
       >
         <View
           className="gap-4 px-5 pt-8"
-          style={{
-            paddingBottom: Math.max(
-              insets.bottom + 20 - rescheduleActionsOffset,
-              4,
-            ),
-          }}
+          style={{ paddingBottom: bottomSheetActionBottomOffset }}
         >
           <View>
             <Text className="text-center text-[24px] font-extrabold text-foreground">
@@ -4413,10 +4424,10 @@ export default function CalendarScreen({
             </View>
           </View>
 
-          <View className="flex-row items-center gap-3">
+          <View className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-2xl border-[#fecdd3] bg-[#fff1f2]"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#fecdd3] bg-[#fff1f2]`}
                 fullWidth
                 label={t("profile.cancel")}
                 onPress={() => {
@@ -4431,7 +4442,7 @@ export default function CalendarScreen({
             </View>
             <View className="flex-1">
               <Button
-                className="min-h-12 rounded-2xl border-[#dce4f2] bg-white"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#dce4f2] bg-white`}
                 fullWidth
                 label={
                   pendingTaskAction === "reschedule"

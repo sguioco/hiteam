@@ -28,6 +28,14 @@ import { SmartMeetingMeta, appendTaskMeta } from '../../lib/task-meta';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
 import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_ROW_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+  getBottomSheetActionReservedSpace,
+} from '../../src/components/bottom-sheet-actions';
 
 type Step = 'details' | 'confirm';
 type TimeTarget = 'start' | 'end';
@@ -76,6 +84,7 @@ function formatFullGroupLabel(groupName: string) {
 
 export default function CreateMeetingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ employeeId?: string | string[]; employeeName?: string | string[] }>();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
@@ -195,7 +204,8 @@ export default function CreateMeetingScreen() {
   const hasEndTime = endTime !== null;
   const participantSheetItemCount = groups.length + orderedEmployees.length;
   const shouldScrollParticipantSheet = participantSheetItemCount > 5;
-  const nextButtonOffset = invitedEmployeeIds.length === 0 ? 80 : 20;
+  const actionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
+  const actionReservedSpace = getBottomSheetActionReservedSpace(insets.bottom);
   const timeCardGap = 12;
   const collapsedStartWidth = timeRowWidth > 0 ? Math.max((timeRowWidth - timeCardGap) / 2, 0) : undefined;
   const expandedStartWidth = timeRowWidth > 0 ? timeRowWidth : undefined;
@@ -398,7 +408,49 @@ export default function CreateMeetingScreen() {
 
   return (
     <>
-      <Screen contentClassName="flex-grow gap-3 px-5 pb-5 pt-0" withGradient>
+      <Screen
+        contentClassName="flex-grow gap-3 px-5 pt-0"
+        contentContainerStyle={{ paddingBottom: actionReservedSpace + 20 }}
+        footer={
+          step === 'details' ? (
+            <PressableScale
+              className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/30`}
+              haptic="selection"
+              onPress={handleNext}
+            >
+              <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
+                {t('manager.meetingNext')}
+              </Text>
+            </PressableScale>
+          ) : (
+            <View className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
+              <PressableScale
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 border border-[#d8e2f0] bg-white`}
+                containerClassName="flex-1"
+                haptic="selection"
+                onPress={() => setStep('details')}
+              >
+                <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-foreground`}>
+                  {t('manager.meetingEditDetails')}
+                </Text>
+              </PressableScale>
+              <PressableScale
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25 ${submitting ? 'opacity-60' : ''}`}
+                containerClassName="flex-1"
+                disabled={submitting}
+                haptic="selection"
+                onPress={() => void handleCreateMeeting()}
+              >
+                <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
+                  {submitting ? t('common.processing') : t('manager.meetingCreateTask')}
+                </Text>
+              </PressableScale>
+            </View>
+          )
+        }
+        footerStyle={{ bottom: actionBottomOffset, paddingHorizontal: 20 }}
+        withGradient
+      >
         <StatusBar backgroundColor="transparent" style="dark" translucent />
 
         <View className="flex-row items-center gap-3">
@@ -589,17 +641,9 @@ export default function CreateMeetingScreen() {
                 )}
               </View>
 
-              <PressableScale
-                className="rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
-                haptic="selection"
-                onPress={handleNext}
-                style={{ marginTop: nextButtonOffset }}
-              >
-                <Text className="text-center font-display text-[16px] font-semibold text-white">{t('manager.meetingNext')}</Text>
-              </PressableScale>
             </View>
           ) : (
-            <View className="flex-1 justify-between gap-4">
+            <View className="flex-1 gap-4">
               <View className="gap-4">
                 <View className="items-center gap-2 px-2 pt-2">
                   <Text className="text-center text-[26px] font-extrabold text-foreground">{title.trim()}</Text>
@@ -676,23 +720,6 @@ export default function CreateMeetingScreen() {
                 </Card>
               </View>
 
-              <View className="pt-2 flex-row gap-3 px-1">
-                <View className="flex-1">
-                  <PressableScale className="min-h-14 items-center justify-center rounded-full border border-[#d8e2f0] bg-white" haptic="selection" onPress={() => setStep('details')}>
-                    <Text className="text-[15px] font-extrabold text-foreground">{t('manager.meetingEditDetails')}</Text>
-                  </PressableScale>
-                </View>
-                <View className="flex-1">
-                  <PressableScale
-                    className={`min-h-14 items-center justify-center rounded-full border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25 ${submitting ? 'opacity-60' : ''}`}
-                    disabled={submitting}
-                    haptic="selection"
-                    onPress={() => void handleCreateMeeting()}
-                  >
-                    <Text className="text-[15px] font-extrabold text-white">{submitting ? t('common.processing') : t('manager.meetingCreateTask')}</Text>
-                  </PressableScale>
-                </View>
-              </View>
             </View>
           )}
         </View>
@@ -801,4 +828,3 @@ export default function CreateMeetingScreen() {
     </>
   );
 }
-

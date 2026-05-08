@@ -7,6 +7,12 @@ import { Text } from '../../components/ui/text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CropZoom, type CropZoomRefType } from 'react-native-zoom-toolkit';
 import BottomSheetModal from './BottomSheetModal';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_ROW_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from './bottom-sheet-actions';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import { hapticError, hapticSuccess } from '../../lib/haptics';
 import { useI18n } from '../../lib/i18n';
@@ -78,6 +84,7 @@ export function NewsImageCropperModal({
 }: NewsImageCropperModalProps) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
+  const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
   const cropRef = useRef<CropZoomRefType>(null);
   const [saving, setSaving] = useState(false);
   const selectedAspectRatio = useMemo(
@@ -157,7 +164,7 @@ export function NewsImageCropperModal({
     >
       <View
         style={{
-          paddingBottom: Math.max(insets.bottom, 18),
+          paddingBottom: bottomSheetActionBottomOffset,
         }}
       >
         <View className="mb-4 flex-row items-start justify-between gap-4">
@@ -212,22 +219,22 @@ export function NewsImageCropperModal({
           ) : null}
         </View>
 
-        <View className="mt-4 flex-row w-full items-center gap-3 pb-1">
+        <View className={`mt-4 w-full ${BOTTOM_SHEET_ACTION_ROW_CLASS}`}>
           <PressableScale
-            className="w-full min-h-[56px] items-center justify-center rounded-[24px] border border-[#d8deea] bg-white px-4"
+            className={`w-full ${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-[#d8deea] bg-white`}
             containerClassName="flex-1"
             contentStyle={{ width: '100%' }}
             disabled={saving}
             haptic="selection"
             onPress={onClose}
           >
-            <Text className="text-center font-display text-[16px] font-semibold text-[#11233d]">
+            <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-[#11233d]`}>
               {copy.cancel}
             </Text>
           </PressableScale>
 
           <PressableScale
-            className={`w-full min-h-[56px] items-center justify-center rounded-[24px] bg-primary px-4 ${saving ? 'opacity-70' : ''}`}
+            className={`w-full ${BOTTOM_SHEET_ACTION_BUTTON_CLASS} bg-primary ${saving ? 'opacity-70' : ''}`}
             containerClassName="flex-1"
             contentStyle={{ width: '100%' }}
             disabled={saving}
@@ -237,12 +244,12 @@ export function NewsImageCropperModal({
             {saving ? (
               <View className="flex-row items-center justify-center gap-2">
                 <ActivityIndicator color="#ffffff" size="small" />
-                <Text className="font-display text-[16px] font-semibold text-white">
+                <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
                   {copy.saving}
                 </Text>
               </View>
             ) : (
-              <Text className="text-center font-display text-[16px] font-semibold text-white">
+              <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
                 {copy.apply}
               </Text>
             )}
@@ -252,4 +259,3 @@ export function NewsImageCropperModal({
     </BottomSheetModal>
   );
 }
-

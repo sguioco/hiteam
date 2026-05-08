@@ -23,6 +23,12 @@ import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from './BottomSheetModal';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_ROW_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from './bottom-sheet-actions';
 import { parseTaskDueAt } from '../../lib/task-utils';
 
 type TaskListProps = {
@@ -62,24 +68,23 @@ const taskSkeletonWidths = ['72%', '58%', '66%'] as const;
 
 const PHOTO_REPORT_LAYOUT = {
   withoutPhotos: {
-    shellClassName: 'flex-1 relative',
-    contentClassName: 'pb-24',
-    footerClassName: 'absolute inset-x-0 bottom-0 gap-3',
+    shellClassName: 'relative',
+    contentClassName: '',
+    footerClassName: 'mt-2 gap-3',
     addButtonClassName:
-      'rounded-[24px] border border-white bg-[#ebf6ff] px-4 py-4',
+      `${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-white bg-[#ebf6ff]`,
   },
   withPhotos: {
-    shellClassName: 'flex-1 relative',
-    contentClassName: 'pb-24',
-    footerClassName: 'absolute inset-x-0 bottom-0 gap-3',
-    actionRowClassName: 'flex-row gap-3',
+    shellClassName: 'relative',
+    contentClassName: '',
+    footerClassName: 'mt-2 gap-3',
+    actionRowClassName: BOTTOM_SHEET_ACTION_ROW_CLASS,
   },
 } as const;
 
 const PHOTO_REPORT_ACTION_BUTTON_CLASS =
-  'flex-1 h-16 min-h-[64px] items-center justify-center rounded-[24px] px-4 py-0';
-const PHOTO_REPORT_ACTION_TEXT_CLASS =
-  'font-display text-[16px] font-semibold leading-5';
+  `flex-1 ${BOTTOM_SHEET_ACTION_BUTTON_CLASS}`;
+const PHOTO_REPORT_ACTION_TEXT_CLASS = `${BOTTOM_SHEET_ACTION_TEXT_CLASS} leading-5`;
 
 const PHOTO_REPORT_LIMIT = 7;
 const warmedPhotoUris = new Set<string>();
@@ -189,19 +194,22 @@ export default function TaskList({
   const photoReportLayout = activeTaskHasPhotos
     ? PHOTO_REPORT_LAYOUT.withPhotos
     : PHOTO_REPORT_LAYOUT.withoutPhotos;
-  const photoPreviewHeight = Math.max(
-    170,
-    Math.min(viewportWidth - 58, viewportHeight * 0.34, 300),
-  );
   const photoReportSheetMaxHeight = Math.max(
     520,
     viewportHeight - insets.top - 18,
   );
-  const photoReportSheetHeight = Math.min(
-    photoReportSheetMaxHeight,
-    activeTaskHasPhotos
-      ? Math.max(620, photoPreviewHeight + 320)
-      : 560,
+  const photoReportActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
+  const photoReportScrollableMaxHeight = Math.max(
+    420,
+    photoReportSheetMaxHeight - photoReportActionBottomOffset,
+  );
+  const photoPreviewHeight = Math.max(
+    180,
+    Math.min(
+      viewportWidth - 58,
+      viewportHeight * (mediaError ? 0.24 : 0.3),
+      mediaError ? 240 : 280,
+    ),
   );
 
   useEffect(() => {
@@ -695,229 +703,235 @@ export default function TaskList({
 
       <BottomSheetModal
         onClose={closeTaskModal}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
         sheetStyle={{
-          height: photoReportSheetHeight,
           maxHeight: photoReportSheetMaxHeight,
-          paddingBottom: Math.max(insets.bottom + 20, 32),
+          paddingBottom: photoReportActionBottomOffset,
         }}
         visible={activeTask !== null}
       >
         {activeTask ? (
-          <View className={photoReportLayout.shellClassName}>
-            <View className={photoReportLayout.contentClassName}>
-              <View className="mb-4 flex-row items-start justify-between gap-4">
-                <View className="w-10" />
-                <View className="flex-1 items-center">
-                  <Text className="text-center font-display text-[24px] font-bold text-foreground">
-                    {t('today.photoReportTitle')}
-                  </Text>
-                  <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
-                    {t('today.photoDefaultHint')}
-                  </Text>
+          <ScrollView
+            bounces={false}
+            contentContainerStyle={{ flexGrow: 0 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ flexGrow: 0, maxHeight: photoReportScrollableMaxHeight }}
+          >
+            <View className={photoReportLayout.shellClassName}>
+              <View className={photoReportLayout.contentClassName}>
+                <View className="mb-4 flex-row items-start justify-between gap-4">
+                  <View className="w-10" />
+                  <View className="flex-1 items-center">
+                    <Text className="text-center font-display text-[24px] font-bold text-foreground">
+                      {t('today.photoReportTitle')}
+                    </Text>
+                    <Text className="mt-1 text-center font-body text-sm leading-6 text-muted-foreground">
+                      {t('today.photoDefaultHint')}
+                    </Text>
+                  </View>
+                  <View className="w-10" />
                 </View>
-                <View className="w-10" />
-              </View>
 
-              {mediaError ? (
-                <View className="mb-4 rounded-[22px] border border-[#ffd7dc] bg-[#fff1f3] px-4 py-3">
-                  <Text className="font-body text-sm leading-6 text-[#9f1239]">{mediaError}</Text>
-                </View>
-              ) : null}
-
-              <View>
-                {activeTaskHasPhotos ? (
-                  <View className="mb-4 h-9">
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View className="flex-row gap-2">
-                        {activeTaskPhotos.map((photo, index) => {
-                          const isSelected = selectedPhoto?.id === photo.id;
-
-                          return (
-                            <PressableScale
-                              key={photo.id}
-                              className={`h-9 w-9 items-center justify-center rounded-full border ${
-                                isSelected ? 'border-primary bg-primary' : 'border-[#d7def5] bg-white'
-                              }`}
-                              haptic="selection"
-                              onPress={() => {
-                                prewarmPhotoUris([photo.uri]);
-                                setSelectedPhotoId(photo.id);
-                              }}
-                            >
-                              {photo.isPending ? (
-                                <ActivityIndicator
-                                  color={isSelected ? '#ffffff' : '#6d73ff'}
-                                  size="small"
-                                />
-                              ) : (
-                                <Text
-                                  className={`font-display text-sm font-bold ${
-                                    isSelected ? 'text-white' : 'text-foreground'
-                                  }`}
-                                >
-                                  {index + 1}
-                                </Text>
-                              )}
-                            </PressableScale>
-                          );
-                        })}
-                        <PressableScale
-                          className="h-9 w-9 items-center justify-center rounded-full border border-[#d7def5] bg-white"
-                          haptic="selection"
-                          onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
-                        >
-                          <Ionicons color="#6d73ff" name="add" size={18} />
-                        </PressableScale>
-                      </View>
-                    </ScrollView>
+                {mediaError ? (
+                  <View className="mb-3 rounded-[22px] border border-[#ffd7dc] bg-[#fff1f3] px-4 py-3">
+                    <Text className="font-body text-sm leading-6 text-[#9f1239]">{mediaError}</Text>
                   </View>
                 ) : null}
 
-                {selectedPhoto ? (
-                  <View
-                    className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
-                    style={{ height: photoPreviewHeight }}
-                  >
-                    <Image
-                      resizeMode="contain"
-                      source={{ uri: selectedPhoto.uri }}
-                      style={StyleSheet.absoluteFillObject}
-                    />
-                    {selectedPhoto.isPending ? (
-                      <View className="absolute inset-0 items-center justify-center bg-[#0f172a]/18">
-                        <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">
-                          <ActivityIndicator color="#546cf2" size="large" />
-                          <Text className="font-body text-sm text-[#24314b]">
-                            {t('today.uploadingPhoto')}
-                          </Text>
+                <View>
+                  {activeTaskHasPhotos ? (
+                    <View className="mb-3 h-9">
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View className="flex-row gap-2">
+                          {activeTaskPhotos.map((photo, index) => {
+                            const isSelected = selectedPhoto?.id === photo.id;
+
+                            return (
+                              <PressableScale
+                                key={photo.id}
+                                className={`h-9 w-9 items-center justify-center rounded-full border ${
+                                  isSelected ? 'border-primary bg-primary' : 'border-[#d7def5] bg-white'
+                                }`}
+                                haptic="selection"
+                                onPress={() => {
+                                  prewarmPhotoUris([photo.uri]);
+                                  setSelectedPhotoId(photo.id);
+                                }}
+                              >
+                                {photo.isPending ? (
+                                  <ActivityIndicator
+                                    color={isSelected ? '#ffffff' : '#6d73ff'}
+                                    size="small"
+                                  />
+                                ) : (
+                                  <Text
+                                    className={`font-display text-sm font-bold ${
+                                      isSelected ? 'text-white' : 'text-foreground'
+                                    }`}
+                                  >
+                                    {index + 1}
+                                  </Text>
+                                )}
+                              </PressableScale>
+                            );
+                          })}
+                          <PressableScale
+                            className="h-9 w-9 items-center justify-center rounded-full border border-[#d7def5] bg-white"
+                            haptic="selection"
+                            onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
+                          >
+                            <Ionicons color="#6d73ff" name="add" size={18} />
+                          </PressableScale>
                         </View>
-                      </View>
-                    ) : (
-                      <PressableScale
-                        className="absolute right-4 top-4 h-8 w-8 items-center justify-center"
-                        disabled={mediaBusy}
-                        haptic="selection"
-                        onPress={() => {
-                          void deleteSelectedPhoto();
-                        }}
-                      >
-                        <Ionicons color="#ffffff" name="close" size={16} />
-                      </PressableScale>
-                    )}
-                    <View
-                      className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
-                      style={{ backgroundColor: 'rgba(15, 23, 42, 0.38)' }}
-                    >
-                      <Text className="font-display text-[28px] font-bold text-white">
-                        {selectedPhoto.label}
-                      </Text>
-                      <Text className="mt-2 font-body text-sm text-white/90">
-                        {selectedPhoto.isPending
-                          ? t('today.uploading')
-                          : t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
-                      </Text>
+                      </ScrollView>
                     </View>
-                  </View>
-                ) : (
+                  ) : null}
+
+                  {selectedPhoto ? (
+                    <View
+                      className="overflow-hidden rounded-[26px] bg-[#dbe7ff]"
+                      style={{ height: photoPreviewHeight }}
+                    >
+                      <Image
+                        resizeMode="contain"
+                        source={{ uri: selectedPhoto.uri }}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                      {selectedPhoto.isPending ? (
+                        <View className="absolute inset-0 items-center justify-center bg-[#0f172a]/18">
+                          <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">
+                            <ActivityIndicator color="#546cf2" size="large" />
+                            <Text className="font-body text-sm text-[#24314b]">
+                              {t('today.uploadingPhoto')}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <PressableScale
+                          className="absolute right-4 top-4 h-8 w-8 items-center justify-center"
+                          disabled={mediaBusy}
+                          haptic="selection"
+                          onPress={() => {
+                            void deleteSelectedPhoto();
+                          }}
+                        >
+                          <Ionicons color="#ffffff" name="close" size={16} />
+                        </PressableScale>
+                      )}
+                      <View
+                        className="absolute inset-x-0 bottom-0 px-5 pb-4 pt-5"
+                        style={{ backgroundColor: 'rgba(15, 23, 42, 0.38)' }}
+                      >
+                        <Text className="font-display text-[24px] font-bold text-white">
+                          {selectedPhoto.label}
+                        </Text>
+                        <Text className="mt-1 font-body text-sm text-white/90">
+                          {selectedPhoto.isPending
+                            ? t('today.uploading')
+                            : t('today.photoCapturedAt', { time: selectedPhoto.capturedAt })}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <PressableScale
+                      className="min-h-[200px] items-center justify-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-7"
+                      haptic="selection"
+                      onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
+                    >
+                      <View className="h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                        <Ionicons color="#6d73ff" name="camera-outline" size={24} />
+                      </View>
+                      <Text className="mt-4 font-display text-[20px] font-bold text-foreground">
+                        {t('today.noPhotosYet')}
+                      </Text>
+                      <Text className="mt-2 text-center font-body text-sm leading-6 text-muted-foreground">
+                        {t('today.addPhotoBeforeDone')}
+                      </Text>
+                    </PressableScale>
+                  )}
+                </View>
+              </View>
+
+              <View className={photoReportLayout.footerClassName}>
+                {!activeTaskHasPhotos ? (
                   <PressableScale
-                    className="mb-4 items-center rounded-[26px] border border-dashed border-primary/20 bg-white px-5 py-10"
+                    className={PHOTO_REPORT_LAYOUT.withoutPhotos.addButtonClassName}
+                    disabled={mediaBusy}
                     haptic="selection"
                     onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
                   >
-                    <View className="h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                      <Ionicons color="#6d73ff" name="camera-outline" size={24} />
+                    <View className="flex-row items-center justify-center gap-2">
+                      <Ionicons color="#2563eb" name="camera-outline" size={18} />
+                      <Text className="font-display text-[16px] font-semibold text-[#11233d]">
+                        {t('today.addPhoto')}
+                      </Text>
                     </View>
-                    <Text className="mt-4 font-display text-[20px] font-bold text-foreground">
-                      {t('today.noPhotosYet')}
-                    </Text>
-                    <Text className="mt-2 text-center font-body text-sm leading-6 text-muted-foreground">
-                      {t('today.addPhotoBeforeDone')}
-                    </Text>
                   </PressableScale>
+                ) : activeTask.status === 'DONE' ? (
+                  <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
+                    <PressableScale
+                      className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
+                      containerClassName="flex-1"
+                      disabled={mediaBusy}
+                      haptic="selection"
+                      onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
+                    >
+                      <View className="flex-row items-center justify-center gap-2">
+                        <Ionicons color="#2563eb" name="create-outline" size={18} />
+                        <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
+                          {t('today.editPhotos')}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                    <PressableScale
+                      className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8deea] bg-white`}
+                      containerClassName="flex-1"
+                      disabled={mediaBusy}
+                      haptic="selection"
+                      onPress={closeTaskModal}
+                    >
+                      <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
+                        {t('today.taskDone')}
+                      </Text>
+                    </PressableScale>
+                  </View>
+                ) : (
+                  <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
+                    <PressableScale
+                      className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
+                      containerClassName="flex-1"
+                      disabled={mediaBusy}
+                      haptic="selection"
+                      onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
+                    >
+                      <View className="flex-row items-center justify-center gap-2">
+                        <Ionicons color="#2563eb" name="create-outline" size={18} />
+                        <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
+                          {t('today.editPhotos')}
+                        </Text>
+                      </View>
+                    </PressableScale>
+
+                    <PressableScale
+                      className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} bg-primary`}
+                      containerClassName="flex-1"
+                      disabled={mediaBusy}
+                      haptic="success"
+                      onPress={() => void completePhotoTask(activeTask.id)}
+                    >
+                      <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-white`}>
+                        {t('today.taskDone')}
+                      </Text>
+                    </PressableScale>
+                  </View>
                 )}
               </View>
             </View>
-
-            <View className={photoReportLayout.footerClassName}>
-              {!activeTaskHasPhotos ? (
-                <PressableScale
-                  className={PHOTO_REPORT_LAYOUT.withoutPhotos.addButtonClassName}
-                  disabled={mediaBusy}
-                  haptic="selection"
-                  onPress={() => openPhotoSourceChooser(activeTask.id, 'add')}
-                >
-                  <View className="flex-row items-center justify-center gap-2">
-                    <Ionicons color="#2563eb" name="camera-outline" size={18} />
-                    <Text className="font-display text-[16px] font-semibold text-[#11233d]">
-                      {t('today.addPhoto')}
-                    </Text>
-                  </View>
-                </PressableScale>
-              ) : activeTask.status === 'DONE' ? (
-                <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
-                  <PressableScale
-                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="selection"
-                    onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
-                  >
-                    <View className="flex-row items-center justify-center gap-2">
-                      <Ionicons color="#2563eb" name="create-outline" size={18} />
-                      <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
-                        {t('today.editPhotos')}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                  <PressableScale
-                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8deea] bg-white`}
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="selection"
-                    onPress={closeTaskModal}
-                  >
-                    <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
-                      {t('today.taskDone')}
-                    </Text>
-                  </PressableScale>
-                </View>
-              ) : (
-                <View className={PHOTO_REPORT_LAYOUT.withPhotos.actionRowClassName}>
-                  <PressableScale
-                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} border border-[#d8e5ff] bg-[#eef5ff]`}
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="selection"
-                    onPress={() => openPhotoSourceChooser(activeTask.id, 'edit')}
-                  >
-                    <View className="flex-row items-center justify-center gap-2">
-                      <Ionicons color="#2563eb" name="create-outline" size={18} />
-                      <Text className={`${PHOTO_REPORT_ACTION_TEXT_CLASS} text-[#11233d]`}>
-                        {t('today.editPhotos')}
-                      </Text>
-                    </View>
-                  </PressableScale>
-
-                  <PressableScale
-                    className={`${PHOTO_REPORT_ACTION_BUTTON_CLASS} bg-primary`}
-                    containerClassName="flex-1"
-                    disabled={mediaBusy}
-                    haptic="success"
-                    onPress={() => void completePhotoTask(activeTask.id)}
-                  >
-                    <Text className={`text-center ${PHOTO_REPORT_ACTION_TEXT_CLASS} text-white`}>
-                      {t('today.taskDone')}
-                    </Text>
-                  </PressableScale>
-                </View>
-              )}
-            </View>
-          </View>
+          </ScrollView>
         ) : null}
       </BottomSheetModal>
 
     </>
   );
 }
-

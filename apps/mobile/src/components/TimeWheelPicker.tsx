@@ -7,6 +7,10 @@ import { Button } from '../../components/ui/button';
 import { useI18n } from '../../lib/i18n';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from './BottomSheetModal';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  getBottomSheetActionBottomOffset,
+} from './bottom-sheet-actions';
 
 export type TimeValue = {
   hour: number;
@@ -143,14 +147,14 @@ export function TimeWheelPickerPanel({
       <View className="mt-5 gap-3" style={{ paddingBottom: bottomPadding }}>
         {allowClear ? (
           <Button
-            className="min-h-14 rounded-[24px] border-[#d8e2f0] bg-white"
+            className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#d8e2f0] bg-white`}
             label={t('manager.meetingClearEndTime')}
             onPress={onClear}
             variant="secondary"
           />
         ) : null}
         <Button
-          className="min-h-14 rounded-[24px] border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25"
+          className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/25`}
           fullWidth
           label={t('manager.meetingApplyTime')}
           onPress={() => onApply({ hour: hourIndex, minute: minuteIndex })}
@@ -184,7 +188,7 @@ export function TimeWheelPicker({
       <TimeWheelPickerPanel
         active={visible}
         allowClear={allowClear}
-        bottomPadding={Math.max(insets.bottom, 12)}
+        bottomPadding={getBottomSheetActionBottomOffset(insets.bottom)}
         initialValue={initialValue}
         onApply={onApply}
         onClear={onClear}
@@ -194,4 +198,3 @@ export function TimeWheelPicker({
     </BottomSheetModal>
   );
 }
-

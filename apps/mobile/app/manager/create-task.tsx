@@ -30,6 +30,13 @@ import {
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
 import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+  getBottomSheetActionReservedSpace,
+} from '../../src/components/bottom-sheet-actions';
 
 const PRIORITY_OPTIONS = [
   { label: 'Low', value: 'LOW' as const },
@@ -139,6 +146,7 @@ function TaskOptionCheckbox({ checked, label, onPress }: TaskOptionCheckboxProps
 
 export default function CreateTaskScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { language, t } = useI18n();
   const locale = getDateLocale(language);
   const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
@@ -255,7 +263,8 @@ export default function CreateTaskScreen() {
   const selectedAssigneeIds = useMemo(() => selectedAssignees.map((employee) => employee.id), [selectedAssignees]);
   const priorityIndex = PRIORITY_OPTIONS.findIndex((option) => option.value === priority);
   const activePriorityColor = PRIORITY_COLORS[priority];
-  const createTaskButtonOffset = selectedAssigneeIds.length === 0 ? 85 : 25;
+  const actionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
+  const actionReservedSpace = getBottomSheetActionReservedSpace(insets.bottom);
 
   const individuallySelectedEmployees = useMemo(
     () => selectedAssignees.filter((employee) => !selectedGroupMemberIdSet.has(employee.id)),
@@ -427,7 +436,24 @@ export default function CreateTaskScreen() {
 
   return (
     <>
-      <Screen contentClassName="flex-grow gap-3 px-5 pb-4 pt-0" withGradient>
+      <Screen
+        contentClassName="flex-grow gap-3 px-5 pt-0"
+        contentContainerStyle={{ paddingBottom: actionReservedSpace + 20 }}
+        footer={
+          <PressableScale
+            className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
+            disabled={submitting}
+            haptic="selection"
+            onPress={() => void handleSubmit()}
+          >
+            <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
+              {submitting ? t('manager.createTaskCreating') : isRecurring ? t('manager.createTaskRecurringSubmit') : t('manager.createTaskSubmit')}
+            </Text>
+          </PressableScale>
+        }
+        footerStyle={{ bottom: actionBottomOffset, paddingHorizontal: 20 }}
+        withGradient
+      >
         <StatusBar backgroundColor="transparent" style="dark" translucent />
 
         <View className="flex-row items-center gap-3">
@@ -625,16 +651,6 @@ export default function CreateTaskScreen() {
             )}
           </View>
 
-          <PressableScale
-            className="rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
-            haptic="selection"
-            onPress={() => void handleSubmit()}
-            style={{ marginTop: createTaskButtonOffset }}
-          >
-            <Text className="text-center font-display text-[16px] font-semibold text-white">
-              {submitting ? t('manager.createTaskCreating') : isRecurring ? t('manager.createTaskRecurringSubmit') : t('manager.createTaskSubmit')}
-            </Text>
-          </PressableScale>
         </View>
       </Screen>
 
@@ -764,4 +780,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-

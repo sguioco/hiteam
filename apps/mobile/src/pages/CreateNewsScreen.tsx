@@ -58,6 +58,12 @@ import {
 } from '../components/news-image-cropper-modal';
 import { ParticipantAvatarStrip } from '../components/participant-avatar-strip';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+  getBottomSheetActionReservedSpace,
+} from '../components/bottom-sheet-actions';
 
 type NewsOptionCheckboxProps = {
   checked: boolean;
@@ -90,9 +96,6 @@ type NewsLocationSuggestion = NewsLocationDraft & {
   id: string;
 };
 
-const CREATE_NEWS_SUBMIT_BUTTON_OFFSET = 20;
-const CREATE_NEWS_SUBMIT_BUTTON_HEIGHT = 56;
-const CREATE_NEWS_SUBMIT_BUTTON_BASE_BOTTOM = 0;
 const CREATE_NEWS_SUBMIT_BUTTON_SIDE_PADDING = 20;
 const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const NEWS_LOCATION_SUGGESTION_LIMIT = 5;
@@ -234,13 +237,13 @@ function CreateNewsSubmitButton({
 }: CreateNewsSubmitButtonProps) {
   return (
     <PressableScale
-      className="rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30"
+      className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/30`}
       dimWhenDisabled={false}
       disabled={disabled}
       haptic="selection"
       onPress={onPress}
     >
-      <Text className="text-center font-display text-[16px] font-semibold text-white">
+      <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
         {submitting ? loadingLabel : label}
       </Text>
     </PressableScale>
@@ -374,9 +377,8 @@ export default function CreateNewsScreen() {
     [selectedGroupMemberIdSet, selectedParticipants],
   );
   const shouldScrollParticipantSheet = groups.length + orderedEmployees.length > 5;
-  const submitButtonBottom = insets.bottom + CREATE_NEWS_SUBMIT_BUTTON_BASE_BOTTOM;
-  const submitButtonContentPadding =
-    submitButtonBottom + CREATE_NEWS_SUBMIT_BUTTON_HEIGHT + Math.max(CREATE_NEWS_SUBMIT_BUTTON_OFFSET, 0) + 28;
+  const submitButtonBottom = getBottomSheetActionBottomOffset(insets.bottom);
+  const submitButtonContentPadding = getBottomSheetActionReservedSpace(insets.bottom) + 20;
   const locationSuggestionQuery = locationAddressQuery.trim();
   const shouldShowLocationSuggestions =
     !locationSuggestionsSuppressed &&
@@ -1704,7 +1706,6 @@ export default function CreateNewsScreen() {
             {
               bottom: submitButtonBottom,
               paddingHorizontal: CREATE_NEWS_SUBMIT_BUTTON_SIDE_PADDING,
-              transform: [{ translateY: CREATE_NEWS_SUBMIT_BUTTON_OFFSET }],
             },
           ]}
         >
@@ -1875,4 +1876,3 @@ const styles = StyleSheet.create({
     right: 0,
   },
 });
-

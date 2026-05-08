@@ -36,6 +36,11 @@ import { hasResolvedLiveText, primeLiveTextMap, useLiveTextMap } from '../../lib
 import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
+import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from '../components/bottom-sheet-actions';
 
 type NewsScreenProps = {
   standalone?: boolean;
@@ -195,6 +200,7 @@ function getAnnouncementAttachments(item: AnnouncementItem) {
 export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
   const { language, t } = useI18n();
   const textDirectionStyle = useMemo(() => getTextDirectionStyle(language), [language]);
   const { roleCodes } = useAuthFlowState();
@@ -601,7 +607,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         className="max-h-[560px]"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-4 pb-1">
+        <View className="gap-4" style={{ paddingBottom: bottomSheetActionBottomOffset }}>
           <TextInput
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             onChangeText={setEditingTitle}
@@ -684,12 +690,12 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           ) : null}
 
           <PressableScale
-            className={`rounded-[24px] border border-transparent bg-[#6d73ff] px-4 py-4 shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
+            className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border border-transparent bg-[#6d73ff] shadow-lg shadow-[#6d73ff]/30 ${submitting ? 'opacity-60' : ''}`}
             disabled={submitting}
             haptic="selection"
             onPress={() => void handleSaveEdit()}
           >
-            <Text className="text-center font-display text-[16px] font-semibold text-white">
+            <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
               {copy.save}
             </Text>
           </PressableScale>
@@ -1086,7 +1092,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
         <Screen contentClassName={isEmptyState ? 'flex-grow pb-10 pt-3' : 'pb-10 pt-3'} withGradient>{content}</Screen>
         <BottomSheetModal
           onClose={() => setEditingItem(null)}
-          sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
+          sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
           visible={editingItem !== null}
         >
           <View className="mb-4 flex-row items-start justify-between gap-4">
@@ -1127,7 +1133,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
       <BottomSheetModal
         onClose={() => setEditingItem(null)}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-7 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
         visible={editingItem !== null}
       >
         <View className="mb-4 flex-row items-start justify-between gap-4">
@@ -1150,4 +1156,3 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
     </>
   );
 }
-

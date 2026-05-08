@@ -22,6 +22,11 @@ import { Button } from "../../components/ui/button";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomSheetModal from "../components/BottomSheetModal";
 import {
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from "../components/bottom-sheet-actions";
+import {
   loadManagerTasksBootstrap,
   loadMyProfile,
 } from "../../lib/api";
@@ -343,6 +348,7 @@ export default function ManagerScreen({
 }: ManagerScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
   const { height: viewportHeight, width: viewportWidth } =
     useWindowDimensions();
   const { language, t } = useI18n();
@@ -1110,11 +1116,11 @@ export default function ManagerScreen({
 
       <BottomSheetModal
         onClose={closePhotoViewer}
-        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pb-6 pt-5 shadow-2xl shadow-[#1f2687]/15"
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-5 shadow-2xl shadow-[#1f2687]/15"
         visible={activePhotoTask !== null}
       >
         {activePhotoTask ? (
-          <View className="relative">
+          <View className="relative" style={{ paddingBottom: bottomSheetActionBottomOffset }}>
             <View>
               <View className="mb-4 flex-row items-start justify-between gap-4">
                 <View className="w-10" />
@@ -1196,11 +1202,11 @@ export default function ManagerScreen({
 
             <View className="mt-4">
               <PressableScale
-                className="rounded-[24px] bg-primary px-4 py-4"
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} bg-primary`}
                 haptic="selection"
                 onPress={closePhotoViewer}
               >
-                <Text className="text-center font-display text-[16px] font-semibold text-white">
+                <Text className={`${BOTTOM_SHEET_ACTION_TEXT_CLASS} text-white`}>
                   {t("common.done")}
                 </Text>
               </PressableScale>

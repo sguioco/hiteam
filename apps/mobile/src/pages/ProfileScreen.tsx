@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { BottomSheet } from "heroui-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +14,14 @@ import { signOutLocally } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
+import BottomSheetModal from "../components/BottomSheetModal";
+import {
+  BottomSheetActionDock,
+  BOTTOM_SHEET_ACTION_BUTTON_CLASS,
+  BOTTOM_SHEET_ACTION_ROW_CLASS,
+  BOTTOM_SHEET_ACTION_TEXT_CLASS,
+  getBottomSheetActionBottomOffset,
+} from "../components/bottom-sheet-actions";
 
 type ProfileScreenProps = {
   active?: boolean;
@@ -22,6 +29,9 @@ type ProfileScreenProps = {
 
 const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
+  const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
+  const signOutConfirmSheetHeight = bottomSheetActionBottomOffset + 180;
+  const deleteConfirmSheetHeight = bottomSheetActionBottomOffset + (deleteError ? 320 : 220);
   const router = useRouter();
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
@@ -227,9 +237,9 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
 
   const sheetActionLabelStyle = {
     fontFamily: "Manrope_600SemiBold",
-    fontSize: 17,
+    fontSize: 15,
     includeFontPadding: false,
-    lineHeight: 22,
+    lineHeight: 20,
     textAlign: "center",
   } as const;
 
@@ -433,148 +443,146 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
         </ScrollView>
       </View>
 
-      <BottomSheet
-        isOpen={signOutConfirmOpen}
-        onOpenChange={setSignOutConfirmOpen}
+      <BottomSheetModal
+        backdropOpacity={0.42}
+        onClose={() => setSignOutConfirmOpen(false)}
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-8 shadow-2xl shadow-[#1f2687]/15"
+        sheetStyle={{ height: signOutConfirmSheetHeight }}
+        solidBackground
+        visible={signOutConfirmOpen}
       >
-        <BottomSheet.Portal disableFullWindowOverlay={__DEV__}>
-          <BottomSheet.Overlay
-            style={{ backgroundColor: "rgba(6, 14, 28, 0.42)" }}
-          />
-          <BottomSheet.Content
-            backgroundClassName="rounded-t-[34px] bg-[#f7faff]"
-            enableDynamicSizing={false}
-            snapPoints={["22%"]}
-            className="px-5 pb-7 pt-5"
-            contentContainerClassName="pb-2"
-          >
-            <View className="mb-12 items-center">
-              <BottomSheet.Title
-                style={{
-                  color: "#111827",
-                  fontFamily: "Manrope_700Bold",
-                  fontSize: 24,
-                  includeFontPadding: false,
-                  lineHeight: 30,
-                  textAlign: "center",
-                }}
-              >
-                {t("profile.signOutTitle")}
-              </BottomSheet.Title>
-            </View>
+        <View className="flex-1">
+          <View className="items-center">
+            <Text
+              style={{
+                color: "#111827",
+                fontFamily: "Manrope_700Bold",
+                fontSize: 24,
+                includeFontPadding: false,
+                lineHeight: 30,
+                textAlign: "center",
+              }}
+            >
+              {t("profile.signOutTitle")}
+            </Text>
+          </View>
 
-            <View className="flex-row gap-3">
-              <PressableScale
-                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#eef5ff] px-4 py-4"
-                containerClassName="flex-1"
-                haptic="selection"
-                onPress={() => setSignOutConfirmOpen(false)}
+          <BottomSheetActionDock className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
+            <PressableScale
+              className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 bg-[#eef5ff]`}
+              containerClassName="flex-1"
+              haptic="selection"
+              onPress={() => setSignOutConfirmOpen(false)}
+            >
+              <Text
+                className={BOTTOM_SHEET_ACTION_TEXT_CLASS}
+                style={[sheetActionLabelStyle, { color: "#234067" }]}
               >
-                <Text style={[sheetActionLabelStyle, { color: "#234067" }]}>
-                  {t("profile.cancel")}
-                </Text>
-              </PressableScale>
-              <PressableScale
-                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#f25555] px-4 py-4"
-                containerClassName="flex-1"
-                haptic="success"
-                onPress={() => {
-                  hapticSuccess();
-                  setSignOutConfirmOpen(false);
-                  signOutLocally();
-                  router.replace("/");
-                }}
+                {t("profile.cancel")}
+              </Text>
+            </PressableScale>
+            <PressableScale
+              className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 bg-[#f25555]`}
+              containerClassName="flex-1"
+              haptic="success"
+              onPress={() => {
+                hapticSuccess();
+                setSignOutConfirmOpen(false);
+                signOutLocally();
+                router.replace("/");
+              }}
+            >
+              <Text
+                className={BOTTOM_SHEET_ACTION_TEXT_CLASS}
+                style={[sheetActionLabelStyle, { color: "#ffffff" }]}
               >
-                <Text style={[sheetActionLabelStyle, { color: "#ffffff" }]}>
-                  {t("profile.signOut")}
-                </Text>
-              </PressableScale>
-            </View>
-          </BottomSheet.Content>
-        </BottomSheet.Portal>
-      </BottomSheet>
+                {t("profile.signOut")}
+              </Text>
+            </PressableScale>
+          </BottomSheetActionDock>
+        </View>
+      </BottomSheetModal>
 
-      <BottomSheet
-        isOpen={deleteConfirmOpen}
-        onOpenChange={(open) => {
+      <BottomSheetModal
+        backdropOpacity={0.42}
+        onClose={() => {
           if (!deleteInFlight) {
-            setDeleteConfirmOpen(open);
-            if (!open) {
-              setDeleteError(null);
-            }
+            setDeleteConfirmOpen(false);
+            setDeleteError(null);
           }
         }}
+        sheetClassName="rounded-t-[34px] border border-white bg-[#f7faff] px-5 pt-8 shadow-2xl shadow-[#1f2687]/15"
+        sheetStyle={{ height: deleteConfirmSheetHeight }}
+        solidBackground
+        visible={deleteConfirmOpen}
       >
-        <BottomSheet.Portal disableFullWindowOverlay={__DEV__}>
-          <BottomSheet.Overlay
-            style={{ backgroundColor: "rgba(6, 14, 28, 0.42)" }}
-          />
-          <BottomSheet.Content
-            backgroundClassName="rounded-t-[34px] bg-[#f7faff]"
-            enableDynamicSizing={false}
-            snapPoints={["34%"]}
-            className="px-5 pb-7 pt-5"
-            contentContainerClassName="pb-2"
-          >
-            <View className="mb-6 items-center gap-3">
-              <BottomSheet.Title
-                style={{
-                  color: "#111827",
-                  fontFamily: "Manrope_700Bold",
-                  fontSize: 24,
-                  includeFontPadding: false,
-                  lineHeight: 30,
-                  textAlign: "center",
-                }}
-              >
-                {t("profile.deleteAccountTitle")}
-              </BottomSheet.Title>
-              <Text className="px-3 text-center font-body text-[14px] leading-6 text-muted-foreground">
-                {t("profile.deleteAccountBody")}
-              </Text>
-              {deleteError ? (
-                <View className="w-full rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
-                  <Text className="text-center font-body text-[13px] leading-5 text-danger">
-                    {deleteError}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            <View className="flex-row gap-3">
-              <PressableScale
-                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#eef5ff] px-4 py-4"
-                containerClassName="flex-1"
-                disabled={deleteInFlight}
-                haptic="selection"
-                onPress={() => setDeleteConfirmOpen(false)}
-              >
-                <Text style={[sheetActionLabelStyle, { color: "#234067" }]}>
-                  {t("profile.cancel")}
+        <View className="flex-1">
+          <View className="items-center gap-3">
+            <Text
+              style={{
+                color: "#111827",
+                fontFamily: "Manrope_700Bold",
+                fontSize: 24,
+                includeFontPadding: false,
+                lineHeight: 30,
+                textAlign: "center",
+              }}
+            >
+              {t("profile.deleteAccountTitle")}
+            </Text>
+            <Text className="px-3 text-center font-body text-[14px] leading-6 text-muted-foreground">
+              {t("profile.deleteAccountBody")}
+            </Text>
+            {deleteError ? (
+              <View className="w-full rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
+                <Text className="text-center font-body text-[13px] leading-5 text-danger">
+                  {deleteError}
                 </Text>
-              </PressableScale>
-              <PressableScale
-                className="min-h-[56px] flex-1 items-center justify-center rounded-[24px] bg-[#f25555] px-4 py-4"
-                containerClassName="flex-1"
-                disabled={deleteInFlight}
-                haptic="warning"
-                onPress={() => void handleDeleteAccount()}
+              </View>
+            ) : null}
+          </View>
+
+          <BottomSheetActionDock className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
+            <PressableScale
+              className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 bg-[#eef5ff]`}
+              containerClassName="flex-1"
+              disabled={deleteInFlight}
+              haptic="selection"
+              onPress={() => {
+                setDeleteConfirmOpen(false);
+                setDeleteError(null);
+              }}
+            >
+              <Text
+                className={BOTTOM_SHEET_ACTION_TEXT_CLASS}
+                style={[sheetActionLabelStyle, { color: "#234067" }]}
               >
-                {deleteInFlight ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={[sheetActionLabelStyle, { color: "#ffffff" }]}>
-                    {t("profile.deleteAccountConfirm")}
-                  </Text>
-                )}
-              </PressableScale>
-            </View>
-          </BottomSheet.Content>
-        </BottomSheet.Portal>
-      </BottomSheet>
+                {t("profile.cancel")}
+              </Text>
+            </PressableScale>
+            <PressableScale
+              className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} flex-1 bg-[#f25555]`}
+              containerClassName="flex-1"
+              disabled={deleteInFlight}
+              haptic="warning"
+              onPress={() => void handleDeleteAccount()}
+            >
+              {deleteInFlight ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text
+                  className={BOTTOM_SHEET_ACTION_TEXT_CLASS}
+                  style={[sheetActionLabelStyle, { color: "#ffffff" }]}
+                >
+                  {t("profile.deleteAccountConfirm")}
+                </Text>
+              )}
+            </PressableScale>
+          </BottomSheetActionDock>
+        </View>
+      </BottomSheetModal>
     </>
   );
 };
 
 export default ProfileScreen;
-
