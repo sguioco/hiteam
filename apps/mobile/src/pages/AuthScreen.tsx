@@ -48,19 +48,171 @@ type JoinProfileForm = {
   avatarDataUrl: string;
   avatarPreviewUri: string;
 };
+type CountryCodeOption = {
+  code: string;
+  country: string;
+};
 
-const FORM_FOOTER_BOTTOM_OFFSET = -34;
 const JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH = 96;
-const JOIN_PROFILE_COUNTRY_CODES = [
+const JOIN_PROFILE_COUNTRY_CODES: readonly CountryCodeOption[] = [
   { code: '+7', country: 'Russia / Kazakhstan' },
   { code: '+1', country: 'United States / Canada' },
   { code: '+44', country: 'United Kingdom' },
+  { code: '+33', country: 'France' },
   { code: '+49', country: 'Germany' },
+  { code: '+39', country: 'Italy' },
+  { code: '+34', country: 'Spain' },
+  { code: '+31', country: 'Netherlands' },
+  { code: '+32', country: 'Belgium' },
+  { code: '+41', country: 'Switzerland' },
+  { code: '+43', country: 'Austria' },
+  { code: '+46', country: 'Sweden' },
+  { code: '+47', country: 'Norway' },
+  { code: '+45', country: 'Denmark' },
+  { code: '+358', country: 'Finland' },
+  { code: '+48', country: 'Poland' },
+  { code: '+420', country: 'Czechia' },
+  { code: '+351', country: 'Portugal' },
+  { code: '+30', country: 'Greece' },
+  { code: '+353', country: 'Ireland' },
+  { code: '+40', country: 'Romania' },
+  { code: '+36', country: 'Hungary' },
+  { code: '+380', country: 'Ukraine' },
+  { code: '+375', country: 'Belarus' },
+  { code: '+373', country: 'Moldova' },
+  { code: '+374', country: 'Armenia' },
+  { code: '+994', country: 'Azerbaijan' },
+  { code: '+90', country: 'Turkey' },
   { code: '+971', country: 'UAE' },
+  { code: '+966', country: 'Saudi Arabia' },
+  { code: '+974', country: 'Qatar' },
+  { code: '+965', country: 'Kuwait' },
+  { code: '+973', country: 'Bahrain' },
+  { code: '+968', country: 'Oman' },
+  { code: '+972', country: 'Israel' },
+  { code: '+20', country: 'Egypt' },
+  { code: '+27', country: 'South Africa' },
+  { code: '+234', country: 'Nigeria' },
+  { code: '+254', country: 'Kenya' },
+  { code: '+212', country: 'Morocco' },
+  { code: '+91', country: 'India' },
+  { code: '+92', country: 'Pakistan' },
+  { code: '+880', country: 'Bangladesh' },
+  { code: '+94', country: 'Sri Lanka' },
+  { code: '+977', country: 'Nepal' },
+  { code: '+86', country: 'China' },
+  { code: '+852', country: 'Hong Kong' },
+  { code: '+886', country: 'Taiwan' },
+  { code: '+81', country: 'Japan' },
+  { code: '+82', country: 'South Korea' },
+  { code: '+65', country: 'Singapore' },
+  { code: '+60', country: 'Malaysia' },
+  { code: '+66', country: 'Thailand' },
+  { code: '+84', country: 'Vietnam' },
+  { code: '+62', country: 'Indonesia' },
+  { code: '+63', country: 'Philippines' },
+  { code: '+61', country: 'Australia' },
+  { code: '+64', country: 'New Zealand' },
+  { code: '+55', country: 'Brazil' },
+  { code: '+52', country: 'Mexico' },
+  { code: '+54', country: 'Argentina' },
+  { code: '+56', country: 'Chile' },
+  { code: '+57', country: 'Colombia' },
+  { code: '+51', country: 'Peru' },
+  { code: '+593', country: 'Ecuador' },
+  { code: '+58', country: 'Venezuela' },
+  { code: '+598', country: 'Uruguay' },
+  { code: '+595', country: 'Paraguay' },
+  { code: '+507', country: 'Panama' },
+  { code: '+506', country: 'Costa Rica' },
   { code: '+998', country: 'Uzbekistan' },
   { code: '+996', country: 'Kyrgyzstan' },
   { code: '+995', country: 'Georgia' },
 ] as const;
+const COUNTRY_CODE_SEARCH_ALIASES: Record<string, readonly string[]> = {
+  'Russia / Kazakhstan': ['Россия', 'Казахстан', 'РФ', 'Қазақстан', 'Qazaqstan', 'Rossiya'],
+  'United States / Canada': ['США', 'Америка', 'Соединенные Штаты', 'Канада', 'USA', 'US', 'United States', 'Canada'],
+  'United Kingdom': ['Великобритания', 'Англия', 'Британия', 'UK', 'Great Britain', 'England'],
+  France: ['Франция', 'France', 'Français'],
+  Germany: ['Германия', 'Deutschland', 'Allemagne'],
+  Italy: ['Италия', 'Italia'],
+  Spain: ['Испания', 'España', 'Espana'],
+  Netherlands: ['Нидерланды', 'Голландия', 'Nederland', 'Holland'],
+  Belgium: ['Бельгия', 'België', 'Belgique', 'Belgien'],
+  Switzerland: ['Швейцария', 'Schweiz', 'Suisse', 'Svizzera'],
+  Austria: ['Австрия', 'Österreich', 'Osterreich'],
+  Sweden: ['Швеция', 'Sverige'],
+  Norway: ['Норвегия', 'Norge'],
+  Denmark: ['Дания', 'Danmark'],
+  Finland: ['Финляндия', 'Suomi'],
+  Poland: ['Польша', 'Polska'],
+  Czechia: ['Чехия', 'Česko', 'Cesko', 'Czech Republic'],
+  Portugal: ['Португалия'],
+  Greece: ['Греция', 'Ελλάδα', 'Ellada'],
+  Ireland: ['Ирландия', 'Éire', 'Eire'],
+  Romania: ['Румыния', 'România'],
+  Hungary: ['Венгрия', 'Magyarország', 'Magyarorszag'],
+  Ukraine: ['Украина', 'Україна', 'Ukraina'],
+  Belarus: ['Беларусь', 'Белоруссия'],
+  Moldova: ['Молдова'],
+  Armenia: ['Армения', 'Հայաստան', 'Hayastan'],
+  Azerbaijan: ['Азербайджан', 'Azərbaycan', 'Azerbaycan'],
+  Turkey: ['Турция', 'Türkiye', 'Turkiye'],
+  UAE: ['ОАЭ', 'Эмираты', 'United Arab Emirates', 'الإمارات'],
+  'Saudi Arabia': ['Саудовская Аравия', 'السعودية'],
+  Qatar: ['Катар', 'قطر'],
+  Kuwait: ['Кувейт', 'الكويت'],
+  Bahrain: ['Бахрейн', 'البحرين'],
+  Oman: ['Оман', 'عمان'],
+  Israel: ['Израиль', 'ישראל'],
+  Egypt: ['Египет', 'مصر', 'Misr'],
+  'South Africa': ['ЮАР', 'Южная Африка'],
+  Nigeria: ['Нигерия'],
+  Kenya: ['Кения'],
+  Morocco: ['Марокко', 'المغرب'],
+  India: ['Индия', 'भारत', 'Bharat', 'Hindustan'],
+  Pakistan: ['Пакистан', 'پاکستان'],
+  Bangladesh: ['Бангладеш', 'বাংলাদেশ'],
+  'Sri Lanka': ['Шри-Ланка', 'ශ්‍රී ලංකා', 'இலங்கை'],
+  Nepal: ['Непал', 'नेपाल'],
+  China: ['Китай', '中国', 'Zhongguo'],
+  'Hong Kong': ['Гонконг', '香港'],
+  Taiwan: ['Тайвань', '臺灣', '台湾'],
+  Japan: ['Япония', '日本', 'Nihon', 'Nippon'],
+  'South Korea': ['Южная Корея', 'Корея', '한국', 'Korea'],
+  Singapore: ['Сингапур', '新加坡'],
+  Malaysia: ['Малайзия'],
+  Thailand: ['Таиланд', 'ไทย'],
+  Vietnam: ['Вьетнам', 'Việt Nam', 'Viet Nam'],
+  Indonesia: ['Индонезия'],
+  Philippines: ['Филиппины', 'Pilipinas'],
+  Australia: ['Австралия'],
+  'New Zealand': ['Новая Зеландия', 'Aotearoa'],
+  Brazil: ['Бразилия', 'Brasil'],
+  Mexico: ['Мексика', 'México', 'Mexico'],
+  Argentina: ['Аргентина'],
+  Chile: ['Чили'],
+  Colombia: ['Колумбия'],
+  Peru: ['Перу', 'Perú'],
+  Ecuador: ['Эквадор'],
+  Venezuela: ['Венесуэла'],
+  Uruguay: ['Уругвай'],
+  Paraguay: ['Парагвай'],
+  Panama: ['Панама', 'Panamá'],
+  'Costa Rica': ['Коста-Рика'],
+  Uzbekistan: ['Узбекистан', 'O‘zbekiston', 'Ozbekiston'],
+  Kyrgyzstan: ['Кыргызстан', 'Киргизия', 'Кыргыз Республикасы'],
+  Georgia: ['Грузия', 'საქართველო', 'Sakartvelo'],
+};
+function normalizeCountryCodeSearchValue(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[().,/\\-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
 const INITIAL_JOIN_PROFILE_FORM: JoinProfileForm = {
   firstName: '',
   lastName: '',
@@ -74,6 +226,7 @@ const AUTH_TRANSITION_TIMING = {
   duration: 210,
   easing: Easing.out(Easing.cubic),
 } as const;
+const LANDING_HERO_OVERSCAN = 40;
 const AUTH_KEYBOARD_TIMING = {
   duration: 180,
   easing: Easing.out(Easing.quad),
@@ -144,6 +297,7 @@ const AuthScreen = () => {
   const [joinProfileForm, setJoinProfileForm] = useState<JoinProfileForm>(INITIAL_JOIN_PROFILE_FORM);
   const [joinProfileCountryCode, setJoinProfileCountryCode] = useState('+7');
   const [joinProfileCountryPickerVisible, setJoinProfileCountryPickerVisible] = useState(false);
+  const [countryCodeSearchQuery, setCountryCodeSearchQuery] = useState('');
   const [joinProfileDatePickerVisible, setJoinProfileDatePickerVisible] = useState(false);
   const [joinProfileSubmitted, setJoinProfileSubmitted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -161,18 +315,21 @@ const AuthScreen = () => {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const shouldUseHeroVideo = Platform.OS !== 'web';
   const shouldRenderHeroVideo = shouldUseHeroVideo;
+  const restingActionBottomOffset = Math.max(28, insets.bottom - 4);
+  const keyboardActionBottomOffset = insets.bottom + 8;
 
   const collapsedHeroHeight = Math.min(Math.max(screenHeight * 0.46, 400), 550);
-  const compactJoinHeroHeight = Math.min(Math.max(screenHeight * 0.42, 360), 430);
+  const compactAuthHeroHeight = Math.min(Math.max(screenHeight * 0.36, 300), 360);
+  const compactJoinHeroHeight = compactAuthHeroHeight;
   const compactJoinProfileHeroHeight = Math.min(Math.max(screenHeight * 0.2, 280), 280);
   const compactJoinProfileSuccessHeroHeight = 480;
-  const compactSignInHeroHeight = Math.min(Math.max(screenHeight * 0.36, 300), 360);
+  const compactSignInHeroHeight = compactAuthHeroHeight;
   const compactJoinProfileTitleOffset = 135;
   const compactJoinProfileSuccessTitleOffset = 240;
-  const compactJoinContentPaddingClass = 'pb-28 pt-28';
-  const compactSignInContentPaddingClass = 'pb-8 pt-32';
-  const compactJoinFooterPaddingClass = 'pt-24';
-  const compactSignInFooterPaddingClass = 'pt-28';
+  const compactJoinContentPaddingClass = 'pb-44 pt-14';
+  const compactSignInContentPaddingClass = 'pb-44 pt-14';
+  const compactAuthHeroTitleRestOffset = 150;
+  const compactAuthHeroTitleKeyboardOffset = 92;
   const compactHeroHeight =
     mode === 'joinProfile'
       ? joinProfileSubmitted
@@ -186,11 +343,9 @@ const AuthScreen = () => {
       ? joinProfileSubmitted
         ? compactJoinProfileSuccessTitleOffset
         : compactJoinProfileTitleOffset
-      : mode === 'join'
-        ? 184
-        : 160;
+      : compactAuthHeroTitleKeyboardOffset;
   const compactFormTop =
-    mode === 'joinProfile' ? compactHeroHeight - 8 : mode === 'join' ? compactHeroHeight + 14 : compactHeroHeight + 12;
+    mode === 'joinProfile' ? compactHeroHeight - 8 : compactHeroHeight + 12;
   const joinProfileCopy = useMemo(
     () => ({
       company: t('joinProfile.company'),
@@ -260,6 +415,30 @@ const AuthScreen = () => {
           },
     [language],
   );
+  const filteredCountryCodeOptions = useMemo(() => {
+    const normalizedQuery = normalizeCountryCodeSearchValue(countryCodeSearchQuery);
+    const queryDigits = countryCodeSearchQuery.replace(/\D/g, '');
+
+    if (!normalizedQuery && !queryDigits) {
+      return JOIN_PROFILE_COUNTRY_CODES;
+    }
+
+    return JOIN_PROFILE_COUNTRY_CODES.filter((option) => {
+      const codeDigits = option.code.replace(/\D/g, '');
+      const searchText = normalizeCountryCodeSearchValue(
+        [
+          option.code,
+          option.country,
+          ...(COUNTRY_CODE_SEARCH_ALIASES[option.country] ?? []),
+        ].join(' '),
+      );
+
+      return (
+        (!!queryDigits && codeDigits.includes(queryDigits)) ||
+        (!!normalizedQuery && searchText.includes(normalizedQuery))
+      );
+    });
+  }, [countryCodeSearchQuery]);
   const joinProfileInputStyle = {
     color: '#24314b',
     fontFamily: 'Manrope_700Bold',
@@ -350,13 +529,15 @@ const AuthScreen = () => {
   }, [keyboardProgress]);
 
   const heroStyle = useAnimatedStyle(() => {
+    const restsAtCompactLayout = mode === 'signin' || mode === 'join';
+    const restingHeroHeight = restsAtCompactLayout ? compactHeroHeight : collapsedHeroHeight;
     const compactTargetHeight =
       mode === 'joinProfile'
         ? interpolate(keyboardProgress.value, [0, 1], [compactHeroHeight, 0], Extrapolation.CLAMP)
         : interpolate(
           keyboardProgress.value,
           [0, 1],
-          [collapsedHeroHeight, compactHeroHeight],
+          [restingHeroHeight, compactHeroHeight],
           Extrapolation.CLAMP,
         );
 
@@ -367,7 +548,7 @@ const AuthScreen = () => {
         transition.value,
         [0, 1],
         [
-          screenHeight + 40,
+          screenHeight + LANDING_HERO_OVERSCAN,
           compactTargetHeight,
         ],
         Extrapolation.CLAMP,
@@ -384,7 +565,7 @@ const AuthScreen = () => {
         : interpolate(
           keyboardProgress.value,
           [0, 1],
-          [210, compactHeroTitleOffset],
+          [compactAuthHeroTitleRestOffset, compactHeroTitleOffset],
           Extrapolation.CLAMP,
         );
 
@@ -417,13 +598,15 @@ const AuthScreen = () => {
   }));
 
   const formAreaStyle = useAnimatedStyle(() => {
+    const restsAtCompactLayout = mode === 'signin' || mode === 'join';
+    const restingFormTop = restsAtCompactLayout ? compactFormTop : collapsedHeroHeight - 40;
     const compactPaddingTop =
       mode === 'joinProfile'
         ? interpolate(keyboardProgress.value, [0, 1], [compactFormTop, 8], Extrapolation.CLAMP)
         : interpolate(
           keyboardProgress.value,
           [0, 1],
-          [collapsedHeroHeight - 40, compactFormTop],
+          [restingFormTop, compactFormTop],
           Extrapolation.CLAMP,
         );
 
@@ -473,9 +656,20 @@ const AuthScreen = () => {
     });
   }
 
+  function openCountryCodePicker() {
+    Keyboard.dismiss();
+    setCountryCodeSearchQuery('');
+    setJoinProfileCountryPickerVisible(true);
+  }
+
+  function closeCountryCodePicker() {
+    setJoinProfileCountryPickerVisible(false);
+    setCountryCodeSearchQuery('');
+  }
+
   function focusJoinProfileInput(input: TextInput | null) {
     setJoinProfileDatePickerVisible(false);
-    setJoinProfileCountryPickerVisible(false);
+    closeCountryCodePicker();
     requestAnimationFrame(() => {
       input?.focus();
     });
@@ -737,7 +931,7 @@ const AuthScreen = () => {
       setJoinCompany(null);
       setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
       setJoinProfileCountryCode('+7');
-      setJoinProfileCountryPickerVisible(false);
+      closeCountryCodePicker();
       setJoinProfileDatePickerVisible(false);
       setInviteCode('');
       setJoinPhone('');
@@ -765,7 +959,7 @@ const AuthScreen = () => {
 
     if (!trimmedIdentifier || !trimmedPassword) {
       hapticError();
-      setMessage(t('login.signInErrorEmpty'));
+      setMessage(null);
       return;
     }
 
@@ -827,19 +1021,21 @@ const AuthScreen = () => {
     );
   }
 
-  function renderJoinTitle() {
-    return (
-      <Text style={styles.joinTitle}>
-        {joinMethod === 'phone' ? joinUi.phoneTitle : joinUi.emailTitle}
-      </Text>
-    );
-  }
-
   function renderSignInTitle() {
     return (
       <View pointerEvents="none" style={styles.signInTitleSlot}>
         <Text style={styles.signInTitle}>
           {t('login.signInToAccount')}
+        </Text>
+      </View>
+    );
+  }
+
+  function renderJoinTeamTitle() {
+    return (
+      <View pointerEvents="none" style={styles.signInTitleSlot}>
+        <Text style={styles.signInTitle}>
+          {t('login.joinTeam')}
         </Text>
       </View>
     );
@@ -904,8 +1100,17 @@ const AuthScreen = () => {
     lineHeight: 24,
   } as const;
 
+  const joinMethodLinkStyle = {
+    color: '#546cf2',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    includeFontPadding: Platform.OS === 'android',
+    lineHeight: 20,
+    textAlign: 'right',
+  } as const;
+
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['left', 'right', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-white" edges={['left', 'right']}>
       <StatusBar backgroundColor="transparent" style="light" translucent />
 
       <KeyboardAvoidingView
@@ -973,7 +1178,7 @@ const AuthScreen = () => {
                 style={[
                   landingActionsStyle,
                   {
-                    bottom: insets.bottom + 70,
+                    bottom: restingActionBottomOffset + LANDING_HERO_OVERSCAN,
                     zIndex: 10,
                   },
                 ]}
@@ -1006,7 +1211,9 @@ const AuthScreen = () => {
               style={[
                 formAreaStyle,
                 {
-                  paddingBottom: insets.bottom + (keyboardVisible ? 8 : 20),
+                  paddingBottom: mode === 'joinProfile'
+                    ? insets.bottom + (keyboardVisible ? 8 : 20)
+                    : 0,
                 },
               ]}
             >
@@ -1029,11 +1236,14 @@ const AuthScreen = () => {
                       }
                     >
                       {mode === 'joinProfile' && joinProfileSubmitted ? null : (
-                        <View className="mb-7 items-center" style={mode === 'signin' ? styles.signInTitleWrapper : undefined}>
+                        <View
+                          className="mb-7 items-center"
+                          style={mode === 'signin' || mode === 'join' ? styles.signInTitleWrapper : undefined}
+                        >
                           {mode === 'joinProfile'
                             ? renderJoinProfileTitle()
                             : mode === 'join'
-                              ? renderJoinTitle()
+                              ? renderJoinTeamTitle()
                               : renderSignInTitle()}
                         </View>
                       )}
@@ -1128,10 +1338,7 @@ const AuthScreen = () => {
                                 <PressableScale
                                   className="h-[46px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
                                   haptic="selection"
-                                  onPress={() => {
-                                    Keyboard.dismiss();
-                                    setJoinProfileCountryPickerVisible(true);
-                                  }}
+                                  onPress={openCountryCodePicker}
                                   style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
                                 >
                                   <Text className="text-[15px] text-[#24314b]" style={joinProfileInputStyle}>
@@ -1247,68 +1454,88 @@ const AuthScreen = () => {
                       ) : (
                         <View className="gap-3">
                           {mode === 'join' ? (
-                            joinMethod === 'phone' ? (
-                              <View className="min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-2">
-                                <PressableScale
-                                  className="h-[46px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
-                                  haptic="selection"
-                                  onPress={() => {
-                                    Keyboard.dismiss();
-                                    setJoinProfileCountryPickerVisible(true);
-                                  }}
-                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
-                                >
-                                  <Text className="text-[15px] text-[#24314b]" style={joinProfileInputStyle}>
-                                    {joinProfileCountryCode}
-                                  </Text>
-                                </PressableScale>
+                            <>
+                              {joinMethod === 'phone' ? (
+                                <View className="h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-2">
+                                  <PressableScale
+                                    className="h-[46px] items-center justify-center rounded-[14px] border border-[#e7dfd3] bg-[#fbfaf7] px-3"
+                                    haptic="selection"
+                                    onPress={openCountryCodePicker}
+                                    style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
+                                  >
+                                    <Text className="text-[15px] text-[#24314b]" style={joinProfileInputStyle}>
+                                      {joinProfileCountryCode}
+                                    </Text>
+                                  </PressableScale>
+                                  <TextInput
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    className="h-[58px] flex-1 px-4 text-center text-[17px] text-[#0f2530]"
+                                    importantForAutofill="no"
+                                    keyboardType="phone-pad"
+                                    key="join-phone-input"
+                                    onChangeText={(nextValue) => {
+                                      setJoinPhone(nextValue.replace(/[^\d\s()-]/g, ''));
+                                      setMessage(null);
+                                    }}
+                                    placeholder={joinUi.phonePlaceholder}
+                                    placeholderTextColor="#7f8da1"
+                                    returnKeyType="go"
+                                    selectionColor="#26334a"
+                                    showSoftInputOnFocus
+                                    style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                                    textAlign="center"
+                                    value={joinPhone}
+                                  />
+                                  <View
+                                    pointerEvents="none"
+                                    style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
+                                  />
+                                </View>
+                              ) : (
                                 <TextInput
                                   autoCapitalize="none"
                                   autoCorrect={false}
-                                  className="min-h-[58px] flex-1 px-4 text-center text-[17px] text-[#0f2530]"
+                                  className="h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
                                   importantForAutofill="no"
-                                  keyboardType="phone-pad"
-                                  key="join-phone-input"
+                                  keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                                  key="join-email-input"
                                   onChangeText={(nextValue) => {
-                                    setJoinPhone(nextValue.replace(/[^\d\s()-]/g, ''));
+                                    setInviteCode(nextValue);
                                     setMessage(null);
                                   }}
-                                  placeholder={joinUi.phonePlaceholder}
+                                  placeholder={joinUi.emailPlaceholder}
                                   placeholderTextColor="#7f8da1"
                                   returnKeyType="go"
                                   selectionColor="#26334a"
                                   showSoftInputOnFocus
                                   style={[centeredInputDirectionStyle, joinProfileInputStyle]}
                                   textAlign="center"
-                                  value={joinPhone}
+                                  value={inviteCode}
                                 />
-                                <View
-                                  pointerEvents="none"
-                                  style={{ width: JOIN_PROFILE_PHONE_SIDE_SLOT_WIDTH }}
-                                />
-                              </View>
-                            ) : (
-                              <TextInput
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-                                importantForAutofill="no"
-                                keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
-                                key="join-email-input"
-                                onChangeText={(nextValue) => {
-                                  setInviteCode(nextValue);
+                              )}
+
+                              <PressableScale
+                                accessibilityRole="button"
+                                className="min-h-[28px] items-end justify-center"
+                                containerClassName="-mt-2 self-stretch"
+                                hitSlop={8}
+                                haptic="selection"
+                                onPress={() => {
+                                  Keyboard.dismiss();
                                   setMessage(null);
+                                  setJoinMethod((current) =>
+                                    current === 'email' ? 'phone' : 'email',
+                                  );
                                 }}
-                                placeholder={joinUi.emailPlaceholder}
-                                placeholderTextColor="#7f8da1"
-                                returnKeyType="go"
-                                selectionColor="#26334a"
-                                showSoftInputOnFocus
-                                style={centeredInputDirectionStyle}
-                                textAlign="center"
-                                value={inviteCode}
-                              />
-                            )
+                              >
+                                <Text style={joinMethodLinkStyle}>
+                                  {joinMethod === 'email'
+                                    ? joinUi.phoneSwitch
+                                    : joinUi.emailSwitch}
+                                </Text>
+                              </PressableScale>
+                            </>
                           ) : (
                             <>
                               <TextInput
@@ -1392,39 +1619,37 @@ const AuthScreen = () => {
                             ? mode === 'join'
                               ? 'pt-8'
                               : 'pt-4'
-                            : mode === 'join'
-                              ? compactJoinFooterPaddingClass
-                              : compactSignInFooterPaddingClass
+                            : undefined
                         }
-                        style={{
-                          paddingBottom: insets.bottom + (keyboardVisible ? 8 : 0),
-                          marginBottom: keyboardVisible ? 0 : FORM_FOOTER_BOTTOM_OFFSET,
-                        }}
+                        style={
+                          keyboardVisible
+                            ? { paddingBottom: keyboardActionBottomOffset }
+                            : [styles.authActionDock, { bottom: restingActionBottomOffset }]
+                        }
                       >
                         {mode === 'join' ? (
                           <PressableScale
-                            className="min-h-[34px] items-center justify-center"
+                            className={`${keyboardVisible ? 'mb-3' : 'mb-6'} min-h-[24px] items-center justify-center`}
                             haptic="selection"
-                            onPress={() => {
-                              Keyboard.dismiss();
-                              setMessage(null);
-                              setJoinMethod((current) =>
-                                current === 'email' ? 'phone' : 'email',
-                              );
-                            }}
-                            style={
-                              keyboardVisible
-                                ? styles.joinMethodSwitchCompact
-                                : styles.joinMethodSwitch
-                            }
+                            onPress={() => switchMode('signin', { skipHaptic: true })}
                           >
-                            <Text style={joinLinkStyle}>
-                              {joinMethod === 'email'
-                                ? joinUi.phoneSwitch
-                                : joinUi.emailSwitch}
+                            <Text style={joinPromptStyle}>
+                              <Text style={joinPromptStyle}>{t('welcome.alreadyHaveAccount')} </Text>
+                              <Text style={joinLinkStyle}>{t('login.logIn')}</Text>
                             </Text>
                           </PressableScale>
-                        ) : null}
+                        ) : (
+                          <PressableScale
+                            className={`${keyboardVisible ? 'mb-3' : 'mb-6'} min-h-[24px] items-center justify-center`}
+                            haptic="selection"
+                            onPress={() => switchMode('join', { skipHaptic: true })}
+                          >
+                            <Text style={signInPromptStyle}>
+                              <Text style={signInPromptStyle}>{t('login.needInvite')} </Text>
+                              <Text style={signInLinkStyle}>{t('login.joinTeam')}</Text>
+                            </Text>
+                          </PressableScale>
+                        )}
 
                         <PressableScale
                           className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${submitting ? 'opacity-70' : ''
@@ -1454,26 +1679,6 @@ const AuthScreen = () => {
                             </View>
                           )}
                         </PressableScale>
-
-                        {mode === 'join' ? (
-                          <View className="mt-10 min-h-[24px] items-center justify-center" style={styles.joinFooterWrapper}>
-                            <Text style={joinPromptStyle}>
-                              <Text style={joinPromptStyle}>{t('welcome.alreadyHaveAccount')} </Text>
-                              <Text onPress={() => switchMode('signin')} style={joinLinkStyle}>
-                                {t('login.logIn')}
-                              </Text>
-                            </Text>
-                          </View>
-                        ) : (
-                          <View className="mt-10 min-h-[24px] items-center justify-center" style={styles.signInFooterWrapper}>
-                            <Text style={signInPromptStyle}>
-                              <Text style={signInPromptStyle}>{t('login.needInvite')} </Text>
-                              <Text onPress={() => switchMode('join')} style={signInLinkStyle}>
-                                {t('login.joinTeam')}
-                              </Text>
-                            </Text>
-                          </View>
-                        )}
                       </View>
                     ) : null}
                   </View>
@@ -1483,39 +1688,63 @@ const AuthScreen = () => {
           </View>
         </TouchableWithoutFeedback>
         <BottomSheetModal
-          onClose={() => setJoinProfileCountryPickerVisible(false)}
-          sheetClassName="rounded-t-[28px] border border-white bg-white px-5 pt-5"
+          backdropOpacity={0.64}
+          onClose={closeCountryCodePicker}
+          sheetClassName="rounded-t-[28px] bg-white px-5 pt-5"
           solidBackground
           visible={joinProfileCountryPickerVisible}
         >
-          <View style={{ maxHeight: screenHeight * 0.58, paddingBottom: Math.max(insets.bottom, 20) }}>
+          <View style={{ height: screenHeight * 0.68 }}>
             <Text style={styles.modalTitle}>{t('login.countryPickerTitle')}</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {JOIN_PROFILE_COUNTRY_CODES.map((option) => (
-                <PressableScale
-                  className="flex-row items-center justify-between rounded-[18px] px-4 py-4"
-                  haptic="selection"
-                  key={option.code}
-                  onPress={() => {
-                    setJoinProfileCountryCode(option.code);
-                    setJoinProfileCountryPickerVisible(false);
-                    setMessage(null);
-                  }}
-                >
-                  <View className="gap-1">
-                    <Text style={styles.countryCodeValue}>{option.code}</Text>
-                    <Text style={styles.countryCodeLabel}>{option.country}</Text>
-                  </View>
-                  {joinProfileCountryCode === option.code ? <Text style={styles.countryCodeCheck}>✓</Text> : null}
-                </PressableScale>
-              ))}
+            <View className="mb-3 h-[50px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-4">
+              <Ionicons color="#8a92ab" name="search-outline" size={20} />
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="h-[50px] flex-1 px-3 text-[16px] text-[#26334a]"
+                clearButtonMode="while-editing"
+                onChangeText={setCountryCodeSearchQuery}
+                placeholder={t('login.countryPickerSearchPlaceholder')}
+                placeholderTextColor="#8a92ab"
+                selectionColor="#26334a"
+                style={styles.countryCodeSearchInput}
+                value={countryCodeSearchQuery}
+              />
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              {filteredCountryCodeOptions.length ? (
+                filteredCountryCodeOptions.map((option) => (
+                  <PressableScale
+                    className="flex-row items-center justify-between rounded-[18px] px-4 py-4"
+                    haptic="selection"
+                    key={`${option.code}-${option.country}`}
+                    onPress={() => {
+                      setJoinProfileCountryCode(option.code);
+                      closeCountryCodePicker();
+                      setMessage(null);
+                    }}
+                  >
+                    <View className="gap-1">
+                      <Text style={styles.countryCodeValue}>{option.code}</Text>
+                      <Text style={styles.countryCodeLabel}>{option.country}</Text>
+                    </View>
+                    {joinProfileCountryCode === option.code ? <Text style={styles.countryCodeCheck}>✓</Text> : null}
+                  </PressableScale>
+                ))
+              ) : (
+                <View className="items-center py-10">
+                  <Text style={styles.countryCodeEmpty}>
+                    {language === 'ru' ? 'Ничего не найдено' : 'No countries found'}
+                  </Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </BottomSheetModal>
         {Platform.OS === 'ios' ? (
           <BottomSheetModal
             onClose={() => setJoinProfileDatePickerVisible(false)}
-            sheetClassName="rounded-t-[28px] border border-white bg-white px-5 pt-5"
+            sheetClassName="rounded-t-[28px] bg-white px-5 pt-5"
             solidBackground
             visible={joinProfileDatePickerVisible}
           >
@@ -1558,6 +1787,12 @@ const AuthScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  authActionDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   signInTitleWrapper: {
     paddingHorizontal: 4,
     paddingBottom: Platform.OS === 'android' ? 4 : 0,
@@ -1588,44 +1823,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_500Medium',
     includeFontPadding: Platform.OS === 'android',
   },
-  joinTitle: {
-    color: '#26334a',
-    fontSize: 31,
-    lineHeight: 40,
-    textAlign: 'center',
-    includeFontPadding: Platform.OS === 'android',
-  },
-  joinTitleAccent: {
-    fontFamily: 'Manrope_500Medium',
-    fontStyle: 'italic',
-    includeFontPadding: Platform.OS === 'android',
-  },
-  joinTitleBody: {
-    fontFamily: 'Manrope_500Medium',
-    includeFontPadding: Platform.OS === 'android',
-  },
-  joinFooterWrapper: {
-    paddingBottom: 0,
-    marginBottom: 0,
-    marginTop: 26,
-  },
-  joinMethodSwitch: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 48,
-  },
-  joinMethodSwitchCompact: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: -8,
-  },
-  signInFooterWrapper: {
-    paddingBottom: 0,
-    marginBottom: 0,
-    marginTop: 26,
-  },
   modalTitle: {
     marginBottom: 14,
     color: '#26334a',
@@ -1645,6 +1842,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     includeFontPadding: false,
   },
+  countryCodeSearchInput: {
+    color: '#26334a',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 16,
+    includeFontPadding: Platform.OS === 'android',
+  },
+  countryCodeEmpty: {
+    color: '#7f8da1',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 15,
+    includeFontPadding: false,
+  },
   countryCodeCheck: {
     color: '#546cf2',
     fontFamily: 'Manrope_500Medium',
@@ -1662,4 +1871,3 @@ const styles = StyleSheet.create({
 });
 
 export default AuthScreen;
-

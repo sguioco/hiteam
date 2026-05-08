@@ -363,22 +363,23 @@ export default function LeaderboardScreen({
     isManager && Boolean(overview?.visibility?.canManage);
   const dailyMaxPoints = overview?.me.todayMaxPoints ?? overview?.summary.maxDailyPoints ?? 15;
   const todayPoints = overview?.me.todayPoints ?? 0;
+  const todayTotalCardIsIOS = Platform.OS === "ios";
   const todayTotalValueStyle: TextStyle = {
     color: "#ffffff",
     fontFamily: "Manrope_700Bold",
-    fontSize: Platform.OS === "ios" ? 42 : 44,
+    fontSize: todayTotalCardIsIOS ? 36 : 44,
     fontVariant: ["tabular-nums"],
     includeFontPadding: false,
-    lineHeight: Platform.OS === "ios" ? 44 : 48,
+    lineHeight: todayTotalCardIsIOS ? 44 : 48,
     textAlign: "center",
   };
   const todayTotalMaxStyle: TextStyle = {
     color: "#ffffff",
     fontFamily: "Manrope_700Bold",
-    fontSize: Platform.OS === "ios" ? 25 : 27,
+    fontSize: todayTotalCardIsIOS ? 22 : 27,
     fontVariant: ["tabular-nums"],
     includeFontPadding: false,
-    lineHeight: Platform.OS === "ios" ? 31 : 34,
+    lineHeight: todayTotalCardIsIOS ? 30 : 34,
   };
   const todayTotalLabelStyle: TextStyle = {
     color: "#ffffff",
@@ -660,13 +661,24 @@ export default function LeaderboardScreen({
 
           <View className="overflow-hidden rounded-[20px] shadow-sm shadow-[#1f2687]/20">
             <LinearGradient
-              className="px-4 py-3"
               colors={["#1f73ff", "#1458f4"]}
               end={{ x: 1, y: 1 }}
               start={{ x: 0, y: 0 }}
-              style={{ borderRadius: 20, minHeight: 80 }}
+              style={{
+                borderRadius: 20,
+                minHeight: todayTotalCardIsIOS ? 92 : 80,
+                paddingBottom: todayTotalCardIsIOS ? 15 : 12,
+                paddingHorizontal: todayTotalCardIsIOS ? 22 : 16,
+                paddingTop: todayTotalCardIsIOS ? 15 : 12,
+              }}
             >
-              <View className="flex-row items-center">
+              <View
+                className="flex-row items-center"
+                style={{
+                  minHeight: todayTotalCardIsIOS ? 62 : undefined,
+                  transform: [{ translateY: todayTotalCardIsIOS ? -1 : 0 }],
+                }}
+              >
                 <View
                   className="min-w-0 flex-1 flex-row items-center gap-3 pr-3"
                   style={{ minWidth: 0 }}
@@ -687,16 +699,46 @@ export default function LeaderboardScreen({
                   className="h-12 w-px"
                   style={{ backgroundColor: "rgba(255,255,255,0.34)" }}
                 />
-                <View className="w-[104px] shrink-0 items-center justify-center pl-3">
-                  <Text
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.84}
-                    numberOfLines={1}
-                    style={todayTotalValueStyle}
-                  >
-                    {todayPoints}
-                    <Text style={todayTotalMaxStyle}>/{dailyMaxPoints}</Text>
-                  </Text>
+                <View
+                  className="shrink-0 items-center justify-center"
+                  style={{
+                    paddingLeft: todayTotalCardIsIOS ? 14 : 12,
+                    width: todayTotalCardIsIOS ? 108 : 104,
+                  }}
+                >
+                  {todayTotalCardIsIOS ? (
+                    <View
+                      className="flex-row items-end justify-center"
+                      style={{ height: 44, transform: [{ translateY: -2 }] }}
+                    >
+                      <Text
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.84}
+                        numberOfLines={1}
+                        style={todayTotalValueStyle}
+                      >
+                        {todayPoints}
+                      </Text>
+                      <Text
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.84}
+                        numberOfLines={1}
+                        style={todayTotalMaxStyle}
+                      >
+                        /{dailyMaxPoints}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.84}
+                      numberOfLines={1}
+                      style={todayTotalValueStyle}
+                    >
+                      {todayPoints}
+                      <Text style={todayTotalMaxStyle}>/{dailyMaxPoints}</Text>
+                    </Text>
+                  )}
                   <Text
                     numberOfLines={1}
                     style={todayTotalLabelStyle}
