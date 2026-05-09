@@ -4837,6 +4837,12 @@ export async function demoApiRequest<T>(
       currentPeriodStart: billingPeriod?.start.toISOString() ?? null,
       currentPeriodEnd: billingPeriod?.end.toISOString() ?? null,
       serviceActive,
+      stripeConnected: Boolean(currentState.billingFirstPaidAt),
+      stripeSubscriptionId: currentState.billingFirstPaidAt ? "sub_demo" : null,
+      stripeSubscriptionStatus: serviceActive ? "ACTIVE" : "PAYMENT_REQUIRED",
+      stripeCancelAtPeriodEnd: false,
+      stripeCurrentPeriodStart: billingPeriod?.start.toISOString() ?? null,
+      stripeCurrentPeriodEnd: billingPeriod?.end.toISOString() ?? null,
       price: {
         regionCode: "standard",
         regionLabel: "Standard",
@@ -4844,8 +4850,19 @@ export async function demoApiRequest<T>(
         currency,
         unitAmount,
         approxUsd: null,
+        stripeLookupKey: "hiteam_seat_standard_monthly",
         locationConfigured: Boolean(currentState.organization.location),
       },
+    } as T;
+  }
+
+  if (
+    (pathname === "/billing/checkout" || pathname === "/billing/portal") &&
+    method === "POST"
+  ) {
+    return {
+      mode: pathname === "/billing/portal" ? "portal" : "checkout",
+      url: "/billing?stripe=demo",
     } as T;
   }
 

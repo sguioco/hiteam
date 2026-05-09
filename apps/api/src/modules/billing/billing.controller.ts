@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -15,5 +15,20 @@ export class BillingController {
   @Get('summary')
   summary(@CurrentUser() user: JwtUser) {
     return this.billingService.getSummary(user.tenantId);
+  }
+
+  @Post('checkout')
+  checkout(@CurrentUser() user: JwtUser) {
+    return this.billingService.createCheckoutSession(user.tenantId, user.sub);
+  }
+
+  @Post('portal')
+  portal(@CurrentUser() user: JwtUser) {
+    return this.billingService.createPortalSession(user.tenantId);
+  }
+
+  @Post('sync-seats')
+  syncSeats(@CurrentUser() user: JwtUser) {
+    return this.billingService.syncStripeSeatQuantity(user.tenantId);
   }
 }

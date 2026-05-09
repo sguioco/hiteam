@@ -100,7 +100,6 @@ type TaskTableRow = {
   id: string;
   employeeName: string;
   employeeSubtitle: string | null;
-  employeeInitials: string;
   employeeAvatarUrl: string | null;
   statusLabel: string;
   statusActive: boolean;
@@ -138,7 +137,6 @@ type TaskSearchMatch = {
   dateMonth: string;
   employeeAvatarUrl: string | null;
   employeeId: string | null;
-  employeeInitials: string;
   employeeName: string;
   id: string;
   photoProofs: { id: string; url: string }[];
@@ -159,6 +157,10 @@ function getTaskAssigneeAvatarUrl(task: TaskItem) {
 
 function localize(locale: string, ru: string, en: string) {
   return locale === "ru" ? ru : en;
+}
+
+function normalizeSearchText(value: string) {
+  return value.trim().toLowerCase().replace(/ё/g, "е");
 }
 
 function addDays(baseDate: Date, days: number) {
@@ -662,10 +664,6 @@ function getTaskAttentionRank(stats: EmployeeTaskStats) {
   }
 
   return getCompletionRatio(stats);
-}
-
-function getEmployeeInitials(employee: Pick<EmployeeDirectoryItem, "firstName" | "lastName">) {
-  return `${employee.firstName.charAt(0)}${employee.lastName.charAt(0)}`.trim().toUpperCase();
 }
 
 function getEmployeeSubtitle(
@@ -1240,8 +1238,8 @@ export function ManagerTasksPage({
         id: entry.employee.id,
         employeeName,
         employeeSubtitle: getEmployeeSubtitle(entry.employee),
-        employeeInitials: getEmployeeInitials(entry.employee),
-        employeeAvatarUrl: entry.employee.avatarUrl ?? null,
+        employeeAvatarUrl:
+          entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName || entry.employee.id),
         ...statusSummary,
         teams,
         teamsSort: teams.join(" "),
@@ -1298,16 +1296,30 @@ export function ManagerTasksPage({
     [employees],
   );
 
-  const searchQuery = employeeSearch.trim().toLowerCase();
+  const searchQuery = normalizeSearchText(employeeSearch);
   const taskSearchMatches = useMemo<TaskSearchMatch[]>(() => {
     if (!searchQuery) {
       return [];
     }
 
-    return visibleTasks
+    return tasks
       .map((task): TaskSearchResult | null => {
         const title = getTaskTitle(task, { normalize: true });
-        const haystack = [title, task.title].join(" ").toLowerCase();
+        const taskMeta = parseTaskMeta(task.description);
+        const haystack = normalizeSearchText(
+          [
+            title,
+            task.title,
+            task.description ?? "",
+            taskMeta.body ?? "",
+            taskMeta.meeting?.meetingLocation ?? "",
+            task.assigneeEmployee
+              ? getEmployeeName(task.assigneeEmployee, locale)
+              : "",
+            task.group?.name ?? "",
+            getEmployeeName(task.managerEmployee, locale),
+          ].join(" "),
+        );
 
         if (!haystack.includes(searchQuery)) {
           return null;
@@ -1368,9 +1380,6 @@ export function ManagerTasksPage({
           directoryEmployee?.avatarUrl ??
           getTaskAssigneeAvatarUrl(task) ??
           getMockAvatarDataUrl(employeeName || task.id);
-        const employeeInitials = task.assigneeEmployee
-          ? getEmployeeInitials(task.assigneeEmployee)
-          : (task.group?.name.slice(0, 2).toUpperCase() ?? "TM");
         const photoProofs = getActivePhotoProofs(task)
           .filter(
             (proof): proof is (typeof task.photoProofs)[number] & { url: string } =>
@@ -1388,7 +1397,6 @@ export function ManagerTasksPage({
           dateMonth: dateParts.month,
           employeeAvatarUrl,
           employeeId: task.assigneeEmployeeId,
-          employeeInitials,
           employeeName,
           id: task.id,
           photoProofs,
@@ -1419,7 +1427,7 @@ export function ManagerTasksPage({
       )
       .sort((left, right) => right.sortTime - left.sortTime)
       .map((item) => item.match);
-  }, [employeeById, getTaskTitle, locale, searchQuery, today, visibleTasks]);
+  }, [employeeById, getTaskTitle, locale, searchQuery, tasks, today]);
 
   const taskSearchMatchIds = useMemo(
     () => new Set(taskSearchMatches.map((match) => match.id)),
@@ -1462,17 +1470,17 @@ export function ManagerTasksPage({
       : null;
 
     return tableRows.filter((row) => {
-      const matchesTaskSearch = row.entry.tasks.some((task) =>
-        taskSearchMatchIds.has(task.id),
-      );
+      const matchesTaskSearch =
+        row.entry.tasks.some((task) => taskSearchMatchIds.has(task.id)) ||
+        taskSearchEmployeeIds.has(row.id);
 
       if (
         searchQuery &&
         !matchesTaskSearch &&
-        ![row.employeeName, row.employeeSubtitle ?? "", row.teams.join(" ")]
-          .join(" ")
-          .toLowerCase()
-          .includes(searchQuery)
+        !normalizeSearchText(
+          [row.employeeName, row.employeeSubtitle ?? "", row.teams.join(" ")]
+            .join(" "),
+        ).includes(searchQuery)
       ) {
         return false;
       }
@@ -1515,6 +1523,7 @@ export function ManagerTasksPage({
     tableRows,
     taskCountFilter,
     taskPresenceFilter,
+    taskSearchEmployeeIds,
     taskSearchMatchIds,
   ]);
 
@@ -2197,7 +2206,6 @@ export function ManagerTasksPage({
                           <Avatar
                             alt={match.employeeName}
                             className="team-tasks-search-result-avatar"
-                            initials={match.employeeInitials}
                             size="sm"
                             src={match.employeeAvatarUrl}
                           />
@@ -2290,18 +2298,28 @@ export function ManagerTasksPage({
                       }
 
                       if (item.kind === "details") {
-                        const hasRowTaskSearchMatches = item.row.entry.tasks.some((task) =>
-                          taskSearchMatchIds.has(task.id),
-                        );
+                        const rowSearchMatchedTasks = searchQuery
+                          ? tasks.filter(
+                              (task) =>
+                                task.assigneeEmployeeId === item.row.id &&
+                                taskSearchMatchIds.has(task.id),
+                            )
+                          : [];
+                        const hasRowTaskSearchMatches =
+                          rowSearchMatchedTasks.length > 0 ||
+                          item.row.entry.tasks.some((task) =>
+                            taskSearchMatchIds.has(task.id),
+                          );
+                        const detailSourceTasks =
+                          rowSearchMatchedTasks.length > 0
+                            ? rowSearchMatchedTasks
+                            : item.row.entry.tasks;
                         const detailTasks =
                           hasRowTaskSearchMatches
-                            ? item.row.entry.tasks.filter((task) =>
+                            ? detailSourceTasks.filter((task) =>
                                 taskSearchMatchIds.has(task.id),
                               )
-                            : item.row.entry.tasks;
-                        const recurringTasks = detailTasks.filter((task) => task.isRecurring);
-                        const regularTasks = detailTasks.filter((task) => !task.isRecurring);
-
+                            : detailSourceTasks;
                         return (
                           <Table.Row
                             className={`team-tasks-detail-row ${
@@ -2314,20 +2332,7 @@ export function ManagerTasksPage({
                                 {detailTasks.length ? (
                                   <div className="team-tasks-inline-details">
                                     <div className="team-tasks-detail-list">
-                                      {renderTaskCollection(regularTasks)}
-
-                                      {recurringTasks.length ? (
-                                        <section className="team-tasks-routine-box">
-                                          <div className="team-tasks-routine-label">
-                                            {localize(locale, "Повседневные задачи", "Routine tasks")}
-                                          </div>
-                                          <div className="team-tasks-routine-list">
-                                            {renderTaskCollection(recurringTasks, {
-                                              embedded: true,
-                                            })}
-                                          </div>
-                                        </section>
-                                      ) : null}
+                                      {renderTaskCollection(detailTasks)}
                                     </div>
                                   </div>
                                 ) : (
@@ -2381,7 +2386,6 @@ export function ManagerTasksPage({
                                 <Avatar
                                   alt={item.employeeName}
                                   className="shrink-0"
-                                  initials={item.employeeInitials}
                                   size="sm"
                                   src={item.employeeAvatarUrl}
                                 />

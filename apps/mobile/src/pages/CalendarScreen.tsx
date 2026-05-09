@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerEvent,
@@ -38,7 +38,6 @@ import {
 } from "../components/bottom-sheet-actions";
 import {
   TimeWheelPicker,
-  TimeWheelPickerPanel,
   type TimeValue,
 } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
@@ -130,6 +129,26 @@ type ManagerTaskSearchResult = {
   isOverdue: boolean;
 };
 
+type ManagerCalendarTab = "all" | "overdue" | "pending" | "done";
+
+type ManagerOverdueEmployeeRow = {
+  avatarSource: ManagerEmployee["avatar"] | null;
+  employee: ManagerEmployee | null;
+  employeeName: string;
+  firstName: string;
+  groupTitle: string;
+  id: string;
+  lastName: string;
+  tasks: Array<{
+    dateLabel: string;
+    dueAt: Date | null;
+    photoCount: number;
+    subtitle: string;
+    task: TaskItem;
+    title: string;
+  }>;
+};
+
 type CalendarScreenCacheValue = {
   shifts: CalendarShift[];
   tasks: TaskItem[];
@@ -147,7 +166,6 @@ type ShiftTemplateDraft = {
   fixedBreakEnabled: boolean;
   fixedBreakStartsAt: TimeValue;
   fixedBreakDurationMinutes: string;
-  fixedBreakIsPaid: boolean;
 };
 
 const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
@@ -161,7 +179,6 @@ function createDefaultShiftTemplateDraft(): ShiftTemplateDraft {
     fixedBreakEnabled: false,
     fixedBreakStartsAt: { hour: 13, minute: 0 },
     fixedBreakDurationMinutes: "30",
-    fixedBreakIsPaid: false,
   };
 }
 
@@ -184,6 +201,37 @@ function combineDateAndTime(date: Date, time: TimeValue) {
 
 function formatLocalTime(value: TimeValue) {
   return `${`${value.hour}`.padStart(2, "0")}:${`${value.minute}`.padStart(2, "0")}`;
+}
+
+function durationStringToTimeValue(value: string): TimeValue {
+  const minutes = Math.max(0, Math.min(23 * 60 + 59, Number(value) || 0));
+
+  return {
+    hour: Math.floor(minutes / 60),
+    minute: minutes % 60,
+  };
+}
+
+function timeValueToDurationMinutes(value: TimeValue) {
+  return String(value.hour * 60 + value.minute);
+}
+
+function formatBreakDurationLabel(value: string, language: string) {
+  const minutes = Math.max(0, Number(value) || 0);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  const hourLabel = language === "ru" ? "ч" : "h";
+  const minuteLabel = language === "ru" ? "мин" : "min";
+
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours} ${hourLabel} ${remainingMinutes} ${minuteLabel}`;
+  }
+
+  if (hours > 0) {
+    return `${hours} ${hourLabel}`;
+  }
+
+  return `${remainingMinutes} ${minuteLabel}`;
 }
 
 function parseLocalTime(value?: string | null): TimeValue | null {
@@ -280,12 +328,6 @@ function getTaskAssigneeId(task: TaskItem) {
 
 function buildEmployeeName(firstName?: string | null, lastName?: string | null) {
   return [lastName?.trim(), firstName?.trim()].filter(Boolean).join(" ").trim();
-}
-
-function getEmployeeInitials(firstName?: string | null, lastName?: string | null) {
-  const first = firstName?.trim().charAt(0) ?? "";
-  const last = lastName?.trim().charAt(0) ?? "";
-  return `${first}${last}`.toUpperCase() || "HI";
 }
 
 function getEmployeeSubtitle(employee: ManagerEmployee) {
@@ -512,11 +554,14 @@ export default function CalendarScreen({
     string[]
   >([]);
   const [managerTaskSearch, setManagerTaskSearch] = useState("");
+  const [managerCalendarTab, setManagerCalendarTab] =
+    useState<ManagerCalendarTab>("all");
   const [expandedManagerEmployeeId, setExpandedManagerEmployeeId] = useState<
     string | null
   >(null);
   const [expandedManagerShiftGroupIds, setExpandedManagerShiftGroupIds] =
     useState<string[]>([]);
+  const managerShiftGroupKeyRef = useRef("");
   const [expandedManagerGroupIds, setExpandedManagerGroupIds] = useState<
     string[]
   >([]);
@@ -536,9 +581,12 @@ export default function CalendarScreen({
     assignShiftBreakDurationMinutes,
     setAssignShiftBreakDurationMinutes,
   ] = useState("30");
-  const [assignShiftBreakIsPaid, setAssignShiftBreakIsPaid] = useState(false);
   const [assignShiftBreakPickerVisible, setAssignShiftBreakPickerVisible] =
     useState(false);
+  const [
+    assignShiftBreakDurationPickerVisible,
+    setAssignShiftBreakDurationPickerVisible,
+  ] = useState(false);
   const [assignShiftSubmitting, setAssignShiftSubmitting] = useState(false);
   const [shiftActionId, setShiftActionId] = useState<string | null>(null);
   const [assignShiftError, setAssignShiftError] = useState<string | null>(null);
@@ -549,6 +597,10 @@ export default function CalendarScreen({
   const [templateTimePickerTarget, setTemplateTimePickerTarget] = useState<
     "start" | "end" | "break" | null
   >(null);
+  const [
+    templateBreakDurationPickerVisible,
+    setTemplateBreakDurationPickerVisible,
+  ] = useState(false);
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
     initialNewsSnapshot?.value ?? [],
@@ -837,9 +889,14 @@ export default function CalendarScreen({
 
   useEffect(() => {
     if (overdueSheetSignal > 0) {
-      setOverdueSheetVisible(true);
+      if (isManager) {
+        setManagerCalendarTab("overdue");
+        setOverdueSheetVisible(false);
+      } else {
+        setOverdueSheetVisible(true);
+      }
     }
-  }, [overdueSheetSignal]);
+  }, [isManager, overdueSheetSignal]);
 
   const cells: Array<number | null> = [];
   for (let index = 0; index < firstDay; index += 1) cells.push(null);
@@ -1194,6 +1251,113 @@ export default function CalendarScreen({
     t,
   ]);
 
+  const overdueEmployeeRows = useMemo<ManagerOverdueEmployeeRow[]>(() => {
+    const groupByEmployeeId = new Map<
+      string,
+      { id: string; name: string }
+    >();
+
+    managerGroups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (!groupByEmployeeId.has(membership.employeeId)) {
+          groupByEmployeeId.set(membership.employeeId, {
+            id: group.id,
+            name: group.name,
+          });
+        }
+      });
+    });
+
+    const rows = new Map<string, ManagerOverdueEmployeeRow>();
+
+    overdueTasks.forEach((task) => {
+      const employeeId = getTaskAssigneeId(task);
+      const employee =
+        (employeeId ? managerEmployeeDirectory.get(employeeId) : null) ??
+        buildManagerEmployeeFromTask(task);
+      const explicitGroup = task.group
+        ? { id: task.group.id, name: task.group.name }
+        : null;
+      const membershipGroup = employeeId
+        ? groupByEmployeeId.get(employeeId) ?? null
+        : null;
+      const group = membershipGroup ?? explicitGroup;
+      const firstName = employee?.firstName ?? task.assigneeEmployee?.firstName ?? "";
+      const lastName = employee?.lastName ?? task.assigneeEmployee?.lastName ?? "";
+      const employeeName =
+        buildEmployeeName(firstName, lastName) ||
+        employee?.employeeNumber ||
+        task.group?.name ||
+        t("calendar.groupTask");
+      const rowId = employeeId
+        ? `employee:${employeeId}`
+        : task.group?.id
+          ? `group:${task.group.id}`
+          : "without-assignee";
+      const dueAt = parseTaskDueAt(task);
+      const dateLabel = dueAt
+        ? dueAt.toLocaleDateString(locale, {
+            month: "long",
+            day: "numeric",
+          })
+        : t("calendar.noTimeSelected");
+      const title =
+        getTaskTitle(task, {
+          normalize: true,
+          hideSourceBeforeReady: true,
+        }) || task.title;
+      const subtitle = getTaskBody(task, {
+        hideSourceBeforeReady: true,
+      });
+      const row = rows.get(rowId) ?? {
+        avatarSource: employee?.avatar ?? null,
+        employee: employee ?? null,
+        employeeName,
+        firstName,
+        groupTitle: group?.name ?? t("calendar.withoutGroup"),
+        id: rowId,
+        lastName,
+        tasks: [],
+      };
+
+      row.tasks.push({
+        dateLabel,
+        dueAt,
+        photoCount: buildTaskPhotos(task, locale).length,
+        subtitle,
+        task,
+        title,
+      });
+      rows.set(rowId, row);
+    });
+
+    return Array.from(rows.values())
+      .map((row) => ({
+        ...row,
+        tasks: row.tasks.sort((left, right) => {
+          const leftTime = left.dueAt?.getTime() ?? Infinity;
+          const rightTime = right.dueAt?.getTime() ?? Infinity;
+          return leftTime - rightTime || left.title.localeCompare(right.title, locale);
+        }),
+      }))
+      .sort((left, right) => {
+        if (left.id === "without-assignee") return 1;
+        if (right.id === "without-assignee") return -1;
+        if (left.tasks.length !== right.tasks.length) {
+          return right.tasks.length - left.tasks.length;
+        }
+        return left.employeeName.localeCompare(right.employeeName, locale);
+      });
+  }, [
+    getTaskBody,
+    getTaskTitle,
+    locale,
+    managerEmployeeDirectory,
+    managerGroups,
+    overdueTasks,
+    t,
+  ]);
+
   const sortedManagerEmployees = useMemo(() => {
     return Array.from(managerEmployeeDirectory.values()).sort((left, right) =>
       buildEmployeeName(left.firstName, left.lastName).localeCompare(
@@ -1455,6 +1619,88 @@ export default function CalendarScreen({
     visibleManagerEmployees,
   ]);
 
+  const managerCalendarTabStats = useMemo(() => {
+    return managerEmployeeRows.reduce(
+      (stats, row) => {
+        const openTasks = row.plannedTasks.filter((task) =>
+          isTaskOpen(task.status),
+        );
+        const overdueOpenTasks = openTasks.filter((task) =>
+          isOverdueTask(task, today),
+        );
+
+        stats.all += 1;
+        stats.pending += openTasks.length - overdueOpenTasks.length;
+        stats.done += row.doneTasks.length;
+
+        return stats;
+      },
+      { all: 0, overdue: overdueTasks.length, pending: 0, done: 0 },
+    );
+  }, [managerEmployeeRows, overdueTasks.length, today]);
+
+  const filteredManagerEmployeeRows = useMemo(() => {
+    if (managerCalendarTab === "all") {
+      return managerEmployeeRows;
+    }
+
+    return managerEmployeeRows.filter((row) => {
+      if (managerCalendarTab === "overdue") {
+        return false;
+      }
+
+      const openTasks = row.plannedTasks.filter((task) =>
+        isTaskOpen(task.status),
+      );
+      const overdueTasks = openTasks.filter((task) =>
+        isOverdueTask(task, today),
+      );
+      const pendingTasksCount = openTasks.length - overdueTasks.length;
+
+      if (managerCalendarTab === "pending") {
+        return pendingTasksCount > 0;
+      }
+
+      return row.doneTasks.length > 0;
+    });
+  }, [managerCalendarTab, managerEmployeeRows, today]);
+
+  const managerCalendarTabs = useMemo(
+    () =>
+      [
+        {
+          key: "all",
+          label: t("calendar.tabAll"),
+          count: null,
+          tone: "neutral",
+        },
+        {
+          key: "overdue",
+          label: t("calendar.tabOverdue"),
+          count: managerCalendarTabStats.overdue,
+          tone: "warning",
+        },
+        {
+          key: "pending",
+          label: t("calendar.tabPending"),
+          count: managerCalendarTabStats.pending,
+          tone: "info",
+        },
+        {
+          key: "done",
+          label: t("calendar.tabDone"),
+          count: managerCalendarTabStats.done,
+          tone: "success",
+        },
+      ] satisfies Array<{
+        key: ManagerCalendarTab;
+        label: string;
+        count: number | null;
+        tone: "neutral" | "warning" | "info" | "success";
+      }>,
+    [managerCalendarTabStats, t],
+  );
+
   const managerShiftGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -1466,7 +1712,7 @@ export default function CalendarScreen({
       }
     >();
 
-    managerEmployeeRows.forEach((row) => {
+    filteredManagerEmployeeRows.forEach((row) => {
       const groupId = getManagerShiftGroupId(row.shift);
       const title = row.shift
         ? row.shift.template.name
@@ -1490,7 +1736,7 @@ export default function CalendarScreen({
       if (right.id === "without-shift") return -1;
       return left.subtitle.localeCompare(right.subtitle, locale);
     });
-  }, [locale, managerEmployeeRows, t]);
+  }, [filteredManagerEmployeeRows, locale, t]);
 
   const managerDaySummary = useMemo(() => {
     const total = managerEmployeeRows.reduce(
@@ -1509,10 +1755,90 @@ export default function CalendarScreen({
       done,
       total,
       employees: managerEmployeeRows.length,
-      shifts: managerShiftsForSelectedDay.length,
+      employeesOnShift: managerEmployeeRows.filter((row) => row.shift).length,
       employeesWithOpenTasks,
     };
-  }, [managerEmployeeRows, managerShiftsForSelectedDay.length]);
+  }, [managerEmployeeRows]);
+
+  const topOverdueEmployeeRows = useMemo(
+    () =>
+      overdueEmployeeRows.slice(
+        0,
+        managerDaySummary.employeesOnShift >= 10 ? 5 : 3,
+      ),
+    [managerDaySummary.employeesOnShift, overdueEmployeeRows],
+  );
+
+  const managerDoneTodayRows = useMemo(() => {
+    return managerEmployeeRows
+      .filter(
+        (row) =>
+          row.plannedTasks.length > 0 &&
+          row.doneTasks.length === row.plannedTasks.length,
+      )
+      .sort((left, right) => {
+        if (left.doneTasks.length !== right.doneTasks.length) {
+          return right.doneTasks.length - left.doneTasks.length;
+        }
+
+        return buildEmployeeName(
+          left.employee.firstName,
+          left.employee.lastName,
+        ).localeCompare(
+          buildEmployeeName(right.employee.firstName, right.employee.lastName),
+          locale,
+        );
+      });
+  }, [locale, managerEmployeeRows]);
+
+  const managerDoneEmployeeRows = useMemo(() => {
+    const limit = managerDaySummary.employeesOnShift >= 10 ? 5 : 3;
+    const result = [...managerDoneTodayRows];
+
+    if (result.length >= limit) {
+      return result;
+    }
+
+    const supplementalRows = managerEmployeeRows
+      .filter(
+        (row) =>
+          row.doneTasks.length > 0 &&
+          !managerDoneTodayRows.some(
+            (doneRow) => doneRow.employee.id === row.employee.id,
+          ),
+      )
+      .sort((left, right) => {
+        if (left.doneTasks.length !== right.doneTasks.length) {
+          return right.doneTasks.length - left.doneTasks.length;
+        }
+
+        return buildEmployeeName(
+          left.employee.firstName,
+          left.employee.lastName,
+        ).localeCompare(
+          buildEmployeeName(right.employee.firstName, right.employee.lastName),
+          locale,
+        );
+      });
+
+    let index = 0;
+    while (index < supplementalRows.length && result.length < limit) {
+      const doneCount = supplementalRows[index].doneTasks.length;
+      const tiedRows = supplementalRows.filter(
+        (row) => row.doneTasks.length === doneCount,
+      );
+
+      result.push(...tiedRows);
+      index += tiedRows.length;
+    }
+
+    return result;
+  }, [
+    locale,
+    managerDaySummary.employeesOnShift,
+    managerDoneTodayRows,
+    managerEmployeeRows,
+  ]);
 
   useEffect(() => {
     if (!assignShiftSheetVisible) {
@@ -1529,15 +1855,28 @@ export default function CalendarScreen({
   ]);
 
   useEffect(() => {
-    setExpandedManagerShiftGroupIds((current) => {
-      const availableIds = new Set(managerShiftGroups.map((group) => group.id));
-      const next = current.filter((id) => availableIds.has(id));
+    const groupIds = managerShiftGroups.map((group) => group.id);
+    const groupKey = groupIds.join("|");
+    const groupsChanged = managerShiftGroupKeyRef.current !== groupKey;
+    managerShiftGroupKeyRef.current = groupKey;
 
-      if (next.length > 0 || managerShiftGroups.length === 0) {
-        return next;
+    setExpandedManagerShiftGroupIds((current) => {
+      const availableIds = new Set(groupIds);
+      const next = current.filter((id) => availableIds.has(id));
+      const nextExpandedIds =
+        next.length > 0 || !groupsChanged
+          ? next
+          : groupIds;
+
+      const isSameSelection =
+        nextExpandedIds.length === current.length &&
+        nextExpandedIds.every((id, index) => id === current[index]);
+
+      if (isSameSelection) {
+        return current;
       }
 
-      return managerShiftGroups.map((group) => group.id);
+      return nextExpandedIds;
     });
   }, [managerShiftGroups]);
 
@@ -1665,17 +2004,6 @@ export default function CalendarScreen({
     );
   }
 
-  function expandAllManagerShiftGroups() {
-    hapticSelection();
-    setExpandedManagerShiftGroupIds(managerShiftGroups.map((group) => group.id));
-  }
-
-  function collapseAllManagerShiftGroups() {
-    hapticSelection();
-    setExpandedManagerShiftGroupIds([]);
-    setExpandedManagerEmployeeId(null);
-  }
-
   function markAvatarFailed(employeeId: string) {
     setFailedAvatarEmployeeIds((current) => {
       if (current.has(employeeId)) {
@@ -1704,7 +2032,9 @@ export default function CalendarScreen({
     applyAssignShiftBreakDefaults(nextTemplateId);
     setTemplateComposerVisible(false);
     setTemplateTimePickerTarget(null);
+    setTemplateBreakDurationPickerVisible(false);
     setAssignShiftBreakPickerVisible(false);
+    setAssignShiftBreakDurationPickerVisible(false);
     setAssignShiftSheetVisible(true);
   }
 
@@ -1729,10 +2059,11 @@ export default function CalendarScreen({
     setAssignShiftBreakDurationMinutes(
       String(shift.fixedBreakDurationMinutes || 30),
     );
-    setAssignShiftBreakIsPaid(Boolean(shift.fixedBreakIsPaid));
     setTemplateComposerVisible(false);
     setTemplateTimePickerTarget(null);
+    setTemplateBreakDurationPickerVisible(false);
     setAssignShiftBreakPickerVisible(false);
+    setAssignShiftBreakDurationPickerVisible(false);
     setAssignShiftSheetVisible(true);
   }
 
@@ -1748,7 +2079,6 @@ export default function CalendarScreen({
     setAssignShiftBreakEnabled(breakDuration > 0);
     setAssignShiftBreakStartsAt(breakStartsAt);
     setAssignShiftBreakDurationMinutes(String(breakDuration || 30));
-    setAssignShiftBreakIsPaid(Boolean(template?.fixedBreakIsPaid));
   }
 
   function toggleAssignShiftEmployee(employeeId: string) {
@@ -1815,15 +2145,15 @@ export default function CalendarScreen({
         fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
           ? fixedBreakDuration
           : 0,
-        fixedBreakIsPaid: templateDraft.fixedBreakEnabled
-          ? templateDraft.fixedBreakIsPaid
-          : false,
+        fixedBreakIsPaid: false,
       });
 
       setShiftTemplates((current) => [createdTemplate, ...current]);
       setAssignShiftTemplateId(createdTemplate.id);
       setTemplateDraft(createDefaultShiftTemplateDraft());
       setTemplateComposerVisible(false);
+      setTemplateTimePickerTarget(null);
+      setTemplateBreakDurationPickerVisible(false);
     } catch (nextError) {
       setAssignShiftError(
         nextError instanceof Error
@@ -1871,9 +2201,7 @@ export default function CalendarScreen({
           fixedBreakDurationMinutes: assignShiftBreakEnabled
             ? fixedBreakDuration
             : 0,
-          fixedBreakIsPaid: assignShiftBreakEnabled
-            ? assignShiftBreakIsPaid
-            : false,
+          fixedBreakIsPaid: false,
         });
 
         setManagerShifts((current) =>
@@ -1883,6 +2211,9 @@ export default function CalendarScreen({
         );
         setAssignShiftSheetVisible(false);
         setEditingShiftId(null);
+        setTemplateBreakDurationPickerVisible(false);
+        setAssignShiftBreakPickerVisible(false);
+        setAssignShiftBreakDurationPickerVisible(false);
         return;
       }
 
@@ -1898,9 +2229,7 @@ export default function CalendarScreen({
             fixedBreakDurationMinutes: assignShiftBreakEnabled
               ? fixedBreakDuration
               : 0,
-            fixedBreakIsPaid: assignShiftBreakEnabled
-              ? assignShiftBreakIsPaid
-              : false,
+            fixedBreakIsPaid: false,
           }),
         ),
       );
@@ -1910,6 +2239,9 @@ export default function CalendarScreen({
       setAssignShiftEmployeeIds([]);
       setAssignShiftTemplateId("");
       setEditingShiftId(null);
+      setTemplateBreakDurationPickerVisible(false);
+      setAssignShiftBreakPickerVisible(false);
+      setAssignShiftBreakDurationPickerVisible(false);
     } catch (nextError) {
       setAssignShiftError(
         nextError instanceof Error
@@ -1985,6 +2317,7 @@ export default function CalendarScreen({
     hapticSelection();
     setCurrentDate(new Date(dueAt.getFullYear(), dueAt.getMonth(), 1));
     setSelectedDay(dueAt.getDate());
+    setManagerCalendarTab("all");
     setOverdueSheetVisible(false);
   }
 
@@ -2207,6 +2540,432 @@ export default function CalendarScreen({
     );
   }
 
+  function renderManagerAllOverview() {
+    return (
+      <View className="gap-4">
+        <View className="flex-row items-center justify-between gap-4 px-5">
+          <View className="min-w-0 flex-1">
+            <Text className="font-display text-[20px] font-extrabold text-foreground">
+              {t("calendar.managerTasksDoneSummary", {
+                done: managerDaySummary.done,
+                total: managerDaySummary.total,
+              })}
+            </Text>
+          </View>
+          <View className="min-w-[88px] flex-row items-center justify-end gap-2">
+            <Ionicons color="#315cf6" name="people-outline" size={18} />
+            <Text
+              className="font-display text-[22px] font-extrabold text-foreground"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              {managerDaySummary.employeesOnShift}/{managerDaySummary.employees}
+            </Text>
+          </View>
+        </View>
+
+        <View className="rounded-[30px] border border-white bg-white px-5 py-4 shadow-sm shadow-[#1f2687]/10">
+          <View className="mb-3 flex-row items-center justify-between gap-3">
+            <View className="flex-row items-center gap-2">
+              <Ionicons color="#ff1f1f" name="warning-outline" size={18} />
+              <Text className="font-display text-[17px] font-extrabold text-foreground">
+                {t("calendar.topOverdueEmployees")}
+              </Text>
+            </View>
+            <Text
+              className="font-display text-[18px] font-extrabold text-[#ff1f1f]"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              {overdueTasks.length}
+            </Text>
+          </View>
+
+          {topOverdueEmployeeRows.length ? (
+            <View className="gap-3">
+              {topOverdueEmployeeRows.map((row) => {
+                const avatarKey = row.employee?.id ?? row.id;
+                const avatarSource = row.avatarSource;
+                const showAvatar =
+                  avatarSource && !failedAvatarEmployeeIds.has(avatarKey);
+
+                return (
+                  <View
+                    className="flex-row items-center gap-3"
+                    key={row.id}
+                  >
+                    {showAvatar ? (
+                      <Image
+                        className="h-11 w-11 rounded-2xl"
+                        onError={() => markAvatarFailed(avatarKey)}
+                        resizeMode="cover"
+                        source={avatarSource}
+                      />
+                    ) : row.employee ? (
+                      <Image
+                        className="h-11 w-11 rounded-2xl bg-[#eef2ff]"
+                        resizeMode="cover"
+                        source={resolveEmployeeAvatarSource(row.employee)}
+                      />
+                    ) : (
+                      <Image
+                        className="h-11 w-11 rounded-2xl bg-[#eef2ff]"
+                        resizeMode="cover"
+                        source={resolveEmployeeAvatarSource({
+                          firstName: row.firstName,
+                          id: row.id,
+                          lastName: row.lastName,
+                        })}
+                      />
+                    )}
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="font-body text-[15px] font-extrabold text-foreground"
+                        numberOfLines={1}
+                      >
+                        {row.employeeName}
+                      </Text>
+                      <Text
+                        className="mt-0.5 font-body text-[12px] leading-5 text-[#7b8798]"
+                        numberOfLines={1}
+                      >
+                        {row.groupTitle}
+                      </Text>
+                    </View>
+                    <Text
+                      className="font-display text-[20px] font-extrabold text-[#ff1f1f]"
+                      style={{ fontVariant: ["tabular-nums"] }}
+                    >
+                      {row.tasks.length}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text className="font-body text-[13px] leading-5 text-[#7b8798]">
+              {t("calendar.noOverdueTasks")}
+            </Text>
+          )}
+        </View>
+
+        <View className="overflow-hidden rounded-[30px] border border-white bg-white shadow-sm shadow-[#1f2687]/10">
+          <View className="flex-row items-center justify-between gap-3 bg-white px-5 py-4">
+            <View className="flex-row items-center gap-2">
+              <Ionicons color="#16a34a" name="checkmark-circle-outline" size={19} />
+              <Text className="font-display text-[17px] font-extrabold text-foreground">
+                {t("calendar.doneTodayEmployees")}
+              </Text>
+            </View>
+            <Text
+              className="font-display text-[18px] font-extrabold text-[#16a34a]"
+              style={{ fontVariant: ["tabular-nums"] }}
+            >
+              {managerDoneTodayRows.length}
+            </Text>
+          </View>
+
+          {managerDoneEmployeeRows.length ? (
+            managerDoneEmployeeRows.map((row, index) => {
+              const doneRowId = `done:${row.employee.id}`;
+              const isExpanded = expandedManagerEmployeeId === doneRowId;
+              const showAvatar =
+                row.employee.avatar &&
+                !failedAvatarEmployeeIds.has(row.employee.id);
+              const subtitle = row.shift
+                ? `${row.shift.template.name} · ${formatShiftRange(row.shift, locale)}`
+                : getEmployeeSubtitle(row.employee);
+
+              return (
+                <View key={doneRowId}>
+                  <PressableScale
+                    className="px-5 py-4"
+                    haptic="selection"
+                    onPress={() => toggleManagerEmployeeExpanded(doneRowId)}
+                  >
+                    <View className="flex-row items-center gap-3">
+                      <View className="w-5 items-center">
+                        <Ionicons
+                          color="#6b7a90"
+                          name={isExpanded ? "chevron-up" : "chevron-down"}
+                          size={20}
+                        />
+                      </View>
+                      {showAvatar ? (
+                        <Image
+                          className="h-12 w-12 rounded-2xl"
+                          onError={() => markAvatarFailed(row.employee.id)}
+                          resizeMode="cover"
+                          source={row.employee.avatar}
+                        />
+                      ) : (
+                        <Image
+                          className="h-12 w-12 rounded-2xl bg-[#eef2ff]"
+                          resizeMode="cover"
+                          source={resolveEmployeeAvatarSource(row.employee)}
+                        />
+                      )}
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className="font-display text-[17px] font-bold text-foreground"
+                          numberOfLines={1}
+                        >
+                          {buildEmployeeName(
+                            row.employee.firstName,
+                            row.employee.lastName,
+                          )}
+                        </Text>
+                        <Text
+                          className="mt-0.5 font-body text-[12px] leading-5 text-[#7b8798]"
+                          numberOfLines={1}
+                        >
+                          {subtitle}
+                        </Text>
+                      </View>
+                      <Text
+                        className="font-display text-[20px] font-extrabold text-[#16a34a]"
+                        style={{ fontVariant: ["tabular-nums"] }}
+                      >
+                        {row.doneTasks.length}
+                      </Text>
+                    </View>
+                  </PressableScale>
+
+                  {isExpanded ? (
+                    <View className="gap-1 border-t border-[#e4ebf5] px-5 pb-5 pt-4">
+                      {row.doneTasks.map((task) => {
+                        const photoCount = buildTaskPhotos(task, locale).length;
+                        const title = getTaskTitle(task, {
+                          normalize: true,
+                          hideSourceBeforeReady: true,
+                        });
+                        const note =
+                          getTaskMeetingLocation(task, {
+                            hideSourceBeforeReady: true,
+                          }) ||
+                          getTaskBody(task, {
+                            hideSourceBeforeReady: true,
+                          });
+                        const rowContent = (
+                          <View className="flex-row items-start gap-3 px-1 py-2">
+                            <View className="w-6 items-center pt-0.5">
+                              {renderManagerTaskLeading(task, photoCount)}
+                            </View>
+                            <View className="min-w-0 flex-1">
+                              <Text
+                                className="font-body text-[15px] leading-6 text-[#16a34a] line-through"
+                                numberOfLines={2}
+                              >
+                                {title || task.title}
+                              </Text>
+                              {note ? (
+                                <Text
+                                  className="mt-0.5 font-body text-[12px] leading-5 text-[#7b8798]"
+                                  numberOfLines={2}
+                                >
+                                  {note}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </View>
+                        );
+
+                        return photoCount > 0 ? (
+                          <PressableScale
+                            haptic="selection"
+                            key={task.id}
+                            onPress={() => openTaskPhotos(task)}
+                          >
+                            {rowContent}
+                          </PressableScale>
+                        ) : (
+                          <View key={task.id}>{rowContent}</View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {index < managerDoneEmployeeRows.length - 1 ? (
+                    <View className="h-px bg-[#edf1f7]" />
+                  ) : null}
+                </View>
+              );
+            })
+          ) : (
+            <View className="px-5 py-5">
+              <Text className="text-center font-body text-[13px] leading-5 text-[#7b8798]">
+                {t("calendar.noDoneTasksToday")}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  function renderManagerOverdueEmployeeList() {
+    if (overdueEmployeeRows.length === 0) {
+      return (
+        <View className="px-5 py-3">
+          <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
+            {t("calendar.noOverdueTasks")}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
+        {overdueEmployeeRows.map((row, index) => {
+          const avatarKey = row.employee?.id ?? row.id;
+          const avatarSource = row.avatarSource;
+          const showAvatar =
+            avatarSource && !failedAvatarEmployeeIds.has(avatarKey);
+          const isExpanded = expandedManagerEmployeeId === row.id;
+
+          return (
+            <View key={row.id}>
+              <Animated.View
+                entering={FadeInUp.delay(index * 18)
+                  .duration(170)
+                  .withInitialValues({
+                    opacity: 0,
+                    transform: [{ translateY: 8 }],
+                  })}
+              >
+                <PressableScale
+                  className="px-5 py-5"
+                  haptic="selection"
+                  onPress={() => toggleManagerEmployeeExpanded(row.id)}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View className="w-5 items-center">
+                      <Ionicons
+                        color="#6b7a90"
+                        name={isExpanded ? "chevron-up" : "chevron-down"}
+                        size={20}
+                      />
+                    </View>
+                    {showAvatar ? (
+                      <Image
+                        className="h-14 w-14 rounded-2xl"
+                        onError={() => markAvatarFailed(avatarKey)}
+                        resizeMode="cover"
+                        source={avatarSource}
+                      />
+                    ) : row.employee ? (
+                      <Image
+                        className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
+                        resizeMode="cover"
+                        source={resolveEmployeeAvatarSource(row.employee)}
+                      />
+                    ) : row.firstName || row.lastName ? (
+                      <Image
+                        className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
+                        resizeMode="cover"
+                        source={resolveEmployeeAvatarSource({
+                          firstName: row.firstName,
+                          id: row.id,
+                          lastName: row.lastName,
+                        })}
+                      />
+                    ) : (
+                      <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#fff1f2]">
+                        <Ionicons
+                          color="#dc2626"
+                          name="people-outline"
+                          size={22}
+                        />
+                      </View>
+                    )}
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="font-display text-[18px] font-bold text-foreground"
+                        numberOfLines={1}
+                      >
+                        {row.employeeName}
+                      </Text>
+                      <Text
+                        className="mt-1 font-body text-[13px] leading-5 text-[#7b8798]"
+                        numberOfLines={1}
+                      >
+                        {row.groupTitle}
+                      </Text>
+                    </View>
+                    <View className="min-w-10 items-end justify-center self-stretch">
+                      <Text
+                        className="font-display text-[22px] font-extrabold text-[#ff1f1f]"
+                        style={{ fontVariant: ["tabular-nums"] }}
+                      >
+                        {row.tasks.length}
+                      </Text>
+                    </View>
+                  </View>
+                </PressableScale>
+
+                {isExpanded ? (
+                  <View className="border-t border-[#e4ebf5] px-5 pb-4 pt-2">
+                    {row.tasks.map((item, taskIndex) => (
+                      <View key={item.task.id}>
+                        <View className="px-1 py-3">
+                          <View className="flex-row items-start gap-3">
+                            <View className="w-6 items-center pt-1">
+                              <Ionicons
+                                color="#dc2626"
+                                name="warning-outline"
+                                size={18}
+                              />
+                            </View>
+                            <View className="min-w-0 flex-1">
+                              <View className="flex-row items-start gap-2">
+                                <Text
+                                  className="min-w-0 flex-1 font-body text-[15px] font-semibold leading-6 text-foreground"
+                                  numberOfLines={2}
+                                >
+                                  {item.title}
+                                </Text>
+                                {item.photoCount > 0 ? (
+                                  <PressableScale
+                                    className="mt-0.5 flex-row items-center gap-1 rounded-full bg-[#eef3ff] px-2 py-1"
+                                    haptic="selection"
+                                    onPress={() => openTaskPhotos(item.task)}
+                                  >
+                                    <Ionicons
+                                      color="#315cf6"
+                                      name="images-outline"
+                                      size={13}
+                                    />
+                                    <Text className="font-body text-[11px] font-extrabold text-[#315cf6]">
+                                      {item.photoCount}
+                                    </Text>
+                                  </PressableScale>
+                                ) : null}
+                              </View>
+                              <Text className="mt-2 font-body text-[12px] font-semibold text-[#dc2626]">
+                                {t("calendar.overdueFrom", {
+                                  dateLabel: item.dateLabel,
+                                })}
+                              </Text>
+                            </View>
+                          </View>
+                          {renderOverdueTaskActions(item.task, true)}
+                        </View>
+                        {taskIndex < row.tasks.length - 1 ? (
+                          <View className="h-px bg-[#edf1f7]" />
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </Animated.View>
+              {index < overdueEmployeeRows.length - 1 ? (
+                <View className="h-px bg-[#edf1f7]" />
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
     <>
       <View className="flex-1 bg-transparent">
@@ -2417,18 +3176,28 @@ export default function CalendarScreen({
                 </View>
 
                 <View className="gap-4 px-5">
-                  <View className="flex-row items-start justify-between gap-4">
+                  <View className="flex-row items-center justify-between gap-4">
                     <View className="flex-1">
                       <Text className="font-display text-[22px] font-bold text-foreground">
                         {selectedDayLabel}
                       </Text>
-                      <Text className="mt-1 font-body text-sm leading-6 text-muted-foreground">
-                        {t("calendar.managerDaySummary", {
-                          done: managerDaySummary.done,
-                          total: managerDaySummary.total,
-                          shifts: managerDaySummary.shifts,
-                        })}
-                      </Text>
+                      <View className="mt-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+                        <Text className="font-body text-sm leading-6 text-muted-foreground">
+                          {t("calendar.managerTasksDoneSummary", {
+                            done: managerDaySummary.done,
+                            total: managerDaySummary.total,
+                          })}
+                        </Text>
+                        <View className="flex-row items-center gap-1">
+                          <Ionicons color="#6b7a90" name="people-outline" size={15} />
+                          <Text
+                            className="font-body text-sm leading-6 text-muted-foreground"
+                            style={{ fontVariant: ["tabular-nums"] }}
+                          >
+                            {managerDaySummary.employeesOnShift}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                     <PressableScale
                       className={`h-[40px] justify-center rounded-[20px] px-4 ${
@@ -2449,47 +3218,56 @@ export default function CalendarScreen({
                     </PressableScale>
                   </View>
 
-                  <View className="flex-row items-stretch gap-3">
-                    <View className="flex-1 rounded-2xl bg-[#f4f7fb] px-3 py-3">
-                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                        {t("calendar.managerProgress")}
-                      </Text>
-                      <Text
-                        className="mt-1 font-display text-[22px] font-bold text-foreground"
-                        style={{ fontVariant: ["tabular-nums"] }}
-                      >
-                        {managerDaySummary.done}/{managerDaySummary.total}
-                      </Text>
-                    </View>
-                    <PressableScale
-                      className="min-w-[132px] items-center justify-center rounded-2xl bg-[#eef3ff] px-3"
-                      haptic="selection"
-                      onPress={
-                        expandedManagerShiftGroupIds.length ===
-                        managerShiftGroups.length
-                          ? collapseAllManagerShiftGroups
-                          : expandAllManagerShiftGroups
-                      }
-                    >
-                      <Ionicons
-                        color="#315cf6"
-                        name={
-                          expandedManagerShiftGroupIds.length ===
-                          managerShiftGroups.length
-                            ? "contract-outline"
-                            : "expand-outline"
-                        }
-                        size={18}
-                      />
-                      <Text className="mt-1 text-center font-body text-[12px] font-bold text-[#315cf6]">
-                        {expandedManagerShiftGroupIds.length ===
-                        managerShiftGroups.length
-                          ? t("calendar.collapseAll")
-                          : t("calendar.expandAll")}
-                      </Text>
-                    </PressableScale>
-                  </View>
                 </View>
+
+                {!isManagerTaskSearchActive ? (
+                  <ScrollView
+                    className="-mx-5"
+                    contentContainerStyle={{
+                      gap: 8,
+                      paddingHorizontal: 20,
+                    }}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {managerCalendarTabs.map((item) => {
+                      const isActive = item.key === managerCalendarTab;
+                      const badgeTextClassName =
+                        item.tone === "warning"
+                          ? "text-[#f59e0b]"
+                          : item.tone === "success"
+                            ? "text-[#16a34a]"
+                            : "text-[#315cf6]";
+
+                      return (
+                        <PressableScale
+                          className={`h-11 flex-row items-center gap-2 rounded-[18px] border bg-white px-4 shadow-sm shadow-[#1f2687]/10 ${
+                            isActive ? "border-[#315cf6]" : "border-[#dbe3ef]"
+                          }`}
+                          haptic="selection"
+                          key={item.key}
+                          onPress={() => setManagerCalendarTab(item.key)}
+                        >
+                          <Text
+                            className={`font-body text-[13px] font-extrabold ${
+                              isActive ? "text-[#315cf6]" : "text-[#4b5563]"
+                            }`}
+                          >
+                            {item.label}
+                          </Text>
+                          {item.count !== null ? (
+                            <Text
+                              className={`font-body text-[13px] font-extrabold ${badgeTextClassName}`}
+                              style={{ fontVariant: ["tabular-nums"] }}
+                            >
+                              {item.count}
+                            </Text>
+                          ) : null}
+                        </PressableScale>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
 
                 {loading ? (
                   <View className="rounded-[28px] border border-white/40 bg-white/78 px-5 py-5 shadow-sm shadow-[#1f2687]/10">
@@ -2591,14 +3369,15 @@ export default function CalendarScreen({
                                       source={avatarSource}
                                     />
                                   ) : (
-                                    <View className="h-7 w-7 items-center justify-center rounded-full bg-[#eef2ff]">
-                                      <Text className="font-display text-[9px] font-extrabold text-foreground">
-                                        {getEmployeeInitials(
-                                          result.firstName,
-                                          result.lastName,
-                                        )}
-                                      </Text>
-                                    </View>
+                                    <Image
+                                      className="h-7 w-7 rounded-full bg-[#eef2ff]"
+                                      resizeMode="cover"
+                                      source={resolveEmployeeAvatarSource({
+                                        firstName: result.firstName,
+                                        id: employeeId,
+                                        lastName: result.lastName,
+                                      })}
+                                    />
                                   )}
                                   <Text
                                     className="min-w-0 flex-1 font-body text-[12px] font-semibold text-[#7b8798]"
@@ -2625,18 +3404,22 @@ export default function CalendarScreen({
                       </Text>
                     </View>
                   )
-                ) : managerEmployeeRows.length ? (
+                ) : managerCalendarTab === "all" ? (
+                  renderManagerAllOverview()
+                ) : managerCalendarTab === "overdue" ? (
+                  renderManagerOverdueEmployeeList()
+                ) : filteredManagerEmployeeRows.length ? (
                   <View className="overflow-hidden rounded-[30px] border border-white/40 bg-white/78 shadow-sm shadow-[#1f2687]/10">
-                    {managerEmployeeRows.map((row, index) => {
+                    {filteredManagerEmployeeRows.map((row, index) => {
                       const groupId = getManagerShiftGroupId(row.shift);
                       const group = managerShiftGroups.find(
                         (item) => item.id === groupId,
                       );
-                      const previousRow = managerEmployeeRows[index - 1];
+                      const previousRow = filteredManagerEmployeeRows[index - 1];
                       const previousGroupId = previousRow
                         ? getManagerShiftGroupId(previousRow.shift)
                         : null;
-                      const nextRow = managerEmployeeRows[index + 1];
+                      const nextRow = filteredManagerEmployeeRows[index + 1];
                       const nextGroupId = nextRow
                         ? getManagerShiftGroupId(nextRow.shift)
                         : null;
@@ -2658,6 +3441,34 @@ export default function CalendarScreen({
                             row.shift.createdByEmployee.lastName,
                           )
                         : "";
+                      const openTasks = row.plannedTasks.filter((task) =>
+                        isTaskOpen(task.status),
+                      );
+                      const pendingTasks = openTasks.filter(
+                        (task) => !isOverdueTask(task, today),
+                      );
+                      const visibleRowTasks =
+                        managerCalendarTab === "pending"
+                          ? pendingTasks
+                          : managerCalendarTab === "done"
+                            ? row.doneTasks
+                            : row.assignedTasks;
+                      const taskCountText =
+                        managerCalendarTab === "all"
+                          ? row.plannedTasks.length > 0
+                            ? `${row.doneTasks.length}/${row.plannedTasks.length}`
+                            : `0 ${t("calendar.tasksShort")}`
+                          : String(visibleRowTasks.length);
+                      const shouldShowTaskLabel =
+                        managerCalendarTab !== "all" || row.plannedTasks.length > 0;
+                      const taskLabel =
+                        managerCalendarTab === "done"
+                          ? t("calendar.tabDone")
+                          : t("calendar.tasksShort");
+                      const taskCountClassName =
+                        managerCalendarTab === "done"
+                          ? "text-[#16a34a]"
+                          : "text-foreground";
 
                       return (
                         <View key={`${groupId}:${row.employee.id}`}>
@@ -2675,16 +3486,19 @@ export default function CalendarScreen({
                                   >
                                     {group?.title ?? t("calendar.withoutShift")}
                                   </Text>
-                                  <Text className="mt-1 font-body text-[12px] font-semibold text-[#315cf6]">
-                                    {group?.subtitle ?? t("calendar.noShiftAssigned")}
-                                  </Text>
+                                  {groupId !== "without-shift" ? (
+                                    <Text className="mt-1 font-body text-[12px] font-semibold text-[#315cf6]">
+                                      {group?.subtitle ?? t("calendar.noShiftAssigned")}
+                                    </Text>
+                                  ) : null}
                                 </View>
                                 <View className="flex-row items-center gap-2">
-                                  <View className="rounded-full bg-[#eef3ff] px-2.5 py-1">
-                                    <Text className="font-body text-[12px] font-bold text-[#315cf6]">
-                                      {group?.rows.length ?? 0}
-                                    </Text>
-                                  </View>
+                                  <Text
+                                    className="font-body text-[15px] font-extrabold text-[#315cf6]"
+                                    style={{ fontVariant: ["tabular-nums"] }}
+                                  >
+                                    {group?.rows.length ?? 0}
+                                  </Text>
                                   <Ionicons
                                     color="#6b7a90"
                                     name={
@@ -2731,14 +3545,11 @@ export default function CalendarScreen({
                                   source={row.employee.avatar}
                                 />
                               ) : (
-                                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">
-                                  <Text className="font-display text-[15px] font-extrabold text-foreground">
-                                    {getEmployeeInitials(
-                                      row.employee.firstName,
-                                      row.employee.lastName,
-                                    )}
-                                  </Text>
-                                </View>
+                                <Image
+                                  className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
+                                  resizeMode="cover"
+                                  source={resolveEmployeeAvatarSource(row.employee)}
+                                />
                               )}
                               <View className="min-w-0 flex-1">
                                 <Text
@@ -2761,16 +3572,14 @@ export default function CalendarScreen({
                               </View>
                               <View className="items-end">
                                 <Text
-                                  className="font-display text-[18px] font-bold text-foreground"
+                                  className={`font-display text-[18px] font-bold ${taskCountClassName}`}
                                   style={{ fontVariant: ["tabular-nums"] }}
                                 >
-                                  {row.plannedTasks.length > 0
-                                    ? `${row.doneTasks.length}/${row.plannedTasks.length}`
-                                    : `0 ${t("calendar.tasksShort")}`}
+                                  {taskCountText}
                                 </Text>
-                                {row.plannedTasks.length > 0 ? (
+                                {shouldShowTaskLabel ? (
                                   <Text className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.8px] text-[#8a96ab]">
-                                    {t("calendar.tasksShort")}
+                                    {taskLabel}
                                   </Text>
                                 ) : null}
                               </View>
@@ -2825,9 +3634,9 @@ export default function CalendarScreen({
                                   </View>
                                 ) : null}
 
-                                {row.assignedTasks.length ? (
+                                {visibleRowTasks.length ? (
                                   <View className="gap-1">
-                                    {row.assignedTasks.map((task) => {
+                                    {visibleRowTasks.map((task) => {
                                       const isDone = task.status === "DONE";
                                       const photoCount = buildTaskPhotos(
                                         task,
@@ -2911,66 +3720,13 @@ export default function CalendarScreen({
                     <Text className="text-center font-body text-sm leading-6 text-muted-foreground">
                       {isManagerTaskSearchActive
                         ? t("calendar.managerNoTasksForSearch")
+                        : managerEmployeeRows.length > 0
+                          ? t("calendar.managerNoEmployeesForTab")
                         : t("calendar.managerNoEmployeesForFilter")}
                     </Text>
                   </View>
                 )}
               </View>
-            ) : null}
-
-            {overdueTasks.length > 0 ? (
-              <PressableScale
-                className="rounded-3xl border border-warning/25 bg-white/78 p-5 shadow-sm shadow-[#1f2687]/10"
-                haptic="selection"
-                onPress={() => setOverdueSheetVisible(true)}
-              >
-                <View className="flex-row items-start gap-4">
-                  <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4dd]">
-                    <Ionicons
-                      color="#f59e0b"
-                      name="warning-outline"
-                      size={22}
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-display text-lg font-bold text-foreground">
-                      {t("calendar.overdueManagerTitle", {
-                        count: overdueTasks.length,
-                      })}
-                    </Text>
-                    {overdueTaskGroups.length ? (
-                      <View className="mt-3 flex-row flex-wrap gap-2">
-                        {overdueTaskGroups.slice(0, 3).map((group) => (
-                          <View
-                            className="rounded-full bg-[#fff7ed] px-3 py-1.5"
-                            key={group.id}
-                          >
-                            <Text
-                              className="font-body text-[11px] font-extrabold text-[#c17b07]"
-                              numberOfLines={1}
-                            >
-                              {group.title} · {group.tasks.length}
-                            </Text>
-                          </View>
-                        ))}
-                        {overdueTaskGroups.length > 3 ? (
-                          <View className="rounded-full bg-[#f4f7fb] px-3 py-1.5">
-                            <Text className="font-body text-[11px] font-extrabold text-[#7b8798]">
-                              +{overdueTaskGroups.length - 3}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
-                  </View>
-                  <Ionicons
-                    color="#f59e0b"
-                    name="chevron-forward"
-                    size={18}
-                    style={directionalIconStyle}
-                  />
-                </View>
-              </PressableScale>
             ) : null}
 
             {!isManager ? (
@@ -3476,14 +4232,11 @@ export default function CalendarScreen({
                                         source={employee.avatar}
                                       />
                                     ) : (
-                                      <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                                        <Text className="font-display text-[12px] font-extrabold text-foreground">
-                                          {getEmployeeInitials(
-                                            employee.firstName,
-                                            employee.lastName,
-                                          )}
-                                        </Text>
-                                      </View>
+                                      <Image
+                                        className="h-10 w-10 rounded-full bg-[#eef2ff]"
+                                        resizeMode="cover"
+                                        source={resolveEmployeeAvatarSource(employee)}
+                                      />
                                     )}
                                     <View className="flex-1">
                                       <Text className="font-body text-[14px] font-semibold text-foreground">
@@ -3555,14 +4308,11 @@ export default function CalendarScreen({
                                 source={employee.avatar}
                               />
                             ) : (
-                              <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                                <Text className="font-display text-[12px] font-extrabold text-foreground">
-                                  {getEmployeeInitials(
-                                    employee.firstName,
-                                    employee.lastName,
-                                  )}
-                                </Text>
-                              </View>
+                              <Image
+                                className="h-10 w-10 rounded-full bg-[#eef2ff]"
+                                resizeMode="cover"
+                                source={resolveEmployeeAvatarSource(employee)}
+                              />
                             )}
                             <View className="min-w-0 flex-1">
                               <Text
@@ -3607,7 +4357,9 @@ export default function CalendarScreen({
           setEditingShiftId(null);
           setTemplateComposerVisible(false);
           setTemplateTimePickerTarget(null);
+          setTemplateBreakDurationPickerVisible(false);
           setAssignShiftBreakPickerVisible(false);
+          setAssignShiftBreakDurationPickerVisible(false);
         }}
         sheetClassName="rounded-t-[32px]"
         solidBackground
@@ -3685,14 +4437,11 @@ export default function CalendarScreen({
                                 source={employee.avatar}
                               />
                             ) : (
-                              <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                                <Text className="font-display text-[12px] font-extrabold text-foreground">
-                                  {getEmployeeInitials(
-                                    employee.firstName,
-                                    employee.lastName,
-                                  )}
-                                </Text>
-                              </View>
+                              <Image
+                                className="h-10 w-10 rounded-full bg-[#eef2ff]"
+                                resizeMode="cover"
+                                source={resolveEmployeeAvatarSource(employee)}
+                              />
                             )}
                             <Text
                               className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
@@ -3730,6 +4479,7 @@ export default function CalendarScreen({
                       setAssignShiftError(null);
                       if (templateComposerVisible) {
                         setTemplateTimePickerTarget(null);
+                        setTemplateBreakDurationPickerVisible(false);
                       }
                       setTemplateComposerVisible((current) => !current);
                     }}
@@ -3841,85 +4591,26 @@ export default function CalendarScreen({
                                 {formatLocalTime(templateDraft.fixedBreakStartsAt)}
                               </Text>
                             </PressableScale>
-                            <Input
-                              className="h-16 flex-1 border-[#dce4f2] bg-[#f8fbff] shadow-none"
-                              keyboardType="number-pad"
-                              onChangeText={(fixedBreakDurationMinutes) =>
-                                setTemplateDraft((current) => ({
-                                  ...current,
-                                  fixedBreakDurationMinutes,
-                                }))
-                              }
-                              placeholder="30"
-                              value={templateDraft.fixedBreakDurationMinutes}
-                            />
-                          </View>
-                          <PressableScale
-                            className="flex-row items-center gap-3"
-                            haptic="selection"
-                            onPress={() =>
-                              setTemplateDraft((current) => ({
-                                ...current,
-                                fixedBreakIsPaid: !current.fixedBreakIsPaid,
-                              }))
-                            }
-                          >
-                            <View
-                              className={`h-5 w-5 items-center justify-center rounded-full border ${
-                                templateDraft.fixedBreakIsPaid
-                                  ? "border-primary bg-primary"
-                                  : "border-[#d7deeb] bg-white"
-                              }`}
+                            <PressableScale
+                              className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                              containerClassName="flex-1"
+                              haptic="selection"
+                              onPress={() => setTemplateBreakDurationPickerVisible(true)}
                             >
-                              {templateDraft.fixedBreakIsPaid ? (
-                                <Ionicons
-                                  color="#ffffff"
-                                  name="checkmark"
-                                  size={11}
-                                />
-                              ) : null}
-                            </View>
-                            <Text className="font-body text-[13px] font-semibold text-muted-foreground">
-                              {t("calendar.fixedBreakPaid")}
-                            </Text>
-                          </PressableScale>
+                              <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                                {t("calendar.fixedBreakDuration")}
+                              </Text>
+                              <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                                {formatBreakDurationLabel(
+                                  templateDraft.fixedBreakDurationMinutes,
+                                  language,
+                                )}
+                              </Text>
+                            </PressableScale>
+                          </View>
                         </View>
                       ) : null}
                     </View>
-
-                    {templateTimePickerTarget ? (
-                      <View className="rounded-[28px] border border-[#dce4f2] bg-white p-4">
-                        <TimeWheelPickerPanel
-                          active
-                          bottomPadding={0}
-                          initialValue={
-                            templateTimePickerTarget === "break"
-                              ? templateDraft.fixedBreakStartsAt
-                              : templateTimePickerTarget === "end"
-                                ? templateDraft.endsAt
-                                : templateDraft.startsAt
-                          }
-                          onApply={(value) => {
-                            setTemplateDraft((current) =>
-                              templateTimePickerTarget === "break"
-                                ? { ...current, fixedBreakStartsAt: value }
-                                : templateTimePickerTarget === "end"
-                                ? { ...current, endsAt: value }
-                                : { ...current, startsAt: value },
-                            );
-                            setTemplateTimePickerTarget(null);
-                          }}
-                          onClose={() => setTemplateTimePickerTarget(null)}
-                          title={
-                            templateTimePickerTarget === "break"
-                              ? t("calendar.fixedBreakStart")
-                              : templateTimePickerTarget === "end"
-                              ? t("calendar.shiftTemplateEnd")
-                              : t("calendar.shiftTemplateStart")
-                          }
-                        />
-                      </View>
-                    ) : null}
 
                     <View className="mt-3">
                       <View className="flex-row items-center justify-between">
@@ -3969,9 +4660,9 @@ export default function CalendarScreen({
                   </View>
                 ) : null}
 
-                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
-                  {shiftTemplates.length ? (
-                    shiftTemplates.map((template, index) => {
+                {shiftTemplates.length ? (
+                  <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                    {shiftTemplates.map((template, index) => {
                       const isSelected = assignShiftTemplateId === template.id;
 
                       return (
@@ -4015,15 +4706,13 @@ export default function CalendarScreen({
                           </View>
                         </PressableScale>
                       );
-                    })
-                  ) : (
-                    <View className="px-4 py-5">
-                      <Text className="text-center font-body text-sm text-muted-foreground">
-                        {t("calendar.noShiftTemplates")}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                    })}
+                  </View>
+                ) : (
+                  <Text className="px-1 py-2 text-center font-body text-sm text-muted-foreground">
+                    {t("calendar.noShiftTemplates")}
+                  </Text>
+                )}
 
                 <View className="rounded-[24px] border border-[#e7ecf5] bg-white p-4">
                   <PressableScale
@@ -4065,53 +4754,25 @@ export default function CalendarScreen({
                             {formatLocalTime(assignShiftBreakStartsAt)}
                           </Text>
                         </PressableScale>
-                        <Input
-                          className="h-16 flex-1 border-[#dce4f2] bg-[#f8fbff] shadow-none"
-                          keyboardType="number-pad"
-                          onChangeText={setAssignShiftBreakDurationMinutes}
-                          placeholder="30"
-                          value={assignShiftBreakDurationMinutes}
-                        />
-                      </View>
-
-                      {assignShiftBreakPickerVisible ? (
-                        <View className="rounded-[28px] border border-[#dce4f2] bg-[#f8fbff] p-4">
-                          <TimeWheelPickerPanel
-                            active
-                            bottomPadding={0}
-                            initialValue={assignShiftBreakStartsAt}
-                            onApply={(value) => {
-                              setAssignShiftBreakStartsAt(value);
-                              setAssignShiftBreakPickerVisible(false);
-                            }}
-                            onClose={() => setAssignShiftBreakPickerVisible(false)}
-                            title={t("calendar.fixedBreakStart")}
-                          />
-                        </View>
-                      ) : null}
-
-                      <PressableScale
-                        className="flex-row items-center gap-3"
-                        haptic="selection"
-                        onPress={() =>
-                          setAssignShiftBreakIsPaid((current) => !current)
-                        }
-                      >
-                        <View
-                          className={`h-5 w-5 items-center justify-center rounded-full border ${
-                            assignShiftBreakIsPaid
-                              ? "border-primary bg-primary"
-                              : "border-[#d7deeb] bg-white"
-                          }`}
+                        <PressableScale
+                          className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                          containerClassName="flex-1"
+                          haptic="selection"
+                          onPress={() =>
+                            setAssignShiftBreakDurationPickerVisible(true)
+                          }
                         >
-                          {assignShiftBreakIsPaid ? (
-                            <Ionicons color="#ffffff" name="checkmark" size={11} />
-                          ) : null}
-                        </View>
-                        <Text className="font-body text-[13px] font-semibold text-muted-foreground">
-                          {t("calendar.fixedBreakPaid")}
-                        </Text>
-                      </PressableScale>
+                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                            {t("calendar.fixedBreakDuration")}
+                          </Text>
+                          <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                            {formatBreakDurationLabel(
+                              assignShiftBreakDurationMinutes,
+                              language,
+                            )}
+                          </Text>
+                        </PressableScale>
+                      </View>
                     </View>
                   ) : null}
                 </View>
@@ -4130,7 +4791,9 @@ export default function CalendarScreen({
                   setEditingShiftId(null);
                   setTemplateComposerVisible(false);
                   setTemplateTimePickerTarget(null);
+                  setTemplateBreakDurationPickerVisible(false);
                   setAssignShiftBreakPickerVisible(false);
+                  setAssignShiftBreakDurationPickerVisible(false);
                 }}
                 textClassName="text-foreground"
                 variant="secondary"
@@ -4167,7 +4830,7 @@ export default function CalendarScreen({
         onClose={() => setOverdueSheetVisible(false)}
         sheetClassName="rounded-t-[32px]"
         solidBackground
-        visible={overdueSheetVisible}
+        visible={!isManager && overdueSheetVisible}
       >
         <View
           className="gap-4 px-5 pt-8"
@@ -4236,14 +4899,15 @@ export default function CalendarScreen({
                                   source={item.avatarSource}
                                 />
                               ) : item.employeeId ? (
-                                <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#eef2ff]">
-                                  <Text className="font-display text-[11px] font-extrabold text-foreground">
-                                    {getEmployeeInitials(
-                                      item.firstName,
-                                      item.lastName,
-                                    )}
-                                  </Text>
-                                </View>
+                                <Image
+                                  className="mt-0.5 h-11 w-11 rounded-2xl bg-[#eef2ff]"
+                                  resizeMode="cover"
+                                  source={resolveEmployeeAvatarSource({
+                                    firstName: item.firstName,
+                                    id: item.employeeId,
+                                    lastName: item.lastName,
+                                  })}
+                                />
                               ) : (
                                 <View className="mt-0.5 h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4dd]">
                                   <Ionicons
@@ -4459,6 +5123,73 @@ export default function CalendarScreen({
           </View>
         </View>
       </BottomSheetModal>
+
+      <TimeWheelPicker
+        initialValue={
+          templateTimePickerTarget === "break"
+            ? templateDraft.fixedBreakStartsAt
+            : templateTimePickerTarget === "end"
+              ? templateDraft.endsAt
+              : templateDraft.startsAt
+        }
+        onApply={(value) => {
+          setTemplateDraft((current) =>
+            templateTimePickerTarget === "break"
+              ? { ...current, fixedBreakStartsAt: value }
+              : templateTimePickerTarget === "end"
+                ? { ...current, endsAt: value }
+                : { ...current, startsAt: value },
+          );
+          setTemplateTimePickerTarget(null);
+        }}
+        onClose={() => setTemplateTimePickerTarget(null)}
+        title={
+          templateTimePickerTarget === "break"
+            ? t("calendar.fixedBreakStart")
+            : templateTimePickerTarget === "end"
+              ? t("calendar.shiftTemplateEnd")
+              : t("calendar.shiftTemplateStart")
+        }
+        visible={Boolean(templateTimePickerTarget)}
+      />
+
+      <TimeWheelPicker
+        initialValue={durationStringToTimeValue(
+          templateDraft.fixedBreakDurationMinutes,
+        )}
+        onApply={(value) => {
+          setTemplateDraft((current) => ({
+            ...current,
+            fixedBreakDurationMinutes: timeValueToDurationMinutes(value),
+          }));
+          setTemplateBreakDurationPickerVisible(false);
+        }}
+        onClose={() => setTemplateBreakDurationPickerVisible(false)}
+        title={t("calendar.fixedBreakDuration")}
+        visible={templateBreakDurationPickerVisible}
+      />
+
+      <TimeWheelPicker
+        initialValue={assignShiftBreakStartsAt}
+        onApply={(value) => {
+          setAssignShiftBreakStartsAt(value);
+          setAssignShiftBreakPickerVisible(false);
+        }}
+        onClose={() => setAssignShiftBreakPickerVisible(false)}
+        title={t("calendar.fixedBreakStart")}
+        visible={assignShiftBreakPickerVisible}
+      />
+
+      <TimeWheelPicker
+        initialValue={durationStringToTimeValue(assignShiftBreakDurationMinutes)}
+        onApply={(value) => {
+          setAssignShiftBreakDurationMinutes(timeValueToDurationMinutes(value));
+          setAssignShiftBreakDurationPickerVisible(false);
+        }}
+        onClose={() => setAssignShiftBreakDurationPickerVisible(false)}
+        title={t("calendar.fixedBreakDuration")}
+        visible={assignShiftBreakDurationPickerVisible}
+      />
 
       {Platform.OS === "android" && rescheduleDatePickerVisible ? (
         <DateTimePicker

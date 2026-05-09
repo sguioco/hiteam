@@ -27,6 +27,7 @@ import {
   type GroupOption,
   mergeGroupOptions,
 } from '../../lib/manager-group-options';
+import { resolveEmployeeAvatarSource } from '../../lib/employee-avatar';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
 import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
@@ -34,8 +35,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
-  getBottomSheetActionBottomOffset,
-  getBottomSheetActionReservedSpace,
+  getScreenActionBottomOffset,
+  getScreenActionReservedSpace,
 } from '../../src/components/bottom-sheet-actions';
 
 const PRIORITY_OPTIONS = [
@@ -73,12 +74,23 @@ function isDateTimeInPast(date: Date, time: TimeValue) {
   return buildDateTime(date, time).getTime() < Date.now();
 }
 
-function getEmployeeInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
-
 function formatFullGroupLabel(groupName: string) {
   return `All ${groupName}`;
+}
+
+function getEmployeeAvatarSource(employee: EmployeeOption | GroupMemberOption) {
+  return (
+    employee.avatar ??
+    resolveEmployeeAvatarSource({
+      avatar: employee.avatar,
+      email: 'email' in employee ? employee.email : undefined,
+      employeeNumber: 'employeeNumber' in employee ? employee.employeeNumber : undefined,
+      firstName: employee.firstName,
+      gender: employee.gender,
+      id: employee.id,
+      lastName: employee.lastName,
+    })
+  );
 }
 
 type WorkspaceProfile = Awaited<ReturnType<typeof loadMyProfile>>;
@@ -263,8 +275,8 @@ export default function CreateTaskScreen() {
   const selectedAssigneeIds = useMemo(() => selectedAssignees.map((employee) => employee.id), [selectedAssignees]);
   const priorityIndex = PRIORITY_OPTIONS.findIndex((option) => option.value === priority);
   const activePriorityColor = PRIORITY_COLORS[priority];
-  const actionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
-  const actionReservedSpace = getBottomSheetActionReservedSpace(insets.bottom);
+  const actionBottomOffset = getScreenActionBottomOffset(insets.bottom);
+  const actionReservedSpace = getScreenActionReservedSpace(insets.bottom);
 
   const individuallySelectedEmployees = useMemo(
     () => selectedAssignees.filter((employee) => !selectedGroupMemberIdSet.has(employee.id)),
@@ -313,13 +325,7 @@ export default function CreateTaskScreen() {
           <View className={`h-6 w-6 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
             {isSelected ? <Ionicons color="#ffffff" name="checkmark" size={14} /> : null}
           </View>
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-            {employee.avatar ? (
-              <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-            ) : (
-              <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-            )}
-          </View>
+          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">{employeeSubtitle}</Text>
@@ -625,13 +631,7 @@ export default function CreateTaskScreen() {
 
                   {individuallySelectedEmployees.map((employee) => (
                     <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
-                      <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                        {employee.avatar ? (
-                          <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-                        ) : (
-                          <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-                        )}
-                      </View>
+                      <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
                       <View className="flex-1">
                         <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
                         <Text className="text-[12px] text-muted-foreground">

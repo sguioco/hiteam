@@ -30,6 +30,7 @@ import { getSession } from "@/lib/auth";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { type Locale, useI18n } from "@/lib/i18n";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 export type LeaderboardCenterInitialData = LeaderboardOverviewResponse;
@@ -253,15 +254,6 @@ function getEmployeeFullName(
   return `${entry.employee.firstName} ${entry.employee.lastName}`.trim();
 }
 
-function getEmployeeInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 function getEmployeeSubtitle(
   entry: LeaderboardOverviewResponse["leaderboard"][number],
   locale: Locale,
@@ -277,7 +269,7 @@ function getEmployeeSubtitle(
 function getEmployeeAvatarSrc(
   entry: LeaderboardOverviewResponse["leaderboard"][number],
 ) {
-  return entry.employee.avatarUrl ?? null;
+  return entry.employee.avatarUrl ?? getMockAvatarDataUrl(getEmployeeFullName(entry) || entry.employee.id);
 }
 
 function getProgressDayLabel(locale: Locale, isCurrentMonth: boolean) {
@@ -645,7 +637,6 @@ export function LeaderboardCenter({
                           ? "ring-amber-200"
                           : "ring-white"
                     }`}
-                    initials={getEmployeeInitials(fullName)}
                     size={isFirstPlace ? "2xl" : "xl"}
                     src={getEmployeeAvatarSrc(entry)}
                   />
@@ -934,7 +925,6 @@ export function LeaderboardCenter({
                               <Avatar
                                 alt={fullName}
                                 className="shrink-0"
-                                initials={getEmployeeInitials(fullName)}
                                 size="sm"
                                 src={getEmployeeAvatarSrc(entry)}
                               />

@@ -28,6 +28,7 @@ import { AttendanceAuditMap } from "@/components/AttendanceAuditMap";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
@@ -218,15 +219,6 @@ function formatCoordinates(latitude: number | null, longitude: number | null) {
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -332,28 +324,15 @@ function AttendanceAvatar({
         ? "h-14 w-14 text-base"
         : "h-11 w-11 text-xs";
 
-  if (avatarUrl) {
-    return (
-      <img
-        alt={name}
-        className={cn(
-          "rounded-full border border-[color:var(--border)] object-cover",
-          sizeClass,
-        )}
-        src={avatarUrl}
-      />
-    );
-  }
-
   return (
-    <div
+    <img
+      alt={name}
       className={cn(
-        "flex items-center justify-center rounded-full bg-[color:var(--panel-muted)] font-semibold text-[color:var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+        "rounded-full border border-[color:var(--border)] object-cover",
         sizeClass,
       )}
-    >
-      {getInitials(name)}
-    </div>
+      src={avatarUrl || getMockAvatarDataUrl(name)}
+    />
   );
 }
 

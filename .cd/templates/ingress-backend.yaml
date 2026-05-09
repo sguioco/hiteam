@@ -14,6 +14,9 @@ spec:
   tls:
     - hosts:
         - {{ .Values.ingress.backend.host | quote }}
+        {{- range .Values.ingress.backend.extraHosts }}
+        - {{ . | quote }}
+        {{- end }}
       secretName: {{ include "hiteam.backendTlsSecret" . | quote }}
   rules:
     - host: {{ .Values.ingress.backend.host | quote }}
@@ -26,6 +29,18 @@ spec:
                 name: {{ include "hiteam.apiServiceName" . }}
                 port:
                   number: {{ .Values.api.service.port }}
+    {{- range .Values.ingress.backend.extraHosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.apiServiceName" $ }}
+                port:
+                  number: {{ $.Values.api.service.port }}
+    {{- end }}
 ---
 {{- if .Values.ingress.backend.enableHttpRedirect }}
 apiVersion: networking.k8s.io/v1
@@ -51,5 +66,17 @@ spec:
                 name: {{ include "hiteam.apiServiceName" . }}
                 port:
                   number: {{ .Values.api.service.port }}
+    {{- range .Values.ingress.backend.extraHosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.apiServiceName" $ }}
+                port:
+                  number: {{ $.Values.api.service.port }}
+    {{- end }}
 {{- end }}
 {{- end }}

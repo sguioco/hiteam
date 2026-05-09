@@ -51,6 +51,7 @@ import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { Locale, useI18n } from "@/lib/i18n";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { localizePersonName } from "@/lib/transliteration";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
@@ -288,10 +289,6 @@ function formatNewsMetaLine(
   return locale === "ru"
     ? `${relativeOrDate} • ${authorName}`
     : `${relativeOrDate} by ${authorName}`;
-}
-
-function getEmployeeInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
 type ReaderGroupSummary = {
@@ -1791,17 +1788,14 @@ export function NewsCenter({
                                             <div key={reader.notificationId}>
                                               <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                                 <div className="flex min-w-0 items-center gap-3">
-                                                  {reader.avatarUrl ? (
-                                                    <img
-                                                      alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                                      className="h-8 w-8 rounded-full object-cover"
-                                                      src={reader.avatarUrl}
-                                                    />
-                                                  ) : (
-                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-700">
-                                                      {getEmployeeInitials(reader.firstName, reader.lastName)}
-                                                    </div>
-                                                  )}
+                                                  <img
+                                                    alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
+                                                    className="h-8 w-8 rounded-full object-cover"
+                                                    src={
+                                                      reader.avatarUrl ||
+                                                      getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
+                                                    }
+                                                  />
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                                     {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
@@ -1824,17 +1818,14 @@ export function NewsCenter({
                                   <div key={reader.notificationId}>
                                     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                       <div className="flex min-w-0 items-center gap-3">
-                                        {reader.avatarUrl ? (
-                                          <img
-                                            alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                            className="h-8 w-8 rounded-full object-cover"
-                                            src={reader.avatarUrl}
-                                          />
-                                        ) : (
-                                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-700">
-                                            {getEmployeeInitials(reader.firstName, reader.lastName)}
-                                          </div>
-                                        )}
+                                        <img
+                                          alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
+                                          className="h-8 w-8 rounded-full object-cover"
+                                          src={
+                                            reader.avatarUrl ||
+                                            getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
+                                          }
+                                        />
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                           {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>
@@ -1899,17 +1890,14 @@ export function NewsCenter({
                                             <div key={reader.notificationId}>
                                               <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                                 <div className="flex min-w-0 items-center gap-3">
-                                                  {reader.avatarUrl ? (
-                                                    <img
-                                                      alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                                      className="h-8 w-8 rounded-full object-cover"
-                                                      src={reader.avatarUrl}
-                                                    />
-                                                  ) : (
-                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">
-                                                      {getEmployeeInitials(reader.firstName, reader.lastName)}
-                                                    </div>
-                                                  )}
+                                                  <img
+                                                    alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
+                                                    className="h-8 w-8 rounded-full object-cover"
+                                                    src={
+                                                      reader.avatarUrl ||
+                                                      getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
+                                                    }
+                                                  />
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                                     {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
@@ -1932,17 +1920,14 @@ export function NewsCenter({
                                   <div key={reader.notificationId}>
                                     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                       <div className="flex min-w-0 items-center gap-3">
-                                        {reader.avatarUrl ? (
-                                          <img
-                                            alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                            className="h-8 w-8 rounded-full object-cover"
-                                            src={reader.avatarUrl}
-                                          />
-                                        ) : (
-                                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">
-                                            {getEmployeeInitials(reader.firstName, reader.lastName)}
-                                          </div>
-                                        )}
+                                        <img
+                                          alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
+                                          className="h-8 w-8 rounded-full object-cover"
+                                          src={
+                                            reader.avatarUrl ||
+                                            getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
+                                          }
+                                        />
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                           {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>

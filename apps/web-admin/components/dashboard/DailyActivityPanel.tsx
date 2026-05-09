@@ -87,15 +87,6 @@ function resolvePersonName(
     : person.displayName;
 }
 
-export function getInitials(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export function getAvatarSource(person: DashboardActivityPerson, locale: "ru" | "en") {
   const displayName = resolvePersonName(person, locale);
   return person.avatarUrl || getMockAvatarDataUrl(displayName);
@@ -332,8 +323,11 @@ export function DailyActivityPanel({
                           />
                         </div>
                       ) : (
-                        <div className="daily-activity-actor-avatar daily-activity-actor-avatar--fallback">
-                          {getInitials(actorName)}
+                        <div className="daily-activity-actor-avatar">
+                          <img
+                            alt={actorName}
+                            src={getMockAvatarDataUrl(actorName)}
+                          />
                         </div>
                       )}
 

@@ -578,13 +578,12 @@ export default function TaskList({
     const dueTimeLabel = formatTaskDueTime(task, locale);
     const isOverdue = Boolean(dueAt && task.status !== 'DONE' && task.status !== 'CANCELLED' && dueAt.getTime() < Date.now());
     const metaColor = completed ? '#8fa1bb' : isOverdue ? '#ef4444' : '#64748b';
-    const photoMetaLabel = task.requiresPhoto
-      ? completed && photoCount > 0
-        ? t('today.photosSaved', { count: photoCount })
-        : photoCount > 0
-          ? t('today.photosAttached', { count: photoCount })
-          : t('today.photoProofRequired')
-      : null;
+    const photoMetaLabel =
+      task.requiresPhoto && photoCount > 0
+        ? completed
+          ? t('today.photosSaved', { count: photoCount })
+          : t('today.photosAttached', { count: photoCount })
+        : null;
 
     return (
       <Animated.View
@@ -615,24 +614,22 @@ export default function TaskList({
             ) : (
               <View className="mt-1 h-4 w-[72%] rounded-full bg-[#e2eaf6]" />
             )}
-            {dueTimeLabel || photoMetaLabel ? (
-              <View className="mt-1 flex-row flex-wrap items-center gap-2">
-                {dueTimeLabel ? (
-                  <View className="flex-row items-center gap-1">
-                    <Ionicons color={metaColor} name="time-outline" size={12} />
-                    <Text className="text-[11px] font-semibold" style={{ color: metaColor }}>
-                      {dueTimeLabel}
-                    </Text>
-                  </View>
-                ) : null}
-                {photoMetaLabel ? (
-                  <Text className="text-[11px]" style={{ color: completed ? '#8fa1bb' : '#94a3b8' }}>
-                    {photoMetaLabel}
-                  </Text>
-                ) : null}
-              </View>
+            {photoMetaLabel ? (
+              <Text className="mt-1 text-[11px]" style={{ color: completed ? '#8fa1bb' : '#94a3b8' }}>
+                {photoMetaLabel}
+              </Text>
             ) : null}
           </View>
+          {dueTimeLabel ? (
+            <View className="ml-2 min-w-[58px] items-end justify-center self-stretch">
+              <Text
+                className="text-[14px] font-extrabold"
+                style={{ color: metaColor, fontVariant: ["tabular-nums"] }}
+              >
+                {dueTimeLabel}
+              </Text>
+            </View>
+          ) : null}
         </PressableScale>
       </Animated.View>
     );

@@ -1,5 +1,6 @@
 import { Image, View } from 'react-native';
 import { Text } from '../../components/ui/text';
+import { resolveEmployeeAvatarSource } from '../../lib/employee-avatar';
 
 export type ParticipantAvatarItem = {
   avatar?: any;
@@ -14,10 +15,6 @@ type ParticipantAvatarStripProps = {
 
 const MAX_VISIBLE_AVATARS = 8;
 const MAX_VISIBLE_PARTICIPANTS = MAX_VISIBLE_AVATARS - 1;
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
 
 export function ParticipantAvatarStrip({
   participants,
@@ -40,17 +37,11 @@ export function ParticipantAvatarStrip({
           className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#eef2ff]"
           style={{ marginLeft: index === 0 ? 0 : -10 }}
         >
-          {participant.avatar ? (
-            <Image
-              source={participant.avatar}
-              className="h-9 w-9 rounded-full"
-              resizeMode="cover"
-            />
-          ) : (
-            <Text className="text-[12px] font-extrabold text-foreground">
-              {getInitials(participant.firstName, participant.lastName)}
-            </Text>
-          )}
+          <Image
+            source={resolveEmployeeAvatarSource(participant)}
+            className="h-9 w-9 rounded-full"
+            resizeMode="cover"
+          />
         </View>
       ))}
 

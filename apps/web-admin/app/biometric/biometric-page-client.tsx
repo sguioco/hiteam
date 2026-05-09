@@ -47,15 +47,6 @@ function scoreLabel(value: number | null) {
   return `${Math.round(value * 100)}%`;
 }
 
-function getEmployeeInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
 function getBiometricTone(
   status: 'NOT_STARTED' | 'PENDING' | 'ENROLLED' | 'FAILED' | 'PASSED' | 'REVIEW',
 ) {
@@ -390,7 +381,6 @@ function getEnrollmentStatusLabel(
                                 <Avatar
                                   alt={item.employeeName}
                                   className="shrink-0"
-                                  initials={getEmployeeInitials(item.employeeName)}
                                   size="sm"
                                   src={employeeProfile?.avatarUrl || getMockAvatarDataUrl(item.employeeName)}
                                 />

@@ -49,6 +49,7 @@ import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { localizePersonName } from "@/lib/transliteration";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
@@ -313,10 +314,6 @@ function formatDateTime(value: string, locale = "en-US") {
 
 function formatPeriod(startsOn: string, endsOn: string, locale = "en-US") {
   return `${formatDate(startsOn, locale)} - ${formatDate(endsOn, locale)}`;
-}
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 }
 
 function getRequestStatusLabel(
@@ -1105,17 +1102,16 @@ export default function Requests({
                 <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className={cn("rounded-[24px] p-5", requestBlueSurfaceClass)}>
                     <div className="flex items-center gap-3">
-                      <div
+                      <img
+                        alt={`${selectedItem.request.employee.firstName} ${selectedItem.request.employee.lastName}`.trim()}
                         className={cn(
-                          "flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-[color:var(--foreground)]",
+                          "h-11 w-11 rounded-full object-cover",
                           requestBlueInsetClass,
                         )}
-                      >
-                        {getInitials(
-                          selectedItem.request.employee.firstName,
-                          selectedItem.request.employee.lastName,
+                        src={getMockAvatarDataUrl(
+                          `${selectedItem.request.employee.firstName} ${selectedItem.request.employee.lastName}`.trim(),
                         )}
-                      </div>
+                      />
                       <div>
                         <p className="text-sm font-semibold text-[color:var(--foreground)]">
                           {selectedItem.request.employee.firstName}{" "}

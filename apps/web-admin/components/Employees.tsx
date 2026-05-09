@@ -54,6 +54,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  TaskDatePicker,
+  TaskDateTimePicker,
+  TaskTimePicker,
+} from "@/components/task-schedule-pickers";
+import {
   PhoneCountryInput,
   buildPhoneWithCountryCode,
   getDefaultPhoneCountryCode,
@@ -91,6 +96,7 @@ import {
   normalizeWebAdminTaskPriority,
 } from "@/lib/task-priority";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { navigateWithClickSupport } from "@/lib/navigation";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
@@ -185,11 +191,10 @@ const initialTaskDraft = {
   hasDueTime: false,
   requiresPhoto: false,
   isRecurring: false,
-  frequency: "DAILY" as "DAILY" | "WEEKLY" | "MONTHLY",
   weekDays: [1, 2, 3, 4, 5],
   startDate: new Date().toISOString().split("T")[0],
-  endDate: "",
 };
+const TASK_WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 const reviewFieldClassName = "h-11 rounded-xl bg-secondary/30 text-sm";
 const reviewInfoBoxClassName =
@@ -265,7 +270,7 @@ function getAvatarSrc(
     "avatarUrl" | "firstName" | "lastName" | "middleName"
   >,
 ) {
-  return employee.avatarUrl ?? null;
+  return employee.avatarUrl ?? getMockAvatarDataUrl(buildEmployeeName(employee) || employee.lastName || employee.firstName || "employee");
 }
 
 function resolveEmployeeRoleLabel(
@@ -338,15 +343,6 @@ function formatHireDate(value?: string | null) {
     : date.toLocaleDateString(getRuntimeLocaleTag());
 }
 
-function getEmployeeInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 function renderEmployeeStatusBadge(status: EmployeeStatus) {
   const locale = getRuntimeLocale();
   const tableStatusLabel = getStatusLabel(status, locale);
@@ -398,33 +394,35 @@ function getTaskPriorityOptions(_locale: "ru" | "en") {
 }
 
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
+  const normalizedDay = day === 7 ? 0 : day;
+
   if (locale === "en") {
-    return day === 7
+    return normalizedDay === 0
       ? "Su"
-      : day === 1
+      : normalizedDay === 1
         ? "Mo"
-        : day === 2
+        : normalizedDay === 2
           ? "Tu"
-          : day === 3
+          : normalizedDay === 3
             ? "We"
-            : day === 4
+            : normalizedDay === 4
               ? "Th"
-              : day === 5
+              : normalizedDay === 5
                 ? "Fr"
                 : "Sa";
   }
 
-  return day === 7
+  return normalizedDay === 0
     ? "Вс"
-    : day === 1
+    : normalizedDay === 1
       ? "Пн"
-      : day === 2
+      : normalizedDay === 2
         ? "Вт"
-        : day === 3
+        : normalizedDay === 3
           ? "Ср"
-          : day === 4
+          : normalizedDay === 4
             ? "Чт"
-            : day === 5
+            : normalizedDay === 5
               ? "Пт"
               : "Сб";
 }
@@ -1574,8 +1572,8 @@ const Employees = ({
       });
       setPageMessage(
         runtimeLocalize(
-          "Приглашение обновлено.",
-          "Invitation was refreshed.",
+          "Приглашение отправлено повторно.",
+          "Invitation was resent.",
           locale,
         ),
       );
@@ -1585,8 +1583,8 @@ const Employees = ({
         requestError instanceof Error
           ? requestError.message
             : runtimeLocalize(
-              "Не удалось обновить приглашение.",
-              "Failed to refresh invitation.",
+              "Не удалось отправить приглашение повторно.",
+              "Failed to resend invitation.",
               locale,
             ),
       );
@@ -1906,19 +1904,30 @@ const Employees = ({
 
     setTaskError(null);
 
+    if (taskDraft.isRecurring && taskDraft.weekDays.length === 0) {
+      setTaskError(
+        runtimeLocalize(
+          "Выберите хотя бы один день повтора.",
+          "Select at least one recurring day.",
+          locale,
+        ),
+      );
+      return;
+    }
+
     if (taskDraft.hasDueTime) {
-      if (taskDraft.isRecurring) {
-        if (!taskDraft.dueTimeLocal) {
-          setTaskError(
-            runtimeLocalize(
-              "Выберите время выполнения.",
-              "Select a due time.",
-              locale,
-            ),
-          );
-          return;
-        }
-      } else {
+      if (taskDraft.isRecurring && !taskDraft.dueTimeLocal) {
+        setTaskError(
+          runtimeLocalize(
+            "Выберите точное время.",
+            "Select an exact time.",
+            locale,
+          ),
+        );
+        return;
+      }
+
+      if (!taskDraft.isRecurring) {
         const dueDate = taskDraft.dueAt ? new Date(taskDraft.dueAt) : null;
         if (!dueDate || Number.isNaN(dueDate.getTime()) || dueDate < new Date()) {
           setTaskError(
@@ -1957,12 +1966,10 @@ const Employees = ({
             priority: taskDraft.priority,
             requiresPhoto: taskDraft.requiresPhoto || undefined,
             expandOnDemand: true,
-            frequency: taskDraft.frequency,
-            weekDays:
-              taskDraft.frequency === "WEEKLY" ? taskDraft.weekDays : undefined,
+            frequency: "WEEKLY",
+            weekDays: taskDraft.weekDays,
             startDate:
               taskDraft.startDate || new Date().toISOString().split("T")[0],
-            endDate: taskDraft.endDate || undefined,
             dueAfterDays: 0,
             dueTimeLocal: taskDraft.hasDueTime
               ? taskDraft.dueTimeLocal || undefined
@@ -2294,9 +2301,8 @@ const Employees = ({
                         <Avatar
                           alt={employee.name}
                           className="shrink-0"
-                          initials={getEmployeeInitials(employee.name)}
                           size="sm"
-                          src={employee.avatarUrl ?? null}
+                          src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
                         />
                         <div className="min-w-0 space-y-0.5">
                           <p className="truncate text-base font-medium text-[color:var(--foreground)]">
@@ -2579,7 +2585,7 @@ const Employees = ({
                           size="sm"
                           variant="outline"
                         >
-                          <Mail className="h-4 w-4" /> {runtimeLocalize("Обновить", "Refresh", locale)}
+                          <Mail className="h-4 w-4" /> {runtimeLocalize("Отправить повторно", "Resend", locale)}
                         </Button>
                       </>
                     ) : (
@@ -3039,9 +3045,8 @@ const Employees = ({
                       <Avatar
                         alt={employee.name}
                         className="shrink-0"
-                        initials={getEmployeeInitials(employee.name)}
                         size="md"
-                        src={employee.avatarUrl ?? null}
+                        src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
                       />
                       <div className="min-w-0">
                         <p className="truncate font-heading font-medium text-foreground">
@@ -3547,24 +3552,24 @@ const Employees = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Input
-                onChange={(event) =>
+              <TaskTimePicker
+                locale={locale}
+                onChange={(value) =>
                   setTemplateDraft((current) => ({
                     ...current,
-                    startsAtLocal: event.target.value,
+                    startsAtLocal: value,
                   }))
                 }
-                type="time"
                 value={templateDraft.startsAtLocal}
               />
-              <Input
-                onChange={(event) =>
+              <TaskTimePicker
+                locale={locale}
+                onChange={(value) =>
                   setTemplateDraft((current) => ({
                     ...current,
-                    endsAtLocal: event.target.value,
+                    endsAtLocal: value,
                   }))
                 }
-                type="time"
                 value={templateDraft.endsAtLocal}
               />
             </div>
@@ -3588,15 +3593,14 @@ const Employees = ({
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
-                    <Input
-                      className="h-11"
-                      onChange={(event) =>
+                    <TaskTimePicker
+                      locale={locale}
+                      onChange={(value) =>
                         setTemplateDraft((current) => ({
                           ...current,
-                          fixedBreakStartsAtLocal: event.target.value,
+                          fixedBreakStartsAtLocal: value,
                         }))
                       }
-                      type="time"
                       value={templateDraft.fixedBreakStartsAtLocal}
                     />
                   </label>
@@ -3701,12 +3705,11 @@ const Employees = ({
                   <Avatar
                     alt={selectedEmployee.name}
                     className="shrink-0 shadow-[0_12px_32px_rgba(40,75,255,0.16)]"
-                    initials={getEmployeeInitials(selectedEmployee.name)}
                     size="2xl"
                     src={
                       selectedEmployeeDetails
                         ? getAvatarSrc(selectedEmployeeDetails)
-                        : selectedEmployee.avatarUrl ?? null
+                        : selectedEmployee.avatarUrl ?? getMockAvatarDataUrl(selectedEmployee.name)
                     }
                   />
                   <DialogHeader className="gap-2 pr-10">
@@ -4220,30 +4223,33 @@ const Employees = ({
               </label>
               {!taskDraft.isRecurring ? (
                 <div className="grid gap-2 text-sm font-heading">
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(190px,240px)]">
-                    <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
-                    <Checkbox
-                      checked={taskDraft.hasDueTime}
-                      onCheckedChange={(checked) =>
-                        setTaskDraft((current) => ({
-                          ...current,
-                          hasDueTime: checked === true,
-                          dueAt: checked === true ? current.dueAt : "",
-                        }))
-                      }
-                    />
-                    <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
+                  <div className="grid gap-2">
+                    <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3 py-2">
+                      <Checkbox
+                        checked={taskDraft.hasDueTime}
+                        onCheckedChange={(checked) =>
+                          setTaskDraft((current) => ({
+                            ...current,
+                            hasDueTime: checked === true,
+                            dueAt: checked === true ? current.dueAt : "",
+                          }))
+                        }
+                      />
+                      <span className="leading-snug">
+                        {runtimeLocalize("Сделать до времени", "Set deadline time", locale)}
+                      </span>
                     </label>
-                    <Input
-                      className="h-11"
-                      disabled={!taskDraft.hasDueTime}
-                      onChange={(event) =>
+                    <TaskDateTimePicker
+                      className="sm:grid-cols-[minmax(0,1fr)_118px]"
+                      isDisabled={!taskDraft.hasDueTime}
+                      locale={locale}
+                      minToday
+                      onChange={(value) =>
                         setTaskDraft((current) => ({
                           ...current,
-                          dueAt: event.target.value,
+                          dueAt: value,
                         }))
                       }
-                      type="datetime-local"
                       value={taskDraft.dueAt}
                     />
                   </div>
@@ -4274,6 +4280,8 @@ const Employees = ({
                     setTaskDraft((current) => ({
                       ...current,
                       isRecurring: checked === true,
+                      dueAt: checked === true ? "" : current.dueAt,
+                      hasDueTime: checked === true ? false : current.hasDueTime,
                     }))
                   }
                 />
@@ -4301,117 +4309,81 @@ const Employees = ({
               </label>
             </div>
             {taskDraft.isRecurring ? (
-              <div className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-dashed border-border p-4 bg-secondary/10">
+              <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Периодичность", "Frequency", locale)}</span>
-                  <AppSelectField
-                    value={taskDraft.frequency}
-                    onValueChange={(value) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        frequency: value as "DAILY" | "WEEKLY" | "MONTHLY",
-                      }))
-                    }
-                    options={[
-                      { value: "DAILY", label: runtimeLocalize("Ежедневно", "Daily", locale) },
-                      { value: "WEEKLY", label: runtimeLocalize("Еженедельно", "Weekly", locale) },
-                      { value: "MONTHLY", label: runtimeLocalize("Ежемесячно", "Monthly", locale) },
-                    ]}
-                    triggerClassName="h-11 rounded-xl bg-secondary/30"
-                  />
+                  <span>{runtimeLocalize("Дни повтора", "Recurring days", locale)}</span>
+                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                    {TASK_WEEKDAY_VALUES.map((day) => {
+                      const label = getWeekdayShortLabel(day, locale);
+                      const isSelected = taskDraft.weekDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          className={`flex aspect-square w-full min-w-0 items-center justify-center rounded-full text-[11px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] sm:text-xs ${
+                            isSelected
+                              ? "bg-[color:var(--primary)] text-white shadow-[0_8px_18px_rgba(37,99,235,0.22)]"
+                              : "border border-border/70 bg-white text-foreground hover:bg-secondary/50"
+                          }`}
+                          onClick={() => {
+                            setTaskDraft((current) => ({
+                              ...current,
+                              weekDays: isSelected
+                                ? current.weekDays.filter((d) => d !== day)
+                                : [...current.weekDays, day].sort((left, right) => left - right),
+                            }));
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Начало", "Start date", locale)}</span>
-                  <Input
-                    className="h-11"
-                    onChange={(event) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        startDate: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    value={taskDraft.startDate}
-                  />
-                </label>
-                <div className="grid gap-2 text-sm font-heading sm:grid-cols-[minmax(0,1fr)_minmax(140px,180px)]">
-                  <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
-                    <Checkbox
-                      checked={taskDraft.hasDueTime}
-                      onCheckedChange={(checked) =>
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>{runtimeLocalize("Начало", "Start date", locale)}</span>
+                    <TaskDatePicker
+                      locale={locale}
+                      onChange={(value) =>
                         setTaskDraft((current) => ({
                           ...current,
-                          hasDueTime: checked === true,
-                          dueTimeLocal:
-                            checked === true
-                              ? current.dueTimeLocal || "18:00"
-                              : current.dueTimeLocal,
+                          startDate: value,
                         }))
                       }
+                      value={taskDraft.startDate}
                     />
-                    <span>{runtimeLocalize("Сделать до времени", "Set deadline time", locale)}</span>
                   </label>
-                  <Input
-                    className="h-11"
-                    disabled={!taskDraft.hasDueTime}
-                    onChange={(event) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        dueTimeLocal: event.target.value,
-                      }))
-                    }
-                    type="time"
-                    value={taskDraft.dueTimeLocal}
-                  />
+                  <div className="grid gap-2 text-sm font-heading">
+                    <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-white px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]">
+                      <Checkbox
+                        checked={taskDraft.hasDueTime}
+                        onCheckedChange={(checked) =>
+                          setTaskDraft((current) => ({
+                            ...current,
+                            hasDueTime: checked === true,
+                            dueTimeLocal:
+                              checked === true
+                                ? current.dueTimeLocal || "18:00"
+                                : current.dueTimeLocal,
+                          }))
+                        }
+                      />
+                      <span>{runtimeLocalize("Точное время", "Exact time", locale)}</span>
+                    </label>
+                    <TaskTimePicker
+                      isDisabled={!taskDraft.hasDueTime}
+                      locale={locale}
+                      onChange={(value) =>
+                        setTaskDraft((current) => ({
+                          ...current,
+                          dueTimeLocal: value,
+                        }))
+                      }
+                      value={taskDraft.hasDueTime ? taskDraft.dueTimeLocal : ""}
+                    />
+                  </div>
                 </div>
-                {taskDraft.frequency === "WEEKLY" ? (
-                  <label className="col-span-full grid gap-2 text-sm font-heading">
-                    <span>{runtimeLocalize("Дни недели", "Weekdays", locale)}</span>
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 2, 3, 4, 5, 6, 7].map((day) => {
-                        const label = getWeekdayShortLabel(day, locale);
-                        const isSelected = taskDraft.weekDays.includes(day);
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${isSelected ? "bg-[color:var(--primary)] text-white" : "bg-secondary text-foreground hover:bg-secondary/80"}`}
-                            onClick={() => {
-                              setTaskDraft((current) => ({
-                                ...current,
-                                weekDays: isSelected
-                                  ? current.weekDays.filter((d) => d !== day)
-                                  : [...current.weekDays, day].sort(),
-                              }));
-                            }}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </label>
-                ) : null}
-                <label className="col-span-full grid gap-2 text-sm font-heading">
-                  <span>
-                    {runtimeLocalize(
-                      "Дата окончания (необязательно)",
-                      "End date (optional)",
-                      locale,
-                    )}
-                  </span>
-                  <Input
-                    className="h-11"
-                    onChange={(event) =>
-                      setTaskDraft((current) => ({
-                        ...current,
-                        endDate: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    value={taskDraft.endDate || ""}
-                  />
-                </label>
               </div>
             ) : null}
             {taskError ? <div className="error-box">{taskError}</div> : null}
@@ -4425,7 +4397,15 @@ const Employees = ({
               </Button>
               <Button
                 className="rounded-xl font-heading"
-                disabled={taskSubmitting || !taskDraft.title.trim()}
+                disabled={
+                  taskSubmitting ||
+                  !taskDraft.title.trim() ||
+                  (taskDraft.isRecurring && taskDraft.weekDays.length === 0) ||
+                  (taskDraft.hasDueTime &&
+                    (taskDraft.isRecurring
+                      ? !taskDraft.dueTimeLocal
+                      : !taskDraft.dueAt))
+                }
                 onClick={() => void handleCreateTask()}
               >
                 {taskSubmitting
@@ -4548,9 +4528,8 @@ const Employees = ({
                         <Avatar
                           alt={employee.name}
                           className="shrink-0"
-                          initials={getEmployeeInitials(employee.name)}
                           size="md"
-                          src={employee.avatarUrl ?? null}
+                          src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
                         />
                         <div className="min-w-0">
                           <p className="truncate font-heading font-medium text-foreground">
@@ -4729,15 +4708,14 @@ const Employees = ({
             </label>
             <label className="grid gap-2 text-sm font-heading">
               <span>{runtimeLocalize("Дата", "Date", locale)}</span>
-              <Input
-                className="h-11"
-                onChange={(event) =>
+              <TaskDatePicker
+                locale={locale}
+                onChange={(value) =>
                   setAssignShiftDraft((current) => ({
                     ...current,
-                    shiftDate: event.target.value,
+                    shiftDate: value,
                   }))
                 }
-                type="date"
                 value={assignShiftDraft.shiftDate}
               />
             </label>
@@ -4760,15 +4738,14 @@ const Employees = ({
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
-                    <Input
-                      className="h-11"
-                      onChange={(event) =>
+                    <TaskTimePicker
+                      locale={locale}
+                      onChange={(value) =>
                         setAssignShiftDraft((current) => ({
                           ...current,
-                          fixedBreakStartsAtLocal: event.target.value,
+                          fixedBreakStartsAtLocal: value,
                         }))
                       }
-                      type="time"
                       value={assignShiftDraft.fixedBreakStartsAtLocal}
                     />
                   </label>

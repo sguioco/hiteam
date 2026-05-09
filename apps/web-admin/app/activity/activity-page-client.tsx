@@ -14,13 +14,13 @@ import {
   getActivityIcon,
   getActivityIconTone,
   getAvatarSource,
-  getInitials,
   resolveActionCopy,
   resolveTargetLabel,
 } from "@/components/dashboard/DailyActivityPanel";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { cn } from "@/lib/utils";
 
 type PeriodPreset = "7d" | "14d" | "custom";
@@ -165,8 +165,11 @@ function ActivityFeedItem({
               />
             </div>
           ) : (
-            <div className="daily-activity-actor-avatar daily-activity-actor-avatar--fallback">
-              {getInitials(actorName)}
+            <div className="daily-activity-actor-avatar">
+              <img
+                alt={actorName}
+                src={getMockAvatarDataUrl(actorName)}
+              />
             </div>
           )}
 

@@ -51,6 +51,7 @@ import {
   type GroupMemberOption,
   type GroupOption,
 } from '../../lib/manager-group-options';
+import { resolveEmployeeAvatarSource } from '../../lib/employee-avatar';
 import {
   NewsImageCropperModal,
   type NewsImageDraft,
@@ -61,8 +62,8 @@ import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
-  getBottomSheetActionBottomOffset,
-  getBottomSheetActionReservedSpace,
+  getScreenActionBottomOffset,
+  getScreenActionReservedSpace,
 } from '../components/bottom-sheet-actions';
 
 type NewsOptionCheckboxProps = {
@@ -250,14 +251,22 @@ function CreateNewsSubmitButton({
   );
 }
 
-function getEmployeeInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
-
 function getEmployeeSubtitle(employee: GroupMemberOption | EmployeeOption) {
   return 'department' in employee
     ? employee.department?.name ?? employee.position?.name ?? employee.email
     : employee.departmentName ?? '';
+}
+
+function getEmployeeAvatarSource(employee: GroupMemberOption | EmployeeOption) {
+  return resolveEmployeeAvatarSource({
+    avatar: 'avatar' in employee ? employee.avatar : undefined,
+    email: 'email' in employee ? employee.email : undefined,
+    employeeNumber: 'employeeNumber' in employee ? employee.employeeNumber : undefined,
+    firstName: employee.firstName,
+    gender: employee.gender,
+    id: employee.id,
+    lastName: employee.lastName,
+  });
 }
 
 export default function CreateNewsScreen() {
@@ -377,8 +386,8 @@ export default function CreateNewsScreen() {
     [selectedGroupMemberIdSet, selectedParticipants],
   );
   const shouldScrollParticipantSheet = groups.length + orderedEmployees.length > 5;
-  const submitButtonBottom = getBottomSheetActionBottomOffset(insets.bottom);
-  const submitButtonContentPadding = getBottomSheetActionReservedSpace(insets.bottom) + 20;
+  const submitButtonBottom = getScreenActionBottomOffset(insets.bottom);
+  const submitButtonContentPadding = getScreenActionReservedSpace(insets.bottom) + 20;
   const locationSuggestionQuery = locationAddressQuery.trim();
   const shouldShowLocationSuggestions =
     !locationSuggestionsSuppressed &&
@@ -562,15 +571,7 @@ export default function CreateNewsScreen() {
           <View className={`h-6 w-6 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
             {isSelected ? <Ionicons color="#ffffff" name="checkmark" size={14} /> : null}
           </View>
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-            {'avatar' in employee && employee.avatar ? (
-              <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-            ) : (
-              <Text className="text-[12px] font-extrabold text-foreground">
-                {getEmployeeInitials(employee.firstName, employee.lastName)}
-              </Text>
-            )}
-          </View>
+          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">
               {employee.firstName} {employee.lastName}
@@ -1159,7 +1160,7 @@ export default function CreateNewsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#41e4f6]">
+    <SafeAreaView className="flex-1 bg-[#d8fbff]">
       <AppGradientBackground />
       <StatusBar backgroundColor="transparent" style="dark" translucent />
       <View className="flex-1">
@@ -1670,15 +1671,7 @@ export default function CreateNewsScreen() {
                   ))}
                   {individuallySelectedEmployees.map((employee) => (
                     <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
-                      <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                        {employee.avatar ? (
-                          <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-                        ) : (
-                          <Text className="text-[12px] font-extrabold text-foreground">
-                            {getEmployeeInitials(employee.firstName, employee.lastName)}
-                          </Text>
-                        )}
-                      </View>
+                      <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
                       <View className="flex-1">
                         <Text className="text-[14px] font-semibold text-foreground">
                           {employee.firstName} {employee.lastName}

@@ -30,6 +30,12 @@ export type BillingSummary = {
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   serviceActive: boolean;
+  stripeConnected: boolean;
+  stripeSubscriptionId: string | null;
+  stripeSubscriptionStatus: string;
+  stripeCancelAtPeriodEnd: boolean;
+  stripeCurrentPeriodStart: string | null;
+  stripeCurrentPeriodEnd: string | null;
   price: {
     regionCode: string;
     regionLabel: string;
@@ -37,8 +43,14 @@ export type BillingSummary = {
     currency: BillingCurrency;
     unitAmount: number;
     approxUsd: number | null;
+    stripeLookupKey: string;
     locationConfigured: boolean;
   };
+};
+
+type BillingRedirectResponse = {
+  mode: "checkout" | "portal";
+  url: string | null;
 };
 
 export type BillingPageInitialData = BillingSummary;
@@ -174,6 +186,7 @@ export default function BillingPageClient({
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
+  const [billingActionLoading, setBillingActionLoading] = useState(false);
 
   const usagePercent = useMemo(() => {
     if (!summary?.requiredSeats) return 0;
@@ -274,8 +287,52 @@ export default function BillingPageClient({
     }
   }
 
+  async function openBillingFlow() {
+    const session = getSession();
+    if (!session) {
+      setError(
+        locale === "ru"
+          ? "Сессия истекла. Войди заново"
+          : "Session expired. Sign in again",
+      );
+      return;
+    }
+
+    try {
+      setBillingActionLoading(true);
+      setError(null);
+      const path = summary?.stripeConnected ? "/billing/portal" : "/billing/checkout";
+      const redirect = await apiRequest<BillingRedirectResponse>(path, {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+
+      if (redirect.url) {
+        window.location.assign(redirect.url);
+        return;
+      }
+
+      await loadBilling();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось открыть оплату"
+            : "Failed to open billing",
+      );
+    } finally {
+      setBillingActionLoading(false);
+    }
+  }
+
   useEffect(() => {
-    if (!initialData) {
+    const shouldRefreshAfterStripe =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("stripe");
+
+    if (!initialData || shouldRefreshAfterStripe) {
       void loadBilling();
     }
   }, []);
@@ -515,27 +572,64 @@ export default function BillingPageClient({
                     </div>
                     <div className="font-heading">
                       <p className="font-semibold text-foreground">
-                        {locale === "ru"
-                          ? "Платежный метод не подключен"
-                          : "No payment method connected"}
+                        {summary.stripeConnected
+                          ? locale === "ru"
+                            ? "Оплата подключена через Stripe"
+                            : "Billing is connected through Stripe"
+                          : locale === "ru"
+                            ? "Платежный метод не подключен"
+                            : "No payment method connected"}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {locale === "ru"
-                          ? "После подключения платежи закроют недостающие места"
-                          : "Once connected, payments will cover missing seats"}
+                        {summary.stripeConnected
+                          ? locale === "ru"
+                            ? "Карта, счета и подписка управляются в Stripe"
+                            : "Cards, invoices and subscription details are managed in Stripe"
+                          : locale === "ru"
+                            ? "После подключения платежи закроют недостающие места"
+                            : "Once connected, payments will cover missing seats"}
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-4 py-2 font-heading text-sm font-medium text-muted-foreground">
-                    {locale === "ru" ? "Ожидает" : "Pending"}
+                  <span
+                    className={`rounded-full px-4 py-2 font-heading text-sm font-medium ${
+                      summary.stripeConnected
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-muted-foreground"
+                    }`}
+                  >
+                    {summary.stripeConnected
+                      ? locale === "ru"
+                        ? "Подключено"
+                        : "Connected"
+                      : locale === "ru"
+                        ? "Ожидает"
+                        : "Pending"}
                   </span>
                 </div>
-                <div className="mt-5 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(15,23,42,0.16)] font-heading text-sm font-medium text-foreground">
+                <button
+                  className="mt-5 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(15,23,42,0.16)] font-heading text-sm font-medium text-foreground transition-[background-color,transform] hover:bg-blue-50 active:scale-[0.96] disabled:cursor-wait disabled:opacity-60"
+                  disabled={billingActionLoading}
+                  onClick={openBillingFlow}
+                  type="button"
+                >
                   <CreditCard className="size-4" />
-                  {locale === "ru"
-                    ? "Подключается через платежного провайдера"
-                    : "Managed through the payment provider"}
-                </div>
+                  {billingActionLoading
+                    ? locale === "ru"
+                      ? "Открываем Stripe..."
+                      : "Opening Stripe..."
+                    : summary.stripeConnected
+                      ? locale === "ru"
+                        ? "Управлять оплатой в Stripe"
+                        : "Manage billing in Stripe"
+                      : summary.missingSeats > 0
+                        ? locale === "ru"
+                          ? "Оплатить места в Stripe"
+                          : "Pay seats in Stripe"
+                        : locale === "ru"
+                          ? "Подключить оплату Stripe"
+                          : "Connect Stripe billing"}
+                </button>
               </article>
 
               <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">

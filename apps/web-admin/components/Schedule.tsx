@@ -6,6 +6,7 @@ import {
   Camera,
   Calendar,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -32,6 +33,7 @@ import {
   TaskItem,
 } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
+import { TimePicker } from "@/components/application/time-picker/time-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -178,7 +180,7 @@ type CalendarDayEntry = {
 };
 
 type CreateShiftDraft = {
-  employeeId: string;
+  employeeIds: string[];
   templateId: string;
   shiftDate: string;
   fixedBreakEnabled: boolean;
@@ -223,15 +225,6 @@ function buildEmployeeName(employee: {
     .filter(Boolean)
     .join(" ")
     .trim();
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((chunk) => chunk[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 function cloneDate(value: Date) {
@@ -705,11 +698,12 @@ const scheduleCopy = {
     createdShift: "Создана смена",
     createdTemplate: "Создан шаблон",
     createShiftDialogTitle: "Создать смену",
-    createShiftDialogDescription: "Назначьте сотрудника на конкретную дату по одному из шаблонов.",
+    createShiftDialogDescription: "Назначьте одного или нескольких сотрудников на дату по шаблону.",
     editShiftDialogTitle: "Изменить смену",
     editShiftDialogDescription: "Измените сотрудника, шаблон, дату или перерыв этой смены",
     employee: "Сотрудник",
     selectEmployee: "Выберите сотрудника",
+    selectedEmployees: (count: number) => `Выбрано сотрудников: ${count}`,
     shiftTemplate: "Шаблон смены",
     selectTemplate: "Выберите шаблон",
     date: "Дата",
@@ -832,11 +826,12 @@ const scheduleCopy = {
     createdShift: "Shift created",
     createdTemplate: "Template created",
     createShiftDialogTitle: "Create shift",
-    createShiftDialogDescription: "Assign an employee to a date using one of the templates.",
+    createShiftDialogDescription: "Assign one or more employees to a date using a template.",
     editShiftDialogTitle: "Edit shift",
     editShiftDialogDescription: "Change the employee, template, date, or break for this shift",
     employee: "Employee",
     selectEmployee: "Select employee",
+    selectedEmployees: (count: number) => `${count} employees selected`,
     shiftTemplate: "Shift template",
     selectTemplate: "Select template",
     date: "Date",
@@ -959,9 +954,11 @@ export default function Schedule({
   const [shiftActionId, setShiftActionId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [massAssignOpen, setMassAssignOpen] = useState(false);
+  const [createShiftEmployeePickerOpen, setCreateShiftEmployeePickerOpen] =
+    useState(false);
 
   const [createShiftDraft, setCreateShiftDraft] = useState<CreateShiftDraft>({
-    employeeId: "",
+    employeeIds: [],
     templateId: "",
     shiftDate: formatDateInput(today),
     fixedBreakEnabled: false,
@@ -1001,15 +998,15 @@ export default function Schedule({
       fixedBreakEnabled: duration > 0,
       fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
       fixedBreakDurationMinutes: String(duration || 30),
-      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
+      fixedBreakIsPaid: false,
     };
   }
 
-  function buildShiftPayload(draft: CreateShiftDraft) {
+  function buildShiftPayload(draft: CreateShiftDraft, employeeId: string) {
     const fixedBreakDuration = Number(draft.fixedBreakDurationMinutes);
 
     return {
-      employeeId: draft.employeeId,
+      employeeId,
       templateId: draft.templateId,
       shiftDate: draft.shiftDate,
       fixedBreakStartsAtLocal: draft.fixedBreakEnabled
@@ -1019,7 +1016,7 @@ export default function Schedule({
         ? fixedBreakDuration
         : 0,
       fixedBreakIsPaid: draft.fixedBreakEnabled
-        ? draft.fixedBreakIsPaid
+        ? false
         : false,
     };
   }
@@ -1096,6 +1093,38 @@ export default function Schedule({
         : employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
     [employees, selectedEmployeeId],
   );
+
+  const createShiftSelectedEmployees = useMemo(() => {
+    const selectedIds = new Set(createShiftDraft.employeeIds);
+    return employees.filter((employee) => selectedIds.has(employee.id));
+  }, [createShiftDraft.employeeIds, employees]);
+
+  const createShiftEmployeeLabel =
+    createShiftSelectedEmployees.length === 0
+      ? ui.selectEmployee
+      : createShiftSelectedEmployees.length === 1
+        ? buildEmployeeName(createShiftSelectedEmployees[0])
+        : ui.selectedEmployees(createShiftSelectedEmployees.length);
+
+  function toggleCreateShiftEmployee(employeeId: string) {
+    setCreateShiftDraft((current) => {
+      if (editingShiftId) {
+        return {
+          ...current,
+          employeeIds: [employeeId],
+        };
+      }
+
+      const isSelected = current.employeeIds.includes(employeeId);
+
+      return {
+        ...current,
+        employeeIds: isSelected
+          ? current.employeeIds.filter((id) => id !== employeeId)
+          : [...current.employeeIds, employeeId],
+      };
+    });
+  }
 
   const employeeById = useMemo(
     () =>
@@ -1898,12 +1927,17 @@ export default function Schedule({
 
   useEffect(() => {
     if (!createShiftOpen) {
+      setCreateShiftEmployeePickerOpen(false);
       return;
     }
 
     setCreateShiftDraft((current) => ({
-      employeeId:
-        current.employeeId || (selectedEmployeeId !== "all" ? selectedEmployeeId : ""),
+      employeeIds:
+        current.employeeIds.length > 0
+          ? current.employeeIds
+          : selectedEmployeeId !== "all"
+            ? [selectedEmployeeId]
+            : [],
       templateId: current.templateId,
       shiftDate:
         current.shiftDate || formatDateInput(selectedDay ?? currentDate ?? new Date()),
@@ -1945,7 +1979,7 @@ export default function Schedule({
 
   function resetCreateShiftDraft(nextDate = selectedDay ?? today) {
     setCreateShiftDraft({
-      employeeId: selectedEmployeeId !== "all" ? selectedEmployeeId : "",
+      employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
       templateId: "",
       shiftDate: formatDateInput(nextDate),
       fixedBreakEnabled: false,
@@ -1957,10 +1991,10 @@ export default function Schedule({
 
   function openCreateShiftForDay(day = selectedDay ?? today) {
     setEditingShiftId(null);
+    setCreateShiftEmployeePickerOpen(false);
     setCreateShiftDraft({
       shiftDate: formatDateInput(day),
-      employeeId:
-        selectedEmployeeId !== "all" ? selectedEmployeeId : "",
+      employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
       templateId: "",
       fixedBreakEnabled: false,
       fixedBreakStartsAtLocal: "13:00",
@@ -1972,8 +2006,9 @@ export default function Schedule({
 
   function openEditShiftDialog(shift: EnrichedShift) {
     setEditingShiftId(shift.id);
+    setCreateShiftEmployeePickerOpen(false);
     setCreateShiftDraft({
-      employeeId: shift.employeeId,
+      employeeIds: [shift.employeeId],
       templateId: shift.templateId,
       shiftDate: formatDateInput(shift.shiftDate),
       fixedBreakEnabled: shift.fixedBreakDurationMinutes > 0,
@@ -1983,7 +2018,7 @@ export default function Schedule({
       fixedBreakDurationMinutes: String(
         shift.fixedBreakDurationMinutes > 0 ? shift.fixedBreakDurationMinutes : 30,
       ),
-      fixedBreakIsPaid: shift.fixedBreakIsPaid,
+      fixedBreakIsPaid: false,
     });
     setCreateShiftOpen(true);
   }
@@ -2025,8 +2060,17 @@ export default function Schedule({
   async function handleCreateShift() {
     const session = getSession();
     const wasEditing = Boolean(editingShiftId);
+    const selectedCreateShiftEmployeeIds = Array.from(
+      new Set(
+        editingShiftId
+          ? createShiftDraft.employeeIds.slice(0, 1)
+          : createShiftDraft.employeeIds,
+      ),
+    );
+    const primaryEmployeeId = selectedCreateShiftEmployeeIds[0];
+
     if (
-      !createShiftDraft.employeeId ||
+      !primaryEmployeeId ||
       !createShiftDraft.templateId ||
       !createShiftDraft.shiftDate
     ) {
@@ -2058,15 +2102,23 @@ export default function Schedule({
     }
 
     if (!session || isMockMode) {
-      const employee = employees.find((item) => item.id === createShiftDraft.employeeId);
       const template = templates.find((item) => item.id === createShiftDraft.templateId);
-      if (!employee || !template) {
+      const selectedEmployees = selectedCreateShiftEmployeeIds
+        .map((employeeId) => employees.find((item) => item.id === employeeId))
+        .filter((employee): employee is EmployeeApiRecord => Boolean(employee));
+
+      if (selectedEmployees.length === 0 || !template) {
+        setMessage(ui.templateNotFound);
+        return;
+      }
+      const primaryEmployee = selectedEmployees[0];
+      if (!primaryEmployee) {
         setMessage(ui.templateNotFound);
         return;
       }
 
       const now = new Date().toISOString();
-      const nextShiftData = {
+      const buildMockShiftData = (employee: EmployeeApiRecord) => ({
         shiftDate: createShiftDraft.shiftDate,
         startsAt: new Date(`${createShiftDraft.shiftDate}T${template.startsAtLocal}:00`).toISOString(),
         endsAt: new Date(`${createShiftDraft.shiftDate}T${template.endsAtLocal}:00`).toISOString(),
@@ -2077,7 +2129,7 @@ export default function Schedule({
           ? Number(createShiftDraft.fixedBreakDurationMinutes)
           : 0,
         fixedBreakIsPaid: createShiftDraft.fixedBreakEnabled
-          ? createShiftDraft.fixedBreakIsPaid
+          ? false
           : false,
         employee: {
           id: employee.id,
@@ -2088,7 +2140,15 @@ export default function Schedule({
         location: template.location,
         position: template.position,
         template,
-      };
+      });
+      const nextMockShifts: ShiftRecord[] = selectedEmployees.map((employee, index) => ({
+        id: `mock-shift-${Date.now()}-${index}`,
+        ...buildMockShiftData(employee),
+        status: "PUBLISHED",
+        createdAt: now,
+        updatedAt: now,
+        createdByEmployee: null,
+      }));
 
       setShifts((current) =>
         editingShiftId
@@ -2096,22 +2156,12 @@ export default function Schedule({
               shift.id === editingShiftId
                 ? {
                     ...shift,
-                    ...nextShiftData,
+                    ...buildMockShiftData(primaryEmployee),
                     updatedAt: now,
                   }
                 : shift,
             )
-          : [
-              {
-                id: `mock-shift-${current.length + 1}`,
-                ...nextShiftData,
-                status: "PUBLISHED",
-                createdAt: now,
-                updatedAt: now,
-                createdByEmployee: null,
-              },
-              ...current,
-            ],
+          : [...nextMockShifts, ...current],
       );
       setCreateShiftOpen(false);
       setEditingShiftId(null);
@@ -2121,14 +2171,23 @@ export default function Schedule({
     }
 
     try {
-      await apiRequest(
-        editingShiftId ? `/schedule/shifts/${editingShiftId}` : "/schedule/shifts",
-        {
-          method: editingShiftId ? "PATCH" : "POST",
+      if (editingShiftId) {
+        await apiRequest(`/schedule/shifts/${editingShiftId}`, {
+          method: "PATCH",
           token: session.accessToken,
-          body: JSON.stringify(buildShiftPayload(createShiftDraft)),
-        },
-      );
+          body: JSON.stringify(buildShiftPayload(createShiftDraft, primaryEmployeeId)),
+        });
+      } else {
+        await Promise.all(
+          selectedCreateShiftEmployeeIds.map((employeeId) =>
+            apiRequest("/schedule/shifts", {
+              method: "POST",
+              token: session.accessToken,
+              body: JSON.stringify(buildShiftPayload(createShiftDraft, employeeId)),
+            }),
+          ),
+        );
+      }
 
       setCreateShiftOpen(false);
       setEditingShiftId(null);
@@ -2588,7 +2647,7 @@ export default function Schedule({
                                 <SelectOptionContent>
                                   <SelectOptionAvatar
                                     alt={label}
-                                    fallback={getInitials(label)}
+                                    seed={label || employee.id}
                                     src={
                                       employee.avatarUrl ||
                                       getMockAvatarDataUrl(label || employee.id)
@@ -3148,7 +3207,7 @@ export default function Schedule({
         }}
         open={createShiftOpen}
       >
-        <DialogContent className="max-w-xl rounded-[28px]">
+        <DialogContent className="max-w-xl overflow-visible rounded-[28px]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {editingShiftId
@@ -3167,53 +3226,91 @@ export default function Schedule({
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {ui.employee}
               </label>
-              <Select
-                onValueChange={(value) =>
-                  setCreateShiftDraft((current) => ({
-                    ...current,
-                    employeeId: value,
-                  }))
-                }
-                value={createShiftDraft.employeeId}
-              >
-                <SelectTrigger>
-                  <SelectTriggerLabel>
-                    {createShiftDraft.employeeId
-                      ? buildEmployeeName(
-                          employees.find(
-                            (employee) => employee.id === createShiftDraft.employeeId,
-                          ) || {},
-                        )
-                      : ui.selectEmployee}
-                  </SelectTriggerLabel>
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((employee) => {
-                    const label = buildEmployeeName(employee);
-                    return (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        <SelectOptionContent>
+              <div className="relative">
+                <button
+                  aria-expanded={createShiftEmployeePickerOpen}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[20px] border border-border bg-white px-4 py-2.5 text-left text-sm font-medium text-foreground shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-[border-color,box-shadow,transform] duration-150 active:scale-[0.96]"
+                  onClick={() =>
+                    setCreateShiftEmployeePickerOpen((current) => !current)
+                  }
+                  type="button"
+                >
+                  <span
+                    className={`min-w-0 truncate ${
+                      createShiftSelectedEmployees.length > 0
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {createShiftEmployeeLabel}
+                  </span>
+                  <ChevronDown
+                    className={`size-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
+                      createShiftEmployeePickerOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {createShiftEmployeePickerOpen ? (
+                  <div
+                    aria-multiselectable={!editingShiftId}
+                    className="absolute left-0 right-0 z-50 mt-1 max-h-[320px] overflow-y-auto rounded-[26px] border border-border bg-white/95 p-2 shadow-[0_22px_60px_rgba(15,23,42,0.18)] backdrop-blur"
+                    role="listbox"
+                  >
+                    {employees.map((employee) => {
+                      const label = buildEmployeeName(employee);
+                      const isSelected = createShiftDraft.employeeIds.includes(employee.id);
+
+                      return (
+                        <button
+                          aria-selected={isSelected}
+                          className={`relative flex min-h-[48px] w-full items-center gap-3 rounded-[20px] px-3 py-2 pr-10 text-left transition-[background-color,color,transform] duration-150 active:scale-[0.96] ${
+                            isSelected
+                              ? "bg-[color:var(--accent)] text-white"
+                              : "text-foreground hover:bg-[rgba(15,23,42,0.05)]"
+                          }`}
+                          key={employee.id}
+                          onClick={() => {
+                            toggleCreateShiftEmployee(employee.id);
+                            if (editingShiftId) {
+                              setCreateShiftEmployeePickerOpen(false);
+                            }
+                          }}
+                          role="option"
+                          type="button"
+                        >
                           <SelectOptionAvatar
                             alt={label}
-                            fallback={getInitials(label)}
+                            seed={label || employee.id}
                             src={
                               employee.avatarUrl ||
                               getMockAvatarDataUrl(label || employee.id)
                             }
                           />
-                          <SelectOptionText>
-                            <SelectOptionTitle>{label}</SelectOptionTitle>
-                            <SelectOptionDescription data-select-description>
+                          <span className="grid min-w-0 gap-0.5">
+                            <span className="truncate text-sm font-semibold leading-[1.2] text-current">
+                              {label}
+                            </span>
+                            <span
+                              className={`truncate text-xs leading-[1.25] ${
+                                isSelected
+                                  ? "text-white/75"
+                                  : "text-[rgba(72,84,104,0.72)]"
+                              }`}
+                            >
                               {employee.position?.name || ui.employee} ·{" "}
                               {employee.employeeNumber}
-                            </SelectOptionDescription>
-                          </SelectOptionText>
-                        </SelectOptionContent>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+                            </span>
+                          </span>
+                          {isSelected ? (
+                            <Check className="absolute right-3 size-4 text-white" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div>
@@ -3274,8 +3371,8 @@ export default function Schedule({
               />
             </div>
 
-            <div className="md:col-span-2 rounded-[22px] border border-border/70 bg-secondary/30 p-4">
-              <label className="flex items-center gap-3 text-sm font-semibold text-foreground">
+            <div className="space-y-3">
+              <label className="flex min-h-10 items-center gap-3 text-sm font-semibold text-foreground">
                 <input
                   checked={createShiftDraft.fixedBreakEnabled}
                   className="h-4 w-4 rounded border accent-primary"
@@ -3283,6 +3380,7 @@ export default function Schedule({
                     setCreateShiftDraft((current) => ({
                       ...current,
                       fixedBreakEnabled: event.target.checked,
+                      fixedBreakIsPaid: false,
                     }))
                   }
                   type="checkbox"
@@ -3291,23 +3389,24 @@ export default function Schedule({
               </label>
 
               {createShiftDraft.fixedBreakEnabled ? (
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <label className="space-y-1.5">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="w-36 max-w-full space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground">
                       {ui.fixedBreakStart}
                     </span>
-                    <Input
-                      onChange={(event) =>
+                    <TimePicker
+                      buttonClassName="h-11 rounded-[14px]"
+                      doneLabel={locale === "ru" ? "Готово" : "Done"}
+                      onChange={(value) =>
                         setCreateShiftDraft((current) => ({
                           ...current,
-                          fixedBreakStartsAtLocal: event.target.value,
+                          fixedBreakStartsAtLocal: value,
                         }))
                       }
-                      type="time"
                       value={createShiftDraft.fixedBreakStartsAtLocal}
                     />
                   </label>
-                  <label className="space-y-1.5">
+                  <label className="w-28 max-w-full space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground">
                       {ui.fixedBreakMinutes}
                     </span>
@@ -3319,23 +3418,10 @@ export default function Schedule({
                           fixedBreakDurationMinutes: event.target.value,
                         }))
                       }
+                      className="h-11 rounded-[14px]"
                       type="number"
                       value={createShiftDraft.fixedBreakDurationMinutes}
                     />
-                  </label>
-                  <label className="flex items-center gap-3 pt-6 text-sm font-semibold text-muted-foreground">
-                    <input
-                      checked={createShiftDraft.fixedBreakIsPaid}
-                      className="h-4 w-4 rounded border accent-primary"
-                      onChange={(event) =>
-                        setCreateShiftDraft((current) => ({
-                          ...current,
-                          fixedBreakIsPaid: event.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    {ui.fixedBreakPaid}
                   </label>
                 </div>
               ) : null}

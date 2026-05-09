@@ -20,6 +20,9 @@ spec:
         {{- if .Values.ingress.frontend.enableWwwRedirect }}
         - "www.{{ .Values.ingress.frontend.host }}"
         {{- end }}
+        {{- range .Values.ingress.frontend.extraHosts }}
+        - {{ . | quote }}
+        {{- end }}
       secretName: {{ include "hiteam.frontendTlsSecret" . | quote }}
   rules:
     - host: {{ .Values.ingress.frontend.host | quote }}
@@ -43,6 +46,18 @@ spec:
                 name: {{ include "hiteam.webAdminServiceName" . }}
                 port:
                   number: {{ .Values.webAdmin.service.port }}
+    {{- end }}
+    {{- range .Values.ingress.frontend.extraHosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" $ }}
+                port:
+                  number: {{ $.Values.webAdmin.service.port }}
     {{- end }}
 ---
 {{- if .Values.ingress.frontend.enableHttpRedirect }}
@@ -80,6 +95,18 @@ spec:
                 name: {{ include "hiteam.webAdminServiceName" . }}
                 port:
                   number: {{ .Values.webAdmin.service.port }}
+    {{- end }}
+    {{- range .Values.ingress.frontend.extraHosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hiteam.webAdminServiceName" $ }}
+                port:
+                  number: {{ $.Values.webAdmin.service.port }}
     {{- end }}
 {{- end }}
 {{- end }}

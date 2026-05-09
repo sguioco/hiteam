@@ -44,6 +44,7 @@ import {
   getRuntimeLocale,
   getRuntimeLocaleTag,
 } from "../../../lib/runtime-locale";
+import { getMockAvatarDataUrl } from "../../../lib/mock-avatar";
 
 type EmployeeDetails = EmployeeDetailRecord;
 
@@ -164,12 +165,6 @@ async function settleRequest<T>(request: Promise<T>) {
   } catch {
     return { ok: false as const };
   }
-}
-
-function getEmployeeInitials(employee: EmployeeDetails | null) {
-  const firstInitial = employee?.firstName?.trim().charAt(0) ?? "";
-  const lastInitial = employee?.lastName?.trim().charAt(0) ?? "";
-  return (firstInitial + lastInitial).toUpperCase() || "—";
 }
 
 function SectionState({
@@ -333,10 +328,6 @@ export default function EmployeeCardPageClient({
   const canPromoteToFieldManager = Boolean(
     managerAccess &&
     (managerAccess.hasManagerAccess || managerAccess.canToggleManagerAccess),
-  );
-  const employeeInitials = useMemo(
-    () => getEmployeeInitials(employee),
-    [employee],
   );
   const selectedVerification = useMemo(
     () =>
@@ -675,23 +666,17 @@ export default function EmployeeCardPageClient({
           </Link>
 
           <div className="flex flex-wrap items-center gap-4">
-            {employee?.avatarUrl ? (
-              <img
-                alt={
-                  employee
-                    ? fullName
-                    : locale === "ru"
-                      ? "Фото сотрудника"
-                      : "Employee photo"
-                }
-                className="size-14 rounded-full object-cover"
-                src={employee.avatarUrl}
-              />
-            ) : (
-              <div className="flex size-14 items-center justify-center rounded-full bg-[#eef3ff] text-sm font-semibold text-[#546cf2]">
-                {employeeInitials}
-              </div>
-            )}
+            <img
+              alt={
+                employee
+                  ? fullName
+                  : locale === "ru"
+                    ? "Фото сотрудника"
+                    : "Employee photo"
+              }
+              className="size-14 rounded-full object-cover"
+              src={employee?.avatarUrl || getMockAvatarDataUrl(fullName)}
+            />
             <div>
               <h1 className="font-heading text-2xl font-bold text-foreground">
                 {fullName}

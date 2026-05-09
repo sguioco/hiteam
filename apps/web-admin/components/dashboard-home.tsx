@@ -65,6 +65,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  TaskDatePicker,
+  TaskDateTimePicker,
+  TaskTimePicker,
+} from "@/components/task-schedule-pickers";
 import { apiRequest } from "@/lib/api";
 import {
   getSession,
@@ -130,10 +135,8 @@ type TaskDraft = {
   hasDueTime: boolean;
   requiresPhoto: boolean;
   isRecurring: boolean;
-  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
   weekDays: number[];
   startDate: string;
-  endDate: string;
   meetingMode: "online" | "offline";
   meetingLink: string;
   meetingLocation: string;
@@ -343,14 +346,13 @@ const initialTaskDraft: TaskDraft = {
   hasDueTime: false,
   requiresPhoto: false,
   isRecurring: false,
-  frequency: "DAILY",
   weekDays: [1, 2, 3, 4, 5],
   startDate: new Date().toISOString().split("T")[0],
-  endDate: "",
   meetingMode: "online",
   meetingLink: "",
   meetingLocation: "",
 };
+const TASK_WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 0];
 
 function getPriorityOptions(locale: "ru" | "en"): Array<{
   value: TaskItem["priority"];
@@ -381,44 +383,37 @@ function getPriorityOptions(locale: "ru" | "en"): Array<{
 }
 
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
+  const normalizedDay = day === 7 ? 0 : day;
+
   if (locale === "en") {
-    return day === 7
+    return normalizedDay === 0
       ? "Su"
-      : day === 1
+      : normalizedDay === 1
         ? "Mo"
-        : day === 2
+        : normalizedDay === 2
           ? "Tu"
-          : day === 3
+          : normalizedDay === 3
             ? "We"
-            : day === 4
+            : normalizedDay === 4
               ? "Th"
-              : day === 5
+              : normalizedDay === 5
                 ? "Fr"
                 : "Sa";
   }
 
-  return day === 7
+  return normalizedDay === 0
     ? "Вс"
-    : day === 1
+    : normalizedDay === 1
       ? "Пн"
-      : day === 2
+      : normalizedDay === 2
         ? "Вт"
-        : day === 3
+        : normalizedDay === 3
           ? "Ср"
-          : day === 4
+          : normalizedDay === 4
             ? "Чт"
-            : day === 5
+            : normalizedDay === 5
               ? "Пт"
               : "Сб";
-}
-
-function getInitials(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 type TaskCheckboxProps = {
@@ -1403,7 +1398,6 @@ export default function DashboardHome({
 
       return {
         id: employee.id,
-        initials: getInitials(fullName),
         name: fullName,
         schedule: session?.shiftLabel ?? localize(locale, "Нет расписания", "No schedule"),
         arrival: getAttendanceArrivalLabel(session, locale),
@@ -1621,6 +1615,23 @@ export default function DashboardHome({
       return;
     }
 
+    if (taskDraft.mode === "task" && taskDraft.isRecurring && taskDraft.weekDays.length === 0) {
+      setMessageAction(null);
+      setMessage(localize(locale, "Выберите хотя бы один день повтора.", "Select at least one recurring day."));
+      return;
+    }
+
+    if (
+      taskDraft.mode === "task" &&
+      taskDraft.isRecurring &&
+      taskDraft.hasDueTime &&
+      !taskDraft.dueTimeLocal
+    ) {
+      setMessageAction(null);
+      setMessage(localize(locale, "Выберите точное время.", "Select an exact time."));
+      return;
+    }
+
     if (taskDueAt) {
       const dueDate = new Date(taskDueAt);
       if (Number.isNaN(dueDate.getTime()) || dueDate < new Date()) {
@@ -1667,15 +1678,11 @@ export default function DashboardHome({
                 priority: taskDraft.priority,
                 requiresPhoto: taskDraft.requiresPhoto || undefined,
                 expandOnDemand: true,
-                frequency: taskDraft.frequency,
-                weekDays:
-                  taskDraft.frequency === "WEEKLY"
-                    ? taskDraft.weekDays
-                    : undefined,
+                frequency: "WEEKLY",
+                weekDays: taskDraft.weekDays,
                 startDate:
                   taskDraft.startDate ||
                   new Date().toISOString().split("T")[0],
-                endDate: taskDraft.endDate || undefined,
                 dueAfterDays: 0,
                 dueTimeLocal: taskDueTimeLocal || undefined,
                 assigneeEmployeeId,
@@ -1693,12 +1700,10 @@ export default function DashboardHome({
             priority: taskDraft.priority,
             requiresPhoto: taskDraft.requiresPhoto || undefined,
             expandOnDemand: true,
-            frequency: taskDraft.frequency,
-            weekDays:
-              taskDraft.frequency === "WEEKLY" ? taskDraft.weekDays : undefined,
+            frequency: "WEEKLY",
+            weekDays: taskDraft.weekDays,
             startDate:
               taskDraft.startDate || new Date().toISOString().split("T")[0],
-            endDate: taskDraft.endDate || undefined,
             dueAfterDays: 0,
             dueTimeLocal: taskDueTimeLocal || undefined,
             groupId: selectedGroupId,
@@ -1801,12 +1806,14 @@ export default function DashboardHome({
       (taskDraft.isRecurring
         ? Boolean(taskDraft.dueTimeLocal)
         : Boolean(taskDraft.dueAt))) &&
+    (taskDraft.mode !== "task" ||
+      !taskDraft.isRecurring ||
+      taskDraft.weekDays.length > 0) &&
     (taskDraft.mode === "task" ||
       (Boolean(taskDraft.dueAt) &&
         (taskDraft.meetingMode === "online"
           ? Boolean(taskDraft.meetingLink.trim())
           : Boolean(taskDraft.meetingLocation.trim()))));
-  const minTaskDateTime = formatDateTimeLocalInput(new Date());
   const selectedPriorityOption =
     priorityOptions.find(
       (item) => item.value === normalizeWebAdminTaskPriority(taskDraft.priority),
@@ -2113,21 +2120,16 @@ export default function DashboardHome({
                         </SelectContent>
                       </Select>
                       {taskDraft.mode === "meeting" ? (
-                        <Input
-                          onChange={(e) =>
-                            setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
+                        <TaskDateTimePicker
+                          locale={locale}
+                          minToday
+                          onChange={(value) =>
+                            setTaskDraft((c) => ({ ...c, dueAt: value }))
                           }
-                          min={minTaskDateTime}
-                          placeholder={localize(
-                            locale,
-                            "Дата и время встречи",
-                            "Meeting date and time",
-                          )}
-                          type="datetime-local"
                           value={taskDraft.dueAt}
                         />
-                      ) : (
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(190px,240px)]">
+                      ) : taskDraft.isRecurring ? null : (
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
                           <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
                             <Checkbox
                               checked={taskDraft.hasDueTime}
@@ -2153,31 +2155,15 @@ export default function DashboardHome({
                               {localize(locale, "Сделать до времени", "Set deadline time")}
                             </span>
                           </label>
-                          {taskDraft.isRecurring ? (
-                            <Input
-                              className="h-11"
-                              disabled={!taskDraft.hasDueTime}
-                              onChange={(event) =>
-                                setTaskDraft((current) => ({
-                                  ...current,
-                                  dueTimeLocal: event.target.value,
-                                }))
-                              }
-                              type="time"
-                              value={taskDraft.dueTimeLocal}
-                            />
-                          ) : (
-                            <Input
-                              className="h-11"
-                              disabled={!taskDraft.hasDueTime}
-                              onChange={(e) =>
-                                setTaskDraft((c) => ({ ...c, dueAt: e.target.value }))
-                              }
-                              min={minTaskDateTime}
-                              type="datetime-local"
-                              value={taskDraft.dueAt}
-                            />
-                          )}
+                          <TaskDateTimePicker
+                            isDisabled={!taskDraft.hasDueTime}
+                            locale={locale}
+                            minToday
+                            onChange={(value) =>
+                              setTaskDraft((c) => ({ ...c, dueAt: value }))
+                            }
+                            value={taskDraft.dueAt}
+                          />
                         </div>
                       )}
                       </div>
@@ -2191,6 +2177,8 @@ export default function DashboardHome({
                                 setTaskDraft((current) => ({
                                   ...current,
                                   isRecurring: checked === true,
+                                  dueAt: checked === true ? "" : current.dueAt,
+                                  hasDueTime: checked === true ? false : current.hasDueTime,
                                 }))
                               }
                             />
@@ -2214,98 +2202,82 @@ export default function DashboardHome({
                           </label>
                           </div>
                           {taskDraft.isRecurring ? (
-                            <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4 sm:grid-cols-2">
+                            <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
                             <label className="grid gap-2 text-sm font-heading">
-                              <span>{localize(locale, "Периодичность", "Frequency")}</span>
-                              <Select
-                                onValueChange={(value) =>
-                                  setTaskDraft((current) => ({
-                                    ...current,
-                                    frequency: value as "DAILY" | "WEEKLY" | "MONTHLY",
-                                  }))
-                                }
-                                value={taskDraft.frequency}
-                              >
-                                <SelectTrigger>
-                                  <SelectTriggerLabel>
-                                    <SelectValue
-                                      placeholder={localize(
-                                        locale,
-                                        "Выберите периодичность",
-                                        "Select frequency",
-                                      )}
-                                    />
-                                  </SelectTriggerLabel>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="DAILY">{localize(locale, "Ежедневно", "Daily")}</SelectItem>
-                                  <SelectItem value="WEEKLY">{localize(locale, "Еженедельно", "Weekly")}</SelectItem>
-                                  <SelectItem value="MONTHLY">{localize(locale, "Ежемесячно", "Monthly")}</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </label>
-                            <label className="grid gap-2 text-sm font-heading">
-                              <span>{localize(locale, "Начало", "Start date")}</span>
-                              <Input
-                                className="h-11"
-                                onChange={(event) =>
-                                  setTaskDraft((current) => ({
-                                    ...current,
-                                    startDate: event.target.value,
-                                  }))
-                                }
-                                type="date"
-                                value={taskDraft.startDate}
-                              />
-                            </label>
-                            {taskDraft.frequency === "WEEKLY" ? (
-                              <label className="col-span-full grid gap-2 text-sm font-heading">
-                                <span>{localize(locale, "Дни недели", "Weekdays")}</span>
-                                <div className="flex flex-wrap gap-2">
-                                  {[1, 2, 3, 4, 5, 6, 7].map((day) => {
-                                    const label = getWeekdayShortLabel(day, locale);
-                                    const isSelected =
-                                      taskDraft.weekDays.includes(day);
+                              <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
+                              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                                {TASK_WEEKDAY_VALUES.map((day) => {
+                                  const label = getWeekdayShortLabel(day, locale);
+                                  const isSelected = taskDraft.weekDays.includes(day);
 
-                                    return (
-                                      <button
-                                        className={`h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
-                                          isSelected
-                                            ? "bg-[color:var(--primary)] text-white"
-                                            : "bg-secondary text-foreground hover:bg-secondary/80"
-                                        }`}
-                                        key={day}
-                                        onClick={() =>
-                                          setTaskDraft((current) => ({
-                                            ...current,
-                                            weekDays: isSelected
-                                              ? current.weekDays.filter((d) => d !== day)
-                                              : [...current.weekDays, day].sort(),
-                                          }))
-                                        }
-                                        type="button"
-                                      >
-                                        {label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </label>
-                            ) : null}
-                            <label className="col-span-full grid gap-2 text-sm font-heading">
-                              <span>{localize(locale, "Дата окончания (необязательно)", "End date (optional)")}</span>
-                              <Input
-                                className="h-11"
-                                onChange={(event) =>
-                                  setTaskDraft((current) => ({
-                                    ...current,
-                                    endDate: event.target.value,
-                                  }))
-                                }
-                                type="date"
-                                value={taskDraft.endDate || ""}
-                              />
+                                  return (
+                                    <button
+                                      className={`flex aspect-square w-full min-w-0 items-center justify-center rounded-full text-[11px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] sm:text-xs ${
+                                        isSelected
+                                          ? "bg-[color:var(--primary)] text-white shadow-[0_8px_18px_rgba(37,99,235,0.22)]"
+                                          : "border border-border/70 bg-white text-foreground hover:bg-secondary/50"
+                                      }`}
+                                      key={day}
+                                      onClick={() =>
+                                        setTaskDraft((current) => ({
+                                          ...current,
+                                          weekDays: isSelected
+                                            ? current.weekDays.filter((d) => d !== day)
+                                            : [...current.weekDays, day].sort((left, right) => left - right),
+                                        }))
+                                      }
+                                      type="button"
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </label>
+                            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
+                              <label className="grid gap-2 text-sm font-heading">
+                                <span>{localize(locale, "Начало", "Start date")}</span>
+                                <TaskDatePicker
+                                  locale={locale}
+                                  onChange={(value) =>
+                                    setTaskDraft((current) => ({
+                                      ...current,
+                                      startDate: value,
+                                    }))
+                                  }
+                                  value={taskDraft.startDate}
+                                />
+                              </label>
+                              <div className="grid gap-2 text-sm font-heading">
+                                <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-white px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]">
+                                  <Checkbox
+                                    checked={taskDraft.hasDueTime}
+                                    onCheckedChange={(checked) =>
+                                      setTaskDraft((current) => ({
+                                        ...current,
+                                        hasDueTime: checked === true,
+                                        dueTimeLocal:
+                                          checked === true
+                                            ? current.dueTimeLocal || "18:00"
+                                            : current.dueTimeLocal,
+                                      }))
+                                    }
+                                  />
+                                  <span>{localize(locale, "Точное время", "Exact time")}</span>
+                                </label>
+                                <TaskTimePicker
+                                  isDisabled={!taskDraft.hasDueTime}
+                                  locale={locale}
+                                  onChange={(value) =>
+                                    setTaskDraft((current) => ({
+                                      ...current,
+                                      dueTimeLocal: value,
+                                    }))
+                                  }
+                                  value={taskDraft.hasDueTime ? taskDraft.dueTimeLocal : ""}
+                                />
+                              </div>
+                            </div>
                             </div>
                           ) : null}
                         </>

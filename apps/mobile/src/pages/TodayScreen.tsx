@@ -406,17 +406,17 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
                 })}
               >
                 <Pressable
-                  className="mb-4 flex-row items-center gap-3 rounded-2xl border border-warning/30 bg-white/70 px-4 py-3 shadow-sm shadow-[#1f2687]/10"
+                  className="mb-4 flex-row items-center gap-3 rounded-2xl border border-[#fecaca] bg-white/70 px-4 py-3 shadow-sm shadow-[#1f2687]/10"
                   onPress={() => {
                     hapticSelection();
                     onOpenOverdue?.();
                   }}
                 >
-                  <Ionicons color="#f59e0b" name="warning-outline" size={20} />
-                  <Text className="flex-1 font-body text-sm text-foreground">
+                  <Ionicons color="#ef4444" name="warning-outline" size={20} />
+                  <Text className="flex-1 font-body text-sm font-semibold text-[#dc2626]">
                     {t('today.overdueBanner', { count: overdueCount })}
                   </Text>
-                  <Ionicons color="#f59e0b" name="chevron-forward" size={16} style={directionalIconStyle} />
+                  <Ionicons color="#ef4444" name="chevron-forward" size={16} style={directionalIconStyle} />
                 </Pressable>
               </Animated.View>
             ) : null}

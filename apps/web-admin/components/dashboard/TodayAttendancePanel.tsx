@@ -456,14 +456,14 @@ export function TodayAttendancePanel({
   }));
 
   return (
-    <div className="dashboard-card today-attendance-panel">
+    <div aria-busy={isLoading} className="dashboard-card today-attendance-panel">
       <div className="today-attendance-head">
         <div className="today-attendance-date-controls">
           <div className="today-attendance-nav-group">
             <button
               aria-label={localize(locale, "Предыдущий день", "Previous day")}
               className="today-attendance-nav-button"
-              disabled={!canGoPrevious || isLoading}
+              disabled={!canGoPrevious}
               onClick={onPreviousDay}
               type="button"
             >
@@ -472,7 +472,7 @@ export function TodayAttendancePanel({
             <button
               aria-label={localize(locale, "Следующий день", "Next day")}
               className="today-attendance-nav-button"
-              disabled={!canGoNext || isLoading}
+              disabled={!canGoNext}
               onClick={onNextDay}
               type="button"
             >
@@ -481,7 +481,6 @@ export function TodayAttendancePanel({
           </div>
           <button
             className={`today-attendance-today-button${isToday ? " is-active" : ""}`}
-            disabled={isLoading}
             onClick={onToday}
             type="button"
           >
@@ -495,7 +494,7 @@ export function TodayAttendancePanel({
           </span>
         </div>
         <span className="today-attendance-head-count">
-          {isLoading ? "..." : `${presentCount}/${expectedCount}`}
+          {presentCount}/{expectedCount}
         </span>
       </div>
 

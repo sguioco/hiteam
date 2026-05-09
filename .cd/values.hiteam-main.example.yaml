@@ -78,11 +78,14 @@ ingress:
   frontend:
     enabled: true
     host: "hiteam.example.com"
+    extraHosts:
+      - "www.hiteam.example.com"
     tlsSecret: "hiteam-main-tls-frontend"
     enableWwwRedirect: true
   backend:
     enabled: true
     host: "api.hiteam.example.com"
+    extraHosts: []
     tlsSecret: "hiteam-main-tls-api"
   storage:
     enabled: true

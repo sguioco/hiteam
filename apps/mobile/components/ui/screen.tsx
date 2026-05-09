@@ -17,7 +17,7 @@ export function AppGradientBackground() {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <LinearGradient
-        colors={['#46d8ee', '#67e1f1', '#a7eef8', '#e9fbff', '#e9fbff']}
+        colors={['#d8fbff', '#9cecf6', '#bef4fb', '#eefcff', '#eefcff']}
         end={{ x: 0.5, y: 1 }}
         locations={[0, 0.34, 0.62, 0.84, 1]}
         start={{ x: 0.5, y: 0 }}
@@ -25,7 +25,7 @@ export function AppGradientBackground() {
       />
 
       <LinearGradient
-        colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']}
+        colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
         end={{ x: 0.5, y: 1 }}
         start={{ x: 0.5, y: 0 }}
         style={styles.topGlow}
@@ -45,7 +45,7 @@ export function Screen({
   ...props
 }: ScreenProps) {
   return (
-    <SafeAreaView className={cn('flex-1', withGradient ? 'bg-[#41e4f6]' : 'bg-canvas', safeAreaClassName)}>
+    <SafeAreaView className={cn('flex-1', withGradient ? 'bg-[#d8fbff]' : 'bg-canvas', safeAreaClassName)}>
       {withGradient ? <AppGradientBackground /> : null}
       <View className="flex-1">
         <ScrollView className="flex-1 bg-transparent" contentContainerClassName={cn('gap-5 p-5', contentClassName)} {...props}>

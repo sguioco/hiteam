@@ -30,6 +30,7 @@ export const CalendarContextProvider = ({ children }: PropsWithChildren) => {
 interface CalendarProps extends AriaCalendarProps<DateValue> {
     /** The dates to highlight. */
     highlightedDates?: DateValue[];
+    todayLabel?: string;
     /**
      * The content to render between the header and the calendar grid.
      * If not provided, a default layout will be rendered with a date input and a today button.
@@ -37,7 +38,7 @@ interface CalendarProps extends AriaCalendarProps<DateValue> {
     children?: ReactNode;
 }
 
-export const Calendar = ({ highlightedDates, className, children, ...props }: CalendarProps) => {
+export const Calendar = ({ highlightedDates, todayLabel = "Today", className, children, ...props }: CalendarProps) => {
     const context = useSlottedContext(AriaCalendarContext);
 
     const ContextWrapper = context ? Fragment : CalendarContextProvider;
@@ -91,7 +92,7 @@ export const Calendar = ({ highlightedDates, className, children, ...props }: Ca
                                         state.setFocusedDate(today(getLocalTimeZone()));
                                     }}
                                 >
-                                    Today
+                                    {todayLabel}
                                 </Button>
                             </div>
                         )}

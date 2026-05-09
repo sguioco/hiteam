@@ -18,6 +18,7 @@ import {
   type GroupOption,
   mergeGroupOptions,
 } from '../../lib/manager-group-options';
+import { resolveEmployeeAvatarSource } from '../../lib/employee-avatar';
 import {
   getDateLocale,
   getDirectionalIconStyle,
@@ -33,8 +34,8 @@ import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_ROW_CLASS,
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
-  getBottomSheetActionBottomOffset,
-  getBottomSheetActionReservedSpace,
+  getScreenActionBottomOffset,
+  getScreenActionReservedSpace,
 } from '../../src/components/bottom-sheet-actions';
 
 type Step = 'details' | 'confirm';
@@ -74,12 +75,23 @@ function isDateTimeInPast(date: Date, time: TimeValue) {
   return buildDateTime(date, time).getTime() < Date.now();
 }
 
-function getEmployeeInitials(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
-
 function formatFullGroupLabel(groupName: string) {
   return `All ${groupName}`;
+}
+
+function getEmployeeAvatarSource(employee: EmployeeOption | GroupMemberOption) {
+  return (
+    employee.avatar ??
+    resolveEmployeeAvatarSource({
+      avatar: employee.avatar,
+      email: 'email' in employee ? employee.email : undefined,
+      employeeNumber: 'employeeNumber' in employee ? employee.employeeNumber : undefined,
+      firstName: employee.firstName,
+      gender: employee.gender,
+      id: employee.id,
+      lastName: employee.lastName,
+    })
+  );
 }
 
 export default function CreateMeetingScreen() {
@@ -204,8 +216,8 @@ export default function CreateMeetingScreen() {
   const hasEndTime = endTime !== null;
   const participantSheetItemCount = groups.length + orderedEmployees.length;
   const shouldScrollParticipantSheet = participantSheetItemCount > 5;
-  const actionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
-  const actionReservedSpace = getBottomSheetActionReservedSpace(insets.bottom);
+  const actionBottomOffset = getScreenActionBottomOffset(insets.bottom);
+  const actionReservedSpace = getScreenActionReservedSpace(insets.bottom);
   const timeCardGap = 12;
   const collapsedStartWidth = timeRowWidth > 0 ? Math.max((timeRowWidth - timeCardGap) / 2, 0) : undefined;
   const expandedStartWidth = timeRowWidth > 0 ? timeRowWidth : undefined;
@@ -265,13 +277,7 @@ export default function CreateMeetingScreen() {
           <View className={`h-6 w-6 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
             {isSelected ? <Ionicons color="#ffffff" name="checkmark" size={14} /> : null}
           </View>
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-            {employee.avatar ? (
-              <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-            ) : (
-              <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-            )}
-          </View>
+          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">{employeeSubtitle}</Text>
@@ -616,13 +622,7 @@ export default function CreateMeetingScreen() {
                       ))}
                       {individuallyInvitedEmployees.map((employee) => (
                         <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
-                          <View className="h-10 w-10 items-center justify-center rounded-full bg-[#eef2ff]">
-                            {employee.avatar ? (
-                              <Image source={employee.avatar} className="h-10 w-10 rounded-full" resizeMode="cover" />
-                            ) : (
-                              <Text className="text-[12px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-                            )}
-                          </View>
+                          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
                           <View className="flex-1">
                             <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
                             <Text className="text-[12px] text-muted-foreground">
@@ -686,13 +686,7 @@ export default function CreateMeetingScreen() {
                     <View className="flex-row gap-2 pr-1">
                       {invitedEmployees.map((employee) => (
                         <View key={employee.id} className="w-[68px] items-center gap-2">
-                          <View className="h-14 w-14 items-center justify-center rounded-full bg-[#eef2ff]">
-                            {employee.avatar ? (
-                              <Image source={employee.avatar} className="h-14 w-14 rounded-full" resizeMode="cover" />
-                            ) : (
-                              <Text className="text-[15px] font-extrabold text-foreground">{getEmployeeInitials(employee.firstName, employee.lastName)}</Text>
-                            )}
-                          </View>
+                          <Image source={getEmployeeAvatarSource(employee)} className="h-14 w-14 rounded-full bg-[#eef2ff]" resizeMode="cover" />
                           <Text className="text-center text-[12px] font-semibold text-foreground" numberOfLines={2}>{employee.firstName}</Text>
                         </View>
                       ))}

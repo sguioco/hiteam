@@ -118,11 +118,16 @@ ingress:
   frontend:
     enabled: true
     host: "hiteam.85.237.211.182.nip.io"
+    extraHosts:
+      - "hiteam.dev"
+      - "www.hiteam.dev"
     tlsSecret: "hiteam-main-tls-frontend"
     enableWwwRedirect: true
   backend:
     enabled: true
     host: "api.85.237.211.182.nip.io"
+    extraHosts:
+      - "api.hiteam.dev"
     tlsSecret: "hiteam-main-tls-api"
   storage:
     enabled: true

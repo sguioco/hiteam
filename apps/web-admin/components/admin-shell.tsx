@@ -44,10 +44,7 @@ import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
-import {
-  buildUserDisplayName,
-  getDisplayInitials,
-} from "../lib/profile-display";
+import { buildUserDisplayName } from "../lib/profile-display";
 import { localizePersonName } from "../lib/transliteration";
 import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
 import {
@@ -1082,10 +1079,7 @@ export function AdminShell({
   const sidebarAvatarSrc =
     resolvedProfileAvatarUrl && !profileAvatarFailed
       ? resolvedProfileAvatarUrl
-      : null;
-  const sidebarAvatarFallback = getDisplayInitials(
-    displayProfileName || session?.user.email || "HiTeam",
-  );
+      : getMockAvatarDataUrl(displayProfileName || session?.user.email || "HiTeam");
 
   function resolveNotificationHref(actionUrl: string | null) {
     if (!actionUrl) return notificationsHref;
@@ -1452,16 +1446,12 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                {sidebarAvatarSrc ? (
-                  <img
-                    alt={displayProfileName}
-                    className="h-full w-full rounded-full object-cover"
-                    onError={() => setProfileAvatarFailed(true)}
-                    src={sidebarAvatarSrc}
-                  />
-                ) : (
-                  <span>{sidebarAvatarFallback}</span>
-                )}
+                <img
+                  alt={displayProfileName}
+                  className="h-full w-full rounded-full object-cover"
+                  onError={() => setProfileAvatarFailed(true)}
+                  src={sidebarAvatarSrc}
+                />
               </div>
               <div className="sidebar-user-copy">
                 <strong>{displayProfileName}</strong>
@@ -1707,10 +1697,11 @@ export function AdminShell({
                     </div>
                   ) : null}
                 </div>
-                {createDialogActions?.length || onCreateAction ? (
+                {canUseDesktopAdminTools ? (
                   <Button
                     className="rounded-2xl px-5"
                     onClick={() => {
+                      setNotificationsOpen(false);
                       if (onCreateAction) {
                         onCreateAction();
                         return;

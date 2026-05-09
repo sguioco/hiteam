@@ -755,13 +755,6 @@
   object-fit: cover;
 }
 
-.daily-activity-actor-avatar--fallback {
-  color: var(--accent);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
 .daily-activity-text {
   display: grid;
   gap: 6px;
@@ -2106,9 +2099,10 @@ textarea {
   display: grid;
   min-height: 100%;
   position: relative;
+  background: var(--panel);
 }
 
-.session-check-stage {
+.shell-stage.session-check-stage {
   display: grid;
   height: 100%;
   min-height: 100vh;
@@ -2175,7 +2169,7 @@ textarea {
   z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(242, 239, 234, 0.5);
+  background: rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(8px);
   pointer-events: none;
 }
@@ -4269,9 +4263,11 @@ textarea {
 }
 
 .task-avatar {
+  position: relative;
   display: grid;
   size: 34px;
   place-items: center;
+  overflow: hidden;
   border-radius: 999px;
   background: linear-gradient(135deg, #dde7ff, #ffd9c6);
   font-size: 12px;
@@ -4279,8 +4275,22 @@ textarea {
   color: var(--foreground);
 }
 
+.task-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .task-avatar.is-complete {
-  background: linear-gradient(135deg, #d8f3e8, #c6f4dd);
+  background: #d8f3e8;
+  color: var(--success);
+}
+
+.task-avatar-check {
+  position: absolute;
+  inset: auto 0 0 auto;
+  border-radius: 999px;
+  background: #ffffff;
   color: var(--success);
 }
 
@@ -7211,7 +7221,7 @@ body {
   inset: 0;
   z-index: 8;
   min-height: 0;
-  background: rgba(242, 239, 234, 0.46);
+  background: rgba(255, 255, 255, 0.68);
   backdrop-filter: blur(3px);
 }
 
@@ -11320,34 +11330,6 @@ body {
   min-width: 0;
 }
 
-.team-tasks-routine-box {
-  display: grid;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 12px 14px;
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(245, 248, 255, 0.9));
-  border: 1px solid rgba(122, 146, 190, 0.16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  animation: fade-in 0.28s ease-out both;
-}
-
-.team-tasks-routine-label {
-  margin: 2px 0 0;
-  padding-left: 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
-}
-
-.team-tasks-routine-list {
-  display: grid;
-  gap: 0;
-}
-
 .team-tasks-task-entry {
   display: grid;
   gap: 0;
@@ -11411,7 +11393,7 @@ body {
 
 .team-tasks-task-line-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   min-width: 0;
   grid-column: 1 / 4;
@@ -11652,7 +11634,6 @@ body {
   .team-tasks-toolbar,
   .team-tasks-summary,
   .team-tasks-employee-item,
-  .team-tasks-routine-box,
   .team-tasks-task-preview {
     animation: none;
   }

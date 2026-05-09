@@ -17,9 +17,12 @@ interface DatePickerProps extends AriaDatePickerProps<DateValue> {
     onApply?: () => void;
     /** The function to call when the cancel button is clicked. */
     onCancel?: () => void;
+    applyLabel?: string;
     size?: ButtonProps["size"];
     buttonClassName?: string;
+    cancelLabel?: string;
     placeholder?: string;
+    todayLabel?: string;
 }
 
 export const DatePicker = ({
@@ -28,9 +31,12 @@ export const DatePicker = ({
     onChange,
     onApply,
     onCancel,
+    applyLabel = "Apply",
     size = "sm",
     buttonClassName,
+    cancelLabel = "Cancel",
     placeholder = "Select date",
+    todayLabel = "Today",
     ...props
 }: DatePickerProps) => {
     const formatter = useDateFormatter({
@@ -53,6 +59,7 @@ export const DatePicker = ({
                     size={size}
                     color="secondary"
                     iconLeading={CalendarIcon}
+                    isDisabled={props.isDisabled}
                 >
                     {formattedDate}
                 </Button>
@@ -77,7 +84,7 @@ export const DatePicker = ({
                     {({ close }) => (
                         <>
                             <div className="flex bg-white px-6 py-5">
-                                <Calendar highlightedDates={highlightedDates} />
+                                <Calendar highlightedDates={highlightedDates} todayLabel={todayLabel} />
                             </div>
                             <div className="grid grid-cols-2 gap-3 border-t border-[rgba(15,23,42,0.08)] bg-white p-4">
                                 <Button
@@ -89,7 +96,7 @@ export const DatePicker = ({
                                         close();
                                     }}
                                 >
-                                    Cancel
+                                    {cancelLabel}
                                 </Button>
                                 <Button
                                     className="border-transparent bg-[#7c56d9] text-white shadow-none ring-0 hover:bg-[#6d46d0] hover:text-white"
@@ -100,7 +107,7 @@ export const DatePicker = ({
                                         close();
                                     }}
                                 >
-                                    Apply
+                                    {applyLabel}
                                 </Button>
                             </div>
                         </>

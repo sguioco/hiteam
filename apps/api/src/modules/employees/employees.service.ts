@@ -152,6 +152,16 @@ export class EmployeesService {
     private readonly invitationsMailer: EmployeeInvitationsMailerService,
   ) {}
 
+  private syncBillingSeatsInBackground(tenantId: string) {
+    void this.billingService.syncStripeSeatQuantity(tenantId).catch((error) => {
+      this.logger.warn(
+        `Unable to sync Stripe seats for tenant ${tenantId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+
   async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
     const employeeRecords = await this.prisma.employee.findMany({
       where: {
@@ -452,7 +462,7 @@ export class EmployeesService {
 
     const passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
 
-    return this.prisma.$transaction(async (tx) => {
+    const employee = await this.prisma.$transaction(async (tx) => {
       const employeeRole = await this.ensureEmployeeRole(tx);
       const managerRole = dto.grantManagerAccess ? await this.ensureManagerRole(tx) : null;
 
@@ -511,6 +521,9 @@ export class EmployeesService {
         },
       });
     });
+    this.syncBillingSeatsInBackground(tenantId);
+
+    return employee;
   }
 
   async listPendingInvitations(tenantId: string) {
@@ -675,6 +688,7 @@ export class EmployeesService {
       action: email ? 'employee.join_email_registered' : 'employee.join_phone_registered',
       metadata: { email, phone, expiresAt: expiresAt.toISOString(), workMode },
     });
+    this.syncBillingSeatsInBackground(tenantId);
 
     return {
       id: invitation.id,
@@ -1278,6 +1292,7 @@ export class EmployeesService {
         action: 'employee.review_rejected',
         metadata: { reason: rejected.rejectedReason ?? null },
       });
+      this.syncBillingSeatsInBackground(tenantId);
 
       return { id: rejected.id, status: rejected.status };
     }
@@ -1400,6 +1415,7 @@ export class EmployeesService {
           grantManagerAccess,
         },
       });
+      this.syncBillingSeatsInBackground(tenantId);
 
       return {
         id: approved.id,
@@ -1514,6 +1530,7 @@ export class EmployeesService {
         grantManagerAccess,
       },
     });
+    this.syncBillingSeatsInBackground(tenantId);
 
     return { id: approved.id, status: approved.status, employeeId: approved.employeeId };
   }

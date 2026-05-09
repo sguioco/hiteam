@@ -61,6 +61,9 @@ api:
     EXPO_ACCESS_TOKEN: ""
     SYSTEM_SECRET: ""
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
+    STRIPE_SECRET_KEY: ""
+    STRIPE_PUBLISHABLE_KEY: ""
+    STRIPE_WEBHOOK_SECRET: ""
 
   resources:
     requests:
@@ -249,6 +252,7 @@ ingress:
     enabled: false
     className: "traefik"
     host: ""
+    extraHosts: []
     tlsSecret: ""
     enableWwwRedirect: false
     enableHttpRedirect: true
@@ -257,6 +261,7 @@ ingress:
     enabled: false
     className: "traefik"
     host: ""
+    extraHosts: []
     tlsSecret: ""
     enableHttpRedirect: true
 

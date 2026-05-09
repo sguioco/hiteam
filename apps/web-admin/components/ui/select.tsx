@@ -4,6 +4,7 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
@@ -45,33 +46,20 @@ function SelectOptionIcon({
 function SelectOptionAvatar({
   src,
   alt,
-  fallback,
+  seed,
   className,
 }: {
   src?: string | null;
   alt?: string;
-  fallback: string;
+  seed: string;
   className?: string;
 }) {
-  if (src) {
-    return (
-      <img
-        alt={alt ?? ""}
-        className={cn("size-8 shrink-0 rounded-full object-cover", className)}
-        src={src}
-      />
-    );
-  }
-
   return (
-    <span
-      className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#d8e3ff_0%,#9eb7ff_100%)] text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-[#1b3ff5]",
-        className,
-      )}
-    >
-      {fallback}
-    </span>
+    <img
+      alt={alt ?? ""}
+      className={cn("size-8 shrink-0 rounded-full object-cover", className)}
+      src={src || getMockAvatarDataUrl(alt || seed)}
+    />
   );
 }
 
