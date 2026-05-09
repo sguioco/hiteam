@@ -31,7 +31,6 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const insets = useSafeAreaInsets();
   const bottomSheetActionBottomOffset = getBottomSheetActionBottomOffset(insets.bottom);
   const signOutConfirmSheetHeight = bottomSheetActionBottomOffset + 180;
-  const deleteConfirmSheetHeight = bottomSheetActionBottomOffset + (deleteError ? 320 : 220);
   const router = useRouter();
   const { language, t } = useI18n();
   const directionalIconStyle = getDirectionalIconStyle(language);
@@ -39,6 +38,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteConfirmSheetHeight = bottomSheetActionBottomOffset + (deleteError ? 320 : 220);
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<Awaited<ReturnType<typeof loadMyProfile>>>(
