@@ -374,7 +374,12 @@ export class BillingService {
       throw new HttpException({ message: 'Missing Stripe signature.' }, HttpStatus.BAD_REQUEST);
     }
 
-    const event = this.getStripe().webhooks.constructEvent(payload, signature, webhookSecret);
+    let event: Stripe.Event;
+    try {
+      event = this.getStripe().webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch {
+      throw new HttpException({ message: 'Invalid Stripe signature.' }, HttpStatus.BAD_REQUEST);
+    }
 
     switch (event.type) {
       case 'checkout.session.completed':
@@ -392,6 +397,9 @@ export class BillingService {
         break;
       case 'invoice.payment_failed':
         await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        break;
+      case 'invoice.finalization_failed':
+        await this.handleInvoiceFinalizationFailed(event.data.object as Stripe.Invoice);
         break;
       default:
         break;
@@ -525,6 +533,7 @@ export class BillingService {
       'INCOMPLETE_EXPIRED',
       'PAST_DUE',
       'PAYMENT_FAILED',
+      'INVOICE_FINALIZATION_FAILED',
       'UNPAID',
     ].includes(this.normalizeStripeStatus(status));
   }
@@ -565,6 +574,16 @@ export class BillingService {
     }
 
     return subscription?.id ?? invoiceValue.parent?.subscription_details?.subscription ?? null;
+  }
+
+  private getCustomerIdFromInvoice(invoice: Stripe.Invoice) {
+    const customer = invoice.customer;
+
+    if (typeof customer === 'string') {
+      return customer;
+    }
+
+    return customer?.id ?? null;
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice) {
@@ -618,6 +637,22 @@ export class BillingService {
     await this.prisma.billingSubscription.update({
       where: { tenantId },
       data: { status: 'PAYMENT_FAILED' },
+    });
+  }
+
+  private async handleInvoiceFinalizationFailed(invoice: Stripe.Invoice) {
+    const subscriptionId = this.getSubscriptionIdFromInvoice(invoice);
+    const customerId = this.getCustomerIdFromInvoice(invoice);
+    const tenantId = await this.findTenantIdForStripeObject({ subscriptionId, customerId });
+
+    if (!tenantId) {
+      this.logger.warn(`Unable to map failed Stripe invoice finalization ${invoice.id} to tenant.`);
+      return;
+    }
+
+    await this.prisma.billingSubscription.update({
+      where: { tenantId },
+      data: { status: 'INVOICE_FINALIZATION_FAILED' },
     });
   }
 
