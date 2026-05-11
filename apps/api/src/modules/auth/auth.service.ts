@@ -9,6 +9,7 @@ import { Prisma, UserStatus, EmployeeStatus, EmployeeInvitationStatus } from '@p
 import { SignOptions } from 'jsonwebtoken';
 import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
+import { KommoService } from '../kommo/kommo.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly auditService: AuditService,
+    private readonly kommoService: KommoService,
   ) {}
 
   private normalizeOrganizationName(value: string): string {
@@ -275,6 +277,7 @@ export class AuthService {
       action: 'auth.login',
       metadata: { email: user.email, roleCodes },
     });
+    this.kommoService.recordLogin(user.tenantId, user.id);
 
     return {
       accessToken,
@@ -501,6 +504,7 @@ export class AuthService {
       action: 'auth.owner_registered',
       metadata: { email: ownerEmail, tenantSlug },
     });
+    this.kommoService.recordOrganizationRegistered(result.tenantId);
 
     return result;
   }
@@ -606,6 +610,7 @@ export class AuthService {
         managerEmail,
       },
     });
+    this.kommoService.recordOrganizationRegistered(result.tenantId);
 
     return {
       tenantId: result.tenantId,

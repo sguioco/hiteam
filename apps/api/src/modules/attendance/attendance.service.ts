@@ -26,6 +26,7 @@ import { ScheduleService } from '../schedule/schedule.service';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { BiometricService } from '../biometric/biometric.service';
+import { KommoService } from '../kommo/kommo.service';
 
 @Injectable()
 export class AttendanceService {
@@ -38,6 +39,7 @@ export class AttendanceService {
     private readonly leaderboardService: LeaderboardService,
     private readonly attendanceRealtimeService: AttendanceRealtimeService,
     private readonly notificationsService: NotificationsService,
+    private readonly kommoService: KommoService,
   ) {}
 
   async getMyStatus(userId: string) {
@@ -255,6 +257,7 @@ export class AttendanceService {
     });
 
     await this.publishTeamSnapshot(employee.tenantId);
+    this.kommoService.recordAttendanceEvent(employee.tenantId, employee.id, 'check_in');
     const leaderboardCelebration =
       shift && lateMinutes <= shift.template.gracePeriodMinutes
         ? await this.leaderboardService.getCheckInCelebration(userId).catch(() => null)
@@ -592,6 +595,7 @@ export class AttendanceService {
     });
 
     await this.publishTeamSnapshot(employee.tenantId);
+    this.kommoService.recordAttendanceEvent(employee.tenantId, employee.id, 'check_out');
 
     return {
       eventId: event.id,

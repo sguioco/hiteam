@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { KommoService } from "../kommo/kommo.service";
 import { CreateLocationDto } from "./dto/create-location.dto";
 import { UpsertOrgSetupDto } from "./dto/upsert-org-setup.dto";
 
@@ -76,7 +77,10 @@ function inferCountryFromAddress(address: string) {
 
 @Injectable()
 export class OrgService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly kommoService: KommoService,
+  ) {}
 
   private isPlaceholderSetup(args: {
     company: {
@@ -148,8 +152,8 @@ export class OrgService {
     });
   }
 
-  createLocation(tenantId: string, dto: CreateLocationDto) {
-    return this.prisma.location.create({
+  async createLocation(tenantId: string, dto: CreateLocationDto) {
+    const location = await this.prisma.location.create({
       data: {
         tenantId,
         companyId: dto.companyId,
@@ -162,10 +166,13 @@ export class OrgService {
         timezone: dto.timezone,
       },
     });
+
+    this.kommoService.recordOrganizationUpdated(tenantId, 'location_created');
+    return location;
   }
 
   async upsertSetup(tenantId: string, dto: UpsertOrgSetupDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const setup = await this.prisma.$transaction(async (tx) => {
       const [existingCompanies, existingLocations] = await Promise.all([
         tx.company.findMany({
           where: { tenantId },
@@ -243,6 +250,9 @@ export class OrgService {
         defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
       };
     });
+
+    this.kommoService.recordOrganizationUpdated(tenantId, 'setup_updated');
+    return setup;
   }
 
   async deleteSetup(tenantId: string) {
@@ -268,6 +278,8 @@ export class OrgService {
     await this.prisma.company.delete({
       where: { id: company.id },
     });
+
+    this.kommoService.recordOrganizationUpdated(tenantId, 'setup_deleted');
 
     return {
       deleted: true,

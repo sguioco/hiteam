@@ -30,6 +30,7 @@ import { ObservabilityModule } from './modules/observability/observability.modul
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { LeaderboardModule } from './modules/leaderboard/leaderboard.module';
 import { TranslationModule } from './modules/translation/translation.module';
+import { KommoModule } from './modules/kommo/kommo.module';
 import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
 import { HttpResponseCacheInterceptor } from './common/cache/http-response-cache.interceptor';
 import { ResponseCacheService } from './common/cache/response-cache.service';
@@ -60,6 +61,7 @@ import { ResponseCacheService } from './common/cache/response-cache.service';
     CollaborationModule,
     LeaderboardModule,
     TranslationModule,
+    KommoModule,
     AuthModule,
     OrgModule,
     EmployeesModule,

@@ -1,0 +1,2071 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Cron } from '@nestjs/schedule';
+import {
+  AttendanceEventType,
+  AttendanceResult,
+  BiometricEnrollmentStatus,
+  DevicePlatform,
+  EmployeeInvitationStatus,
+  EmployeeStatus,
+  Prisma,
+  ShiftStatus,
+} from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  KOMMO_FIELD_SPECS,
+  KOMMO_PIPELINE_NAME,
+  KOMMO_STAGE_SPECS,
+  KOMMO_TAGS,
+  KommoEntityType,
+  KommoFieldSpec,
+} from './kommo.constants';
+
+type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type KommoFieldInfo = KommoFieldSpec & { id: number };
+type KommoFieldMap = Record<KommoEntityType, Map<string, KommoFieldInfo>>;
+type KommoStageName = (typeof KOMMO_STAGE_SPECS)[number]['name'];
+
+type KommoAccountSetup = {
+  pipelineId: number;
+  statusesByName: Map<string, number>;
+  fields: KommoFieldMap;
+};
+
+type KommoSyncOptions = {
+  reason: string;
+  stageName?: KommoStageName;
+  note?: string;
+  employeeId?: string;
+  invitationId?: string;
+  syncAllContacts?: boolean;
+};
+
+type KommoSyncResult = {
+  skipped?: boolean;
+  leadId?: number;
+  companyId?: number;
+  primaryContactId?: number;
+  syncedEmployeeContacts?: number;
+};
+
+type KommoWebhookLeadEvent = {
+  action: string;
+  id: number;
+  statusId: number | null;
+  oldStatusId: number | null;
+  pipelineId: number | null;
+  raw: unknown;
+};
+
+type KommoConfig = {
+  enabled: boolean;
+  baseUrl: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
+  redirectUri: string | null;
+  responsibleUserId: number | null;
+  pipelineId: number | null;
+  pipelineName: string;
+  trialDays: number;
+  eventNotesEnabled: boolean;
+};
+
+type KommoApiObject = Record<string, unknown>;
+
+class KommoRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(message);
+  }
+}
+
+@Injectable()
+export class KommoService {
+  private readonly logger = new Logger(KommoService.name);
+  private setupCache: { value: KommoAccountSetup; expiresAt: number } | null = null;
+  private setupPromise: Promise<KommoAccountSetup> | null = null;
+  private runtimeAccessToken: string | null = null;
+  private runtimeRefreshToken: string | null = null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  getStatus() {
+    const config = this.getConfig();
+
+    return {
+      enabled: config.enabled,
+      baseUrl: config.baseUrl,
+      pipelineName: config.pipelineName,
+      pipelineId: config.pipelineId,
+      hasAccessToken: Boolean(config.accessToken),
+      hasRefreshFlow: Boolean(config.refreshToken && config.clientId && config.clientSecret),
+      eventNotesEnabled: config.eventNotesEnabled,
+    };
+  }
+
+  async getTenantStatus(tenantId: string) {
+    const links = await this.prisma.kommoEntityLink.findMany({
+      where: { tenantId },
+      orderBy: [{ localEntityType: 'asc' }, { updatedAt: 'desc' }],
+    });
+
+    return {
+      ...this.getStatus(),
+      links: links.map((link) => ({
+        localEntityType: link.localEntityType,
+        localEntityId: link.localEntityId,
+        kommoEntityType: link.kommoEntityType,
+        kommoEntityId: link.kommoEntityId,
+        lastSyncedAt: link.lastSyncedAt?.toISOString() ?? null,
+        lastSyncStatus: link.lastSyncStatus,
+        lastSyncError: link.lastSyncError,
+      })),
+    };
+  }
+
+  recordOrganizationRegistered(tenantId: string) {
+    this.enqueueSync(tenantId, {
+      reason: 'organization_registered',
+      stageName: 'New Registration',
+      note: 'HiTeam organization registered.',
+      syncAllContacts: true,
+    });
+  }
+
+  recordOrganizationUpdated(tenantId: string, reason = 'organization_updated') {
+    this.enqueueSync(tenantId, {
+      reason,
+      note: `HiTeam organization updated: ${reason}.`,
+      syncAllContacts: true,
+    });
+  }
+
+  recordLogin(tenantId: string, userId: string) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void this.prisma.employee.findUnique({
+      where: { userId },
+      select: { id: true },
+    }).then((employee) => {
+      this.enqueueSync(tenantId, {
+        reason: 'login',
+        note: 'HiTeam login recorded.',
+        employeeId: employee?.id,
+        syncAllContacts: false,
+      });
+    }).catch((error) => {
+      this.logger.warn(`Unable to resolve employee for Kommo login sync: ${this.getErrorMessage(error)}`);
+    });
+  }
+
+  recordEmployeeCreated(tenantId: string, employeeId: string) {
+    this.enqueueSync(tenantId, {
+      reason: 'employee_created',
+      note: 'HiTeam employee created.',
+      employeeId,
+    });
+  }
+
+  recordEmployeeInvited(tenantId: string, invitationId: string) {
+    this.enqueueSync(tenantId, {
+      reason: 'employee_invited',
+      stageName: 'Employees Invited',
+      note: 'HiTeam employee invitation sent.',
+      invitationId,
+      syncAllContacts: true,
+    });
+  }
+
+  recordEmployeeUpdated(tenantId: string, employeeId: string, reason = 'employee_updated') {
+    this.enqueueSync(tenantId, {
+      reason,
+      note: `HiTeam employee updated: ${reason}.`,
+      employeeId,
+    });
+  }
+
+  recordAttendanceEvent(tenantId: string, employeeId: string, eventType: 'check_in' | 'check_out') {
+    this.enqueueSync(tenantId, {
+      reason: `attendance_${eventType}`,
+      stageName: eventType === 'check_in' ? 'First Check-In Completed' : undefined,
+      note: eventType === 'check_in' ? 'Employee check-in completed.' : 'Employee check-out completed.',
+      employeeId,
+    });
+  }
+
+  recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
+    this.enqueueSync(tenantId, {
+      reason,
+      note: `HiTeam billing updated: ${reason}.`,
+    });
+  }
+
+  recordDeviceUpdated(tenantId: string, employeeId: string) {
+    this.enqueueSync(tenantId, {
+      reason: 'device_updated',
+      note: 'HiTeam employee device updated.',
+      employeeId,
+    });
+  }
+
+  recordBiometricUpdated(tenantId: string, employeeId: string) {
+    this.enqueueSync(tenantId, {
+      reason: 'biometric_updated',
+      note: 'HiTeam biometric status updated.',
+      employeeId,
+    });
+  }
+
+  async manualSyncTenant(tenantId: string) {
+    return this.syncTenant(tenantId, {
+      reason: 'manual_sync',
+      note: 'Manual HiTeam sync completed.',
+      syncAllContacts: true,
+    });
+  }
+
+  isWebhookSecretValid(secret?: string | null) {
+    const expected = this.configService.get<string>('KOMMO_WEBHOOK_SECRET')?.trim();
+    return !expected || secret === expected;
+  }
+
+  async handleIncomingWebhook(body: unknown) {
+    if (!this.getConfig().enabled) {
+      return { accepted: true, skipped: true };
+    }
+
+    const events = this.extractWebhookLeadEvents(body);
+    if (events.length === 0) {
+      return { accepted: true, processed: 0, ignored: 0 };
+    }
+
+    const stageNameByStatusId = new Map<number, string>();
+    for (const [name, id] of this.setupCache?.value.statusesByName.entries() ?? []) {
+      stageNameByStatusId.set(id, name);
+    }
+
+    let processed = 0;
+    let ignored = 0;
+
+    for (const event of events) {
+      const link = await this.prisma.kommoEntityLink.findFirst({
+        where: {
+          kommoEntityType: 'leads',
+          kommoEntityId: event.id,
+        },
+      });
+
+      if (!link) {
+        ignored += 1;
+        continue;
+      }
+
+      const stageName = event.statusId ? stageNameByStatusId.get(event.statusId) ?? null : null;
+      const metadata = this.mergeMetadata(link.metadataJson, {
+        lastInboundAction: event.action,
+        lastInboundAt: new Date().toISOString(),
+        kommoStatusId: event.statusId,
+        kommoOldStatusId: event.oldStatusId,
+        kommoPipelineId: event.pipelineId,
+        ...(stageName
+          ? {
+              kommoStageName: stageName,
+              manualStageName: stageName,
+              manualStatusId: event.statusId,
+              manualStageUpdatedAt: new Date().toISOString(),
+            }
+          : {}),
+      });
+
+      await this.prisma.kommoEntityLink.update({
+        where: { id: link.id },
+        data: {
+          lastSyncStatus: 'OK',
+          lastSyncError: null,
+          metadataJson: JSON.stringify(metadata),
+        },
+      });
+
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId: link.tenantId,
+          entityType: 'kommo_lead',
+          entityId: String(event.id),
+          action: 'kommo.lead_webhook',
+          metadataJson: JSON.stringify({
+            action: event.action,
+            statusId: event.statusId,
+            oldStatusId: event.oldStatusId,
+            pipelineId: event.pipelineId,
+            stageName,
+          }),
+        },
+      });
+
+      processed += 1;
+    }
+
+    return { accepted: true, processed, ignored };
+  }
+
+  async syncTenant(tenantId: string, options: KommoSyncOptions): Promise<KommoSyncResult> {
+    const config = this.getConfig();
+    if (!config.enabled) {
+      return { skipped: true };
+    }
+
+    await this.markTenantSyncState(tenantId, 'PENDING', null);
+
+    try {
+      const [setup, snapshot] = await Promise.all([
+        this.ensureAccountSetup(),
+        this.loadTenantSnapshot(tenantId),
+      ]);
+
+      const existingLeadLink = await this.findLink(snapshot.tenant.id, 'tenant', snapshot.tenant.id, 'leads');
+      const manualStageName = options.stageName ? null : this.readManualStageName(existingLeadLink?.metadataJson, setup);
+      const stageName = options.stageName ?? manualStageName ?? this.resolveStageName(snapshot);
+      const statusId = setup.statusesByName.get(stageName);
+      const tags = this.resolveTags(snapshot);
+      const companyId = await this.syncCompany(setup, snapshot);
+      const primaryContactId = await this.syncPrimaryContact(setup, snapshot, companyId);
+      const employeeContactIds = await this.syncEmployeeContacts(setup, snapshot, companyId, options);
+      const leadId = await this.syncLead(setup, snapshot, {
+        stageName,
+        statusId,
+        tags,
+        companyId,
+        primaryContactId,
+        employeeContactIds,
+        clearManualStage: Boolean(options.stageName),
+      });
+
+      if (options.note && (config.eventNotesEnabled || options.reason === 'manual_sync')) {
+        await this.addLeadNote(leadId, this.buildEventNote(snapshot, options.note, options.reason));
+      }
+
+      await this.markTenantSyncState(tenantId, 'OK', null, leadId);
+
+      return {
+        leadId,
+        companyId,
+        primaryContactId,
+        syncedEmployeeContacts: employeeContactIds.length,
+      };
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      await this.markTenantSyncState(tenantId, 'ERROR', message);
+      this.logger.warn(`Kommo sync failed for tenant ${tenantId}: ${message}`);
+      throw error;
+    }
+  }
+
+  @Cron('0 9 * * *')
+  async runDailyAutomations() {
+    const config = this.getConfig();
+    if (!config.enabled) {
+      return;
+    }
+
+    const tenants = await this.prisma.tenant.findMany({
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: 500,
+    });
+
+    for (const tenant of tenants) {
+      try {
+        const snapshot = await this.loadTenantSnapshot(tenant.id);
+        await this.runTenantAutomations(snapshot);
+      } catch (error) {
+        this.logger.warn(`Kommo daily automation failed for tenant ${tenant.id}: ${this.getErrorMessage(error)}`);
+      }
+    }
+  }
+
+  private enqueueSync(tenantId: string, options: KommoSyncOptions) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void this.syncTenant(tenantId, options).catch((error) => {
+      this.logger.warn(`Background Kommo sync failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`);
+    });
+  }
+
+  private async runTenantAutomations(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const now = Date.now();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    const inactiveMs = 5 * 24 * 60 * 60 * 1000;
+    const paid = snapshot.metrics.paymentStatus === 'PAID';
+    const trialEndingSoon =
+      !paid &&
+      snapshot.trialEndDate.getTime() >= now &&
+      snapshot.trialEndDate.getTime() - now <= threeDaysMs;
+    const inactive =
+      snapshot.metrics.totalRegisteredEmployees > 0 &&
+      snapshot.metrics.lastActivityDate !== null &&
+      now - snapshot.metrics.lastActivityDate.getTime() >= inactiveMs;
+
+    if (!trialEndingSoon && !inactive) {
+      return;
+    }
+
+    const result = await this.syncTenant(snapshot.tenant.id, {
+      reason: trialEndingSoon ? 'trial_expiring_soon' : 'inactive_5_days',
+      stageName: trialEndingSoon ? 'Payment Pending' : 'Reactivation',
+      note: trialEndingSoon
+        ? 'Trial ends in 3 days or less. Manager follow-up required.'
+        : 'No HiTeam activity for 5 days. Reactivation follow-up required.',
+      syncAllContacts: false,
+    });
+
+    if (!result.leadId) {
+      return;
+    }
+
+    if (trialEndingSoon) {
+      await this.createTaskOnce(
+        snapshot.tenant.id,
+        `trial-expiring-${this.toDateKey(snapshot.trialEndDate)}`,
+        result.leadId,
+        `HiTeam trial expires on ${this.toDateKey(snapshot.trialEndDate)}. Check payment and onboarding blockers.`,
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      );
+    }
+
+    if (inactive) {
+      await this.createTaskOnce(
+        snapshot.tenant.id,
+        `inactive-5-days-${this.toDateKey(new Date())}`,
+        result.leadId,
+        'HiTeam has had no activity for 5 days. Contact the customer and verify blockers.',
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      );
+    }
+  }
+
+  private async ensureAccountSetup(): Promise<KommoAccountSetup> {
+    const cached = this.setupCache;
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    if (this.setupPromise) {
+      return this.setupPromise;
+    }
+
+    this.setupPromise = this.buildAccountSetup();
+    try {
+      const value = await this.setupPromise;
+      this.setupCache = { value, expiresAt: Date.now() + 15 * 60 * 1000 };
+      return value;
+    } finally {
+      this.setupPromise = null;
+    }
+  }
+
+  private async buildAccountSetup(): Promise<KommoAccountSetup> {
+    const pipelineId = await this.ensurePipeline();
+    const statusesByName = await this.ensurePipelineStages(pipelineId);
+    const fields = await this.ensureCustomFields();
+
+    return { pipelineId, statusesByName, fields };
+  }
+
+  private async ensurePipeline() {
+    const config = this.getConfig();
+    if (config.pipelineId) {
+      return config.pipelineId;
+    }
+
+    const listResponse = await this.request<KommoApiObject>('GET', '/api/v4/leads/pipelines');
+    const pipelines = this.extractEmbedded(listResponse, 'pipelines');
+    const existing = pipelines.find((pipeline) => this.readString(pipeline.name) === config.pipelineName);
+
+    if (existing?.id) {
+      return Number(existing.id);
+    }
+
+    try {
+      const createResponse = await this.request<KommoApiObject>('POST', '/api/v4/leads/pipelines', [
+        {
+          name: config.pipelineName,
+          sort: 100,
+          is_main: false,
+        },
+      ]);
+      const created = this.extractEmbedded(createResponse, 'pipelines')[0];
+      if (created?.id) {
+        return Number(created.id);
+      }
+    } catch (error) {
+      this.logger.warn(`Unable to create Kommo pipeline, falling back to main pipeline: ${this.getErrorMessage(error)}`);
+    }
+
+    const mainPipeline = pipelines.find((pipeline) => pipeline.is_main === true) ?? pipelines[0];
+    if (!mainPipeline?.id) {
+      throw new Error('Kommo pipeline was not found and could not be created.');
+    }
+
+    return Number(mainPipeline.id);
+  }
+
+  private async ensurePipelineStages(pipelineId: number) {
+    const listResponse = await this.request<KommoApiObject>('GET', `/api/v4/leads/pipelines/${pipelineId}/statuses`);
+    const existingStatuses = this.extractEmbedded(listResponse, 'statuses');
+    const statusesByName = new Map<string, number>();
+
+    for (const status of existingStatuses) {
+      const name = this.readString(status.name);
+      const id = Number(status.id);
+      if (name && Number.isFinite(id)) {
+        statusesByName.set(name, id);
+      }
+    }
+
+    const missing = KOMMO_STAGE_SPECS.filter((stage) => !statusesByName.has(stage.name));
+    if (missing.length > 0) {
+      const createResponse = await this.request<KommoApiObject>(
+        'POST',
+        `/api/v4/leads/pipelines/${pipelineId}/statuses`,
+        missing.map((stage) => ({
+          name: stage.name,
+          sort: stage.sort,
+          color: stage.color,
+        })),
+      );
+      for (const status of this.extractEmbedded(createResponse, 'statuses')) {
+        const name = this.readString(status.name);
+        const id = Number(status.id);
+        if (name && Number.isFinite(id)) {
+          statusesByName.set(name, id);
+        }
+      }
+    }
+
+    return statusesByName;
+  }
+
+  private async ensureCustomFields(): Promise<KommoFieldMap> {
+    const fields: KommoFieldMap = {
+      leads: new Map(),
+      contacts: new Map(),
+      companies: new Map(),
+    };
+
+    for (const entityType of ['leads', 'contacts', 'companies'] as const) {
+      const entitySpecs = KOMMO_FIELD_SPECS.filter((spec) => spec.entityType === entityType);
+      const groups = await this.ensureFieldGroups(entityType, entitySpecs);
+      const listResponse = await this.request<KommoApiObject>('GET', `/api/v4/${entityType}/custom_fields`, undefined, { limit: 250 });
+      const existingFields = this.extractEmbedded(listResponse, 'custom_fields');
+      const existingByName = new Map<string, KommoApiObject>();
+
+      for (const field of existingFields) {
+        const name = this.readString(field.name);
+        if (name && !existingByName.has(name)) {
+          existingByName.set(name, field);
+        }
+      }
+
+      const missingSpecs = entitySpecs.filter((spec) => !existingByName.has(spec.name));
+      if (missingSpecs.length > 0) {
+        const createResponse = await this.request<KommoApiObject>(
+          'POST',
+          `/api/v4/${entityType}/custom_fields`,
+          missingSpecs.map((spec) => ({
+            name: spec.name,
+            type: spec.type,
+            sort: spec.sort,
+            group_id: groups.get(spec.groupName),
+            enums: spec.enums?.map((value, index) => ({ value, sort: (index + 1) * 10 })),
+          })),
+        );
+        for (const field of this.extractEmbedded(createResponse, 'custom_fields')) {
+          const name = this.readString(field.name);
+          if (name) {
+            existingByName.set(name, field);
+          }
+        }
+      }
+
+      for (const spec of entitySpecs) {
+        const field = existingByName.get(spec.name);
+        const id = Number(field?.id);
+        if (Number.isFinite(id)) {
+          fields[entityType].set(spec.key, { ...spec, id });
+        }
+      }
+    }
+
+    return fields;
+  }
+
+  private async ensureFieldGroups(entityType: KommoEntityType, specs: KommoFieldSpec[]) {
+    const response = await this.request<KommoApiObject>('GET', `/api/v4/${entityType}/custom_fields/groups`);
+    const existingGroups = this.extractEmbedded(response, 'custom_field_groups');
+    const groupsByName = new Map<string, string>();
+
+    for (const group of existingGroups) {
+      const name = this.readString(group.name);
+      const id = this.readString(group.id);
+      if (name && id) {
+        groupsByName.set(name, id);
+      }
+    }
+
+    const desiredGroupNames = Array.from(new Set(specs.map((spec) => spec.groupName)));
+    const missing = desiredGroupNames.filter((name) => !groupsByName.has(name));
+
+    if (missing.length > 0) {
+      const createResponse = await this.request<KommoApiObject>(
+        'POST',
+        `/api/v4/${entityType}/custom_fields/groups`,
+        missing.map((name, index) => ({
+          name,
+          sort: 900 + index,
+        })),
+      );
+      for (const group of this.extractEmbedded(createResponse, 'custom_field_groups')) {
+        const name = this.readString(group.name);
+        const id = this.readString(group.id);
+        if (name && id) {
+          groupsByName.set(name, id);
+        }
+      }
+    }
+
+    return groupsByName;
+  }
+
+  private async loadTenantSnapshot(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        businessId: true,
+        name: true,
+        slug: true,
+        timezone: true,
+        locale: true,
+        createdAt: true,
+        companies: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        locations: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            country: true,
+            timezone: true,
+            latitude: true,
+            longitude: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            roles: {
+              select: {
+                role: {
+                  select: { code: true },
+                },
+              },
+            },
+          },
+        },
+        employees: {
+          select: {
+            id: true,
+            userId: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+            middleName: true,
+            phone: true,
+            avatarUrl: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            user: {
+              select: {
+                id: true,
+                email: true,
+                roles: {
+                  select: {
+                    role: {
+                      select: { code: true },
+                    },
+                  },
+                },
+              },
+            },
+            company: { select: { name: true, logoUrl: true } },
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+            primaryLocation: { select: { name: true, country: true, timezone: true, address: true } },
+            biometricProfile: {
+              select: {
+                enrollmentStatus: true,
+                enrolledAt: true,
+                lastVerifiedAt: true,
+                provider: true,
+              },
+            },
+            devices: {
+              select: {
+                id: true,
+                platform: true,
+                isPrimary: true,
+                updatedAt: true,
+              },
+            },
+            groupMemberships: {
+              select: {
+                group: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
+          orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+        },
+        employeeInvitations: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            employeeId: true,
+            invitedAt: true,
+            submittedAt: true,
+            approvedAt: true,
+            avatarUrl: true,
+            approvedGroupId: true,
+            workMode: true,
+            company: { select: { name: true } },
+          },
+          orderBy: { invitedAt: 'desc' },
+        },
+        billingSubscription: true,
+        payrollPolicy: { select: { id: true } },
+        _count: {
+          select: {
+            pushDevices: true,
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const adminUserIds = tenant.users
+      .filter((user) => this.hasAnyRole(user.roles.map((entry) => entry.role.code), ['tenant_owner', 'hr_admin', 'operations_admin', 'manager']))
+      .map((user) => user.id);
+
+    const employeeIds = tenant.employees.map((employee) => employee.id);
+    const userIds = tenant.users.map((user) => user.id);
+
+    const [
+      lastCheckIn,
+      lastCheckOut,
+      firstCheckIn,
+      checkInsToday,
+      lateEmployees,
+      missedCheckIns,
+      checkInsLast7Days,
+      employeesWithRecentActivity,
+      latestAudit,
+      latestAdminAudit,
+      latestLogin,
+      latestLoginsByUser,
+      latestCheckInsByEmployee,
+      latestCheckOutsByEmployee,
+      diagnosticsSnapshot,
+    ] = await Promise.all([
+      this.prisma.attendanceEvent.findFirst({
+        where: { tenantId, eventType: AttendanceEventType.CHECK_IN, result: AttendanceResult.ACCEPTED },
+        orderBy: { occurredAt: 'desc' },
+        select: { employeeId: true, occurredAt: true },
+      }),
+      this.prisma.attendanceEvent.findFirst({
+        where: { tenantId, eventType: AttendanceEventType.CHECK_OUT, result: AttendanceResult.ACCEPTED },
+        orderBy: { occurredAt: 'desc' },
+        select: { employeeId: true, occurredAt: true },
+      }),
+      this.prisma.attendanceEvent.findFirst({
+        where: { tenantId, eventType: AttendanceEventType.CHECK_IN, result: AttendanceResult.ACCEPTED },
+        orderBy: { occurredAt: 'asc' },
+        select: { id: true, occurredAt: true },
+      }),
+      this.prisma.attendanceEvent.count({
+        where: {
+          tenantId,
+          eventType: AttendanceEventType.CHECK_IN,
+          result: AttendanceResult.ACCEPTED,
+          occurredAt: { gte: startOfToday, lte: endOfToday },
+        },
+      }),
+      this.prisma.attendanceSession.count({
+        where: {
+          tenantId,
+          startedAt: { gte: startOfToday, lte: endOfToday },
+          lateMinutes: { gt: 0 },
+        },
+      }),
+      this.prisma.shift.count({
+        where: {
+          tenantId,
+          status: ShiftStatus.PUBLISHED,
+          startsAt: { gte: startOfToday, lte: now },
+          attendanceSessions: { none: {} },
+        },
+      }),
+      this.prisma.attendanceEvent.count({
+        where: {
+          tenantId,
+          eventType: AttendanceEventType.CHECK_IN,
+          result: AttendanceResult.ACCEPTED,
+          occurredAt: { gte: sevenDaysAgo },
+        },
+      }),
+      this.prisma.attendanceEvent.findMany({
+        where: {
+          tenantId,
+          employeeId: { in: employeeIds.length > 0 ? employeeIds : ['__none__'] },
+          occurredAt: { gte: sevenDaysAgo },
+        },
+        distinct: ['employeeId'],
+        select: { employeeId: true },
+      }),
+      this.prisma.auditLog.findFirst({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      adminUserIds.length > 0
+        ? this.prisma.auditLog.findFirst({
+            where: { tenantId, actorUserId: { in: adminUserIds } },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.auditLog.findFirst({
+        where: { tenantId, action: 'auth.login' },
+        orderBy: { createdAt: 'desc' },
+        select: { actorUserId: true, createdAt: true },
+      }),
+      userIds.length > 0
+        ? this.prisma.auditLog.findMany({
+            where: { tenantId, action: 'auth.login', actorUserId: { in: userIds } },
+            orderBy: { createdAt: 'desc' },
+            distinct: ['actorUserId'],
+            select: { actorUserId: true, createdAt: true },
+          })
+        : Promise.resolve([]),
+      employeeIds.length > 0
+        ? this.prisma.attendanceEvent.findMany({
+            where: { tenantId, employeeId: { in: employeeIds }, eventType: AttendanceEventType.CHECK_IN, result: AttendanceResult.ACCEPTED },
+            orderBy: { occurredAt: 'desc' },
+            distinct: ['employeeId'],
+            select: { employeeId: true, occurredAt: true },
+          })
+        : Promise.resolve([]),
+      employeeIds.length > 0
+        ? this.prisma.attendanceEvent.findMany({
+            where: { tenantId, employeeId: { in: employeeIds }, eventType: AttendanceEventType.CHECK_OUT, result: AttendanceResult.ACCEPTED },
+            orderBy: { occurredAt: 'desc' },
+            distinct: ['employeeId'],
+            select: { employeeId: true, occurredAt: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.diagnosticsSnapshot.findFirst({
+        where: { tenantId },
+        orderBy: { capturedAt: 'desc' },
+        select: { criticalAlerts: true, warningAlerts: true },
+      }),
+    ]);
+
+    const activeEmployees = tenant.employees.filter((employee) => employee.status === EmployeeStatus.ACTIVE);
+    const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
+    const employeesWithRecentActivitySet = new Set(employeesWithRecentActivity.map((entry) => entry.employeeId));
+    const employeesWithoutActivity = Array.from(activeEmployeeIds).filter((id) => !employeesWithRecentActivitySet.has(id)).length;
+    const paidSeats = tenant.billingSubscription?.paidSeats ?? 0;
+    const usedSeats =
+      activeEmployees.length +
+      tenant.employeeInvitations.filter((invitation) =>
+        [EmployeeInvitationStatus.INVITED, EmployeeInvitationStatus.PENDING_APPROVAL, EmployeeInvitationStatus.APPROVED].includes(invitation.status),
+      ).length;
+    const trialDays = this.getConfig().trialDays;
+    const trialStartDate = tenant.createdAt;
+    const trialEndDate = new Date(tenant.createdAt.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    const serviceActive = Boolean(tenant.billingSubscription?.firstPaidAt) && paidSeats >= usedSeats && !this.isBlockingSubscriptionStatus(tenant.billingSubscription?.status);
+    const paymentStatus = serviceActive
+      ? 'PAID'
+      : tenant.billingSubscription?.status && this.isBlockingSubscriptionStatus(tenant.billingSubscription.status)
+        ? 'FAILED'
+        : 'PENDING';
+    const lastActivityDate = this.maxDate([
+      latestAudit?.createdAt ?? null,
+      lastCheckIn?.occurredAt ?? null,
+      lastCheckOut?.occurredAt ?? null,
+      latestLogin?.createdAt ?? null,
+    ]);
+    const weeklyUsageScore = this.calculateWeeklyUsageScore(activeEmployees.length, checkInsLast7Days);
+    const engagementLevel = weeklyUsageScore >= 70 ? 'HIGH' : weeklyUsageScore >= 30 ? 'MEDIUM' : 'LOW';
+    const primaryCompany = tenant.companies[0] ?? null;
+    const primaryLocation = tenant.locations[0] ?? null;
+    const country = primaryLocation?.country ?? this.inferCountryFromAddress(primaryLocation?.address ?? null);
+    const latestLoginByUserId = new Map(
+      latestLoginsByUser
+        .filter((entry) => entry.actorUserId)
+        .map((entry) => [entry.actorUserId!, entry.createdAt]),
+    );
+    const latestCheckInByEmployeeId = new Map(latestCheckInsByEmployee.map((entry) => [entry.employeeId, entry.occurredAt]));
+    const latestCheckOutByEmployeeId = new Map(latestCheckOutsByEmployee.map((entry) => [entry.employeeId, entry.occurredAt]));
+    const ownerEmployee =
+      tenant.employees.find((employee) =>
+        this.hasAnyRole(employee.user.roles.map((entry) => entry.role.code), ['tenant_owner', 'hr_admin', 'operations_admin', 'manager']),
+      ) ?? tenant.employees[0] ?? null;
+    const managerInvitation = tenant.employeeInvitations.find((invitation) => invitation.email || invitation.phone) ?? null;
+
+    return {
+      tenant,
+      primaryCompany,
+      primaryLocation,
+      ownerEmployee,
+      managerInvitation,
+      country,
+      trialStartDate,
+      trialEndDate,
+      latestLoginByUserId,
+      latestCheckInByEmployeeId,
+      latestCheckOutByEmployeeId,
+      metrics: {
+        totalEmployees: tenant.employees.length,
+        activeEmployees: activeEmployees.length,
+        totalRegisteredEmployees: tenant.employees.length,
+        employeesInvited: tenant.employeeInvitations.filter((invitation) => invitation.status === EmployeeInvitationStatus.INVITED).length,
+        employeesActivated: activeEmployees.length,
+        employeesWithFaceVerification: tenant.employees.filter((employee) => employee.biometricProfile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED).length,
+        employeesWithoutActivity,
+        checkInsToday,
+        lateEmployees,
+        missedCheckIns,
+        weeklyUsageScore,
+        engagementLevel,
+        paidSeats,
+        usedSeats,
+        serviceActive,
+        paymentStatus,
+        subscriptionStatus: serviceActive ? 'ACTIVE' : tenant.billingSubscription?.status ?? 'TRIAL',
+        lastActivityDate,
+        lastAdminActivityDate: latestAdminAudit?.createdAt ?? null,
+        lastEmployeeActivityDate: this.maxDate([lastCheckIn?.occurredAt ?? null, lastCheckOut?.occurredAt ?? null]),
+        lastLoginDate: latestLogin?.createdAt ?? null,
+        lastEmployeeCheckIn: lastCheckIn?.occurredAt ?? null,
+        lastEmployeeCheckOut: lastCheckOut?.occurredAt ?? null,
+        firstCheckInDate: firstCheckIn?.occurredAt ?? null,
+        activeDevices: tenant.employees.reduce((sum, employee) => sum + employee.devices.length, 0),
+        mobileAppInstalled: tenant.employees.some((employee) => employee.devices.some((device) => device.platform !== DevicePlatform.WEB)),
+        notificationsEnabled: tenant._count.pushDevices > 0,
+        checklistFeatureEnabled: true,
+        payrollModuleEnabled: Boolean(tenant.payrollPolicy),
+        diagnosticsNeedsSupport: Boolean(diagnosticsSnapshot && diagnosticsSnapshot.criticalAlerts > 0),
+      },
+    };
+  }
+
+  private async syncCompany(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+  ) {
+    const name = snapshot.primaryCompany?.name ?? snapshot.tenant.name;
+    const payload = {
+      name,
+      custom_fields_values: this.buildCompanyFieldValues(setup, snapshot),
+    };
+    const link = await this.findLink(snapshot.tenant.id, 'tenant', snapshot.tenant.id, 'companies');
+    const companyId = await this.upsertKommoEntity('companies', link?.kommoEntityId ?? null, payload);
+
+    await this.upsertLink(snapshot.tenant.id, 'tenant', snapshot.tenant.id, 'companies', companyId, 'OK', null);
+    return companyId;
+  }
+
+  private async syncPrimaryContact(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    companyId: number,
+  ) {
+    const owner = snapshot.ownerEmployee;
+    const invitation = snapshot.managerInvitation;
+    const name = owner
+      ? this.employeeFullName(owner)
+      : invitation?.firstName || invitation?.lastName
+        ? [invitation.firstName, invitation.lastName].filter(Boolean).join(' ')
+        : `${snapshot.tenant.name} manager`;
+    const email = owner?.user.email ?? invitation?.email ?? null;
+    const phone = owner?.phone ?? invitation?.phone ?? null;
+    const payload = {
+      name,
+      custom_fields_values: [
+        ...this.buildStandardContactFieldValues(email, phone),
+        ...this.toCustomFieldValues(setup.fields.contacts, {
+          employeeId: owner?.id ?? snapshot.tenant.id,
+          employeeName: name,
+          employeePosition: owner?.position.name ?? 'Primary contact',
+          employeeBranch: owner?.primaryLocation.name ?? snapshot.primaryLocation?.name ?? null,
+          employeeStatus: owner?.status ?? 'INVITED',
+          employeeAppInstalled: owner ? owner.devices.length > 0 : false,
+          employeeFaceVerificationActive: owner?.biometricProfile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED,
+          employeeGroup: owner?.groupMemberships[0]?.group.name ?? null,
+          employeeLastLogin: owner ? snapshot.latestLoginByUserId.get(owner.userId) ?? null : null,
+          employeeAvatarUrl: owner?.avatarUrl ?? snapshot.primaryCompany?.logoUrl ?? null,
+          employeeLink: owner ? this.buildWebUrl(`/employees/${owner.id}`) : this.buildWebUrl('/employees'),
+        }),
+      ],
+      _embedded: {
+        companies: [{ id: companyId }],
+      },
+    };
+    const link = await this.findLink(snapshot.tenant.id, 'tenant_primary_contact', snapshot.tenant.id, 'contacts');
+    const contactId = await this.upsertKommoEntity('contacts', link?.kommoEntityId ?? null, payload);
+
+    await this.upsertLink(snapshot.tenant.id, 'tenant_primary_contact', snapshot.tenant.id, 'contacts', contactId, 'OK', null);
+    return contactId;
+  }
+
+  private async syncEmployeeContacts(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    companyId: number,
+    options: KommoSyncOptions,
+  ) {
+    const contactIds: number[] = [];
+    const shouldSyncEmployee = (employeeId: string) =>
+      options.syncAllContacts || !options.employeeId || employeeId === options.employeeId;
+
+    for (const employee of snapshot.tenant.employees) {
+      if (!shouldSyncEmployee(employee.id)) {
+        continue;
+      }
+
+      const contactId = await this.syncSingleEmployeeContact(setup, snapshot, companyId, employee);
+      contactIds.push(contactId);
+    }
+
+    if (options.syncAllContacts || options.invitationId) {
+      for (const invitation of snapshot.tenant.employeeInvitations.filter((item) => !item.employeeId)) {
+        if (options.invitationId && invitation.id !== options.invitationId) {
+          continue;
+        }
+
+        const contactId = await this.syncInvitationContact(setup, snapshot, companyId, invitation);
+        contactIds.push(contactId);
+      }
+    }
+
+    return contactIds;
+  }
+
+  private async syncSingleEmployeeContact(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    companyId: number,
+    employee: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>['tenant']['employees'][number],
+  ) {
+    const name = this.employeeFullName(employee);
+    const payload = {
+      name,
+      custom_fields_values: [
+        ...this.buildStandardContactFieldValues(employee.user.email, employee.phone),
+        ...this.toCustomFieldValues(setup.fields.contacts, {
+          employeeId: employee.id,
+          employeeName: name,
+          employeePosition: employee.position.name,
+          employeeBranch: employee.primaryLocation.name,
+          employeeStatus: employee.status,
+          employeeLastCheckIn: snapshot.latestCheckInByEmployeeId.get(employee.id) ?? null,
+          employeeLastCheckOut: snapshot.latestCheckOutByEmployeeId.get(employee.id) ?? null,
+          employeeAppInstalled: employee.devices.length > 0,
+          employeeFaceVerificationActive: employee.biometricProfile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED,
+          employeeGroup: employee.groupMemberships[0]?.group.name ?? null,
+          employeeLastLogin: snapshot.latestLoginByUserId.get(employee.userId) ?? null,
+          employeeAvatarUrl: employee.avatarUrl ?? null,
+          employeeLink: this.buildWebUrl(`/employees/${employee.id}`),
+        }),
+      ],
+      _embedded: {
+        companies: [{ id: companyId }],
+      },
+    };
+    const link = await this.findLink(snapshot.tenant.id, 'employee', employee.id, 'contacts');
+    const contactId = await this.upsertKommoEntity('contacts', link?.kommoEntityId ?? null, payload);
+
+    await this.upsertLink(snapshot.tenant.id, 'employee', employee.id, 'contacts', contactId, 'OK', null);
+    return contactId;
+  }
+
+  private async syncInvitationContact(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    companyId: number,
+    invitation: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>['tenant']['employeeInvitations'][number],
+  ) {
+    const name =
+      [invitation.firstName, invitation.lastName].filter(Boolean).join(' ') ||
+      invitation.email ||
+      invitation.phone ||
+      `Invitation ${invitation.id.slice(0, 8)}`;
+    const payload = {
+      name,
+      custom_fields_values: [
+        ...this.buildStandardContactFieldValues(invitation.email, invitation.phone),
+        ...this.toCustomFieldValues(setup.fields.contacts, {
+          employeeId: invitation.id,
+          employeeName: name,
+          employeePosition: 'Invited employee',
+          employeeBranch: invitation.company?.name ?? snapshot.primaryLocation?.name ?? null,
+          employeeStatus: invitation.status,
+          employeeAppInstalled: false,
+          employeeFaceVerificationActive: false,
+          employeeAvatarUrl: invitation.avatarUrl ?? null,
+          employeeLink: this.buildWebUrl('/employees'),
+        }),
+      ],
+      _embedded: {
+        companies: [{ id: companyId }],
+      },
+    };
+    const link = await this.findLink(snapshot.tenant.id, 'employee_invitation', invitation.id, 'contacts');
+    const contactId = await this.upsertKommoEntity('contacts', link?.kommoEntityId ?? null, payload);
+
+    await this.upsertLink(snapshot.tenant.id, 'employee_invitation', invitation.id, 'contacts', contactId, 'OK', null);
+    return contactId;
+  }
+
+  private async syncLead(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    args: {
+      stageName: KommoStageName;
+      statusId?: number;
+      tags: string[];
+      companyId: number;
+      primaryContactId: number;
+      employeeContactIds: number[];
+      clearManualStage: boolean;
+    },
+  ) {
+    const config = this.getConfig();
+    const name = `HiTeam - ${snapshot.primaryCompany?.name ?? snapshot.tenant.name}`;
+    const link = await this.findLink(snapshot.tenant.id, 'tenant', snapshot.tenant.id, 'leads');
+    const uniqueContactIds = Array.from(new Set([args.primaryContactId, ...args.employeeContactIds])).slice(0, 100);
+    const basePayload = {
+      name,
+      pipeline_id: setup.pipelineId,
+      status_id: args.statusId,
+      price: Math.round(this.resolveTotalMonthlyPayment(snapshot) ?? 0),
+      responsible_user_id: config.responsibleUserId ?? undefined,
+      custom_fields_values: this.buildLeadFieldValues(setup, snapshot),
+      _embedded: {
+        companies: [{ id: args.companyId }],
+        contacts: uniqueContactIds.map((id, index) => ({ id, is_main: index === 0 })),
+      },
+    };
+
+    const leadId = await this.upsertKommoEntity('leads', link?.kommoEntityId ?? null, {
+      ...basePayload,
+      _embedded: {
+        ...basePayload._embedded,
+        ...(link?.kommoEntityId
+          ? { tags_to_add: args.tags.map((tag) => ({ name: tag })) }
+          : { tags: args.tags.map((tag) => ({ name: tag })) }),
+      },
+    });
+
+    const metadata = this.mergeMetadata(
+      link?.metadataJson,
+      {
+        stageName: args.stageName,
+        statusId: args.statusId ?? null,
+        lastOutboundSyncAt: new Date().toISOString(),
+      },
+      args.clearManualStage ? ['manualStageName', 'manualStatusId', 'manualStageUpdatedAt'] : [],
+    );
+
+    await this.upsertLink(
+      snapshot.tenant.id,
+      'tenant',
+      snapshot.tenant.id,
+      'leads',
+      leadId,
+      'OK',
+      null,
+      JSON.stringify(metadata),
+    );
+    return leadId;
+  }
+
+  private buildLeadFieldValues(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+  ) {
+    const country = snapshot.country;
+    const city = this.inferCityFromAddress(snapshot.primaryLocation?.address ?? null);
+    const totalMonthlyPayment = this.resolveTotalMonthlyPayment(snapshot);
+    const unitPrice = this.resolvePricePerEmployee(snapshot);
+    const paidUntil = snapshot.tenant.billingSubscription?.stripeCurrentPeriodEnd ?? null;
+    const lastPaymentDate = snapshot.tenant.billingSubscription?.firstPaidAt ?? null;
+    const plan = snapshot.tenant.billingSubscription?.stripePriceLookupKey ?? 'trial';
+    const paymentLink = this.buildWebUrl('/billing');
+    const dashboardLink = this.buildWebUrl('/app');
+
+    return this.toCustomFieldValues(setup.fields.leads, {
+      companyName: snapshot.primaryCompany?.name ?? snapshot.tenant.name,
+      organizationId: snapshot.tenant.businessId,
+      country,
+      city,
+      timezone: snapshot.primaryLocation?.timezone ?? snapshot.tenant.timezone,
+      industry: this.configService.get<string>('KOMMO_DEFAULT_INDUSTRY') ?? null,
+      numberOfLocations: snapshot.tenant.locations.length,
+      totalEmployees: snapshot.metrics.totalEmployees,
+      activeEmployees: snapshot.metrics.activeEmployees,
+      trialStatus: snapshot.metrics.paymentStatus !== 'PAID',
+      currentPlan: plan,
+      subscriptionStatus: snapshot.metrics.serviceActive ? 'ACTIVE' : snapshot.metrics.subscriptionStatus,
+      paymentStatus: snapshot.metrics.paymentStatus,
+      trialStartDate: snapshot.trialStartDate,
+      trialEndDate: snapshot.trialEndDate,
+      paidUntil,
+      lastActivityDate: snapshot.metrics.lastActivityDate,
+      registrationDate: snapshot.tenant.createdAt,
+      referralSource: this.configService.get<string>('KOMMO_DEFAULT_REFERRAL_SOURCE') ?? 'HiTeam signup',
+      salesManager: this.configService.get<string>('KOMMO_SALES_MANAGER_NAME') ?? null,
+      onboardingManager: this.configService.get<string>('KOMMO_ONBOARDING_MANAGER_NAME') ?? null,
+      dashboardLink,
+      adminLink: dashboardLink,
+      mobileAppInstalled: snapshot.metrics.mobileAppInstalled,
+      gpsTrackingEnabled: true,
+      faceRecognitionEnabled: snapshot.metrics.employeesWithFaceVerification > 0,
+      selfieVerificationEnabled: true,
+      checklistFeatureEnabled: snapshot.metrics.checklistFeatureEnabled,
+      notificationsEnabled: snapshot.metrics.notificationsEnabled,
+      payrollModuleEnabled: snapshot.metrics.payrollModuleEnabled,
+      activeDevices: snapshot.metrics.activeDevices,
+      lastEmployeeCheckIn: snapshot.metrics.lastEmployeeCheckIn,
+      lastEmployeeCheckOut: snapshot.metrics.lastEmployeeCheckOut,
+      lastSyncStatus: `OK ${new Date().toISOString()}`,
+      integrationStatus: 'ACTIVE',
+      totalRegisteredEmployees: snapshot.metrics.totalRegisteredEmployees,
+      employeesInvited: snapshot.metrics.employeesInvited,
+      employeesActivated: snapshot.metrics.employeesActivated,
+      employeesWithFaceVerification: snapshot.metrics.employeesWithFaceVerification,
+      employeesWithoutActivity: snapshot.metrics.employeesWithoutActivity,
+      employeeRoster: this.buildEmployeeRoster(snapshot),
+      subscriptionType: plan,
+      pricePerEmployee: unitPrice,
+      totalMonthlyPayment,
+      billingCycle: 'MONTHLY',
+      nextPaymentDate: paidUntil,
+      lastPaymentDate,
+      paymentMethod: snapshot.tenant.billingSubscription?.stripeCustomerId ? 'Stripe' : null,
+      autoRenewal: !snapshot.tenant.billingSubscription?.stripeCancelAtPeriodEnd,
+      paymentLink,
+      invoiceAttached: Boolean(snapshot.tenant.billingSubscription?.stripeSubscriptionId),
+      seatsUsed: snapshot.metrics.usedSeats,
+      seatsPaid: snapshot.metrics.paidSeats,
+      lastLoginDate: snapshot.metrics.lastLoginDate,
+      lastAdminActivityDate: snapshot.metrics.lastAdminActivityDate,
+      lastEmployeeActivityDate: snapshot.metrics.lastEmployeeActivityDate,
+      checkInsToday: snapshot.metrics.checkInsToday,
+      lateEmployees: snapshot.metrics.lateEmployees,
+      missedCheckIns: snapshot.metrics.missedCheckIns,
+      weeklyUsageScore: snapshot.metrics.weeklyUsageScore,
+      engagementLevel: snapshot.metrics.engagementLevel,
+      employeesLink: this.buildWebUrl('/employees'),
+      billingLink: this.buildWebUrl('/billing'),
+      checkInLogsLink: this.buildWebUrl('/attendance'),
+      branchesLink: this.buildWebUrl('/organization'),
+    });
+  }
+
+  private buildCompanyFieldValues(
+    setup: KommoAccountSetup,
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+  ) {
+    return this.toCustomFieldValues(setup.fields.companies, {
+      companyOrganizationId: snapshot.tenant.businessId,
+      companyDashboardLink: this.buildWebUrl('/app'),
+      companyAdminLink: this.buildWebUrl('/app'),
+      companyTotalEmployees: snapshot.metrics.totalEmployees,
+      companyActiveEmployees: snapshot.metrics.activeEmployees,
+      companySeatsUsed: snapshot.metrics.usedSeats,
+      companySubscriptionStatus: snapshot.metrics.subscriptionStatus,
+      companyPaymentStatus: snapshot.metrics.paymentStatus,
+      companyLastActivityDate: snapshot.metrics.lastActivityDate,
+      companyLocations: snapshot.tenant.locations.length,
+    });
+  }
+
+  private toCustomFieldValues(fieldMap: Map<string, KommoFieldInfo>, values: Record<string, unknown>) {
+    const customFields = [];
+
+    for (const [key, value] of Object.entries(values)) {
+      const field = fieldMap.get(key);
+      if (!field) {
+        continue;
+      }
+
+      const formatted = this.formatFieldValue(field, value);
+      if (!formatted) {
+        continue;
+      }
+
+      customFields.push({
+        field_id: field.id,
+        values: formatted,
+      });
+    }
+
+    return customFields;
+  }
+
+  private formatFieldValue(field: KommoFieldInfo, value: unknown): Array<Record<string, unknown>> | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (field.type === 'checkbox') {
+      return [{ value: Boolean(value) }];
+    }
+
+    if (field.type === 'date' || field.type === 'date_time') {
+      const date = value instanceof Date ? value : new Date(String(value));
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+      return [{ value: Math.floor(date.getTime() / 1000) }];
+    }
+
+    if (field.type === 'numeric' || field.type === 'monetary') {
+      const numberValue = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(numberValue)) {
+        return null;
+      }
+      return [{ value: String(numberValue) }];
+    }
+
+    const stringValue = String(value).trim();
+    if (!stringValue) {
+      return null;
+    }
+
+    return [{ value: stringValue }];
+  }
+
+  private buildStandardContactFieldValues(email?: string | null, phone?: string | null) {
+    const values = [];
+
+    if (email?.trim()) {
+      values.push({
+        field_code: 'EMAIL',
+        values: [{ value: email.trim().toLowerCase(), enum_code: 'WORK' }],
+      });
+    }
+
+    if (phone?.trim()) {
+      values.push({
+        field_code: 'PHONE',
+        values: [{ value: phone.trim(), enum_code: 'WORK' }],
+      });
+    }
+
+    return values;
+  }
+
+  private async upsertKommoEntity(entityType: KommoEntityType, existingId: number | null, payload: Record<string, unknown>) {
+    if (existingId) {
+      try {
+        await this.request<KommoApiObject>('PATCH', `/api/v4/${entityType}/${existingId}`, payload);
+        return existingId;
+      } catch (error) {
+        if (!(error instanceof KommoRequestError) || error.status !== 404) {
+          throw error;
+        }
+      }
+    }
+
+    const response = await this.request<KommoApiObject>('POST', `/api/v4/${entityType}`, [payload]);
+    const created = this.extractEmbedded(response, entityType)[0];
+    const id = Number(created?.id);
+
+    if (!Number.isFinite(id)) {
+      throw new Error(`Kommo did not return created ${entityType} ID.`);
+    }
+
+    return id;
+  }
+
+  private async addLeadNote(leadId: number, text: string) {
+    await this.request('POST', '/api/v4/leads/notes', [
+      {
+        entity_id: leadId,
+        note_type: 'common',
+        params: { text },
+      },
+    ]);
+  }
+
+  private async createTaskOnce(tenantId: string, key: string, leadId: number, text: string, completeTill: Date) {
+    try {
+      await this.prisma.kommoAutomationLog.create({
+        data: { tenantId, key },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return;
+      }
+      throw error;
+    }
+
+    const config = this.getConfig();
+    await this.request('POST', '/api/v4/tasks', [
+      {
+        entity_id: leadId,
+        entity_type: 'leads',
+        text,
+        complete_till: Math.floor(completeTill.getTime() / 1000),
+        responsible_user_id: config.responsibleUserId ?? undefined,
+      },
+    ]);
+  }
+
+  private async findLink(
+    tenantId: string,
+    localEntityType: string,
+    localEntityId: string,
+    kommoEntityType: KommoEntityType,
+  ) {
+    return this.prisma.kommoEntityLink.findUnique({
+      where: {
+        kommo_entity_local_remote_unique: {
+          localEntityType,
+          localEntityId,
+          kommoEntityType,
+        },
+      },
+    }).then((link) => (link?.tenantId === tenantId ? link : null));
+  }
+
+  private async upsertLink(
+    tenantId: string,
+    localEntityType: string,
+    localEntityId: string,
+    kommoEntityType: KommoEntityType,
+    kommoEntityId: number | null,
+    status: string,
+    error: string | null,
+    metadataJson?: string | null,
+  ) {
+    await this.prisma.kommoEntityLink.upsert({
+      where: {
+        kommo_entity_local_remote_unique: {
+          localEntityType,
+          localEntityId,
+          kommoEntityType,
+        },
+      },
+      update: {
+        tenantId,
+        kommoEntityId,
+        lastSyncedAt: status === 'OK' ? new Date() : undefined,
+        lastSyncStatus: status,
+        lastSyncError: error,
+        metadataJson,
+      },
+      create: {
+        tenantId,
+        localEntityType,
+        localEntityId,
+        kommoEntityType,
+        kommoEntityId,
+        lastSyncedAt: status === 'OK' ? new Date() : undefined,
+        lastSyncStatus: status,
+        lastSyncError: error,
+        metadataJson,
+      },
+    });
+  }
+
+  private markTenantSyncState(tenantId: string, status: string, error: string | null, leadId?: number) {
+    return this.upsertLink(tenantId, 'tenant', tenantId, 'leads', leadId ?? null, status, error);
+  }
+
+  private readManualStageName(metadataJson: string | null | undefined, setup: KommoAccountSetup): KommoStageName | null {
+    if (!metadataJson) {
+      return null;
+    }
+
+    const metadata = this.readRecord(this.parseJson(metadataJson));
+    const stageName = this.readString(metadata?.manualStageName);
+
+    if (stageName && this.isKommoStageName(stageName) && setup.statusesByName.has(stageName)) {
+      return stageName;
+    }
+
+    return null;
+  }
+
+  private mergeMetadata(
+    metadataJson: string | null | undefined,
+    values: Record<string, unknown>,
+    deleteKeys: string[] = [],
+  ) {
+    const parsed = this.readRecord(metadataJson ? this.parseJson(metadataJson) : null);
+    const metadata: Record<string, unknown> = { ...(parsed ?? {}) };
+
+    for (const key of deleteKeys) {
+      delete metadata[key];
+    }
+
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      if (value === null) {
+        delete metadata[key];
+        continue;
+      }
+
+      metadata[key] = value;
+    }
+
+    return metadata;
+  }
+
+  private resolveStageName(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>): KommoStageName {
+    if (snapshot.metrics.diagnosticsNeedsSupport) {
+      return 'Support Needed';
+    }
+
+    if (snapshot.metrics.paymentStatus === 'PAID') {
+      return 'Paid Subscription';
+    }
+
+    if (snapshot.metrics.paymentStatus === 'FAILED') {
+      return 'Payment Pending';
+    }
+
+    if (
+      snapshot.metrics.lastActivityDate &&
+      snapshot.metrics.totalRegisteredEmployees > 0 &&
+      Date.now() - snapshot.metrics.lastActivityDate.getTime() > 5 * 24 * 60 * 60 * 1000
+    ) {
+      return 'Reactivation';
+    }
+
+    if (snapshot.metrics.weeklyUsageScore >= 50) {
+      return 'Active Usage';
+    }
+
+    if (snapshot.metrics.firstCheckInDate) {
+      return 'First Check-In Completed';
+    }
+
+    if (snapshot.metrics.employeesInvited > 0 || snapshot.metrics.employeesActivated > 1) {
+      return 'Employees Invited';
+    }
+
+    if (snapshot.trialEndDate.getTime() > Date.now()) {
+      return 'Trial Started';
+    }
+
+    return 'New Registration';
+  }
+
+  private resolveTags(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const tags = new Set<string>();
+    const now = Date.now();
+
+    if (snapshot.metrics.paymentStatus === 'PAID') {
+      tags.add('Paid');
+    } else {
+      tags.add('Trial');
+    }
+
+    if (snapshot.trialEndDate.getTime() - now <= 3 * 24 * 60 * 60 * 1000 && snapshot.metrics.paymentStatus !== 'PAID') {
+      tags.add('Expiring Soon');
+    }
+
+    if (
+      snapshot.metrics.lastActivityDate &&
+      snapshot.metrics.totalRegisteredEmployees > 0 &&
+      now - snapshot.metrics.lastActivityDate.getTime() > 5 * 24 * 60 * 60 * 1000
+    ) {
+      tags.add('No Activity');
+    }
+
+    if (snapshot.metrics.weeklyUsageScore >= 70) {
+      tags.add('High Engagement');
+    }
+
+    if (snapshot.metrics.totalEmployees >= 100) {
+      tags.add('Enterprise');
+    }
+
+    if (snapshot.tenant.locations.length > 1) {
+      tags.add('Multi-Location');
+    }
+
+    if (snapshot.metrics.diagnosticsNeedsSupport) {
+      tags.add('Needs Support');
+    }
+
+    if ((snapshot.country ?? '').toLowerCase().includes('united arab emirates') || (snapshot.country ?? '').toLowerCase().includes('uae')) {
+      tags.add('UAE');
+    }
+
+    if (snapshot.tenant.locale.toLowerCase().startsWith('ru')) {
+      tags.add('Russian-speaking');
+    } else {
+      tags.add('English-speaking');
+    }
+
+    return Array.from(tags).filter((tag) => (KOMMO_TAGS as readonly string[]).includes(tag));
+  }
+
+  private buildEmployeeRoster(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const rows = snapshot.tenant.employees.slice(0, 100).map((employee) => {
+      const lastCheckIn = snapshot.latestCheckInByEmployeeId.get(employee.id);
+      return [
+        this.employeeFullName(employee),
+        employee.user.email,
+        employee.phone ?? 'no phone',
+        employee.position.name,
+        employee.primaryLocation.name,
+        employee.groupMemberships[0]?.group.name ?? 'no group',
+        employee.status,
+        lastCheckIn ? `last check-in ${lastCheckIn.toISOString()}` : 'no check-in',
+      ].join(' | ');
+    });
+
+    if (snapshot.tenant.employees.length > rows.length) {
+      rows.push(`...and ${snapshot.tenant.employees.length - rows.length} more employees`);
+    }
+
+    return rows.join('\n').slice(0, 6000);
+  }
+
+  private buildEventNote(
+    snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    note: string,
+    reason: string,
+  ) {
+    return [
+      `[HiTeam] ${note}`,
+      `Reason: ${reason}`,
+      `Organization: ${snapshot.tenant.name}`,
+      `Employees: ${snapshot.metrics.activeEmployees}/${snapshot.metrics.totalEmployees} active`,
+      `Payment: ${snapshot.metrics.paymentStatus}`,
+      `Weekly usage score: ${snapshot.metrics.weeklyUsageScore}`,
+      `Dashboard: ${this.buildWebUrl('/app')}`,
+    ].join('\n');
+  }
+
+  private async request<T>(
+    method: HttpMethod,
+    path: string,
+    body?: unknown,
+    query?: Record<string, string | number | boolean | undefined>,
+  ): Promise<T> {
+    const config = this.getConfig();
+    if (!config.baseUrl) {
+      throw new Error('KOMMO_SUBDOMAIN or KOMMO_BASE_URL is not configured.');
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = await this.getAccessToken();
+      if (!token) {
+        throw new Error('KOMMO_ACCESS_TOKEN or refresh-token flow is not configured.');
+      }
+
+      const response = await fetch(this.buildApiUrl(config.baseUrl, path, query), {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+      if (response.status === 401 && attempt === 0 && this.canRefreshToken()) {
+        await this.refreshAccessToken();
+        continue;
+      }
+
+      if (response.status === 429 && attempt < 2) {
+        const retryAfter = Number(response.headers.get('retry-after'));
+        await this.delay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000 * (attempt + 1));
+        continue;
+      }
+
+      if (response.status === 204) {
+        return null as T;
+      }
+
+      const text = await response.text();
+      const parsed = this.parseJson(text);
+
+      if (!response.ok) {
+        throw new KommoRequestError(
+          `Kommo ${method} ${path} failed with HTTP ${response.status}`,
+          response.status,
+          text,
+        );
+      }
+
+      return parsed as T;
+    }
+
+    throw new Error(`Kommo ${method} ${path} failed after retries.`);
+  }
+
+  private async getAccessToken() {
+    if (this.runtimeAccessToken) {
+      return this.runtimeAccessToken;
+    }
+
+    const config = this.getConfig();
+    if (config.accessToken) {
+      return config.accessToken;
+    }
+
+    if (this.canRefreshToken()) {
+      await this.refreshAccessToken();
+      return this.runtimeAccessToken;
+    }
+
+    return null;
+  }
+
+  private canRefreshToken() {
+    const config = this.getConfig();
+    return Boolean((this.runtimeRefreshToken || config.refreshToken) && config.clientId && config.clientSecret);
+  }
+
+  private async refreshAccessToken() {
+    const config = this.getConfig();
+    if (!config.baseUrl || !config.clientId || !config.clientSecret) {
+      throw new Error('Kommo OAuth refresh flow is not fully configured.');
+    }
+
+    const refreshToken = this.runtimeRefreshToken ?? config.refreshToken;
+    if (!refreshToken) {
+      throw new Error('KOMMO_REFRESH_TOKEN is not configured.');
+    }
+
+    const response = await fetch(this.buildApiUrl(config.baseUrl, '/oauth2/access_token'), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        redirect_uri: config.redirectUri ?? undefined,
+      }),
+    });
+    const text = await response.text();
+    const parsed = this.parseJson(text) as {
+      access_token?: string;
+      refresh_token?: string;
+    };
+
+    if (!response.ok || !parsed.access_token) {
+      throw new KommoRequestError('Kommo OAuth refresh failed.', response.status, text);
+    }
+
+    this.runtimeAccessToken = parsed.access_token;
+    this.runtimeRefreshToken = parsed.refresh_token ?? refreshToken;
+  }
+
+  private getConfig(): KommoConfig {
+    const baseUrl = this.resolveBaseUrl();
+    const accessToken =
+      this.configService.get<string>('KOMMO_LONG_LIVED_TOKEN')?.trim() ||
+      this.configService.get<string>('KOMMO_ACCESS_TOKEN')?.trim() ||
+      null;
+    const refreshToken = this.configService.get<string>('KOMMO_REFRESH_TOKEN')?.trim() || null;
+    const clientId = this.configService.get<string>('KOMMO_CLIENT_ID')?.trim() || null;
+    const clientSecret = this.configService.get<string>('KOMMO_CLIENT_SECRET')?.trim() || null;
+    const explicitEnabled = this.configService.get<string>('KOMMO_ENABLED')?.trim().toLowerCase();
+    const hasCredentials = Boolean(accessToken || (refreshToken && clientId && clientSecret));
+    const enabled = explicitEnabled === 'true' || (explicitEnabled !== 'false' && Boolean(baseUrl && hasCredentials));
+
+    return {
+      enabled,
+      baseUrl,
+      accessToken,
+      refreshToken,
+      clientId,
+      clientSecret,
+      redirectUri: this.configService.get<string>('KOMMO_REDIRECT_URI')?.trim() || null,
+      responsibleUserId: this.readNumberConfig('KOMMO_RESPONSIBLE_USER_ID'),
+      pipelineId: this.readNumberConfig('KOMMO_PIPELINE_ID'),
+      pipelineName: this.configService.get<string>('KOMMO_PIPELINE_NAME')?.trim() || KOMMO_PIPELINE_NAME,
+      trialDays: this.readNumberConfig('KOMMO_TRIAL_DAYS') ?? 7,
+      eventNotesEnabled: this.configService.get<string>('KOMMO_EVENT_NOTES_ENABLED')?.trim().toLowerCase() !== 'false',
+    };
+  }
+
+  private resolveBaseUrl() {
+    const explicitBaseUrl = this.configService.get<string>('KOMMO_BASE_URL')?.trim().replace(/\/$/, '');
+    if (explicitBaseUrl) {
+      return explicitBaseUrl;
+    }
+
+    const rawSubdomain = this.configService.get<string>('KOMMO_SUBDOMAIN')?.trim();
+    if (!rawSubdomain) {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(rawSubdomain)) {
+      return rawSubdomain.replace(/\/$/, '');
+    }
+
+    const subdomain = rawSubdomain.replace(/\.kommo\.com$/i, '');
+    return `https://${subdomain}.kommo.com`;
+  }
+
+  private buildApiUrl(baseUrl: string, path: string, query?: Record<string, string | number | boolean | undefined>) {
+    const url = new URL(path, `${baseUrl}/`);
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+    return url;
+  }
+
+  private buildWebUrl(path: string) {
+    const baseUrl = (
+      this.configService.get<string>('WEB_ADMIN_BASE_URL') ??
+      this.configService.get<string>('FRONTEND_URL') ??
+      this.configService.get<string>('APP_BASE_URL') ??
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
+
+    return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  private resolvePricePerEmployee(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const lookupKey = snapshot.tenant.billingSubscription?.stripePriceLookupKey ?? '';
+    if (lookupKey.includes('middle_east')) return 11;
+    if (lookupKey.includes('us_uk')) return 5;
+    if (lookupKey.includes('spain_france')) return 3;
+    if (lookupKey.includes('kazakhstan')) return 2;
+    if (lookupKey.includes('uzbekistan') || lookupKey.includes('kyrgyzstan')) return 1;
+    if (lookupKey.includes('armenia')) return 2;
+    return null;
+  }
+
+  private resolveTotalMonthlyPayment(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const unitPrice = this.resolvePricePerEmployee(snapshot);
+    if (unitPrice === null) {
+      return null;
+    }
+    return Math.max(snapshot.metrics.paidSeats, snapshot.metrics.usedSeats, 1) * unitPrice;
+  }
+
+  private calculateWeeklyUsageScore(activeEmployees: number, checkInsLast7Days: number) {
+    if (activeEmployees <= 0) {
+      return 0;
+    }
+
+    const expectedCheckIns = activeEmployees * 5;
+    return Math.min(100, Math.round((checkInsLast7Days / Math.max(expectedCheckIns, 1)) * 100));
+  }
+
+  private isBlockingSubscriptionStatus(status?: string | null) {
+    return ['CANCELED', 'INCOMPLETE', 'INCOMPLETE_EXPIRED', 'PAST_DUE', 'PAYMENT_FAILED', 'INVOICE_FINALIZATION_FAILED', 'UNPAID'].includes(
+      (status ?? '').toUpperCase(),
+    );
+  }
+
+  private extractEmbedded(response: unknown, key: string): KommoApiObject[] {
+    const embedded = (response as { _embedded?: Record<string, unknown> } | null)?._embedded;
+    const value = embedded?.[key];
+    return Array.isArray(value) ? (value as KommoApiObject[]) : [];
+  }
+
+  private extractWebhookLeadEvents(body: unknown): KommoWebhookLeadEvent[] {
+    const root = this.readRecord(body);
+    const containers = [this.readRecord(root?.leads), this.readRecord(root?.lead)].filter(
+      (value): value is Record<string, unknown> => Boolean(value),
+    );
+    const events: KommoWebhookLeadEvent[] = [];
+
+    for (const container of containers) {
+      for (const action of ['status', 'update', 'add', 'responsible', 'restore', 'delete']) {
+        const entries = this.toWebhookEntries(container[action]);
+
+        for (const raw of entries) {
+          const record = this.readRecord(raw);
+          const id = this.readWebhookNumber(record?.id ?? record?.entity_id ?? record?.element_id);
+          if (!id) {
+            continue;
+          }
+
+          events.push({
+            action,
+            id,
+            statusId: this.readWebhookNumber(record?.status_id),
+            oldStatusId: this.readWebhookNumber(record?.old_status_id),
+            pipelineId: this.readWebhookNumber(record?.pipeline_id),
+            raw,
+          });
+        }
+      }
+    }
+
+    return events;
+  }
+
+  private toWebhookEntries(value: unknown): unknown[] {
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => this.toWebhookEntries(item));
+    }
+
+    const record = this.readRecord(value);
+    if (!record) {
+      return [];
+    }
+
+    if ('id' in record || 'entity_id' in record || 'element_id' in record) {
+      return [record];
+    }
+
+    return Object.values(record).flatMap((item) => this.toWebhookEntries(item));
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  }
+
+  private readWebhookNumber(value: unknown) {
+    const numberValue = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+  }
+
+  private isKommoStageName(value: string): value is KommoStageName {
+    return KOMMO_STAGE_SPECS.some((stage) => stage.name === value);
+  }
+
+  private parseJson(text: string) {
+    if (!text.trim()) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
+  }
+
+  private readString(value: unknown) {
+    return typeof value === 'string' ? value : null;
+  }
+
+  private readNumberConfig(key: string) {
+    const value = Number(this.configService.get<string>(key));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  private hasAnyRole(roleCodes: string[], expected: string[]) {
+    return roleCodes.some((roleCode) => expected.includes(roleCode));
+  }
+
+  private maxDate(values: Array<Date | null>) {
+    const dates = values.filter((value): value is Date => Boolean(value));
+    if (dates.length === 0) {
+      return null;
+    }
+
+    return dates.reduce((latest, value) => (value > latest ? value : latest), dates[0]);
+  }
+
+  private employeeFullName(employee: { firstName: string; lastName: string; middleName?: string | null }) {
+    return [employee.firstName, employee.middleName, employee.lastName].filter(Boolean).join(' ');
+  }
+
+  private inferCountryFromAddress(address?: string | null) {
+    if (!address) {
+      return null;
+    }
+
+    const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+    return parts[parts.length - 1] ?? null;
+  }
+
+  private inferCityFromAddress(address?: string | null) {
+    if (!address) {
+      return null;
+    }
+
+    const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+    return parts.length >= 2 ? parts[parts.length - 2] : parts[0] ?? null;
+  }
+
+  private toDateKey(date: Date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private delay(ms: number) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private getErrorMessage(error: unknown) {
+    if (error instanceof KommoRequestError) {
+      return `${error.message}: ${error.body.slice(0, 500)}`;
+    }
+
+    return error instanceof Error ? error.message : String(error);
+  }
+}

@@ -296,6 +296,8 @@ model Tenant {
   taskAutomationPolicy TaskAutomationPolicy?
   diagnosticsSnapshots DiagnosticsSnapshot[]
   billingSubscription BillingSubscription?
+  kommoEntityLinks  KommoEntityLink[]
+  kommoAutomationLogs KommoAutomationLog[]
 }
 
 model BillingSubscription {
@@ -317,6 +319,39 @@ model BillingSubscription {
   updatedAt                  DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model KommoEntityLink {
+  id              String    @id @default(uuid())
+  tenantId        String
+  localEntityType String
+  localEntityId   String
+  kommoEntityType String
+  kommoEntityId   Int?
+  lastSyncedAt    DateTime?
+  lastSyncStatus  String    @default("PENDING")
+  lastSyncError   String?
+  metadataJson    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([localEntityType, localEntityId, kommoEntityType], name: "kommo_entity_local_remote_unique")
+  @@index([tenantId, localEntityType, localEntityId])
+  @@index([kommoEntityType, kommoEntityId])
+}
+
+model KommoAutomationLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key], name: "kommo_automation_log_tenant_key_unique")
+  @@index([tenantId, createdAt])
 }
 
 model DiagnosticsPolicy {

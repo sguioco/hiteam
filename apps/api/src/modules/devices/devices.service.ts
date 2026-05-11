@@ -3,6 +3,7 @@ import { Device, DevicePlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { AuditService } from '../audit/audit.service';
+import { KommoService } from '../kommo/kommo.service';
 
 const MAX_DEVICES_PER_PLATFORM = 5;
 
@@ -11,6 +12,7 @@ export class DevicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly kommoService: KommoService,
   ) {}
 
   async register(employeeId: string, dto: RegisterDeviceDto): Promise<Device> {
@@ -42,6 +44,7 @@ export class DevicesService {
         action: 'device.updated',
         metadata: { fingerprint: dto.deviceFingerprint, platform: dto.platform },
       });
+      this.kommoService.recordDeviceUpdated(employee.tenantId, employee.id);
 
       return updated;
     }
@@ -91,6 +94,7 @@ export class DevicesService {
       action: 'device.registered',
       metadata: { fingerprint: dto.deviceFingerprint, platform: dto.platform, isPrimary: created.isPrimary },
     });
+    this.kommoService.recordDeviceUpdated(employee.tenantId, employee.id);
 
     return created;
   }
@@ -179,6 +183,7 @@ export class DevicesService {
         replacementPrimaryDeviceId,
       },
     });
+    this.kommoService.recordDeviceUpdated(tenantId, employeeId);
 
     return {
       success: true,

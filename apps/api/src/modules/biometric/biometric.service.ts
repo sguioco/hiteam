@@ -12,6 +12,7 @@ import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
+import { KommoService } from '../kommo/kommo.service';
 import { StartEnrollmentDto } from './dto/start-enrollment.dto';
 import { CompleteEnrollmentDto } from './dto/complete-enrollment.dto';
 import { VerifyBiometricDto } from './dto/verify-biometric.dto';
@@ -33,6 +34,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     private readonly auditService: AuditService,
     private readonly storageService: StorageService,
     private readonly biometricProviderService: BiometricProviderService,
+    private readonly kommoService: KommoService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -271,6 +273,8 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
         awsLivenessSessionId: awsSessionId,
       },
     });
+
+    this.kommoService.recordBiometricUpdated(employee.tenantId, employee.id);
 
     return {
       profileId: profile.id,
@@ -727,6 +731,8 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
         comprefaceRawResult: comprefaceVerification?.rawResult ?? null,
       },
     });
+
+    this.kommoService.recordBiometricUpdated(employee.tenantId, employee.id);
 
     return {
       verificationId: verification.id,

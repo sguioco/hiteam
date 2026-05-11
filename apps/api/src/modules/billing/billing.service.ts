@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableExcept
 import { ConfigService } from '@nestjs/config';
 import { EmployeeInvitationStatus, EmployeeStatus } from '@prisma/client';
 import Stripe from 'stripe';
+import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type BillingCurrency = 'AED' | 'USD' | 'EUR';
@@ -155,6 +156,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly kommoService: KommoService,
   ) {}
 
   async getSummary(tenantId: string) {
@@ -278,6 +280,7 @@ export class BillingService {
         stripeCurrency: price.currency.toUpperCase(),
       },
     });
+    this.kommoService.recordBillingUpdated(tenantId, 'checkout_session_created');
 
     return {
       mode: 'checkout' as const,
@@ -359,6 +362,7 @@ export class BillingService {
         },
       });
     }
+    this.kommoService.recordBillingUpdated(tenantId, 'stripe_seats_synced');
 
     return { quantity };
   }
@@ -619,6 +623,7 @@ export class BillingService {
             : new Date()),
       },
     });
+    this.kommoService.recordBillingUpdated(tenantId, 'invoice_paid');
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
@@ -638,6 +643,7 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'PAYMENT_FAILED' },
     });
+    this.kommoService.recordBillingUpdated(tenantId, 'invoice_payment_failed');
   }
 
   private async handleInvoiceFinalizationFailed(invoice: Stripe.Invoice) {
@@ -654,6 +660,7 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'INVOICE_FINALIZATION_FAILED' },
     });
+    this.kommoService.recordBillingUpdated(tenantId, 'invoice_finalization_failed');
   }
 
   private async applyStripeSubscription(
@@ -725,6 +732,7 @@ export class BillingService {
         stripeCancelAtPeriodEnd: Boolean(subscriptionValue.cancel_at_period_end),
       },
     });
+    this.kommoService.recordBillingUpdated(tenantId, 'stripe_subscription_updated');
 
     return tenantId;
   }

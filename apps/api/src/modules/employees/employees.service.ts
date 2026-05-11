@@ -20,6 +20,7 @@ import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -150,6 +151,7 @@ export class EmployeesService {
     private readonly notificationsService: NotificationsService,
     private readonly storageService: StorageService,
     private readonly invitationsMailer: EmployeeInvitationsMailerService,
+    private readonly kommoService: KommoService,
   ) {}
 
   private syncBillingSeatsInBackground(tenantId: string) {
@@ -339,6 +341,7 @@ export class EmployeesService {
         email: employee.user.email,
       },
     });
+    this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'manager_access_updated');
 
     return this.getManagerAccess(tenantId, employeeId);
   }
@@ -371,6 +374,7 @@ export class EmployeesService {
         breaksEnabled,
       },
     });
+    this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'breaks_access_updated');
 
     return this.getById(tenantId, employeeId);
   }
@@ -404,6 +408,7 @@ export class EmployeesService {
         workMode: nextWorkMode,
       },
     });
+    this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'work_mode_updated');
 
     return this.getById(tenantId, employeeId);
   }
@@ -522,6 +527,7 @@ export class EmployeesService {
       });
     });
     this.syncBillingSeatsInBackground(tenantId);
+    this.kommoService.recordEmployeeCreated(tenantId, employee.id);
 
     return employee;
   }
@@ -689,6 +695,7 @@ export class EmployeesService {
       metadata: { email, phone, expiresAt: expiresAt.toISOString(), workMode },
     });
     this.syncBillingSeatsInBackground(tenantId);
+    this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
 
     return {
       id: invitation.id,
@@ -797,6 +804,7 @@ export class EmployeesService {
         phone: updated.phone,
       },
     });
+    this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
 
     return {
       id: updated.id,
@@ -1132,6 +1140,11 @@ export class EmployeesService {
         migratedFromPendingApproval: canRegisterPendingInvitation,
       },
     });
+    if (result.invitation.employeeId) {
+      this.kommoService.recordEmployeeUpdated(invitation.tenantId, result.invitation.employeeId, 'profile_submitted');
+    } else {
+      this.kommoService.recordEmployeeInvited(invitation.tenantId, invitation.id);
+    }
 
     return {
       invitationId: invitation.id,
@@ -1293,6 +1306,11 @@ export class EmployeesService {
         metadata: { reason: rejected.rejectedReason ?? null },
       });
       this.syncBillingSeatsInBackground(tenantId);
+      if (invitation.employeeId) {
+        this.kommoService.recordEmployeeUpdated(tenantId, invitation.employeeId, 'review_rejected');
+      } else {
+        this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
+      }
 
       return { id: rejected.id, status: rejected.status };
     }
@@ -1416,6 +1434,9 @@ export class EmployeesService {
         },
       });
       this.syncBillingSeatsInBackground(tenantId);
+      if (approved.employeeId) {
+        this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
+      }
 
       return {
         id: approved.id,
@@ -1531,6 +1552,9 @@ export class EmployeesService {
       },
     });
     this.syncBillingSeatsInBackground(tenantId);
+    if (approved.employeeId) {
+      this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
+    }
 
     return { id: approved.id, status: approved.status, employeeId: approved.employeeId };
   }
