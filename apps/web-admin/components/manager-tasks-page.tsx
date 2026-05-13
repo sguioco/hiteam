@@ -1527,17 +1527,6 @@ export function ManagerTasksPage({
     taskSearchMatchIds,
   ]);
 
-  const teamSummary = useMemo(() => {
-    return filteredRows.reduce(
-      (summary, row) => {
-        summary.total += row.entry.stats.total;
-        summary.completed += row.entry.stats.done;
-        return summary;
-      },
-      { total: 0, completed: 0 },
-    );
-  }, [filteredRows]);
-
   const hasActiveFilters = useMemo(
     () =>
       Boolean(groupFilter) ||
@@ -1910,7 +1899,7 @@ export function ManagerTasksPage({
 
   function renderTeamsBadges(item: TaskTableRow) {
     if (!item.teams.length) {
-      return <span className="team-tasks-team-text is-empty">—</span>;
+      return <span aria-hidden="true" className="team-tasks-team-text is-empty" />;
     }
 
     return (
@@ -2267,13 +2256,13 @@ export function ManagerTasksPage({
                         allowsSorting
                         className="w-[18%] min-w-[170px] team-tasks-head-center"
                         id="teams"
-                        label={localize(locale, "Команды", "Teams")}
+                        label={localize(locale, "Команда", "Team")}
                       />
                       <Table.Head
                         allowsSorting
                         className="w-[18%] min-w-[170px] team-tasks-head-center team-tasks-head-progress"
                         id="tasks"
-                        label={`${localize(locale, "Задачи", "Tasks")} ${teamSummary.completed} ${localize(locale, "из", "of")} ${teamSummary.total}`}
+                        label={localize(locale, "Задачи", "Tasks")}
                       />
                     </Table.Header>
 

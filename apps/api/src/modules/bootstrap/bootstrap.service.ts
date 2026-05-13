@@ -820,7 +820,9 @@ export class BootstrapService {
         })),
       this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
       withTimeoutFallback(
-        this.auditService.listCompanyActivity(user.tenantId).catch(() => []),
+        this.auditService
+          .listCompanyActivity(user.tenantId, { dateFrom, dateTo })
+          .catch(() => []),
         1200,
         [],
       ),
@@ -856,6 +858,18 @@ export class BootstrapService {
         personalHistory,
         dailyActivity,
       },
+    };
+  }
+
+  async activity(user: JwtUser, dateFrom?: string, dateTo?: string) {
+    return {
+      items: await this.auditService
+        .listCompanyActivity(user.tenantId, {
+          dateFrom,
+          dateTo,
+          limit: 80,
+        })
+        .catch(() => []),
     };
   }
 

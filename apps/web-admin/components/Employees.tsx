@@ -16,6 +16,7 @@ import {
   Plus,
   Search,
   Settings,
+  Smartphone,
   Trash2,
   UserPlus,
   Users,
@@ -2473,7 +2474,7 @@ const Employees = ({
               type="button"
               variant="outline"
             >
-              <Copy className="h-4 w-4" />
+              <Smartphone className="h-4 w-4" />
               {mobileLinkCopied
                 ? runtimeLocalize("Скопировано", "Copied", locale)
                 : runtimeLocalize("Ссылка на приложение", "Mobile app link", locale)}
@@ -4312,7 +4313,7 @@ const Employees = ({
               <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
                 <label className="grid gap-2 text-sm font-heading">
                   <span>{runtimeLocalize("Дни повтора", "Recurring days", locale)}</span>
-                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                  <div className="grid grid-cols-7 justify-items-center gap-1.5 sm:gap-2">
                     {TASK_WEEKDAY_VALUES.map((day) => {
                       const label = getWeekdayShortLabel(day, locale);
                       const isSelected = taskDraft.weekDays.includes(day);
@@ -4320,9 +4321,9 @@ const Employees = ({
                         <button
                           key={day}
                           type="button"
-                          className={`flex aspect-square w-full min-w-0 items-center justify-center rounded-full text-[11px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] sm:text-xs ${
+                          className={`flex size-10 min-w-10 items-center justify-center rounded-full text-[11px] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] sm:size-11 sm:min-w-11 sm:text-xs ${
                             isSelected
-                              ? "bg-[color:var(--primary)] text-white shadow-[0_8px_18px_rgba(37,99,235,0.22)]"
+                              ? "bg-[color:var(--primary)] text-white shadow-[0_6px_14px_rgba(37,99,235,0.2)]"
                               : "border border-border/70 bg-white text-foreground hover:bg-secondary/50"
                           }`}
                           onClick={() => {

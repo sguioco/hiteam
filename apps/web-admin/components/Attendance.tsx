@@ -213,7 +213,7 @@ function formatDistance(value: number | null) {
 
 function formatCoordinates(latitude: number | null, longitude: number | null) {
   if (latitude === null || longitude === null) {
-    return "—";
+    return "";
   }
 
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
@@ -674,6 +674,9 @@ export default function Attendance({
 
   const selectedCard =
     filteredTodayCards.find((card) => card.id === selectedId) ?? null;
+  const selectedCardHasAttendanceEvent = Boolean(
+    selectedCard?.arrival || selectedCard?.departure,
+  );
 
   const todayCounts = useMemo<Record<TodayFilter, number>>(() => {
     return {
@@ -1065,7 +1068,7 @@ export default function Attendance({
                           {runtimeLocalize("Приход", "Check-in", locale)}
                         </div>
                         <div className="mt-2 text-base font-semibold tabular-nums text-[color:var(--foreground)]">
-                          {formatTime(selectedCard.arrival)}
+                          {selectedCard.arrival ? formatTime(selectedCard.arrival) : ""}
                         </div>
                       </div>
                       <Separator
@@ -1078,31 +1081,33 @@ export default function Attendance({
                           {runtimeLocalize("Уход", "Check-out", locale)}
                         </div>
                         <div className="mt-2 text-base font-semibold tabular-nums text-[color:var(--foreground)]">
-                          {formatTime(selectedCard.departure)}
+                          {selectedCard.departure ? formatTime(selectedCard.departure) : ""}
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-[18px] border border-[color:var(--border)] bg-[color:var(--panel-muted)] p-4 text-xs text-[color:var(--muted-foreground)]">
-                      <div className="mb-2 inline-flex items-center gap-2 font-semibold uppercase tracking-[0.18em]">
-                        <MapPin className="h-3.5 w-3.5" />
-                        GPS
-                      </div>
-                      <div className="grid gap-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <span>{runtimeLocalize("Приход", "Check-in", locale)}</span>
-                          <span className="font-medium tabular-nums text-[color:var(--foreground)]">
-                            {formatCoordinates(selectedCard.checkInLatitude, selectedCard.checkInLongitude)}
-                          </span>
+                    {selectedCardHasAttendanceEvent ? (
+                      <div className="text-xs text-[color:var(--muted-foreground)]">
+                        <div className="mb-2 inline-flex items-center gap-2 font-semibold uppercase tracking-[0.18em]">
+                          <MapPin className="h-3.5 w-3.5" />
+                          GPS
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>{runtimeLocalize("Уход", "Check-out", locale)}</span>
-                          <span className="font-medium tabular-nums text-[color:var(--foreground)]">
-                            {formatCoordinates(selectedCard.checkOutLatitude, selectedCard.checkOutLongitude)}
-                          </span>
+                        <div className="grid gap-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{runtimeLocalize("Приход", "Check-in", locale)}</span>
+                            <span className="font-medium tabular-nums text-[color:var(--foreground)]">
+                              {formatCoordinates(selectedCard.checkInLatitude, selectedCard.checkInLongitude)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{runtimeLocalize("Уход", "Check-out", locale)}</span>
+                            <span className="font-medium tabular-nums text-[color:var(--foreground)]">
+                              {formatCoordinates(selectedCard.checkOutLatitude, selectedCard.checkOutLongitude)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : null}
 
                     {selectedCard.anomalies.length > 0 ? (
                       <div className="space-y-3">

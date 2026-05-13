@@ -75,6 +75,16 @@ export class BootstrapController {
     return this.bootstrapService.dashboard(user, dateFrom, dateTo);
   }
 
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('activity')
+  activity(
+    @CurrentUser() user: JwtUser,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.bootstrapService.activity(user, dateFrom, dateTo);
+  }
+
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('requests')
   requests(

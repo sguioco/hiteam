@@ -29,6 +29,11 @@ export type ActivityPageInitialData = {
   items: DashboardActivityItem[];
 };
 
+type ActivityDateRange = {
+  dateFrom: string;
+  dateTo: string;
+};
+
 function localize(locale: "ru" | "en", ru: string, en: string) {
   return locale === "ru" ? ru : en;
 }
@@ -106,16 +111,36 @@ function formatDayHeader(value: string) {
   };
 }
 
+function buildActivityBootstrapPath(range: ActivityDateRange) {
+  const searchParams = new URLSearchParams({
+    dateFrom: range.dateFrom,
+    dateTo: range.dateTo,
+  });
+
+  return `/bootstrap/activity?${searchParams.toString()}`;
+}
+
+function buildDashboardBootstrapPath(range: ActivityDateRange) {
+  const searchParams = new URLSearchParams({
+    dateFrom: range.dateFrom,
+    dateTo: range.dateTo,
+  });
+
+  return `/bootstrap/dashboard?${searchParams.toString()}`;
+}
+
 async function fetchActivitySnapshot(
   token: string,
+  range: ActivityDateRange,
 ): Promise<ActivityPageInitialData> {
   try {
-    return await apiRequest<ActivityPageInitialData>("/bootstrap/activity", {
-      token,
-    });
+    return await apiRequest<ActivityPageInitialData>(
+      buildActivityBootstrapPath(range),
+      { token },
+    );
   } catch {
     const snapshot = await apiRequest<DashboardBootstrapResponse>(
-      "/bootstrap/dashboard",
+      buildDashboardBootstrapPath(range),
       { token },
     );
 
@@ -245,9 +270,10 @@ export default function ActivityPageClient({
     setLoading(true);
     setError(null);
 
-    void fetchActivitySnapshot(session.accessToken)
+    void fetchActivitySnapshot(session.accessToken, { dateFrom, dateTo })
       .then((snapshot) => {
         setItems(snapshot.items ?? []);
+        setCollapsedDays(new Set());
       })
       .catch((loadError) => {
         setItems([]);
@@ -264,7 +290,7 @@ export default function ActivityPageClient({
       .finally(() => {
         setLoading(false);
       });
-  }, [initialData, locale]);
+  }, [dateFrom, dateTo, initialData, locale]);
 
   const groupedItems = useMemo(() => {
     const rangeStart = parseDateKey(dateFrom);

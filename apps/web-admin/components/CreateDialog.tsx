@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import {
-  BriefcaseBusiness,
   CalendarRange,
-  Sparkles,
+  ListTodo,
+  Newspaper,
   UsersRound,
 } from "lucide-react";
 import {
@@ -28,17 +28,30 @@ export type CreateDialogAction = {
 
 type CreateDialogProps = {
   actions?: CreateDialogAction[];
+  onCreateTask?: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
 export const CreateDialog = ({
   actions,
+  onCreateTask,
   open,
   onOpenChange,
 }: CreateDialogProps) => {
   const { locale } = useI18n();
   const defaultActions: CreateDialogAction[] = [
+    {
+      id: "task",
+      title: locale === "ru" ? "Добавить задачу" : "Add task",
+      description:
+        locale === "ru"
+          ? "Выбрать сотрудника и назначить новую задачу."
+          : "Choose an employee and assign a new task.",
+      icon: ListTodo,
+      onSelect: onCreateTask,
+      href: onCreateTask ? undefined : toAdminHref("/tasks"),
+    },
     {
       id: "employee",
       href: toAdminHref("/employees"),
@@ -60,24 +73,14 @@ export const CreateDialog = ({
       icon: CalendarRange,
     },
     {
-      id: "request",
-      href: toAdminHref("/requests"),
-      title: locale === "ru" ? "Запрос" : "Request",
+      id: "news",
+      href: toAdminHref("/news?create=1"),
+      title: locale === "ru" ? "Добавить новость" : "Add news",
       description:
         locale === "ru"
-          ? "Открыть раздел запросов и быстро оформить новый запрос."
-          : "Open requests and create a new request.",
-      icon: Sparkles,
-    },
-    {
-      id: "task-or-meeting",
-      href: toAdminHref("/collaboration"),
-      title: locale === "ru" ? "Задача или встреча" : "Task or meeting",
-      description:
-        locale === "ru"
-          ? "Перейти в рабочий раздел для задач, встреч и командного взаимодействия."
-          : "Open the workspace for tasks, meetings, and collaboration.",
-      icon: BriefcaseBusiness,
+          ? "Открыть новости и добавить публикацию."
+          : "Open news and add a post.",
+      icon: Newspaper,
     },
   ];
   const items = actions ?? defaultActions;
@@ -91,8 +94,8 @@ export const CreateDialog = ({
           </DialogTitle>
           <DialogDescription>
             {locale === "ru"
-              ? "Выберите, что хотите создать. Откроется нужный раздел с рабочими инструментами."
-              : "Choose what you want to create and open the relevant workspace."}
+              ? "Выберите, что хотите создать."
+              : "Choose what you want to create."}
           </DialogDescription>
         </DialogHeader>
 
@@ -108,9 +111,7 @@ export const CreateDialog = ({
                 key={action.id}
                 onClick={() => onOpenChange(false)}
               >
-                <span className="inline-flex size-11 items-center justify-center rounded-[16px] bg-[rgba(40,75,255,0.12)] text-[color:var(--accent)]">
-                  <Icon className="size-5" />
-                </span>
+                <Icon className="size-5 text-[color:var(--accent)]" />
                 <span className="grid gap-1">
                   <strong className="text-base text-[color:var(--foreground)]">
                     {action.title}
@@ -133,9 +134,7 @@ export const CreateDialog = ({
                 }}
                 type="button"
               >
-                <span className="inline-flex size-11 items-center justify-center rounded-[16px] bg-[rgba(40,75,255,0.12)] text-[color:var(--accent)]">
-                  <Icon className="size-5" />
-                </span>
+                <Icon className="size-5 text-[color:var(--accent)]" />
                 <span className="grid gap-1">
                   <strong className="text-base text-[color:var(--foreground)]">
                     {action.title}

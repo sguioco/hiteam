@@ -38,7 +38,12 @@ export type LeaderboardCenterInitialData = LeaderboardOverviewResponse;
 type LeaderboardCenterTab = "table" | "progress";
 type MonthTransitionDirection = "previous" | "next" | null;
 
-const LEADERBOARD_CACHE_TTL_MS = 30_000;
+const LEADERBOARD_CACHE_TTL_MS = 10 * 60_000;
+const LEADERBOARD_PREFETCH_MONTHS_BACK = 12;
+const leaderboardOverviewRequests = new Map<
+  string,
+  Promise<LeaderboardOverviewResponse>
+>();
 
 function localize(locale: Locale, ru: string, en: string) {
   return locale === "ru" ? ru : en;
@@ -132,6 +137,86 @@ function shiftMonthKey(value: string, amount: number) {
 
 function getCurrentMonthKey() {
   return formatMonthKey(new Date());
+}
+
+function normalizeSelectableMonthKey(
+  value: string | null | undefined,
+  currentMonthKey: string,
+) {
+  const parsed = value ? parseMonthKey(value) : null;
+  if (!parsed) {
+    return null;
+  }
+
+  const monthKey = formatMonthKey(parsed);
+  return monthKey <= currentMonthKey ? monthKey : currentMonthKey;
+}
+
+function buildLeaderboardPrefetchMonthKeys(
+  selectedMonthKey: string,
+  currentMonthKey: string,
+) {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  const add = (monthKey: string) => {
+    if (monthKey > currentMonthKey || seen.has(monthKey)) {
+      return;
+    }
+
+    seen.add(monthKey);
+    result.push(monthKey);
+  };
+
+  add(selectedMonthKey);
+  add(shiftMonthKey(selectedMonthKey, -1));
+  add(shiftMonthKey(selectedMonthKey, 1));
+  add(currentMonthKey);
+
+  for (let index = 1; index < LEADERBOARD_PREFETCH_MONTHS_BACK; index += 1) {
+    add(shiftMonthKey(currentMonthKey, -index));
+  }
+
+  return result;
+}
+
+async function requestLeaderboardOverview(params: {
+  accessToken?: string;
+  cacheKey: string | null;
+  monthKey: string;
+}) {
+  if (!params.accessToken) {
+    return null;
+  }
+
+  const requestKey = params.cacheKey ?? `leaderboard-center:${params.monthKey}`;
+  const existingRequest = leaderboardOverviewRequests.get(requestKey);
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = apiRequest<LeaderboardBootstrapResponse>(
+    `/bootstrap/leaderboard?month=${encodeURIComponent(params.monthKey)}`,
+    {
+      token: params.accessToken,
+      cacheTtlMs: LEADERBOARD_CACHE_TTL_MS,
+    },
+  )
+    .then((snapshot) => {
+      const nextOverview = snapshot.initialData;
+
+      if (params.cacheKey) {
+        writeClientCache(params.cacheKey, nextOverview);
+      }
+
+      return nextOverview;
+    })
+    .finally(() => {
+      leaderboardOverviewRequests.delete(requestKey);
+    });
+
+  leaderboardOverviewRequests.set(requestKey, request);
+  return request;
 }
 
 function formatMonthLabel(value: string, locale: Locale) {
@@ -362,15 +447,23 @@ function getProgressBarClass(todayPoints: number, maxDailyPoints: number) {
 
 export function LeaderboardCenter({
   initialData,
+  requestedMonthKey,
 }: {
   initialData?: LeaderboardCenterInitialData | null;
+  requestedMonthKey?: string | null;
 }) {
   const session = getSession();
   const { locale } = useI18n();
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
-  const initialMonthKey = initialData?.month.key ?? currentMonthKey;
+  const requestedInitialMonthKey = useMemo(
+    () => normalizeSelectableMonthKey(requestedMonthKey, currentMonthKey),
+    [currentMonthKey, requestedMonthKey],
+  );
+  const initialMonthKey =
+    initialData?.month.key ?? requestedInitialMonthKey ?? currentMonthKey;
   const initialDataMonthKey = useRef(initialData?.month.key ?? null);
   const [selectedMonthKey, setSelectedMonthKey] = useState(initialMonthKey);
+  const selectedMonthKeyRef = useRef(initialMonthKey);
   const [monthTransitionDirection, setMonthTransitionDirection] =
     useState<MonthTransitionDirection>(null);
   const [tab, setTab] = useState<LeaderboardCenterTab>("table");
@@ -385,6 +478,16 @@ export function LeaderboardCenter({
     [selectedMonthKey, session],
   );
 
+  function readCachedOverview(monthKey: string) {
+    const nextCacheKey = buildLeaderboardCacheKey(session, monthKey);
+    return nextCacheKey
+      ? readClientCache<LeaderboardOverviewResponse>(
+          nextCacheKey,
+          LEADERBOARD_CACHE_TTL_MS,
+        )
+      : null;
+  }
+
   async function loadOverview(
     monthKey: string,
     options?: { silent?: boolean },
@@ -394,17 +497,18 @@ export function LeaderboardCenter({
     }
 
     try {
-      const snapshot = await apiRequest<LeaderboardBootstrapResponse>(
-        `/bootstrap/leaderboard?month=${encodeURIComponent(monthKey)}`,
-        {
-          token: session?.accessToken,
-        },
-      );
-      const nextOverview = snapshot.initialData;
-      setOverview(nextOverview);
-      setError(null);
+      const nextOverview = await requestLeaderboardOverview({
+        accessToken: session?.accessToken,
+        cacheKey: buildLeaderboardCacheKey(session, monthKey),
+        monthKey,
+      });
+
+      if (nextOverview && selectedMonthKeyRef.current === monthKey) {
+        setOverview(nextOverview);
+        setError(null);
+      }
     } catch (loadError) {
-      if (!options?.silent) {
+      if (!options?.silent && selectedMonthKeyRef.current === monthKey) {
         setError(
           loadError instanceof Error
             ? loadError.message
@@ -416,13 +520,15 @@ export function LeaderboardCenter({
         );
       }
     } finally {
-      if (!options?.silent) {
+      if (!options?.silent && selectedMonthKeyRef.current === monthKey) {
         setLoading(false);
       }
     }
   }
 
   useEffect(() => {
+    selectedMonthKeyRef.current = selectedMonthKey;
+
     const canUseInitialData =
       initialData &&
       initialDataMonthKey.current === selectedMonthKey &&
@@ -458,15 +564,61 @@ export function LeaderboardCenter({
     void loadOverview(selectedMonthKey, {
       silent: Boolean(cached),
     });
-  }, [cacheKey, initialData, locale, selectedMonthKey]);
+  }, [cacheKey, initialData, locale, selectedMonthKey, session?.accessToken]);
 
   useEffect(() => {
-    if (!cacheKey || !overview || loading) {
+    if (!cacheKey || !overview || loading || overview.month.key !== selectedMonthKey) {
       return;
     }
 
     writeClientCache(cacheKey, overview);
-  }, [cacheKey, loading, overview]);
+  }, [cacheKey, loading, overview, selectedMonthKey]);
+
+  useEffect(() => {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+    const monthKeys = buildLeaderboardPrefetchMonthKeys(
+      selectedMonthKey,
+      currentMonthKey,
+    );
+
+    void (async () => {
+      for (const monthKey of monthKeys) {
+        if (cancelled) {
+          return;
+        }
+
+        const nextCacheKey = buildLeaderboardCacheKey(session, monthKey);
+        const cached = nextCacheKey
+          ? readClientCache<LeaderboardOverviewResponse>(
+              nextCacheKey,
+              LEADERBOARD_CACHE_TTL_MS,
+            )
+          : null;
+
+        if (cached && !cached.isStale) {
+          continue;
+        }
+
+        try {
+          await requestLeaderboardOverview({
+            accessToken: session.accessToken,
+            cacheKey: nextCacheKey,
+            monthKey,
+          });
+        } catch {
+          // Background prefetch should never block the active month.
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentMonthKey, selectedMonthKey, session?.accessToken]);
 
   useWorkspaceAutoRefresh({
     session,
@@ -533,8 +685,22 @@ export function LeaderboardCenter({
   }
 
   function handleMonthShift(delta: -1 | 1) {
+    const nextMonthKey = shiftMonthKey(selectedMonthKey, delta);
+    const cached = readCachedOverview(nextMonthKey);
+
+    selectedMonthKeyRef.current = nextMonthKey;
     setMonthTransitionDirection(delta < 0 ? "previous" : "next");
-    setSelectedMonthKey((current) => shiftMonthKey(current, delta));
+
+    if (cached) {
+      setOverview(cached.value);
+      setLoading(false);
+      setError(null);
+    } else {
+      setOverview(null);
+      setLoading(true);
+    }
+
+    setSelectedMonthKey(nextMonthKey);
   }
 
   useEffect(() => {
@@ -842,14 +1008,14 @@ export function LeaderboardCenter({
         ) : null}
 
         {tab === "table" ? (
-          <div className="team-tasks-table-card h-[min(62vh,640px)]">
+          <div className="team-tasks-table-card leaderboard-table-card">
             {loading ? (
               <WorkspaceLoading
-                className="h-full min-h-0"
+                className="min-h-[360px]"
                 label={localize(locale, "Загружаем рейтинг", "Loading leaderboard")}
               />
             ) : !overview || leaderboard.length === 0 ? (
-              <div className="flex h-full items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
+              <div className="flex min-h-[260px] items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
                 {localize(
                   locale,
                   "Пока нет данных для рейтинга.",
@@ -857,7 +1023,7 @@ export function LeaderboardCenter({
                 )}
               </div>
             ) : (
-              <div className="team-tasks-table-shell">
+              <div className="team-tasks-table-shell leaderboard-table-shell">
                 <Table
                 aria-label={localize(
                   locale,

@@ -32,6 +32,9 @@ const LEADERBOARD_DAILY_MAX_POINTS = 15;
 const LEADERBOARD_CHECK_OUT_TOLERANCE_MINUTES = 5;
 const LEADERBOARD_TASK_LOOKBACK_DAYS = 31;
 const LEADERBOARD_STREAK_LOOKBACK_DAYS = 120;
+const LEADERBOARD_CURRENT_MONTH_CACHE_MS = 30_000;
+const LEADERBOARD_PAST_MONTH_CACHE_MS = 10 * 60_000;
+const LEADERBOARD_OVERVIEW_CACHE_MAX_SIZE = 500;
 const STREAK_BONUSES = new Map<number, 10 | 20 | 30>([
   [5, 10],
   [10, 20],
@@ -168,6 +171,13 @@ type StreakState = {
   bonusByDayKey: Map<string, number>;
 };
 
+type LeaderboardOverviewCacheEntry = {
+  expiresAt: number;
+  value: LeaderboardOverviewResponse;
+};
+
+const leaderboardOverviewCache = new Map<string, LeaderboardOverviewCacheEntry>();
+
 @Injectable()
 export class LeaderboardService {
   constructor(
@@ -191,18 +201,32 @@ export class LeaderboardService {
     }
 
     const context = this.createMonthContext(requestedMonthKey);
-    const [employees, tenantSettings] = await Promise.all([
-      this.loadTeamEmployees(viewer.tenantId, viewer.id),
-      this.prisma.tenant.findUnique({
+    const tenantSettings = await this.prisma.tenant
+      .findUnique({
         where: { id: viewer.tenantId },
         select: { hideLeaderboardPeersFromEmployees: true },
-      }).catch(() => null),
-    ]);
-    const employeeIds = employees.map((employee) => employee.id);
+      })
+      .catch(() => null);
     const hidePeersFromEmployees =
       tenantSettings?.hideLeaderboardPeersFromEmployees ?? false;
     const peersHiddenForViewer =
       hidePeersFromEmployees && !canManageLeaderboard;
+    const cacheKey = this.buildOverviewCacheKey({
+      canManageLeaderboard,
+      context,
+      hidePeersFromEmployees,
+      peersHiddenForViewer,
+      viewerEmployeeId: viewer.id,
+      viewerTenantId: viewer.tenantId,
+    });
+    const cachedOverview = this.readCachedOverview(cacheKey);
+
+    if (cachedOverview) {
+      return cachedOverview;
+    }
+
+    const employees = await this.loadTeamEmployees(viewer.tenantId, viewer.id);
+    const employeeIds = employees.map((employee) => employee.id);
 
     const [shifts, sessions, approvedLeaves, taskBuckets] = await Promise.all([
       this.loadShifts(
@@ -314,7 +338,7 @@ export class LeaderboardService {
         dailyActivity: [],
       };
 
-    return {
+    const overview: LeaderboardOverviewResponse = {
       month: {
         key: context.monthKey,
         startsAt: context.monthStart.toISOString(),
@@ -346,6 +370,9 @@ export class LeaderboardService {
         peersHiddenForViewer,
       },
     };
+
+    this.writeCachedOverview(cacheKey, overview, context);
+    return overview;
   }
 
   async updateSettings(userId: string, dto: UpdateLeaderboardSettingsDto) {
@@ -359,6 +386,7 @@ export class LeaderboardService {
         hideLeaderboardPeersFromEmployees: true,
       },
     });
+    this.clearTenantOverviewCache(viewer.tenantId);
 
     return {
       hidePeersFromEmployees: tenant.hideLeaderboardPeersFromEmployees,
@@ -455,6 +483,75 @@ export class LeaderboardService {
     return viewer.user.roles.some((assignment) =>
       MANAGER_ROLE_CODES.has(assignment.role.code),
     );
+  }
+
+  private buildOverviewCacheKey(args: {
+    canManageLeaderboard: boolean;
+    context: MonthContext;
+    hidePeersFromEmployees: boolean;
+    peersHiddenForViewer: boolean;
+    viewerEmployeeId: string;
+    viewerTenantId: string;
+  }) {
+    return [
+      args.viewerTenantId,
+      args.viewerEmployeeId,
+      args.context.monthKey,
+      args.canManageLeaderboard ? "manager" : "employee",
+      args.hidePeersFromEmployees ? "hidden" : "visible",
+      args.peersHiddenForViewer ? "viewer-hidden" : "viewer-visible",
+    ].join(":");
+  }
+
+  private readCachedOverview(cacheKey: string) {
+    const cached = leaderboardOverviewCache.get(cacheKey);
+
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      leaderboardOverviewCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private writeCachedOverview(
+    cacheKey: string,
+    overview: LeaderboardOverviewResponse,
+    context: MonthContext,
+  ) {
+    const now = new Date();
+    const isCurrentMonth =
+      context.monthStart.getFullYear() === now.getFullYear() &&
+      context.monthStart.getMonth() === now.getMonth();
+    const ttlMs = isCurrentMonth
+      ? LEADERBOARD_CURRENT_MONTH_CACHE_MS
+      : LEADERBOARD_PAST_MONTH_CACHE_MS;
+
+    leaderboardOverviewCache.set(cacheKey, {
+      expiresAt: Date.now() + ttlMs,
+      value: overview,
+    });
+
+    if (leaderboardOverviewCache.size <= LEADERBOARD_OVERVIEW_CACHE_MAX_SIZE) {
+      return;
+    }
+
+    const oldestKey = leaderboardOverviewCache.keys().next().value;
+    if (oldestKey) {
+      leaderboardOverviewCache.delete(oldestKey);
+    }
+  }
+
+  private clearTenantOverviewCache(tenantId: string) {
+    for (const cacheKey of leaderboardOverviewCache.keys()) {
+      if (cacheKey.startsWith(`${tenantId}:`)) {
+        leaderboardOverviewCache.delete(cacheKey);
+      }
+    }
   }
 
   private applyLeaderboardVisibility(

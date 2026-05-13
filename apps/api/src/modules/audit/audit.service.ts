@@ -39,6 +39,12 @@ export type CompanyActivityItem = {
   targetEmployees: ActivityPerson[];
 };
 
+type CompanyActivityListOptions = {
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+};
+
 const COMPANY_ACTIVITY_ACTIONS = [
   'attendance.check_in',
   'attendance.check_out',
@@ -52,6 +58,57 @@ const COMPANY_ACTIVITY_ACTIONS = [
   'employee.review_approved',
   'request.created',
 ] as const;
+
+function parseActivityDateBoundary(
+  value: string | undefined,
+  boundary: 'start' | 'end',
+) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    const date = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      boundary === 'start' ? 0 : 23,
+      boundary === 'start' ? 0 : 59,
+      boundary === 'start' ? 0 : 59,
+      boundary === 'start' ? 0 : 999,
+    );
+
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function resolveActivityCreatedAtFilter(options?: CompanyActivityListOptions) {
+  const defaultStart = new Date();
+  defaultStart.setDate(defaultStart.getDate() - 13);
+  defaultStart.setHours(0, 0, 0, 0);
+
+  let start = parseActivityDateBoundary(options?.dateFrom, 'start') ?? defaultStart;
+  let end = parseActivityDateBoundary(options?.dateTo, 'end');
+
+  if (end && start.getTime() > end.getTime()) {
+    [start, end] = [end, start];
+  }
+
+  return end
+    ? {
+        gte: start,
+        lte: end,
+      }
+    : {
+        gte: start,
+      };
+}
 
 @Injectable()
 export class AuditService {
@@ -79,11 +136,10 @@ export class AuditService {
 
   async listCompanyActivity(
     tenantId: string,
-    options?: { limit?: number },
+    options?: CompanyActivityListOptions,
   ): Promise<CompanyActivityItem[]> {
     const limit = Math.max(1, Math.min(options?.limit ?? 36, 80));
-    const since = new Date();
-    since.setDate(since.getDate() - 7);
+    const createdAt = resolveActivityCreatedAtFilter(options);
 
     const logs = await this.prisma.auditLog.findMany({
       where: {
@@ -91,9 +147,7 @@ export class AuditService {
         action: {
           in: [...COMPANY_ACTIVITY_ACTIONS],
         },
-        createdAt: {
-          gte: since,
-        },
+        createdAt,
       },
       orderBy: {
         createdAt: 'desc',

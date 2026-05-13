@@ -25,13 +25,23 @@ async function loadInitialNewsData(): Promise<{
   }
 }
 
-export default async function NewsPage() {
+export default async function NewsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const createParam = resolvedSearchParams?.create;
+  const autoOpenCreate = Array.isArray(createParam)
+    ? createParam.includes("1")
+    : createParam === "1";
   const { initialData, mode } = await loadInitialNewsData();
 
   return (
     <AdminShell mode={mode}>
       <main className="page-shell section-stack">
         <NewsCenter
+          autoOpenCreate={autoOpenCreate}
           initialData={initialData}
           mode={mode === "employee" ? "employee" : "manager"}
         />

@@ -17,14 +17,16 @@ type LoadingNavItem = {
   href: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
-  active?: boolean;
   expandable?: boolean;
 };
 
 const DEMO_ADMIN_AVATAR_URL =
   "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
-function getLoadingNavItems(locale: LoadingSidebarLocale): LoadingNavItem[] {
+function getLoadingNavItems(
+  locale: LoadingSidebarLocale,
+  activeHref: string,
+): LoadingNavItem[] {
   const isRu = locale === "ru";
 
   return [
@@ -32,7 +34,6 @@ function getLoadingNavItems(locale: LoadingSidebarLocale): LoadingNavItem[] {
       href: "/app",
       label: isRu ? "Главная" : "Home",
       icon: Home,
-      active: true,
     },
     {
       href: "/activity",
@@ -69,8 +70,10 @@ function getLoadingNavItems(locale: LoadingSidebarLocale): LoadingNavItem[] {
 }
 
 export function AdminShellLoadingSidebar({
+  activeHref = "/app",
   locale = "ru",
 }: {
+  activeHref?: string;
   locale?: LoadingSidebarLocale;
 }) {
   const profileName = locale === "ru" ? "Алекс Петров" : "Alex Petrov";
@@ -85,13 +88,14 @@ export function AdminShellLoadingSidebar({
       </div>
 
       <nav className="sidebar-nav sidebar-nav-untitled">
-        {getLoadingNavItems(locale).map((item) => {
+        {getLoadingNavItems(locale, activeHref).map((item) => {
           const Icon = item.icon;
+          const active = item.href === activeHref;
 
           return (
             <div className="sidebar-nav-group" key={item.href}>
               <div
-                className={`sidebar-link sidebar-link-untitled${item.active ? " is-active" : ""}`}
+                className={`sidebar-link sidebar-link-untitled${active ? " is-active" : ""}`}
               >
                 <a className="sidebar-link-main" href={item.href}>
                   <span className="flex items-center gap-3">

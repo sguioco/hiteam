@@ -460,18 +460,21 @@ function getAnnouncementImageOutputDimensions(value: AnnouncementImageAspectRati
 export function NewsCenter({
   mode,
   initialData,
+  autoOpenCreate = false,
 }: NewsCenterProps & {
+  autoOpenCreate?: boolean;
   initialData?: NewsCenterInitialData | null;
 }) {
   const { locale } = useI18n();
   const session = getSession();
   const cacheKey = buildNewsCacheKey(session, mode);
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const isManagerView = mode === "manager";
   const [items, setItems] = useState<AnnouncementItem[]>(initialData?.items ?? []);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(autoOpenCreate && isManagerView);
   const [deleteTarget, setDeleteTarget] = useState<AnnouncementItem | null>(null);
   const [draft, setDraft] = useState<NewsDraft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -486,8 +489,16 @@ export function NewsCenter({
     initialData?.employees ?? [],
   );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
-  const isManagerView = mode === "manager";
   const didUseInitialData = useRef(Boolean(initialData));
+
+  useEffect(() => {
+    if (!autoOpenCreate || !isManagerView) {
+      return;
+    }
+
+    setDraft(EMPTY_DRAFT);
+    setCreateOpen(true);
+  }, [autoOpenCreate, isManagerView]);
 
   function applyCachedSnapshot(snapshot: NewsCenterCachePayload) {
     setItems(snapshot.items);

@@ -4,26 +4,30 @@ import {
   LeaderboardCenter,
   type LeaderboardCenterInitialData,
 } from "@/components/leaderboard-center";
+import { hasManagerAccess } from "@/lib/auth";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 
-async function loadInitialLeaderboardData(month?: string): Promise<{
-  initialData: LeaderboardCenterInitialData | null;
-  mode: "admin" | "employee";
-}> {
-  const session = await requireServerSession();
+const LEADERBOARD_SERVER_BOOTSTRAP_TIMEOUT_MS = 1800;
+
+async function loadInitialLeaderboardData(
+  session: Awaited<ReturnType<typeof requireServerSession>>,
+  month?: string,
+): Promise<LeaderboardCenterInitialData | null> {
   const query = month?.trim() ? `?month=${encodeURIComponent(month.trim())}` : "";
 
   try {
-    return await serverApiRequestWithSession<LeaderboardBootstrapResponse>(
+    const snapshot = await serverApiRequestWithSession<LeaderboardBootstrapResponse>(
       session,
       `/bootstrap/leaderboard${query}`,
+      {
+        signal: AbortSignal.timeout(LEADERBOARD_SERVER_BOOTSTRAP_TIMEOUT_MS),
+      },
     );
+
+    return snapshot.initialData;
   } catch {
-    return {
-      mode: "admin",
-      initialData: null,
-    };
+    return null;
   }
 }
 
@@ -36,12 +40,14 @@ export default async function LeaderboardPage({
   const monthParam = resolvedSearchParams?.month;
   const month =
     typeof monthParam === "string" ? monthParam : monthParam?.[0];
-  const { initialData, mode } = await loadInitialLeaderboardData(month);
+  const session = await requireServerSession();
+  const initialData = await loadInitialLeaderboardData(session, month);
+  const mode = hasManagerAccess(session.user.roleCodes) ? "admin" : "employee";
 
   return (
     <AdminShell mode={mode}>
       <main className="page-shell section-stack">
-        <LeaderboardCenter initialData={initialData} />
+        <LeaderboardCenter initialData={initialData} requestedMonthKey={month} />
       </main>
     </AdminShell>
   );

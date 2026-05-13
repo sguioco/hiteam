@@ -44,6 +44,7 @@ import { getMockAvatarDataUrl } from "../lib/mock-avatar";
 import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
+import { HeaderTaskCreateDialog } from "./header-task-create-dialog";
 import { buildUserDisplayName } from "../lib/profile-display";
 import { localizePersonName } from "../lib/transliteration";
 import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
@@ -348,6 +349,7 @@ export function AdminShell({
   );
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
@@ -1237,7 +1239,7 @@ export function AdminShell({
   if (!ready || !session) {
     return (
       <div className="admin-frame admin-frame-checking-session">
-        <AdminShellLoadingSidebar locale={locale} />
+        <AdminShellLoadingSidebar activeHref={pathname} locale={locale} />
 
         <section
           className={`admin-content admin-content-session-check${
@@ -1259,8 +1261,15 @@ export function AdminShell({
     <div className="admin-frame">
       <CreateDialog
         actions={createDialogActions}
+        onCreateTask={() => setTaskCreateOpen(true)}
         onOpenChange={setCreateOpen}
         open={createOpen}
+      />
+      <HeaderTaskCreateDialog
+        onCreated={() => router.refresh()}
+        onOpenChange={setTaskCreateOpen}
+        open={taskCreateOpen}
+        session={session}
       />
 
       <aside className="sidebar sidebar-untitled">

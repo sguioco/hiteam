@@ -5523,6 +5523,17 @@ body {
   will-change: transform, opacity;
 }
 
+.team-tasks-table-card.leaderboard-table-card {
+  flex: 0 0 auto;
+  height: auto !important;
+}
+
+.team-tasks-table-shell.leaderboard-table-shell {
+  height: auto;
+  overflow-y: visible;
+  overscroll-behavior-y: auto;
+}
+
 .leaderboard-month-label.is-previous,
 .leaderboard-month-surface.is-previous,
 .leaderboard-month-content.is-previous {
