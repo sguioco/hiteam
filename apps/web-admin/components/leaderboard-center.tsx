@@ -1217,8 +1217,8 @@ export function LeaderboardCenter({
                     <p className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]">
                       {localize(
                         locale,
-                        "Сохраняйте серию и получайте дополнительные бонусы.",
-                        "Keep your streak and earn extra bonuses.",
+                        "Сохраняйте серию и получайте дополнительные бонусы",
+                        "Keep your streak and earn extra bonuses",
                       )}
                     </p>
                     <div className="mt-4">

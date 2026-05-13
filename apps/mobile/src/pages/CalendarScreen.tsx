@@ -3453,14 +3453,8 @@ export default function CalendarScreen({
                           : managerCalendarTab === "done"
                             ? row.doneTasks
                             : row.assignedTasks;
-                      const taskCountText =
-                        managerCalendarTab === "all"
-                          ? row.plannedTasks.length > 0
-                            ? `${row.doneTasks.length}/${row.plannedTasks.length}`
-                            : `0 ${t("calendar.tasksShort")}`
-                          : String(visibleRowTasks.length);
-                      const shouldShowTaskLabel =
-                        managerCalendarTab !== "all" || row.plannedTasks.length > 0;
+                      const taskCountText = String(visibleRowTasks.length);
+                      const shouldShowTaskLabel = true;
                       const taskLabel =
                         managerCalendarTab === "done"
                           ? t("calendar.tabDone")

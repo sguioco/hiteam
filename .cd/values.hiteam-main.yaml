@@ -33,6 +33,14 @@ api:
     COMPRE_FACE_BASE_URL: ""
     COMPRE_FACE_API_KEY: ""
     COMPRE_FACE_TIMEOUT_MS: "10000"
+    KOMMO_ENABLED: "false"
+    KOMMO_SUBDOMAIN: ""
+    KOMMO_LONG_LIVED_TOKEN: ""
+    KOMMO_PIPELINE_NAME: "HiTeam"
+    KOMMO_TRIAL_DAYS: "7"
+    KOMMO_EVENT_NOTES_ENABLED: "true"
+    KOMMO_WEBHOOK_SECRET: "qTROKZbJj0kXMkpOwo0fwlV2uL4qz6BZ"
+    KOMMO_DEFAULT_REFERRAL_SOURCE: "HiTeam signup"
 
 webAdmin:
   image: "ghcr.io/sguioco/hiteam-web-admin:main-544e9d3f25b021446875ad2a149285e2a8c76330"

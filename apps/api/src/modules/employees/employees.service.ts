@@ -1024,7 +1024,7 @@ export class EmployeesService {
       'registerFromInvitation',
     );
 
-    let result: { user: { id: string }; invitation: { id: string } };
+    let result: { user: { id: string }; invitation: { id: string; employeeId: string | null } };
 
     try {
       result = await this.prisma.$transaction(async (tx) => {

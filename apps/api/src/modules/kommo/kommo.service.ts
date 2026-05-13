@@ -918,12 +918,15 @@ export class KommoService {
     const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
     const employeesWithRecentActivitySet = new Set(employeesWithRecentActivity.map((entry) => entry.employeeId));
     const employeesWithoutActivity = Array.from(activeEmployeeIds).filter((id) => !employeesWithRecentActivitySet.has(id)).length;
+    const seatHoldingInvitationStatuses = new Set<EmployeeInvitationStatus>([
+      EmployeeInvitationStatus.INVITED,
+      EmployeeInvitationStatus.PENDING_APPROVAL,
+      EmployeeInvitationStatus.APPROVED,
+    ]);
     const paidSeats = tenant.billingSubscription?.paidSeats ?? 0;
     const usedSeats =
       activeEmployees.length +
-      tenant.employeeInvitations.filter((invitation) =>
-        [EmployeeInvitationStatus.INVITED, EmployeeInvitationStatus.PENDING_APPROVAL, EmployeeInvitationStatus.APPROVED].includes(invitation.status),
-      ).length;
+      tenant.employeeInvitations.filter((invitation) => seatHoldingInvitationStatuses.has(invitation.status)).length;
     const trialDays = this.getConfig().trialDays;
     const trialStartDate = tenant.createdAt;
     const trialEndDate = new Date(tenant.createdAt.getTime() + trialDays * 24 * 60 * 60 * 1000);

@@ -1,7 +1,8 @@
 import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmployeeInvitationStatus, EmployeeStatus } from '@prisma/client';
-import Stripe from 'stripe';
+import StripeClient from 'stripe';
+import type { Stripe } from 'stripe/cjs/stripe.core';
 import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -342,8 +343,7 @@ export class BillingService {
         },
       },
     );
-    const stripeSubscriptionId =
-      typeof item.subscription === 'string' ? item.subscription : item.subscription?.id;
+    const stripeSubscriptionId = typeof item.subscription === 'string' ? item.subscription : null;
 
     if (stripeSubscriptionId) {
       const stripeSubscription = await this.getStripe().subscriptions.retrieve(
@@ -461,7 +461,7 @@ export class BillingService {
       throw new ServiceUnavailableException('STRIPE_SECRET_KEY is not configured.');
     }
 
-    this.stripeClient = new Stripe(secretKey);
+    this.stripeClient = new StripeClient(secretKey);
     return this.stripeClient;
   }
 
