@@ -504,6 +504,13 @@ export class KommoService {
           name: config.pipelineName,
           sort: 100,
           is_main: false,
+          is_unsorted_on: false,
+          _embedded: {
+            statuses: KOMMO_STAGE_SPECS.map((stage) => ({
+              name: stage.name,
+              sort: stage.sort,
+            })),
+          },
         },
       ]);
       const created = this.extractEmbedded(createResponse, 'pipelines')[0];
@@ -543,7 +550,6 @@ export class KommoService {
         missing.map((stage) => ({
           name: stage.name,
           sort: stage.sort,
-          color: stage.color,
         })),
       );
       for (const status of this.extractEmbedded(createResponse, 'statuses')) {
@@ -1042,17 +1048,12 @@ export class KommoService {
       custom_fields_values: [
         ...this.buildStandardContactFieldValues(email, phone),
         ...this.toCustomFieldValues(setup.fields.contacts, {
-          employeeId: owner?.id ?? snapshot.tenant.id,
           employeeName: name,
           employeePosition: owner?.position.name ?? 'Primary contact',
           employeeBranch: owner?.primaryLocation.name ?? snapshot.primaryLocation?.name ?? null,
           employeeStatus: owner?.status ?? 'INVITED',
           employeeAppInstalled: owner ? owner.devices.length > 0 : false,
           employeeFaceVerificationActive: owner?.biometricProfile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED,
-          employeeGroup: owner?.groupMemberships[0]?.group.name ?? null,
-          employeeLastLogin: owner ? snapshot.latestLoginByUserId.get(owner.userId) ?? null : null,
-          employeeAvatarUrl: owner?.avatarUrl ?? snapshot.primaryCompany?.logoUrl ?? null,
-          employeeLink: owner ? this.buildWebUrl(`/employees/${owner.id}`) : this.buildWebUrl('/employees'),
         }),
       ],
       _embedded: {
@@ -1111,19 +1112,13 @@ export class KommoService {
       custom_fields_values: [
         ...this.buildStandardContactFieldValues(employee.user.email, employee.phone),
         ...this.toCustomFieldValues(setup.fields.contacts, {
-          employeeId: employee.id,
           employeeName: name,
           employeePosition: employee.position.name,
           employeeBranch: employee.primaryLocation.name,
           employeeStatus: employee.status,
           employeeLastCheckIn: snapshot.latestCheckInByEmployeeId.get(employee.id) ?? null,
-          employeeLastCheckOut: snapshot.latestCheckOutByEmployeeId.get(employee.id) ?? null,
           employeeAppInstalled: employee.devices.length > 0,
           employeeFaceVerificationActive: employee.biometricProfile?.enrollmentStatus === BiometricEnrollmentStatus.ENROLLED,
-          employeeGroup: employee.groupMemberships[0]?.group.name ?? null,
-          employeeLastLogin: snapshot.latestLoginByUserId.get(employee.userId) ?? null,
-          employeeAvatarUrl: employee.avatarUrl ?? null,
-          employeeLink: this.buildWebUrl(`/employees/${employee.id}`),
         }),
       ],
       _embedded: {
@@ -1153,15 +1148,12 @@ export class KommoService {
       custom_fields_values: [
         ...this.buildStandardContactFieldValues(invitation.email, invitation.phone),
         ...this.toCustomFieldValues(setup.fields.contacts, {
-          employeeId: invitation.id,
           employeeName: name,
           employeePosition: 'Invited employee',
           employeeBranch: invitation.company?.name ?? snapshot.primaryLocation?.name ?? null,
           employeeStatus: invitation.status,
           employeeAppInstalled: false,
           employeeFaceVerificationActive: false,
-          employeeAvatarUrl: invitation.avatarUrl ?? null,
-          employeeLink: this.buildWebUrl('/employees'),
         }),
       ],
       _embedded: {
@@ -1379,7 +1371,7 @@ export class KommoService {
       return [{ value: Math.floor(date.getTime() / 1000) }];
     }
 
-    if (field.type === 'numeric' || field.type === 'monetary') {
+    if (field.type === 'numeric') {
       const numberValue = typeof value === 'number' ? value : Number(value);
       if (!Number.isFinite(numberValue)) {
         return null;
@@ -1529,8 +1521,19 @@ export class KommoService {
     });
   }
 
-  private markTenantSyncState(tenantId: string, status: string, error: string | null, leadId?: number) {
-    return this.upsertLink(tenantId, 'tenant', tenantId, 'leads', leadId ?? null, status, error);
+  private async markTenantSyncState(tenantId: string, status: string, error: string | null, leadId?: number) {
+    const existingLeadLink =
+      leadId === undefined ? await this.findLink(tenantId, 'tenant', tenantId, 'leads') : null;
+
+    return this.upsertLink(
+      tenantId,
+      'tenant',
+      tenantId,
+      'leads',
+      leadId ?? existingLeadLink?.kommoEntityId ?? null,
+      status,
+      error,
+    );
   }
 
   private readManualStageName(metadataJson: string | null | undefined, setup: KommoAccountSetup): KommoStageName | null {

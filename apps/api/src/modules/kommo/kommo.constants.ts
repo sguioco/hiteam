@@ -8,8 +8,7 @@ export type KommoCustomFieldType =
   | 'date'
   | 'date_time'
   | 'url'
-  | 'textarea'
-  | 'monetary';
+  | 'textarea';
 
 export type KommoFieldSpec = {
   key: string;
@@ -132,7 +131,7 @@ export const KOMMO_FIELD_SPECS: KommoFieldSpec[] = [
 
   { key: 'subscriptionType', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Subscription Type', type: 'text', sort: 10 },
   { key: 'pricePerEmployee', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Price Per Employee', type: 'numeric', sort: 20 },
-  { key: 'totalMonthlyPayment', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Total Monthly Payment', type: 'monetary', sort: 30 },
+  { key: 'totalMonthlyPayment', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Total Monthly Payment', type: 'numeric', sort: 30 },
   {
     key: 'billingCycle',
     entityType: 'leads',
@@ -184,25 +183,19 @@ export const KOMMO_FIELD_SPECS: KommoFieldSpec[] = [
   { key: 'companyLastActivityDate', entityType: 'companies', groupName: 'HiTeam - Company', name: 'Last Activity Date', type: 'date_time', sort: 90 },
   { key: 'companyLocations', entityType: 'companies', groupName: 'HiTeam - Company', name: 'Number of Locations', type: 'numeric', sort: 100 },
 
-  { key: 'employeeId', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'HiTeam Employee ID', type: 'text', sort: 10 },
-  { key: 'employeeName', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Employee Name', type: 'text', sort: 20 },
-  { key: 'employeePosition', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Position', type: 'text', sort: 30 },
-  { key: 'employeeBranch', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Branch', type: 'text', sort: 40 },
+  { key: 'employeeName', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Employee Name', type: 'text', sort: 10 },
+  { key: 'employeePosition', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Position', type: 'text', sort: 20 },
+  { key: 'employeeBranch', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Branch', type: 'text', sort: 30 },
   {
     key: 'employeeStatus',
     entityType: 'contacts',
     groupName: 'HiTeam - Employee',
     name: 'Status',
     type: 'select',
-    sort: 50,
+    sort: 40,
     enums: ['ACTIVE', 'INACTIVE', 'TERMINATED', 'INVITED', 'PENDING_APPROVAL', 'REJECTED'],
   },
-  { key: 'employeeLastCheckIn', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Last Check-In', type: 'date_time', sort: 60 },
-  { key: 'employeeLastCheckOut', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Last Check-Out', type: 'date_time', sort: 70 },
-  { key: 'employeeAppInstalled', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'App Installed', type: 'checkbox', sort: 80 },
-  { key: 'employeeFaceVerificationActive', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Face Verification Active', type: 'checkbox', sort: 90 },
-  { key: 'employeeGroup', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Group', type: 'text', sort: 100 },
-  { key: 'employeeLastLogin', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Last Login Date', type: 'date_time', sort: 110 },
-  { key: 'employeeAvatarUrl', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Avatar URL', type: 'url', sort: 120 },
-  { key: 'employeeLink', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'HiTeam Employee Link', type: 'url', sort: 130 },
+  { key: 'employeeLastCheckIn', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Last Check-In', type: 'date_time', sort: 50 },
+  { key: 'employeeAppInstalled', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'App Installed', type: 'checkbox', sort: 60 },
+  { key: 'employeeFaceVerificationActive', entityType: 'contacts', groupName: 'HiTeam - Employee', name: 'Face Verification Active', type: 'checkbox', sort: 70 },
 ];
