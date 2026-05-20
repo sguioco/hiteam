@@ -6,6 +6,11 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+} from "motion/react";
 import Image from "next/image";
 import { BrandWordmark } from "./brand-wordmark";
 import { AppStoreButton, GooglePlayButton } from "./landing-page";
@@ -2801,6 +2806,32 @@ function CaseResultIcon({ index }: { index: number }) {
   );
 }
 
+function Reveal({
+  amount = 0.2,
+  children,
+  className,
+  delay = 0,
+}: {
+  amount?: number;
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      className={className}
+      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+      transition={{ delay, duration: 0.52, ease: "easeOut" }}
+      viewport={{ amount, once: true }}
+      whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function SectionHeading({
   eyebrow,
   title,
@@ -2814,14 +2845,20 @@ function SectionHeading({
   center?: boolean;
   light?: boolean;
 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <div
+    <motion.div
       className={cx(
         "mb-12 max-w-3xl",
         center ? "mx-auto text-center" : "",
         light ? "text-white" : "text-foreground",
       )}
       data-lp-section-heading
+      initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+      transition={{ duration: 0.48, ease: "easeOut" }}
+      viewport={{ amount: 0.65, once: true }}
+      whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
     >
       <span
         className={cx(
@@ -2849,7 +2886,7 @@ function SectionHeading({
           {subtitle}
         </p>
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
@@ -3384,6 +3421,7 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
 }
 export function SalesLandingPage() {
   const { locale: appLocale, setLocale: setAppLocale } = useI18n();
+  const reduceMotion = useReducedMotion();
   const [locale, setLandingLocale] = useState<LandingLocale>(appLocale);
   const [activeCase, setActiveCase] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -3519,24 +3557,61 @@ export function SalesLandingPage() {
               >
                 <FlagIcon locale={locale} />
               </button>
-              {isLocaleMenuOpen ? (
-                <div className="absolute top-full left-1/2 mt-3 grid -translate-x-1/2 gap-2 rounded-[10px] border border-slate-200 bg-white p-2 shadow-[0_16px_44px_rgba(15,23,42,0.14)]">
-                  {LANDING_LOCALE_OPTIONS.map((option) => (
-                    <button
-                      aria-label={LANGUAGE_NAMES[option]}
-                      className={cx(
-                        "p-0 leading-none transition hover:scale-105",
-                        option === locale ? "opacity-100" : "opacity-65",
-                      )}
-                      key={option}
-                      onClick={() => updateLocale(option)}
-                      type="button"
-                    >
-                      <FlagIcon locale={option} />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+              <AnimatePresence initial={false}>
+                {isLocaleMenuOpen ? (
+                  <motion.div
+                    animate={
+                      reduceMotion
+                        ? { opacity: 1 }
+                        : { opacity: 1, scale: 1, y: 0 }
+                    }
+                    className="absolute top-full left-1/2 mt-3 grid gap-2 rounded-[10px] border border-slate-200 bg-white p-2 shadow-[0_16px_44px_rgba(15,23,42,0.14)]"
+                    exit={
+                      reduceMotion
+                        ? { opacity: 0 }
+                        : { opacity: 0, scale: 0.96, y: -4 }
+                    }
+                    initial={
+                      reduceMotion
+                        ? { opacity: 0 }
+                        : { opacity: 0, scale: 0.96, y: -4 }
+                    }
+                    style={{ x: "-50%" }}
+                    transition={{ duration: 0.16, ease: "easeOut" }}
+                  >
+                    {LANDING_LOCALE_OPTIONS.map((option, optionIndex) => (
+                      <motion.button
+                        animate={
+                          reduceMotion
+                            ? { opacity: option === locale ? 1 : 0.65 }
+                            : {
+                                opacity: option === locale ? 1 : 0.65,
+                                scale: 1,
+                              }
+                        }
+                        aria-label={LANGUAGE_NAMES[option]}
+                        className="p-0 leading-none"
+                        initial={
+                          reduceMotion
+                            ? false
+                            : { opacity: 0, scale: 0.92 }
+                        }
+                        key={option}
+                        onClick={() => updateLocale(option)}
+                        transition={{
+                          delay: optionIndex * 0.025,
+                          duration: 0.16,
+                          ease: "easeOut",
+                        }}
+                        type="button"
+                        whileHover={reduceMotion ? undefined : { scale: 1.05 }}
+                      >
+                        <FlagIcon locale={option} />
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
             <a
               className={cx(
@@ -3575,7 +3650,12 @@ export function SalesLandingPage() {
           </video>
           <div className="absolute inset-0 bg-white/58" />
           <div className="relative z-10 mx-auto grid max-w-[1120px] items-center gap-10 lg:grid-cols-2 lg:gap-16">
-            <div className={cx(isRtl ? "text-right" : "")}>
+            <motion.div
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+              className={cx(isRtl ? "text-right" : "")}
+              initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+              transition={{ duration: 0.58, ease: "easeOut" }}
+            >
               <h1 className="mb-4 max-w-[17ch] text-[clamp(2.25rem,4.2vw,3.5rem)] leading-[1.08] font-bold tracking-[-0.025em] text-slate-950">
                 {copy.hero.titleLines.map((line, index) => (
                   <span
@@ -3649,11 +3729,16 @@ export function SalesLandingPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </motion.div>
 
-            <div className="hidden lg:block">
+            <motion.div
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+              className="hidden lg:block"
+              initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+              transition={{ delay: 0.12, duration: 0.58, ease: "easeOut" }}
+            >
               <HeroPhoneCard copy={copy} />
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -3712,9 +3797,17 @@ export function SalesLandingPage() {
             />
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {copy.cost.cards.map((card, index) => (
-                <article
+                <motion.article
                   className="rounded-[14px] bg-[#1e3a8a] px-5 py-6 text-white"
+                  initial={reduceMotion ? false : { opacity: 0, y: 18 }}
                   key={card.title}
+                  transition={{
+                    delay: index * 0.045,
+                    duration: 0.42,
+                    ease: "easeOut",
+                  }}
+                  viewport={{ amount: 0.35, once: true }}
+                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                 >
                   <div className="mb-4">
                     <CostCardIcon index={index} />
@@ -3725,7 +3818,7 @@ export function SalesLandingPage() {
                   <p className="mt-2 text-xs leading-6 text-white/62">
                     {card.body}
                   </p>
-                </article>
+                </motion.article>
               ))}
             </div>
             <p className="mt-6 flex max-w-none items-start gap-3 whitespace-nowrap text-sm font-medium leading-6 text-amber-800">
@@ -3749,9 +3842,17 @@ export function SalesLandingPage() {
             />
             <div className="grid overflow-hidden rounded-[14px] border border-slate-200 bg-slate-200 md:grid-cols-3">
               {copy.problem.cards.map((card, index) => (
-                <article
+                <motion.article
                   className="bg-white px-6 py-7 transition hover:bg-[#f8faff]"
+                  initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                   key={card.title}
+                  transition={{
+                    delay: index * 0.05,
+                    duration: 0.42,
+                    ease: "easeOut",
+                  }}
+                  viewport={{ amount: 0.35, once: true }}
+                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                 >
                   <p className="text-[2.5rem] leading-none font-extrabold tracking-[-0.04em] text-blue-100">
                     {String(index + 1).padStart(2, "0")}
@@ -3762,7 +3863,7 @@ export function SalesLandingPage() {
                   <p className="mt-2 text-sm leading-7 text-muted-foreground">
                     {card.body}
                   </p>
-                </article>
+                </motion.article>
               ))}
             </div>
             <div className="mt-5 grid overflow-hidden rounded-[14px] border border-slate-200 bg-slate-200 md:grid-cols-2">
@@ -3804,7 +3905,18 @@ export function SalesLandingPage() {
             <div className="relative grid gap-10 md:grid-cols-3 md:gap-11">
               <div className="absolute top-[3.65rem] right-[calc(16.67%+1.25rem)] left-[calc(16.67%+1.25rem)] hidden h-px bg-gradient-to-r from-blue-100 via-primary to-blue-100 md:block" />
               {copy.how.steps.map((step, index) => (
-                <article className="relative text-center" key={step.title}>
+                <motion.article
+                  className="relative text-center"
+                  initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                  key={step.title}
+                  transition={{
+                    delay: index * 0.08,
+                    duration: 0.45,
+                    ease: "easeOut",
+                  }}
+                  viewport={{ amount: 0.45, once: true }}
+                  whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                >
                   <div className="relative mb-5 h-[5.25rem]">
                     <p className="absolute top-0 left-1/2 -translate-x-1/2 text-[2.75rem] leading-none font-extrabold tracking-[-0.04em] text-blue-100">
                       {step.icon}
@@ -3817,7 +3929,7 @@ export function SalesLandingPage() {
                   <p className="mt-1.5 text-sm leading-7 text-muted-foreground">
                     {step.body}
                   </p>
-                </article>
+                </motion.article>
               ))}
             </div>
             <div className="mx-auto mt-8 flex max-w-full items-start gap-3 overflow-x-auto text-[0.8125rem] leading-7 text-slate-700 md:max-w-none md:overflow-visible">
@@ -3842,84 +3954,96 @@ export function SalesLandingPage() {
             />
             <div className="mb-7 flex w-fit max-w-full gap-1 overflow-x-auto rounded-[10px] border border-slate-200 bg-[#f8faff] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {copy.cases.items.map((item, index) => (
-                <button
+                <motion.button
                   className={cx(
-                    "inline-flex shrink-0 items-center gap-2 rounded-[8px] px-4 py-2.5 text-sm font-semibold transition",
+                    "inline-flex shrink-0 items-center gap-2 rounded-[8px] px-4 py-2.5 text-sm font-semibold transition-[background-color,color,box-shadow]",
                     activeCase === index
                       ? "bg-white text-[#1e3a8a] shadow-[0_1px_4px_rgba(15,23,42,0.08)]"
                       : "text-slate-600 hover:text-slate-950",
                   )}
                   key={item.label}
+                  layout
                   onClick={() => setActiveCase(index)}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
                   type="button"
+                  whileTap={reduceMotion ? undefined : { scale: 0.97 }}
                 >
                   <CaseTabIcon index={index} />
                   {item.label}
-                </button>
+                </motion.button>
               ))}
             </div>
-            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)] lg:items-center">
-              <div>
-                <blockquote className="border-l-[3px] border-primary pl-4 text-[1.06rem] leading-7 text-slate-800">
-                  “{activeCaseItem.quote}”
-                  <footer className="mt-3 text-sm font-medium text-muted-foreground">
-                    {activeCaseItem.author}
-                  </footer>
-                </blockquote>
-                <div className="mt-8">
-                  <p className="mb-4 text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">
-                    {activeCaseItem.resultLabel}
-                  </p>
-                  <div className="overflow-hidden rounded-[9px] border border-slate-200 bg-white/55 text-sm leading-6 text-slate-700">
-                    {activeCaseItem.results.map((result, index) => (
-                      <Fragment key={result}>
-                        {index > 0 ? (
-                          <Separator className="bg-slate-200/80" />
-                        ) : null}
-                        <div className="flex items-start gap-3 px-4 py-3">
-                          <CaseResultIcon index={index} />
-                          <p>{result}</p>
+            <AnimatePresence initial={false} mode="wait">
+              <motion.div
+                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)] lg:items-center"
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
+                key={`${locale}-${activeCase}`}
+                transition={{ duration: 0.26, ease: "easeOut" }}
+              >
+                <div>
+                  <blockquote className="border-l-[3px] border-primary pl-4 text-[1.06rem] leading-7 text-slate-800">
+                    “{activeCaseItem.quote}”
+                    <footer className="mt-3 text-sm font-medium text-muted-foreground">
+                      {activeCaseItem.author}
+                    </footer>
+                  </blockquote>
+                  <div className="mt-8">
+                    <p className="mb-4 text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">
+                      {activeCaseItem.resultLabel}
+                    </p>
+                    <div className="overflow-hidden rounded-[9px] border border-slate-200 bg-white/55 text-sm leading-6 text-slate-700">
+                      {activeCaseItem.results.map((result, index) => (
+                        <Fragment key={result}>
+                          {index > 0 ? (
+                            <Separator className="bg-slate-200/80" />
+                          ) : null}
+                          <div className="flex items-start gap-3 px-4 py-3">
+                            <CaseResultIcon index={index} />
+                            <p>{result}</p>
+                          </div>
+                        </Fragment>
+                      ))}
+                      <Separator className="bg-slate-200/80" />
+                      <div className="px-4 py-3">
+                        <div className="flex items-start gap-3">
+                          <CaseResultIcon index={3} />
+                          <p>
+                            {locale === "ru"
+                              ? "Новость отправлена:"
+                              : locale === "es"
+                                ? "Noticia enviada:"
+                                : locale === "ar"
+                                  ? "تم إرسال الخبر:"
+                                  : "Company news sent:"}
+                          </p>
                         </div>
-                      </Fragment>
-                    ))}
-                    <Separator className="bg-slate-200/80" />
-                    <div className="px-4 py-3">
-                      <div className="flex items-start gap-3">
-                        <CaseResultIcon index={3} />
-                        <p>
-                          {locale === "ru"
-                            ? "Новость отправлена:"
-                            : locale === "es"
-                              ? "Noticia enviada:"
-                              : locale === "ar"
-                                ? "تم إرسال الخبر:"
-                                : "Company news sent:"}
-                        </p>
-                      </div>
-                      <div className="mt-2 ml-7 rounded-[8px] border border-blue-100 bg-[#eff6ff] px-3 py-2.5">
-                        <p className="text-[0.62rem] font-bold tracking-[0.12em] text-primary uppercase">
-                          {activeCaseItem.newsLabel}
-                        </p>
-                        <p className="mt-1 text-sm leading-6">
-                          {activeCaseItem.newsText}
-                        </p>
+                        <div className="mt-2 ml-7 rounded-[8px] border border-blue-100 bg-[#eff6ff] px-3 py-2.5">
+                          <p className="text-[0.62rem] font-bold tracking-[0.12em] text-primary uppercase">
+                            {activeCaseItem.newsLabel}
+                          </p>
+                          <p className="mt-1 text-sm leading-6">
+                            {activeCaseItem.newsText}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="relative mx-auto w-full max-w-[250px] lg:max-w-[255px]">
-                <div className="relative min-h-[34rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_4px_6px_rgba(15,23,42,0.06),0_24px_70px_rgba(37,99,235,0.18)]">
-                  <Image
-                    alt="HiTeam application mockup"
-                    className="object-cover object-top"
-                    fill
-                    sizes="(min-width: 1024px) 255px, 78vw"
-                    src={`/1${mockupLocale}.webp`}
-                  />
+                <div className="relative mx-auto w-full max-w-[250px] lg:max-w-[255px]">
+                  <div className="relative min-h-[34rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_4px_6px_rgba(15,23,42,0.06),0_24px_70px_rgba(37,99,235,0.18)]">
+                    <Image
+                      alt="HiTeam application mockup"
+                      className="object-cover object-top"
+                      fill
+                      sizes="(min-width: 1024px) 255px, 78vw"
+                      src={`/1${mockupLocale}.webp`}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </section>
 
@@ -3934,9 +4058,19 @@ export function SalesLandingPage() {
                 const iconName = FEATURE_ICON_NAMES[index] ?? "clock";
 
                 return (
-                  <article
+                  <motion.article
                     className="bg-white px-6 py-7 transition hover:bg-[#f8faff]"
+                    initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                     key={feature.title}
+                    transition={{
+                      delay: (index % 3) * 0.04,
+                      duration: 0.4,
+                      ease: "easeOut",
+                    }}
+                    viewport={{ amount: 0.25, once: true }}
+                    whileInView={
+                      reduceMotion ? undefined : { opacity: 1, y: 0 }
+                    }
                   >
                     <div className="mb-4">
                       <FeatureIcon name={iconName} />
@@ -3947,7 +4081,7 @@ export function SalesLandingPage() {
                     <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
                       {feature.body}
                     </p>
-                  </article>
+                  </motion.article>
                 );
               })}
             </div>
@@ -3998,15 +4132,25 @@ export function SalesLandingPage() {
                 {copy.integrations.availableLabel}
               </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                {copy.integrations.available.map((item) => (
-                  <article
+                {copy.integrations.available.map((item, index) => (
+                  <motion.article
                     className={cx(
                       "flex min-h-[140px] flex-col items-center justify-center rounded-[12px] border bg-white px-4 py-6 text-center",
                       item.contact
                         ? "border-dashed border-slate-300"
                         : "border-slate-200",
                     )}
+                    initial={reduceMotion ? false : { opacity: 0, y: 14 }}
                     key={item.name}
+                    transition={{
+                      delay: index * 0.035,
+                      duration: 0.38,
+                      ease: "easeOut",
+                    }}
+                    viewport={{ amount: 0.3, once: true }}
+                    whileInView={
+                      reduceMotion ? undefined : { opacity: 1, y: 0 }
+                    }
                   >
                     <IntegrationIcon name={item.icon} />
                     <h3
@@ -4018,7 +4162,7 @@ export function SalesLandingPage() {
                       {item.name}
                     </h3>
                     <p className="mt-2 text-xs text-slate-500">{item.meta}</p>
-                  </article>
+                  </motion.article>
                 ))}
               </div>
             </div>
@@ -4028,10 +4172,20 @@ export function SalesLandingPage() {
                 {copy.integrations.comingSoonLabel}
               </p>
               <div className="grid gap-3 md:grid-cols-3">
-                {copy.integrations.soon.map((item) => (
-                  <article
+                {copy.integrations.soon.map((item, index) => (
+                  <motion.article
                     className="flex items-center gap-4 rounded-[12px] border border-slate-200 bg-[#f8faff] px-6 py-4"
+                    initial={reduceMotion ? false : { opacity: 0, y: 14 }}
                     key={item.name}
+                    transition={{
+                      delay: index * 0.04,
+                      duration: 0.38,
+                      ease: "easeOut",
+                    }}
+                    viewport={{ amount: 0.35, once: true }}
+                    whileInView={
+                      reduceMotion ? undefined : { opacity: 1, y: 0 }
+                    }
                   >
                     {item.icon === "salon" ? (
                       <Image
@@ -4057,7 +4211,7 @@ export function SalesLandingPage() {
                     <span className="text-xs font-semibold text-amber-600">
                       {item.badge}
                     </span>
-                  </article>
+                  </motion.article>
                 ))}
               </div>
             </div>
@@ -4072,7 +4226,9 @@ export function SalesLandingPage() {
           }}
         >
           <div className="mx-auto flex max-w-[1120px] flex-col items-center gap-14 lg:flex-row lg:gap-20">
-            <div className={cx("max-w-xl flex-1", isRtl ? "text-right" : "")}>
+            <Reveal
+              className={cx("max-w-xl flex-1", isRtl ? "text-right" : "")}
+            >
               <span className="mb-3 block text-[0.7rem] font-bold tracking-[0.12em] text-primary uppercase">
                 {copy.mobile.eyebrow}
               </span>
@@ -4107,8 +4263,8 @@ export function SalesLandingPage() {
                   target="_blank"
                 />
               </div>
-            </div>
-            <div className="relative">
+            </Reveal>
+            <Reveal className="relative" delay={0.08}>
               <div className="relative rounded-[3.4rem] bg-[#1e3a8a] p-2.5 shadow-[0_38px_120px_rgba(47,99,255,0.20)]">
                 <div className="absolute top-0 left-1/2 z-20 h-[30px] w-[136px] -translate-x-1/2 rounded-b-[1.35rem] bg-[#1e3a8a]" />
                 <div className="relative aspect-[9/19.5] w-[min(78vw,330px)] overflow-hidden rounded-[2.9rem] bg-white">
@@ -4119,7 +4275,7 @@ export function SalesLandingPage() {
                   />
                 </div>
               </div>
-            </div>
+            </Reveal>
           </div>
         </section>
 
@@ -4135,7 +4291,13 @@ export function SalesLandingPage() {
               center
             />
             <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.95fr)]">
-              <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-[#f8faff] p-5 sm:p-8">
+              <motion.div
+                className="flex h-full flex-col rounded-2xl border border-slate-200 bg-[#f8faff] p-5 sm:p-8"
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                transition={{ duration: 0.48, ease: "easeOut" }}
+                viewport={{ amount: 0.28, once: true }}
+                whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              >
                 <div className="flex flex-col justify-between gap-4 sm:flex-row">
                   <div>
                     <h3 className="text-2xl font-semibold tracking-[-0.035em]">
@@ -4252,8 +4414,14 @@ export function SalesLandingPage() {
                     {copy.pricing.note}
                   </p>
                 </div>
-              </div>
-              <div className="grid h-full gap-4">
+              </motion.div>
+              <motion.div
+                className="grid h-full gap-4"
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                transition={{ delay: 0.08, duration: 0.48, ease: "easeOut" }}
+                viewport={{ amount: 0.28, once: true }}
+                whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              >
                 {(["monthly", "six", "year"] as const).map((key) => {
                   const option = PRICING_DURATIONS[key];
                   const packageTotal =
@@ -4261,15 +4429,16 @@ export function SalesLandingPage() {
                   const isSelected = durationKey === key;
 
                   return (
-                    <article
+                    <motion.article
                       aria-pressed={isSelected}
                       className={cx(
-                        "flex min-h-[0] cursor-pointer flex-col rounded-[14px] border bg-white p-5 text-left transition-[border-color,box-shadow,transform,background-color] duration-150 outline-none hover:-translate-y-0.5 hover:border-primary/70 hover:shadow-[0_18px_44px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/20 active:scale-[0.99]",
+                        "flex min-h-[0] cursor-pointer flex-col rounded-[14px] border bg-white p-5 text-left transition-[border-color,box-shadow,background-color] duration-150 outline-none hover:border-primary/70 hover:shadow-[0_18px_44px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/20",
                         isSelected
                           ? "border-primary ring-4 ring-primary/10"
                           : "border-slate-200",
                       )}
                       key={key}
+                      layout
                       onClick={() => setDurationKey(key)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -4279,6 +4448,9 @@ export function SalesLandingPage() {
                       }}
                       role="button"
                       tabIndex={0}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      whileHover={reduceMotion ? undefined : { y: -2 }}
+                      whileTap={reduceMotion ? undefined : { scale: 0.99 }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -4316,10 +4488,10 @@ export function SalesLandingPage() {
                           {copy.pricing.cta}
                         </span>
                       </div>
-                    </article>
+                    </motion.article>
                   );
                 })}
-              </div>
+              </motion.div>
             </div>
           </div>
         </section>
@@ -4341,9 +4513,19 @@ export function SalesLandingPage() {
                   TESTIMONIAL_AVATARS[index % TESTIMONIAL_AVATARS.length];
 
                 return (
-                  <article
+                  <motion.article
                     className="rounded-[14px] border border-slate-200 bg-white p-7"
+                    initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                     key={item.name}
+                    transition={{
+                      delay: index * 0.06,
+                      duration: 0.42,
+                      ease: "easeOut",
+                    }}
+                    viewport={{ amount: 0.35, once: true }}
+                    whileInView={
+                      reduceMotion ? undefined : { opacity: 1, y: 0 }
+                    }
                   >
                     <RatingStars />
                     <p className="mt-5 text-base leading-7 text-slate-700">
@@ -4365,7 +4547,7 @@ export function SalesLandingPage() {
                         </p>
                       </div>
                     </div>
-                  </article>
+                  </motion.article>
                 );
               })}
             </div>
@@ -4386,6 +4568,7 @@ export function SalesLandingPage() {
               {copy.faq.items.map((item, index) => (
                 <article className="border-t border-slate-200" key={item.q}>
                   <button
+                    aria-expanded={openFaq === index}
                     className="flex w-full items-center justify-between gap-4 py-5 text-left text-sm font-semibold text-slate-950 transition hover:text-primary"
                     onClick={() =>
                       setOpenFaq((current) =>
@@ -4395,27 +4578,34 @@ export function SalesLandingPage() {
                     type="button"
                   >
                     <span>{item.q}</span>
-                    <span
-                      className={cx(
-                        "shrink-0 text-lg font-normal leading-none text-slate-400 transition-transform",
-                        openFaq === index && "rotate-45",
-                      )}
+                    <motion.span
+                      animate={{ rotate: openFaq === index ? 45 : 0 }}
+                      className="shrink-0 text-lg font-normal leading-none text-slate-400"
+                      transition={{ duration: 0.18, ease: "easeOut" }}
                     >
                       +
-                    </span>
+                    </motion.span>
                   </button>
-                  <div
-                    className={cx(
-                      "grid transition-[grid-template-rows] duration-300",
-                      openFaq === index ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                    )}
-                  >
-                    <div className="overflow-hidden">
-                      <p className="pb-5 text-sm leading-7 text-muted-foreground">
-                        {item.a}
-                      </p>
-                    </div>
-                  </div>
+                  <AnimatePresence initial={false}>
+                    {openFaq === index ? (
+                      <motion.div
+                        animate={{ height: "auto", opacity: 1 }}
+                        className="overflow-hidden"
+                        exit={{ height: 0, opacity: 0 }}
+                        initial={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.24, ease: "easeOut" }}
+                      >
+                        <motion.p
+                          animate={reduceMotion ? { y: 0 } : { y: 0 }}
+                          className="pb-5 text-sm leading-7 text-muted-foreground"
+                          initial={reduceMotion ? false : { y: -4 }}
+                          transition={{ duration: 0.22, ease: "easeOut" }}
+                        >
+                          {item.a}
+                        </motion.p>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                 </article>
               ))}
             </div>
@@ -4423,7 +4613,7 @@ export function SalesLandingPage() {
         </section>
 
         <section className="bg-[#24418f] px-6 py-10 text-white md:px-10 md:py-12">
-          <div className="mx-auto grid max-w-[1120px] items-center gap-10 rounded-[13px] border border-white/18 bg-white/10 px-10 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:px-10 lg:px-12">
+          <Reveal className="mx-auto grid max-w-[1120px] items-center gap-10 rounded-[13px] border border-white/18 bg-white/10 px-10 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:px-10 lg:px-12">
             <div>
               <h2 className="max-w-[13ch] text-[clamp(3rem,5vw,4.125rem)] leading-[0.92] font-extrabold tracking-[-0.03em] text-white">
                 {(Array.isArray(copy.cta.title)
@@ -4457,7 +4647,7 @@ export function SalesLandingPage() {
                 {copy.cta.secondary}
               </Button>
             </div>
-          </div>
+          </Reveal>
         </section>
       </main>
 
@@ -4528,7 +4718,10 @@ export function SalesLandingPage() {
       </footer>
 
       <Dialog open={isDemoOpen} onOpenChange={setIsDemoOpen}>
-        <DialogContent className="sm:max-w-[425px]" dir={copy.dir}>
+        <DialogContent
+          className="sm:max-w-[425px] duration-200 ease-out data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2"
+          dir={copy.dir}
+        >
           <DialogHeader
             className={cx(isRtl ? "text-right" : "text-center sm:text-center")}
           >
@@ -4539,7 +4732,7 @@ export function SalesLandingPage() {
               {copy.demo.subtitle}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 animate-in fade-in slide-in-from-bottom-1 duration-300">
             <Input
               className="h-12"
               onChange={(event) => setDemoName(event.target.value)}
