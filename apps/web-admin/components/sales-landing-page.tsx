@@ -3339,7 +3339,6 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
                     "block text-[0.62rem] font-extrabold tabular-nums",
                     row.tone === "ok" && "text-emerald-600",
                     row.tone === "late" && "text-red-600",
-                    row.tone === "muted" && "text-slate-500",
                   )}
                 >
                   {row.value}
