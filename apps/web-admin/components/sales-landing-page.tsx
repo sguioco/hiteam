@@ -2942,19 +2942,21 @@ function HeroSmartphoneIcon({ className }: { className?: string }) {
 
 function HeroCrossStrikeIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      className="pointer-events-none absolute top-1/2 left-1/2 h-[131%] w-[131%] -translate-x-1/2 -translate-y-1/2 text-red-600 opacity-50"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <path
-        d="M20 20 4 4M20 4 4 20"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="2"
-      />
-    </svg>
+    <span className="pointer-events-none absolute -top-1.5 -right-2 grid h-5 min-w-6 place-items-center rounded-full bg-red-600 px-1.5 text-white">
+      <svg
+        aria-hidden="true"
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M20 20 4 4M20 4 4 20"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2.5"
+        />
+      </svg>
+    </span>
   );
 }
 
