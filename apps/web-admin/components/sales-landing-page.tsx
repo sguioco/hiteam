@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   readBrowserStorageItem,
   writeBrowserStorageItem,
@@ -286,7 +287,7 @@ const COPY: Record<LandingLocale, Copy> = {
           pain: "Breaks. $800 to fix.",
         },
         { icon: "▣", name: "Access card", pain: "Always gets lost." },
-        { icon: "☷", name: "QR / NFC terminal", pain: "Needs maintenance." },
+        { icon: "☷", name: "NFC terminal", pain: "Needs maintenance." },
       ],
       stats: [
         { value: "99.8%", label: "Face accuracy" },
@@ -769,7 +770,7 @@ const COPY: Record<LandingLocale, Copy> = {
           pain: "Ломается. Ремонт $800.",
         },
         { icon: "▣", name: "Карточка доступа", pain: "Постоянно теряется." },
-        { icon: "☷", name: "QR/NFC терминал", pain: "Требует обслуживания." },
+        { icon: "☷", name: "NFC терминал", pain: "Требует обслуживания." },
       ],
       stats: [
         { value: "99.8%", label: "Точность распознавания" },
@@ -1268,7 +1269,7 @@ const COPY: Record<LandingLocale, Copy> = {
         { icon: "▣", name: "Tarjeta de acceso", pain: "Siempre se pierde." },
         {
           icon: "☷",
-          name: "Terminal QR / NFC",
+          name: "Terminal NFC",
           pain: "Necesita mantenimiento.",
         },
       ],
@@ -1739,7 +1740,7 @@ const COPY: Record<LandingLocale, Copy> = {
       hardware: [
         { icon: "⌾", name: "ماسح البصمة", pain: "يتعطل. إصلاح $800." },
         { icon: "▣", name: "بطاقة الدخول", pain: "تضيع دائماً." },
-        { icon: "☷", name: "جهاز QR / NFC", pain: "يحتاج صيانة." },
+        { icon: "☷", name: "جهاز NFC", pain: "يحتاج صيانة." },
       ],
       stats: [
         { value: "99.8%", label: "دقة التعرف" },
@@ -2492,24 +2493,26 @@ function HowStepIcon({ index }: { index: number }) {
 }
 
 function IntegrationIcon({ name }: { name: string }) {
+  const isCompact = name === "salon" || name === "diamond" || name === "orb";
+  const common = cx(isCompact ? "h-7 w-7" : "h-8 w-8", "shrink-0");
+  const strokeProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.9,
+  };
+
   if (name === "bars") {
     return (
       <svg
         aria-hidden="true"
-        className="h-8 w-8"
-        fill="none"
+        className={cx(common, "text-sky-500")}
         viewBox="0 0 32 32"
       >
-        <rect fill="#EDE9FE" height="24" rx="4" width="24" x="4" y="4" />
-        <rect fill="#22C55E" height="14" rx="1.5" width="4" x="9" y="12" />
-        <rect fill="#EC4899" height="18" rx="1.5" width="4" x="15" y="8" />
-        <rect fill="#60A5FA" height="11" rx="1.5" width="4" x="21" y="15" />
-        <path
-          d="M8 25h18"
-          stroke="#CBD5E1"
-          strokeLinecap="round"
-          strokeWidth="1.6"
-        />
+        <rect height="23" rx="5" width="23" x="4.5" y="4.5" {...strokeProps} />
+        <path d="M10 24V14M16 24V9M22 24v-7" {...strokeProps} />
+        <path d="M8 24h17" {...strokeProps} />
       </svg>
     );
   }
@@ -2518,24 +2521,13 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-8 w-8"
-        fill="none"
+        className={cx(common, "text-violet-500")}
         viewBox="0 0 32 32"
       >
-        <circle cx="16" cy="16" fill="#EDE9FE" r="10" />
-        <circle cx="16" cy="16" fill="#F8FAFC" r="6" />
-        <path
-          d="M7 8v15M10 8v15M24 8v15"
-          stroke="#C4B5FD"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
-        <path
-          d="M24 8c2.2 3.4 2.2 7.2 0 10.4"
-          stroke="#A78BFA"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
+        <circle cx="16" cy="16" r="8" {...strokeProps} />
+        <circle cx="16" cy="16" r="3.5" {...strokeProps} />
+        <path d="M7.5 8.5v15M10.5 8.5v15M24.5 8.5v15" {...strokeProps} />
+        <path d="M24.5 8.5c2 3.4 2 6.9 0 10" {...strokeProps} />
       </svg>
     );
   }
@@ -2544,24 +2536,12 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-8 w-8"
-        fill="none"
+        className={cx(common, "text-amber-600")}
         viewBox="0 0 32 32"
       >
-        <path d="m16 4 10 5.8v12.4L16 28 6 22.2V9.8z" fill="#B9784D" />
-        <path d="m16 4 10 5.8-10 5.8L6 9.8z" fill="#E7B27B" />
-        <path
-          d="M16 15.6V28"
-          stroke="#8B5A36"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
-        <path
-          d="m10.5 7.2 10 5.8"
-          stroke="#F2D0A8"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
+        <path d="m16 4.5 10 5.8v11.4l-10 5.8-10-5.8V10.3z" {...strokeProps} />
+        <path d="m6 10.3 10 5.8 10-5.8M16 16.1v11.4" {...strokeProps} />
+        <path d="m10.75 7.55 10 5.8" {...strokeProps} />
       </svg>
     );
   }
@@ -2570,24 +2550,12 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-8 w-8"
-        fill="none"
+        className={cx(common, "text-blue-500")}
         viewBox="0 0 32 32"
       >
-        <rect fill="#CBD5E1" height="24" rx="3" width="20" x="6" y="4" />
-        <path
-          d="M11 9h3M18 9h3M11 14h3M18 14h3M11 19h3M18 19h3"
-          stroke="#2563EB"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
-        <path d="M13 28v-5h6v5" fill="#94A3B8" />
-        <path
-          d="M7 7h18"
-          stroke="#F97316"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
+        <rect height="23" rx="3" width="18" x="7" y="4.5" {...strokeProps} />
+        <path d="M11.5 9.5h2.5M18 9.5h2.5M11.5 14.5h2.5M18 14.5h2.5M11.5 19.5h2.5M18 19.5h2.5" {...strokeProps} />
+        <path d="M13 27.5v-4h6v4M7 7.5h18" {...strokeProps} />
       </svg>
     );
   }
@@ -2596,28 +2564,12 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-8 w-8"
-        fill="none"
+        className={cx(common, "text-violet-500")}
         viewBox="0 0 32 32"
       >
-        <path
-          d="M13.5 20.5 11 23a5 5 0 0 1-7-7l4-4a5 5 0 0 1 7 0"
-          stroke="#C4B5FD"
-          strokeLinecap="round"
-          strokeWidth="2.6"
-        />
-        <path
-          d="m18.5 11.5 2.5-2.5a5 5 0 0 1 7 7l-4 4a5 5 0 0 1-7 0"
-          stroke="#A78BFA"
-          strokeLinecap="round"
-          strokeWidth="2.6"
-        />
-        <path
-          d="m12.5 19.5 7-7"
-          stroke="#94A3B8"
-          strokeLinecap="round"
-          strokeWidth="2.4"
-        />
+        <path d="m13.5 20.5-2.25 2.25a5.25 5.25 0 0 1-7.4-7.42l4-4a5.25 5.25 0 0 1 7.4 0" {...strokeProps} />
+        <path d="m18.5 11.5 2.25-2.25a5.25 5.25 0 0 1 7.4 7.42l-4 4a5.25 5.25 0 0 1-7.4 0" {...strokeProps} />
+        <path d="m12.5 19.5 7-7" {...strokeProps} />
       </svg>
     );
   }
@@ -2626,17 +2578,11 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-7 w-7"
-        fill="none"
+        className={cx(common, "text-fuchsia-500")}
         viewBox="0 0 32 32"
       >
-        <path d="M10 5h8l-3 9h6l-10 13 2.8-10H8z" fill="#C4B5FD" />
-        <path
-          d="M20 6h4M20 11h3M19 16h5"
-          stroke="#F9A8D4"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
+        <path d="M11 4.5h8l-3.25 8.5H22L10.5 27.5 14 17H8z" {...strokeProps} />
+        <path d="M21 6.5h3M20.5 11h3M20 15.5h4" {...strokeProps} />
       </svg>
     );
   }
@@ -2645,20 +2591,24 @@ function IntegrationIcon({ name }: { name: string }) {
     return (
       <svg
         aria-hidden="true"
-        className="h-7 w-7"
-        fill="none"
+        className={cx(common, "text-sky-500")}
         viewBox="0 0 32 32"
       >
-        <path d="m16 5 11 11-11 11L5 16z" fill="#60A5FA" />
-        <path d="m16 5 4.5 11L16 27 11.5 16z" fill="#93C5FD" />
+        <path d="m16 4.5 11 11-11 11-11-11z" {...strokeProps} />
+        <path d="m16 4.5 4.5 11L16 26.5l-4.5-11z" {...strokeProps} />
       </svg>
     );
   }
 
   return (
-    <svg aria-hidden="true" className="h-7 w-7" fill="none" viewBox="0 0 32 32">
-      <circle cx="16" cy="16" fill="#8B5CF6" r="10" />
-      <path d="M9 16c4-5.5 10-5.5 14 0-4 5.5-10 5.5-14 0Z" fill="#A78BFA" />
+    <svg
+      aria-hidden="true"
+      className={cx(common, "text-violet-500")}
+      viewBox="0 0 32 32"
+    >
+      <circle cx="16" cy="16" r="10" {...strokeProps} />
+      <path d="M9.5 16c3.7-5.2 9.3-5.2 13 0-3.7 5.2-9.3 5.2-13 0Z" {...strokeProps} />
+      <path d="M16 13.5v5" {...strokeProps} />
     </svg>
   );
 }
@@ -2787,29 +2737,26 @@ function CaseTabIcon({ index }: { index: number }) {
 }
 
 function CaseResultIcon({ index }: { index: number }) {
-  const common = "h-4 w-4 shrink-0";
+  const common = "mt-0.5 h-4 w-4 shrink-0";
+  const strokeProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 2,
+  };
 
   if (index === 0) {
     return (
       <svg
         aria-hidden="true"
-        className={common}
-        fill="none"
+        className={cx(common, "text-red-500")}
         viewBox="0 0 24 24"
       >
-        <circle cx="12" cy="13" r="6.5" stroke="#F43F5E" strokeWidth="1.8" />
-        <path
-          d="M12 9.5v4l2.4 1.4"
-          stroke="#2563EB"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-        />
-        <path
-          d="M6.8 4.7 4.5 7M17.2 4.7 19.5 7"
-          stroke="#F59E0B"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-        />
+        <circle cx="12" cy="13" r="7" {...strokeProps} />
+        <path d="M12 9.5v4l2.25 1.35" {...strokeProps} />
+        <path d="M7 4.75 4.75 7M17 4.75 19.25 7" {...strokeProps} />
+        <path d="M12 3v2" {...strokeProps} />
       </svg>
     );
   }
@@ -2818,13 +2765,12 @@ function CaseResultIcon({ index }: { index: number }) {
     return (
       <svg
         aria-hidden="true"
-        className={common}
-        fill="none"
+        className={cx(common, "text-slate-500")}
         viewBox="0 0 24 24"
       >
-        <rect fill="#E5E7EB" height="12" rx="2" width="16" x="4" y="7" />
-        <circle cx="12" cy="13" fill="#64748B" r="3.5" />
-        <path d="M8 7 9.2 5h5.6L16 7" fill="#CBD5E1" />
+        <rect height="12" rx="2.25" width="16" x="4" y="7" {...strokeProps} />
+        <circle cx="12" cy="13" r="3" {...strokeProps} />
+        <path d="M8.5 7 10 5h4l1.5 2" {...strokeProps} />
       </svg>
     );
   }
@@ -2833,36 +2779,24 @@ function CaseResultIcon({ index }: { index: number }) {
     return (
       <svg
         aria-hidden="true"
-        className={common}
-        fill="none"
+        className={cx(common, "text-amber-500")}
         viewBox="0 0 24 24"
       >
-        <path d="M8 4h8v5a4 4 0 0 1-8 0z" fill="#F59E0B" />
-        <path
-          d="M8 6H5.5a2 2 0 0 0 2.3 3M16 6h2.5a2 2 0 0 1-2.3 3"
-          stroke="#F59E0B"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-        />
-        <path
-          d="M12 13v4M9 20h6"
-          stroke="#B45309"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-        />
+        <path d="M8 4h8v5.5a4 4 0 0 1-8 0z" {...strokeProps} />
+        <path d="M8 6H5.75a2.25 2.25 0 0 0 2.25 3M16 6h2.25A2.25 2.25 0 0 1 16 9" {...strokeProps} />
+        <path d="M12 13.5V18M9 20h6" {...strokeProps} />
       </svg>
     );
   }
 
   return (
-    <svg aria-hidden="true" className={common} fill="none" viewBox="0 0 24 24">
-      <path d="M5 10v5M9 9l9-3v13l-9-3z" fill="#F472B6" />
-      <path
-        d="m9 16 1.5 4"
-        stroke="#2563EB"
-        strokeLinecap="round"
-        strokeWidth="1.8"
-      />
+    <svg
+      aria-hidden="true"
+      className={cx(common, "text-pink-500")}
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 10.5v4M9 9.5l9-3v11l-9-3z" {...strokeProps} />
+      <path d="m9 14.5 1.5 4" {...strokeProps} />
     </svg>
   );
 }
@@ -2926,79 +2860,21 @@ function HeroHardwareIcon({
   index: number;
   className?: string;
 }) {
-  if (index === 0) {
-    return (
-      <svg
-        aria-hidden="true"
-        className={className}
-        fill="none"
-        viewBox="0 0 48 48"
-      >
-        <path
-          d="M14.7 25.5 13 15.7c-.3-1.7.7-3 2.2-3.2 1.4-.2 2.5.7 2.9 2.3l1.4 7.3"
-          fill="#F6C38D"
-        />
-        <path
-          d="M19.7 23.2 18.3 9.8c-.2-1.8.8-3.2 2.4-3.4 1.5-.1 2.7 1 3 2.8l1.5 13.2"
-          fill="#F8D2A4"
-        />
-        <path
-          d="M25.1 22.6 24.5 8.9c-.1-1.7 1-3 2.6-3 1.5-.1 2.6 1 2.8 2.8l.8 13.3"
-          fill="#F9D9B1"
-        />
-        <path
-          d="m30.7 22 1.8-9.5c.3-1.7 1.6-2.6 3-2.3 1.5.3 2.3 1.7 2 3.4l-2 11.5"
-          fill="#F6C38D"
-        />
-        <path
-          d="M13.2 24.2c-1.8-1.9-3.7-2.4-5-1.2-1.1 1-.9 2.7.6 4.4l8.1 9.1c2.5 2.8 5.5 4.1 9.3 3.6l4.4-.6c3.4-.5 5.9-2.8 6.7-6.1l1.3-5.4c.5-1.9-.6-3.3-2.4-3.1-2.7.4-4.4 1.7-5.7 4.1"
-          fill="#F4B979"
-        />
-        <path
-          d="M17.6 24.1c4.4 2.4 8.9 3.1 13.7 1.6"
-          stroke="#D08D5E"
-          strokeLinecap="round"
-          strokeWidth="1.6"
-        />
-      </svg>
-    );
-  }
-
-  if (index === 1) {
-    return (
-      <svg
-        aria-hidden="true"
-        className={className}
-        fill="none"
-        viewBox="0 0 48 48"
-      >
-        <rect fill="#9EDBEA" height="24" rx="4" width="36" x="6" y="14" />
-        <path d="M6 20h36v6H6z" fill="#6CB7D0" />
-        <rect fill="#F7D56D" height="5" rx="1" width="11" x="12" y="29" />
-        <path
-          d="M29 31h8"
-          stroke="#F8FAFC"
-          strokeLinecap="round"
-          strokeWidth="2"
-        />
-      </svg>
-    );
-  }
+  const source =
+    index === 0
+      ? "https://www.svgrepo.com/show/478933/fingerprint.svg"
+      : index === 1
+        ? "https://www.svgrepo.com/show/175836/access-card.svg"
+        : "https://www.svgrepo.com/show/305903/contactlesspayment.svg";
 
   return (
-    <svg
+    <img
+      alt=""
       aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 48 48"
-    >
-      <rect fill="#D5D7DE" height="20" rx="4" width="36" x="6" y="16" />
-      <path d="M11 16h26l-5-5H16z" fill="#EEF0F5" />
-      <circle cx="24" cy="26" fill="#9AA1AD" r="8" />
-      <circle cx="24" cy="26" fill="#BDC3CE" r="4" />
-      <rect fill="#F87171" height="3" rx="1.5" width="8" x="11" y="20" />
-      <rect fill="#CBD5E1" height="4" rx="2" width="7" x="35" y="13" />
-    </svg>
+      className={cx(className, index === 0 && "scale-80")}
+      draggable={false}
+      src={source}
+    />
   );
 }
 
@@ -3024,6 +2900,24 @@ function HeroSmartphoneIcon({ className }: { className?: string }) {
         ✓
       </span>
     </span>
+  );
+}
+
+function HeroCrossStrikeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="pointer-events-none absolute top-1/2 left-1/2 h-[131%] w-[131%] -translate-x-1/2 -translate-y-1/2 text-red-600 opacity-50"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M20 20 4 4M20 4 4 20"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
   );
 }
 
@@ -3107,18 +3001,6 @@ function HeroMiniIcon({
   );
 }
 
-function compactHardwareName(name: string, index: number) {
-  if (index === 0) {
-    return name.replace(/\s+scanner$/i, "");
-  }
-
-  if (index === 2) {
-    return name.replace(/\s*\/\s*NFC/i, "");
-  }
-
-  return name;
-}
-
 function HeroHardwareMark({
   index,
   name,
@@ -3148,12 +3030,12 @@ function HeroHardwareMark({
           <HeroHardwareIcon
             className={
               compact
-                ? "h-[34px] w-[34px] opacity-50"
-                : "h-[42px] w-[42px] opacity-45"
+                ? "h-[34px] w-[34px]"
+                : "h-[42px] w-[42px]"
             }
             index={index}
           />
-          <span className="absolute top-1/2 left-1/2 h-[3px] w-[130%] -translate-x-1/2 -translate-y-1/2 -rotate-12 rounded-full bg-red-600" />
+          <HeroCrossStrikeIcon />
         </div>
       )}
       <p
@@ -3168,31 +3050,6 @@ function HeroHardwareMark({
           </span>
         ))}
       </p>
-    </div>
-  );
-}
-
-function HeroHardwareStrip({ copy }: { copy: Copy }) {
-  return (
-    <div className="mt-4 mb-3 flex flex-wrap items-start gap-x-2.5 gap-y-2">
-      {copy.hero.hardware.map((item, index) => (
-        <Fragment key={item.name}>
-          <HeroHardwareMark
-            compact
-            index={index}
-            name={compactHardwareName(item.name, index)}
-          />
-          <span className="mt-3 text-base text-slate-300">
-            {index < copy.hero.hardware.length - 1 ? "+" : "→"}
-          </span>
-        </Fragment>
-      ))}
-      <HeroHardwareMark
-        compact
-        index={3}
-        name={copy.hero.smartphoneLabel}
-        smartphone
-      />
     </div>
   );
 }
@@ -3312,7 +3169,8 @@ function CheckLine({
 }
 
 function FlagIcon({ locale }: { locale: LandingLocale }) {
-  const className = "block h-[22px] w-[31px] overflow-hidden rounded-[2px]";
+  const className =
+    "block h-[22px] w-[31px] overflow-hidden rounded-[8px] border border-slate-300/80";
 
   if (locale === "en") {
     return (
@@ -3488,7 +3346,20 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
                 )}
               >
                 {row.done ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                  <svg
+                    aria-hidden="true"
+                    className="h-2 w-2 text-white"
+                    fill="none"
+                    viewBox="0 0 12 12"
+                  >
+                    <path
+                      d="m3 6.2 2 2 4-4.4"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                    />
+                  </svg>
                 ) : null}
               </span>
               <span
@@ -3721,7 +3592,6 @@ export function SalesLandingPage() {
               <p className="max-w-[27.5rem] text-base leading-7 text-slate-700">
                 {copy.hero.subtitle}
               </p>
-              <HeroHardwareStrip copy={copy} />
               <div className="mt-1 inline-flex items-center gap-2 text-sm font-bold text-emerald-700">
                 <svg
                   aria-hidden="true"
@@ -4000,17 +3870,20 @@ export function SalesLandingPage() {
                   <p className="mb-4 text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">
                     {activeCaseItem.resultLabel}
                   </p>
-                  <div className="space-y-3">
+                  <div className="overflow-hidden rounded-[9px] border border-slate-200 bg-white/55 text-sm leading-6 text-slate-700">
                     {activeCaseItem.results.map((result, index) => (
-                      <div
-                        className="flex items-start gap-3 rounded-[9px] border border-slate-200 bg-white/55 px-4 py-3 text-sm leading-6 text-slate-700"
-                        key={result}
-                      >
-                        <CaseResultIcon index={index} />
-                        <p>{result}</p>
-                      </div>
+                      <Fragment key={result}>
+                        {index > 0 ? (
+                          <Separator className="bg-slate-200/80" />
+                        ) : null}
+                        <div className="flex items-start gap-3 px-4 py-3">
+                          <CaseResultIcon index={index} />
+                          <p>{result}</p>
+                        </div>
+                      </Fragment>
                     ))}
-                    <div className="rounded-[9px] border border-slate-200 bg-white/45 px-4 py-3 text-sm leading-6 text-slate-700">
+                    <Separator className="bg-slate-200/80" />
+                    <div className="px-4 py-3">
                       <div className="flex items-start gap-3">
                         <CaseResultIcon index={3} />
                         <p>
@@ -4160,14 +4033,28 @@ export function SalesLandingPage() {
                     className="flex items-center gap-4 rounded-[12px] border border-slate-200 bg-[#f8faff] px-6 py-4"
                     key={item.name}
                   >
-                    <IntegrationIcon name={item.icon} />
+                    {item.icon === "salon" ? (
+                      <Image
+                        alt="Altegio logo"
+                        className="h-7 w-7 shrink-0 object-contain"
+                        height={28}
+                        src="/altegio.webp"
+                        style={{
+                          filter:
+                            "brightness(0) saturate(100%) invert(53%) sepia(86%) saturate(1289%) hue-rotate(176deg) brightness(98%) contrast(92%)",
+                        }}
+                        width={28}
+                      />
+                    ) : (
+                      <IntegrationIcon name={item.icon} />
+                    )}
                     <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-bold text-slate-700">
                         {item.name}
                       </h3>
                       <p className="mt-1 text-xs text-slate-500">{item.meta}</p>
                     </div>
-                    <span className="rounded-full border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-600">
+                    <span className="text-xs font-semibold text-amber-600">
                       {item.badge}
                     </span>
                   </article>
@@ -4341,7 +4228,7 @@ export function SalesLandingPage() {
                       </span>
                     </div>
                     <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-                      <p className="text-5xl font-bold tracking-[-0.06em] text-slate-950">
+                      <p className="text-5xl font-semibold tracking-[-0.06em] text-slate-950">
                         {formatMoney(pricing.unitPrice)}
                       </p>
                       <p className="pb-2 text-sm text-muted-foreground">
@@ -4408,7 +4295,7 @@ export function SalesLandingPage() {
                       </div>
                       <div className="mt-auto pt-4">
                         <div className="flex flex-wrap items-end gap-x-2">
-                          <p className="text-3xl font-bold tracking-[-0.06em] text-slate-950">
+                          <p className="text-3xl font-semibold tracking-[-0.06em] text-slate-950">
                             {formatMoney(option.unitPrice)}
                           </p>
                           <p className="pb-1 text-xs text-muted-foreground">
@@ -4510,7 +4397,7 @@ export function SalesLandingPage() {
                     <span>{item.q}</span>
                     <span
                       className={cx(
-                        "grid h-5 w-5 shrink-0 place-items-center rounded-full border border-slate-200 text-sm leading-none text-slate-500 transition",
+                        "shrink-0 text-lg font-normal leading-none text-slate-400 transition-transform",
                         openFaq === index && "rotate-45",
                       )}
                     >
