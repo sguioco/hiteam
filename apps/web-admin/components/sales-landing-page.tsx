@@ -3649,7 +3649,7 @@ export function SalesLandingPage() {
           >
             <source src="/hero.webm" type="video/webm" />
           </video>
-          <div className="absolute inset-0 bg-white/58" />
+          <div className="absolute inset-0 bg-white/80" />
           <div className="relative z-10 mx-auto grid max-w-[1120px] items-center gap-10 lg:grid-cols-2 lg:gap-16">
             <motion.div
               animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
@@ -3953,7 +3953,7 @@ export function SalesLandingPage() {
               title={copy.cases.title}
               subtitle={copy.cases.subtitle}
             />
-            <div className="mb-7 flex w-fit max-w-full gap-1 overflow-x-auto rounded-[10px] border border-slate-200 bg-[#f8faff] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mb-7 flex w-fit max-w-full gap-1 overflow-x-auto rounded-[10px] border border-slate-200 bg-[#f8faff] p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
               {copy.cases.items.map((item, index) => (
                 <motion.button
                   className={cx(
