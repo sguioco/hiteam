@@ -2198,7 +2198,7 @@ const Landing = () => {
             <Image
               alt=""
               aria-hidden
-              className="object-cover [transform:scale(-1,-1)] [filter:brightness(0.92)_contrast(1.02)_saturate(0.84)]"
+              className="object-cover [transform:scaleX(-1)] [filter:brightness(0.92)_contrast(1.02)_saturate(0.84)]"
               fill
               priority
               sizes="100vw"
@@ -2222,7 +2222,7 @@ const Landing = () => {
           data-lp-hero-video
           ref={heroVideoRef}
           style={{
-            transform: "scale(-1, -1)",
+            transform: "scaleX(-1) rotate(180deg)",
             filter: "brightness(0.9) contrast(1.02) saturate(0.8)",
           }}
         >
