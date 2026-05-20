@@ -3069,7 +3069,7 @@ function HeroRightHardware({ copy }: { copy: Copy }) {
 
   return (
     <div className="mb-5">
-      <div className="mb-3 flex items-center gap-2 text-[0.68rem] font-bold tracking-[0.1em] text-red-600 uppercase">
+      <div className="mb-3 flex items-center gap-2 text-[0.68rem] font-semibold tracking-[0.1em] text-red-600 uppercase">
         <span className="h-0.5 w-3.5 bg-red-600" />
         {copy.hero.hardwareLabel}
       </div>
