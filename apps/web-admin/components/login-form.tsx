@@ -300,7 +300,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
       </Card>
 
       <p className="px-6 text-center text-xs text-muted-foreground">
-        {t.terms}{' '}<a href="#" className="underline underline-offset-4 hover:text-foreground">{t.termsLink}</a>{' '}{t.and}{' '}<a href="#" className="underline underline-offset-4 hover:text-foreground">{t.privacyLink}</a>.
+        {t.terms}{' '}<a href="/terms" className="underline underline-offset-4 hover:text-foreground">{t.termsLink}</a>{' '}{t.and}{' '}<a href="/privacy" className="underline underline-offset-4 hover:text-foreground">{t.privacyLink}</a>.
       </p>
 
       {/* Language picker — bottom center */}

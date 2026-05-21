@@ -5,9 +5,15 @@ import { decodeSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 
 const PUBLIC_EXACT_PATHS = new Set([
   "/",
+  "/cookies",
+  "/dpa",
   "/login",
   "/mobile",
+  "/privacy",
+  "/privacy-en",
   "/signup",
+  "/terms",
+  "/terms-en",
 ]);
 
 const PUBLIC_PREFIXES = [

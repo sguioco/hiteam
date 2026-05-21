@@ -1847,7 +1847,7 @@ const Landing = () => {
     ? [
         {
           items: [
-            { label: "ALTEGIO LLC-FZ" },
+            { label: "ALT TECHNOLOGIES L.L.C" },
             {
               className: "max-w-[28ch]",
               label:
@@ -1858,7 +1858,7 @@ const Landing = () => {
         },
         {
           items: [
-            { href: "mailto:support@support@hiteam", label: "support@support@hiteam" },
+            { href: "mailto:info@hiteam.net", label: "info@hiteam.net" },
             { href: "tel:+971557195382", label: "+971557195382" },
           ],
           note:
@@ -1869,7 +1869,7 @@ const Landing = () => {
     : [
         {
           items: [
-            { label: "ALTEGIO LLC-FZ" },
+            { label: "ALT TECHNOLOGIES L.L.C" },
             {
               className: "max-w-[28ch]",
               label:
@@ -1880,7 +1880,7 @@ const Landing = () => {
         },
         {
           items: [
-            { href: "mailto:support@support@hiteam", label: "support@support@hiteam" },
+            { href: "mailto:info@hiteam.net", label: "info@hiteam.net" },
             { href: "tel:+971557195382", label: "+971557195382" },
           ],
           note:
@@ -2950,10 +2950,10 @@ const Landing = () => {
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4 md:mt-0 md:justify-end">
               <div className="flex gap-6">
-                {footerLegalLinks.map((link) => (
+                {footerLegalLinks.map((link, index) => (
                   <a
                     className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    href="#"
+                    href={index === 0 ? "/privacy" : "/terms"}
                     key={link}
                   >
                     {link}

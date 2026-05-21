@@ -2686,9 +2686,17 @@ function LockIcon({ className }: { className?: string }) {
   );
 }
 
-function CaseTabIcon({ index }: { index: number }) {
-  const common =
-    "h-4 w-4 shrink-0 fill-none stroke-current stroke-[1.8] text-current";
+function CaseTabIcon({
+  className,
+  index,
+}: {
+  className?: string;
+  index: number;
+}) {
+  const common = cx(
+    "h-5 w-5 shrink-0 fill-none stroke-current stroke-[1.8] text-current sm:h-4 sm:w-4",
+    className,
+  );
 
   if (index === 0) {
     return (
@@ -2915,7 +2923,13 @@ function HeroHardwareIcon({
   );
 }
 
-function HeroSmartphoneIcon({ className }: { className?: string }) {
+function HeroSmartphoneIcon({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   return (
     <span className={cx("relative inline-block", className)}>
       <svg
@@ -2933,19 +2947,33 @@ function HeroSmartphoneIcon({ className }: { className?: string }) {
         <rect fill="#F472B6" height="5" rx="1" width="5" x="16" y="31" />
         <rect fill="#22C55E" height="5" rx="1" width="5" x="24" y="31" />
       </svg>
-      <span className="absolute -top-1.5 -right-2 grid h-5 min-w-6 place-items-center rounded-full bg-emerald-600 px-1.5 text-[0.62rem] font-black text-white">
+      <span
+        className={cx(
+          "absolute grid place-items-center rounded-full bg-emerald-600 font-black text-white",
+          compact
+            ? "-top-1 right-0 h-4 min-w-4 px-1 text-[0.5rem]"
+            : "-top-1.5 -right-2 h-5 min-w-6 px-1.5 text-[0.62rem]",
+        )}
+      >
         ✓
       </span>
     </span>
   );
 }
 
-function HeroCrossStrikeIcon() {
+function HeroCrossStrikeIcon({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="pointer-events-none absolute -top-1.5 -right-2 grid h-5 min-w-6 place-items-center rounded-full bg-red-600 px-1.5 text-white">
+    <span
+      className={cx(
+        "pointer-events-none absolute grid place-items-center rounded-full bg-red-600 text-white",
+        compact
+          ? "-top-1 right-0 h-4 min-w-4 px-1"
+          : "-top-1.5 -right-2 h-5 min-w-6 px-1.5",
+      )}
+    >
       <svg
         aria-hidden="true"
-        className="h-3.5 w-3.5"
+        className={compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5"}
         fill="none"
         viewBox="0 0 24 24"
       >
@@ -3057,29 +3085,33 @@ function HeroHardwareMark({
     <div
       className={cx(
         "flex min-w-0 flex-col items-center text-center",
-        compact ? "gap-[3px]" : "gap-1",
+        compact ? "w-full gap-[3px]" : "gap-1",
       )}
     >
       {smartphone ? (
         <HeroSmartphoneIcon
-          className={compact ? "h-[38px] w-[38px]" : "h-12 w-12"}
+          className={compact ? "h-[32px] w-[32px]" : "h-12 w-12"}
+          compact={compact}
         />
       ) : (
         <div className="relative">
           <HeroHardwareIcon
             className={
               compact
-                ? "h-[34px] w-[34px]"
+                ? "h-[28px] w-[28px]"
                 : "h-[42px] w-[42px]"
             }
             index={index}
           />
-          <HeroCrossStrikeIcon />
+          <HeroCrossStrikeIcon compact={compact} />
         </div>
       )}
       <p
         className={cx(
-          "max-w-[5.9rem] text-[0.56rem] leading-tight font-bold tracking-[0.04em] uppercase",
+          "text-[0.56rem] leading-tight font-bold tracking-[0.04em] uppercase",
+          compact
+            ? "max-w-full text-[0.47rem] tracking-[0.02em]"
+            : "max-w-[5.9rem]",
           smartphone ? "text-emerald-600" : "text-red-600",
         )}
       >
@@ -3093,7 +3125,13 @@ function HeroHardwareMark({
   );
 }
 
-function HeroRightHardware({ copy }: { copy: Copy }) {
+function HeroRightHardware({
+  compact = false,
+  copy,
+}: {
+  compact?: boolean;
+  copy: Copy;
+}) {
   const rightSmartphoneLabel =
     copy.hero.smartphoneLabel.toLowerCase() === "smartphone"
       ? "Any smartphone"
@@ -3106,25 +3144,89 @@ function HeroRightHardware({ copy }: { copy: Copy }) {
     { icon: "news" as const, label: "News", tone: "green" },
   ];
 
+  if (compact) {
+    return (
+      <div className="mb-0 w-full max-w-full">
+        <div className="mb-3 flex min-w-0 items-center gap-2 text-[0.68rem] font-semibold tracking-[0.1em] text-red-600 uppercase">
+          <span className="h-0.5 w-3.5 shrink-0 bg-red-600" />
+          <span className="min-w-0 break-words">
+            {copy.hero.hardwareLabel}
+          </span>
+        </div>
+        <div className="mb-4 grid w-full min-w-0 grid-cols-4 gap-1.5">
+          {copy.hero.hardware.map((item, index) => (
+            <HeroHardwareMark
+              compact
+              index={index}
+              key={item.name}
+              name={item.name}
+            />
+          ))}
+          <HeroHardwareMark
+            compact
+            index={3}
+            name={rightSmartphoneLabel}
+            smartphone
+          />
+        </div>
+        <div className="grid w-full min-w-0 grid-cols-2 gap-[5px] min-[390px]:flex min-[390px]:flex-wrap min-[390px]:justify-center">
+          {pills
+            .filter((pill) => pill.icon !== "news")
+            .map((pill) => (
+              <span
+                className={cx(
+                  "inline-flex min-w-0 items-center justify-center gap-1 rounded-full px-[9px] py-[3px] text-[0.58rem] font-bold",
+                  pill.tone === "blue"
+                    ? "bg-blue-50 text-[#1e3a8a]"
+                    : "bg-emerald-50 text-emerald-600",
+                )}
+                key={pill.label}
+              >
+                <HeroMiniIcon name={pill.icon} />
+                <span className="min-w-0 truncate">{pill.label}</span>
+              </span>
+            ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mb-5">
+    <div className="mb-5 max-w-full">
       <div className="mb-3 flex items-center gap-2 text-[0.68rem] font-semibold tracking-[0.1em] text-red-600 uppercase">
         <span className="h-0.5 w-3.5 bg-red-600" />
         {copy.hero.hardwareLabel}
       </div>
-      <div className="mb-4 flex flex-wrap items-start gap-3">
+      <div
+        className="mb-4 flex flex-wrap items-start gap-3"
+      >
         {copy.hero.hardware.map((item, index) => (
           <Fragment key={item.name}>
-            <HeroHardwareMark index={index} name={item.name} />
+            <HeroHardwareMark compact={compact} index={index} name={item.name} />
             {index < copy.hero.hardware.length - 1 ? (
-              <span className="pt-3 text-lg text-slate-300">+</span>
+              <span
+                className="pt-3 text-lg text-slate-300"
+              >
+                +
+              </span>
             ) : null}
           </Fragment>
         ))}
-        <span className="pt-3 text-2xl font-light text-slate-400">→</span>
-        <HeroHardwareMark index={3} name={rightSmartphoneLabel} smartphone />
+        <span
+          className="pt-3 text-2xl font-light text-slate-400"
+        >
+          →
+        </span>
+        <HeroHardwareMark
+          compact={compact}
+          index={3}
+          name={rightSmartphoneLabel}
+          smartphone
+        />
       </div>
-      <div className="flex flex-wrap gap-[5px]">
+      <div
+        className="flex max-w-full flex-wrap gap-[5px]"
+      >
         {pills.map((pill) => (
           <span
             className={cx(
@@ -3431,6 +3533,7 @@ export function SalesLandingPage() {
   const [isDemoOpen, setIsDemoOpen] = useState(false);
   const [isHeaderSolid, setIsHeaderSolid] = useState(false);
   const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [demoName, setDemoName] = useState("");
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
@@ -3478,6 +3581,7 @@ export function SalesLandingPage() {
   const updateLocale = (nextLocale: LandingLocale) => {
     setLandingLocale(nextLocale);
     setIsLocaleMenuOpen(false);
+    setIsMobileMenuOpen(false);
     writeBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY, nextLocale);
 
     if (nextLocale === "en" || nextLocale === "ru") {
@@ -3486,41 +3590,48 @@ export function SalesLandingPage() {
   };
 
   const scrollTo = (id: string) => {
+    setIsMobileMenuOpen(false);
     document
       .getElementById(id)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const headerNavItems = [
+    ["how", copy.nav.how],
+    ["cases", copy.nav.cases],
+    ["pricing", copy.nav.pricing],
+    ["questions", copy.nav.faq],
+  ] as const;
+  const footerLegalHrefs =
+    locale === "ru"
+      ? ["/terms", "/privacy", "/cookies"]
+      : ["/terms-en", "/privacy-en", "/cookies"];
+
   return (
     <div
-      className="landing-shell min-h-screen bg-white text-foreground"
+      className="landing-shell min-h-screen w-full max-w-[100svw] overflow-x-clip bg-white text-foreground"
       dir={copy.dir}
       lang={locale}
     >
       <header
         className={cx(
-          "fixed inset-x-0 top-0 z-50 px-6 transition-all duration-300 md:px-12",
+          "fixed inset-x-0 top-0 z-50 px-4 transition-all duration-300 sm:px-6 md:px-12",
           isHeaderSolid
             ? "border-b border-slate-200 bg-white/95 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl"
             : "border-b border-transparent bg-transparent",
         )}
       >
-        <div className="mx-auto flex h-[62px] max-w-[1120px] items-center justify-between gap-4">
+        <div className="mx-auto flex h-[62px] w-full max-w-[1120px] min-w-0 items-center justify-between gap-3">
           <button
-            className="flex items-center"
+            className="flex min-w-0 items-center"
             onClick={() => scrollTo("hero")}
             type="button"
           >
-            <BrandWordmark className="text-[1.65rem] text-slate-950 sm:text-[1.9rem]" />
+            <BrandWordmark className="text-[1.45rem] text-slate-950 sm:text-[1.9rem]" />
           </button>
 
           <nav className="hidden items-center gap-7 md:flex">
-            {[
-              ["how", copy.nav.how],
-              ["cases", copy.nav.cases],
-              ["pricing", copy.nav.pricing],
-              ["questions", copy.nav.faq],
-            ].map(([id, label]) => (
+            {headerNavItems.map(([id, label]) => (
               <button
                 className={cx(
                   "text-sm font-medium transition hover:text-primary",
@@ -3535,7 +3646,7 @@ export function SalesLandingPage() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-5">
+          <div className="hidden items-center gap-5 md:flex">
             <div
               className="relative flex items-center"
               onBlur={(event) => {
@@ -3623,19 +3734,106 @@ export function SalesLandingPage() {
             >
               {copy.nav.signIn}
             </a>
-            <Button
-              className="rounded-[8px] px-4"
-              onClick={() => setIsDemoOpen(true)}
-            >
-              {copy.nav.start}
+            <Button asChild className="rounded-[8px] px-4">
+              <a href="/login">{copy.nav.start}</a>
             </Button>
           </div>
+          <button
+            aria-expanded={isMobileMenuOpen}
+            aria-label="Open menu"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-slate-200 bg-white/90 text-slate-950 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition hover:border-primary md:hidden"
+            onClick={() => setIsMobileMenuOpen((value) => !value)}
+            type="button"
+          >
+            <span className="relative block h-4 w-5">
+              <span
+                className={cx(
+                  "absolute top-0 left-0 h-0.5 w-5 rounded-full bg-current transition-transform",
+                  isMobileMenuOpen && "translate-y-[7px] rotate-45",
+                )}
+              />
+              <span
+                className={cx(
+                  "absolute top-[7px] left-0 h-0.5 w-5 rounded-full bg-current transition-opacity",
+                  isMobileMenuOpen && "opacity-0",
+                )}
+              />
+              <span
+                className={cx(
+                  "absolute bottom-0 left-0 h-0.5 w-5 rounded-full bg-current transition-transform",
+                  isMobileMenuOpen && "-translate-y-[7px] -rotate-45",
+                )}
+              />
+            </span>
+          </button>
         </div>
       </header>
 
-      <main>
+      <AnimatePresence initial={false}>
+        {isMobileMenuOpen ? (
+          <motion.div
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            className="fixed inset-x-0 top-[62px] z-40 px-4 md:hidden"
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -14 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -14 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+          >
+            <div className="rounded-b-[18px] border border-slate-200 bg-white/96 p-4 shadow-[0_22px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+              <div className="grid gap-1">
+                {headerNavItems.map(([id, label]) => (
+                  <button
+                    className="rounded-[10px] px-3 py-3 text-left text-sm font-semibold text-slate-900 transition hover:bg-[#f8faff] hover:text-primary"
+                    key={id}
+                    onClick={() => scrollTo(id)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-4">
+                <span className="text-xs font-bold tracking-[0.12em] text-slate-500 uppercase">
+                  {copy.languageLabel}
+                </span>
+                <div className="flex items-center gap-2">
+                  {LANDING_LOCALE_OPTIONS.map((option) => (
+                    <button
+                      aria-label={LANGUAGE_NAMES[option]}
+                      className={cx(
+                        "leading-none transition",
+                        option === locale ? "opacity-100" : "opacity-55",
+                      )}
+                      key={option}
+                      onClick={() => updateLocale(option)}
+                      type="button"
+                    >
+                      <FlagIcon locale={option} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                <a
+                  className="flex h-11 items-center justify-center rounded-[9px] border border-slate-200 text-sm font-semibold text-slate-950"
+                  href="/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {copy.nav.signIn}
+                </a>
+                <Button asChild className="h-11 rounded-[9px] text-sm font-bold">
+                  <a href="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                    {copy.nav.start}
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <main className="w-full max-w-full overflow-x-clip">
         <section
-          className="relative overflow-hidden border-b border-slate-200 px-6 pt-[106px] pb-14 md:px-12 md:pt-[138px] md:pb-[76px]"
+          className="relative overflow-hidden border-b border-slate-200 px-4 pt-[106px] pb-14 sm:px-6 md:px-12 md:pt-[138px] md:pb-[76px]"
           id="hero"
         >
           <video
@@ -3650,14 +3848,14 @@ export function SalesLandingPage() {
             <source src="/hero.webm" type="video/webm" />
           </video>
           <div className="absolute inset-0 bg-white/80" />
-          <div className="relative z-10 mx-auto grid max-w-[1120px] items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className="relative z-10 mx-auto grid w-full max-w-[1120px] min-w-0 items-center gap-10 lg:grid-cols-2 lg:gap-16">
             <motion.div
               animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-              className={cx(isRtl ? "text-right" : "")}
+              className={cx("min-w-0", isRtl ? "text-right" : "")}
               initial={reduceMotion ? false : { opacity: 0, y: 20 }}
               transition={{ duration: 0.58, ease: "easeOut" }}
             >
-              <h1 className="mb-4 max-w-[17ch] text-[clamp(2.25rem,4.2vw,3.5rem)] leading-[1.08] font-bold tracking-[-0.025em] text-slate-950">
+              <h1 className="mb-4 w-full max-w-[17ch] text-[clamp(2.15rem,9vw,3.5rem)] leading-[1.08] font-bold tracking-[-0.025em] text-slate-950">
                 {copy.hero.titleLines.map((line, index) => (
                   <span
                     className={cx(
@@ -3670,10 +3868,10 @@ export function SalesLandingPage() {
                   </span>
                 ))}
               </h1>
-              <p className="max-w-[27.5rem] text-base leading-7 text-slate-700">
+              <p className="w-full max-w-[27.5rem] text-base leading-7 break-words text-slate-700 [overflow-wrap:anywhere]">
                 {copy.hero.subtitle}
               </p>
-              <div className="mt-1 inline-flex items-center gap-2 text-sm font-bold text-emerald-700">
+              <div className="mt-1 flex w-full max-w-full items-start gap-2 text-sm font-bold text-emerald-700">
                 <svg
                   aria-hidden="true"
                   className="h-4 w-4 shrink-0"
@@ -3688,16 +3886,20 @@ export function SalesLandingPage() {
                     strokeWidth="2"
                   />
                 </svg>
-                {copy.hero.verified}
+                <span className="min-w-0 flex-1 leading-6 break-words [overflow-wrap:anywhere]">
+                  {copy.hero.verified}
+                </span>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-primary">
+              <div className="mt-2 flex w-full max-w-full items-start gap-2 text-sm font-semibold text-primary">
                 <HeroMiniIcon name="phone" />
-                {copy.hero.mobile}
+                <span className="min-w-0 flex-1 leading-6 break-words [overflow-wrap:anywhere]">
+                  {copy.hero.mobile}
+                </span>
               </div>
 
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-7 grid w-full max-w-full gap-3 sm:flex sm:flex-row">
                 <Button
-                  className="h-12 rounded-[9px] border border-slate-200 bg-white px-5 text-sm font-medium text-slate-950 hover:border-primary hover:bg-white hover:text-primary"
+                  className="h-12 w-full min-w-0 rounded-[9px] border border-slate-200 bg-white px-5 text-sm font-medium text-slate-950 hover:border-primary hover:bg-white hover:text-primary sm:w-auto"
                   onClick={() => scrollTo("how")}
                   type="button"
                   variant="outline"
@@ -3705,14 +3907,18 @@ export function SalesLandingPage() {
                   {copy.hero.secondaryCta}
                 </Button>
                 <Button
-                  className="h-12 rounded-[9px] px-6 text-sm font-bold"
-                  onClick={() => setIsDemoOpen(true)}
+                  asChild
+                  className="h-12 w-full min-w-0 rounded-[9px] px-6 text-sm font-bold sm:w-auto"
                 >
-                  {copy.hero.primaryCta}
+                  <a href="/login">{copy.hero.primaryCta}</a>
                 </Button>
               </div>
 
-              <div className="mt-10 grid max-w-[34rem] grid-cols-3 overflow-hidden rounded-[12px] border border-slate-200 bg-white">
+              <div className="mt-8 w-full max-w-full overflow-hidden lg:hidden">
+                <HeroRightHardware compact copy={copy} />
+              </div>
+
+              <div className="mt-10 grid w-full max-w-[34rem] min-w-0 grid-cols-3 overflow-hidden rounded-[12px] border border-slate-200 bg-white">
                 {copy.hero.stats.map((stat, index) => (
                   <div
                     className={cx(
@@ -3822,9 +4028,9 @@ export function SalesLandingPage() {
                 </motion.article>
               ))}
             </div>
-            <p className="mt-6 flex max-w-none items-start gap-3 whitespace-nowrap text-sm font-medium leading-6 text-amber-800">
+            <p className="mt-6 flex max-w-full items-start gap-3 text-sm font-medium leading-6 text-amber-800 md:whitespace-nowrap">
               <LightningIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-              <span>{copy.cost.note}</span>
+              <span className="min-w-0 break-words">{copy.cost.note}</span>
             </p>
           </div>
         </section>
@@ -3933,9 +4139,11 @@ export function SalesLandingPage() {
                 </motion.article>
               ))}
             </div>
-            <div className="mx-auto mt-8 flex max-w-full items-start gap-3 overflow-x-auto text-[0.8125rem] leading-7 text-slate-700 md:max-w-none md:overflow-visible">
+            <div className="mx-auto mt-8 flex max-w-full items-start gap-3 text-[0.8125rem] leading-7 text-slate-700 md:max-w-none">
               <LockIcon className="mt-1 h-5 w-5 shrink-0 text-primary" />
-              <p className="whitespace-nowrap">{copy.how.proof}</p>
+              <p className="min-w-0 break-words md:whitespace-nowrap">
+                {copy.how.proof}
+              </p>
             </div>
           </div>
         </section>
@@ -3953,26 +4161,43 @@ export function SalesLandingPage() {
               title={copy.cases.title}
               subtitle={copy.cases.subtitle}
             />
-            <div className="mb-7 flex w-fit max-w-full gap-1 overflow-x-auto rounded-[10px] border border-slate-200 bg-[#f8faff] p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
-              {copy.cases.items.map((item, index) => (
-                <motion.button
-                  className={cx(
-                    "inline-flex shrink-0 items-center gap-2 rounded-[8px] px-4 py-2.5 text-sm font-semibold transition-[background-color,color,box-shadow]",
-                    activeCase === index
-                      ? "bg-white text-[#1e3a8a] shadow-[0_1px_4px_rgba(15,23,42,0.08)]"
-                      : "text-slate-600 hover:text-slate-950",
-                  )}
-                  key={item.label}
-                  layout
-                  onClick={() => setActiveCase(index)}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  type="button"
-                  whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+            <div className="mb-7 w-full sm:w-fit">
+              <div className="flex w-full max-w-full flex-wrap gap-1 rounded-[10px] border border-slate-200 bg-[#f8faff] p-1 sm:w-fit sm:flex-nowrap">
+                {copy.cases.items.map((item, index) => (
+                  <motion.button
+                    aria-label={item.label}
+                    className={cx(
+                      "inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden rounded-[8px] px-0 text-sm font-semibold transition-[background-color,color,box-shadow] sm:h-auto sm:flex-none sm:px-4 sm:py-2.5",
+                      activeCase === index
+                        ? "bg-white text-[#1e3a8a] shadow-[0_1px_4px_rgba(15,23,42,0.08)]"
+                        : "text-slate-600 hover:text-slate-950",
+                    )}
+                    key={item.label}
+                    layout
+                    onClick={() => setActiveCase(index)}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    type="button"
+                    whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+                  >
+                    <CaseTabIcon index={index} />
+                    <span className="hidden min-w-0 truncate sm:inline">
+                      {item.label}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+              <AnimatePresence initial={false} mode="wait">
+                <motion.p
+                  animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  className="mt-3 text-center text-sm font-semibold text-[#1e3a8a] sm:hidden"
+                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                  initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 4 }}
+                  key={activeCaseItem.label}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
                 >
-                  <CaseTabIcon index={index} />
-                  {item.label}
-                </motion.button>
-              ))}
+                  {activeCaseItem.label}
+                </motion.p>
+              </AnimatePresence>
             </div>
             <AnimatePresence initial={false} mode="wait">
               <motion.div
@@ -4220,7 +4445,7 @@ export function SalesLandingPage() {
         </section>
 
         <section
-          className="px-6 py-20 md:px-12 md:py-[88px]"
+          className="hidden px-6 py-20 md:block md:px-12 md:py-[88px]"
           id="mobile"
           style={{
             background: "linear-gradient(180deg, #f5f7fc 0%, #eef3fb 100%)",
@@ -4405,10 +4630,10 @@ export function SalesLandingPage() {
                       {totalText}
                     </p>
                     <Button
-                      className="mt-6 h-12 w-full rounded-[9px]"
-                      onClick={() => setIsDemoOpen(true)}
+                      asChild
+                      className="mt-6 h-12 w-full rounded-[9px] text-white hover:text-white"
                     >
-                      {copy.pricing.cta}
+                      <a href="/login">{copy.pricing.cta}</a>
                     </Button>
                   </div>
                   <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
@@ -4425,15 +4650,13 @@ export function SalesLandingPage() {
               >
                 {(["monthly", "six", "year"] as const).map((key) => {
                   const option = PRICING_DURATIONS[key];
-                  const packageTotal =
-                    employeeCount * option.unitPrice * option.months;
                   const isSelected = durationKey === key;
 
                   return (
                     <motion.article
                       aria-pressed={isSelected}
                       className={cx(
-                        "flex min-h-[0] cursor-pointer flex-col rounded-[14px] border bg-white p-5 text-left transition-[border-color,box-shadow,background-color] duration-150 outline-none hover:border-primary/70 hover:shadow-[0_18px_44px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/20",
+                        "flex min-h-[0] cursor-pointer flex-col rounded-[14px] border bg-white p-4 text-left transition-[border-color,box-shadow,background-color] duration-150 outline-none hover:border-primary/70 hover:shadow-[0_18px_44px_rgba(15,23,42,0.10)] focus-visible:ring-2 focus-visible:ring-primary/20 sm:p-5",
                         isSelected
                           ? "border-primary ring-4 ring-primary/10"
                           : "border-slate-200",
@@ -4467,20 +4690,17 @@ export function SalesLandingPage() {
                         </span>
                       </div>
                       <div className="mt-auto pt-4">
-                        <div className="flex flex-wrap items-end gap-x-2">
-                          <p className="text-3xl font-semibold tracking-[-0.06em] text-slate-950">
+                        <div className="flex min-w-0 items-end gap-x-2">
+                          <p className="text-[1.75rem] font-semibold tracking-[-0.06em] text-slate-950 sm:text-3xl">
                             {formatMoney(option.unitPrice)}
                           </p>
-                          <p className="pb-1 text-xs text-muted-foreground">
+                          <p className="pb-1 text-[0.68rem] whitespace-nowrap text-muted-foreground sm:text-xs">
                             {copy.pricing.perEmployee}
                           </p>
                         </div>
-                        <p className="mt-2 text-sm font-semibold text-slate-700">
-                          {formatMoney(packageTotal)} {copy.pricing.totalSuffix}
-                        </p>
                         <span
                           className={cx(
-                            "mt-4 flex h-10 w-full items-center justify-center rounded-[9px] text-sm font-medium transition-[background-color,color]",
+                            "mt-3 flex h-10 w-full items-center justify-center rounded-[9px] text-sm font-medium transition-[background-color,color] sm:mt-4",
                             isSelected
                               ? "bg-primary text-white"
                               : "bg-secondary text-primary",
@@ -4508,14 +4728,14 @@ export function SalesLandingPage() {
               eyebrow={copy.testimonials.eyebrow}
               title={copy.testimonials.title}
             />
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid items-stretch gap-5 md:grid-cols-3">
               {copy.testimonials.items.map((item, index) => {
                 const avatar =
                   TESTIMONIAL_AVATARS[index % TESTIMONIAL_AVATARS.length];
 
                 return (
                   <motion.article
-                    className="rounded-[14px] border border-slate-200 bg-white p-7"
+                    className="flex h-full flex-col rounded-[14px] border border-slate-200 bg-white p-7"
                     initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                     key={item.name}
                     transition={{
@@ -4532,20 +4752,22 @@ export function SalesLandingPage() {
                     <p className="mt-5 text-base leading-7 text-slate-700">
                       {item.quote}
                     </p>
-                    <div className="mt-7 flex items-center gap-3 border-t border-slate-200 pt-4">
-                      <img
-                        alt={item.name}
-                        className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-black/10"
-                        src={getMockAvatarDataUrl(
-                          avatar.seed,
-                          avatar.gender,
-                        )}
-                      />
-                      <div className="min-w-0">
-                        <p className="font-semibold">{item.name}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {item.role}
-                        </p>
+                    <div className="mt-auto pt-7">
+                      <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+                        <img
+                          alt={item.name}
+                          className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-black/10"
+                          src={getMockAvatarDataUrl(
+                            avatar.seed,
+                            avatar.gender,
+                          )}
+                        />
+                        <div className="min-w-0">
+                          <p className="font-semibold">{item.name}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {item.role}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </motion.article>
@@ -4570,7 +4792,7 @@ export function SalesLandingPage() {
                 <article className="border-t border-slate-200" key={item.q}>
                   <button
                     aria-expanded={openFaq === index}
-                    className="flex w-full items-center justify-between gap-4 py-5 text-left text-sm font-semibold text-slate-950 transition hover:text-primary"
+                    className="flex w-full min-w-0 items-center justify-between gap-4 overflow-hidden py-5 text-left text-sm font-semibold text-slate-950 transition hover:text-primary"
                     onClick={() =>
                       setOpenFaq((current) =>
                         current === index ? null : index,
@@ -4578,7 +4800,9 @@ export function SalesLandingPage() {
                     }
                     type="button"
                   >
-                    <span>{item.q}</span>
+                    <span className="min-w-0 flex-1 break-words">
+                      {item.q}
+                    </span>
                     <motion.span
                       animate={{ rotate: openFaq === index ? 45 : 0 }}
                       className="shrink-0 text-lg font-normal leading-none text-slate-400"
@@ -4614,7 +4838,7 @@ export function SalesLandingPage() {
         </section>
 
         <section className="bg-[#24418f] px-6 py-10 text-white md:px-10 md:py-12">
-          <Reveal className="mx-auto grid max-w-[1120px] items-center gap-10 rounded-[13px] border border-white/18 bg-white/10 px-10 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:px-10 lg:px-12">
+          <Reveal className="mx-auto grid max-w-[1120px] items-center gap-10 md:grid-cols-[minmax(0,1fr)_auto]">
             <div>
               <h2 className="max-w-[13ch] text-[clamp(3rem,5vw,4.125rem)] leading-[0.92] font-extrabold tracking-[-0.03em] text-white">
                 {(Array.isArray(copy.cta.title)
@@ -4635,10 +4859,10 @@ export function SalesLandingPage() {
             </div>
             <div className="flex flex-col justify-center gap-3 sm:flex-row md:items-center">
               <Button
-                className="h-12 min-w-[165px] rounded-[8px] bg-white px-7 text-primary hover:bg-white/90"
-                onClick={() => setIsDemoOpen(true)}
+                asChild
+                className="h-12 min-w-[165px] rounded-[8px] bg-white px-7 text-slate-950 hover:bg-white/90 hover:text-slate-950"
               >
-                {copy.cta.primary}
+                <a href="/login">{copy.cta.primary}</a>
               </Button>
               <Button
                 className="h-12 min-w-[165px] rounded-[8px] border-white/40 bg-white/10 px-7 text-white hover:bg-white/15"
@@ -4672,11 +4896,19 @@ export function SalesLandingPage() {
                 {copy.footer.product}
               </h4>
               <div className="grid gap-3">
-                {copy.footer.links.map((link) => (
+                {copy.footer.links.map((link, index) => (
                   <button
                     className="text-left text-sm text-muted-foreground hover:text-foreground"
                     key={link}
-                    onClick={() => scrollTo("how")}
+                    onClick={() =>
+                      scrollTo(
+                        index === 2
+                          ? "pricing"
+                          : index === copy.footer.links.length - 1
+                            ? "mobile"
+                            : "how",
+                      )
+                    }
                     type="button"
                   >
                     {link}
@@ -4698,10 +4930,10 @@ export function SalesLandingPage() {
                 {copy.footer.contacts}
               </h4>
               <div className="grid gap-3">
-                {copy.footer.legal.map((link) => (
+                {copy.footer.legal.map((link, index) => (
                   <a
                     className="text-sm text-muted-foreground hover:text-foreground"
-                    href="#footer"
+                    href={footerLegalHrefs[index] ?? "/terms-en"}
                     key={link}
                   >
                     {link}

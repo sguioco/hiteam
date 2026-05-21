@@ -35,6 +35,14 @@
   font-style: italic;
 }
 
+.brand-wordmark-wave {
+  align-self: baseline;
+  display: inline-block;
+  width: 1.44em;
+  height: 1.44em;
+  margin-left: 0.18em;
+}
+
 .landing-shell,
 .landing-shell h1,
 .landing-shell h2,
@@ -88,6 +96,23 @@
 .landing-shell .landing-hero-title,
 .landing-shell .landing-hero-title span {
   font-family: var(--font-hero-display), var(--font-landing), var(--font-sf-base) !important;
+}
+
+html:has(.landing-shell),
+body:has(.landing-shell) {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.landing-shell {
+  max-width: 100svw;
+  overflow-x: clip;
+}
+
+.landing-shell *,
+.landing-shell *::before,
+.landing-shell *::after {
+  box-sizing: border-box;
 }
 
 @theme inline {

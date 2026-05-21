@@ -42,8 +42,13 @@ const onest = Onest({
 });
 
 export const metadata: Metadata = {
-  title: 'Smart',
-  description: 'Operational control center for attendance, scheduling, and workforce workflows.',
+  title: 'HiTeam — Workforce Management & Attendance Control',
+  description: 'Workforce management, attendance control, scheduling, tasks, checklists and mobile verification for real-world teams.',
+  openGraph: {
+    title: 'HiTeam — Workforce Management & Attendance Control',
+    description: 'Control attendance, shifts, tasks and field teams from one mobile-first platform.',
+    images: [LANDING_HERO_POSTER_SRC],
+  },
 };
 
 function parsePreferredLocaleFromAcceptLanguage(
