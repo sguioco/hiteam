@@ -28,6 +28,7 @@
         "ascApiKeyPath": "../../Apple/AuthKey_QNGS4QB2U4.p8",
         "ascApiKeyId": "QNGS4QB2U4",
         "ascApiKeyIssuerId": "d73c6b25-08b0-4bc6-8ab1-254102404792",
+        "ascAppId": "6769683295",
         "appleTeamId": "D5GP7N872H",
         "bundleIdentifier": "net.hiteam.app"
       }
