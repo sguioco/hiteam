@@ -3736,7 +3736,7 @@ export function SalesLandingPage() {
             </a>
             <Button
               asChild
-              className="rounded-[8px] px-4 text-white hover:text-white"
+              className="rounded-[8px] px-4 !text-white hover:!text-white"
             >
               <a href="/login">{copy.nav.start}</a>
             </Button>
@@ -3823,7 +3823,10 @@ export function SalesLandingPage() {
                 >
                   {copy.nav.signIn}
                 </a>
-                <Button asChild className="h-11 rounded-[9px] text-sm font-bold">
+                <Button
+                  asChild
+                  className="h-11 rounded-[9px] text-sm font-bold !text-white hover:!text-white"
+                >
                   <a href="/login" onClick={() => setIsMobileMenuOpen(false)}>
                     {copy.nav.start}
                   </a>
@@ -3911,7 +3914,7 @@ export function SalesLandingPage() {
                 </Button>
                 <Button
                   asChild
-                  className="h-12 w-full min-w-0 rounded-[9px] px-6 text-sm font-bold text-white hover:text-white sm:w-auto"
+                  className="h-12 w-full min-w-0 rounded-[9px] px-6 text-sm font-bold !text-white hover:!text-white sm:w-auto"
                 >
                   <a href="/login">{copy.hero.primaryCta}</a>
                 </Button>
@@ -4863,7 +4866,7 @@ export function SalesLandingPage() {
             <div className="flex flex-col justify-center gap-3 sm:flex-row md:items-center">
               <Button
                 asChild
-                className="h-12 min-w-[165px] rounded-[8px] bg-white px-7 text-black hover:bg-white/90 hover:text-black"
+                className="h-12 min-w-[165px] rounded-[8px] bg-white px-7 !text-black hover:bg-white/90 hover:!text-black"
               >
                 <a href="/login">{copy.cta.primary}</a>
               </Button>
