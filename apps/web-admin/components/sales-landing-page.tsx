@@ -4637,7 +4637,7 @@ export function SalesLandingPage() {
                     </p>
                     <Button
                       asChild
-                      className="mt-6 h-12 w-full rounded-[9px] text-white hover:text-white"
+                      className="mt-6 h-12 w-full rounded-[9px] !text-white hover:!text-white"
                     >
                       <a href="/login">{copy.pricing.cta}</a>
                     </Button>
@@ -4708,7 +4708,7 @@ export function SalesLandingPage() {
                           className={cx(
                             "mt-3 flex h-10 w-full items-center justify-center rounded-[9px] text-sm font-medium transition-[background-color,color] sm:mt-4",
                             isSelected
-                              ? "bg-primary text-white"
+                              ? "bg-primary !text-white"
                               : "bg-secondary text-primary",
                           )}
                         >

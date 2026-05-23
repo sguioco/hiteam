@@ -339,7 +339,7 @@ async function main(): Promise<void> {
     deviceName: 'Alex Browser',
   });
 
-  await ensureEmployee({
+  const anna = await ensureEmployee({
     tenantId: tenant.id,
     companyId: company.id,
     departmentId: operationsDepartment.id,
@@ -565,7 +565,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const allEmployees = [owner, alex, julia, sergey, maria];
+  const allEmployees = [owner, alex, anna, julia, sergey, maria];
   const allEmployeeIds = allEmployees.map((item) => item.employee.id);
   const todayStart = startOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS);
   const todayEnd = endOfDayAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS);
@@ -632,6 +632,18 @@ async function main(): Promise<void> {
   });
 
   const shifts = {
+    owner: await prisma.shift.create({
+      data: {
+        tenantId: tenant.id,
+        templateId: futureOwnerTemplate.id,
+        employeeId: owner.employee.id,
+        locationId: location.id,
+        positionId: ownerPosition.id,
+        shiftDate: todayStart,
+        startsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 0),
+        endsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 18, 0),
+      },
+    }),
     alex: await prisma.shift.create({
       data: {
         tenantId: tenant.id,
@@ -680,20 +692,22 @@ async function main(): Promise<void> {
         endsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 19, 0),
       },
     }),
-  };
-
-  await prisma.shift.createMany({
-    data: [
-      {
+    anna: await prisma.shift.create({
+      data: {
         tenantId: tenant.id,
-        templateId: futureOwnerTemplate.id,
-        employeeId: owner.employee.id,
+        templateId: template.id,
+        employeeId: anna.employee.id,
         locationId: location.id,
-        positionId: ownerPosition.id,
+        positionId: managerPosition.id,
         shiftDate: todayStart,
         startsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 0),
         endsAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 18, 0),
       },
+    }),
+  };
+
+  await prisma.shift.createMany({
+    data: [
       {
         tenantId: tenant.id,
         templateId: futureEmployeeTemplate.id,
@@ -757,13 +771,101 @@ async function main(): Promise<void> {
     ],
   });
 
+  const ownerCheckIn = await prisma.attendanceEvent.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: owner.employee.id,
+      eventType: AttendanceEventType.CHECK_IN,
+      result: AttendanceResult.ACCEPTED,
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 0),
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracyMeters: 5,
+      distanceMeters: 8,
+      notes: 'Seeded demo on-time owner check-in',
+      locationId: location.id,
+      deviceId: owner.device.id,
+    },
+  });
+
+  await prisma.attendanceSession.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: owner.employee.id,
+      shiftId: shifts.owner.id,
+      checkInEventId: ownerCheckIn.id,
+      status: AttendanceSessionStatus.OPEN,
+      startedAt: ownerCheckIn.occurredAt,
+      totalMinutes: 180,
+    },
+  });
+
+  const alexCheckIn = await prisma.attendanceEvent.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: alex.employee.id,
+      eventType: AttendanceEventType.CHECK_IN,
+      result: AttendanceResult.ACCEPTED,
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 8, 22),
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracyMeters: 7,
+      distanceMeters: 12,
+      notes: 'Seeded demo late check-in',
+      locationId: location.id,
+      deviceId: alex.device.id,
+    },
+  });
+
+  await prisma.attendanceSession.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: alex.employee.id,
+      shiftId: shifts.alex.id,
+      checkInEventId: alexCheckIn.id,
+      status: AttendanceSessionStatus.OPEN,
+      startedAt: alexCheckIn.occurredAt,
+      totalMinutes: 160,
+      lateMinutes: 22,
+    },
+  });
+
+  const juliaCheckIn = await prisma.attendanceEvent.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: julia.employee.id,
+      eventType: AttendanceEventType.CHECK_IN,
+      result: AttendanceResult.ACCEPTED,
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 58),
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracyMeters: 6,
+      distanceMeters: 9,
+      notes: 'Seeded demo on-time check-in',
+      locationId: location.id,
+      deviceId: julia.device.id,
+    },
+  });
+
+  await prisma.attendanceSession.create({
+    data: {
+      tenantId: tenant.id,
+      employeeId: julia.employee.id,
+      shiftId: shifts.julia.id,
+      checkInEventId: juliaCheckIn.id,
+      status: AttendanceSessionStatus.OPEN,
+      startedAt: juliaCheckIn.occurredAt,
+      totalMinutes: 120,
+    },
+  });
+
   const mariaCheckIn = await prisma.attendanceEvent.create({
     data: {
       tenantId: tenant.id,
       employeeId: maria.employee.id,
       eventType: AttendanceEventType.CHECK_IN,
       result: AttendanceResult.ACCEPTED,
-      occurredAt: hoursFromNow(-4),
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 8, 1),
       latitude: location.latitude,
       longitude: location.longitude,
       accuracyMeters: 6,
@@ -780,7 +882,7 @@ async function main(): Promise<void> {
       employeeId: maria.employee.id,
       eventType: AttendanceEventType.BREAK_START,
       result: AttendanceResult.ACCEPTED,
-      occurredAt: hoursFromNow(-2),
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 12, 10),
       latitude: location.latitude,
       longitude: location.longitude,
       accuracyMeters: 6,
@@ -820,7 +922,7 @@ async function main(): Promise<void> {
       employeeId: sergey.employee.id,
       eventType: AttendanceEventType.CHECK_IN,
       result: AttendanceResult.ACCEPTED,
-      occurredAt: hoursFromNow(-6),
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 7, 31),
       latitude: location.latitude,
       longitude: location.longitude,
       accuracyMeters: 7,
@@ -837,7 +939,7 @@ async function main(): Promise<void> {
       employeeId: sergey.employee.id,
       eventType: AttendanceEventType.CHECK_OUT,
       result: AttendanceResult.ACCEPTED,
-      occurredAt: hoursFromNow(-2),
+      occurredAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 15, 20),
       latitude: location.latitude,
       longitude: location.longitude,
       accuracyMeters: 7,
@@ -1060,6 +1162,14 @@ async function main(): Promise<void> {
     'Employee: online product training',
     'Employee: post-shift towel count',
     'Employee: overdue dust check in studio A',
+    'Alex: opening checklist 2 of 4',
+    'Alex: sanitize treatment rooms',
+    'Julia: client cards 3 of 4',
+    'Julia: confirm reception handoff',
+    'Sergey: cash count 1 of 4',
+    'Sergey: close early-leave note',
+    'Maria: break follow-up photo report',
+    'Anna: no-show shift handoff',
   ];
 
   const demoTaskTemplateTitles = [
@@ -1171,6 +1281,177 @@ async function main(): Promise<void> {
       status: TaskStatus.DONE,
       dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 0),
     },
+  });
+
+  await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      managerEmployeeId: owner.employee.id,
+      assigneeEmployeeId: alex.employee.id,
+      groupId: group.id,
+      title: 'Alex: opening checklist 2 of 4',
+      description: 'Demo progress case: Alex is late, and the opening checklist is half done.',
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.IN_PROGRESS,
+      dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 14, 0),
+      checklistItems: {
+        create: [
+          {
+            tenantId: tenant.id,
+            title: 'Prepare treatment room A',
+            sortOrder: 1,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 10, 12),
+            completedByEmployeeId: alex.employee.id,
+          },
+          {
+            tenantId: tenant.id,
+            title: 'Prepare treatment room B',
+            sortOrder: 2,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 10, 34),
+            completedByEmployeeId: alex.employee.id,
+          },
+          { tenantId: tenant.id, title: 'Attach room photo proof', sortOrder: 3 },
+          { tenantId: tenant.id, title: 'Confirm readiness in notes', sortOrder: 4 },
+        ],
+      },
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      managerEmployeeId: owner.employee.id,
+      assigneeEmployeeId: julia.employee.id,
+      groupId: group.id,
+      title: 'Julia: client cards 3 of 4',
+      description: 'Julia arrived on time and has almost finished the front desk checklist.',
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.IN_PROGRESS,
+      dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 13, 20),
+      checklistItems: {
+        create: [
+          {
+            tenantId: tenant.id,
+            title: 'Check today bookings',
+            sortOrder: 1,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 10, 5),
+            completedByEmployeeId: julia.employee.id,
+          },
+          {
+            tenantId: tenant.id,
+            title: 'Update client phones',
+            sortOrder: 2,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 10, 22),
+            completedByEmployeeId: julia.employee.id,
+          },
+          {
+            tenantId: tenant.id,
+            title: 'Mark prepayments',
+            sortOrder: 3,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 0),
+            completedByEmployeeId: julia.employee.id,
+          },
+          { tenantId: tenant.id, title: 'Send appointment reminders', sortOrder: 4 },
+        ],
+      },
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      managerEmployeeId: owner.employee.id,
+      assigneeEmployeeId: sergey.employee.id,
+      groupId: group.id,
+      title: 'Sergey: cash count 1 of 4',
+      description: 'Sergey checked out early; only one cash-control step is done.',
+      priority: TaskPriority.HIGH,
+      status: TaskStatus.IN_PROGRESS,
+      dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 12, 45),
+      checklistItems: {
+        create: [
+          {
+            tenantId: tenant.id,
+            title: 'Count cash drawer',
+            sortOrder: 1,
+            isCompleted: true,
+            completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 40),
+            completedByEmployeeId: sergey.employee.id,
+          },
+          { tenantId: tenant.id, title: 'Check card terminal', sortOrder: 2 },
+          { tenantId: tenant.id, title: 'Save Z-report', sortOrder: 3 },
+          { tenantId: tenant.id, title: 'Leave owner comment', sortOrder: 4 },
+        ],
+      },
+    },
+  });
+
+  await prisma.task.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: alex.employee.id,
+        groupId: group.id,
+        title: 'Alex: sanitize treatment rooms',
+        description: 'Completed demo task for the late employee.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.DONE,
+        completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 15),
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 30),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: julia.employee.id,
+        groupId: group.id,
+        title: 'Julia: confirm reception handoff',
+        description: 'Completed demo task for an on-time employee.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.DONE,
+        completedAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 10, 45),
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 11, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: sergey.employee.id,
+        groupId: group.id,
+        title: 'Sergey: close early-leave note',
+        description: 'Pending task left after early checkout.',
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 16, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: maria.employee.id,
+        groupId: group.id,
+        title: 'Maria: break follow-up photo report',
+        description: 'Employee is on break; this task remains open.',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        requiresPhoto: true,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 15, 0),
+      },
+      {
+        tenantId: tenant.id,
+        managerEmployeeId: owner.employee.id,
+        assigneeEmployeeId: anna.employee.id,
+        groupId: group.id,
+        title: 'Anna: no-show shift handoff',
+        description: 'No check-in has been recorded, so this handoff stays overdue.',
+        priority: TaskPriority.URGENT,
+        status: TaskStatus.TODO,
+        dueAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 30),
+      },
+    ],
   });
 
   await prisma.task.createMany({

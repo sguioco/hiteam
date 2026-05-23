@@ -7,14 +7,17 @@ import DashboardHome, {
 } from "@/components/dashboard-home";
 import { type AuthSession, isEmployeeOnlyRole } from "@/lib/auth";
 import { getDemoDashboardBootstrap } from "@/lib/demo-api";
-import { isDemoAccessToken } from "@/lib/demo-mode";
+import { DEMO_ADMIN_EMAIL, isDemoAccessToken } from "@/lib/demo-mode";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 import { requireServerSession } from "@/lib/server-auth";
 
 async function loadInitialDashboardBootstrap(
   session: AuthSession,
 ): Promise<DashboardInitialData | null> {
-  if (isDemoAccessToken(session.accessToken)) {
+  const isOwnerDemoAccount =
+    session.user.email.trim().toLowerCase() === DEMO_ADMIN_EMAIL;
+
+  if (isDemoAccessToken(session.accessToken) || isOwnerDemoAccount) {
     return getDemoDashboardBootstrap(session.accessToken)
       .initialData as DashboardInitialData;
   }

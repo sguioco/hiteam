@@ -558,7 +558,7 @@ function createInitialState(): DemoState {
               ),
         breaksEnabled: false,
         workMode: index === 1 ? "FIELD" : "STATIONARY",
-        status: index < 4 ? "ACTIVE" : "INACTIVE",
+        status: "ACTIVE",
         user: {
           id: `user-${employee.id}`,
           email:
@@ -696,6 +696,28 @@ function createInitialState(): DemoState {
     };
   };
 
+  const buildChecklistProgress = (
+    taskId: string,
+    employee: DemoEmployee,
+    titles: string[],
+    completedCount: number,
+  ) =>
+    titles.map((title, index) => ({
+      id: `${taskId}-check-${index + 1}`,
+      title,
+      sortOrder: index + 1,
+      isCompleted: index < completedCount,
+      completedAt: index < completedCount ? createIsoAt(0, 10 + index, 12) : null,
+      completedByEmployee:
+        index < completedCount
+          ? {
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+            }
+          : null,
+    }));
+
   const tasks = [
     buildTask({
       id: "task-demo-1",
@@ -774,6 +796,134 @@ function createInitialState(): DemoState {
       priority: "MEDIUM",
       groupId: groups[1].id,
       assigneeEmployeeId: employees[3].id,
+    }),
+    buildTask({
+      id: "task-attendance-demo-ilya-1",
+      title: "Илья: открыть смену и проверить зал",
+      description: "Сотрудник пришел с опозданием, но закрыл первые пункты открытия.",
+      dueAt: createIsoAt(0, 10, 0),
+      priority: "HIGH",
+      status: "DONE",
+      assigneeEmployeeId: employees[1].id,
+      groupId: groups[0].id,
+      checklistItems: buildChecklistProgress("task-attendance-demo-ilya-1", employees[1], [
+        "Проверить входную зону",
+        "Подготовить рабочее место",
+      ], 2),
+    }),
+    buildTask({
+      id: "task-attendance-demo-ilya-2",
+      title: "Илья: сверить остатки расходников",
+      description: "Второе выполненное задание сотрудника за текущую смену.",
+      dueAt: createIsoAt(0, 11, 30),
+      priority: "MEDIUM",
+      status: "DONE",
+      assigneeEmployeeId: employees[1].id,
+      groupId: groups[0].id,
+    }),
+    buildTask({
+      id: "task-attendance-demo-ilya-3",
+      title: "Илья: чек-лист подготовки кабинета",
+      description: "Показательный прогресс: выполнено 2 из 4 пунктов.",
+      dueAt: createIsoAt(0, 14, 0),
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[1].id,
+      groupId: groups[0].id,
+      checklistItems: buildChecklistProgress("task-attendance-demo-ilya-3", employees[1], [
+        "Заменить полотенца",
+        "Проверить лампы",
+        "Сделать фото кабинета",
+        "Отметить готовность в комментарии",
+      ], 2),
+    }),
+    buildTask({
+      id: "task-attendance-demo-ilya-4",
+      title: "Илья: загрузить фотоотчет после уборки",
+      description: "Осталось к выполнению до конца смены.",
+      dueAt: createIsoAt(0, 17, 30),
+      priority: "MEDIUM",
+      status: "TODO",
+      assigneeEmployeeId: employees[1].id,
+      groupId: groups[0].id,
+    }),
+    buildTask({
+      id: "task-attendance-demo-maria-1",
+      title: "Мария: принять утреннюю запись",
+      description: "Пришла вовремя и закрыла задачу до первого клиента.",
+      dueAt: createIsoAt(0, 10, 15),
+      priority: "MEDIUM",
+      status: "DONE",
+      assigneeEmployeeId: employees[2].id,
+      groupId: groups[0].id,
+    }),
+    buildTask({
+      id: "task-attendance-demo-maria-2",
+      title: "Мария: подготовить клиентские карточки",
+      description: "Выполнено 3 из 4 пунктов, один пункт еще открыт.",
+      dueAt: createIsoAt(0, 13, 20),
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[2].id,
+      groupId: groups[0].id,
+      checklistItems: buildChecklistProgress("task-attendance-demo-maria-2", employees[2], [
+        "Проверить записи",
+        "Обновить телефоны",
+        "Отметить предоплату",
+        "Отправить напоминания",
+      ], 3),
+    }),
+    buildTask({
+      id: "task-attendance-demo-dmitry-1",
+      title: "Дмитрий: пересчитать кассу",
+      description: "Сотрудник пришел вовремя, но часть задач еще в работе.",
+      dueAt: createIsoAt(0, 12, 45),
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      assigneeEmployeeId: employees[3].id,
+      groupId: groups[1].id,
+      checklistItems: buildChecklistProgress("task-attendance-demo-dmitry-1", employees[3], [
+        "Сверить наличные",
+        "Проверить терминал",
+        "Сохранить Z-отчет",
+        "Передать комментарий владельцу",
+      ], 1),
+    }),
+    buildTask({
+      id: "task-attendance-demo-dmitry-2",
+      title: "Дмитрий: закрыть заявку по форме",
+      description: "Одна выполненная задача в карточке сотрудника.",
+      dueAt: createIsoAt(0, 15, 10),
+      priority: "LOW",
+      status: "DONE",
+      assigneeEmployeeId: employees[3].id,
+      groupId: groups[1].id,
+    }),
+    buildTask({
+      id: "task-attendance-demo-olga-1",
+      title: "Ольга: открыть витрину",
+      description: "Сотрудник в расписании, но прихода нет, задача остается просроченной.",
+      dueAt: createIsoAt(0, 9, 30),
+      priority: "URGENT",
+      status: "TODO",
+      assigneeEmployeeId: employees[4].id,
+      groupId: groups[1].id,
+      checklistItems: buildChecklistProgress("task-attendance-demo-olga-1", employees[4], [
+        "Включить подсветку",
+        "Проверить ценники",
+        "Сделать фото витрины",
+        "Сообщить о готовности",
+      ], 0),
+    }),
+    buildTask({
+      id: "task-attendance-demo-alexey-1",
+      title: "Алексей: подготовить позднюю смену",
+      description: "Второй no-show сотрудник: смена есть, выполненных задач нет.",
+      dueAt: createIsoAt(0, 11, 15),
+      priority: "HIGH",
+      status: "TODO",
+      assigneeEmployeeId: employees[5].id,
+      groupId: groups[0].id,
     }),
     buildTask({
       id: "task-sgiuoco-1",
@@ -1450,6 +1600,7 @@ function loadState(): DemoState {
         gender: normalizedGender,
         middleName: nextMiddleName,
         birthDate: nextBirthDate,
+        status: "ACTIVE",
         avatarUrl: isOwner
           ? DEMO_ADMIN_AVATAR_URL
           : shouldReplaceAvatar
@@ -1463,13 +1614,22 @@ function loadState(): DemoState {
           normalizeDemoTask(task, normalized.employees),
         )
       : seedState.tasks;
+    const syncedDemoTaskIds = new Set(
+      seedState.tasks
+        .filter((task) => String(task.id).startsWith("task-attendance-demo-"))
+        .map((task) => task.id),
+    );
+    const mergedTasks = [
+      ...normalizedTasks.filter((task) => !syncedDemoTaskIds.has(task.id)),
+      ...seedState.tasks.filter((task) => syncedDemoTaskIds.has(task.id)),
+    ];
     if (
       !Array.isArray(normalized.tasks) ||
-      JSON.stringify(normalizedTasks) !== JSON.stringify(normalized.tasks)
+      JSON.stringify(mergedTasks) !== JSON.stringify(normalized.tasks)
     ) {
       changed = true;
     }
-    normalized.tasks = normalizedTasks;
+    normalized.tasks = mergedTasks;
 
     if (!Array.isArray(normalized.announcements)) {
       normalized.announcements = seedState.announcements;
@@ -1547,7 +1707,19 @@ function updateState(mutator: (state: DemoState) => DemoState | void) {
 }
 
 function currentDemoRole(token?: string) {
-  return getDemoRoleByToken(token ?? getSession()?.accessToken ?? null);
+  const session = getSession();
+  const tokenRole = getDemoRoleByToken(token ?? session?.accessToken ?? null);
+  if (tokenRole) {
+    return tokenRole;
+  }
+
+  const sessionEmail = session?.user.email.trim().toLowerCase();
+  const isSessionToken = !token || token === session?.accessToken;
+  if (sessionEmail === DEMO_ADMIN_EMAIL && isSessionToken) {
+    return "admin";
+  }
+
+  return null;
 }
 
 function currentEmployeeId(token?: string) {
@@ -1556,15 +1728,23 @@ function currentEmployeeId(token?: string) {
 }
 
 function shouldHandle(token?: string) {
+  const session = getSession();
+  const activeToken = token ?? session?.accessToken ?? null;
+  const isDemoToken = isDemoAccessToken(activeToken);
+  const sessionEmail = session?.user.email.trim().toLowerCase();
+  const isOwnerDemoAccount =
+    sessionEmail === DEMO_ADMIN_EMAIL && (!token || token === session?.accessToken);
+
   return (
-    (isDemoModeEnabled() || isLocalDevHost()) &&
-    isDemoAccessToken(token ?? getSession()?.accessToken ?? null)
+    isOwnerDemoAccount ||
+    ((isDemoModeEnabled() || isLocalDevHost()) && isDemoToken)
   );
 }
 
 function buildAttendanceLive(state: DemoState) {
   const presets = [
     {
+      employeeIndex: 0,
       shiftLabel: "09:00-18:00",
       status: "on_shift",
       startedAt: createIsoAt(0, 9, 0),
@@ -1575,6 +1755,7 @@ function buildAttendanceLive(state: DemoState) {
       earlyLeaveMinutes: 0,
     },
     {
+      employeeIndex: 1,
       shiftLabel: "09:00-18:00",
       status: "on_shift",
       startedAt: createIsoAt(0, 10, 13),
@@ -1585,39 +1766,31 @@ function buildAttendanceLive(state: DemoState) {
       earlyLeaveMinutes: 0,
     },
     {
-      shiftLabel: "09:00-18:00",
+      employeeIndex: 2,
+      shiftLabel: "10:00-19:00",
       status: "checked_out",
-      startedAt: createIsoAt(0, 8, 46),
-      endedAt: createIsoAt(0, 16, 46),
+      startedAt: createIsoAt(0, 9, 58),
+      endedAt: createIsoAt(0, 17, 5),
       totalMinutes: 421,
       breakMinutes: 45,
       lateMinutes: 0,
-      earlyLeaveMinutes: 74,
+      earlyLeaveMinutes: 55,
     },
     {
-      shiftLabel: "09:00-18:00",
-      status: "on_shift",
-      startedAt: createIsoAt(0, 10, 0),
+      employeeIndex: 3,
+      shiftLabel: "10:00-19:00",
+      status: "on_break",
+      startedAt: createIsoAt(0, 10, 24),
       endedAt: null,
       totalMinutes: 348,
-      breakMinutes: 0,
-      lateMinutes: 0,
-      earlyLeaveMinutes: 0,
-    },
-    {
-      shiftLabel: null,
-      status: "on_shift",
-      startedAt: createIsoAt(0, 9, 6),
-      endedAt: null,
-      totalMinutes: 324,
-      breakMinutes: 0,
-      lateMinutes: 6,
+      breakMinutes: 35,
+      lateMinutes: 24,
       earlyLeaveMinutes: 0,
     },
   ] as const;
 
-  return state.employees.slice(0, 5).map((employee, index) => {
-    const preset = presets[index];
+  return presets.map((preset) => {
+    const employee = state.employees[preset.employeeIndex];
     return {
       sessionId: `session-${employee.id}`,
       employeeId: employee.id,
@@ -1625,15 +1798,15 @@ function buildAttendanceLive(state: DemoState) {
       employeeNumber: employee.employeeNumber,
       department: employee.department?.name ?? "—",
       location: employee.primaryLocation?.name ?? "—",
-      shiftLabel: preset?.shiftLabel ?? "09:00-18:00",
-      status: preset?.status ?? "on_shift",
-      startedAt: preset?.startedAt ?? createIsoAt(0, 9, 0),
-      endedAt: preset?.endedAt ?? null,
-      totalMinutes: preset?.totalMinutes ?? 420,
-      breakMinutes: preset?.breakMinutes ?? 0,
+      shiftLabel: preset.shiftLabel,
+      status: preset.status,
+      startedAt: preset.startedAt,
+      endedAt: preset.endedAt,
+      totalMinutes: preset.totalMinutes,
+      breakMinutes: preset.breakMinutes,
       paidBreakMinutes: 0,
-      lateMinutes: preset?.lateMinutes ?? 0,
-      earlyLeaveMinutes: preset?.earlyLeaveMinutes ?? 0,
+      lateMinutes: preset.lateMinutes,
+      earlyLeaveMinutes: preset.earlyLeaveMinutes,
     };
   });
 }
@@ -3938,6 +4111,19 @@ export function getDemoDashboardBootstrap(token?: string) {
     initialData: buildDemoDashboardInitialData(state, token),
     mode: currentDemoRole(token) === "employee" ? "employee" : "admin",
   };
+}
+
+export function getDemoAttendanceBootstrap(searchParams = new URLSearchParams()) {
+  const state = loadState();
+  return buildDemoAttendanceBootstrap(state, searchParams);
+}
+
+export function getDemoCollaborationBootstrap(
+  token?: string,
+  searchParams = new URLSearchParams(),
+) {
+  const state = loadState();
+  return buildDemoCollaborationBootstrap(state, token, searchParams);
 }
 
 export function getDemoNewsBootstrap(token?: string) {
