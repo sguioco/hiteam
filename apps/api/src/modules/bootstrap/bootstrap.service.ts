@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TaskStatus } from '@prisma/client';
+import { TaskPriority, TaskStatus } from '@prisma/client';
 import type { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -13,6 +13,48 @@ import { ScheduleService } from '../schedule/schedule.service';
 import type { ListManagerTasksQueryDto } from '../collaboration/dto/list-manager-tasks-query.dto';
 
 const ADMIN_ROLES = ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'] as const;
+const DEMO_OWNER_EMAIL = 'owner@demo.smart';
+const DEMO_TIME_ZONE = 'Asia/Novosibirsk';
+const DEMO_UTC_OFFSET = '+07:00';
+
+type DemoNamedEntity = {
+  id: string;
+  name: string;
+};
+
+type DemoEmployeeRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  employeeNumber: string;
+  department?: DemoNamedEntity | null;
+  position?: DemoNamedEntity | null;
+  primaryLocation?: (DemoNamedEntity & { timezone?: string | null }) | null;
+  avatar?: unknown;
+  avatarUrl?: string | null;
+};
+
+type DemoGroupRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  managerEmployeeId: string;
+  memberships: Array<{
+    id: string;
+    employeeId: string;
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      employeeNumber: string;
+      avatarUrl?: string | null;
+    };
+  }>;
+  _count?: {
+    tasks: number;
+  };
+};
 
 function isEmployeeOnlyRole(roleCodes: string[]) {
   return !roleCodes.some((role) => ADMIN_ROLES.includes(role as (typeof ADMIN_ROLES)[number]));
@@ -93,6 +135,611 @@ function resolveBootstrapTaskRange(dateFrom?: string, dateTo?: string) {
   return {
     dateFrom: dateFrom ?? dateTo ?? today,
     dateTo: dateTo ?? dateFrom ?? today,
+  };
+}
+
+function isDemoOwnerAccount(user: JwtUser) {
+  return user.email?.trim().toLowerCase() === DEMO_OWNER_EMAIL;
+}
+
+function demoTodayDateKey() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: DEMO_TIME_ZONE,
+    year: 'numeric',
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  if (!year || !month || !day) {
+    return formatDateKey(new Date());
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+function demoIsoAt(hour: number, minute: number) {
+  const normalizedHour = String(hour).padStart(2, '0');
+  const normalizedMinute = String(minute).padStart(2, '0');
+
+  return new Date(
+    `${demoTodayDateKey()}T${normalizedHour}:${normalizedMinute}:00.000${DEMO_UTC_OFFSET}`,
+  ).toISOString();
+}
+
+function demoMinutesBetween(startedAt: string, endedAt?: string | null) {
+  const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+  const startMs = new Date(startedAt).getTime();
+
+  return Math.max(0, Math.round((endMs - startMs) / 60_000));
+}
+
+function normalizeDemoLookup(value?: string | null) {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+function demoEmployeeName(
+  employee: Pick<DemoEmployeeRecord, 'firstName' | 'lastName'>,
+) {
+  return `${employee.firstName} ${employee.lastName}`.trim();
+}
+
+function demoTaskEmployee(employee: DemoEmployeeRecord) {
+  return {
+    id: employee.id,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    employeeNumber: employee.employeeNumber,
+    avatarUrl: employee.avatarUrl ?? null,
+    department: employee.department
+      ? {
+          id: employee.department.id,
+          name: employee.department.name,
+        }
+      : null,
+    primaryLocation: employee.primaryLocation
+      ? {
+          id: employee.primaryLocation.id,
+          name: employee.primaryLocation.name,
+        }
+      : null,
+  };
+}
+
+function buildDemoManagerTasksBootstrap(
+  sourceEmployees: DemoEmployeeRecord[],
+  sourceGroups: DemoGroupRecord[],
+) {
+  const operationsDepartment = {
+    id: 'demo-department-operations',
+    name: 'Operations',
+  };
+  const frontDeskDepartment = {
+    id: 'demo-department-front-desk',
+    name: 'Front desk',
+  };
+  const adminPosition = {
+    id: 'demo-position-admin',
+    name: 'Administrator',
+  };
+  const managerPosition = {
+    id: 'demo-position-manager',
+    name: 'Manager',
+  };
+  const specialistPosition = {
+    id: 'demo-position-specialist',
+    name: 'Specialist',
+  };
+  const location = {
+    id: 'demo-location-hq',
+    name: 'Central Studio',
+    timezone: DEMO_TIME_ZONE,
+  };
+  const fallbackEmployees: DemoEmployeeRecord[] = [
+    {
+      id: 'demo-employee-alexander',
+      firstName: 'Alexander',
+      lastName: 'Prokhorov',
+      email: 'employee@demo.smart',
+      employeeNumber: 'EMP-0002',
+      department: operationsDepartment,
+      position: specialistPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+    {
+      id: 'demo-employee-anna',
+      firstName: 'Anna',
+      lastName: 'Manager',
+      email: 'manager@demo.smart',
+      employeeNumber: 'EMP-0006',
+      department: operationsDepartment,
+      position: managerPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+    {
+      id: 'demo-employee-ilia',
+      firstName: 'Ilia',
+      lastName: 'Admin',
+      email: DEMO_OWNER_EMAIL,
+      employeeNumber: 'EMP-0001',
+      department: operationsDepartment,
+      position: adminPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+    {
+      id: 'demo-employee-julia',
+      firstName: 'Julia',
+      lastName: 'Zakharova',
+      email: 'julia@demo.smart',
+      employeeNumber: 'EMP-0003',
+      department: frontDeskDepartment,
+      position: specialistPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+    {
+      id: 'demo-employee-maria',
+      firstName: 'Maria',
+      lastName: 'Kim',
+      email: 'maria@demo.smart',
+      employeeNumber: 'EMP-0005',
+      department: frontDeskDepartment,
+      position: specialistPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+    {
+      id: 'demo-employee-sergey',
+      firstName: 'Sergey',
+      lastName: 'Ivanov',
+      email: 'sergey@demo.smart',
+      employeeNumber: 'EMP-0004',
+      department: operationsDepartment,
+      position: specialistPosition,
+      primaryLocation: location,
+      avatarUrl: null,
+    },
+  ];
+  const findSourceEmployee = (fallback: DemoEmployeeRecord) => {
+    const fallbackName = normalizeDemoLookup(demoEmployeeName(fallback));
+    const fallbackEmail = normalizeDemoLookup(fallback.email);
+
+    return sourceEmployees.find((employee) => {
+      const employeeName = normalizeDemoLookup(demoEmployeeName(employee));
+
+      return (
+        normalizeDemoLookup(employee.email) === fallbackEmail ||
+        normalizeDemoLookup(employee.employeeNumber) ===
+          normalizeDemoLookup(fallback.employeeNumber) ||
+        employeeName === fallbackName
+      );
+    });
+  };
+  const employees = fallbackEmployees.map((fallback) => {
+    const source = findSourceEmployee(fallback);
+
+    return {
+      ...fallback,
+      ...source,
+      email: source?.email ?? fallback.email,
+      employeeNumber: source?.employeeNumber ?? fallback.employeeNumber,
+      department: source?.department ?? fallback.department,
+      position: source?.position ?? fallback.position,
+      primaryLocation: source?.primaryLocation ?? fallback.primaryLocation,
+      avatarUrl: source?.avatarUrl ?? fallback.avatarUrl ?? null,
+    };
+  });
+  const alexander = employees[0]!;
+  const anna = employees[1]!;
+  const owner = employees[2]!;
+  const julia = employees[3]!;
+  const maria = employees[4]!;
+  const sergey = employees[5]!;
+  const fallbackGroup: DemoGroupRecord = {
+    id: 'demo-group-opening',
+    name: 'Opening team',
+    description: 'Demo team for today attendance and tasks',
+    managerEmployeeId: owner.id,
+    memberships: employees.map((employee) => ({
+      id: `demo-membership-${employee.id}`,
+      employeeId: employee.id,
+      employee: {
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        employeeNumber: employee.employeeNumber,
+        avatarUrl: employee.avatarUrl ?? null,
+      },
+    })),
+    _count: {
+      tasks: 0,
+    },
+  };
+  const group = sourceGroups[0] ?? fallbackGroup;
+  const managerEmployee = {
+    id: owner.id,
+    firstName: owner.firstName,
+    lastName: owner.lastName,
+  };
+  const groupSummary = {
+    id: group.id,
+    name: group.name,
+  };
+  const now = demoIsoAt(8, 0);
+  const createTask = (input: {
+    id: string;
+    assignee: DemoEmployeeRecord;
+    title: string;
+    description: string;
+    status: TaskStatus;
+    priority?: TaskPriority;
+    dueHour: number;
+    dueMinute: number;
+    completedHour?: number;
+    completedMinute?: number;
+    requiresPhoto?: boolean;
+    checklistTitles?: string[];
+    completedChecklistCount?: number;
+  }) => {
+    const completedAt =
+      input.status === TaskStatus.DONE
+        ? demoIsoAt(
+            input.completedHour ?? input.dueHour,
+            input.completedMinute ?? input.dueMinute,
+          )
+        : null;
+    const checklistTitles = input.checklistTitles ?? [];
+    const completedChecklistCount = input.completedChecklistCount ?? 0;
+
+    return {
+      id: input.id,
+      title: input.title,
+      description: input.description,
+      status: input.status,
+      priority: input.priority ?? TaskPriority.MEDIUM,
+      requiresPhoto: input.requiresPhoto ?? false,
+      isRecurring: false,
+      taskTemplateId: null,
+      occurrenceDate: demoTodayDateKey(),
+      dueAt: demoIsoAt(input.dueHour, input.dueMinute),
+      completedAt,
+      createdAt: now,
+      updatedAt: completedAt ?? demoIsoAt(10, 5),
+      groupId: group.id,
+      assigneeEmployeeId: input.assignee.id,
+      managerEmployee,
+      assigneeEmployee: demoTaskEmployee(input.assignee),
+      group: groupSummary,
+      checklistItems: checklistTitles.map((title, index) => {
+        const isCompleted = index < completedChecklistCount;
+
+        return {
+          id: `${input.id}-check-${index + 1}`,
+          title,
+          sortOrder: index + 1,
+          isCompleted,
+          completedAt: isCompleted ? demoIsoAt(10, 10 + index * 5) : null,
+          completedByEmployee: isCompleted
+            ? {
+                id: input.assignee.id,
+                firstName: input.assignee.firstName,
+                lastName: input.assignee.lastName,
+              }
+            : null,
+        };
+      }),
+      activities: [
+        {
+          id: `${input.id}-activity-created`,
+          kind: 'CREATED',
+          body: null,
+          createdAt: now,
+          actorEmployee: managerEmployee,
+        },
+      ],
+      photoProofs: [],
+    };
+  };
+
+  return {
+    tasks: sortBootstrapTasks([
+      createTask({
+        id: 'demo-task-alexander-opening-checklist',
+        assignee: alexander,
+        title: 'Alexander: opening checklist 2 of 4',
+        description: 'Late arrival case: the opening checklist is half done.',
+        status: TaskStatus.IN_PROGRESS,
+        priority: TaskPriority.HIGH,
+        dueHour: 14,
+        dueMinute: 0,
+        checklistTitles: [
+          'Prepare treatment room A',
+          'Prepare treatment room B',
+          'Refill towels',
+          'Send opening photo',
+        ],
+        completedChecklistCount: 2,
+      }),
+      createTask({
+        id: 'demo-task-alexander-sanitize',
+        assignee: alexander,
+        title: 'Alexander: sanitize treatment rooms',
+        description: 'Completed after the late check-in.',
+        status: TaskStatus.DONE,
+        dueHour: 11,
+        dueMinute: 30,
+        completedHour: 11,
+        completedMinute: 15,
+      }),
+      createTask({
+        id: 'demo-task-alexander-towels',
+        assignee: alexander,
+        title: 'Alexander: stock towels before lunch',
+        description: 'Second completed task for the 2/4 demo state.',
+        status: TaskStatus.DONE,
+        dueHour: 12,
+        dueMinute: 15,
+        completedHour: 12,
+        completedMinute: 0,
+      }),
+      createTask({
+        id: 'demo-task-alexander-photo',
+        assignee: alexander,
+        title: 'Alexander: upload reception photo report',
+        description: 'Still open and requires a photo proof.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        dueHour: 15,
+        dueMinute: 10,
+        requiresPhoto: true,
+      }),
+      createTask({
+        id: 'demo-task-anna-no-show-handoff',
+        assignee: anna,
+        title: 'Anna: no-show shift handoff',
+        description: 'No check-in has been recorded for this employee.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.URGENT,
+        dueHour: 9,
+        dueMinute: 30,
+      }),
+      createTask({
+        id: 'demo-task-anna-replacement-call',
+        assignee: anna,
+        title: 'Anna: call replacement specialist',
+        description: 'Open task for the absent employee.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        dueHour: 10,
+        dueMinute: 0,
+      }),
+      createTask({
+        id: 'demo-task-owner-review-photos',
+        assignee: owner,
+        title: `${owner.firstName}: review opening photo reports`,
+        description: 'Owner/admin has one completed task.',
+        status: TaskStatus.DONE,
+        dueHour: 10,
+        dueMinute: 20,
+        completedHour: 10,
+        completedMinute: 8,
+      }),
+      createTask({
+        id: 'demo-task-owner-supply-budget',
+        assignee: owner,
+        title: `${owner.firstName}: approve studio supply budget`,
+        description: 'Owner/admin has one remaining task.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        dueHour: 16,
+        dueMinute: 0,
+      }),
+      createTask({
+        id: 'demo-task-julia-reception-handoff',
+        assignee: julia,
+        title: 'Julia: confirm reception handoff',
+        description: 'On-time employee completed the handoff.',
+        status: TaskStatus.DONE,
+        dueHour: 10,
+        dueMinute: 45,
+        completedHour: 10,
+        completedMinute: 35,
+      }),
+      createTask({
+        id: 'demo-task-julia-bookings',
+        assignee: julia,
+        title: 'Julia: update afternoon bookings',
+        description: 'Second completed task for Julia.',
+        status: TaskStatus.DONE,
+        dueHour: 12,
+        dueMinute: 0,
+        completedHour: 11,
+        completedMinute: 48,
+      }),
+      createTask({
+        id: 'demo-task-julia-lobby',
+        assignee: julia,
+        title: 'Julia: reset lobby stand',
+        description: 'Third completed task for Julia.',
+        status: TaskStatus.DONE,
+        dueHour: 13,
+        dueMinute: 20,
+        completedHour: 13,
+        completedMinute: 5,
+      }),
+      createTask({
+        id: 'demo-task-julia-vip-note',
+        assignee: julia,
+        title: 'Julia: prepare VIP note',
+        description: 'One task remains open for the on-time employee.',
+        status: TaskStatus.TODO,
+        dueHour: 17,
+        dueMinute: 0,
+      }),
+      createTask({
+        id: 'demo-task-maria-break-room-check',
+        assignee: maria,
+        title: 'Maria: break room checklist',
+        description: 'On-break employee has partial progress.',
+        status: TaskStatus.IN_PROGRESS,
+        dueHour: 14,
+        dueMinute: 20,
+        checklistTitles: [
+          'Clean coffee point',
+          'Refill paper cups',
+          'Wipe table',
+        ],
+        completedChecklistCount: 1,
+      }),
+      createTask({
+        id: 'demo-task-maria-inventory',
+        assignee: maria,
+        title: 'Maria: confirm inventory count',
+        description: 'Completed inventory count before break.',
+        status: TaskStatus.DONE,
+        dueHour: 12,
+        dueMinute: 30,
+        completedHour: 12,
+        completedMinute: 18,
+      }),
+      createTask({
+        id: 'demo-task-maria-photo-report',
+        assignee: maria,
+        title: 'Maria: add stock room photo report',
+        description: 'Open photo proof task while Maria is on break.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        dueHour: 15,
+        dueMinute: 0,
+        requiresPhoto: true,
+      }),
+      createTask({
+        id: 'demo-task-sergey-close-note',
+        assignee: sergey,
+        title: 'Sergey: close early-leave note',
+        description: 'Pending task left after early checkout.',
+        status: TaskStatus.TODO,
+        dueHour: 16,
+        dueMinute: 0,
+      }),
+      createTask({
+        id: 'demo-task-sergey-stock',
+        assignee: sergey,
+        title: 'Sergey: restock cleaning cart',
+        description: 'Completed before leaving early.',
+        status: TaskStatus.DONE,
+        dueHour: 11,
+        dueMinute: 20,
+        completedHour: 11,
+        completedMinute: 5,
+      }),
+      createTask({
+        id: 'demo-task-sergey-evening',
+        assignee: sergey,
+        title: 'Sergey: prepare evening handoff',
+        description: 'Open task because Sergey checked out early.',
+        status: TaskStatus.TODO,
+        priority: TaskPriority.HIGH,
+        dueHour: 17,
+        dueMinute: 30,
+      }),
+      createTask({
+        id: 'demo-task-sergey-photo',
+        assignee: sergey,
+        title: 'Sergey: upload storage photo',
+        description: 'Open photo task after early checkout.',
+        status: TaskStatus.TODO,
+        dueHour: 15,
+        dueMinute: 40,
+        requiresPhoto: true,
+      }),
+    ]),
+    employees,
+    groups: [
+      {
+        ...fallbackGroup,
+        ...group,
+        memberships: group.memberships?.length
+          ? group.memberships
+          : fallbackGroup.memberships,
+        _count: group._count ?? fallbackGroup._count,
+      },
+    ],
+    liveSessions: [
+      {
+        sessionId: 'demo-session-alexander',
+        employeeId: alexander.id,
+        employeeName: demoEmployeeName(alexander),
+        employeeNumber: alexander.employeeNumber,
+        department: alexander.department?.name ?? 'Operations',
+        location: alexander.primaryLocation?.name ?? 'Central Studio',
+        shiftLabel: '09:00-18:00',
+        status: 'on_shift',
+        startedAt: demoIsoAt(9, 18),
+        endedAt: null,
+        totalMinutes: demoMinutesBetween(demoIsoAt(9, 18)),
+        breakMinutes: 0,
+        paidBreakMinutes: 0,
+        lateMinutes: 18,
+        earlyLeaveMinutes: 0,
+      },
+      {
+        sessionId: 'demo-session-julia',
+        employeeId: julia.id,
+        employeeName: demoEmployeeName(julia),
+        employeeNumber: julia.employeeNumber,
+        department: julia.department?.name ?? 'Front desk',
+        location: julia.primaryLocation?.name ?? 'Central Studio',
+        shiftLabel: '09:00-18:00',
+        status: 'on_shift',
+        startedAt: demoIsoAt(8, 58),
+        endedAt: null,
+        totalMinutes: demoMinutesBetween(demoIsoAt(8, 58)),
+        breakMinutes: 0,
+        paidBreakMinutes: 0,
+        lateMinutes: 0,
+        earlyLeaveMinutes: 0,
+      },
+      {
+        sessionId: 'demo-session-maria',
+        employeeId: maria.id,
+        employeeName: demoEmployeeName(maria),
+        employeeNumber: maria.employeeNumber,
+        department: maria.department?.name ?? 'Front desk',
+        location: maria.primaryLocation?.name ?? 'Central Studio',
+        shiftLabel: '09:00-18:00',
+        status: 'on_break',
+        startedAt: demoIsoAt(9, 2),
+        endedAt: null,
+        totalMinutes: demoMinutesBetween(demoIsoAt(9, 2)),
+        breakMinutes: 24,
+        paidBreakMinutes: 0,
+        lateMinutes: 2,
+        earlyLeaveMinutes: 0,
+      },
+      {
+        sessionId: 'demo-session-sergey',
+        employeeId: sergey.id,
+        employeeName: demoEmployeeName(sergey),
+        employeeNumber: sergey.employeeNumber,
+        department: sergey.department?.name ?? 'Operations',
+        location: sergey.primaryLocation?.name ?? 'Central Studio',
+        shiftLabel: '09:00-18:00',
+        status: 'checked_out',
+        startedAt: demoIsoAt(8, 55),
+        endedAt: demoIsoAt(15, 20),
+        totalMinutes: demoMinutesBetween(demoIsoAt(8, 55), demoIsoAt(15, 20)),
+        breakMinutes: 30,
+        paidBreakMinutes: 0,
+        lateMinutes: 0,
+        earlyLeaveMinutes: 40,
+      },
+    ],
   };
 }
 
@@ -383,6 +1030,32 @@ export class BootstrapService {
   }
 
   async tasks(user: JwtUser, dateFrom?: string, dateTo?: string) {
+    if (isDemoOwnerAccount(user)) {
+      const [employees, groups] = await Promise.all([
+        withTimeoutFallback(
+          this.employeesService
+            .list(user.tenantId, {}, user.sub)
+            .then((items) => items as DemoEmployeeRecord[])
+            .catch(() => [] as DemoEmployeeRecord[]),
+          1500,
+          [] as DemoEmployeeRecord[],
+        ),
+        withTimeoutFallback(
+          this.collaborationService
+            .listGroups(user.sub)
+            .then((items) => items as DemoGroupRecord[])
+            .catch(() => [] as DemoGroupRecord[]),
+          1200,
+          [] as DemoGroupRecord[],
+        ),
+      ]);
+
+      return buildDemoManagerTasksBootstrap(
+        employees as DemoEmployeeRecord[],
+        groups as DemoGroupRecord[],
+      );
+    }
+
     const resolvedRange = resolveBootstrapTaskRange(dateFrom, dateTo);
 
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
