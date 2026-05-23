@@ -25,3 +25,5 @@ apps/web-admin/.next-dev
 .aidesigner/*
 !.aidesigner/.gitkeep
 AGENTS.md
+Apple/
+credentials.json

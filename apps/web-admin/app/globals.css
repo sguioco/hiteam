@@ -41,6 +41,7 @@
   width: 1.44em;
   height: 1.44em;
   margin-left: 0.18em;
+  transform: translateY(0.08em);
 }
 
 .landing-shell,
@@ -102,6 +103,7 @@ html:has(.landing-shell),
 body:has(.landing-shell) {
   max-width: 100%;
   overflow-x: clip;
+  scrollbar-gutter: stable;
 }
 
 .landing-shell {

@@ -48,14 +48,28 @@ export function LegalDocumentPage({ document }: { document: LegalDocument }) {
     <main className="min-h-screen bg-[#f5f7fc] px-5 py-8 text-slate-950 md:px-10 md:py-12">
       <div className="mx-auto max-w-[920px]">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <Link aria-label="HiTeam home" href="/">
-            <BrandWordmark className="text-[2rem]" />
-          </Link>
           <Link
-            className="rounded-[8px] border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 transition hover:text-primary"
             href="/"
           >
+            <svg
+              aria-hidden="true"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M19 12H5m0 0 6-6m-6 6 6 6"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+            </svg>
             Back to site
+          </Link>
+          <Link aria-label="HiTeam home" href="/">
+            <BrandWordmark className="text-[2rem]" />
           </Link>
         </header>
 
@@ -63,7 +77,7 @@ export function LegalDocumentPage({ document }: { document: LegalDocument }) {
           <p className="text-xs font-bold tracking-[0.14em] text-primary uppercase">
             HiTeam legal
           </p>
-          <h1 className="mt-4 text-[clamp(2.1rem,5vw,3.5rem)] leading-[1.02] font-extrabold tracking-[-0.03em] text-slate-950">
+          <h1 className="mt-4 text-[clamp(2.1rem,5vw,3.5rem)] leading-[1.02] font-bold tracking-[-0.03em] text-slate-950">
             {document.title}
           </h1>
           <p className="mt-3 text-lg font-semibold text-slate-700">

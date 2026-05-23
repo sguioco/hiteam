@@ -286,15 +286,6 @@ export function AuthPanel() {
         return;
       }
 
-      if (switcherTrackRef.current && switcherIndicatorRef.current) {
-        const offset = tab === 'signin' ? 0 : switcherTrackRef.current.clientWidth / 2 - 4;
-        gsap.to(switcherIndicatorRef.current, {
-          x: offset,
-          duration: 0.42,
-          ease: 'power3.out',
-        });
-      }
-
       if (!hasAnimatedAuthPanelRef.current) {
         hasAnimatedAuthPanelRef.current = true;
         return;
@@ -337,6 +328,33 @@ export function AuthPanel() {
       revertOnUpdate: true,
     },
   );
+
+  useEffect(() => {
+    const switcherTrack = switcherTrackRef.current;
+    const switcherIndicator = switcherIndicatorRef.current;
+
+    if (!switcherTrack || !switcherIndicator) {
+      return;
+    }
+
+    const offset = tab === 'signin' ? 0 : switcherTrack.clientWidth / 2 - 4;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      gsap.set(switcherIndicator, { x: offset });
+      return;
+    }
+
+    const tween = gsap.to(switcherIndicator, {
+      x: offset,
+      duration: 0.42,
+      ease: 'power3.out',
+      overwrite: true,
+    });
+
+    return () => {
+      tween.kill();
+    };
+  }, [tab]);
 
   useEffect(() => {
     const saved = readBrowserStorageItem('smart-admin-locale');
