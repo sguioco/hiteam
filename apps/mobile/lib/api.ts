@@ -266,6 +266,17 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
     return fallbackMessage;
   }
 
+  const contentType = response.headers.get("content-type") ?? "";
+  const normalizedTextStart = text.trim().slice(0, 256).toLowerCase();
+  const isHtmlError =
+    contentType.toLowerCase().includes("text/html") ||
+    normalizedTextStart.startsWith("<!doctype html") ||
+    normalizedTextStart.startsWith("<html");
+
+  if (isHtmlError) {
+    return getApiConnectivityErrorMessage();
+  }
+
   try {
     const parsed = JSON.parse(text) as {
       message?: string | string[];

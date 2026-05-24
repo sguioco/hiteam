@@ -209,22 +209,22 @@ Do these registrations first:
 
 After that, send me:
 
-## 11. Render Setup For Current Repo
+## 11. HiTeam VPS Setup For Current Repo
 
-If you are already using Render for the backend consumed by `web-admin`, keep `mobile` on the same API service.
+For HiTeam production, keep `web-admin` and `mobile` on the same VPS API service.
 
 Recommended production layout:
 
-- one Render web service for `apps/api`
+- one VPS deployment for `apps/api`
 - one PostgreSQL database for that API
 - one Redis instance for that API
 - `web-admin` and `mobile` both use that same API base URL
 
 Use these client environment variables:
 
-- `NEXT_PUBLIC_API_URL=https://your-api-service.onrender.com`
-- `INTERNAL_API_URL=https://your-api-service.onrender.com`
-- `EXPO_PUBLIC_API_URL=https://your-api-service.onrender.com`
+- `NEXT_PUBLIC_API_URL=https://api.hiteam.net`
+- `INTERNAL_API_URL=https://api.hiteam.net`
+- `EXPO_PUBLIC_API_URL=https://api.hiteam.net`
 
 Important:
 
