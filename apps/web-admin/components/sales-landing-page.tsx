@@ -3568,9 +3568,6 @@ export function SalesLandingPage() {
   const total = employeeCount * pricing.unitPrice * pricing.months;
   const activeCaseItem = copy.cases.items[activeCase] ?? copy.cases.items[0];
   const mockupLocale = getMockupLocale(locale);
-  const activeCaseMockup =
-    CASE_MOCKUP_SOURCES[activeCase]?.[mockupLocale] ??
-    CASE_MOCKUP_SOURCES[0][mockupLocale];
   const isRtl = copy.dir === "rtl";
   const isDemoValid = Boolean(
     termsAccepted &&
@@ -4221,7 +4218,7 @@ export function SalesLandingPage() {
                 className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)] lg:items-center"
                 exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
                 initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
-                key={`${locale}-${activeCase}`}
+                key={locale}
                 transition={{ duration: 0.26, ease: "easeOut" }}
               >
                 <div>
@@ -4275,13 +4272,21 @@ export function SalesLandingPage() {
                 </div>
                 <div className="relative mx-auto w-full max-w-[250px] lg:max-w-[255px]">
                   <div className="relative min-h-[34rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_4px_6px_rgba(15,23,42,0.06),0_24px_70px_rgba(37,99,235,0.18)]">
-                    <Image
-                      alt="HiTeam application mockup"
-                      className="object-cover object-top"
-                      fill
-                      sizes="(min-width: 1024px) 255px, 78vw"
-                      src={activeCaseMockup}
-                    />
+                    {CASE_MOCKUP_SOURCES.map((source, index) => (
+                      <Image
+                        alt={index === activeCase ? "HiTeam application mockup" : ""}
+                        aria-hidden={index !== activeCase}
+                        className={cx(
+                          "pointer-events-none object-cover object-top transition-opacity duration-200",
+                          index === activeCase ? "opacity-100" : "opacity-0",
+                        )}
+                        fill
+                        key={source.en}
+                        loading="eager"
+                        sizes="(min-width: 1024px) 255px, 78vw"
+                        src={source[mockupLocale]}
+                      />
+                    ))}
                   </div>
                 </div>
               </motion.div>
