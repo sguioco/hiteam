@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { translateTexts } from './api';
 import type { AppLanguage } from './i18n';
+import { shouldRequestLiveTextTranslation } from './live-translation-policy';
 import { readScreenCache, writeScreenCache } from './screen-cache';
 
 const translationCache = new Map<string, string>();
@@ -32,6 +33,10 @@ function normalizeTexts(texts: string[]) {
 }
 
 function getResolvedText(locale: AppLanguage, text: string) {
+  if (!shouldRequestLiveTextTranslation(text, locale)) {
+    return text;
+  }
+
   return translationCache.get(getCacheKey(locale, text)) ?? text;
 }
 
@@ -157,7 +162,9 @@ export async function primeLiveTextMap(texts: string[], locale: AppLanguage) {
   await hydrateLocaleCache(locale);
 
   const missing = uniqueTexts.filter(
-    (text) => !translationCache.has(getCacheKey(locale, text)),
+    (text) =>
+      shouldRequestLiveTextTranslation(text, locale) &&
+      !translationCache.has(getCacheKey(locale, text)),
   );
 
   if (missing.length > 0) {

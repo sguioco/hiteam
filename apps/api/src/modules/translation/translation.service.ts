@@ -21,6 +21,37 @@ type MemoryCacheEntry = {
 const TRANSLATION_CACHE_TTL_SECONDS = 60 * 60 * 24 * 90;
 const TRANSLATION_FAILURE_TTL_SECONDS = 60 * 5;
 
+function containsCyrillic(text: string) {
+  return /[А-Яа-яЁё]/.test(text);
+}
+
+function containsLatin(text: string) {
+  return /[A-Za-z]/.test(text);
+}
+
+function shouldTranslateText(
+  text: string,
+  targetLocale: SupportedTranslationLocale,
+) {
+  const normalized = text.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const hasCyrillic = containsCyrillic(normalized);
+  const hasLatin = containsLatin(normalized);
+
+  if (targetLocale === 'ru') {
+    return hasLatin && !hasCyrillic;
+  }
+
+  if (targetLocale === 'en') {
+    return hasCyrillic;
+  }
+
+  return hasCyrillic || hasLatin;
+}
+
 @Injectable()
 export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
@@ -231,6 +262,10 @@ export class TranslationService implements OnModuleDestroy {
     const normalizedText = text.trim();
     if (!normalizedText) {
       return text;
+    }
+
+    if (!shouldTranslateText(normalizedText, targetLocale)) {
+      return normalizedText;
     }
 
     const cacheKey = this.getCacheKey(normalizedText, targetLocale);

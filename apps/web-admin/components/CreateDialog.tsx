@@ -46,8 +46,8 @@ export const CreateDialog = ({
       title: locale === "ru" ? "Добавить задачу" : "Add task",
       description:
         locale === "ru"
-          ? "Выбрать сотрудника и назначить новую задачу."
-          : "Choose an employee and assign a new task.",
+          ? "Выбрать сотрудника и назначить новую задачу"
+          : "Choose an employee and assign a new task",
       icon: ListTodo,
       onSelect: onCreateTask,
       href: onCreateTask ? undefined : toAdminHref("/tasks"),
@@ -58,8 +58,8 @@ export const CreateDialog = ({
       title: locale === "ru" ? "Сотрудник" : "Employee",
       description:
         locale === "ru"
-          ? "Открыть кадровый раздел и добавить нового сотрудника."
-          : "Open the people section and add a new employee.",
+          ? "Открыть кадровый раздел и добавить нового сотрудника"
+          : "Open the people section and add a new employee",
       icon: UsersRound,
     },
     {
@@ -68,8 +68,8 @@ export const CreateDialog = ({
       title: locale === "ru" ? "Смена" : "Shift",
       description:
         locale === "ru"
-          ? "Перейти в расписание для создания смены или шаблона."
-          : "Open schedule to create a shift or template.",
+          ? "Перейти в расписание для создания смены или шаблона"
+          : "Open schedule to create a shift or template",
       icon: CalendarRange,
     },
     {
@@ -78,8 +78,8 @@ export const CreateDialog = ({
       title: locale === "ru" ? "Добавить новость" : "Add news",
       description:
         locale === "ru"
-          ? "Открыть новости и добавить публикацию."
-          : "Open news and add a post.",
+          ? "Открыть новости и добавить публикацию"
+          : "Open news and add a post",
       icon: Newspaper,
     },
   ];
@@ -90,12 +90,12 @@ export const CreateDialog = ({
       <DialogContent className="max-w-[640px]">
         <DialogHeader>
           <DialogTitle>
-            {locale === "ru" ? "Быстрое создание" : "Quick create"}
+            {locale === "ru" ? "Создать" : "Create"}
           </DialogTitle>
           <DialogDescription>
             {locale === "ru"
-              ? "Выберите, что хотите создать."
-              : "Choose what you want to create."}
+              ? "Выберите, что хотите создать"
+              : "Choose what you want to create"}
           </DialogDescription>
         </DialogHeader>
 

@@ -111,6 +111,20 @@ function formatAttendanceOffset(minutes: number, locale: string) {
   return `${mins}${minuteUnit}`;
 }
 
+function getLateByTranslationKey(gender?: string | null) {
+  const normalizedGender = gender?.trim().toLowerCase();
+
+  if (normalizedGender === "male") {
+    return "manager.lateByDurationMale";
+  }
+
+  if (normalizedGender === "female") {
+    return "manager.lateByDurationFemale";
+  }
+
+  return "manager.lateByDuration";
+}
+
 type AttendanceDisplay = {
   timeLabel: string;
   statusLabel: string;
@@ -757,6 +771,7 @@ export default function ManagerScreen({
     session: AttendanceLiveSession | null,
     locale: string,
     t: ReturnType<typeof useI18n>["t"],
+    gender?: string | null,
   ): AttendanceDisplay {
     if (!session) {
       return {
@@ -774,7 +789,7 @@ export default function ManagerScreen({
     if (session.lateMinutes > 0) {
       return {
         timeLabel: checkInTime,
-        statusLabel: t("manager.lateByDuration", {
+        statusLabel: t(getLateByTranslationKey(gender), {
           duration: formatAttendanceOffset(session.lateMinutes, locale),
         }),
         statusStyle: "late",
@@ -870,7 +885,7 @@ export default function ManagerScreen({
               <View className="min-w-0 flex-1 items-end">
                 <View className="flex-row items-center justify-end gap-2">
                   <PressableScale
-                    accessibilityLabel="Leaderboard"
+                    accessibilityLabel={t("leaderboard.title")}
                     className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/80"
                     haptic="selection"
                     onPress={() => router.push("/manager/leaderboard" as never)}
@@ -914,6 +929,7 @@ export default function ManagerScreen({
                     item.liveSession,
                     locale,
                     t,
+                    item.employee.gender,
                   );
                   const isExpanded = expandedEmployeeId === item.employee.id;
                   const showAvatar =

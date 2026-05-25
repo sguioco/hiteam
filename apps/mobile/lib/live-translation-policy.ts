@@ -1,11 +1,35 @@
 import type { AppLanguage } from './i18n';
 
-function containsCyrillic(text: string) {
+export function containsCyrillic(text: string) {
   return /[А-Яа-яЁё]/.test(text);
 }
 
-function containsLatin(text: string) {
+export function containsLatin(text: string) {
   return /[A-Za-z]/.test(text);
+}
+
+export function shouldRequestLiveTextTranslation(
+  text: string,
+  language: AppLanguage,
+) {
+  const normalized = text.trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  const hasCyrillic = containsCyrillic(normalized);
+  const hasLatin = containsLatin(normalized);
+
+  if (language === 'ru') {
+    return hasLatin && !hasCyrillic;
+  }
+
+  if (language === 'en') {
+    return hasCyrillic;
+  }
+
+  return hasCyrillic || hasLatin;
 }
 
 export function shouldHideTranslatedSourceText(text: string, language: AppLanguage) {

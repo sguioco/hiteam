@@ -44,6 +44,11 @@ const onest = Onest({
 export const metadata: Metadata = {
   title: 'HiTeam — Workforce Management & Attendance Control',
   description: 'Workforce management, attendance control, scheduling, tasks, checklists and mobile verification for real-world teams.',
+  icons: {
+    icon: '/waving.png',
+    shortcut: '/waving.png',
+    apple: '/waving.png',
+  },
   openGraph: {
     title: 'HiTeam — Workforce Management & Attendance Control',
     description: 'Control attendance, shifts, tasks and field teams from one mobile-first platform.',

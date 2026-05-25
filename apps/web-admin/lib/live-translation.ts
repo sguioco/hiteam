@@ -27,7 +27,9 @@ function shouldTranslate(text: string, targetLocale: Locale) {
     return false;
   }
 
-  return targetLocale === "en" ? hasCyrillic(text) : hasLatin(text);
+  return targetLocale === "en"
+    ? hasCyrillic(text)
+    : hasLatin(text) && !hasCyrillic(text);
 }
 
 async function translateViaLibreTranslate(

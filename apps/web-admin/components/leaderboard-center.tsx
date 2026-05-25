@@ -1206,7 +1206,7 @@ export function LeaderboardCenter({
                         {overview.me.todayPoints}/{overview.me.todayMaxPoints}
                       </strong>
                       <span className="mt-1 block text-xs font-medium text-white/75">
-                        {localize(locale, "выполнено сегодня", "done today")}
+                        {localize(locale, "Выполнено сегодня", "done today")}
                       </span>
                     </div>
                     <div className="border-white/20 md:border-l md:pl-6">
@@ -1233,7 +1233,7 @@ export function LeaderboardCenter({
                     <h2 className="text-base font-semibold tracking-[-0.02em] text-[color:var(--foreground)]">
                       {localize(
                         locale,
-                        "Прогресс за сегодня",
+                        "Прогресс сегодня",
                         "Today progress",
                       )}
                     </h2>
@@ -1280,8 +1280,8 @@ export function LeaderboardCenter({
                         <p className="mt-3 max-w-[34ch] text-sm leading-6 text-[color:var(--muted-foreground)]">
                           {localize(
                             locale,
-                            "Вы на правильном пути к победе. Осталось выполнить 5 действий до максимума за сегодня.",
-                            "You are on track to win. Complete 5 more actions to reach today's maximum.",
+                            "Ты на пути к победе. Заверши оставшиеся задачи, чтобы дойти до дневного максимума",
+                            "You're on track to win. Complete the remaining tasks to reach today's maximum",
                           )}
                         </p>
                         <div className="mt-4 flex items-center gap-2">

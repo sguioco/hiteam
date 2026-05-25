@@ -369,7 +369,7 @@ const ShiftStatusCard = ({
       return {
         title: null,
         body: '',
-        timing: '—',
+        timing: '',
         locationLabel: status?.location.name ?? '—',
         statusText: t('today.shiftUnassignedTitle'),
         statusColor: '#fef3c7',
@@ -531,6 +531,7 @@ const ShiftStatusCard = ({
         : null;
   const greetingLabel = greetingName?.trim() ? t('today.greetingWithName', { name: greetingName.trim() }) : t('today.greetingCard');
   const showCardPlaceholder = loading && !status;
+  const showShiftTiming = Boolean(shiftMeta.timing);
   const showSplitActions = Boolean(shiftMeta.buttonLabel && breakButtonLabel && onBreakAction && !showCardPlaceholder);
 
   return (
@@ -592,9 +593,11 @@ const ShiftStatusCard = ({
         </View>
 
         <View className="mt-10">
-          <Text className="text-[18px] text-[#f3ecff]" style={[textGlow, shiftLabelStyle]}>
-            {t('today.shiftTiming')}
-          </Text>
+          {showShiftTiming ? (
+            <Text className="text-[18px] text-[#f3ecff]" style={[textGlow, shiftLabelStyle]}>
+              {t('today.shiftTiming')}
+            </Text>
+          ) : null}
           {showCardPlaceholder ? (
             <View className="mt-3 gap-3">
               <View className="h-11 w-40 rounded-full bg-white/18" />
@@ -602,9 +605,11 @@ const ShiftStatusCard = ({
             </View>
           ) : (
             <>
-              <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
-                {shiftMeta.timing}
-              </Text>
+              {showShiftTiming ? (
+                <Text className="mt-1 text-[40px] leading-[46px] text-white" style={[textGlow, shiftTimeStyle]}>
+                  {shiftMeta.timing}
+                </Text>
+              ) : null}
               {shiftMeta.statusVariant === 'late' ? (
                 <View className="mt-2 flex-row items-center gap-2">
                   <View className="relative h-2.5 w-2.5 items-center justify-center">

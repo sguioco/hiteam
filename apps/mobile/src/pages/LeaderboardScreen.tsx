@@ -743,7 +743,7 @@ export default function LeaderboardScreen({
                     numberOfLines={1}
                     style={todayTotalLabelStyle}
                   >
-                    {copy("готово сегодня", "done today")}
+                    {copy("Выполнено сегодня", "done today")}
                   </Text>
                 </View>
               </View>
@@ -762,7 +762,7 @@ export default function LeaderboardScreen({
                 </Text>
                 <Text className="mt-1 text-[11px] leading-4 text-[#77839a]">
                   {copy(
-                    "Ты на пути к победе. Заверши ещё действия, чтобы дойти до дневного максимума",
+                    "Ты на пути к победе. Заверши оставшиеся задачи, чтобы дойти до дневного максимума",
                     "You're on track to win. Complete more actions to reach today's maximum.",
                   )}
                 </Text>
@@ -773,7 +773,7 @@ export default function LeaderboardScreen({
 
           <View className="rounded-[18px] border border-[#e5ebf5] bg-white px-4 py-4 shadow-sm shadow-[#1f2687]/10">
             <Text className="text-[13px] font-bold text-[#303847]">
-              {copy("Как заработать points", "How to earn points")}
+              {copy("Как заработать баллы", "How to earn points")}
             </Text>
             <View className="mt-3 gap-2">
               {overview.me.progress.map((metric) => (
@@ -825,7 +825,7 @@ export default function LeaderboardScreen({
                 <View className="min-w-0 flex-1">
                   <View className="flex-row items-center gap-2">
                     <Text className="text-[13px] font-bold text-[#303847]">
-                      {copy("Твой streak", "Your streak")}
+                      {copy("Твоя серия", "Your streak")}
                     </Text>
                     <Text className="text-[13px] font-bold text-[#ff6b35]">
                       {overview.me.streak} {copy("дней", "days")}
