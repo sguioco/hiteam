@@ -1,0 +1,6 @@
+[submodule "infra/compreface"]
+	path = infra/compreface
+	url = https://github.com/sguioco/hiteam-compreface.git
+[submodule "infra/compreface-src"]
+	path = infra/compreface-src
+	url = https://github.com/exadel-inc/CompreFace.git
