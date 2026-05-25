@@ -2640,6 +2640,13 @@ function getMockupLocale(locale: LandingLocale) {
   return locale === "ru" ? "ru" : "en";
 }
 
+const CASE_MOCKUP_SOURCES = [
+  { en: "/1eng.png", ru: "/1rus.png" },
+  { en: "/2eng.png", ru: "/2rus.png" },
+  { en: "/mob_en.webp", ru: "/mob_ru.webp" },
+  { en: "/3eng.png", ru: "/3rus.png" },
+] as const;
+
 function LightningIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -3561,6 +3568,9 @@ export function SalesLandingPage() {
   const total = employeeCount * pricing.unitPrice * pricing.months;
   const activeCaseItem = copy.cases.items[activeCase] ?? copy.cases.items[0];
   const mockupLocale = getMockupLocale(locale);
+  const activeCaseMockup =
+    CASE_MOCKUP_SOURCES[activeCase]?.[mockupLocale] ??
+    CASE_MOCKUP_SOURCES[0][mockupLocale];
   const isRtl = copy.dir === "rtl";
   const isDemoValid = Boolean(
     termsAccepted &&
@@ -4270,7 +4280,7 @@ export function SalesLandingPage() {
                       className="object-cover object-top"
                       fill
                       sizes="(min-width: 1024px) 255px, 78vw"
-                      src={`/1${mockupLocale}.webp`}
+                      src={activeCaseMockup}
                     />
                   </div>
                 </div>
