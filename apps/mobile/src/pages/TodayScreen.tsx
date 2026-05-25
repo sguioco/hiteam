@@ -210,6 +210,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       visibleTasks
         .filter(
           (task) =>
+            task.status !== 'CANCELLED' &&
             !isTaskMeeting(task) &&
             taskAnchorsDateKey(task, todayDateKey, businessTimeZone),
         )

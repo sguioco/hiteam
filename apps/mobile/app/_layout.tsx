@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot, SplashScreen, usePathname, useRouter } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { LogBox, Platform, View } from 'react-native';
 import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
@@ -107,6 +108,36 @@ export default function RootLayout() {
   const [bannerThemeReady, setBannerThemeReady] = useState(false);
   const [initialLanguage, setInitialLanguage] = useState<AppLanguage | null>(null);
   const [languageReady, setLanguageReady] = useState(false);
+
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const applyAvailableUpdate = async () => {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (cancelled || !update.isAvailable) {
+          return;
+        }
+
+        await Updates.fetchUpdateAsync();
+        if (!cancelled) {
+          await Updates.reloadAsync();
+        }
+      } catch {
+        // The embedded bundle remains usable if the update service is unreachable.
+      }
+    };
+
+    void applyAvailableUpdate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
