@@ -51,11 +51,9 @@ import {
   getCurrentDevicePlatform,
 } from "./device";
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
+import { API_URL, FALLBACK_API_URL } from "./api-config";
 import type { AppLanguage } from "./i18n";
 
-const API_URL = normalizeApiUrl(
-  process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000",
-);
 const API_REQUEST_TIMEOUT_MS = 20_000;
 const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
 const API_REQUEST_RETRY_DELAY_MS = 450;
@@ -79,12 +77,8 @@ let unauthorizedHandler: (() => void) | null = null;
 let deviceBootstrapPromise: Promise<void> | null = null;
 let lastDeviceBootstrapAt = 0;
 
-function normalizeApiUrl(value: string) {
-  return value.trim().replace(/\/+$/, "");
-}
-
-function buildApiUrl(path: string) {
-  return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+function buildApiUrl(path: string, apiUrl = API_URL) {
+  return `${apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function isAbortError(error: unknown) {
@@ -98,8 +92,8 @@ function isNetworkError(error: unknown) {
   );
 }
 
-function getApiConnectivityErrorMessage() {
-  return `Unable to reach the API server. Current mobile API URL: ${API_URL}`;
+function getApiConnectivityErrorMessage(apiUrl = API_URL) {
+  return `Unable to reach the API server. Current mobile API URL: ${apiUrl}`;
 }
 
 function resolveRequestTimeoutMs(path: string) {
@@ -123,19 +117,42 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchOnceWithTimeout(path: string, options?: RequestInit) {
+async function responseLooksLikeHtml(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.toLowerCase().includes("text/html")) {
+    return true;
+  }
+
+  try {
+    const text = await response.clone().text();
+    const normalizedTextStart = text.trim().slice(0, 256).toLowerCase();
+    return (
+      normalizedTextStart.startsWith("<!doctype html") ||
+      normalizedTextStart.startsWith("<html")
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function fetchOnceWithTimeout(
+  path: string,
+  options?: RequestInit,
+  apiUrl = API_URL,
+) {
   const timeoutMs = resolveRequestTimeoutMs(path);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(buildApiUrl(path), {
+    return await fetch(buildApiUrl(path, apiUrl), {
       ...options,
       signal: controller.signal,
     });
   } catch (error) {
     if (isAbortError(error) || isNetworkError(error)) {
-      throw new Error(getApiConnectivityErrorMessage());
+      throw new Error(getApiConnectivityErrorMessage(apiUrl));
     }
 
     throw error;
@@ -149,12 +166,26 @@ async function fetchWithTimeout(path: string, options?: RequestInit) {
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchOnceWithTimeout(path, options);
+      const response = await fetchOnceWithTimeout(path, options);
+
+      if (
+        FALLBACK_API_URL &&
+        !response.ok &&
+        (await responseLooksLikeHtml(response))
+      ) {
+        return await fetchOnceWithTimeout(path, options, FALLBACK_API_URL);
+      }
+
+      return response;
     } catch (error) {
       lastError = error;
 
-      if (!(isAbortError(error) || isNetworkError(error))) {
-        throw error;
+      if (FALLBACK_API_URL) {
+        try {
+          return await fetchOnceWithTimeout(path, options, FALLBACK_API_URL);
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
       }
 
       if (attempt === 0) {
