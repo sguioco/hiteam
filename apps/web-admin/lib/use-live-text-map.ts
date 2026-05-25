@@ -28,21 +28,46 @@ function getCacheKey(locale: Locale, text: string) {
   return `${locale}:${normalizeTranslationText(text)}`;
 }
 
+function containsCyrillic(text: string) {
+  return /[А-Яа-яЁё]/.test(text);
+}
+
+function containsLatin(text: string) {
+  return /[A-Za-z]/.test(text);
+}
+
+function shouldRequestLiveTextTranslation(text: string, locale: Locale) {
+  const normalizedText = normalizeTranslationText(text);
+  if (!normalizedText) {
+    return false;
+  }
+
+  const hasCyrillic = containsCyrillic(normalizedText);
+  const hasLatin = containsLatin(normalizedText);
+
+  if (locale === "ru") {
+    return hasLatin && !hasCyrillic;
+  }
+
+  return hasCyrillic;
+}
+
 function primeLocalTranslations(texts: string[], locale: Locale) {
   hydrateClientTranslationCache();
 
   for (const text of texts) {
     const normalizedText = normalizeTranslationText(text);
-    const persistedTranslation = getClientTranslation(locale, normalizedText);
-    if (persistedTranslation) {
-      clientCache.set(getCacheKey(locale, normalizedText), persistedTranslation);
-      continue;
-    }
-
     const translated = getLocalTextTranslation(normalizedText, locale);
     if (translated) {
       clientCache.set(getCacheKey(locale, normalizedText), translated);
       setClientTranslation(locale, normalizedText, translated);
+      continue;
+    }
+
+    const persistedTranslation = getClientTranslation(locale, normalizedText);
+    if (persistedTranslation) {
+      clientCache.set(getCacheKey(locale, normalizedText), persistedTranslation);
+      continue;
     }
   }
 }
@@ -51,8 +76,8 @@ function getResolvedText(locale: Locale, text: string) {
   const normalizedText = normalizeTranslationText(text);
 
   return (
-    clientCache.get(getCacheKey(locale, normalizedText)) ??
     getLocalTextTranslation(normalizedText, locale) ??
+    clientCache.get(getCacheKey(locale, normalizedText)) ??
     normalizedText
   );
 }
@@ -135,7 +160,7 @@ export function useLiveTextMap(texts: string[], locale: Locale) {
   }, [locale, uniqueTexts]);
 
   useEffect(() => {
-    if (locale === "ru" || uniqueTexts.length === 0) {
+    if (uniqueTexts.length === 0) {
       return;
     }
 
@@ -143,6 +168,7 @@ export function useLiveTextMap(texts: string[], locale: Locale) {
 
     const missing = uniqueTexts.filter(
       (text) =>
+        shouldRequestLiveTextTranslation(text, locale) &&
         !clientCache.has(getCacheKey(locale, text)) &&
         !hasClientTranslation(locale, text),
     );

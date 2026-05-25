@@ -743,7 +743,7 @@ export default function LeaderboardScreen({
                     numberOfLines={1}
                     style={todayTotalLabelStyle}
                   >
-                    {copy("Выполнено сегодня", "done today")}
+                    {copy("Сегодня", "today")}
                   </Text>
                 </View>
               </View>

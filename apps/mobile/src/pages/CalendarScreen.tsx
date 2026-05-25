@@ -505,7 +505,7 @@ export default function CalendarScreen({
     month: "long",
     year: "numeric",
   });
-  const calendarCacheKey = `calendar-screen:${isManager ? "manager" : "employee"}:${year}-${monthIndex}`;
+  const calendarCacheKey = `calendar-screen:v2:${isManager ? "manager" : "employee"}:${year}-${monthIndex}`;
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<CalendarScreenCacheValue>(
@@ -922,6 +922,10 @@ export default function CalendarScreen({
     const map = new Map<string, CalendarDayItem[]>();
 
     tasks.forEach((task) => {
+      if (task.status === "CANCELLED") {
+        return;
+      }
+
       const meta = parseTaskMeta(task.description);
       const dateSource = meta.meeting?.scheduledAt ?? task.dueAt ?? null;
       if (!dateSource) {
@@ -955,11 +959,9 @@ export default function CalendarScreen({
         status:
           task.status === "DONE"
             ? "done"
-            : task.status === "CANCELLED"
-              ? "cancelled"
-              : overdue
-                ? "overdue"
-                : "planned",
+            : overdue
+              ? "overdue"
+              : "planned",
       });
       map.set(key, nextItems);
     });
@@ -1002,6 +1004,7 @@ export default function CalendarScreen({
     return tasks
       .filter(
         (task) =>
+          task.status !== "CANCELLED" &&
           isOverdueTask(task, today) &&
           buildTaskPhotos(task, locale).length === 0,
       )

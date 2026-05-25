@@ -11,8 +11,72 @@ const persistedLocaleMaps = new Map<AppLanguage, Record<string, string>>();
 const translationRequestCache = new Map<string, Promise<Record<string, string>>>();
 const TRANSLATION_BATCH_SIZE = 100;
 
+const LOCAL_TEXT_TRANSLATIONS: Partial<Record<AppLanguage, Record<string, string>>> = {
+  ru: {
+    Admin: 'Администратор',
+    Administrator: 'Администратор',
+    Barber: 'Барбер',
+    Beautician: 'Мастер салона',
+    'Beauty master': 'Мастер салона',
+    Cashier: 'Кассир',
+    Chef: 'Шеф-повар',
+    Cleaner: 'Клинер',
+    Cook: 'Повар',
+    Employee: 'Сотрудник',
+    Housekeeper: 'Горничная',
+    Manager: 'Менеджер',
+    Master: 'Мастер',
+    Office: 'Офис',
+    'Office manager': 'Офис-менеджер',
+    Operations: 'Операции',
+    Owner: 'Владелец',
+    Reception: 'Ресепшен',
+    Receptionist: 'Администратор ресепшена',
+    Retail: 'Розница',
+    'Retail associate': 'Сотрудник розницы',
+    Sales: 'Продажи',
+    'Sales assistant': 'Продавец-консультант',
+    Security: 'Охрана',
+    Stylist: 'Стилист',
+    Supervisor: 'Супервайзер',
+    Waiter: 'Официант',
+    Worker: 'Сотрудник',
+  },
+  en: {
+    Администратор: 'Administrator',
+    Барбер: 'Barber',
+    Владелец: 'Owner',
+    Горничная: 'Housekeeper',
+    Клинер: 'Cleaner',
+    Кассир: 'Cashier',
+    Менеджер: 'Manager',
+    Мастер: 'Master',
+    'Мастер салона': 'Beauty master',
+    Операции: 'Operations',
+    Официант: 'Waiter',
+    Офис: 'Office',
+    'Офис-менеджер': 'Office manager',
+    Охрана: 'Security',
+    Повар: 'Cook',
+    Продажи: 'Sales',
+    Продавец: 'Sales assistant',
+    'Продавец-консультант': 'Sales assistant',
+    Ресепшен: 'Reception',
+    Розница: 'Retail',
+    Сотрудник: 'Employee',
+    'Сотрудник розницы': 'Retail associate',
+    Стилист: 'Stylist',
+    Супервайзер: 'Supervisor',
+    'Шеф-повар': 'Chef',
+  },
+};
+
 function getCacheKey(locale: AppLanguage, text: string) {
   return `${locale}:${text}`;
+}
+
+function getLocalTextTranslation(locale: AppLanguage, text: string) {
+  return LOCAL_TEXT_TRANSLATIONS[locale]?.[text.trim()] ?? null;
 }
 
 export function hasResolvedLiveText(locale: AppLanguage, text: string) {
@@ -33,6 +97,11 @@ function normalizeTexts(texts: string[]) {
 }
 
 function getResolvedText(locale: AppLanguage, text: string) {
+  const localTranslation = getLocalTextTranslation(locale, text);
+  if (localTranslation) {
+    return localTranslation;
+  }
+
   if (!shouldRequestLiveTextTranslation(text, locale)) {
     return text;
   }
@@ -163,6 +232,7 @@ export async function primeLiveTextMap(texts: string[], locale: AppLanguage) {
 
   const missing = uniqueTexts.filter(
     (text) =>
+      !getLocalTextTranslation(locale, text) &&
       shouldRequestLiveTextTranslation(text, locale) &&
       !translationCache.has(getCacheKey(locale, text)),
   );

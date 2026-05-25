@@ -40,11 +40,11 @@ export type TodayScreenCacheValue = {
   tasks: TodayTasks;
 };
 
-export const TODAY_SCREEN_CACHE_KEY = "today-screen:v1";
+export const TODAY_SCREEN_CACHE_KEY = "today-screen:v2";
 export const TODAY_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const PROFILE_SCREEN_CACHE_KEY = "profile-screen";
 export const PROFILE_SCREEN_CACHE_TTL_MS = 5 * 60_000;
-export const MANAGER_SCREEN_CACHE_KEY = "manager-screen-v5";
+export const MANAGER_SCREEN_CACHE_KEY = "manager-screen-v6";
 export const MANAGER_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const LEADERBOARD_SCREEN_CACHE_KEY = "leaderboard-screen:v1";
 export const LEADERBOARD_SCREEN_CACHE_TTL_MS = 60_000;
@@ -82,7 +82,7 @@ function delay(ms: number) {
 }
 
 export function getCalendarScreenCacheKey(date = new Date()) {
-  return `calendar-screen:${date.getFullYear()}-${date.getMonth()}`;
+  return `calendar-screen:v2:${date.getFullYear()}-${date.getMonth()}`;
 }
 
 export function getNewsScreenCacheKey(isManager: boolean) {

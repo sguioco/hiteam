@@ -21,6 +21,68 @@ type MemoryCacheEntry = {
 const TRANSLATION_CACHE_TTL_SECONDS = 60 * 60 * 24 * 90;
 const TRANSLATION_FAILURE_TTL_SECONDS = 60 * 5;
 
+const LOCAL_TRANSLATIONS: Partial<
+  Record<SupportedTranslationLocale, Record<string, string>>
+> = {
+  ru: {
+    Admin: 'Администратор',
+    Administrator: 'Администратор',
+    Barber: 'Барбер',
+    Beautician: 'Мастер салона',
+    'Beauty master': 'Мастер салона',
+    Cashier: 'Кассир',
+    Chef: 'Шеф-повар',
+    Cleaner: 'Клинер',
+    Cook: 'Повар',
+    Employee: 'Сотрудник',
+    Housekeeper: 'Горничная',
+    Manager: 'Менеджер',
+    Master: 'Мастер',
+    Office: 'Офис',
+    'Office manager': 'Офис-менеджер',
+    Operations: 'Операции',
+    Owner: 'Владелец',
+    Reception: 'Ресепшен',
+    Receptionist: 'Администратор ресепшена',
+    Retail: 'Розница',
+    'Retail associate': 'Сотрудник розницы',
+    Sales: 'Продажи',
+    'Sales assistant': 'Продавец-консультант',
+    Security: 'Охрана',
+    Stylist: 'Стилист',
+    Supervisor: 'Супервайзер',
+    Waiter: 'Официант',
+    Worker: 'Сотрудник',
+  },
+  en: {
+    Администратор: 'Administrator',
+    Барбер: 'Barber',
+    Владелец: 'Owner',
+    Горничная: 'Housekeeper',
+    Клинер: 'Cleaner',
+    Кассир: 'Cashier',
+    Менеджер: 'Manager',
+    Мастер: 'Master',
+    'Мастер салона': 'Beauty master',
+    Операции: 'Operations',
+    Официант: 'Waiter',
+    Офис: 'Office',
+    'Офис-менеджер': 'Office manager',
+    Охрана: 'Security',
+    Повар: 'Cook',
+    Продажи: 'Sales',
+    Продавец: 'Sales assistant',
+    'Продавец-консультант': 'Sales assistant',
+    Ресепшен: 'Reception',
+    Розница: 'Retail',
+    Сотрудник: 'Employee',
+    'Сотрудник розницы': 'Retail associate',
+    Стилист: 'Stylist',
+    Супервайзер: 'Supervisor',
+    'Шеф-повар': 'Chef',
+  },
+};
+
 function containsCyrillic(text: string) {
   return /[А-Яа-яЁё]/.test(text);
 }
@@ -50,6 +112,13 @@ function shouldTranslateText(
   }
 
   return hasCyrillic || hasLatin;
+}
+
+function getLocalTranslation(
+  text: string,
+  targetLocale: SupportedTranslationLocale,
+) {
+  return LOCAL_TRANSLATIONS[targetLocale]?.[text] ?? null;
 }
 
 @Injectable()
@@ -266,6 +335,17 @@ export class TranslationService implements OnModuleDestroy {
 
     if (!shouldTranslateText(normalizedText, targetLocale)) {
       return normalizedText;
+    }
+
+    const localTranslation = getLocalTranslation(normalizedText, targetLocale);
+    if (localTranslation) {
+      const cacheKey = this.getCacheKey(normalizedText, targetLocale);
+      await this.setCachedTranslation(
+        cacheKey,
+        localTranslation,
+        TRANSLATION_CACHE_TTL_SECONDS,
+      );
+      return localTranslation;
     }
 
     const cacheKey = this.getCacheKey(normalizedText, targetLocale);

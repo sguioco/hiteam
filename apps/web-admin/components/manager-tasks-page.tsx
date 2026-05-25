@@ -51,6 +51,7 @@ import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
+import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 
@@ -1169,10 +1170,25 @@ export function ManagerTasksPage({
     return rowsByEmployee;
   }, [attendanceHistory]);
 
+  const employeeMetaTexts = useMemo(
+    () =>
+      employeeTaskEntries.flatMap((entry) => {
+        const subtitle = getEmployeeSubtitle(entry.employee);
+        const teams = teamsByEmployeeId.get(entry.employee.id) ?? [];
+
+        return [subtitle ?? "", ...teams].filter(Boolean);
+      }),
+    [employeeTaskEntries, teamsByEmployeeId],
+  );
+  const employeeMetaTextMap = useLiveTextMap(employeeMetaTexts, locale);
+
   const tableRows = useMemo<TaskTableRow[]>(() => {
     return employeeTaskEntries.map((entry) => {
       const employeeName = getEmployeeName(entry.employee, locale);
-      const teams = teamsByEmployeeId.get(entry.employee.id) ?? [];
+      const teams = (teamsByEmployeeId.get(entry.employee.id) ?? []).map(
+        (team) => employeeMetaTextMap[team] ?? team,
+      );
+      const employeeSubtitle = getEmployeeSubtitle(entry.employee);
       const liveSession = liveSessionsByEmployeeId.get(entry.employee.id);
       const historyRows =
         attendanceHistoryRowsByEmployeeId.get(entry.employee.id) ?? [];
@@ -1237,7 +1253,9 @@ export function ManagerTasksPage({
       return {
         id: entry.employee.id,
         employeeName,
-        employeeSubtitle: getEmployeeSubtitle(entry.employee),
+        employeeSubtitle: employeeSubtitle
+          ? employeeMetaTextMap[employeeSubtitle] ?? employeeSubtitle
+          : employeeSubtitle,
         employeeAvatarUrl:
           entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName || entry.employee.id),
         ...statusSummary,
@@ -1254,6 +1272,7 @@ export function ManagerTasksPage({
     attendanceHistoryError,
     attendanceHistoryLoading,
     attendanceHistoryRowsByEmployeeId,
+    employeeMetaTextMap,
     employeeTaskEntries,
     isHistoricalRange,
     liveSessionsByEmployeeId,

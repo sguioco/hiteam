@@ -47,6 +47,7 @@ import {
   primeTaskTranslations,
   useTranslatedTaskCopy,
 } from "../../lib/use-translated-task-copy";
+import { useLiveTextMap } from "../../lib/use-live-text-map";
 import {
   MANAGER_SCREEN_CACHE_KEY,
   MANAGER_SCREEN_CACHE_TTL_MS,
@@ -568,7 +569,7 @@ export default function ManagerScreen({
 
   const visibleTasks = useMemo(() => {
     return collapseDuplicateManagerTasks(tasks, businessTimeZone).filter(
-      (task) => !isManagerTaskMeeting(task),
+      (task) => task.status !== "CANCELLED" && !isManagerTaskMeeting(task),
     );
   }, [businessTimeZone, tasks]);
 
@@ -666,6 +667,32 @@ export default function ManagerScreen({
     locale,
     visibleTasks,
   ]);
+
+  const employeeMetaTexts = useMemo(
+    () =>
+      employeeCards.flatMap((item) =>
+        [
+          item.employee.position?.name ?? "",
+          item.employee.department?.name ?? "",
+        ].filter(Boolean),
+      ),
+    [employeeCards],
+  );
+  const employeeMetaTextMap = useLiveTextMap(employeeMetaTexts, language);
+  const getEmployeeMetaLabel = useCallback(
+    (employee: ManagerEmployee) => {
+      const position = employee.position?.name?.trim();
+      const department = employee.department?.name?.trim();
+      const source = position || department || employee.email;
+
+      if (!source) {
+        return "";
+      }
+
+      return employeeMetaTextMap[source] ?? source;
+    },
+    [employeeMetaTextMap],
+  );
 
   const activePhotoTask = useMemo(
     () => visibleTasks.find((task) => task.id === activePhotoTaskId) ?? null,
@@ -980,9 +1007,7 @@ export default function ManagerScreen({
                               {item.employee.firstName} {item.employee.lastName}
                             </Text>
                             <Text className="mt-1 text-[14px] leading-5 text-[#7b8798]">
-                              {item.employee.position?.name ??
-                                item.employee.department?.name ??
-                                item.employee.email}
+                              {getEmployeeMetaLabel(item.employee)}
                             </Text>
                           </View>
 

@@ -1206,7 +1206,7 @@ export function LeaderboardCenter({
                         {overview.me.todayPoints}/{overview.me.todayMaxPoints}
                       </strong>
                       <span className="mt-1 block text-xs font-medium text-white/75">
-                        {localize(locale, "Выполнено сегодня", "done today")}
+                        {localize(locale, "Сегодня", "today")}
                       </span>
                     </div>
                     <div className="border-white/20 md:border-l md:pl-6">

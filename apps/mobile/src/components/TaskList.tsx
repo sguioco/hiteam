@@ -170,6 +170,7 @@ export default function TaskList({
 
   const activeTasks = tasks.filter((task) => task.status !== 'DONE' && task.status !== 'CANCELLED');
   const completedTasks = tasks.filter((task) => task.status === 'DONE');
+  const visibleTaskCount = activeTasks.length + completedTasks.length;
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? null;
   const taskPhotos = useMemo(
     () =>
@@ -253,7 +254,7 @@ export default function TaskList({
     });
   }, [activeTaskPhotos]);
 
-  const totalCountLabel = useMemo(() => `${tasks.length}`, [tasks.length]);
+  const totalCountLabel = useMemo(() => `${visibleTaskCount}`, [visibleTaskCount]);
 
   function photoLimitErrorMessage() {
     return t('today.photoLimitError', { limit: 7 });
@@ -665,7 +666,7 @@ export default function TaskList({
               ))}
             </View>
           </View>
-        ) : tasks.length > 0 ? (
+        ) : visibleTaskCount > 0 ? (
           <View className="overflow-hidden rounded-[28px] bg-white">
             {activeTasks.map((task, index) => (
               <View key={task.id}>

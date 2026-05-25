@@ -144,6 +144,37 @@ const RU_TO_EN_TEXT_MAP: Record<string, string> = {
   "Охрана": "Security",
 };
 
+const EN_TO_RU_TEXT_MAP: Record<string, string> = {
+  Admin: "Администратор",
+  Administrator: "Администратор",
+  Barber: "Барбер",
+  Beautician: "Мастер салона",
+  "Beauty master": "Мастер салона",
+  Cashier: "Кассир",
+  Chef: "Шеф-повар",
+  Cleaner: "Клинер",
+  Cook: "Повар",
+  Employee: "Сотрудник",
+  Housekeeper: "Горничная",
+  Manager: "Менеджер",
+  Master: "Мастер",
+  Office: "Офис",
+  "Office manager": "Офис-менеджер",
+  Operations: "Операции",
+  Owner: "Владелец",
+  Reception: "Ресепшен",
+  Receptionist: "Администратор ресепшена",
+  Retail: "Розница",
+  "Retail associate": "Сотрудник розницы",
+  Sales: "Продажи",
+  "Sales assistant": "Продавец-консультант",
+  Security: "Охрана",
+  Stylist: "Стилист",
+  Supervisor: "Супервайзер",
+  Waiter: "Официант",
+  Worker: "Сотрудник",
+};
+
 export function getLocalTextTranslation(
   text: string,
   locale: Locale,
@@ -177,6 +208,10 @@ export function getLocalTextTranslation(
     }
 
     return null;
+  }
+
+  if (locale === "ru") {
+    return EN_TO_RU_TEXT_MAP[normalized] ?? null;
   }
 
   return null;
