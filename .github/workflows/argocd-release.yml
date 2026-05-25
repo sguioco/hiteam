@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       API_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-${{ github.sha }}
       API_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-latest
       WEB_ADMIN_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-${{ github.sha }}
@@ -27,9 +28,9 @@ jobs:
       WEB_ADMIN_BASE_URL: ${{ vars.ARGOCD_WEB_ADMIN_BASE_URL }}
       WEB_ADMIN_GOOGLE_MAPS_API_KEY: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Validate required repo variables
         run: |
@@ -56,17 +57,17 @@ jobs:
             exit 1
           fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
@@ -76,7 +77,7 @@ jobs:
             ${{ env.API_IMAGE_LATEST }}
 
       - name: Build and push Web Admin image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web-admin/Dockerfile
