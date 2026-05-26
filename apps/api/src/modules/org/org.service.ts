@@ -312,14 +312,14 @@ export class OrgService {
           },
         });
         const employeeUsers = await tx.employee.findMany({
-          where: { tenantId, userId: { not: null } },
+          where: { tenantId },
           select: { userId: true },
         });
 
         if (employeeUsers.length > 0) {
           await tx.userRole.createMany({
             data: employeeUsers.map((employee) => ({
-              userId: employee.userId!,
+              userId: employee.userId,
               roleId: managerRole.id,
               scopeType: "tenant",
               scopeId: tenantId,
