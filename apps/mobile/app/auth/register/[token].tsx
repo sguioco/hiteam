@@ -1,19 +1,67 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../../components/ui/text';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../../components/ui/button';
-import { Card } from '../../../components/ui/card';
+import { PressableScale } from '../../../components/ui/pressable-scale';
 import { loadPublicInvitation, registerFromInvitation, signInWithEmail } from '../../../lib/api';
 import { signInLocally } from '../../../lib/auth-flow';
+import { hapticError, hapticSelection, hapticSuccess } from '../../../lib/haptics';
 import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../../lib/i18n';
+import { BrandWordmark } from '../../../src/components/brand-wordmark';
 
 type InvitationPayload = Awaited<ReturnType<typeof loadPublicInvitation>>;
 
+const initialForm = {
+  email: '',
+  password: '',
+  firstName: '',
+  lastName: '',
+  middleName: '',
+  birthDate: '',
+  gender: 'male' as 'male' | 'female',
+  phone: '',
+  avatarDataUrl: '',
+  avatarPreviewUri: '',
+};
+
+function parseBirthDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(1995, 0, 1);
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date(1995, 0, 1) : parsed;
+}
+
+function formatBirthDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function RegisterInvitationScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     token?: string;
     biometricEnrollmentStatus?: string;
@@ -30,50 +78,84 @@ export default function RegisterInvitationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [step, setStep] = useState<'password' | 'profile'>('password');
-  const [form, setForm] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: '',
-    middleName: '',
-    birthDate: '',
-    gender: 'male' as 'male' | 'female',
-    phone: '',
-  });
+  const [birthDatePickerVisible, setBirthDatePickerVisible] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [form, setForm] = useState(initialForm);
+
   const copy = useMemo(
     () =>
       language === 'ru'
         ? {
             title: 'Присоединение к команде',
-            passwordSubtitle:
-              'Проверьте email и придумайте пароль для входа.',
-            profileSubtitle:
-              'Теперь заполните профиль. После этого мы сразу откроем биометрию и ваш график.',
-            passwordHint:
-              'Пароль нужен только для входа. На следующем шаге вы заполните личные данные.',
+            passwordSubtitle: 'Проверьте email и придумайте пароль для входа.',
+            profileSubtitle: 'Заполните личные данные для профиля сотрудника.',
+            password: 'Пароль',
+            passwordHint: 'Пароль нужен только для входа. На следующем шаге вы заполните личные данные.',
             next: 'Далее',
             createAccount: 'Создать аккаунт',
             creatingAccount: 'Создаём аккаунт...',
             alreadySubmittedTitle: 'Аккаунт уже создан',
             alreadySubmittedBody: 'Для {email} аккаунт уже настроен. Просто войдите в приложение.',
-            profileRequired: 'Заполните имя, фамилию, дату рождения и телефон.',
+            profileRequired: 'Заполните имя, фамилию, дату рождения, телефон и добавьте фото.',
             emailRequired: 'Укажите email.',
+            passwordShort: 'Пароль должен быть не короче 8 символов.',
+            invalidDate: 'Дата рождения должна быть в формате ГГГГ-ММ-ДД.',
+            processingBiometric: 'Завершаем настройку биометрии...',
+            startBiometric: 'Открываем настройку биометрии...',
+            company: 'Компания',
+            email: 'Email',
+            firstName: 'Имя',
+            lastName: 'Фамилия',
+            middleName: 'Отчество',
+            phone: 'Телефон',
+            birthDate: 'Дата рождения',
+            birthDateHint: 'ГГГГ-ММ-ДД',
+            photo: 'Фото',
+            addPhoto: 'Добавить фото',
+            changePhoto: 'Изменить фото',
+            pickPhoto: 'Выбрать фото',
+            takePhoto: 'Сделать фото',
+            cancel: 'Отмена',
+            male: 'Мужчина',
+            female: 'Женщина',
+            showPassword: 'Показать пароль',
+            hidePassword: 'Скрыть пароль',
           }
         : {
             title: 'Join the team',
-            passwordSubtitle:
-              'Confirm your email and create your sign-in password.',
-            profileSubtitle:
-              'Now complete your profile. After that we will open biometric setup and your schedule right away.',
-            passwordHint:
-              'This password is only for sign-in. On the next step you will finish your personal details.',
+            passwordSubtitle: 'Confirm your email and create your sign-in password.',
+            profileSubtitle: 'Complete your employee profile details.',
+            password: 'Password',
+            passwordHint: 'This password is only for sign-in. On the next step you will finish your personal details.',
             next: 'Continue',
             createAccount: 'Create account',
             creatingAccount: 'Creating account...',
             alreadySubmittedTitle: 'Account already created',
             alreadySubmittedBody: 'An account for {email} is already set up. Just sign in to the app.',
-            profileRequired: 'Complete first name, last name, birth date, and phone.',
+            profileRequired: 'Complete first name, last name, birth date, phone, and photo.',
             emailRequired: 'Enter your email.',
+            passwordShort: 'Password must be at least 8 characters.',
+            invalidDate: 'Birth date must use YYYY-MM-DD.',
+            processingBiometric: 'Finishing biometric setup...',
+            startBiometric: 'Opening biometric setup...',
+            company: 'Company',
+            email: 'Email',
+            firstName: 'First name',
+            lastName: 'Last name',
+            middleName: 'Middle name',
+            phone: 'Phone',
+            birthDate: 'Birth date',
+            birthDateHint: 'YYYY-MM-DD',
+            photo: 'Photo',
+            addPhoto: 'Add photo',
+            changePhoto: 'Change photo',
+            pickPhoto: 'Choose photo',
+            takePhoto: 'Take photo',
+            cancel: 'Cancel',
+            male: 'Male',
+            female: 'Female',
+            showPassword: 'Show password',
+            hidePassword: 'Hide password',
           },
     [language],
   );
@@ -90,7 +172,7 @@ export default function RegisterInvitationScreen() {
 
     async function loadInvitation() {
       if (!token) {
-        setError(t('register.invitationUnavailable'));
+        setError(t('joinProfile.unavailableTitle'));
         setLoading(false);
         return;
       }
@@ -114,7 +196,7 @@ export default function RegisterInvitationScreen() {
         }));
       } catch (nextError) {
         if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : t('register.invitationUnavailable'));
+          setError(nextError instanceof Error ? nextError.message : t('joinProfile.unavailableTitle'));
         }
       } finally {
         if (!cancelled) {
@@ -130,46 +212,137 @@ export default function RegisterInvitationScreen() {
     };
   }, [t, token]);
 
-  const isAlreadyHandled = useMemo(() => {
-    if (!invitation) {
-      return false;
+  const isAlreadyHandled = useMemo(() => Boolean(invitation?.registrationCompleted), [invitation]);
+  const passwordToggleLabel = passwordVisible ? copy.hidePassword : copy.showPassword;
+
+  function handleBack() {
+    Keyboard.dismiss();
+    setError(null);
+    setMessage(null);
+
+    if (step === 'profile') {
+      hapticSelection();
+      setStep('password');
+      return;
     }
 
-    return Boolean(invitation.registrationCompleted);
-  }, [invitation]);
+    router.back();
+  }
 
   function handleContinue() {
     if (!form.email.trim()) {
+      hapticError();
       setError(copy.emailRequired);
       return;
     }
 
     if (form.password.trim().length < 8) {
-      setError(t('register.passwordShort'));
+      hapticError();
+      setError(copy.passwordShort);
       return;
     }
 
+    hapticSuccess();
     setError(null);
+    setMessage(null);
     setStep('profile');
+  }
+
+  function handleBirthDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (Platform.OS !== 'ios') {
+      setBirthDatePickerVisible(false);
+    }
+
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+
+    setForm((current) => ({ ...current, birthDate: formatBirthDate(selectedDate) }));
+    setError(null);
+    setMessage(null);
+  }
+
+  async function pickPhoto(source: 'camera' | 'library') {
+    try {
+      const permission =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        hapticError();
+        setError(copy.addPhoto);
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              allowsEditing: false,
+              base64: true,
+              quality: 0.72,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: false,
+              base64: true,
+              quality: 0.72,
+              selectionLimit: 1,
+            });
+
+      if (result.canceled || !result.assets?.[0]?.uri || !result.assets[0].base64) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      setForm((current) => ({
+        ...current,
+        avatarDataUrl: `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`,
+        avatarPreviewUri: asset.uri,
+      }));
+      setError(null);
+      hapticSuccess();
+    } catch (nextError) {
+      hapticError();
+      setError(nextError instanceof Error ? nextError.message : copy.addPhoto);
+    }
+  }
+
+  function openPhotoChooser() {
+    Keyboard.dismiss();
+    Alert.alert(copy.photo, undefined, [
+      { text: copy.pickPhoto, onPress: () => void pickPhoto('library') },
+      { text: copy.takePhoto, onPress: () => void pickPhoto('camera') },
+      { text: copy.cancel, style: 'cancel' },
+    ]);
   }
 
   async function handleSubmit() {
     if (!invitation) {
       return;
     }
+
     const normalizedEmail = form.email.trim().toLowerCase();
+    const trimmedBirthDate = form.birthDate.trim();
 
     if (!normalizedEmail) {
+      hapticError();
       setError(copy.emailRequired);
       return;
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate.trim())) {
-      setError(t('register.invalidDate'));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedBirthDate)) {
+      hapticError();
+      setError(copy.invalidDate);
       return;
     }
 
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim()) {
+    if (
+      !form.firstName.trim() ||
+      !form.lastName.trim() ||
+      !form.phone.trim() ||
+      !form.avatarDataUrl
+    ) {
+      hapticError();
       setError(copy.profileRequired);
       return;
     }
@@ -185,14 +358,16 @@ export default function RegisterInvitationScreen() {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         middleName: form.middleName.trim() || undefined,
-        birthDate: form.birthDate.trim(),
+        birthDate: trimmedBirthDate,
         gender: form.gender,
         phone: form.phone.trim(),
+        avatarDataUrl: form.avatarDataUrl,
       });
 
       await signInWithEmail(normalizedEmail, form.password.trim(), invitation.tenantSlug);
       signInLocally({ workspaceSetupStep: 'biometric' });
-      setMessage(t('register.startBiometric'));
+      setMessage(copy.startBiometric);
+      hapticSuccess();
       router.push({
         pathname: '/biometric',
         params: {
@@ -201,40 +376,72 @@ export default function RegisterInvitationScreen() {
         },
       });
     } catch (nextError) {
+      hapticError();
       setError(nextError instanceof Error ? nextError.message : t('invite.verificationFailed'));
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (params.biometricEnrollmentStatus === 'ENROLLED') {
+  function renderShell(children: ReactNode) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#f4f5f9] px-6">
+      <SafeAreaView className="flex-1 bg-[#f3f5fb]">
         <StatusBar style="dark" />
-        <Text className="text-[16px] font-semibold text-[#24314b]">{t('register.processingBiometric')}</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1"
+        >
+          <LinearGradient
+            colors={['#eef4ff', '#f7f0e7', '#f3f5fb']}
+            end={{ x: 1, y: 1 }}
+            start={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          {children}
+        </KeyboardAvoidingView>
       </SafeAreaView>
+    );
+  }
+
+  if (params.biometricEnrollmentStatus === 'ENROLLED') {
+    return renderShell(
+      <View className="flex-1 items-center justify-center px-6">
+        <ActivityIndicator color="#546cf2" />
+        <Text className="mt-4 text-center text-[16px] font-semibold text-[#24314b]">
+          {copy.processingBiometric}
+        </Text>
+      </View>,
     );
   }
 
   if (loading) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#f4f5f9] px-6">
-        <StatusBar style="dark" />
-        <Text className="text-[16px] font-semibold text-[#24314b]">{t('common.loading')}</Text>
-      </SafeAreaView>
+    return renderShell(
+      <View className="flex-1 items-center justify-center px-6">
+        <ActivityIndicator color="#546cf2" />
+        <Text className="mt-4 text-center text-[16px] font-semibold text-[#24314b]">
+          {t('joinProfile.loading')}
+        </Text>
+      </View>,
     );
   }
 
   if (error && !invitation) {
-    return (
-      <SafeAreaView className="flex-1 bg-[#f4f5f9] px-6 py-8">
-        <StatusBar style="dark" />
-        <Card className="mt-auto gap-4 rounded-[30px] bg-white">
-          <Text className="text-[28px] font-extrabold text-[#24314b]">{t('register.invitationUnavailable')}</Text>
-          <Text className="text-[16px] leading-7 text-[#6f7892]">{error}</Text>
-          <Button fullWidth label={t('common.backHome')} onPress={() => router.replace('/' as never)} />
-        </Card>
-      </SafeAreaView>
+    return renderShell(
+      <View className="flex-1 justify-end px-6 pb-10">
+        <View className="rounded-[34px] border border-white/80 bg-white/90 p-6 shadow-sm">
+          <Text className="text-[28px] font-bold leading-[34px] text-[#24314b]">
+            {t('joinProfile.unavailableTitle')}
+          </Text>
+          <Text className="mt-3 text-[16px] leading-7 text-[#6f7892]">{error}</Text>
+          <PressableScale
+            className="mt-7 min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
+            haptic="medium"
+            onPress={() => router.replace('/' as never)}
+          >
+            <Text style={styles.actionLabel}>{t('common.backHome')}</Text>
+          </PressableScale>
+        </View>
+      </View>,
     );
   }
 
@@ -244,138 +451,330 @@ export default function RegisterInvitationScreen() {
 
   if (isAlreadyHandled) {
     const displayEmail = invitation.email ?? invitation.phone ?? '';
-    return (
-      <SafeAreaView className="flex-1 bg-[#f4f5f9] px-6 py-8">
-        <StatusBar style="dark" />
-        <Card className="mt-auto gap-4 rounded-[30px] bg-white">
-          <Text className="text-[28px] font-extrabold text-[#24314b]">{copy.alreadySubmittedTitle}</Text>
-          <Text className="text-[16px] leading-7 text-[#6f7892]">
+    return renderShell(
+      <View className="flex-1 justify-end px-6 pb-10">
+        <View className="rounded-[34px] border border-white/80 bg-white/90 p-6 shadow-sm">
+          <View className="h-16 w-16 items-center justify-center rounded-[22px] bg-[#edf4ff]">
+            <Ionicons color="#546cf2" name="checkmark-circle" size={34} />
+          </View>
+          <Text className="mt-5 text-[28px] font-bold leading-[34px] text-[#24314b]">
+            {copy.alreadySubmittedTitle}
+          </Text>
+          <Text className="mt-3 text-[16px] leading-7 text-[#6f7892]">
             {copy.alreadySubmittedBody.replace('{email}', displayEmail)}
           </Text>
-          <Button fullWidth label={t('login.signIn')} onPress={() => router.replace('/' as never)} />
-        </Card>
-      </SafeAreaView>
+          <PressableScale
+            className="mt-7 min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2]"
+            haptic="medium"
+            onPress={() => router.replace('/' as never)}
+          >
+            <Text style={styles.actionLabel}>{t('login.signIn')}</Text>
+          </PressableScale>
+        </View>
+      </View>,
     );
   }
 
-  return (
-    <SafeAreaView className="flex-1 bg-[#f4f5f9]">
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
-        <Pressable className="mb-5 h-9 w-9 items-center justify-center" onPress={() => router.back()}>
-          <Text className="text-[34px] leading-[34px] text-[#24314b]" style={directionalIconStyle}>‹</Text>
+  return renderShell(
+    <ScrollView
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingBottom: Math.max(insets.bottom + 18, 34),
+      }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="px-6 pt-2">
+        <Pressable className="mb-5 h-11 w-11 items-center justify-center" onPress={handleBack}>
+          <Text className="text-[36px] leading-[36px] text-[#24314b]" style={directionalIconStyle}>
+            ‹
+          </Text>
         </Pressable>
 
-        <View className="gap-3">
-          <Text className="text-[32px] font-extrabold leading-[38px] text-[#24314b]">{copy.title}</Text>
-          <Text className="text-[17px] leading-[26px] text-[#7a8094]">
+        <View className="mb-7">
+          <BrandWordmark className="text-[34px] leading-[42px] text-[#17233d]" />
+          <View className="mt-7 flex-row gap-2">
+            <View className={`h-2 flex-1 rounded-full ${step === 'password' ? 'bg-[#546cf2]' : 'bg-[#c8d3f6]'}`} />
+            <View className={`h-2 flex-1 rounded-full ${step === 'profile' ? 'bg-[#546cf2]' : 'bg-white/90'}`} />
+          </View>
+          <Text className="mt-6 text-[32px] font-bold leading-[37px] text-[#24314b]">
+            {copy.title}
+          </Text>
+          <Text className="mt-3 text-[17px] leading-[26px] text-[#727b91]">
             {step === 'password' ? copy.passwordSubtitle : copy.profileSubtitle}
           </Text>
-        </View>
-
-        <Card className="mt-6 gap-4 rounded-[30px] bg-white">
-          <View className="gap-2">
-            <Text className="text-[13px] font-bold uppercase tracking-[1.8px] text-[#7a8094]">{t('register.email')}</Text>
-            <TextInput
-              className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-              editable={!invitation.email}
-              keyboardType="email-address"
-              onChangeText={(value) => setForm((current) => ({ ...current, email: value }))}
-              placeholder="you@company.com"
-              placeholderTextColor="#8a92ab"
-              style={textDirectionStyle}
-              value={form.email}
-            />
+          <View className="mt-5 self-start rounded-full border border-white/80 bg-white/75 px-4 py-2">
+            <Text className="text-[13px] font-semibold uppercase tracking-[1.4px] text-[#6f7892]">
+              {copy.company}: {invitation.companyName}
+            </Text>
           </View>
+        </View>
+      </View>
 
-          <TextInput
-            className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-            onChangeText={(value) => setForm((current) => ({ ...current, password: value }))}
-            placeholder={t('register.password')}
-            placeholderTextColor="#8a92ab"
-            secureTextEntry
-            style={textDirectionStyle}
-            value={form.password}
-          />
-          {step === 'password' ? (
-            <View className="rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 py-4">
+      <View className="mx-5 rounded-[34px] border border-white/80 bg-white/90 p-5 shadow-sm">
+        {step === 'password' ? (
+          <View className="gap-4">
+            <View>
+              <Text style={styles.fieldLabel}>{copy.email}</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="mt-2 min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                editable={!invitation.email}
+                keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                onChangeText={(value) => {
+                  setForm((current) => ({ ...current, email: value }));
+                  setError(null);
+                }}
+                placeholder="you@company.com"
+                placeholderTextColor="#7f8da1"
+                selectionColor="#26334a"
+                style={[textDirectionStyle, styles.inputText]}
+                textAlign="center"
+                value={form.email}
+              />
+            </View>
+
+            <View>
+              <Text style={styles.fieldLabel}>{copy.password}</Text>
+              <View className="mt-2 min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-4">
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="min-h-[58px] flex-1 px-3 text-center text-[17px] text-[#0f2530]"
+                  onChangeText={(value) => {
+                    setForm((current) => ({ ...current, password: value }));
+                    setError(null);
+                  }}
+                  placeholder={copy.password}
+                  placeholderTextColor="#7f8da1"
+                  secureTextEntry={!passwordVisible}
+                  selectionColor="#26334a"
+                  style={[textDirectionStyle, styles.inputText]}
+                  textAlign="center"
+                  value={form.password}
+                />
+                <PressableScale
+                  accessibilityLabel={passwordToggleLabel}
+                  className="h-10 w-10 items-center justify-center rounded-full"
+                  haptic="selection"
+                  onPress={() => setPasswordVisible((current) => !current)}
+                >
+                  <Ionicons
+                    color="#7f8da1"
+                    name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                  />
+                </PressableScale>
+              </View>
+            </View>
+
+            <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-4 py-4">
               <Text className="text-[15px] leading-6 text-[#6f7892]">{copy.passwordHint}</Text>
             </View>
-          ) : (
-            <>
-              <TextInput
-                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-                onChangeText={(value) => setForm((current) => ({ ...current, firstName: value }))}
-                placeholder={t('register.firstName')}
-                placeholderTextColor="#8a92ab"
-                style={textDirectionStyle}
-                value={form.firstName}
-              />
-              <TextInput
-                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-                onChangeText={(value) => setForm((current) => ({ ...current, lastName: value }))}
-                placeholder={t('register.lastName')}
-                placeholderTextColor="#8a92ab"
-                style={textDirectionStyle}
-                value={form.lastName}
-              />
-              <TextInput
-                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-                onChangeText={(value) => setForm((current) => ({ ...current, middleName: value }))}
-                placeholder={t('register.middleName')}
-                placeholderTextColor="#8a92ab"
-                style={textDirectionStyle}
-                value={form.middleName}
-              />
-              <TextInput
-                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-                onChangeText={(value) => setForm((current) => ({ ...current, birthDate: value }))}
-                placeholder={t('register.birthDatePlaceholder')}
-                placeholderTextColor="#8a92ab"
-                style={textDirectionStyle}
-                value={form.birthDate}
-              />
-              <TextInput
-                className="min-h-[60px] rounded-[18px] border border-[#d6dceb] bg-[#f9fbff] px-4 text-[16px] text-[#24314b]"
-                onChangeText={(value) => setForm((current) => ({ ...current, phone: value }))}
-                placeholder={t('register.phone')}
-                placeholderTextColor="#8a92ab"
-                style={textDirectionStyle}
-                value={form.phone}
-              />
-
-              <View className="flex-row gap-3">
-                <Button
-                  className="flex-1"
-                  label={t('register.male')}
-                  onPress={() => setForm((current) => ({ ...current, gender: 'male' }))}
-                  variant={form.gender === 'male' ? 'primary' : 'secondary'}
-                />
-                <Button
-                  className="flex-1"
-                  label={t('register.female')}
-                  onPress={() => setForm((current) => ({ ...current, gender: 'female' }))}
-                  variant={form.gender === 'female' ? 'primary' : 'secondary'}
-                />
-              </View>
-            </>
-          )}
-
-          {message ? <Text className="text-[14px] leading-6 text-[#546cf2]">{message}</Text> : null}
-          {error ? <Text className="text-[14px] leading-6 text-[#b93b4a]">{error}</Text> : null}
-
-          {step === 'password' ? (
-            <Button fullWidth label={copy.next} onPress={() => handleContinue()} />
-          ) : (
-            <Button
-              fullWidth
-              label={submitting ? copy.creatingAccount : copy.createAccount}
-              onPress={() => void handleSubmit()}
+          </View>
+        ) : (
+          <View className="gap-3">
+            <TextInput
+              autoCapitalize="words"
+              autoCorrect={false}
+              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+              onChangeText={(value) => {
+                setForm((current) => ({ ...current, firstName: value }));
+                setError(null);
+              }}
+              placeholder={`${copy.firstName}*`}
+              placeholderTextColor="#7f8da1"
+              selectionColor="#26334a"
+              style={[textDirectionStyle, styles.inputText]}
+              textAlign="center"
+              value={form.firstName}
             />
-          )}
-        </Card>
-      </ScrollView>
-    </SafeAreaView>
+            <TextInput
+              autoCapitalize="words"
+              autoCorrect={false}
+              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+              onChangeText={(value) => {
+                setForm((current) => ({ ...current, lastName: value }));
+                setError(null);
+              }}
+              placeholder={`${copy.lastName}*`}
+              placeholderTextColor="#7f8da1"
+              selectionColor="#26334a"
+              style={[textDirectionStyle, styles.inputText]}
+              textAlign="center"
+              value={form.lastName}
+            />
+            <TextInput
+              autoCapitalize="words"
+              autoCorrect={false}
+              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+              onChangeText={(value) => {
+                setForm((current) => ({ ...current, middleName: value }));
+                setError(null);
+              }}
+              placeholder={copy.middleName}
+              placeholderTextColor="#7f8da1"
+              selectionColor="#26334a"
+              style={[textDirectionStyle, styles.inputText]}
+              textAlign="center"
+              value={form.middleName}
+            />
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+              keyboardType="phone-pad"
+              onChangeText={(value) => {
+                setForm((current) => ({ ...current, phone: value.replace(/[^\d+\s()-]/g, '') }));
+                setError(null);
+              }}
+              placeholder={`${copy.phone}*`}
+              placeholderTextColor="#7f8da1"
+              selectionColor="#26334a"
+              style={[textDirectionStyle, styles.inputText]}
+              textAlign="center"
+              value={form.phone}
+            />
+
+            <PressableScale
+              className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
+              haptic="selection"
+              onPress={() => {
+                Keyboard.dismiss();
+                setBirthDatePickerVisible(true);
+              }}
+            >
+              <Text style={styles.inputText}>{copy.birthDate}</Text>
+              <Text style={[styles.inputText, form.birthDate ? null : styles.placeholderText]}>
+                {form.birthDate || copy.birthDateHint}
+              </Text>
+            </PressableScale>
+
+            {birthDatePickerVisible ? (
+              <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-2 py-3">
+                <DateTimePicker
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  maximumDate={new Date()}
+                  mode="date"
+                  onChange={handleBirthDateChange}
+                  style={Platform.OS === 'ios' ? styles.datePickerSpinner : undefined}
+                  value={parseBirthDate(form.birthDate)}
+                />
+                {Platform.OS === 'ios' ? (
+                  <PressableScale
+                    className="mx-3 mt-2 min-h-[44px] items-center justify-center rounded-[16px] bg-white"
+                    haptic="selection"
+                    onPress={() => setBirthDatePickerVisible(false)}
+                  >
+                    <Text className="text-[16px] font-semibold text-[#546cf2]">{copy.next}</Text>
+                  </PressableScale>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View className="flex-row gap-3">
+              {(['male', 'female'] as const).map((gender) => {
+                const selected = form.gender === gender;
+
+                return (
+                  <PressableScale
+                    className={`min-h-[52px] flex-1 items-center justify-center rounded-[18px] border ${
+                      selected ? 'border-[#546cf2] bg-[#eef2ff]' : 'border-[#ddd5c7] bg-white'
+                    }`}
+                    haptic="selection"
+                    key={gender}
+                    onPress={() => setForm((current) => ({ ...current, gender }))}
+                  >
+                    <Text className={`text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
+                      {gender === 'male' ? copy.male : copy.female}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+
+            <PressableScale
+              className="min-h-[112px] flex-row items-center rounded-[24px] border border-dashed border-[#c6d1e4] bg-white px-4"
+              haptic="selection"
+              onPress={openPhotoChooser}
+            >
+              {form.avatarPreviewUri ? (
+                <Image
+                  className="h-20 w-20 rounded-[22px]"
+                  resizeMode="cover"
+                  source={{ uri: form.avatarPreviewUri }}
+                />
+              ) : (
+                <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-[#f3f5fb]">
+                  <Ionicons color="#8a92ab" name="camera-outline" size={32} />
+                </View>
+              )}
+              <View className="ml-4 flex-1">
+                <Text className="text-[16px] font-semibold text-[#24314b]">
+                  {form.avatarPreviewUri ? copy.changePhoto : copy.addPhoto}
+                </Text>
+                <Text className="mt-1 text-[13px] leading-5 text-[#7f8da1]">
+                  {copy.photo}
+                </Text>
+              </View>
+              <Ionicons color="#9ba5bb" name="chevron-forward" size={20} />
+            </PressableScale>
+          </View>
+        )}
+
+        {message ? <Text className="mt-4 text-center text-[14px] leading-6 text-[#546cf2]">{message}</Text> : null}
+        {error ? <Text className="mt-4 text-center text-[14px] leading-6 text-[#b93b4a]">{error}</Text> : null}
+
+        <PressableScale
+          className={`mt-6 min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+            submitting ? 'opacity-70' : ''
+          }`}
+          disabled={submitting}
+          haptic="medium"
+          onPress={() => void (step === 'password' ? handleContinue() : handleSubmit())}
+        >
+          <Text style={styles.actionLabel}>
+            {step === 'password'
+              ? copy.next
+              : submitting
+                ? copy.creatingAccount
+                : copy.createAccount}
+          </Text>
+        </PressableScale>
+      </View>
+    </ScrollView>,
   );
 }
 
+const styles = StyleSheet.create({
+  actionLabel: {
+    color: '#f7f1e6',
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 18,
+    includeFontPadding: Platform.OS === 'android',
+    lineHeight: 26,
+  },
+  datePickerSpinner: {
+    alignSelf: 'center',
+  },
+  fieldLabel: {
+    color: '#7a8094',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    includeFontPadding: false,
+    letterSpacing: 1.6,
+    lineHeight: 18,
+    textTransform: 'uppercase',
+  },
+  inputText: {
+    color: '#24314b',
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 16,
+    includeFontPadding: false,
+  },
+  placeholderText: {
+    color: '#7f8da1',
+    fontFamily: 'Manrope_500Medium',
+  },
+});
