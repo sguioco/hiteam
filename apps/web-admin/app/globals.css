@@ -44,6 +44,41 @@
   transform: translateY(0.08em);
 }
 
+.umnico-widget-logo {
+  position: fixed !important;
+  right: 38px !important;
+  bottom: 25px !important;
+  z-index: 2147483646 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding-top: 1px !important;
+  padding-bottom: 2px !important;
+  background-color: rgba(227, 237, 243, 0.4) !important;
+  border-radius: 41px !important;
+  cursor: pointer !important;
+}
+
+.umnico-widget-logo-image {
+  width: 45px !important;
+  height: 9px !important;
+}
+
+.umnico-widget-loader {
+  all: initial;
+  position: fixed !important;
+  right: 37px !important;
+  bottom: 9px !important;
+  z-index: 2147483646 !important;
+  font-family: sans-serif !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  font-weight: bold !important;
+  padding: 2px 4px 1px !important;
+  background-color: rgba(227, 237, 243, 0.4) !important;
+  border-radius: 41px !important;
+}
+
 .landing-shell,
 .landing-shell h1,
 .landing-shell h2,

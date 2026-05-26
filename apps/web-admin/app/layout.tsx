@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
 import localFont from 'next/font/local';
 import { Montserrat, Onest } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import { Providers } from './providers';
 import { petersburgHero } from './landing-hero-font';
@@ -55,6 +56,19 @@ export const metadata: Metadata = {
     images: [LANDING_HERO_POSTER_SRC],
   },
 };
+
+const umnicoWidgetScript = `
+  document.umnicoWidgetHash = 'd76c61a95d4bf0828c15f24d3f74e95a';
+  if (!document.querySelector('script[data-umnico-widget-loader="true"]')) {
+    var x = document.createElement('script');
+    x.src = 'https://umnico.com/assets/widget-loader.js';
+    x.type = 'text/javascript';
+    x.charset = 'UTF-8';
+    x.async = true;
+    x.setAttribute('data-umnico-widget-loader', 'true');
+    document.body.appendChild(x);
+  }
+`;
 
 function parsePreferredLocaleFromAcceptLanguage(
   acceptLanguageHeader: string | null,
@@ -140,6 +154,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers initialLocale={initialLocale}>{children}</Providers>
+        <a
+          className="umnico-widget-logo"
+          data-umnico-logo="true"
+          draggable={false}
+          href="https://umnico.com/?utm_source=widget&utm_medium=online_chat&utm_campaign=button"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <img
+            alt="Umnico logo"
+            className="umnico-widget-logo-image"
+            draggable={false}
+            src="https://umnico.com/assets/index/umnico1.svg"
+          />
+        </a>
+        <div className="umnico-widget-loader" data-umnico-loader="true">
+          Loading
+        </div>
+        <Script id="umnico-widget-loader" strategy="afterInteractive">
+          {umnicoWidgetScript}
+        </Script>
       </body>
     </html>
   );
