@@ -5060,12 +5060,11 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/billing/disconnect" && method === "POST") {
-    updateState((state) => {
+    const nextState = updateState((state) => {
       state.billingPaidSeats = 0;
       state.billingFirstPaidAt = null;
     });
 
-    const nextState = getState();
     const usedSeats = nextState.employees.length + nextState.invitations.length;
     const requiredSeats = Math.max(nextState.billingRequiredSeats, usedSeats);
     const unitAmount = 3;

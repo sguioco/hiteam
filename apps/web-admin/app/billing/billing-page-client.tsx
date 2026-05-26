@@ -213,13 +213,14 @@ export default function BillingPageClient({
     : "—";
   const invoiceRows = useMemo<BillingInvoiceRow[]>(() => {
     const sourcePeriodStart = summary?.currentPeriodStart ?? summary?.stripeCurrentPeriodStart;
-    if (!sourcePeriodStart) {
+    if (!summary || !sourcePeriodStart) {
       return [];
     }
 
+    const currentSummary = summary;
     const periodStart = new Date(sourcePeriodStart);
-    const billingStartedAt = summary.billingStartedAt
-      ? new Date(summary.billingStartedAt)
+    const billingStartedAt = currentSummary.billingStartedAt
+      ? new Date(currentSummary.billingStartedAt)
       : null;
     const baseDate = Number.isNaN(periodStart.getTime()) ? new Date() : periodStart;
     const rows: BillingInvoiceRow[] = [];
@@ -242,19 +243,21 @@ export default function BillingPageClient({
         id: `INV-${invoiceYear}-${invoiceMonth}`,
         date: formatBillingDate(date, locale),
         amount: formatMoney(
-          isCurrent && summary.missingSeats > 0 ? summary.amountDue : summary.monthlyTotal,
-          summary.price.currency,
+          isCurrent && currentSummary.missingSeats > 0
+            ? currentSummary.amountDue
+            : currentSummary.monthlyTotal,
+          currentSummary.price.currency,
           locale,
         ),
         status:
-          isCurrent && summary.missingSeats > 0
+          isCurrent && currentSummary.missingSeats > 0
             ? locale === "ru"
               ? "К оплате"
               : "Due"
             : locale === "ru"
               ? "Оплачено"
               : "Paid",
-        tone: isCurrent && summary.missingSeats > 0 ? "due" : "paid",
+        tone: isCurrent && currentSummary.missingSeats > 0 ? "due" : "paid",
       });
     });
 
