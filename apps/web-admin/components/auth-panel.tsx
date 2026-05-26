@@ -268,8 +268,12 @@ export function AuthPanel() {
   const switcherIndicatorRef = useRef<HTMLDivElement | null>(null);
   const t = texts[lang];
   const hasCompanyLookupResult = Boolean(companyLookupResult);
+  const createOrganizationLinkVisible = tab === 'join';
   const sharedPrimaryActionReserve =
-    AUTH_PRIMARY_ACTION_HEIGHT + AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM + AUTH_FIELDS_TO_ACTION_GAP + 32;
+    AUTH_PRIMARY_ACTION_HEIGHT +
+    AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM +
+    AUTH_FIELDS_TO_ACTION_GAP +
+    (createOrganizationLinkVisible ? 32 : 0);
   const sharedPrimaryActionLabel =
     tab === 'signin'
       ? loginLoading
@@ -300,6 +304,7 @@ export function AuthPanel() {
           ease: 'power3.out',
         },
       });
+      const createOrganizationLinks = gsap.utils.toArray<HTMLElement>('.auth-create-organization-link');
 
       timeline
         .fromTo(
@@ -318,13 +323,23 @@ export function AuthPanel() {
           { autoAlpha: 0, y: 8 },
           { autoAlpha: 1, y: 0, duration: 0.24, stagger: 0.03 },
           0.05,
-        )
-        .fromTo(
-          '.auth-shared-action-button',
-          { autoAlpha: 0, y: 10, scale: 0.985 },
-          { autoAlpha: 1, y: 0, scale: 1, duration: 0.24 },
+        );
+
+      if (createOrganizationLinks.length) {
+        timeline.fromTo(
+          createOrganizationLinks,
+          { autoAlpha: 0, y: 6, filter: 'blur(2px)' },
+          { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.22 },
           0.08,
         );
+      }
+
+      timeline.fromTo(
+        '.auth-shared-action-button',
+        { autoAlpha: 0, y: 10, scale: 0.985 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.24 },
+        0.11,
+      );
     },
     {
       scope: authMotionScopeRef,
@@ -836,14 +851,17 @@ export function AuthPanel() {
                   className="absolute inset-x-0"
                   style={{ bottom: AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM }}
                 >
-                  <div className="mb-3 text-center">
-                    <Link
-                      className="text-sm font-medium text-[#4f6df5] transition-colors hover:text-[#3553db]"
-                      href="/create"
-                    >
-                      {t.createOrganizationLink}
-                    </Link>
-                  </div>
+                  {createOrganizationLinkVisible ? (
+                    <div className="auth-create-organization-link mb-3 text-center">
+                      <Link
+                        className="text-sm font-[100] text-[#4f6df5] transition-[color,opacity,transform] duration-200 hover:text-[#3553db]"
+                        href="/create"
+                        style={{ fontWeight: 100 }}
+                      >
+                        {t.createOrganizationLink}
+                      </Link>
+                    </div>
+                  ) : null}
                   {tab === 'join' && companyLookupResult ? (
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"

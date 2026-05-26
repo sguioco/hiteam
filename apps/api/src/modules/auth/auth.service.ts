@@ -378,19 +378,23 @@ export class AuthService {
     };
   }
 
-  async registerOwner(dto: RegisterOwnerDto): Promise<{ tenantId: string; userId: string }> {
-    const tenantSlug = dto.tenantSlug.trim().toLowerCase();
+  async registerOwner(dto: RegisterOwnerDto): Promise<{ tenantId: string; tenantSlug: string; userId: string }> {
     const tenantName = this.normalizeOrganizationName(dto.tenantName);
     const companyName = this.normalizeOrganizationName(dto.companyName);
     const ownerEmail = dto.email.trim().toLowerCase();
 
-    const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
-    if (existingTenant) {
-      throw new ConflictException('Tenant slug already exists.');
-    }
-
     if (!tenantName || !companyName) {
       throw new ConflictException('Organization name is required.');
+    }
+
+    const requestedTenantSlug = dto.tenantSlug?.trim().toLowerCase();
+    const tenantSlug = requestedTenantSlug || (await this.buildUniqueTenantSlug(tenantName));
+
+    if (requestedTenantSlug) {
+      const existingTenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      if (existingTenant) {
+        throw new ConflictException('Tenant slug already exists.');
+      }
     }
 
     await this.assertOrganizationAvailability({
@@ -506,7 +510,7 @@ export class AuthService {
     });
     this.kommoService.recordOrganizationRegistered(result.tenantId);
 
-    return result;
+    return { ...result, tenantSlug };
   }
 
   async registerOrganization(dto: RegisterOrganizationDto): Promise<{

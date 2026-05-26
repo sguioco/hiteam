@@ -4,8 +4,9 @@ export class RegisterOwnerDto {
   @IsString()
   tenantName!: string;
 
+  @IsOptional()
   @IsString()
-  tenantSlug!: string;
+  tenantSlug?: string;
 
   @IsString()
   companyName!: string;
