@@ -1994,6 +1994,7 @@ export class EmployeesService {
       data: {
         tenantId,
         name: 'General Company',
+        code: 'GENERAL',
       },
     });
 

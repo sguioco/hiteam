@@ -107,6 +107,10 @@ export class AuthService {
     return normalized || 'company';
   }
 
+  private buildCompanyCode(value: string): string {
+    return this.buildTenantSlug(value).toUpperCase().replace(/-/g, '_').slice(0, 24);
+  }
+
   private async buildUniqueTenantSlug(baseName: string): Promise<string> {
     const baseSlug = this.buildTenantSlug(baseName);
 
@@ -429,6 +433,7 @@ export class AuthService {
         data: {
           tenantId: tenant.id,
           name: companyName,
+          code: this.buildCompanyCode(companyName),
         },
       });
 
@@ -552,6 +557,7 @@ export class AuthService {
         data: {
           tenantId: tenant.id,
           name: organizationName,
+          code: this.buildCompanyCode(organizationName),
         },
       });
 

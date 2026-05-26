@@ -697,6 +697,7 @@ export class ScheduleService {
       data: {
         tenantId,
         name: 'General Company',
+        code: 'GENERAL',
       },
     });
 

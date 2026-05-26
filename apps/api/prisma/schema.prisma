@@ -490,6 +490,7 @@ model Company {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
+  code      String
   logoUrl   String?
   googlePlaceId String?
   createdAt DateTime @default(now())
@@ -501,6 +502,7 @@ model Company {
   employeeInvitations EmployeeInvitation[]
 
   @@unique([tenantId, name])
+  @@unique([tenantId, code])
 }
 
 model Department {

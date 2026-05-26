@@ -206,6 +206,11 @@ export class OrgService {
             data: {
               tenantId,
               name: dto.companyName,
+              code: buildUniqueCode(
+                existingCompanies.map((company) => company.code),
+                dto.companyName,
+                "COMPANY",
+              ),
               logoUrl: dto.companyLogoUrl ?? null,
               googlePlaceId: dto.googlePlaceId ?? null,
             },
