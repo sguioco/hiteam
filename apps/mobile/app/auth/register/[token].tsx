@@ -90,7 +90,6 @@ export default function RegisterInvitationScreen() {
             passwordSubtitle: 'Проверьте email и придумайте пароль для входа.',
             profileSubtitle: 'Заполните личные данные для профиля сотрудника.',
             password: 'Пароль',
-            passwordHint: 'Пароль нужен только для входа. На следующем шаге вы заполните личные данные.',
             next: 'Далее',
             createAccount: 'Создать аккаунт',
             creatingAccount: 'Создаём аккаунт...',
@@ -102,7 +101,6 @@ export default function RegisterInvitationScreen() {
             invalidDate: 'Дата рождения должна быть в формате ГГГГ-ММ-ДД.',
             processingBiometric: 'Завершаем настройку биометрии...',
             startBiometric: 'Открываем настройку биометрии...',
-            company: 'Компания',
             email: 'Email',
             firstName: 'Имя',
             lastName: 'Фамилия',
@@ -126,7 +124,6 @@ export default function RegisterInvitationScreen() {
             passwordSubtitle: 'Confirm your email and create your sign-in password.',
             profileSubtitle: 'Complete your employee profile details.',
             password: 'Password',
-            passwordHint: 'This password is only for sign-in. On the next step you will finish your personal details.',
             next: 'Continue',
             createAccount: 'Create account',
             creatingAccount: 'Creating account...',
@@ -138,7 +135,6 @@ export default function RegisterInvitationScreen() {
             invalidDate: 'Birth date must use YYYY-MM-DD.',
             processingBiometric: 'Finishing biometric setup...',
             startBiometric: 'Opening biometric setup...',
-            company: 'Company',
             email: 'Email',
             firstName: 'First name',
             lastName: 'Last name',
@@ -476,166 +472,167 @@ export default function RegisterInvitationScreen() {
   }
 
   return renderShell(
-    <ScrollView
-      contentContainerStyle={{
-        flexGrow: 1,
-        paddingBottom: Math.max(insets.bottom + 18, 34),
-      }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <View className="px-6 pt-2">
-        <Pressable className="mb-5 h-11 w-11 items-center justify-center" onPress={handleBack}>
-          <Text className="text-[36px] leading-[36px] text-[#24314b]" style={directionalIconStyle}>
-            ‹
-          </Text>
-        </Pressable>
+    <View className="flex-1">
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: Math.max(insets.bottom + 126, 150),
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="px-6 pt-2">
+          <View className="relative h-14 justify-center">
+            <Pressable
+              className="absolute left-0 top-1 z-10 h-11 w-11 items-center justify-center"
+              onPress={handleBack}
+            >
+              <Text className="text-[36px] leading-[36px] text-[#24314b]" style={directionalIconStyle}>
+                ‹
+              </Text>
+            </Pressable>
 
-        <View className="mb-7">
-          <BrandWordmark className="text-[34px] leading-[42px] text-[#17233d]" />
-          <View className="mt-7 flex-row gap-2">
+            <View className="absolute left-0 right-0 items-center" pointerEvents="none">
+              <BrandWordmark className="text-[34px] leading-[42px] text-[#17233d]" />
+            </View>
+          </View>
+
+          <View className="mt-6 flex-row gap-2">
             <View className={`h-2 flex-1 rounded-full ${step === 'password' ? 'bg-[#546cf2]' : 'bg-[#c8d3f6]'}`} />
             <View className={`h-2 flex-1 rounded-full ${step === 'profile' ? 'bg-[#546cf2]' : 'bg-white/90'}`} />
           </View>
-          <Text className="mt-6 text-[32px] font-bold leading-[37px] text-[#24314b]">
-            {copy.title}
-          </Text>
-          <Text className="mt-3 text-[17px] leading-[26px] text-[#727b91]">
-            {step === 'password' ? copy.passwordSubtitle : copy.profileSubtitle}
-          </Text>
-          <View className="mt-5 self-start rounded-full border border-white/80 bg-white/75 px-4 py-2">
-            <Text className="text-[13px] font-semibold uppercase tracking-[1.4px] text-[#6f7892]">
-              {copy.company}: {invitation.tenantName}
+
+          <View className="mb-7 mt-7">
+            <Text className="text-[32px] font-bold leading-[37px] text-[#24314b]">
+              {copy.title}
+            </Text>
+            <Text className="mt-3 text-[17px] leading-[26px] text-[#727b91]">
+              {step === 'password' ? copy.passwordSubtitle : copy.profileSubtitle}
             </Text>
           </View>
         </View>
-      </View>
 
-      <View className="mx-5 rounded-[34px] border border-white/80 bg-white/90 p-5 shadow-sm">
-        {step === 'password' ? (
-          <View className="gap-4">
-            <View>
-              <Text style={styles.fieldLabel}>{copy.email}</Text>
+        <View className="px-6">
+          {step === 'password' ? (
+            <View className="gap-4">
+              <View>
+                <Text style={styles.fieldLabel}>{copy.email}</Text>
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="mt-2 min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                  editable={!invitation.email}
+                  keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                  onChangeText={(value) => {
+                    setForm((current) => ({ ...current, email: value }));
+                    setError(null);
+                  }}
+                  placeholder="you@company.com"
+                  placeholderTextColor="#7f8da1"
+                  selectionColor="#26334a"
+                  style={[textDirectionStyle, styles.inputText]}
+                  textAlign="center"
+                  value={form.email}
+                />
+              </View>
+
+              <View>
+                <Text style={styles.fieldLabel}>{copy.password}</Text>
+                <View className="mt-2 min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-4">
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className="min-h-[58px] flex-1 px-3 text-center text-[17px] text-[#0f2530]"
+                    onChangeText={(value) => {
+                      setForm((current) => ({ ...current, password: value }));
+                      setError(null);
+                    }}
+                    placeholder={copy.password}
+                    placeholderTextColor="#7f8da1"
+                    secureTextEntry={!passwordVisible}
+                    selectionColor="#26334a"
+                    style={[textDirectionStyle, styles.inputText]}
+                    textAlign="center"
+                    value={form.password}
+                  />
+                  <PressableScale
+                    accessibilityLabel={passwordToggleLabel}
+                    className="h-10 w-10 items-center justify-center rounded-full"
+                    haptic="selection"
+                    onPress={() => setPasswordVisible((current) => !current)}
+                  >
+                    <Ionicons
+                      color="#7f8da1"
+                      name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                      size={22}
+                    />
+                  </PressableScale>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View className="gap-3">
               <TextInput
-                autoCapitalize="none"
+                autoCapitalize="words"
                 autoCorrect={false}
-                className="mt-2 min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-                editable={!invitation.email}
-                keyboardType={Platform.OS === 'android' ? 'visible-password' : 'email-address'}
+                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
                 onChangeText={(value) => {
-                  setForm((current) => ({ ...current, email: value }));
+                  setForm((current) => ({ ...current, firstName: value }));
                   setError(null);
                 }}
-                placeholder="you@company.com"
+                placeholder={`${copy.firstName}*`}
                 placeholderTextColor="#7f8da1"
                 selectionColor="#26334a"
                 style={[textDirectionStyle, styles.inputText]}
                 textAlign="center"
-                value={form.email}
+                value={form.firstName}
               />
-            </View>
-
-            <View>
-              <Text style={styles.fieldLabel}>{copy.password}</Text>
-              <View className="mt-2 min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-4">
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  className="min-h-[58px] flex-1 px-3 text-center text-[17px] text-[#0f2530]"
-                  onChangeText={(value) => {
-                    setForm((current) => ({ ...current, password: value }));
-                    setError(null);
-                  }}
-                  placeholder={copy.password}
-                  placeholderTextColor="#7f8da1"
-                  secureTextEntry={!passwordVisible}
-                  selectionColor="#26334a"
-                  style={[textDirectionStyle, styles.inputText]}
-                  textAlign="center"
-                  value={form.password}
-                />
-                <PressableScale
-                  accessibilityLabel={passwordToggleLabel}
-                  className="h-10 w-10 items-center justify-center rounded-full"
-                  haptic="selection"
-                  onPress={() => setPasswordVisible((current) => !current)}
-                >
-                  <Ionicons
-                    color="#7f8da1"
-                    name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
-                    size={22}
-                  />
-                </PressableScale>
-              </View>
-            </View>
-
-            <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-4 py-4">
-              <Text className="text-[15px] leading-6 text-[#6f7892]">{copy.passwordHint}</Text>
-            </View>
-          </View>
-        ) : (
-          <View className="gap-3">
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-              onChangeText={(value) => {
-                setForm((current) => ({ ...current, firstName: value }));
-                setError(null);
-              }}
-              placeholder={`${copy.firstName}*`}
-              placeholderTextColor="#7f8da1"
-              selectionColor="#26334a"
-              style={[textDirectionStyle, styles.inputText]}
-              textAlign="center"
-              value={form.firstName}
-            />
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-              onChangeText={(value) => {
-                setForm((current) => ({ ...current, lastName: value }));
-                setError(null);
-              }}
-              placeholder={`${copy.lastName}*`}
-              placeholderTextColor="#7f8da1"
-              selectionColor="#26334a"
-              style={[textDirectionStyle, styles.inputText]}
-              textAlign="center"
-              value={form.lastName}
-            />
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-              onChangeText={(value) => {
-                setForm((current) => ({ ...current, middleName: value }));
-                setError(null);
-              }}
-              placeholder={copy.middleName}
-              placeholderTextColor="#7f8da1"
-              selectionColor="#26334a"
-              style={[textDirectionStyle, styles.inputText]}
-              textAlign="center"
-              value={form.middleName}
-            />
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
-              keyboardType="phone-pad"
-              onChangeText={(value) => {
-                setForm((current) => ({ ...current, phone: value.replace(/[^\d+\s()-]/g, '') }));
-                setError(null);
-              }}
-              placeholder={`${copy.phone}*`}
-              placeholderTextColor="#7f8da1"
-              selectionColor="#26334a"
-              style={[textDirectionStyle, styles.inputText]}
-              textAlign="center"
-              value={form.phone}
-            />
+              <TextInput
+                autoCapitalize="words"
+                autoCorrect={false}
+                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                onChangeText={(value) => {
+                  setForm((current) => ({ ...current, lastName: value }));
+                  setError(null);
+                }}
+                placeholder={`${copy.lastName}*`}
+                placeholderTextColor="#7f8da1"
+                selectionColor="#26334a"
+                style={[textDirectionStyle, styles.inputText]}
+                textAlign="center"
+                value={form.lastName}
+              />
+              <TextInput
+                autoCapitalize="words"
+                autoCorrect={false}
+                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                onChangeText={(value) => {
+                  setForm((current) => ({ ...current, middleName: value }));
+                  setError(null);
+                }}
+                placeholder={copy.middleName}
+                placeholderTextColor="#7f8da1"
+                selectionColor="#26334a"
+                style={[textDirectionStyle, styles.inputText]}
+                textAlign="center"
+                value={form.middleName}
+              />
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                keyboardType="phone-pad"
+                onChangeText={(value) => {
+                  setForm((current) => ({ ...current, phone: value.replace(/[^\d+\s()-]/g, '') }));
+                  setError(null);
+                }}
+                placeholder={`${copy.phone}*`}
+                placeholderTextColor="#7f8da1"
+                selectionColor="#26334a"
+                style={[textDirectionStyle, styles.inputText]}
+                textAlign="center"
+                value={form.phone}
+              />
 
             <PressableScale
               className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
@@ -720,14 +717,24 @@ export default function RegisterInvitationScreen() {
               </View>
               <Ionicons color="#9ba5bb" name="chevron-forward" size={20} />
             </PressableScale>
-          </View>
-        )}
+            </View>
+          )}
+        </View>
+      </ScrollView>
 
-        {message ? <Text className="mt-4 text-center text-[14px] leading-6 text-[#546cf2]">{message}</Text> : null}
-        {error ? <Text className="mt-4 text-center text-[14px] leading-6 text-[#b93b4a]">{error}</Text> : null}
-
+      <View
+        className="absolute left-6 right-6"
+        style={{ bottom: Math.max(28, insets.bottom - 4) }}
+      >
+        <View className="mb-3 min-h-[28px] items-center justify-center px-2">
+          {error ? (
+            <Text className="text-center text-[14px] leading-5 text-[#b93b4a]">{error}</Text>
+          ) : message ? (
+            <Text className="text-center text-[14px] leading-5 text-[#546cf2]">{message}</Text>
+          ) : null}
+        </View>
         <PressableScale
-          className={`mt-6 min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
+          className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
             submitting ? 'opacity-70' : ''
           }`}
           disabled={submitting}
@@ -743,7 +750,7 @@ export default function RegisterInvitationScreen() {
           </Text>
         </PressableScale>
       </View>
-    </ScrollView>,
+    </View>,
   );
 }
 
