@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, Globe, Mail, ShieldCheck } from "lucide-react";
+import { Copy, ExternalLink, Eye, EyeOff, Globe, Mail, ShieldCheck } from "lucide-react";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
 import { Swirling } from "@/components/ui/swirling";
@@ -114,6 +114,7 @@ function LanguagePicker({
 export default function InternalCreateOrganizationPage() {
   const [lang, setLang] = useState<SupportedLang>("en");
   const [accessKey, setAccessKey] = useState("");
+  const [accessKeyVisible, setAccessKeyVisible] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -264,13 +265,25 @@ export default function InternalCreateOrganizationPage() {
                   <label htmlFor="internal-access-key" className="text-sm font-medium">
                     {t.internalAccessKey}
                   </label>
-                  <Input
-                    id="internal-access-key"
-                    required
-                    type="password"
-                    value={accessKey}
-                    onChange={(event) => setAccessKey(event.target.value)}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="internal-access-key"
+                      required
+                      type={accessKeyVisible ? "text" : "password"}
+                      value={accessKey}
+                      onChange={(event) => setAccessKey(event.target.value)}
+                      className="pr-11"
+                    />
+                    <button
+                      aria-label={accessKeyVisible ? "Hide internal access key" : "Show internal access key"}
+                      className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                      disabled={loading}
+                      onClick={() => setAccessKeyVisible((current) => !current)}
+                      type="button"
+                    >
+                      {accessKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">

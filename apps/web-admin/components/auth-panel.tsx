@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, Building2, Eye, EyeOff, Globe } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
@@ -107,6 +108,7 @@ const texts = {
     demoAdmin: 'Demo admin',
     demoEmployee: 'Demo employee',
     demoHint: 'Current demo flow without backend',
+    createOrganizationLink: 'Create new organization',
   },
   ru: {
     signInTab: 'Вход',
@@ -148,6 +150,7 @@ const texts = {
     demoAdmin: 'Демо админ',
     demoEmployee: 'Демо сотрудник',
     demoHint: 'Текущий demo flow без backend',
+    createOrganizationLink: 'Создать новую организацию',
   },
   ar: {
     signInTab: 'تسجيل الدخول',
@@ -189,6 +192,7 @@ const texts = {
     demoAdmin: 'مشرف تجريبي',
     demoEmployee: 'موظف تجريبي',
     demoHint: 'مسار تجريبي حالي بدون backend',
+    createOrganizationLink: 'إنشاء مؤسسة جديدة',
   },
 };
 
@@ -265,7 +269,7 @@ export function AuthPanel() {
   const t = texts[lang];
   const hasCompanyLookupResult = Boolean(companyLookupResult);
   const sharedPrimaryActionReserve =
-    AUTH_PRIMARY_ACTION_HEIGHT + AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM + AUTH_FIELDS_TO_ACTION_GAP;
+    AUTH_PRIMARY_ACTION_HEIGHT + AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM + AUTH_FIELDS_TO_ACTION_GAP + 32;
   const sharedPrimaryActionLabel =
     tab === 'signin'
       ? loginLoading
@@ -832,6 +836,14 @@ export function AuthPanel() {
                   className="absolute inset-x-0"
                   style={{ bottom: AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM }}
                 >
+                  <div className="mb-3 text-center">
+                    <Link
+                      className="text-sm font-medium text-[#4f6df5] transition-colors hover:text-[#3553db]"
+                      href="/create"
+                    >
+                      {t.createOrganizationLink}
+                    </Link>
+                  </div>
                   {tab === 'join' && companyLookupResult ? (
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
