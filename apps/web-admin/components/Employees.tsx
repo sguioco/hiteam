@@ -668,59 +668,13 @@ const Employees = ({
 
     const session = getSession();
     if (!session) {
-      const location = scheduleTemplates[0]?.location || {
-        id: "mock-loc",
-        name: runtimeLocalize("Офис", "Office", locale),
-      };
-      const position = scheduleTemplates[0]?.position || {
-        id: "mock-pos",
-        name: runtimeLocalize("Сотрудник", "Employee", locale),
-      };
-      const createdAt = new Date().toISOString();
-
-      const newTemplate: ShiftTemplateRecord = {
-        id: `mock-template-${Date.now()}`,
-        name: templateDraft.name.trim(),
-        code: templateDraft.name.trim().toLowerCase().replace(/\s+/g, "-"),
-        startsAtLocal: templateDraft.startsAtLocal,
-        endsAtLocal: templateDraft.endsAtLocal,
-        weekDaysJson: JSON.stringify(templateDraft.weekDays),
-        gracePeriodMinutes: 10,
-        fixedBreakStartsAtLocal: templateDraft.fixedBreakEnabled
-          ? templateDraft.fixedBreakStartsAtLocal
-          : null,
-        fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
-          ? fixedBreakDuration
-          : 0,
-        fixedBreakIsPaid: templateDraft.fixedBreakEnabled
-          ? templateDraft.fixedBreakIsPaid
-          : false,
-        createdAt,
-        updatedAt: createdAt,
-        location,
-        position,
-      };
-
-      setScheduleTemplates((current) => [newTemplate, ...current]);
-      setReviewForm((current) => ({
-        ...current,
-        shiftTemplateId: newTemplate.id,
-      }));
-      setAssignShiftDraft((current) => ({
-        ...current,
-        templateId: newTemplate.id,
-      }));
-      setCreateTemplateOpen(false);
-      setTemplateDraft({
-        name: "",
-        startsAtLocal: "09:00",
-        endsAtLocal: "18:00",
-        weekDays: [1, 2, 3, 4, 5],
-        fixedBreakEnabled: false,
-        fixedBreakStartsAtLocal: "13:00",
-        fixedBreakDurationMinutes: "30",
-        fixedBreakIsPaid: false,
-      });
+      setCreateTemplateError(
+        runtimeLocalize(
+          "Сессия не найдена. Войдите заново",
+          "Session not found. Please sign in again.",
+          locale,
+        ),
+      );
       setCreateTemplateSubmitting(false);
       return;
     }

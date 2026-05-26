@@ -86,6 +86,7 @@ async function ensureEmployee(params: {
   positionId: string;
   email: string;
   passwordHash: string;
+  userStatus?: UserStatus;
   roleId: string;
   roleScopeId: string;
   employeeNumber: string;
@@ -106,13 +107,13 @@ async function ensureEmployee(params: {
     },
     update: {
       passwordHash: params.passwordHash,
-      status: UserStatus.ACTIVE,
+      status: params.userStatus ?? UserStatus.ACTIVE,
     },
     create: {
       tenantId: params.tenantId,
       email: params.email,
       passwordHash: params.passwordHash,
-      status: UserStatus.ACTIVE,
+      status: params.userStatus ?? UserStatus.ACTIVE,
     },
   });
 
@@ -327,6 +328,7 @@ async function main(): Promise<void> {
     positionId: staffPosition.id,
     email: 'employee@demo.smart',
     passwordHash: employeePasswordHash,
+    userStatus: UserStatus.INACTIVE,
     roleId: employeeRole.id,
     roleScopeId: tenant.id,
     employeeNumber: 'EMP-0002',
@@ -347,6 +349,7 @@ async function main(): Promise<void> {
     positionId: managerPosition.id,
     email: 'manager@demo.smart',
     passwordHash: employeePasswordHash,
+    userStatus: UserStatus.INACTIVE,
     roleId: managerRole.id,
     roleScopeId: tenant.id,
     employeeNumber: 'EMP-0006',
@@ -367,6 +370,7 @@ async function main(): Promise<void> {
     positionId: staffPosition.id,
     email: 'julia@demo.smart',
     passwordHash: employeePasswordHash,
+    userStatus: UserStatus.INACTIVE,
     roleId: employeeRole.id,
     roleScopeId: tenant.id,
     employeeNumber: 'EMP-0003',
@@ -387,6 +391,7 @@ async function main(): Promise<void> {
     positionId: staffPosition.id,
     email: 'sergey@demo.smart',
     passwordHash: employeePasswordHash,
+    userStatus: UserStatus.INACTIVE,
     roleId: employeeRole.id,
     roleScopeId: tenant.id,
     employeeNumber: 'EMP-0004',
@@ -407,6 +412,7 @@ async function main(): Promise<void> {
     positionId: staffPosition.id,
     email: 'maria@demo.smart',
     passwordHash: employeePasswordHash,
+    userStatus: UserStatus.INACTIVE,
     roleId: employeeRole.id,
     roleScopeId: tenant.id,
     employeeNumber: 'EMP-0005',

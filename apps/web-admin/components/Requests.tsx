@@ -430,9 +430,9 @@ export default function Requests({
 
     try {
       if (!session) {
-        setItems(createMockApprovalInboxItems(new Date(), locale));
-        setIsMockMode(true);
-        setMessage(ui.demoData);
+        setItems([]);
+        setIsMockMode(false);
+        setError(ui.sessionMissing);
         return;
       }
 
@@ -576,7 +576,12 @@ export default function Requests({
     setMessage(null);
 
     try {
-      if (!session || isMockMode) {
+      if (!session) {
+        setError(ui.sessionMissing);
+        return;
+      }
+
+      if (isMockMode) {
         setItems((current) =>
           current.map((currentItem) =>
             currentItem.request.id === item.request.id
@@ -640,7 +645,12 @@ export default function Requests({
     setMessage(null);
 
     try {
-      if (!session || isMockMode) {
+      if (!session) {
+        setError(ui.sessionMissing);
+        return;
+      }
+
+      if (isMockMode) {
         const comment: RequestCommentResponse = {
           id: `mock-comment-${Date.now()}`,
           body,

@@ -59,7 +59,6 @@ import { apiRequest } from "@/lib/api";
 import { getSession, isEmployeeOnlyRole } from "@/lib/auth";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import { useI18n } from "@/lib/i18n";
-import { createMockScheduleData } from "@/lib/mock-admin-data";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
@@ -662,7 +661,6 @@ const scheduleCopy = {
     period: "Период",
     graceMinutes: "Льготные минуты",
     minutesShort: "мин",
-    scheduleLoadedFromMock: "Показаны демонстрационные данные.",
     scheduleLoadError: "Не удалось загрузить расписание.",
     requestApproved: "Запрос одобрен.",
     requestRejected: "Запрос отклонён.",
@@ -790,7 +788,6 @@ const scheduleCopy = {
     period: "Period",
     graceMinutes: "Grace minutes",
     minutesShort: "min",
-    scheduleLoadedFromMock: "Showing demo data.",
     scheduleLoadError: "Unable to load schedule.",
     requestApproved: "Request approved.",
     requestRejected: "Request rejected.",
@@ -1767,21 +1764,17 @@ export default function Schedule({
     }).toString();
 
     if (!session) {
-      const mock = createMockScheduleData(new Date(), locale);
-      setTemplates(mock.templates);
-      setShifts(mock.shifts);
-      setEmployees(mock.employees);
+      setTemplates([]);
+      setShifts([]);
+      setEmployees([]);
       setGroups([]);
-      setLocations(mock.locations);
-      setDepartments(mock.departments);
-      setPositions(mock.positions);
-      setRequests(mock.requests);
-      setTaskBoard({
-        tasks: [],
-        totals: { total: 0, overdue: 0, active: 0, done: 0 },
-      });
-      setIsMockMode(true);
-      setMessage(ui.scheduleLoadedFromMock);
+      setLocations([]);
+      setDepartments([]);
+      setPositions([]);
+      setRequests([]);
+      setTaskBoard(null);
+      setIsMockMode(false);
+      setMessage(ui.scheduleLoadError);
       return;
     }
 
@@ -1820,6 +1813,7 @@ export default function Schedule({
         setTemplates([]);
         setShifts([]);
         setEmployees([]);
+        setGroups([]);
         setLocations([]);
         setDepartments([]);
         setPositions([]);
@@ -2028,7 +2022,12 @@ export default function Schedule({
     setShiftActionId(shiftId);
 
     try {
-      if (!session || isMockMode) {
+      if (!session) {
+        setMessage(ui.scheduleLoadError);
+        return;
+      }
+
+      if (isMockMode) {
         setShifts((current) =>
           current.map((shift) =>
             shift.id === shiftId
@@ -2101,7 +2100,12 @@ export default function Schedule({
       return;
     }
 
-    if (!session || isMockMode) {
+    if (!session) {
+      setMessage(ui.scheduleLoadError);
+      return;
+    }
+
+    if (isMockMode) {
       const template = templates.find((item) => item.id === createShiftDraft.templateId);
       const selectedEmployees = selectedCreateShiftEmployeeIds
         .map((employeeId) => employees.find((item) => item.id === employeeId))
@@ -2227,7 +2231,12 @@ export default function Schedule({
       return;
     }
 
-    if (!session || isMockMode) {
+    if (!session) {
+      setMessage(ui.scheduleLoadError);
+      return;
+    }
+
+    if (isMockMode) {
       const location = locations[0];
       const position = positions[0];
       if (!location || !position) {
@@ -2350,7 +2359,12 @@ export default function Schedule({
       return;
     }
 
-    if (!session || isMockMode) {
+    if (!session) {
+      setMessage(ui.scheduleLoadError);
+      return;
+    }
+
+    if (isMockMode) {
       const createdAt = new Date().toISOString();
       const createdShifts = dates.flatMap((date, index) =>
         eligibleEmployees.map((employee, employeeIndex) => ({
@@ -2419,7 +2433,13 @@ export default function Schedule({
   ) {
     const session = getSession();
     setRequestActionId(requestId);
-    if (!session || isMockMode) {
+    if (!session) {
+      setMessage(ui.scheduleLoadError);
+      setRequestActionId(null);
+      return;
+    }
+
+    if (isMockMode) {
       setRequests((current) =>
         current.map((item) =>
           item.request.id === requestId

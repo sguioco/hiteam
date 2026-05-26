@@ -1706,7 +1706,7 @@ function updateState(mutator: (state: DemoState) => DemoState | void) {
   return next;
 }
 
-function currentDemoRole(token?: string) {
+function currentDemoRole(token?: string): "admin" | "employee" | null {
   const session = getSession();
   const tokenRole = getDemoRoleByToken(token ?? session?.accessToken ?? null);
   if (tokenRole) {
@@ -2653,7 +2653,7 @@ function buildDemoDailyActivity(state: DemoState) {
   const liveSessions = buildAttendanceLive(state);
   const announcements = buildDemoAnnouncementsForViewer(
     state,
-    createDemoSession("admin").accessToken,
+    createDemoSession().accessToken,
   ).filter((item) => item.publishedAt);
 
   if (!manager) {
@@ -5399,10 +5399,7 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/collaboration/announcements/me" && method === "GET") {
-    return buildDemoAnnouncementsForViewer(
-      currentState,
-      createDemoSession("employee").accessToken,
-    ) as T;
+    return buildDemoAnnouncementsForViewer(currentState, token) as T;
   }
 
   if (pathname === "/collaboration/announcements/archive" && method === "GET") {
@@ -6313,6 +6310,6 @@ export function resetDemoState() {
   }
 }
 
-export function getDemoSessionForRole(role: "admin" | "employee") {
-  return createDemoSession(role);
+export function getDemoSessionForRole(_role: "admin" | "employee" = "admin") {
+  return createDemoSession();
 }

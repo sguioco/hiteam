@@ -32,8 +32,6 @@ import {
 import {
   DEMO_ADMIN_EMAIL,
   DEMO_ADMIN_PASSWORD,
-  DEMO_EMPLOYEE_EMAIL,
-  DEMO_EMPLOYEE_PASSWORD,
   disableDemoMode,
   getDemoRoleByCredentials,
   isDemoModeAvailable,
@@ -106,7 +104,6 @@ const texts = {
     close: 'Close',
     demoTitle: 'Quick access',
     demoAdmin: 'Demo admin',
-    demoEmployee: 'Demo employee',
     demoHint: 'Current demo flow without backend',
     createOrganizationLink: 'Create new organization',
   },
@@ -148,7 +145,6 @@ const texts = {
     close: 'Закрыть',
     demoTitle: 'Быстрый доступ',
     demoAdmin: 'Демо админ',
-    demoEmployee: 'Демо сотрудник',
     demoHint: 'Текущий demo flow без backend',
     createOrganizationLink: 'Создать новую организацию',
   },
@@ -190,7 +186,6 @@ const texts = {
     close: 'إغلاق',
     demoTitle: 'وصول سريع',
     demoAdmin: 'مشرف تجريبي',
-    demoEmployee: 'موظف تجريبي',
     demoHint: 'مسار تجريبي حالي بدون backend',
     createOrganizationLink: 'إنشاء مؤسسة جديدة',
   },
@@ -418,15 +413,11 @@ export function AuthPanel() {
           identifier:
             demoRole === 'admin'
               ? DEMO_ADMIN_EMAIL
-              : demoRole === 'employee'
-                ? DEMO_EMPLOYEE_EMAIL
-                : identifier,
+              : identifier,
           password:
             demoRole === 'admin'
               ? DEMO_ADMIN_PASSWORD
-              : demoRole === 'employee'
-                ? DEMO_EMPLOYEE_PASSWORD
-                : password,
+              : password,
           ...(demoRole
             ? { tenantSlug: 'demo' }
             : companyLookupResult?.tenantSlug
@@ -499,7 +490,7 @@ export function AuthPanel() {
     setForgotSubmitted(true);
   }
 
-  async function handleDemoAccess(role: 'admin' | 'employee') {
+  async function handleDemoAccess() {
     setLoginError('');
     setLoginLoading(true);
     try {
@@ -507,9 +498,8 @@ export function AuthPanel() {
         method: 'POST',
         realBackend: true,
         body: JSON.stringify({
-          identifier: role === 'admin' ? DEMO_ADMIN_EMAIL : DEMO_EMPLOYEE_EMAIL,
-          password:
-            role === 'admin' ? DEMO_ADMIN_PASSWORD : DEMO_EMPLOYEE_PASSWORD,
+          identifier: DEMO_ADMIN_EMAIL,
+          password: DEMO_ADMIN_PASSWORD,
           tenantSlug: 'demo',
         }),
       });
@@ -739,12 +729,9 @@ export function AuthPanel() {
                             {t.demoHint}
                           </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button onClick={() => handleDemoAccess('admin')} type="button" variant="outline">
+                        <div className="grid grid-cols-1 gap-2">
+                          <Button onClick={() => handleDemoAccess()} type="button" variant="outline">
                             {t.demoAdmin}
-                          </Button>
-                          <Button onClick={() => handleDemoAccess('employee')} type="button" variant="outline">
-                            {t.demoEmployee}
                           </Button>
                         </div>
                       </div>

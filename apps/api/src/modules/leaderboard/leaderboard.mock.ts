@@ -7,7 +7,6 @@ import type {
 } from "./leaderboard.types";
 
 const DEMO_OWNER_EMAIL = "owner@demo.smart";
-const DEMO_EMPLOYEE_EMAIL = "employee@demo.smart";
 
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -395,7 +394,7 @@ function createDailyActivity(
 
 export function isDemoLeaderboardEmail(email?: string | null) {
   const normalized = email?.trim().toLowerCase();
-  return normalized === DEMO_OWNER_EMAIL || normalized === DEMO_EMPLOYEE_EMAIL;
+  return normalized === DEMO_OWNER_EMAIL;
 }
 
 export function buildDemoLeaderboardOverview(
@@ -408,34 +407,20 @@ export function buildDemoLeaderboardOverview(
   const leaderboard = createEntries();
   const meEntry =
     leaderboard.find((entry) =>
-      normalized === DEMO_OWNER_EMAIL
-        ? entry.employee.firstName === "Alex" &&
-          entry.employee.lastName === "Petrov"
-        : entry.employee.firstName === "Alexey" &&
-          entry.employee.lastName === "Mironov",
+      normalized === DEMO_OWNER_EMAIL &&
+      entry.employee.firstName === "Alex" &&
+      entry.employee.lastName === "Petrov",
     ) ?? leaderboard[0];
-  const progress =
-    normalized === DEMO_OWNER_EMAIL
-      ? createProgress({
-          arrival: 5,
-          departure: 0,
-          tasks: 5,
-          dueTaskCount: 4,
-          completedDueTaskCount: 4,
-          dueChecklistItemCount: 8,
-          completedDueChecklistItemCount: 8,
-          overdueCount: 0,
-        })
-      : createProgress({
-          arrival: 5,
-          departure: 0,
-          tasks: 3,
-          dueTaskCount: 4,
-          completedDueTaskCount: 4,
-          dueChecklistItemCount: 8,
-          completedDueChecklistItemCount: 6,
-          overdueCount: 2,
-        });
+  const progress = createProgress({
+    arrival: 5,
+    departure: 0,
+    tasks: 5,
+    dueTaskCount: 4,
+    completedDueTaskCount: 4,
+    dueChecklistItemCount: 8,
+    completedDueChecklistItemCount: 8,
+    overdueCount: 0,
+  });
   const todayPoints = progress.reduce(
     (sum, item) => sum + item.earnedPoints,
     0,
@@ -476,15 +461,6 @@ export function buildDemoLeaderboardCelebration(
       streakDays: 10,
       bonusPoints: 20,
       monthPoints: 178,
-    };
-  }
-
-  if (normalized === DEMO_EMPLOYEE_EMAIL) {
-    return {
-      kind: "ARRIVAL_STREAK_BONUS",
-      streakDays: 5,
-      bonusPoints: 10,
-      monthPoints: 149,
     };
   }
 

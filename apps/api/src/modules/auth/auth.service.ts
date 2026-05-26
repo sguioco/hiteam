@@ -11,6 +11,9 @@ import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { KommoService } from '../kommo/kommo.service';
 
+const DEMO_OWNER_EMAIL = 'owner@demo.smart';
+const DEMO_EMAIL_DOMAIN = '@demo.smart';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -140,6 +143,14 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  private isBlockedDemoAccount(email?: string | null): boolean {
+    const normalizedEmail = email?.trim().toLowerCase() ?? '';
+    return (
+      normalizedEmail.endsWith(DEMO_EMAIL_DOMAIN) &&
+      normalizedEmail !== DEMO_OWNER_EMAIL
+    );
+  }
+
   private async issueSessionTokens(user: {
     id: string;
     email: string;
@@ -248,7 +259,7 @@ export class AuthService {
 
     const user = matches[0];
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || user.status !== UserStatus.ACTIVE || this.isBlockedDemoAccount(user.email)) {
       throw new UnauthorizedException('This account is inactive.');
     }
 
@@ -336,7 +347,7 @@ export class AuthService {
       },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || user.status !== UserStatus.ACTIVE || this.isBlockedDemoAccount(user.email)) {
       throw new UnauthorizedException('Refresh token is invalid.');
     }
 

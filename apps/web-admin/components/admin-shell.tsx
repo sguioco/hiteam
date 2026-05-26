@@ -47,7 +47,7 @@ import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { HeaderTaskCreateDialog } from "./header-task-create-dialog";
 import { buildUserDisplayName } from "../lib/profile-display";
 import { localizePersonName } from "../lib/transliteration";
-import { DEMO_ADMIN_EMAIL, DEMO_EMPLOYEE_EMAIL } from "../lib/demo-mode";
+import { DEMO_ADMIN_EMAIL } from "../lib/demo-mode";
 import {
   PROFILE_AVATAR_UPDATED_EVENT,
   readStoredProfileAvatar,
@@ -222,10 +222,7 @@ function resolveDemoHeaderBrand(
 ): { companyName: string; employeeCount: number } | null {
   const normalizedEmail = email?.trim().toLowerCase();
 
-  if (
-    normalizedEmail !== DEMO_ADMIN_EMAIL &&
-    normalizedEmail !== DEMO_EMPLOYEE_EMAIL
-  ) {
+  if (normalizedEmail !== DEMO_ADMIN_EMAIL) {
     return null;
   }
 
@@ -279,12 +276,6 @@ function resolveDemoSidebarProfile(
     return {
       name: locale === "ru" ? "Алекс Петров" : "Alex Petrov",
       avatarUrl: DEMO_ADMIN_AVATAR_URL,
-    };
-  }
-  if (normalizedEmail === DEMO_EMPLOYEE_EMAIL) {
-    return {
-      name: locale === "ru" ? "Алексей Миронов" : "Alex Mironov",
-      avatarUrl: getMockAvatarDataUrl("Alex Mironov", "male"),
     };
   }
   return null;

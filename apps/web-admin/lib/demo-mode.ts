@@ -9,12 +9,8 @@ const DEMO_MODE_STORAGE_KEY = "smart-admin-demo-mode";
 
 export const DEMO_ADMIN_ACCESS_TOKEN = "demo-admin-access-token";
 export const DEMO_ADMIN_REFRESH_TOKEN = "demo-admin-refresh-token";
-export const DEMO_EMPLOYEE_ACCESS_TOKEN = "demo-employee-access-token";
-export const DEMO_EMPLOYEE_REFRESH_TOKEN = "demo-employee-refresh-token";
 export const DEMO_ADMIN_EMAIL = "owner@demo.smart";
 export const DEMO_ADMIN_PASSWORD = "Admin12345!";
-export const DEMO_EMPLOYEE_EMAIL = "employee@demo.smart";
-export const DEMO_EMPLOYEE_PASSWORD = "Employee123!";
 
 function isLocalHost() {
   if (typeof window === "undefined") return false;
@@ -46,21 +42,7 @@ export function disableDemoMode() {
   removeBrowserStorageItem(DEMO_MODE_STORAGE_KEY);
 }
 
-export function createDemoSession(role: "admin" | "employee"): AuthSession {
-  if (role === "employee") {
-    return {
-      accessToken: DEMO_EMPLOYEE_ACCESS_TOKEN,
-      refreshToken: DEMO_EMPLOYEE_REFRESH_TOKEN,
-      user: {
-        id: "emp-2",
-        email: DEMO_EMPLOYEE_EMAIL,
-        tenantId: "demo-tenant",
-        roleCodes: ["employee"],
-        workspaceAccessAllowed: true,
-      },
-    };
-  }
-
+export function createDemoSession(): AuthSession {
   return {
     accessToken: DEMO_ADMIN_ACCESS_TOKEN,
     refreshToken: DEMO_ADMIN_REFRESH_TOKEN,
@@ -74,32 +56,26 @@ export function createDemoSession(role: "admin" | "employee"): AuthSession {
   };
 }
 
-export function getDemoRoleByCredentials(identifier: string, password: string): "admin" | "employee" | null {
+export function getDemoRoleByCredentials(identifier: string, password: string): "admin" | null {
   const normalizedIdentifier = identifier.trim().toLowerCase();
   const normalizedPassword = password.trim();
   if (normalizedIdentifier === DEMO_ADMIN_EMAIL && normalizedPassword === DEMO_ADMIN_PASSWORD) {
     return "admin";
   }
-  if (normalizedIdentifier === DEMO_EMPLOYEE_EMAIL && normalizedPassword === DEMO_EMPLOYEE_PASSWORD) {
-    return "employee";
-  }
   return null;
 }
 
 export function isDemoAccessToken(token?: string | null) {
-  return token === DEMO_ADMIN_ACCESS_TOKEN || token === DEMO_EMPLOYEE_ACCESS_TOKEN;
+  return token === DEMO_ADMIN_ACCESS_TOKEN;
 }
 
 export function isDemoRefreshToken(token?: string | null) {
-  return token === DEMO_ADMIN_REFRESH_TOKEN || token === DEMO_EMPLOYEE_REFRESH_TOKEN;
+  return token === DEMO_ADMIN_REFRESH_TOKEN;
 }
 
-export function getDemoRoleByToken(token?: string | null): "admin" | "employee" | null {
+export function getDemoRoleByToken(token?: string | null): "admin" | null {
   if (token === DEMO_ADMIN_ACCESS_TOKEN || token === DEMO_ADMIN_REFRESH_TOKEN) {
     return "admin";
-  }
-  if (token === DEMO_EMPLOYEE_ACCESS_TOKEN || token === DEMO_EMPLOYEE_REFRESH_TOKEN) {
-    return "employee";
   }
   return null;
 }

@@ -5,6 +5,9 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 
+const DEMO_OWNER_EMAIL = 'owner@demo.smart';
+const DEMO_EMAIL_DOMAIN = '@demo.smart';
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
@@ -36,7 +39,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    const normalizedEmail = user?.email.trim().toLowerCase() ?? '';
+    const blockedDemoAccount =
+      normalizedEmail.endsWith(DEMO_EMAIL_DOMAIN) &&
+      normalizedEmail !== DEMO_OWNER_EMAIL;
+
+    if (!user || user.status !== UserStatus.ACTIVE || blockedDemoAccount) {
       throw new UnauthorizedException('This account is inactive.');
     }
 
