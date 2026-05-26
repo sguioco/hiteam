@@ -35,6 +35,7 @@ const texts = {
     welcome: 'Welcome back',
     desc: 'Sign in to your HiTeam workspace',
     emailOrPhone: 'Email or phone',
+    identifierPlaceholder: 'Enter your email or phone',
     password: 'Password',
     showPassword: 'Show password',
     hidePassword: 'Hide password',
@@ -56,6 +57,7 @@ const texts = {
     welcome: 'С возвращением',
     desc: 'Войдите в рабочее пространство HiTeam',
     emailOrPhone: 'Email или телефон',
+    identifierPlaceholder: 'Введите email или телефон',
     password: 'Пароль',
     showPassword: 'Показать пароль',
     hidePassword: 'Скрыть пароль',
@@ -77,6 +79,7 @@ const texts = {
     welcome: 'مرحباً بعودتك',
     desc: 'سجّل الدخول إلى مساحة عمل HiTeam',
     emailOrPhone: 'البريد الإلكتروني أو الهاتف',
+    identifierPlaceholder: 'أدخل بريدك الإلكتروني أو رقم الهاتف',
     password: 'كلمة المرور',
     showPassword: 'إظهار كلمة المرور',
     hidePassword: 'إخفاء كلمة المرور',
@@ -247,7 +250,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
               <Input
                 id="login-identifier"
                 type="text"
-                placeholder="you@company.com / +7 999 000 00 00"
+                placeholder={t.identifierPlaceholder}
                 required
                 autoComplete="username"
                 value={identifier}

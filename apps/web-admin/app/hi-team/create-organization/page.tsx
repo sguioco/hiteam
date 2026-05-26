@@ -48,6 +48,7 @@ const texts = {
     internalAccessKey: "Internal access key",
     organizationName: "Organization name",
     managerEmail: "Manager email",
+    promoCode: "Promo code (optional)",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
     creating: "Creating...",
@@ -70,6 +71,7 @@ const texts = {
     internalAccessKey: "Internal access key",
     organizationName: "Название организации",
     managerEmail: "Email менеджера",
+    promoCode: "Промокод (необязательно)",
     organizationPlaceholder: "HiTeam Beauty",
     managerEmailPlaceholder: "manager@company.com",
     creating: "Создаём...",
@@ -117,6 +119,7 @@ export default function InternalCreateOrganizationPage() {
   const [accessKeyVisible, setAccessKeyVisible] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegisterOrganizationResponse | null>(null);
@@ -167,6 +170,7 @@ export default function InternalCreateOrganizationPage() {
           accessKey,
           organizationName,
           managerEmail,
+          promoCode: promoCode.trim() || undefined,
         }),
       });
 
@@ -179,6 +183,7 @@ export default function InternalCreateOrganizationPage() {
       setResult(payload);
       setOrganizationName("");
       setManagerEmail("");
+      setPromoCode("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t.createFailed);
     } finally {
@@ -310,6 +315,19 @@ export default function InternalCreateOrganizationPage() {
                     value={managerEmail}
                     onChange={(event) => setManagerEmail(event.target.value)}
                     placeholder={t.managerEmailPlaceholder}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="promo-code" className="text-sm font-medium">
+                    {t.promoCode}
+                  </label>
+                  <Input
+                    autoCapitalize="characters"
+                    id="promo-code"
+                    onChange={(event) => setPromoCode(event.target.value)}
+                    placeholder={t.promoCode}
+                    value={promoCode}
                   />
                 </div>
 

@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpsertOrgSetupDto {
   @IsOptional()
@@ -36,4 +36,8 @@ export class UpsertOrgSetupDto {
 
   @IsString()
   timezone!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  attendanceTrackingEnabled?: boolean;
 }

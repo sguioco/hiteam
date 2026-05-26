@@ -85,6 +85,10 @@ export class CreateAnnouncementDto {
   isPinned?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(1200)
   linkUrl?: string;

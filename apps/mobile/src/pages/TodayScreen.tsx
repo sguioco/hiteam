@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
@@ -81,12 +81,16 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatusResponse | null>(
     initialSnapshot?.value.attendanceStatus ?? null,
   );
+  const [attendanceTrackingEnabled, setAttendanceTrackingEnabled] = useState(
+    initialSnapshot?.value.attendanceTrackingEnabled ?? true,
+  );
   const [profile, setProfile] = useState<TodayScreenCacheValue['profile']>(
     initialSnapshot?.value.profile ?? null,
   );
   const [shifts, setShifts] = useState<ShiftItem[]>(initialSnapshot?.value.shifts ?? []);
   const [tasks, setTasks] = useState<TodayScreenCacheValue['tasks']>(initialSnapshot?.value.tasks ?? []);
   const [attendanceLoading, setAttendanceLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<string[]>([]);
@@ -118,6 +122,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
         dateTo: nextDayDateKey,
       });
       setAttendanceStatus(todayBootstrap.attendanceStatus);
+      setAttendanceTrackingEnabled(todayBootstrap.attendanceTrackingEnabled);
       setProfile(todayBootstrap.profile);
       setShifts(todayBootstrap.shifts);
       await primeTaskTranslations(todayBootstrap.tasks, language);
@@ -139,6 +144,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 
         void primeTaskTranslations(entry.value.tasks, language).catch(() => undefined);
         setAttendanceStatus(entry.value.attendanceStatus);
+        setAttendanceTrackingEnabled(entry.value.attendanceTrackingEnabled ?? true);
         setProfile(entry.value.profile);
         setShifts(entry.value.shifts);
         setTasks(entry.value.tasks);
@@ -159,6 +165,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       if (cached && !cancelled) {
         void primeTaskTranslations(cached.value.tasks, language).catch(() => undefined);
         setAttendanceStatus(cached.value.attendanceStatus);
+        setAttendanceTrackingEnabled(cached.value.attendanceTrackingEnabled ?? true);
         setProfile(cached.value.profile);
         setShifts(cached.value.shifts);
         setTasks(cached.value.tasks);
@@ -186,11 +193,12 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 
     void writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
       attendanceStatus,
+      attendanceTrackingEnabled,
       profile,
       shifts,
       tasks,
     } satisfies TodayScreenCacheValue);
-  }, [attendanceLoading, attendanceStatus, profile, shifts, tasks]);
+  }, [attendanceLoading, attendanceStatus, attendanceTrackingEnabled, profile, shifts, tasks]);
 
   useEffect(() => {
     const remoteBannerTheme = normalizeBannerTheme(profile?.user.bannerTheme);
@@ -235,6 +243,10 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   }, [businessTimeZone, todayDateKey, visibleTasks]);
 
   const effectiveAttendanceStatus = useMemo<AttendanceStatusResponse | null>(() => {
+    if (!attendanceTrackingEnabled) {
+      return null;
+    }
+
     if (!attendanceStatus) {
       return null;
     }
@@ -283,7 +295,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     }
 
     return attendanceStatus;
-  }, [attendanceStatus, shifts]);
+  }, [attendanceStatus, attendanceTrackingEnabled, shifts]);
 
   function openAttendanceAction() {
     if (!effectiveAttendanceStatus) {
@@ -372,20 +384,34 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       <ScrollView
         className="flex-1 bg-transparent"
         contentContainerStyle={{ paddingBottom: 112, paddingTop: 0 }}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => {
+              setRefreshing(true);
+              void refreshAttendance({ silent: true }).finally(() => {
+                setRefreshing(false);
+              });
+            }}
+            refreshing={refreshing}
+            tintColor="#315cf6"
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-5">
-          <View style={{ marginHorizontal: -16 }}>
-            <ShiftStatusCard
-              displayTimeZone={businessTimeZone}
-              greetingName={profile?.firstName ?? null}
-              loading={showLoadingState}
-              onBreakAction={openBreakAction}
-              onPrimaryAction={openAttendanceAction}
-              status={effectiveAttendanceStatus}
-              topInset={insets.top}
-            />
-          </View>
+          {attendanceTrackingEnabled ? (
+            <View style={{ marginHorizontal: -16 }}>
+              <ShiftStatusCard
+                displayTimeZone={businessTimeZone}
+                greetingName={profile?.firstName ?? null}
+                loading={showLoadingState}
+                onBreakAction={openBreakAction}
+                onPrimaryAction={openAttendanceAction}
+                status={effectiveAttendanceStatus}
+                topInset={insets.top}
+              />
+            </View>
+          ) : null}
 
           <View className="px-4">
             {attendanceError ? (

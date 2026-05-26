@@ -52,6 +52,7 @@ export type LeaderboardEntry = {
 };
 
 export type LeaderboardOverviewResponse = {
+  earliestMonthKey?: string;
   month: {
     key: string;
     startsAt: string;

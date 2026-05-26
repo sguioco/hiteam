@@ -33,4 +33,8 @@ export class RegisterOwnerDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
 }

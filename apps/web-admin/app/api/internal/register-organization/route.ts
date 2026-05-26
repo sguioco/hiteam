@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     organizationName?: string;
     managerEmail?: string;
     timezone?: string;
+    promoCode?: string;
   };
 
   if ((body.accessKey ?? "").trim() !== internalAccessKey) {
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
   const organizationName = (body.organizationName ?? "").trim();
   const managerEmail = (body.managerEmail ?? "").trim().toLowerCase();
   const timezone = (body.timezone ?? "UTC").trim() || "UTC";
+  const promoCode = (body.promoCode ?? "").trim();
 
   if (!organizationName || !managerEmail) {
     return NextResponse.json({ message: "Organization name and manager email are required." }, { status: 400 });
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         organizationName,
         managerEmail,
         timezone,
+        ...(promoCode ? { promoCode } : {}),
       }),
     });
   } catch (error) {

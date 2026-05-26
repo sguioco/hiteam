@@ -920,6 +920,11 @@ export default function DashboardHome({
   const [dailyActivity, setDailyActivity] = useState<DashboardActivityItem[]>(
     initialData?.dailyActivity ?? [],
   );
+  const [organizationSetup, setOrganizationSetup] = useState(
+    initialData?.organizationSetup ?? null,
+  );
+  const attendanceTrackingEnabled =
+    organizationSetup?.attendanceTrackingEnabled ?? true;
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
   const [selectedCalendarEvent, setSelectedCalendarEvent] =
     useState<PersonalCalendarEvent | null>(null);
@@ -943,6 +948,7 @@ export default function DashboardHome({
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
     setPersonalHistory(snapshot.personalHistory);
     setDailyActivity(snapshot.dailyActivity ?? []);
+    setOrganizationSetup(snapshot.organizationSetup ?? null);
     setIsBootstrapping(false);
 
     if (cacheKey) {
@@ -2579,9 +2585,9 @@ export default function DashboardHome({
             </aside>
 
             <div className="dashboard-main-card">
-              {isEmployeeMode ? (
+              {isEmployeeMode || !attendanceTrackingEnabled ? (
                 <ManagerPerformancePanel
-                  history={personalHistory}
+                  history={attendanceTrackingEnabled ? personalHistory : null}
                   locale={locale}
                   tasks={personalTasks}
                 />

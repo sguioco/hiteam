@@ -81,7 +81,10 @@ export class AuthController {
 
     if (isEmployeeOnlyRole(user.roleCodes)) {
       try {
-        const profile = await this.employeesService.getMe(user);
+        const [profile, organizationSetup] = await Promise.all([
+          this.employeesService.getMe(user),
+          this.orgService.getSetup(user.tenantId).catch(() => null),
+        ]);
 
         return {
           header: {
@@ -93,6 +96,8 @@ export class AuthController {
                     logoUrl: profile.company.logoUrl ?? null,
                   },
                   configured: true,
+                  attendanceTrackingEnabled:
+                    organizationSetup?.attendanceTrackingEnabled ?? true,
                 }
               : null,
             accountProfile: profile,
@@ -126,6 +131,7 @@ export class AuthController {
                 logoUrl: accountProfile.company.logoUrl ?? null,
               },
               configured: true,
+              attendanceTrackingEnabled: true,
             }
           : null;
 

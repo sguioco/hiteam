@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,6 +51,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
     ReturnType<typeof loadMyProfile>
   > | null>(initialSnapshot?.value ?? null);
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
@@ -129,6 +130,25 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
       cancelled = true;
     };
   }, [t]);
+
+  async function refreshProfile() {
+    setRefreshing(true);
+    setError(null);
+
+    try {
+      const nextProfile = await loadMyProfile();
+      setProfile(nextProfile);
+      setAvatarLoadFailed(false);
+      void writeScreenCache(PROFILE_SCREEN_CACHE_KEY, nextProfile);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : t("today.loadError"),
+      );
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }
 
   const fullName = useMemo(() => {
     if (!normalizedProfile) {
@@ -254,6 +274,15 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
             paddingHorizontal: 16,
             paddingTop: insets.top + 20,
           }}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => {
+                void refreshProfile();
+              }}
+              refreshing={refreshing}
+              tintColor="#315cf6"
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-6">

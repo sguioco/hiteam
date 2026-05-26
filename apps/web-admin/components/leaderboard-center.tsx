@@ -155,11 +155,12 @@ function normalizeSelectableMonthKey(
 function buildLeaderboardPrefetchMonthKeys(
   selectedMonthKey: string,
   currentMonthKey: string,
+  earliestMonthKey: string,
 ) {
   const result: string[] = [];
   const seen = new Set<string>();
   const add = (monthKey: string) => {
-    if (monthKey > currentMonthKey || seen.has(monthKey)) {
+    if (monthKey > currentMonthKey || monthKey < earliestMonthKey || seen.has(monthKey)) {
       return;
     }
 
@@ -205,7 +206,7 @@ async function requestLeaderboardOverview(params: {
     .then((snapshot) => {
       const nextOverview = snapshot.initialData;
 
-      if (params.cacheKey) {
+      if (params.cacheKey && nextOverview.month.key === params.monthKey) {
         writeClientCache(params.cacheKey, nextOverview);
       }
 
@@ -504,6 +505,18 @@ export function LeaderboardCenter({
       });
 
       if (nextOverview && selectedMonthKeyRef.current === monthKey) {
+        if (nextOverview.month.key !== monthKey) {
+          selectedMonthKeyRef.current = nextOverview.month.key;
+          setSelectedMonthKey(nextOverview.month.key);
+          const normalizedCacheKey = buildLeaderboardCacheKey(
+            session,
+            nextOverview.month.key,
+          );
+
+          if (normalizedCacheKey) {
+            writeClientCache(normalizedCacheKey, nextOverview);
+          }
+        }
         setOverview(nextOverview);
         setError(null);
       }
@@ -583,6 +596,7 @@ export function LeaderboardCenter({
     const monthKeys = buildLeaderboardPrefetchMonthKeys(
       selectedMonthKey,
       currentMonthKey,
+      overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey,
     );
 
     void (async () => {
@@ -618,7 +632,7 @@ export function LeaderboardCenter({
     return () => {
       cancelled = true;
     };
-  }, [currentMonthKey, selectedMonthKey, session?.accessToken]);
+  }, [currentMonthKey, initialData?.earliestMonthKey, overview?.earliestMonthKey, selectedMonthKey, session?.accessToken]);
 
   useWorkspaceAutoRefresh({
     session,
@@ -643,6 +657,17 @@ export function LeaderboardCenter({
       attendanceSocket.disconnect();
     };
   }, [locale, selectedMonthKey, session?.accessToken]);
+
+  useEffect(() => {
+    const minimumMonthKey =
+      overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey;
+
+    if (selectedMonthKey < minimumMonthKey) {
+      selectedMonthKeyRef.current = minimumMonthKey;
+      setMonthTransitionDirection("next");
+      setSelectedMonthKey(minimumMonthKey);
+    }
+  }, [currentMonthKey, initialData?.earliestMonthKey, overview?.earliestMonthKey, selectedMonthKey]);
 
   async function handleLeaderboardPrivacyChange(checked: boolean) {
     if (!overview?.visibility?.canManage || savingVisibility) {
@@ -685,7 +710,17 @@ export function LeaderboardCenter({
   }
 
   function handleMonthShift(delta: -1 | 1) {
+    const earliestMonthKey =
+      overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey;
     const nextMonthKey = shiftMonthKey(selectedMonthKey, delta);
+
+    if (
+      (delta < 0 && nextMonthKey < earliestMonthKey) ||
+      (delta > 0 && nextMonthKey > currentMonthKey)
+    ) {
+      return;
+    }
+
     const cached = readCachedOverview(nextMonthKey);
 
     selectedMonthKeyRef.current = nextMonthKey;
@@ -721,6 +756,9 @@ export function LeaderboardCenter({
 
   const isCurrentMonth = selectedMonthKey === currentMonthKey;
   const isPastMonth = selectedMonthKey < currentMonthKey;
+  const earliestMonthKey =
+    overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey;
+  const canGoBack = selectedMonthKey > earliestMonthKey;
   const canGoForward = selectedMonthKey < currentMonthKey;
   const leaderboard = overview?.leaderboard ?? [];
   const peersHiddenForViewer =
@@ -965,7 +1003,8 @@ export function LeaderboardCenter({
 
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[rgba(15,23,42,0.08)] bg-white/90 px-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <button
-              className="schedule-calendar-nav-button"
+              className={`schedule-calendar-nav-button ${canGoBack ? "" : "opacity-40"}`}
+              disabled={!canGoBack}
               onClick={() => handleMonthShift(-1)}
               type="button"
             >

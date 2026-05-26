@@ -4,6 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { NotificationsRealtimeService } from './notifications-realtime.service';
 
+export type NotificationPushPreference =
+  | 'assignmentAlerts'
+  | 'taskDeadlineReminders'
+  | 'meetingReminders'
+  | 'shiftReminders';
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -22,6 +28,9 @@ export class NotificationsService {
     body?: string;
     actionUrl?: string;
     metadata?: Record<string, unknown>;
+    pushPreference?: NotificationPushPreference;
+    forcePush?: boolean;
+    suppressPush?: boolean;
   }) {
     const notification = await this.prisma.notification.create({
       data: {
@@ -58,24 +67,80 @@ export class NotificationsService {
       },
     });
 
-    try {
-      await this.pushService.queueDelivery({
-        tenantId: params.tenantId,
-        notificationId: notification.id,
-        userId: params.userId,
-        title: params.title,
-        body: params.body,
-        data: {
-          actionUrl: params.actionUrl ?? null,
-          type: params.type,
-          ...(params.metadata ?? {}),
-        },
-      });
-    } catch (error) {
-      this.logger.warn(`Push delivery queue failed for notification ${notification.id}: ${error instanceof Error ? error.message : 'unknown error'}`);
+    const shouldQueuePush = await this.shouldQueuePush({
+      forcePush: params.forcePush,
+      preference: params.pushPreference,
+      suppressPush: params.suppressPush,
+      userId: params.userId,
+    });
+
+    if (shouldQueuePush) {
+      try {
+        await this.pushService.queueDelivery({
+          tenantId: params.tenantId,
+          notificationId: notification.id,
+          userId: params.userId,
+          title: params.title,
+          body: params.body,
+          data: {
+            actionUrl: params.actionUrl ?? null,
+            type: params.type,
+            ...(params.metadata ?? {}),
+          },
+        });
+      } catch (error) {
+        this.logger.warn(`Push delivery queue failed for notification ${notification.id}: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
     }
 
     return notification;
+  }
+
+  private async shouldQueuePush(params: {
+    forcePush?: boolean;
+    preference?: NotificationPushPreference;
+    suppressPush?: boolean;
+    userId: string;
+  }) {
+    if (params.forcePush) {
+      return true;
+    }
+
+    if (params.suppressPush) {
+      return false;
+    }
+
+    if (!params.preference) {
+      return true;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: params.userId },
+      select: {
+        notificationAssignmentAlertsEnabled: true,
+        notificationTaskDeadlineRemindersEnabled: true,
+        notificationMeetingRemindersEnabled: true,
+        notificationShiftRemindersEnabled: true,
+      },
+    });
+
+    if (!user) {
+      return false;
+    }
+
+    if (params.preference === 'assignmentAlerts') {
+      return user.notificationAssignmentAlertsEnabled;
+    }
+
+    if (params.preference === 'taskDeadlineReminders') {
+      return user.notificationTaskDeadlineRemindersEnabled;
+    }
+
+    if (params.preference === 'meetingReminders') {
+      return user.notificationMeetingRemindersEnabled;
+    }
+
+    return user.notificationShiftRemindersEnabled;
   }
 
   listMine(userId: string) {

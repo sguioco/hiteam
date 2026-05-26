@@ -43,6 +43,7 @@ type Location = {
 };
 
 type OrganizationSetupResponse = {
+  attendanceTrackingEnabled: boolean;
   company: Company | null;
   configured: boolean;
   defaultGeofenceRadiusMeters: number;
@@ -56,6 +57,7 @@ type SetupDraft = {
   details: LocationAddressDetails | null;
   geofenceRadiusMeters: number;
   googlePlaceId: string;
+  attendanceTrackingEnabled: boolean;
   latitude: string;
   longitude: string;
   timezone: string;
@@ -87,6 +89,7 @@ const TIME_ZONE_OFFSET_LABEL_OVERRIDES: Record<string, string> = {
 };
 
 const EMPTY_SETUP: OrganizationSetupResponse = {
+  attendanceTrackingEnabled: true,
   company: null,
   configured: false,
   defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
@@ -171,6 +174,7 @@ function createEmptyDraft(): SetupDraft {
   return {
     address: "", companyLogoUrl: "", companyName: "", details: null,
     geofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS, googlePlaceId: "",
+    attendanceTrackingEnabled: true,
     latitude: "", longitude: "", timezone: detectedTimeZone,
   };
 }
@@ -183,6 +187,7 @@ function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
     details: null,
     geofenceRadiusMeters: normalizeRadius(setup.location?.geofenceRadiusMeters ?? setup.defaultGeofenceRadiusMeters ?? DEFAULT_GEOFENCE_RADIUS_METERS),
     googlePlaceId: setup.company?.googlePlaceId ?? "",
+    attendanceTrackingEnabled: setup.attendanceTrackingEnabled ?? true,
     latitude: typeof setup.location?.latitude === "number" ? String(setup.location.latitude) : "",
     longitude: typeof setup.location?.longitude === "number" ? String(setup.location.longitude) : "",
     timezone: setup.location?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -406,6 +411,7 @@ export default function OrganizationPageClient({
           country: draft.details?.country || setup.location?.country || undefined,
           companyName: draft.companyName.trim(), geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
           googlePlaceId: draft.googlePlaceId || undefined, latitude: Number(draft.latitude), longitude: Number(draft.longitude),
+          attendanceTrackingEnabled: draft.attendanceTrackingEnabled,
           timezone: draft.timezone.trim() || "UTC",
         }),
       });
@@ -417,6 +423,7 @@ export default function OrganizationPageClient({
         new CustomEvent(ORGANIZATION_UPDATED_EVENT, {
           detail: {
             company: nextSetup.company,
+            attendanceTrackingEnabled: nextSetup.attendanceTrackingEnabled,
             configured: nextSetup.configured,
           },
         }),
@@ -592,6 +599,48 @@ export default function OrganizationPageClient({
                       ))}
                     </SelectContent>
                   </Select>
+                  <button
+                    className={`mt-4 w-full rounded-[22px] border px-4 py-3 text-left transition ${
+                      draft.attendanceTrackingEnabled
+                        ? "border-[color:var(--border)] bg-[color:var(--panel)]"
+                        : "border-[#a7f3d0] bg-[#ecfdf5]"
+                    }`}
+                    onClick={() =>
+                      updateDraft(
+                        "attendanceTrackingEnabled",
+                        !draft.attendanceTrackingEnabled,
+                      )
+                    }
+                    type="button"
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="font-heading text-sm font-semibold text-[color:var(--foreground)]">
+                        {locale === "ru"
+                          ? "Только задачи и чек-листы"
+                          : "Tasks and checklists only"}
+                      </span>
+                      <span
+                        className={`relative h-6 w-11 rounded-full transition ${
+                          draft.attendanceTrackingEnabled
+                            ? "bg-[color:var(--muted)]"
+                            : "bg-emerald-500"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${
+                            draft.attendanceTrackingEnabled
+                              ? "left-1"
+                              : "left-6"
+                          }`}
+                        />
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+                      {locale === "ru"
+                        ? "Если включено, сотрудники работают без check in/out, смен, биометрии и рейтинга."
+                        : "When enabled, employees work without check-in/out, shifts, biometrics, and leaderboard."}
+                    </span>
+                  </button>
                 </section>
               </div>
 

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -13,6 +13,9 @@ import { KommoService } from '../kommo/kommo.service';
 
 const DEMO_OWNER_EMAIL = 'owner@demo.smart';
 const DEMO_EMAIL_DOMAIN = '@demo.smart';
+const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
+const PROMO_TRIAL_SOURCE = 'PROMO_CODE';
+const DEFAULT_TRIAL_SOURCE = 'DEFAULT_7D';
 
 @Injectable()
 export class AuthService {
@@ -149,6 +152,79 @@ export class AuthService {
       normalizedEmail.endsWith(DEMO_EMAIL_DOMAIN) &&
       normalizedEmail !== DEMO_OWNER_EMAIL
     );
+  }
+
+  private normalizePromoCode(value?: string | null) {
+    const normalized = value?.trim().toUpperCase().replace(/\s+/g, '') ?? '';
+    return normalized || null;
+  }
+
+  private addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private async createInitialTrialSubscription(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    rawPromoCode?: string | null,
+  ) {
+    const now = new Date();
+    const promoCode = this.normalizePromoCode(rawPromoCode);
+    let trialDays = DEFAULT_ORGANIZATION_TRIAL_DAYS;
+    let trialSource = DEFAULT_TRIAL_SOURCE;
+
+    if (promoCode) {
+      const promo = await tx.trialPromoCode.findUnique({
+        where: { code: promoCode },
+      });
+
+      if (
+        !promo ||
+        !promo.isActive ||
+        (promo.expiresAt && promo.expiresAt <= now) ||
+        promo.redeemedCount >= promo.maxRedemptions
+      ) {
+        throw new BadRequestException('Promo code is invalid or expired.');
+      }
+
+      const claim = await tx.trialPromoCode.updateMany({
+        where: {
+          id: promo.id,
+          isActive: true,
+          redeemedCount: { lt: promo.maxRedemptions },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        data: {
+          redeemedCount: { increment: 1 },
+        },
+      });
+
+      if (claim.count === 0) {
+        throw new BadRequestException('Promo code is invalid or expired.');
+      }
+
+      await tx.trialPromoRedemption.create({
+        data: {
+          promoCodeId: promo.id,
+          tenantId,
+        },
+      });
+
+      trialDays = promo.trialDays;
+      trialSource = PROMO_TRIAL_SOURCE;
+    }
+
+    return tx.billingSubscription.create({
+      data: {
+        tenantId,
+        paidSeats: 0,
+        status: 'TRIALING',
+        trialStartedAt: now,
+        trialEndsAt: this.addDays(now, trialDays),
+        trialSource,
+        promoCode,
+      },
+    });
   }
 
   private async issueSessionTokens(user: {
@@ -439,6 +515,7 @@ export class AuthService {
           locale: 'ru',
         },
       });
+      await this.createInitialTrialSubscription(tx, tenant.id, dto.promoCode);
 
       const company = await tx.company.create({
         data: {
@@ -522,7 +599,11 @@ export class AuthService {
       entityType: 'tenant',
       entityId: result.tenantId,
       action: 'auth.owner_registered',
-      metadata: { email: ownerEmail, tenantSlug },
+      metadata: {
+        email: ownerEmail,
+        tenantSlug,
+        promoCode: this.normalizePromoCode(dto.promoCode),
+      },
     });
     this.kommoService.recordOrganizationRegistered(result.tenantId);
 
@@ -563,6 +644,7 @@ export class AuthService {
           locale: 'ru',
         },
       });
+      await this.createInitialTrialSubscription(tx, tenant.id, dto.promoCode);
 
       const company = await tx.company.create({
         data: {
@@ -629,6 +711,7 @@ export class AuthService {
         organizationName,
         tenantSlug,
         managerEmail,
+        promoCode: this.normalizePromoCode(dto.promoCode),
       },
     });
     this.kommoService.recordOrganizationRegistered(result.tenantId);

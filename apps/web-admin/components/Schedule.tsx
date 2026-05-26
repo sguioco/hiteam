@@ -120,6 +120,7 @@ type ChangeLogEntry = {
 
 type CalendarTaskEvent = {
   assigneeName: string;
+  authorName: string;
   avatarSrc: string;
   completedAt: string | null;
   date: Date;
@@ -248,6 +249,16 @@ function subMonths(value: Date, amount: number) {
 
 function startOfMonthLocal(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function parseOrganizationStartDate(value?: string | Date | null) {
+  const parsed = value instanceof Date ? value : value ? new Date(value) : null;
+
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return startOfDayLocal(parsed);
 }
 
 function endOfMonthLocal(value: Date) {
@@ -897,6 +908,10 @@ export default function Schedule({
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
   const today = useMemo(() => new Date(), []);
   const [isMockMode, setIsMockMode] = useState(initialData?.isMockMode ?? false);
+  const [organizationSetup, setOrganizationSetup] =
+    useState<ScheduleInitialData["organizationSetup"]>(
+      initialData?.organizationSetup ?? null,
+    );
   const [activeTab, setActiveTab] = useState<TabKey>("schedules");
   const [period] = useState<PeriodMode>("month");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -945,6 +960,17 @@ export default function Schedule({
     locale,
   );
   const didUseInitialData = useRef(Boolean(initialData));
+  const organizationStartDate = useMemo(
+    () => parseOrganizationStartDate(organizationSetup?.company?.createdAt),
+    [organizationSetup?.company?.createdAt],
+  );
+  const organizationStartMonth = useMemo(
+    () => (organizationStartDate ? startOfMonthLocal(organizationStartDate) : null),
+    [organizationStartDate],
+  );
+  const canGoToPreviousMonth =
+    !organizationStartMonth ||
+    startOfMonthLocal(currentDate).getTime() > organizationStartMonth.getTime();
 
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
@@ -1254,6 +1280,9 @@ export default function Schedule({
         const assigneeName = task.assigneeEmployee
           ? buildEmployeeName(task.assigneeEmployee)
           : task.group?.name ?? "—";
+        const authorName = task.managerEmployee
+          ? buildEmployeeName(task.managerEmployee)
+          : "";
         const employeeGroup = task.group
           ? { id: task.group.id, name: task.group.name }
           : task.assigneeEmployeeId
@@ -1275,6 +1304,7 @@ export default function Schedule({
 
         return {
           id: task.id,
+          authorName,
           avatarSrc,
           isDone: task.status === "DONE",
           kind,
@@ -1627,8 +1657,12 @@ export default function Schedule({
                             ? "error"
                             : "gray"
                         : undefined,
-                    metaLabel:
-                      event.locationName !== "—" ? event.locationName : undefined,
+                    metaLabel: [
+                      event.locationName !== "—" ? event.locationName : null,
+                      event.authorName
+                        ? `${ui.shiftAuthor}: ${event.authorName}`
+                        : null,
+                    ].filter(Boolean).join(" · ") || undefined,
                     photoProofs: event.photoProofs,
                   });
                   return map;
@@ -1666,8 +1700,12 @@ export default function Schedule({
                             ? "error"
                             : "gray"
                         : undefined,
-                    metaLabel:
-                      event.locationName !== "—" ? event.locationName : undefined,
+                    metaLabel: [
+                      event.locationName !== "—" ? event.locationName : null,
+                      event.authorName
+                        ? `${ui.shiftAuthor}: ${event.authorName}`
+                        : null,
+                    ].filter(Boolean).join(" · ") || undefined,
                     photoProofs: event.photoProofs,
                   },
                 ],
@@ -1773,6 +1811,7 @@ export default function Schedule({
       setPositions([]);
       setRequests([]);
       setTaskBoard(null);
+      setOrganizationSetup(null);
       setIsMockMode(false);
       setMessage(ui.scheduleLoadError);
       return;
@@ -1806,6 +1845,7 @@ export default function Schedule({
       setPositions(snapshot.initialData.positions);
       setRequests(snapshot.initialData.requests);
       setTaskBoard(snapshot.initialData.taskBoard);
+      setOrganizationSetup(snapshot.initialData.organizationSetup ?? null);
       setMessage(null);
       return;
     } catch (error) {
@@ -1819,6 +1859,7 @@ export default function Schedule({
         setPositions([]);
         setRequests([]);
         setTaskBoard(null);
+        setOrganizationSetup(null);
         setIsMockMode(false);
         setMessage(
           error instanceof Error
@@ -1849,6 +1890,26 @@ export default function Schedule({
 
     void loadData({ force: true });
   }, [calendarDays, initialData, isEmployeeMode, locale, sessionAccessToken, sessionRoleKey]);
+
+  useEffect(() => {
+    if (!organizationStartDate || !organizationStartMonth) {
+      return;
+    }
+
+    if (startOfMonthLocal(currentDate).getTime() < organizationStartMonth.getTime()) {
+      setCurrentDate(organizationStartMonth);
+      setSelectedDay(organizationStartDate);
+      return;
+    }
+
+    if (
+      isSameMonthLocal(currentDate, organizationStartDate) &&
+      selectedDay &&
+      startOfDayLocal(selectedDay).getTime() < organizationStartDate.getTime()
+    ) {
+      setSelectedDay(organizationStartDate);
+    }
+  }, [currentDate, organizationStartDate, organizationStartMonth, selectedDay]);
 
   useWorkspaceAutoRefresh({
     session,
@@ -2557,8 +2618,15 @@ export default function Schedule({
                 </h2>
                 <div className="schedule-calendar-nav">
                   <button
-                    className="schedule-calendar-nav-button"
-                    onClick={() => setCurrentDate((current) => subMonths(current, 1))}
+                    className={`schedule-calendar-nav-button ${canGoToPreviousMonth ? "" : "opacity-40"}`}
+                    disabled={!canGoToPreviousMonth}
+                    onClick={() => {
+                      if (!canGoToPreviousMonth) {
+                        return;
+                      }
+
+                      setCurrentDate((current) => subMonths(current, 1));
+                    }}
                     type="button"
                   >
                     <ChevronLeft className="size-4" />
@@ -2997,16 +3065,22 @@ export default function Schedule({
                   const dayEntries = calendarEntriesForDay(day);
                   const isLastColumn = index % 7 === 6;
                   const isLastRow = index >= calendarDays.length - 7;
+                  const isBeforeOrganizationStart =
+                    Boolean(organizationStartDate) &&
+                    startOfDayLocal(day).getTime() < organizationStartDate!.getTime();
 
                   return (
                     <button
                       className={`flex min-h-[148px] flex-col rounded-none p-2 text-left transition-colors duration-200 ${
                         !isLastColumn ? "border-r border-border/80" : ""
                       } ${!isLastRow ? "border-b border-border/80" : ""} ${
-                        isTodayLocal(day)
+                        isBeforeOrganizationStart
+                          ? "bg-transparent opacity-30"
+                          : isTodayLocal(day)
                           ? "bg-[rgba(74,120,255,0.08)] shadow-[inset_0_0_0_1px_rgba(74,120,255,0.24)]"
                           : "bg-transparent hover:bg-secondary/25"
                       } ${isSameMonthLocal(day, currentDate) ? "" : "opacity-40"}`}
+                      disabled={isBeforeOrganizationStart}
                       key={day.toISOString()}
                       onClick={() => setSelectedDay(day)}
                       type="button"

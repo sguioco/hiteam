@@ -36,6 +36,7 @@ const texts = {
     firstName: 'First name',
     lastName: 'Last name',
     email: 'Email',
+    emailPlaceholder: 'Enter your email',
     password: 'Password',
     confirmPassword: 'Confirm password',
     signUp: 'Create account',
@@ -55,6 +56,7 @@ const texts = {
     firstName: 'Имя',
     lastName: 'Фамилия',
     email: 'Электронная почта',
+    emailPlaceholder: 'Введите email',
     password: 'Пароль',
     confirmPassword: 'Подтвердите пароль',
     signUp: 'Создать аккаунт',
@@ -74,6 +76,7 @@ const texts = {
     firstName: 'الاسم الأول',
     lastName: 'اسم العائلة',
     email: 'البريد الإلكتروني',
+    emailPlaceholder: 'أدخل بريدك الإلكتروني',
     password: 'كلمة المرور',
     confirmPassword: 'تأكيد كلمة المرور',
     signUp: 'إنشاء حساب',
@@ -202,7 +205,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
 
             <div className="space-y-1.5">
               <label htmlFor="signup-email" className="text-sm font-medium">{t.email}</label>
-              <Input id="signup-email" type="email" placeholder="you@company.com" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input id="signup-email" type="email" placeholder={t.emailPlaceholder} required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
 
             <div className="space-y-1.5">

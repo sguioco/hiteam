@@ -45,6 +45,26 @@ const DEFAULT_TASK_BOARD_FILTERS = {
   onlyOverdue: false,
 };
 
+function formatDateTimeLocalInput(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  const hours = `${value.getHours()}`.padStart(2, '0');
+  const minutes = `${value.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function getMinTaskDueAtInput() {
+  const next = new Date();
+  next.setMinutes(next.getMinutes() + 1, 0, 0);
+  return formatDateTimeLocalInput(next);
+}
+
+function isPastDateTimeInput(value: string) {
+  const parsed = value ? new Date(value) : null;
+  return Boolean(parsed && !Number.isNaN(parsed.getTime()) && parsed.getTime() < Date.now());
+}
+
 export type CollaborationPageInitialData =
   CollaborationBootstrapResponse<EmployeeOption>;
 
@@ -120,6 +140,7 @@ export default function CollaborationPageClient({
     locationId: '',
     title: '',
     body: '',
+    notifyParticipants: false,
   });
   const [announcementTemplateDraft, setAnnouncementTemplateDraft] = useState({
     audience: 'ALL',
@@ -472,6 +493,11 @@ export default function CollaborationPageClient({
     const session = getSession();
     if (!session) return;
 
+    if (taskDraft.hasDueTime && isPastDateTimeInput(taskDraft.dueAt)) {
+      setMessage(locale === 'ru' ? 'Нельзя создать задачу с прошедшим сроком.' : 'A task cannot be created with a past due date.');
+      return;
+    }
+
     await apiRequest<TaskItem[]>('/collaboration/tasks', {
       method: 'POST',
       token: session.accessToken,
@@ -567,6 +593,7 @@ export default function CollaborationPageClient({
           announcementDraft.audience === 'LOCATION' ? announcementDraft.locationId || undefined : undefined,
         title: announcementDraft.title,
         body: announcementDraft.body,
+        notifyParticipants: announcementDraft.notifyParticipants,
       }),
     });
 
@@ -578,6 +605,7 @@ export default function CollaborationPageClient({
       locationId: '',
       title: '',
       body: '',
+      notifyParticipants: false,
     });
     setMessage(t('collaboration.announcementPublished'));
     await loadData();
@@ -1260,7 +1288,14 @@ export default function CollaborationPageClient({
               </label>
               {taskDraft.hasDueTime ? (
                 <input
-                  onChange={(event) => setTaskDraft((current) => ({ ...current, dueAt: event.target.value }))}
+                  min={getMinTaskDueAtInput()}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setTaskDraft((current) => ({
+                      ...current,
+                      dueAt: isPastDateTimeInput(value) ? getMinTaskDueAtInput() : value,
+                    }));
+                  }}
                   placeholder={t('collaboration.dueAt')}
                   required
                   type="datetime-local"
@@ -1618,6 +1653,19 @@ export default function CollaborationPageClient({
               ) : null}
               <input onChange={(event) => setAnnouncementDraft((current) => ({ ...current, title: event.target.value }))} placeholder={t('requests.titleField')} required value={announcementDraft.title} />
               <textarea onChange={(event) => setAnnouncementDraft((current) => ({ ...current, body: event.target.value }))} placeholder={t('collaboration.announcementsTitle')} rows={5} value={announcementDraft.body} />
+              <label className="action-row">
+                <input
+                  checked={announcementDraft.notifyParticipants}
+                  onChange={(event) =>
+                    setAnnouncementDraft((current) => ({
+                      ...current,
+                      notifyParticipants: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>{locale === 'ru' ? 'Уведомить участников' : 'Notify participants'}</span>
+              </label>
               <button className="solid-button" type="submit">{t('collaboration.publishAnnouncement')}</button>
             </form>
           </article>

@@ -74,6 +74,20 @@ function isDateTimeInPast(date: Date, time: TimeValue) {
   return buildDateTime(date, time).getTime() < Date.now();
 }
 
+function getNextSelectableTime() {
+  const next = new Date();
+  next.setMinutes(next.getMinutes() + 1, 0, 0);
+
+  return {
+    hour: next.getHours(),
+    minute: next.getMinutes(),
+  };
+}
+
+function normalizeDueTimeForDate(date: Date, time: TimeValue) {
+  return isDateTimeInPast(date, time) ? getNextSelectableTime() : time;
+}
+
 function formatFullGroupLabel(groupName: string) {
   return `All ${groupName}`;
 }
@@ -235,6 +249,24 @@ export default function CreateTaskScreen() {
   }, [locale, today]);
 
   const selectedDate = dateOptions.find((option) => option.key === selectedDateKey)?.value ?? today;
+
+  function toggleDueTime() {
+    if (hasDueTime) {
+      setHasDueTime(false);
+      return;
+    }
+
+    setDueTime((current) => normalizeDueTimeForDate(selectedDate, current));
+    setHasDueTime(true);
+  }
+
+  function handleDateSelect(option: (typeof dateOptions)[number]) {
+    setSelectedDateKey(option.key);
+
+    if (hasDueTime) {
+      setDueTime((current) => normalizeDueTimeForDate(option.value, current));
+    }
+  }
 
   const orderedEmployees = useMemo(() => {
     return [...employees].sort((left, right) => {
@@ -417,12 +449,16 @@ export default function CreateTaskScreen() {
           ),
         );
       } else {
+        const dueAt = hasDueTime
+          ? buildDateTime(selectedDate, dueTime)
+          : buildDateTime(selectedDate, { hour: 23, minute: 59 });
+
         await Promise.all(
           selectedAssigneeIds.map((assigneeEmployeeId) =>
             createManagerTask({
               assigneeEmployeeId,
               description: description.trim() || undefined,
-              dueAt: hasDueTime ? buildDateTime(selectedDate, dueTime).toISOString() : undefined,
+              dueAt: dueAt.toISOString(),
               priority,
               requiresPhoto,
               title: title.trim(),
@@ -497,7 +533,7 @@ export default function CreateTaskScreen() {
                       key={option.key}
                       className={`min-w-[48px] rounded-full border-2 px-3 py-3 ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}
                       haptic="selection"
-                      onPress={() => setSelectedDateKey(option.key)}
+                      onPress={() => handleDateSelect(option)}
                     >
                       <Text className={`text-center text-[12px] font-semibold ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{option.weekday}</Text>
                       <Text className={`mt-1 text-center text-[22px] font-extrabold ${isSelected ? 'text-white' : 'text-foreground'}`}>{option.dayLabel}</Text>
@@ -515,14 +551,14 @@ export default function CreateTaskScreen() {
                   hasDueTime ? 'border-primary bg-primary' : 'border-[#bcc8da] bg-white'
                 }`}
                 haptic="selection"
-                onPress={() => setHasDueTime((current) => !current)}
+                onPress={toggleDueTime}
               >
                 {hasDueTime ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
               </PressableScale>
               <PressableScale
                 className="flex-1"
                 haptic="selection"
-                onPress={() => setHasDueTime((current) => !current)}
+                onPress={toggleDueTime}
               >
                 <Text className="text-[14px] font-semibold text-foreground">{t('manager.createTaskDeadlineToggle')}</Text>
                 <Text className="mt-1 text-[12px] text-muted-foreground">
@@ -535,6 +571,7 @@ export default function CreateTaskScreen() {
                 }`}
                 haptic="selection"
                 onPress={() => {
+                  setDueTime((current) => normalizeDueTimeForDate(selectedDate, current));
                   setHasDueTime(true);
                   setTimePickerOpen(true);
                 }}
@@ -734,7 +771,12 @@ export default function CreateTaskScreen() {
       <TimeWheelPicker
         initialValue={dueTime}
         onApply={(value) => {
-          setDueTime(value);
+          if (isDateTimeInPast(selectedDate, value)) {
+            Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
+            setDueTime(normalizeDueTimeForDate(selectedDate, value));
+          } else {
+            setDueTime(value);
+          }
           setTimePickerOpen(false);
         }}
         onClose={() => setTimePickerOpen(false)}

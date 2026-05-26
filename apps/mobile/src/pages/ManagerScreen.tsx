@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import {
   Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -396,6 +397,7 @@ export default function ManagerScreen({
   );
   const [tasks, setTasks] = useState<TaskItem[]>(initialResolved.tasks);
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(
     null,
   );
@@ -437,15 +439,15 @@ export default function ManagerScreen({
     });
   }, [language]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
     const cached = await readScreenCache<ManagerScreenCacheValue>(
       MANAGER_SCREEN_CACHE_KEY,
       MANAGER_SCREEN_CACHE_TTL_MS,
     );
 
-    if (!cached) {
+    if (!cached && !options?.silent) {
       setLoading(true);
-    } else {
+    } else if (!options?.silent) {
       setLoading(false);
     }
 
@@ -463,7 +465,7 @@ export default function ManagerScreen({
       setTasks(cachedResolved.tasks);
       setFailedAvatarEmployeeIds(new Set());
 
-      if (!cached.isStale) {
+      if (!options?.force && !cached.isStale) {
         return;
       }
     }
@@ -871,6 +873,18 @@ export default function ManagerScreen({
             paddingHorizontal: 16,
             paddingTop: insets.top + 20,
           }}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => {
+                setRefreshing(true);
+                void loadData({ force: true, silent: true }).finally(() => {
+                  setRefreshing(false);
+                });
+              }}
+              refreshing={refreshing}
+              tintColor="#315cf6"
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-5">

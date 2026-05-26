@@ -805,36 +805,75 @@ export function AdminShell({
   const profileHref = toAdminHref("/profile");
   const notificationsHref = toAdminHref("/notifications");
   const contentHasStudioBackground = hasStudioBackground(pathname);
+  const attendanceTrackingEnabled =
+    organization?.attendanceTrackingEnabled ?? true;
+
+  useEffect(() => {
+    if (!ready || !session || attendanceTrackingEnabled) {
+      return;
+    }
+
+    const attendanceDisabledHrefs = [
+      activityHref,
+      leaderboardHref,
+      scheduleHref,
+      toAdminHref("/attendance"),
+      toAdminHref("/biometric"),
+    ];
+
+    if (attendanceDisabledHrefs.some((href) => isActive(pathname, href))) {
+      router.replace(tasksHref);
+    }
+  }, [
+    activityHref,
+    attendanceTrackingEnabled,
+    leaderboardHref,
+    pathname,
+    ready,
+    router,
+    scheduleHref,
+    session,
+    tasksHref,
+  ]);
 
   const navItems = useMemo<NavItem[]>(() => {
     if (employeeOnly) {
-      return [
+      const items: NavItem[] = [
         {
           href: homeHref,
           label: locale === "ru" ? "Главная" : "Home",
           icon: Home,
         },
-        {
+      ];
+
+      if (attendanceTrackingEnabled) {
+        items.push({
           href: activityHref,
           label: t("nav.activity"),
           icon: Activity,
-        },
-        {
+        });
+        items.push({
           href: leaderboardHref,
           label: t("nav.leaderboard"),
           icon: Trophy,
-        },
-        {
+        });
+      }
+
+      items.push({
           href: newsHref,
           label: locale === "ru" ? "Новости" : "News",
           icon: FileText,
-        },
-        {
+      });
+
+      if (attendanceTrackingEnabled) {
+        items.push({
           href: scheduleHref,
           label: locale === "ru" ? "Календарь" : "Calendar",
           icon: BriefcaseBusiness,
-        },
-      ];
+        });
+      }
+
+      return items;
     }
 
     const items: NavItem[] = [
@@ -843,12 +882,15 @@ export function AdminShell({
         label: locale === "ru" ? "Главная" : "Home",
         icon: Home,
       },
-      {
+    ];
+
+    if (attendanceTrackingEnabled) {
+      items.push({
         href: activityHref,
         label: t("nav.activity"),
         icon: Activity,
-      },
-    ];
+      });
+    }
 
     if (hasManagerAccess(session?.user.roleCodes ?? [])) {
       items.push({
@@ -858,11 +900,13 @@ export function AdminShell({
       });
     }
 
-    items.push({
-      href: leaderboardHref,
-      label: t("nav.leaderboard"),
-      icon: Trophy,
-    });
+    if (attendanceTrackingEnabled) {
+      items.push({
+        href: leaderboardHref,
+        label: t("nav.leaderboard"),
+        icon: Trophy,
+      });
+    }
 
     items.push({
       href: newsHref,
@@ -875,30 +919,35 @@ export function AdminShell({
         href: toAdminHref("/employees"),
         label: t("nav.employees"),
         icon: UsersRound,
-        items: [
-          {
-            href: toAdminHref("/attendance"),
-            label: locale === "ru" ? "Посещаемость" : "Attendance",
-            icon: CalendarRange,
-          },
-          {
-            href: toAdminHref("/biometric"),
-            label: locale === "ru" ? "Биометрия" : "Biometric",
-            icon: ScanFace,
-          },
-        ],
+        items: attendanceTrackingEnabled
+          ? [
+              {
+                href: toAdminHref("/attendance"),
+                label: locale === "ru" ? "Посещаемость" : "Attendance",
+                icon: CalendarRange,
+              },
+              {
+                href: toAdminHref("/biometric"),
+                label: locale === "ru" ? "Биометрия" : "Biometric",
+                icon: ScanFace,
+              },
+            ]
+          : [],
       });
     }
 
-    items.push({
-      href: scheduleHref,
-      label: locale === "ru" ? "Календарь" : "Calendar",
-      icon: BriefcaseBusiness,
-    });
+    if (attendanceTrackingEnabled) {
+      items.push({
+        href: scheduleHref,
+        label: locale === "ru" ? "Календарь" : "Calendar",
+        icon: BriefcaseBusiness,
+      });
+    }
 
     return items;
   }, [
     activityHref,
+    attendanceTrackingEnabled,
     employeeOnly,
     homeHref,
     leaderboardHref,

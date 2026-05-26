@@ -27,6 +27,11 @@ export class BillingController {
     return this.billingService.createPortalSession(user.tenantId);
   }
 
+  @Post('disconnect')
+  disconnect(@CurrentUser() user: JwtUser) {
+    return this.billingService.disconnectStripe(user.tenantId);
+  }
+
   @Post('sync-seats')
   syncSeats(@CurrentUser() user: JwtUser) {
     return this.billingService.syncStripeSeatQuantity(user.tenantId);

@@ -49,7 +49,8 @@ const texts = {
     timezone: 'Timezone',
     firstName: 'Your first name',
     lastName: 'Your last name',
-    email: 'Your email',
+    email: 'Enter your email',
+    promoCode: 'Promo code (optional)',
     password: 'Password',
     confirmPassword: 'Confirm password',
     showPassword: 'Show password',
@@ -67,7 +68,8 @@ const texts = {
     timezone: 'Часовой пояс',
     firstName: 'Ваше имя',
     lastName: 'Ваша фамилия',
-    email: 'Ваш email',
+    email: 'Введите email',
+    promoCode: 'Промокод (необязательно)',
     password: 'Пароль',
     confirmPassword: 'Подтвердите пароль',
     showPassword: 'Показать пароль',
@@ -85,7 +87,8 @@ const texts = {
     timezone: 'المنطقة الزمنية',
     firstName: 'اسمك الأول',
     lastName: 'اسم عائلتك',
-    email: 'بريدك الإلكتروني',
+    email: 'أدخل بريدك الإلكتروني',
+    promoCode: 'رمز ترويجي (اختياري)',
     password: 'كلمة المرور',
     confirmPassword: 'تأكيد كلمة المرور',
     showPassword: 'إظهار كلمة المرور',
@@ -230,6 +233,7 @@ export function CreateOrganizationPanel() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -292,6 +296,7 @@ export function CreateOrganizationPanel() {
           employeeNumber: 'OWNER-0001',
           hireDate: getLocalDateInputValue(),
           timezone: timezone.trim() || 'UTC',
+          promoCode: promoCode.trim() || undefined,
         }),
       });
 
@@ -399,6 +404,16 @@ export function CreateOrganizationPanel() {
                   required
                   type="email"
                   value={email}
+                />
+
+                <Input
+                  aria-label={t.promoCode}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  disabled={loading}
+                  onChange={(event) => setPromoCode(event.target.value)}
+                  placeholder={t.promoCode}
+                  value={promoCode}
                 />
 
                 <div className="relative">

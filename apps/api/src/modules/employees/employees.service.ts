@@ -19,6 +19,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
+import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,6 +50,7 @@ const COMPANY_SELECT = {
   id: true,
   name: true,
   logoUrl: true,
+  createdAt: true,
 } satisfies Prisma.CompanySelect;
 
 const EMPLOYEE_USER_SELECT = {
@@ -128,6 +130,12 @@ const EMPLOYEE_PROFILE_SELECT = {
       id: true,
       email: true,
       bannerTheme: true,
+      notificationAssignmentAlertsEnabled: true,
+      notificationTaskDeadlineRemindersEnabled: true,
+      notificationTaskDeadlineReminderMinutes: true,
+      notificationMeetingRemindersEnabled: true,
+      notificationMeetingReminderMinutes: true,
+      notificationShiftRemindersEnabled: true,
     },
   },
   invitation: {
@@ -148,6 +156,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly billingService: BillingService,
+    private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly notificationsService: NotificationsService,
     private readonly storageService: StorageService,
     private readonly invitationsMailer: EmployeeInvitationsMailerService,
@@ -162,6 +171,31 @@ export class EmployeesService {
         }`,
       );
     });
+  }
+
+  private emitWorkspaceRefreshForUser(userId: string, reason: string) {
+    void this.collaborationRealtimeService
+      .fanoutWorkspaceRefresh(userId, {
+        authChanged: true,
+        reason,
+        refreshedAt: new Date().toISOString(),
+      })
+      .catch((error) => {
+        this.logger.warn(
+          `Unable to emit workspace refresh for user ${userId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+  }
+
+  private async isAttendanceTrackingEnabled(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { attendanceTrackingEnabled: true },
+    });
+
+    return tenant?.attendanceTrackingEnabled ?? true;
   }
 
   async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
@@ -324,9 +358,6 @@ export class EmployeesService {
 
     await this.prisma.$transaction(async (tx) => {
       await this.syncManagerRole(tx, employee.userId!, tenantId, grantManagerAccess);
-      await tx.session.deleteMany({
-        where: { userId: employee.userId! },
-      });
     });
 
     await this.auditService.log({
@@ -342,6 +373,10 @@ export class EmployeesService {
       },
     });
     this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'manager_access_updated');
+    this.emitWorkspaceRefreshForUser(
+      employee.userId,
+      grantManagerAccess ? 'manager_access_granted' : 'manager_access_revoked',
+    );
 
     return this.getManagerAccess(tenantId, employeeId);
   }
@@ -409,6 +444,17 @@ export class EmployeesService {
       },
     });
     this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'work_mode_updated');
+    const refreshedEmployee = await this.prisma.employee.findUnique({
+      where: { id: employee.id },
+      select: { userId: true },
+    });
+
+    if (refreshedEmployee?.userId) {
+      this.emitWorkspaceRefreshForUser(
+        refreshedEmployee.userId,
+        'employee_work_mode_updated',
+      );
+    }
 
     return this.getById(tenantId, employeeId);
   }
@@ -445,6 +491,24 @@ export class EmployeesService {
       where: { id: user.sub },
       data: {
         ...(dto.bannerTheme ? { bannerTheme: dto.bannerTheme } : {}),
+        ...(dto.notificationAssignmentAlertsEnabled !== undefined
+          ? { notificationAssignmentAlertsEnabled: dto.notificationAssignmentAlertsEnabled }
+          : {}),
+        ...(dto.notificationTaskDeadlineRemindersEnabled !== undefined
+          ? { notificationTaskDeadlineRemindersEnabled: dto.notificationTaskDeadlineRemindersEnabled }
+          : {}),
+        ...(dto.notificationTaskDeadlineReminderMinutes !== undefined
+          ? { notificationTaskDeadlineReminderMinutes: dto.notificationTaskDeadlineReminderMinutes }
+          : {}),
+        ...(dto.notificationMeetingRemindersEnabled !== undefined
+          ? { notificationMeetingRemindersEnabled: dto.notificationMeetingRemindersEnabled }
+          : {}),
+        ...(dto.notificationMeetingReminderMinutes !== undefined
+          ? { notificationMeetingReminderMinutes: dto.notificationMeetingReminderMinutes }
+          : {}),
+        ...(dto.notificationShiftRemindersEnabled !== undefined
+          ? { notificationShiftRemindersEnabled: dto.notificationShiftRemindersEnabled }
+          : {}),
       },
     });
 
@@ -466,10 +530,15 @@ export class EmployeesService {
     await this.billingService.assertCanAddSeatOccupant(tenantId);
 
     const passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
+    const attendanceTrackingEnabled =
+      await this.isAttendanceTrackingEnabled(tenantId);
 
     const employee = await this.prisma.$transaction(async (tx) => {
       const employeeRole = await this.ensureEmployeeRole(tx);
-      const managerRole = dto.grantManagerAccess ? await this.ensureManagerRole(tx) : null;
+      const managerRole =
+        !attendanceTrackingEnabled || dto.grantManagerAccess
+          ? await this.ensureManagerRole(tx)
+          : null;
 
       const user = await tx.user.create({
         data: {
@@ -512,7 +581,9 @@ export class EmployeesService {
           employeeNumber: dto.employeeNumber,
           firstName: dto.firstName,
           lastName: dto.lastName,
-          workMode: this.normalizeWorkMode(dto.workMode),
+          workMode: attendanceTrackingEnabled
+            ? this.normalizeWorkMode(dto.workMode)
+            : EmployeeWorkMode.FIELD,
           birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
           status: EmployeeStatus.ACTIVE,
           hireDate: new Date(dto.hireDate),
@@ -625,7 +696,9 @@ export class EmployeesService {
     const token = randomBytes(24).toString('hex');
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-    const workMode = this.normalizeWorkMode(dto.workMode);
+    const workMode = tenant.attendanceTrackingEnabled
+      ? this.normalizeWorkMode(dto.workMode)
+      : EmployeeWorkMode.FIELD;
 
     const existingInvitation = await this.prisma.employeeInvitation.findFirst({
       where: {
@@ -741,8 +814,14 @@ export class EmployeesService {
     const firstName = dto.firstName.trim();
     const lastName = dto.lastName.trim();
     const middleName = dto.middleName?.trim() || null;
-    const workMode = this.normalizeWorkMode(dto.workMode ?? invitation.workMode);
-    const shiftTemplateId = dto.shiftTemplateId?.trim() ?? '';
+    const attendanceTrackingEnabled =
+      await this.isAttendanceTrackingEnabled(tenantId);
+    const workMode = attendanceTrackingEnabled
+      ? this.normalizeWorkMode(dto.workMode ?? invitation.workMode)
+      : EmployeeWorkMode.FIELD;
+    const shiftTemplateId = attendanceTrackingEnabled
+      ? (dto.shiftTemplateId?.trim() ?? '')
+      : '';
 
     if (!firstName || !lastName) {
       throw new BadRequestException('Укажите имя и фамилию сотрудника.');
@@ -820,6 +899,78 @@ export class EmployeesService {
       approvedShiftTemplateId: updated.approvedShiftTemplateId ?? null,
       approvedGroupId: updated.approvedGroupId ?? null,
       workMode: updated.workMode,
+    };
+  }
+
+  async deleteInvitationAndEmployee(tenantId: string, actorUserId: string, invitationId: string) {
+    const invitation = await this.prisma.employeeInvitation.findFirst({
+      where: { id: invitationId, tenantId },
+      select: {
+        id: true,
+        status: true,
+        email: true,
+        phone: true,
+        userId: true,
+        employeeId: true,
+      },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found.');
+    }
+
+    if (
+      invitation.status !== EmployeeInvitationStatus.INVITED &&
+      invitation.status !== EmployeeInvitationStatus.PENDING_APPROVAL &&
+      invitation.status !== EmployeeInvitationStatus.REJECTED
+    ) {
+      throw new BadRequestException('Only pending invitations can be deleted here.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employeeInvitation.delete({
+        where: { id: invitation.id },
+      });
+
+      if (invitation.userId) {
+        await tx.user.deleteMany({
+          where: {
+            id: invitation.userId,
+            tenantId,
+          },
+        });
+        return;
+      }
+
+      if (invitation.employeeId) {
+        await tx.employee.deleteMany({
+          where: {
+            id: invitation.employeeId,
+            tenantId,
+          },
+        });
+      }
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee_invitation',
+      entityId: invitation.id,
+      action: 'employee.invitation_deleted',
+      metadata: {
+        email: invitation.email,
+        phone: invitation.phone,
+        userId: invitation.userId,
+        employeeId: invitation.employeeId,
+      },
+    });
+    this.syncBillingSeatsInBackground(tenantId);
+
+    return {
+      deleted: true,
+      invitationId: invitation.id,
+      employeeId: invitation.employeeId,
     };
   }
 
@@ -984,6 +1135,11 @@ export class EmployeesService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const attendanceTrackingEnabled =
+      await this.isAttendanceTrackingEnabled(invitation.tenantId);
+    const effectiveWorkMode = attendanceTrackingEnabled
+      ? this.normalizeWorkMode(invitation.workMode)
+      : EmployeeWorkMode.FIELD;
     
     const realUserCount = await this.prisma.user.count({
       where: {
@@ -1046,11 +1202,25 @@ export class EmployeesService {
             scopeId: invitation.tenantId,
           },
         });
+        if (!attendanceTrackingEnabled && !isFirstUser) {
+          const managerRole = await this.ensureManagerRole(tx);
+          await tx.userRole.createMany({
+            data: [
+              {
+                userId: user.id,
+                roleId: managerRole.id,
+                scopeType: 'tenant',
+                scopeId: invitation.tenantId,
+              },
+            ],
+            skipDuplicates: true,
+          });
+        }
 
         const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
         const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
         const approvedShiftTemplate =
-          invitation.workMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId
+          effectiveWorkMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId
           ? await tx.shiftTemplate.findFirst({
               where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
             })
@@ -1073,7 +1243,7 @@ export class EmployeesService {
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
             middleName: dto.middleName?.trim() || null,
-            workMode: this.normalizeWorkMode(invitation.workMode),
+            workMode: effectiveWorkMode,
             birthDate: new Date(dto.birthDate),
             gender: dto.gender,
             phone: dto.phone.trim(),
@@ -1089,7 +1259,7 @@ export class EmployeesService {
         }
 
         if (
-          invitation.workMode === EmployeeWorkMode.STATIONARY &&
+          effectiveWorkMode === EmployeeWorkMode.STATIONARY &&
           invitation.approvedShiftTemplateId
         ) {
           await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
@@ -1102,6 +1272,11 @@ export class EmployeesService {
             userId: user.id,
             employeeId: employee.id,
             status: EmployeeInvitationStatus.APPROVED,
+            workMode: effectiveWorkMode,
+            approvedShiftTemplateId:
+              effectiveWorkMode === EmployeeWorkMode.STATIONARY
+                ? invitation.approvedShiftTemplateId
+                : null,
             submittedAt: new Date(),
             approvedAt: invitation.approvedAt ?? new Date(),
             approvedByUserId: invitation.approvedByUserId ?? invitation.invitedByUserId,
@@ -1175,8 +1350,14 @@ export class EmployeesService {
       throw new BadRequestException('Invitation is not waiting for review.');
     }
 
-    const grantManagerAccess = dto.decision === 'APPROVE' && dto.grantManagerAccess === true;
-    const workMode = this.normalizeWorkMode(dto.workMode ?? invitation.workMode);
+    const attendanceTrackingEnabled =
+      await this.isAttendanceTrackingEnabled(tenantId);
+    const grantManagerAccess =
+      dto.decision === 'APPROVE' &&
+      (!attendanceTrackingEnabled || dto.grantManagerAccess === true);
+    const workMode = attendanceTrackingEnabled
+      ? this.normalizeWorkMode(dto.workMode ?? invitation.workMode)
+      : EmployeeWorkMode.FIELD;
     const requestedShiftTemplateId =
       dto.decision === 'APPROVE' && workMode === EmployeeWorkMode.STATIONARY
         ? dto.shiftTemplateId?.trim() || invitation.approvedShiftTemplateId || null

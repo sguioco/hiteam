@@ -389,6 +389,7 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
           to: device.token,
           title: params.title,
           body: params.body,
+          channelId: device.platform === DevicePlatform.ANDROID ? 'default' : undefined,
           data: params.data,
         })),
       ),

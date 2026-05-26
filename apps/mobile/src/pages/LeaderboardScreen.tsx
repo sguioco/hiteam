@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Image, Platform, Pressable, ScrollView, View, type TextStyle } from "react-native";
+import { Image, Platform, Pressable, RefreshControl, ScrollView, View, type TextStyle } from "react-native";
 import Animated, {
   FadeInLeft,
   FadeInRight,
@@ -82,6 +82,7 @@ export default function LeaderboardScreen({
   >("next");
   const [tab, setTab] = useState<LeaderboardTab>("progress");
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<LeaderboardOverviewResponse | null>(
@@ -127,9 +128,16 @@ export default function LeaderboardScreen({
         const nextOverview = await loadLeaderboardOverview(selectedMonthKey);
         if (!cancelled) {
           setOverview(nextOverview);
+          if (nextOverview.month.key !== selectedMonthKey) {
+            setMonthAnimationDirection("next");
+            setSelectedMonthKey(nextOverview.month.key);
+          }
           setError(null);
           setLoading(false);
-          await writeScreenCache(leaderboardCacheKey, nextOverview);
+          await writeScreenCache(
+            getLeaderboardScreenCacheKey(nextOverview.month.key),
+            nextOverview,
+          );
         }
       } catch (nextError) {
         if (!cancelled) {
@@ -149,6 +157,33 @@ export default function LeaderboardScreen({
       cancelled = true;
     };
   }, [leaderboardCacheKey, selectedMonthKey, t]);
+
+  async function refreshLeaderboard() {
+    setRefreshing(true);
+    setError(null);
+
+    try {
+      const nextOverview = await loadLeaderboardOverview(selectedMonthKey);
+      setOverview(nextOverview);
+      if (nextOverview.month.key !== selectedMonthKey) {
+        setMonthAnimationDirection("next");
+        setSelectedMonthKey(nextOverview.month.key);
+      }
+      await writeScreenCache(
+        getLeaderboardScreenCacheKey(nextOverview.month.key),
+        nextOverview,
+      );
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("leaderboard.loadError"),
+      );
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }
 
   function formatMetricPoints(earnedPoints: number, maxPoints: number) {
     return `${earnedPoints} / ${maxPoints}`;
@@ -202,15 +237,34 @@ export default function LeaderboardScreen({
     },
   );
   const canGoForward = selectedMonthKey < currentMonthKey;
+  const earliestMonthKey =
+    overview?.earliestMonthKey ??
+    initialSnapshot?.value.earliestMonthKey ??
+    currentMonthKey;
+  const canGoBack = selectedMonthKey > earliestMonthKey;
+
+  useEffect(() => {
+    if (selectedMonthKey < earliestMonthKey) {
+      setMonthAnimationDirection("next");
+      setSelectedMonthKey(earliestMonthKey);
+    }
+  }, [earliestMonthKey, selectedMonthKey]);
 
   function changeMonth(offset: number) {
     if (offset > 0 && !canGoForward) {
       return;
     }
 
+    if (offset < 0 && !canGoBack) {
+      return;
+    }
+
     hapticSelection();
     setMonthAnimationDirection(offset > 0 ? "next" : "prev");
-    setSelectedMonthKey((current) => shiftMonthKey(current, offset));
+    setSelectedMonthKey((current) => {
+      const nextMonthKey = shiftMonthKey(current, offset);
+      return nextMonthKey < earliestMonthKey ? earliestMonthKey : nextMonthKey;
+    });
   }
 
   function handleStandaloneNavigate(nextTab: MainNavTab) {
@@ -443,7 +497,10 @@ export default function LeaderboardScreen({
 
         <View className="mt-4 flex-row items-center justify-between rounded-full border border-[#e5ebf5] bg-white px-1.5 py-1.5 shadow-sm shadow-[#1f2687]/10">
           <PressableScale
-            className="h-8 w-8 items-center justify-center rounded-full bg-white"
+            className={`h-8 w-8 items-center justify-center rounded-full bg-white ${
+              canGoBack ? "" : "opacity-40"
+            }`}
+            disabled={!canGoBack}
             haptic="selection"
             onPress={() => changeMonth(-1)}
           >
@@ -870,6 +927,15 @@ export default function LeaderboardScreen({
           }}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => {
+                void refreshLeaderboard();
+              }}
+              refreshing={refreshing}
+              tintColor="#315cf6"
+            />
+          }
         >
           {leaderboardHeader}
           {leaderboardBody}
@@ -891,6 +957,15 @@ export default function LeaderboardScreen({
         }}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => {
+              void refreshLeaderboard();
+            }}
+            refreshing={refreshing}
+            tintColor="#315cf6"
+          />
+        }
       >
         {leaderboardHeader}
         {leaderboardBody}

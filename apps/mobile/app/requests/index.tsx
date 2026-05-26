@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import {
   EmployeeRequestItem,
@@ -133,6 +133,7 @@ export default function RequestsScreen() {
   );
   const [selectedDayKey, setSelectedDayKey] = useState(() => formatDateKey(new Date()));
   const [loading, setLoading] = useState(() => !initialCacheEntry);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +188,7 @@ export default function RequestsScreen() {
       setError(nextError instanceof Error ? nextError.message : t('requests.loadError'));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -403,7 +405,19 @@ export default function RequestsScreen() {
   }
 
   return (
-    <Screen contentClassName="pb-10">
+    <Screen
+      contentClassName="pb-10"
+      refreshControl={
+        <RefreshControl
+          onRefresh={() => {
+            setRefreshing(true);
+            void loadData(calendarMonth, { silent: true });
+          }}
+          refreshing={refreshing}
+          tintColor="#315cf6"
+        />
+      }
+    >
       <StatusBar style="dark" />
 
       <Card className="gap-4">

@@ -244,6 +244,7 @@ model Tenant {
   slug               String               @unique
   timezone           String               @default("UTC")
   locale             String               @default("en")
+  attendanceTrackingEnabled Boolean @default(true)
   hideLeaderboardPeersFromEmployees Boolean @default(false)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
@@ -296,6 +297,7 @@ model Tenant {
   taskAutomationPolicy TaskAutomationPolicy?
   diagnosticsSnapshots DiagnosticsSnapshot[]
   billingSubscription BillingSubscription?
+  trialPromoRedemptions TrialPromoRedemption[]
   kommoEntityLinks  KommoEntityLink[]
   kommoAutomationLogs KommoAutomationLog[]
 }
@@ -315,10 +317,41 @@ model BillingSubscription {
   stripeCurrentPeriodStart   DateTime?
   stripeCurrentPeriodEnd     DateTime?
   stripeCancelAtPeriodEnd    Boolean   @default(false)
+  trialStartedAt             DateTime?
+  trialEndsAt                DateTime?
+  trialSource                String?
+  promoCode                  String?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TrialPromoCode {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  trialDays      Int      @default(30)
+  maxRedemptions Int      @default(1)
+  redeemedCount  Int      @default(0)
+  isActive       Boolean  @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  redemptions TrialPromoRedemption[]
+}
+
+model TrialPromoRedemption {
+  id          String   @id @default(uuid())
+  promoCodeId String
+  tenantId    String
+  redeemedAt  DateTime @default(now())
+
+  promoCode TrialPromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, tenantId])
+  @@index([tenantId, redeemedAt])
 }
 
 model KommoEntityLink {
@@ -434,6 +467,12 @@ model User {
   status       UserStatus @default(INVITED)
   workspaceAccessAllowed Boolean @default(true)
   bannerTheme  String     @default("blue")
+  notificationAssignmentAlertsEnabled Boolean @default(true)
+  notificationTaskDeadlineRemindersEnabled Boolean @default(true)
+  notificationTaskDeadlineReminderMinutes Int @default(30)
+  notificationMeetingRemindersEnabled Boolean @default(true)
+  notificationMeetingReminderMinutes Int @default(15)
+  notificationShiftRemindersEnabled Boolean @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -1296,6 +1335,7 @@ model Announcement {
   attachmentsJson    String?
   imageStorageKey    String?
   imageAspectRatio   String?
+  notifyParticipants Boolean              @default(false)
   scheduledFor       DateTime?
   publishedAt        DateTime?
   createdAt          DateTime             @default(now())

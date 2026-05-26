@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CreditCard,
+  ExternalLink,
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
@@ -29,6 +30,7 @@ export type BillingSummary = {
   billingStartedAt: string | null;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
+  nextBillingAt: string | null;
   serviceActive: boolean;
   stripeConnected: boolean;
   stripeSubscriptionId: string | null;
@@ -36,6 +38,12 @@ export type BillingSummary = {
   stripeCancelAtPeriodEnd: boolean;
   stripeCurrentPeriodStart: string | null;
   stripeCurrentPeriodEnd: string | null;
+  trialActive: boolean;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  trialDaysRemaining: number;
+  trialSource: string | null;
+  promoCode: string | null;
   price: {
     regionCode: string;
     regionLabel: string;
@@ -187,20 +195,29 @@ export default function BillingPageClient({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
   const [billingActionLoading, setBillingActionLoading] = useState(false);
+  const [billingDisconnectLoading, setBillingDisconnectLoading] = useState(false);
 
   const usagePercent = useMemo(() => {
     if (!summary?.requiredSeats) return 0;
-    return Math.min(100, Math.round((summary.paidSeats / summary.requiredSeats) * 100));
+    const coveredSeats = summary.trialActive ? summary.requiredSeats : summary.paidSeats;
+    return Math.min(100, Math.round((coveredSeats / summary.requiredSeats) * 100));
   }, [summary]);
   const nextBillingDate = summary
-    ? formatBillingDate(summary.currentPeriodEnd, locale)
+    ? formatBillingDate(
+        summary.nextBillingAt ??
+          summary.stripeCurrentPeriodEnd ??
+          summary.currentPeriodEnd ??
+          (summary.trialActive ? summary.trialEndsAt : null),
+        locale,
+      )
     : "—";
   const invoiceRows = useMemo<BillingInvoiceRow[]>(() => {
-    if (!summary?.currentPeriodStart) {
+    const sourcePeriodStart = summary?.currentPeriodStart ?? summary?.stripeCurrentPeriodStart;
+    if (!sourcePeriodStart) {
       return [];
     }
 
-    const periodStart = new Date(summary.currentPeriodStart);
+    const periodStart = new Date(sourcePeriodStart);
     const billingStartedAt = summary.billingStartedAt
       ? new Date(summary.billingStartedAt)
       : null;
@@ -298,6 +315,11 @@ export default function BillingPageClient({
       return;
     }
 
+    const stripeWindow = window.open("", "_blank");
+    if (stripeWindow) {
+      stripeWindow.opener = null;
+    }
+
     try {
       setBillingActionLoading(true);
       setError(null);
@@ -309,12 +331,18 @@ export default function BillingPageClient({
       });
 
       if (redirect.url) {
-        window.location.assign(redirect.url);
+        if (stripeWindow) {
+          stripeWindow.location.href = redirect.url;
+        } else {
+          window.open(redirect.url, "_blank", "noopener,noreferrer");
+        }
         return;
       }
 
+      stripeWindow?.close();
       await loadBilling();
     } catch (requestError) {
+      stripeWindow?.close();
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -324,6 +352,53 @@ export default function BillingPageClient({
       );
     } finally {
       setBillingActionLoading(false);
+    }
+  }
+
+  async function disconnectStripe() {
+    if (!summary?.stripeConnected) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      locale === "ru"
+        ? "Отвязать Stripe от этой организации?"
+        : "Disconnect Stripe from this organization?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const session = getSession();
+    if (!session) {
+      setError(
+        locale === "ru"
+          ? "Сессия истекла. Войди заново"
+          : "Session expired. Sign in again",
+      );
+      return;
+    }
+
+    try {
+      setBillingDisconnectLoading(true);
+      setError(null);
+      const nextSummary = await apiRequest<BillingSummary>("/billing/disconnect", {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+      setSummary(nextSummary);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось отвязать Stripe"
+            : "Failed to disconnect Stripe",
+      );
+    } finally {
+      setBillingDisconnectLoading(false);
     }
   }
 
@@ -382,6 +457,29 @@ export default function BillingPageClient({
           </div>
         ) : summary && activeTab === "overview" ? (
           <>
+            {summary.trialActive ? (
+              <section className="rounded-2xl border border-blue-100 bg-blue-50 px-6 py-5 font-heading shadow-[0_14px_38px_rgba(37,99,235,0.08)]">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#284bff]">
+                      {locale === "ru" ? "Бесплатный trial активен" : "Free trial is active"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {locale === "ru"
+                        ? `Места не требуют оплаты еще ${summary.trialDaysRemaining} дн.`
+                        : `Seats are covered for ${summary.trialDaysRemaining} more days.`}
+                    </p>
+                  </div>
+                  <div className="text-right text-sm">
+                    <p className="text-muted-foreground">
+                      {locale === "ru" ? "Trial до" : "Trial ends"}
+                    </p>
+                    <p className="font-semibold text-foreground">{formatBillingDate(summary.trialEndsAt, locale)}</p>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
             <section className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
               <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
                 <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
@@ -414,6 +512,10 @@ export default function BillingPageClient({
                             ? locale === "ru"
                               ? `Нужно оплатить: ${summary.missingSeats} ${pluralSeats(summary.missingSeats, locale)}`
                               : `Unpaid: ${summary.missingSeats} ${pluralSeats(summary.missingSeats, locale)}`
+                            : summary.trialActive
+                              ? locale === "ru"
+                                ? "Trial покрывает все места"
+                                : "Trial covers all seats"
                             : summary.availableSeats > 0
                               ? locale === "ru"
                                 ? `Запас: ${summary.availableSeats} ${pluralSeats(summary.availableSeats, locale)}`
@@ -482,6 +584,10 @@ export default function BillingPageClient({
                           ? locale === "ru"
                             ? "Есть неоплаченные места"
                             : "Payment required"
+                          : summary.trialActive
+                            ? locale === "ru"
+                              ? "Бесплатный период активен"
+                              : "Free trial active"
                           : locale === "ru"
                             ? "Места считаются автоматически"
                             : "Seats update automatically"}
@@ -494,8 +600,12 @@ export default function BillingPageClient({
                         }`}
                       >
                         {locale === "ru"
-                          ? "Инвайты добавляют места сразу, увольнения остаются в расчете до конца месяца"
-                          : "Invites reserve seats immediately; dismissals stay billable until month end"}
+                          ? summary.trialActive
+                            ? "Сотрудники могут пользоваться сервисом без оплаты до конца trial"
+                            : "Инвайты добавляют места сразу, увольнения остаются в расчете до конца месяца"
+                          : summary.trialActive
+                            ? "Employees can use the service without payment until the trial ends"
+                            : "Invites reserve seats immediately; dismissals stay billable until month end"}
                       </p>
                     </div>
                   </div>
@@ -518,6 +628,22 @@ export default function BillingPageClient({
                 </h2>
 
                 <dl className="mt-7 grid gap-4 font-heading text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-muted-foreground">{locale === "ru" ? "Статус" : "Status"}</dt>
+                    <dd className="font-semibold text-foreground">
+                      {summary.trialActive
+                        ? locale === "ru"
+                          ? "Trial"
+                          : "Trial"
+                        : summary.serviceActive
+                          ? locale === "ru"
+                            ? "Активен"
+                            : "Active"
+                          : locale === "ru"
+                            ? "Нужна оплата"
+                            : "Payment required"}
+                    </dd>
+                  </div>
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-muted-foreground">{locale === "ru" ? "План" : "Plan"}</dt>
                     <dd className="font-semibold text-foreground">{summary.price.regionLabel}</dd>
@@ -552,7 +678,13 @@ export default function BillingPageClient({
                   <div className="mt-7 flex items-center gap-3 text-sm text-foreground">
                     <CalendarDays className="size-4 text-muted-foreground" />
                     <span className="text-muted-foreground">
-                      {locale === "ru" ? "Следующее списание" : "Next billing date"}
+                      {summary.trialActive
+                        ? locale === "ru"
+                          ? "Trial до"
+                          : "Trial ends"
+                        : locale === "ru"
+                          ? "Следующее списание"
+                          : "Next billing date"}
                     </span>
                     <span className="font-semibold">{nextBillingDate}</span>
                   </div>
@@ -592,10 +724,10 @@ export default function BillingPageClient({
                     </div>
                   </div>
                   <span
-                    className={`rounded-full px-4 py-2 font-heading text-sm font-medium ${
+                    className={`font-heading text-sm font-semibold ${
                       summary.stripeConnected
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-slate-100 text-muted-foreground"
+                        ? "text-emerald-700"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {summary.stripeConnected
@@ -613,7 +745,7 @@ export default function BillingPageClient({
                   onClick={openBillingFlow}
                   type="button"
                 >
-                  <CreditCard className="size-4" />
+                  {summary.stripeConnected ? <ExternalLink className="size-4" /> : <CreditCard className="size-4" />}
                   {billingActionLoading
                     ? locale === "ru"
                       ? "Открываем Stripe..."
@@ -630,6 +762,23 @@ export default function BillingPageClient({
                           ? "Подключить оплату Stripe"
                           : "Connect Stripe billing"}
                 </button>
+                {summary.stripeConnected ? (
+                  <button
+                    className="mt-3 flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-red-100 bg-red-50 font-heading text-sm font-medium text-red-700 transition-[background-color,transform] hover:bg-red-100 active:scale-[0.96] disabled:cursor-wait disabled:opacity-60"
+                    disabled={billingDisconnectLoading}
+                    onClick={disconnectStripe}
+                    type="button"
+                  >
+                    <CreditCard className="size-4" />
+                    {billingDisconnectLoading
+                      ? locale === "ru"
+                        ? "Отвязываем Stripe..."
+                        : "Disconnecting Stripe..."
+                      : locale === "ru"
+                        ? "Отвязать Stripe"
+                        : "Disconnect Stripe"}
+                  </button>
+                ) : null}
               </article>
 
               <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">

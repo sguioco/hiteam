@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { EmployeeInvitationStatus, EmployeeWorkMode } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { KommoService } from "../kommo/kommo.service";
 import { CreateLocationDto } from "./dto/create-location.dto";
@@ -25,6 +26,10 @@ const LOCATION_SETUP_SELECT = {
   geofenceRadiusMeters: true,
   timezone: true,
   createdAt: true,
+} as const;
+
+const TENANT_SETUP_SELECT = {
+  attendanceTrackingEnabled: true,
 } as const;
 
 function normalizeGeofenceRadius(value?: number | null) {
@@ -103,11 +108,19 @@ export class OrgService {
   }
 
   async getSetup(tenantId: string) {
-    const company = await this.prisma.company.findFirst({
-      where: { tenantId },
-      select: COMPANY_SETUP_SELECT,
-      orderBy: { createdAt: "desc" },
-    });
+    const [tenant, company] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: TENANT_SETUP_SELECT,
+      }),
+      this.prisma.company.findFirst({
+        where: { tenantId },
+        select: COMPANY_SETUP_SELECT,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+    const attendanceTrackingEnabled =
+      tenant?.attendanceTrackingEnabled ?? true;
 
     const location = company
       ? await this.prisma.location.findFirst({
@@ -125,6 +138,7 @@ export class OrgService {
         configured: false,
         company: null,
         location: null,
+        attendanceTrackingEnabled,
         defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
       };
     }
@@ -140,6 +154,7 @@ export class OrgService {
       configured,
       company,
       location,
+      attendanceTrackingEnabled,
       defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
     };
   }
@@ -173,6 +188,10 @@ export class OrgService {
 
   async upsertSetup(tenantId: string, dto: UpsertOrgSetupDto) {
     const setup = await this.prisma.$transaction(async (tx) => {
+      const nextAttendanceTrackingEnabled =
+        typeof dto.attendanceTrackingEnabled === "boolean"
+          ? dto.attendanceTrackingEnabled
+          : undefined;
       const [existingCompanies, existingLocations] = await Promise.all([
         tx.company.findMany({
           where: { tenantId },
@@ -183,6 +202,19 @@ export class OrgService {
           orderBy: { createdAt: "desc" },
         }),
       ]);
+      const tenant =
+        nextAttendanceTrackingEnabled === undefined
+          ? await tx.tenant.findUniqueOrThrow({
+              where: { id: tenantId },
+              select: TENANT_SETUP_SELECT,
+            })
+          : await tx.tenant.update({
+              where: { id: tenantId },
+              data: {
+                attendanceTrackingEnabled: nextAttendanceTrackingEnabled,
+              },
+              select: TENANT_SETUP_SELECT,
+            });
 
       const shouldCreateNew = existingCompanies.length === 0;
 
@@ -248,10 +280,60 @@ export class OrgService {
             },
           });
 
+      if (tenant.attendanceTrackingEnabled === false) {
+        await tx.employee.updateMany({
+          where: { tenantId },
+          data: { workMode: EmployeeWorkMode.FIELD },
+        });
+        await tx.employeeInvitation.updateMany({
+          where: {
+            tenantId,
+            status: {
+              in: [
+                EmployeeInvitationStatus.INVITED,
+                EmployeeInvitationStatus.PENDING_APPROVAL,
+                EmployeeInvitationStatus.REJECTED,
+              ],
+            },
+          },
+          data: {
+            workMode: EmployeeWorkMode.FIELD,
+            approvedShiftTemplateId: null,
+          },
+        });
+
+        const managerRole = await tx.role.upsert({
+          where: { code: "manager" },
+          update: {},
+          create: {
+            code: "manager",
+            name: "Manager",
+            description: "Can manage team attendance, approvals, and tasks",
+          },
+        });
+        const employeeUsers = await tx.employee.findMany({
+          where: { tenantId, userId: { not: null } },
+          select: { userId: true },
+        });
+
+        if (employeeUsers.length > 0) {
+          await tx.userRole.createMany({
+            data: employeeUsers.map((employee) => ({
+              userId: employee.userId!,
+              roleId: managerRole.id,
+              scopeType: "tenant",
+              scopeId: tenantId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
       return {
         configured: true,
         company,
         location,
+        attendanceTrackingEnabled: tenant.attendanceTrackingEnabled,
         defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
       };
     });

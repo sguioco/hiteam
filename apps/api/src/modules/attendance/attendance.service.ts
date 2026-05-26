@@ -2479,7 +2479,7 @@ export class AttendanceService {
       department: { name: string };
       primaryLocation: { name: string };
     };
-    shift: { template: { name: string } } | null;
+    shift: { startsAt: Date; template: { name: string } } | null;
     status: AttendanceSessionStatus;
     startedAt: Date;
     endedAt: Date | null;
@@ -2489,6 +2489,19 @@ export class AttendanceService {
     lateMinutes: number;
     earlyLeaveMinutes: number;
   }) {
+    const lateMinutes =
+      session.lateMinutes !== 0
+        ? session.lateMinutes
+        : session.shift
+          ? Math.max(
+              0,
+              Math.round(
+                (session.startedAt.getTime() - session.shift.startsAt.getTime()) /
+                  60000,
+              ),
+            )
+          : 0;
+
     return {
       sessionId: session.id,
       employeeId: session.employee.id,
@@ -2509,7 +2522,7 @@ export class AttendanceService {
       totalMinutes: session.totalMinutes,
       breakMinutes: session.breakMinutes,
       paidBreakMinutes: session.paidBreakMinutes,
-      lateMinutes: session.lateMinutes,
+      lateMinutes,
       earlyLeaveMinutes: session.earlyLeaveMinutes,
     };
   }

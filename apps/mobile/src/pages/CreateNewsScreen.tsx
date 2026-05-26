@@ -289,6 +289,7 @@ export default function CreateNewsScreen() {
   const [formScrollEnabled, setFormScrollEnabled] = useState(true);
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [limitParticipants, setLimitParticipants] = useState(false);
+  const [notifyParticipants, setNotifyParticipants] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [linkUrl, setLinkUrl] = useState('');
@@ -1106,6 +1107,7 @@ export default function CreateNewsScreen() {
         audience,
         title: title.trim(),
         body: body.trim(),
+        notifyParticipants,
         ...(groupIds.length ? { groupIds } : {}),
         ...(targetEmployeeIds.length ? { targetEmployeeIds } : {}),
         ...(imageDraft
@@ -1633,6 +1635,14 @@ export default function CreateNewsScreen() {
               checked={limitParticipants}
               label={t('manager.createNewsSelectedAudienceOnly')}
               onPress={() => setLimitParticipants((current) => !current)}
+            />
+          </View>
+
+          <View className="px-1 py-1">
+            <NewsOptionCheckbox
+              checked={notifyParticipants}
+              label={t('manager.createNewsNotifyParticipants')}
+              onPress={() => setNotifyParticipants((current) => !current)}
             />
           </View>
 

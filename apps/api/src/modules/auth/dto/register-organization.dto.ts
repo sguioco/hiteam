@@ -10,4 +10,8 @@ export class RegisterOrganizationDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
 }

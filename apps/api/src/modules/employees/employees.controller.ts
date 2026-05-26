@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AllowPendingAccess } from '../../common/decorators/allow-pending-access.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -54,6 +54,13 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeInvitationSetupDto,
   ) {
     return this.employeesService.updateInvitationSetup(user.tenantId, user.sub, invitationId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Delete('invitations/:invitationId')
+  deleteInvitation(@CurrentUser() user: JwtUser, @Param('invitationId') invitationId: string) {
+    return this.employeesService.deleteInvitationAndEmployee(user.tenantId, user.sub, invitationId);
   }
 
   @Get('invitations/public/:token')

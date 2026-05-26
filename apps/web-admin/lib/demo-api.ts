@@ -5022,6 +5022,7 @@ export async function demoApiRequest<T>(
       billingStartedAt: currentState.billingFirstPaidAt,
       currentPeriodStart: billingPeriod?.start.toISOString() ?? null,
       currentPeriodEnd: billingPeriod?.end.toISOString() ?? null,
+      nextBillingAt: billingPeriod?.end.toISOString() ?? null,
       serviceActive,
       stripeConnected: Boolean(currentState.billingFirstPaidAt),
       stripeSubscriptionId: currentState.billingFirstPaidAt ? "sub_demo" : null,
@@ -5029,6 +5030,12 @@ export async function demoApiRequest<T>(
       stripeCancelAtPeriodEnd: false,
       stripeCurrentPeriodStart: billingPeriod?.start.toISOString() ?? null,
       stripeCurrentPeriodEnd: billingPeriod?.end.toISOString() ?? null,
+      trialActive: false,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      trialDaysRemaining: 0,
+      trialSource: null,
+      promoCode: null,
       price: {
         regionCode: "standard",
         regionLabel: "Standard",
@@ -5049,6 +5056,59 @@ export async function demoApiRequest<T>(
     return {
       mode: pathname === "/billing/portal" ? "portal" : "checkout",
       url: "/billing?stripe=demo",
+    } as T;
+  }
+
+  if (pathname === "/billing/disconnect" && method === "POST") {
+    updateState((state) => {
+      state.billingPaidSeats = 0;
+      state.billingFirstPaidAt = null;
+    });
+
+    const nextState = getState();
+    const usedSeats = nextState.employees.length + nextState.invitations.length;
+    const requiredSeats = Math.max(nextState.billingRequiredSeats, usedSeats);
+    const unitAmount = 3;
+
+    return {
+      status: "PAYMENT_REQUIRED",
+      paidSeats: 0,
+      requiredSeats,
+      usedSeats,
+      billableSeats: requiredSeats,
+      availableSeats: 0,
+      missingSeats: requiredSeats,
+      activeEmployeeCount: nextState.employees.length,
+      pendingInvitationCount: nextState.invitations.length,
+      monthlyTotal: requiredSeats * unitAmount,
+      amountDue: requiredSeats * unitAmount,
+      billingStartedAt: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      nextBillingAt: null,
+      serviceActive: false,
+      stripeConnected: false,
+      stripeSubscriptionId: null,
+      stripeSubscriptionStatus: "PAYMENT_REQUIRED",
+      stripeCancelAtPeriodEnd: false,
+      stripeCurrentPeriodStart: null,
+      stripeCurrentPeriodEnd: null,
+      trialActive: false,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      trialDaysRemaining: 0,
+      trialSource: null,
+      promoCode: null,
+      price: {
+        regionCode: "standard",
+        regionLabel: "Standard",
+        country: nextState.organization.location?.country ?? "Thailand",
+        currency: "USD",
+        unitAmount,
+        approxUsd: null,
+        stripeLookupKey: "hiteam_seat_standard_monthly",
+        locationConfigured: Boolean(nextState.organization.location),
+      },
     } as T;
   }
 
@@ -5208,6 +5268,29 @@ export async function demoApiRequest<T>(
       }
     });
     return undefined as T;
+  }
+
+  const deleteInvitationMatch = pathname.match(
+    /^\/employees\/invitations\/([^/]+)$/,
+  );
+  if (deleteInvitationMatch && method === "DELETE") {
+    updateState((state) => {
+      const invitationId = deleteInvitationMatch[1];
+      const invitation = state.invitations.find((item) => item.id === invitationId);
+      const employeeId = invitation?.employeeId ?? null;
+      state.invitations = state.invitations.filter((item) => item.id !== invitationId);
+      if (employeeId) {
+        state.employees = state.employees.filter((item) => item.id !== employeeId);
+      }
+      state.billingRequiredSeats = Math.max(
+        state.billingPaidSeats,
+        state.employees.length + state.invitations.length,
+      );
+    });
+    return {
+      deleted: true,
+      invitationId: deleteInvitationMatch[1],
+    } as T;
   }
 
   const setupInvitationMatch = pathname.match(
@@ -5438,6 +5521,7 @@ export async function demoApiRequest<T>(
         title: payload.title,
         body: payload.body,
         isPinned: Boolean(payload.isPinned),
+        notifyParticipants: Boolean(payload.notifyParticipants),
         groupIds: Array.isArray(payload.groupIds)
           ? payload.groupIds
           : payload.groupId

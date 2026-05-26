@@ -38,6 +38,7 @@ import {
 } from "../../lib/screen-cache";
 import {
   LEADERBOARD_CELEBRATION_CACHE_KEY,
+  MANAGER_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_KEY,
   TODAY_SCREEN_CACHE_TTL_MS,
   warmTodayScreenCache,
@@ -213,7 +214,7 @@ export function AttendanceCaptureScreen({
 
   const shiftTime = useMemo(() => {
     if (!status?.shift) {
-      return "—";
+      return null;
     }
 
     return `${new Date(status.shift.startsAt).toLocaleTimeString(undefined, {
@@ -221,6 +222,7 @@ export function AttendanceCaptureScreen({
       minute: "2-digit",
     })} - ${new Date(status.shift.endsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
   }, [status]);
+  const showCameraStatusOverlay = Boolean(status) && status?.workMode !== "FIELD";
 
   const cameraStatusText = useMemo(() => {
     if (!permission?.granted) {
@@ -740,6 +742,7 @@ export function AttendanceCaptureScreen({
     }
 
     void clearScreenCache(LEADERBOARD_CELEBRATION_CACHE_KEY);
+    void clearScreenCache(MANAGER_SCREEN_CACHE_KEY);
     router.replace("/today" as never);
 
     void submitAttendanceAction(action, {
@@ -771,6 +774,8 @@ export function AttendanceCaptureScreen({
         if (reconciledStatus) {
           void syncTodayScreenCache(reconciledStatus);
         }
+
+        void clearScreenCache(MANAGER_SCREEN_CACHE_KEY);
 
         if (attendanceResult.leaderboardCelebration) {
           void writeScreenCache(
@@ -889,6 +894,8 @@ export function AttendanceCaptureScreen({
 
     await writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
       attendanceStatus: nextAttendanceStatus,
+      attendanceTrackingEnabled:
+        currentSnapshot?.value.attendanceTrackingEnabled ?? true,
       profile: currentSnapshot?.value.profile ?? null,
       shifts: currentSnapshot?.value.shifts ?? [],
       tasks: currentSnapshot?.value.tasks ?? [],
@@ -987,13 +994,19 @@ export function AttendanceCaptureScreen({
               </View>
             )}
 
-            <View className="absolute inset-x-0 bottom-0 bg-[#0f1724]/60 px-5 py-4">
-              <Text style={styles.cameraCaption}>
-                {status?.shift?.label ?? ""}
-              </Text>
-              <Text style={styles.cameraShift}>{shiftTime}</Text>
-              <Text style={styles.cameraBody}>{cameraStatusText}</Text>
-            </View>
+            {showCameraStatusOverlay ? (
+              <View className="absolute inset-x-0 bottom-0 bg-[#0f1724]/60 px-5 py-4">
+                {status?.shift?.label ? (
+                  <Text style={styles.cameraCaption}>
+                    {status.shift.label}
+                  </Text>
+                ) : null}
+                {shiftTime ? (
+                  <Text style={styles.cameraShift}>{shiftTime}</Text>
+                ) : null}
+                <Text style={styles.cameraBody}>{cameraStatusText}</Text>
+              </View>
+            ) : null}
           </View>
 
           {locationCheck.state === "outside" &&

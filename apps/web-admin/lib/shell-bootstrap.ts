@@ -5,6 +5,7 @@ export type OrganizationHeaderState = {
     logoUrl?: string | null;
     name: string;
   } | null;
+  attendanceTrackingEnabled?: boolean;
   configured: boolean;
 };
 

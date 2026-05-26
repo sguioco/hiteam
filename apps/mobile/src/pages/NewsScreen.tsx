@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Alert, Image, Linking, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { Line, Rect, Svg } from 'react-native-svg';
 import MapView, { Marker } from 'react-native-maps';
 import { Text } from '../../components/ui/text';
@@ -215,6 +215,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingItem, setEditingItem] = useState<AnnouncementItem | null>(null);
@@ -323,6 +324,7 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       setError(nextError instanceof Error ? nextError.message : t('announcements.loadError'));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -1126,6 +1128,16 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
           paddingHorizontal: 16,
           paddingTop: insets.top + 12,
         }}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => {
+              setRefreshing(true);
+              void loadData({ silent: true });
+            }}
+            refreshing={refreshing}
+            tintColor="#315cf6"
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {content}

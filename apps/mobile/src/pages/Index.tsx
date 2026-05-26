@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,8 +27,16 @@ import type {
 } from "@smart/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppGradientBackground } from "../../components/ui/screen";
-import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
-import { loadMyProfile, loadTodayBootstrap } from "../../lib/api";
+import {
+  hasManagerAccess,
+  updateAuthFlowState,
+  useAuthFlowState,
+} from "../../lib/auth-flow";
+import {
+  loadMyProfile,
+  loadTodayBootstrap,
+  refreshCurrentSession,
+} from "../../lib/api";
 import { createCollaborationSocket } from "../../lib/collaboration-socket";
 import { createNotificationsSocket } from "../../lib/notifications-socket";
 import BottomNav from "../components/BottomNav";
@@ -301,12 +316,21 @@ const Index = () => {
   const [navProfile, setNavProfile] = useState<ProfileCacheValue | null>(
     initialProfileSnapshot?.value ?? null,
   );
+  const [attendanceTrackingEnabled, setAttendanceTrackingEnabled] = useState(
+    initialTodaySnapshot?.value.attendanceTrackingEnabled ?? true,
+  );
   const appStateRef = useRef(AppState.currentState);
   const handWaveRotation = useSharedValue(0);
   const isManager = hasManagerAccess(roleCodes);
+  const isTasksOnlyOrganization = !attendanceTrackingEnabled;
+  const effectiveIsManager = isManager || isTasksOnlyOrganization;
   const hasWorkspaceEntry =
     isAuthenticated && workspaceAccessAllowed && workspaceSetupStep === null;
-  const resolvedTab = routeTab === "manage" && !isManager ? "today" : routeTab;
+  const resolvedTab =
+    (routeTab === "manage" && !effectiveIsManager) ||
+    (routeTab === "leaderboard" && isTasksOnlyOrganization)
+      ? "today"
+      : routeTab;
 
   const handWaveStyle = useAnimatedStyle(() => ({
     transform: [{ rotateZ: `${handWaveRotation.value}deg` }],
@@ -351,6 +375,21 @@ const Index = () => {
     });
   }
 
+  const refreshSessionRoleCodes = useCallback(async () => {
+    const refreshedSession = await refreshCurrentSession();
+
+    if (!refreshedSession) {
+      return roleCodes;
+    }
+
+    updateAuthFlowState({
+      roleCodes: refreshedSession.user.roleCodes,
+      workspaceAccessAllowed: refreshedSession.user.workspaceAccessAllowed,
+    });
+
+    return refreshedSession.user.roleCodes;
+  }, [roleCodes]);
+
   useEffect(() => {
     if (!hasWorkspaceEntry) {
       setActiveTab("today");
@@ -370,10 +409,20 @@ const Index = () => {
   }, [hasWorkspaceEntry, resolvedTab]);
 
   useEffect(() => {
-    if (hasWorkspaceEntry && routeTab === "manage" && !isManager) {
+    if (
+      hasWorkspaceEntry &&
+      ((routeTab === "manage" && !effectiveIsManager) ||
+        (routeTab === "leaderboard" && isTasksOnlyOrganization))
+    ) {
       router.replace(buildWorkspaceHref("today") as never);
     }
-  }, [hasWorkspaceEntry, isManager, routeTab, router]);
+  }, [
+    effectiveIsManager,
+    hasWorkspaceEntry,
+    isTasksOnlyOrganization,
+    routeTab,
+    router,
+  ]);
 
   useEffect(() => {
     const wave = () => {
@@ -411,7 +460,7 @@ const Index = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [hasWorkspaceEntry, language, roleCodes]);
+  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -420,6 +469,7 @@ const Index = () => {
     }
 
     const applyTodayBadgeState = (entry: TodayScreenCacheValue | null) => {
+      setAttendanceTrackingEnabled(entry?.attendanceTrackingEnabled ?? true);
       setTodayHasBadge(
         getTodayNavBadgeState(
           entry?.tasks ?? [],
@@ -444,7 +494,16 @@ const Index = () => {
   }, [hasWorkspaceEntry]);
 
   useEffect(() => {
-    if (!hasWorkspaceEntry) {
+    if (!isTasksOnlyOrganization) {
+      return;
+    }
+
+    setStartShiftPrompt(null);
+    setStartShiftPromptVisible(false);
+  }, [isTasksOnlyOrganization]);
+
+  useEffect(() => {
+    if (!hasWorkspaceEntry || isTasksOnlyOrganization) {
       setLeaderboardCelebration(null);
       return;
     }
@@ -462,7 +521,7 @@ const Index = () => {
     });
 
     return unsubscribe;
-  }, [hasWorkspaceEntry]);
+  }, [hasWorkspaceEntry, isTasksOnlyOrganization]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -532,8 +591,10 @@ const Index = () => {
         (previousState === "background" || previousState === "inactive") &&
         nextState === "active"
       ) {
-        void hydrateWorkspaceCaches(roleCodes, language);
-        void warmWorkspaceCaches(roleCodes, { force: true, language });
+        void refreshSessionRoleCodes().then((nextRoleCodes) => {
+          void hydrateWorkspaceCaches(nextRoleCodes, language);
+          void warmWorkspaceCaches(nextRoleCodes, { force: true, language });
+        });
         triggerAppEntry();
       }
     });
@@ -541,7 +602,7 @@ const Index = () => {
     return () => {
       subscription.remove();
     };
-  }, [hasWorkspaceEntry, language, roleCodes]);
+  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -560,8 +621,10 @@ const Index = () => {
 
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
-        void hydrateWorkspaceCaches(roleCodes, language);
-        void warmWorkspaceCaches(roleCodes, { force: true, language });
+        void refreshSessionRoleCodes().then((nextRoleCodes) => {
+          void hydrateWorkspaceCaches(nextRoleCodes, language);
+          void warmWorkspaceCaches(nextRoleCodes, { force: true, language });
+        });
       }, 180);
     };
 
@@ -602,7 +665,7 @@ const Index = () => {
       notificationsSocket?.disconnect();
       collaborationSocket?.disconnect();
     };
-  }, [hasWorkspaceEntry, language, roleCodes]);
+  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!appEntrySignal || !hasWorkspaceEntry) {
@@ -615,6 +678,12 @@ const Index = () => {
       try {
         const todayBootstrap = await loadTodayBootstrap();
         if (cancelled) {
+          return;
+        }
+
+        if (!todayBootstrap.attendanceTrackingEnabled) {
+          setStartShiftPrompt(null);
+          setStartShiftPromptVisible(false);
           return;
         }
 
@@ -643,7 +712,11 @@ const Index = () => {
   }, [appEntrySignal, hasWorkspaceEntry, language, roleCodes]);
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
-    const nextTab = tab === "manage" && !isManager ? "today" : tab;
+    const nextTab =
+      (tab === "manage" && !effectiveIsManager) ||
+      (tab === "leaderboard" && isTasksOnlyOrganization)
+        ? "today"
+        : tab;
     markTabMounted(nextTab);
     setActiveTab(nextTab);
     router.replace(buildWorkspaceHref(nextTab, options) as never);
@@ -664,7 +737,7 @@ const Index = () => {
 
   function openLeaderboardCelebration() {
     closeLeaderboardCelebration();
-    navigateToTab("leaderboard");
+    navigateToTab(isTasksOnlyOrganization ? "today" : "leaderboard");
   }
 
   if (!isAuthenticated) {
@@ -707,9 +780,9 @@ const Index = () => {
         />
       );
     } else if (tab === "manage") {
-      content = isManager ? <ManagerScreen active={isActive} /> : null;
+      content = effectiveIsManager ? <ManagerScreen active={isActive} /> : null;
     } else if (tab === "leaderboard") {
-      content = <LeaderboardScreen active={isActive} />;
+      content = isTasksOnlyOrganization ? null : <LeaderboardScreen active={isActive} />;
     } else if (tab === "news") {
       content = <NewsScreen />;
     } else {
@@ -746,8 +819,8 @@ const Index = () => {
         <View style={{ flex: 1 }}>
           {renderTabScene("today")}
           {renderTabScene("calendar")}
-          {isManager ? renderTabScene("manage") : null}
-          {renderTabScene("leaderboard")}
+          {effectiveIsManager ? renderTabScene("manage") : null}
+          {isTasksOnlyOrganization ? null : renderTabScene("leaderboard")}
           {renderTabScene("news")}
           {renderTabScene("profile")}
         </View>
@@ -760,7 +833,7 @@ const Index = () => {
           hasBadge={todayHasBadge}
           onNavigate={navigateToTab}
           profileAvatarSource={navProfileAvatarSource}
-          showManage={isManager}
+          showManage={effectiveIsManager}
         />
       </View>
       <Modal

@@ -119,7 +119,7 @@ const translations = {
     "invite.description":
       "Email, который менеджер добавил в команду",
     "invite.label": "Рабочий email",
-    "invite.placeholder": "you@company.com",
+    "invite.placeholder": "Введите email",
     "invite.joinWithCodeTitle": "Вступить по приглашению",
     "invite.joinWithCodeBody":
       "Введите email, который менеджер добавил в команду, и мы откроем регистрацию",
@@ -706,7 +706,7 @@ const translations = {
     "attendanceCapture.cameraPromptConfirm": "Продолжить",
     "attendanceCapture.cameraPromptCancel": "Позже",
     "attendanceCapture.locationRunning": "Проверяем вашу локацию...",
-    "attendanceCapture.locationReady": "Вы находитесь внутри рабочей зоны.",
+    "attendanceCapture.locationReady": "Вы находитесь внутри рабочей зоны",
     "attendanceCapture.locationOutsideTitle": "Вы вне рабочей зоны",
     "attendanceCapture.locationOutsideBody":
       "Переместитесь в отмеченный круг и запустите проверку локации ещё раз.",
@@ -999,6 +999,7 @@ const translations = {
     "manager.createNewsPhotoError": "Не удалось выбрать фото для новости.",
     "manager.createNewsEditImage": "Редактировать",
     "manager.createNewsSelectedAudienceOnly": "Только для выбранных участников",
+    "manager.createNewsNotifyParticipants": "Уведомить участников",
     "manager.createNewsChooseAudience": "Выбери группу или сотрудника.",
     "manager.createNewsSelectParticipantsError":
       "Выбери хотя бы одного участника для этой новости.",
@@ -1078,7 +1079,7 @@ const translations = {
     "invite.description":
       "The email your manager added to the team",
     "invite.label": "Work email",
-    "invite.placeholder": "you@company.com",
+    "invite.placeholder": "Enter your email",
     "invite.joinWithCodeTitle": "Join with invitation",
     "invite.joinWithCodeBody":
       "Enter the work email your manager added to the team and we will continue registration.",
@@ -1662,7 +1663,7 @@ const translations = {
     "attendanceCapture.cameraPromptConfirm": "Continue",
     "attendanceCapture.cameraPromptCancel": "Later",
     "attendanceCapture.locationRunning": "Checking your location...",
-    "attendanceCapture.locationReady": "You are inside the allowed work area.",
+    "attendanceCapture.locationReady": "You are inside the allowed work area",
     "attendanceCapture.locationOutsideTitle":
       "You are outside the allowed work area",
     "attendanceCapture.locationOutsideBody":
@@ -1953,6 +1954,7 @@ const translations = {
     "manager.createNewsPhotoError": "Unable to choose a news photo.",
     "manager.createNewsEditImage": "Edit",
     "manager.createNewsSelectedAudienceOnly": "Only for selected participants",
+    "manager.createNewsNotifyParticipants": "Notify participants",
     "manager.createNewsChooseAudience": "Choose a group or an employee.",
     "manager.createNewsSelectParticipantsError":
       "Select at least one participant for this news item.",
@@ -1966,7 +1968,9 @@ const translations = {
     "manager.requestType.supply": "Supply",
     "manager.requestType.shiftChange": "Shift",
   },
-  es: {},
+  es: {
+    "invite.placeholder": "Introduce tu email",
+  },
   ...generatedTranslations,
 } satisfies Record<AppLanguage, Record<string, string>>;
 

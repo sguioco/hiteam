@@ -19,6 +19,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   bootstrapDemoDevice,
+  bootstrapPushNotifications,
   lookupInvitationByEmail,
   lookupInvitationByPhone,
   signInWithEmail,
@@ -382,7 +383,7 @@ const AuthScreen = () => {
         ? {
             emailTitle: 'Вступить по email',
             phoneTitle: 'Вступить по телефону',
-            emailPlaceholder: 'you@company.com',
+            emailPlaceholder: t('invite.placeholder'),
             phonePlaceholder: 'Номер телефона',
             phoneSwitch: 'Вступить по телефону',
             emailSwitch: 'Вступить по email',
@@ -399,7 +400,7 @@ const AuthScreen = () => {
         : {
             emailTitle: 'Join with email',
             phoneTitle: 'Join with phone',
-            emailPlaceholder: 'you@company.com',
+            emailPlaceholder: t('invite.placeholder'),
             phonePlaceholder: 'Phone number',
             phoneSwitch: 'Join with phone',
             emailSwitch: 'Join with email',
@@ -413,7 +414,7 @@ const AuthScreen = () => {
             phoneInvalid: 'Enter a valid phone number.',
             existing: 'Your account is already created. Open sign-in and use your password.',
           },
-    [language],
+    [language, t],
   );
   const filteredCountryCodeOptions = useMemo(() => {
     const normalizedQuery = normalizeCountryCodeSearchValue(countryCodeSearchQuery);
@@ -441,7 +442,7 @@ const AuthScreen = () => {
   }, [countryCodeSearchQuery]);
   const joinProfileInputStyle = {
     color: '#24314b',
-    fontFamily: 'Manrope_700Bold',
+    fontFamily: 'Manrope_600SemiBold',
     fontSize: 16,
     includeFontPadding: false,
   } as const;
@@ -980,6 +981,7 @@ const AuthScreen = () => {
       }
 
       void bootstrapDemoDevice().catch(() => undefined);
+      void bootstrapPushNotifications().catch(() => undefined);
       const workspaceSetupStep = await resolveWorkspaceSetupStep();
 
       signInLocally({ workspaceSetupStep });

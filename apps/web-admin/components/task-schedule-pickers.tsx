@@ -74,6 +74,30 @@ function buildDateTimeInput(
   return `${date || formatDateInput(new Date())}T${time || "18:00"}`;
 }
 
+function formatTimeInput(value: Date) {
+  return `${`${value.getHours()}`.padStart(2, "0")}:${`${value.getMinutes()}`.padStart(2, "0")}`;
+}
+
+function getNextSelectableDateTimeInput() {
+  const next = new Date();
+  next.setMinutes(next.getMinutes() + 1, 0, 0);
+  return `${formatDateInput(next)}T${formatTimeInput(next)}`;
+}
+
+function normalizeFutureDateTimeInput(value: string, minToday: boolean) {
+  if (!minToday || !value) {
+    return value;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() >= Date.now()) {
+    return value;
+  }
+
+  return getNextSelectableDateTimeInput();
+}
+
 function getPickerCopy(locale: Locale) {
   return {
     apply: locale === "ru" ? "Готово" : "Apply",
@@ -151,13 +175,29 @@ export function TaskDateTimePicker({
         isDisabled={isDisabled}
         locale={locale}
         minToday={minToday}
-        onChange={(date) => onChange(date ? buildDateTimeInput(value, { date }) : "")}
+        onChange={(date) =>
+          onChange(
+            date
+              ? normalizeFutureDateTimeInput(
+                  buildDateTimeInput(value, { date }),
+                  minToday,
+                )
+              : "",
+          )
+        }
         value={parts.date}
       />
       <TaskTimePicker
         isDisabled={isDisabled}
         locale={locale}
-        onChange={(time) => onChange(buildDateTimeInput(value, { time }))}
+        onChange={(time) =>
+          onChange(
+            normalizeFutureDateTimeInput(
+              buildDateTimeInput(value, { time }),
+              minToday,
+            ),
+          )
+        }
         value={parts.time}
       />
     </div>

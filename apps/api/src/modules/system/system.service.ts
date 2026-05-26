@@ -5,6 +5,9 @@ import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
 import { RegisterOrganizationDto } from '../auth/dto/register-organization.dto';
+import { GenerateTrialPromoCodesDto } from './dto/generate-trial-promo-codes.dto';
+
+const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
 
 @Injectable()
 export class SystemService {
@@ -25,6 +28,16 @@ export class SystemService {
       data: {
         name: 'New Company',
         slug: dto.slug,
+      },
+    });
+    await this.prisma.billingSubscription.create({
+      data: {
+        tenantId: tenant.id,
+        paidSeats: 0,
+        status: 'TRIALING',
+        trialStartedAt: new Date(),
+        trialEndsAt: new Date(Date.now() + DEFAULT_ORGANIZATION_TRIAL_DAYS * 24 * 60 * 60 * 1000),
+        trialSource: 'DEFAULT_7D',
       },
     });
 
@@ -66,5 +79,64 @@ export class SystemService {
 
   async createOrganization(dto: RegisterOrganizationDto) {
     return this.authService.registerOrganization(dto);
+  }
+
+  async generateTrialPromoCodes(dto: GenerateTrialPromoCodesDto) {
+    const count = dto.count ?? 10;
+    const trialDays = dto.trialDays ?? 30;
+    const maxRedemptions = dto.maxRedemptions ?? 1;
+    const prefix = this.normalizePromoPrefix(dto.prefix ?? 'HITEAM30');
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    const items: Array<{
+      id: string;
+      code: string;
+      trialDays: number;
+      maxRedemptions: number;
+      expiresAt: Date | null;
+    }> = [];
+    let attempts = 0;
+
+    while (items.length < count && attempts < count * 5) {
+      attempts += 1;
+      const code = `${prefix}-${randomBytes(4).toString('hex').toUpperCase()}`;
+      try {
+        const promoCode = await this.prisma.trialPromoCode.create({
+          select: {
+            id: true,
+            code: true,
+            trialDays: true,
+            maxRedemptions: true,
+            expiresAt: true,
+          },
+          data: {
+            code,
+            trialDays,
+            maxRedemptions,
+            expiresAt,
+          },
+        });
+        items.push(promoCode);
+      } catch {
+        // Retry on a rare generated-code collision.
+      }
+    }
+
+    if (items.length < count) {
+      throw new ConflictException('Unable to generate unique promo codes. Try again.');
+    }
+
+    return { items };
+  }
+
+  private normalizePromoPrefix(value: string) {
+    return (
+      value
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 24) || 'HITEAM30'
+    );
   }
 }

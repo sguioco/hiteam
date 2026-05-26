@@ -552,15 +552,15 @@ export default function Attendance({
         let status: AttendanceStatus = "offline";
         let statusLabel = runtimeLocalize("Нет отметки", "No punch", locale);
 
-        if (row?.status === "on_break") {
-          status = "online";
-          statusLabel = runtimeLocalize("На месте", "On site", locale);
-        } else if (row?.lateMinutes && row.lateMinutes > 0) {
+        if (row?.lateMinutes && row.lateMinutes > 0) {
           status = "late";
           statusLabel =
             locale === "ru"
               ? `Опоздание ${row.lateMinutes} мин`
               : `${row.lateMinutes} min late`;
+        } else if (row?.status === "on_break") {
+          status = "online";
+          statusLabel = runtimeLocalize("На месте", "On site", locale);
         } else if (row?.status === "on_shift") {
           status = "online";
           statusLabel = runtimeLocalize("На месте", "On site", locale);

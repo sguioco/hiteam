@@ -164,11 +164,13 @@ function getArrivalState(options: {
 }) {
   const { anomalySummary, locale, now, session, shiftStart } = options;
 
-  if (session && shiftStart) {
+  if (session) {
     const startedAt = new Date(session.startedAt);
-    const diffMinutes = Math.round(
-      (startedAt.getTime() - shiftStart.getTime()) / 60_000,
-    );
+    const shiftDeltaMinutes = shiftStart
+      ? Math.round((startedAt.getTime() - shiftStart.getTime()) / 60_000)
+      : 0;
+    const diffMinutes =
+      session.lateMinutes !== 0 ? session.lateMinutes : shiftDeltaMinutes;
 
     if (diffMinutes > 0) {
       return {
@@ -195,14 +197,6 @@ function getArrivalState(options: {
     }
 
     return {
-      note: localize(locale, "Вовремя", "On time"),
-      time: formatTime(startedAt, locale),
-      tone: "neutral" as AttendanceRowTone,
-    };
-  }
-
-  if (session) {
-    return {
       note:
         session.status === "checked_out" && session.endedAt
           ? localize(
@@ -210,7 +204,9 @@ function getArrivalState(options: {
             `Завершил смену в ${formatTime(session.endedAt, locale)}`,
             `Checked out at ${formatTime(session.endedAt, locale)}`,
           )
-          : localize(locale, "В смене", "On shift"),
+          : shiftStart
+            ? localize(locale, "Вовремя", "On time")
+            : localize(locale, "В смене", "On shift"),
       time: formatTime(session.startedAt, locale),
       tone: "neutral" as AttendanceRowTone,
     };
@@ -383,18 +379,21 @@ export function TodayAttendancePanel({
             session,
             shiftStart,
           });
-      const arrivalDeltaMinutes =
-        session && shiftStart
-          ? Math.round(
-              (new Date(session.startedAt).getTime() - shiftStart.getTime()) /
-                60_000,
-            )
-          : !session && shiftStart
+      const arrivalDeltaMinutes = session
+        ? session.lateMinutes !== 0
+          ? session.lateMinutes
+          : shiftStart
+            ? Math.round(
+                (new Date(session.startedAt).getTime() - shiftStart.getTime()) /
+                  60_000,
+              )
+            : 0
+        : shiftStart
             ? Math.max(
                 0,
                 Math.round((now.getTime() - shiftStart.getTime()) / 60_000),
-            )
-          : 0;
+              )
+            : 0;
       const shiftEmployeeName =
         `${shift?.employee.lastName ?? ""} ${shift?.employee.firstName ?? ""}`.trim();
       const fallbackName =

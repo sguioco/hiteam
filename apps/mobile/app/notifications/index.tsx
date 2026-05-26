@@ -9,10 +9,16 @@ import { PressableScale } from '../../components/ui/pressable-scale';
 import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
 import {
   loadNotificationPreferences,
+  notificationPreferencesFromProfile,
   saveNotificationPreferences,
   type NotificationPreferences,
 } from '../../lib/notification-preferences';
 import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
+import {
+  bootstrapPushNotifications,
+  loadMyProfile,
+  updateMyNotificationPreferences,
+} from '../../lib/api';
 
 type ReminderOption = 15 | 30 | 60;
 
@@ -79,9 +85,20 @@ export default function NotificationsScreen() {
     let cancelled = false;
 
     async function loadPreferences() {
-      const nextPreferences = await loadNotificationPreferences();
+      const localPreferences = await loadNotificationPreferences();
       if (!cancelled) {
-        setPreferences(nextPreferences);
+        setPreferences(localPreferences);
+      }
+
+      try {
+        const profile = await loadMyProfile();
+        const remotePreferences = notificationPreferencesFromProfile(profile);
+        await saveNotificationPreferences(remotePreferences);
+        if (!cancelled) {
+          setPreferences(remotePreferences);
+        }
+      } catch {
+        // Local preferences keep the screen usable while the profile request is unavailable.
       }
     }
 
@@ -92,24 +109,30 @@ export default function NotificationsScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!preferences) {
-      return;
-    }
-
-    void saveNotificationPreferences(preferences);
-  }, [preferences]);
-
   function updatePreferences(patch: Partial<NotificationPreferences>) {
     setPreferences((current) => {
       if (!current) {
         return current;
       }
 
-      return {
+      const nextPreferences = {
         ...current,
         ...patch,
       };
+
+      void saveNotificationPreferences(nextPreferences);
+      void updateMyNotificationPreferences(nextPreferences).catch(() => undefined);
+
+      if (
+        nextPreferences.assignmentAlertsEnabled ||
+        nextPreferences.meetingRemindersEnabled ||
+        nextPreferences.taskDeadlineRemindersEnabled ||
+        nextPreferences.shiftRemindersEnabled
+      ) {
+        void bootstrapPushNotifications();
+      }
+
+      return nextPreferences;
     });
   }
 

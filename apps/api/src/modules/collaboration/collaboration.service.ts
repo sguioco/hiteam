@@ -14,6 +14,7 @@ import {
   TaskActivityKind,
   TaskPriority,
   TaskStatus,
+  UserStatus,
 } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -47,6 +48,12 @@ const TASK_PHOTO_PROOF_LIMIT = 7;
 const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
 const TASK_META_MARKER = "[smart-task-meta]";
+const WORKSPACE_MANAGER_ROLE_CODES = [
+  "tenant_owner",
+  "hr_admin",
+  "operations_admin",
+  "manager",
+] as const;
 
 const MINIMAL_EMPLOYEE_SELECT = {
   id: true,
@@ -2348,16 +2355,21 @@ export class CollaborationService {
 
     for (const task of tasks) {
       if (task.assigneeEmployee?.userId) {
+        const isMeeting = this.isMeetingTaskPayload(task);
         await this.notificationsService.createForUser({
           tenantId: manager.tenantId,
           userId: task.assigneeEmployee.userId,
           type: NotificationType.OPERATIONS_ALERT,
-          title: `New task: ${task.title}`,
-          body: `${manager.firstName} ${manager.lastName} assigned you a task.`,
-          actionUrl: "/employee/tasks",
+          title: `${isMeeting ? "New meeting" : "New task"}: ${task.title}`,
+          body: isMeeting
+            ? `${manager.firstName} ${manager.lastName} added a meeting to your calendar.`
+            : `${manager.firstName} ${manager.lastName} assigned you a task.`,
+          actionUrl: isMeeting ? "/employee/calendar" : "/employee/tasks",
+          pushPreference: "assignmentAlerts",
           metadata: {
             taskId: task.id,
             groupId: task.groupId,
+            meeting: isMeeting,
           },
         });
         void this.collaborationRealtimeService.fanoutThreadUpdated(
@@ -2399,6 +2411,7 @@ export class CollaborationService {
       where: { userId },
     });
     await this.validateTaskTemplateTarget(manager.tenantId, dto);
+    this.validateTaskTemplateDeadline(dto);
     const checklist = this.normalizeChecklist(dto.checklist);
 
     const template = await this.prisma.taskTemplate.create({
@@ -2483,6 +2496,7 @@ export class CollaborationService {
     }
 
     await this.validateTaskTemplateTarget(manager.tenantId, dto);
+    this.validateTaskTemplateDeadline(dto);
     const checklist = this.normalizeChecklist(dto.checklist);
 
     const updated = await this.prisma.taskTemplate.update({
@@ -2663,7 +2677,6 @@ export class CollaborationService {
     const tasks = await this.prisma.task.findMany({
       where: {
         tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
         title: query.search
           ? {
               contains: query.search,
@@ -4472,6 +4485,7 @@ export class CollaborationService {
       title: string;
       body: string;
       isPinned?: boolean;
+      notifyParticipants?: boolean;
       linkUrl?: string;
       attachmentLocation?: {
         address: string;
@@ -4541,6 +4555,7 @@ export class CollaborationService {
         title: dto.title,
         body: dto.body,
         isPinned: dto.isPinned ?? false,
+        notifyParticipants: dto.notifyParticipants ?? false,
         linkUrl: normalizedLinkUrl,
         attachmentLocationAddress: dto.attachmentLocation?.address?.trim() || null,
         attachmentLocationPlaceId:
@@ -4644,6 +4659,7 @@ export class CollaborationService {
         metadata: {
           title: announcement.title,
           isPinned: announcement.isPinned,
+          notifyParticipants: announcement.notifyParticipants,
           audience: announcement.audience,
           groupId: announcement.groupId,
           targetEmployeeId: announcement.targetEmployeeId,
@@ -4742,8 +4758,11 @@ export class CollaborationService {
         title: `Announcement: ${params.announcement.title}`,
         body: params.announcement.body,
         actionUrl: "/employee/announcements",
+        forcePush: params.announcement.notifyParticipants,
+        suppressPush: !params.announcement.notifyParticipants,
         metadata: {
           announcementId: params.announcement.id,
+          notifyParticipants: params.announcement.notifyParticipants,
           ...params.metadata,
         },
       });
@@ -4758,6 +4777,7 @@ export class CollaborationService {
       metadata: {
         title: params.announcement.title,
         isPinned: params.announcement.isPinned,
+        notifyParticipants: params.announcement.notifyParticipants,
         audience: params.announcement.audience,
         groupId: params.announcement.groupId,
         targetEmployeeId: params.announcement.targetEmployeeId,
@@ -5031,6 +5051,29 @@ export class CollaborationService {
     }
 
     return Array.from(texts);
+  }
+
+  private isMeetingTaskPayload(task: {
+    title: string;
+    description?: string | null;
+  }) {
+    if (/^(meeting|встреча):/i.test(task.title.trim())) {
+      return true;
+    }
+
+    const description = task.description?.trim() ?? "";
+    const markerIndex = description.lastIndexOf(TASK_META_MARKER);
+    if (markerIndex === -1) {
+      return false;
+    }
+
+    const rawMeta = description.slice(markerIndex + TASK_META_MARKER.length).trim();
+    try {
+      const parsed = JSON.parse(rawMeta) as { kind?: string };
+      return parsed.kind === "meeting";
+    } catch {
+      return false;
+    }
   }
 
   private queueTranslationPrewarm(texts: Array<string | null | undefined>) {
@@ -5510,6 +5553,7 @@ export class CollaborationService {
           title: `New recurring task: ${task.title}`,
           body: `${manager.firstName} ${manager.lastName} assigned a recurring workflow task.`,
           actionUrl: "/employee/tasks",
+          pushPreference: "assignmentAlerts",
           metadata: {
             taskId: task.id,
             templateId: template.id,
@@ -5679,6 +5723,7 @@ export class CollaborationService {
           ? `${manager.firstName} ${manager.lastName} escalated this overdue task.`
           : `${manager.firstName} ${manager.lastName} asked for an update.`,
         actionUrl: "/employee/tasks",
+        pushPreference: "taskDeadlineReminders",
         metadata: {
           taskId: task.id,
           reminder: !options.escalation,
@@ -6116,7 +6161,6 @@ export class CollaborationService {
     const templates = await this.prisma.taskTemplate.findMany({
       where: {
         tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
         isActive: true,
         expandOnDemand: true,
         startDate: {
@@ -6718,6 +6762,33 @@ export class CollaborationService {
 
     const parsed = new Date(`${value}T12:00:00.000Z`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private validateTaskTemplateDeadline(
+    dto: Pick<
+      CreateTaskTemplateDto | UpdateTaskTemplateDto,
+      "dueAfterDays" | "dueTimeLocal" | "startDate"
+    >,
+  ) {
+    const dueAfterDays = dto.dueAfterDays ?? 0;
+
+    if (!dto.dueTimeLocal || dueAfterDays > 0) {
+      return;
+    }
+
+    const occurrenceDate = this.parseOccurrenceDate(dto.startDate);
+
+    if (!occurrenceDate) {
+      return;
+    }
+
+    const dueAt = new Date(
+      this.buildOccurrenceDueAt(occurrenceDate, dto.dueTimeLocal),
+    );
+
+    if (dueAt.getTime() < Date.now()) {
+      throw new BadRequestException("Task due date cannot be in the past.");
+    }
   }
 
   private isTemplateDueOnOccurrence(
@@ -7388,6 +7459,13 @@ export class CollaborationService {
       }
     }
 
+    const managerUserIds = await this.resolveWorkspaceManagerUserIds(
+      Array.from(tenantIds),
+    );
+    for (const userId of managerUserIds) {
+      userIds.add(userId);
+    }
+
     this.emitWorkspaceRefresh(Array.from(userIds), reason);
   }
 
@@ -7415,6 +7493,30 @@ export class CollaborationService {
         refreshedAt,
       });
     }
+  }
+
+  private async resolveWorkspaceManagerUserIds(tenantIds: string[]) {
+    if (tenantIds.length === 0) {
+      return [];
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        status: UserStatus.ACTIVE,
+        workspaceAccessAllowed: true,
+        roles: {
+          some: {
+            role: {
+              code: { in: [...WORKSPACE_MANAGER_ROLE_CODES] },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return users.map((user) => user.id);
   }
 
   private async resolveWorkspaceRefreshAudience(params: {

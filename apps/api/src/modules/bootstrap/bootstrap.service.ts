@@ -778,13 +778,48 @@ function parseLeaderboardMonth(month?: string) {
   return requested;
 }
 
-function buildEmptyLeaderboardOverview(month?: string) {
+function formatLeaderboardMonthKey(date: Date) {
+  const monthStart = startOfMonthLocal(date);
+  return `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getOrganizationStartMonthKey(
+  organizationSetup?: { company?: { createdAt?: string | Date | null } | null } | null,
+) {
+  const createdAt = organizationSetup?.company?.createdAt;
+  const parsed =
+    createdAt instanceof Date ? createdAt : createdAt ? new Date(createdAt) : null;
+
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return formatLeaderboardMonthKey(new Date());
+  }
+
+  const currentMonth = startOfMonthLocal(new Date());
+  const organizationMonth = startOfMonthLocal(parsed);
+  return formatLeaderboardMonthKey(
+    organizationMonth.getTime() <= currentMonth.getTime()
+      ? organizationMonth
+      : currentMonth,
+  );
+}
+
+function resolveLeaderboardMonthKey(month: string | undefined, earliestMonthKey: string) {
+  const requested = parseLeaderboardMonth(month);
+  const earliest = parseLeaderboardMonth(earliestMonthKey);
+  const resolved =
+    requested.getTime() < earliest.getTime() ? earliest : requested;
+
+  return formatLeaderboardMonthKey(resolved);
+}
+
+function buildEmptyLeaderboardOverview(month?: string, earliestMonthKey?: string) {
   const monthStart = parseLeaderboardMonth(month);
   const monthEnd = endOfMonthLocal(monthStart);
 
   return {
+    earliestMonthKey,
     month: {
-      key: formatDateKey(monthStart).slice(0, 7),
+      key: formatLeaderboardMonthKey(monthStart),
       startsAt: monthStart.toISOString(),
       endsAt: monthEnd.toISOString(),
       todayKey: formatDateKey(new Date()),
@@ -1029,6 +1064,16 @@ export class BootstrapService {
     return mergeTaskBoards([upcomingBoard, overdueBoard]);
   }
 
+  private async loadOrganizationSetup(tenantId: string) {
+    return this.orgService.getSetup(tenantId).catch(() => ({
+      configured: false,
+      company: null,
+      location: null,
+      attendanceTrackingEnabled: true,
+      defaultGeofenceRadiusMeters: 100,
+    }));
+  }
+
   async tasks(user: JwtUser, dateFrom?: string, dateTo?: string) {
     if (isDemoOwnerAccount(user)) {
       const [employees, groups] = await Promise.all([
@@ -1057,6 +1102,9 @@ export class BootstrapService {
     }
 
     const resolvedRange = resolveBootstrapTaskRange(dateFrom, dateTo);
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const attendanceTrackingEnabled =
+      organizationSetup.attendanceTrackingEnabled ?? true;
 
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
       this.collaborationService.listManagerTasks(user.sub, resolvedRange).catch(() => null),
@@ -1071,7 +1119,9 @@ export class BootstrapService {
         [],
       ),
       withTimeoutFallback(
-        this.attendanceService.liveTeam(user.tenantId).catch(() => []),
+        attendanceTrackingEnabled
+          ? this.attendanceService.liveTeam(user.tenantId).catch(() => [])
+          : Promise.resolve([]),
         1200,
         [],
       ),
@@ -1132,6 +1182,21 @@ export class BootstrapService {
     dateTo = formatDateKey(new Date()),
   ) {
     const query = { dateFrom, dateTo };
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+
+    if (organizationSetup.attendanceTrackingEnabled === false) {
+      return {
+        employees: await this.employeesService
+          .list(user.tenantId, {}, user.sub)
+          .catch(() => []),
+        history: null,
+        anomalies: null,
+        liveSessions: [],
+        audit: null,
+        dateFrom,
+        dateTo,
+      };
+    }
 
     const [employees, history, anomalies, liveSessions, audit] = await Promise.all([
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
@@ -1153,6 +1218,9 @@ export class BootstrapService {
   }
 
   async employees(user: JwtUser) {
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const attendanceTrackingEnabled =
+      organizationSetup.attendanceTrackingEnabled ?? true;
     const [
       employeeRecords,
       liveSessions,
@@ -1160,7 +1228,6 @@ export class BootstrapService {
       pendingInvitations,
       workdaySnapshot,
       scheduleTemplates,
-      organizationSetup,
       groups,
     ] = await Promise.all([
       withTimeoutFallback(
@@ -1169,7 +1236,9 @@ export class BootstrapService {
         [],
       ),
       withTimeoutFallback(
-        this.attendanceService.liveTeam(user.tenantId).catch(() => []),
+        attendanceTrackingEnabled
+          ? this.attendanceService.liveTeam(user.tenantId).catch(() => [])
+          : Promise.resolve([]),
         1000,
         [],
       ),
@@ -1184,16 +1253,21 @@ export class BootstrapService {
         [],
       ),
       withTimeoutFallback(
-        this.scheduleService
-          .listShifts(user.tenantId)
-          .then((shifts) => ({
-            canCheckWorkdays: true,
-            scheduleShifts: shifts,
-          }))
-          .catch(() => ({
-            canCheckWorkdays: false,
-            scheduleShifts: [],
-          })),
+        attendanceTrackingEnabled
+          ? this.scheduleService
+              .listShifts(user.tenantId)
+              .then((shifts) => ({
+                canCheckWorkdays: true,
+                scheduleShifts: shifts,
+              }))
+              .catch(() => ({
+                canCheckWorkdays: false,
+                scheduleShifts: [],
+              }))
+          : Promise.resolve({
+              canCheckWorkdays: false,
+              scheduleShifts: [],
+            }),
         1200,
         {
           canCheckWorkdays: false,
@@ -1201,14 +1275,11 @@ export class BootstrapService {
         },
       ),
       withTimeoutFallback(
-        this.scheduleService.listTemplates(user.tenantId).catch(() => []),
+        attendanceTrackingEnabled
+          ? this.scheduleService.listTemplates(user.tenantId).catch(() => [])
+          : Promise.resolve([]),
         1200,
         [],
-      ),
-      withTimeoutFallback(
-        this.orgService.getSetup(user.tenantId).catch(() => ({ company: null })),
-        1000,
-        { company: null },
       ),
       withTimeoutFallback(
         this.collaborationService.listGroups(user.sub).catch(() => []),
@@ -1271,11 +1342,16 @@ export class BootstrapService {
       dateFrom: resolvedVisibleDateFrom,
       dateTo: resolvedVisibleDateTo,
     };
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const attendanceTrackingEnabled =
+      organizationSetup.attendanceTrackingEnabled ?? true;
 
     if (mode === 'employee') {
       const [employeeTasks, shifts] = await Promise.all([
         this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
-        this.scheduleService.myShifts(user.sub).catch(() => []),
+        attendanceTrackingEnabled
+          ? this.scheduleService.myShifts(user.sub).catch(() => [])
+          : Promise.resolve([]),
       ]);
 
       return {
@@ -1285,6 +1361,7 @@ export class BootstrapService {
           visibleDateFrom: resolvedVisibleDateFrom,
           visibleDateTo: resolvedVisibleDateTo,
           isMockMode: false,
+          organizationSetup,
           templates: [],
           shifts,
           employees: [],
@@ -1323,8 +1400,12 @@ export class BootstrapService {
       scheduleTaskBoard,
       overdueTaskBoard,
     ] = await Promise.all([
-      this.scheduleService.listTemplates(user.tenantId).catch(() => []),
-      this.scheduleService.listShifts(user.tenantId).catch(() => []),
+      attendanceTrackingEnabled
+        ? this.scheduleService.listTemplates(user.tenantId).catch(() => [])
+        : Promise.resolve([]),
+      attendanceTrackingEnabled
+        ? this.scheduleService.listShifts(user.tenantId).catch(() => [])
+        : Promise.resolve([]),
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
       withTimeoutFallback(
         this.collaborationService.listGroups(user.sub).catch(() => []),
@@ -1376,6 +1457,7 @@ export class BootstrapService {
         visibleDateFrom: resolvedVisibleDateFrom,
         visibleDateTo: resolvedVisibleDateTo,
         isMockMode: false,
+        organizationSetup,
         templates,
         shifts,
         employees,
@@ -1408,6 +1490,9 @@ export class BootstrapService {
             dateTo,
           }
         : undefined;
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const attendanceTrackingEnabled =
+      organizationSetup.attendanceTrackingEnabled ?? true;
 
     if (mode === 'employee') {
       const [
@@ -1418,10 +1503,16 @@ export class BootstrapService {
         personalHistory,
       ] = await Promise.all([
         this.employeesService.getMe(user).catch(() => null),
-        this.attendanceService.getMyStatus(user.sub).catch(() => null),
-        this.scheduleService.myShifts(user.sub).catch(() => []),
+        attendanceTrackingEnabled
+          ? this.attendanceService.getMyStatus(user.sub).catch(() => null)
+          : Promise.resolve(null),
+        attendanceTrackingEnabled
+          ? this.scheduleService.myShifts(user.sub).catch(() => [])
+          : Promise.resolve([]),
         this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
-        this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
+        attendanceTrackingEnabled
+          ? this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       const taskBoard = {
@@ -1454,6 +1545,7 @@ export class BootstrapService {
           personalHistory,
           taskBoard,
           personalTaskBoard: taskBoard,
+          organizationSetup,
         },
       };
     }
@@ -1473,29 +1565,44 @@ export class BootstrapService {
       dailyActivity,
     ] = await Promise.all([
       this.employeesService.getMe(user).catch(() => null),
-      this.attendanceService.getMyStatus(user.sub).catch(() => null),
-      this.attendanceService.liveTeam(user.tenantId).catch(() => []),
-      this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null),
+      attendanceTrackingEnabled
+        ? this.attendanceService.getMyStatus(user.sub).catch(() => null)
+        : Promise.resolve(null),
+      attendanceTrackingEnabled
+        ? this.attendanceService.liveTeam(user.tenantId).catch(() => [])
+        : Promise.resolve([]),
+      attendanceTrackingEnabled
+        ? this.attendanceService.teamAnomalies(user.tenantId, {}).catch(() => null)
+        : Promise.resolve(null),
       this.requestsService.inbox(user.sub).catch(() => []),
       this.loadDashboardManagerTaskBoard(user),
       this.collaborationService.listMyTasks(user.sub, taskQuery).catch(() => []),
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
       this.collaborationService.listGroups(user.sub).catch(() => []),
-      this.scheduleService
-        .listShifts(user.tenantId)
-        .then((result) => ({
-          canCheckWorkdays: true,
-          scheduleShifts: result,
-        }))
-        .catch(() => ({
-          canCheckWorkdays: false,
-          scheduleShifts: [],
-        })),
-      this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null),
+      attendanceTrackingEnabled
+        ? this.scheduleService
+            .listShifts(user.tenantId)
+            .then((result) => ({
+              canCheckWorkdays: true,
+              scheduleShifts: result,
+            }))
+            .catch(() => ({
+              canCheckWorkdays: false,
+              scheduleShifts: [],
+            }))
+        : Promise.resolve({
+            canCheckWorkdays: false,
+            scheduleShifts: [],
+          }),
+      attendanceTrackingEnabled
+        ? this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null)
+        : Promise.resolve(null),
       withTimeoutFallback(
-        this.auditService
-          .listCompanyActivity(user.tenantId, { dateFrom, dateTo })
-          .catch(() => []),
+        attendanceTrackingEnabled
+          ? this.auditService
+              .listCompanyActivity(user.tenantId, { dateFrom, dateTo })
+              .catch(() => [])
+          : Promise.resolve([]),
         1200,
         [],
       ),
@@ -1530,6 +1637,7 @@ export class BootstrapService {
         canCheckWorkdays: scheduleShifts.canCheckWorkdays,
         personalHistory,
         dailyActivity,
+        organizationSetup,
       },
     };
   }
@@ -1585,6 +1693,17 @@ export class BootstrapService {
   }
 
   async analytics(user: JwtUser, days = 14) {
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+
+    if (organizationSetup.attendanceTrackingEnabled === false) {
+      return {
+        history: null,
+        anomalies: null,
+        employeeCount: 0,
+        period: days === 7 ? '7d' : days === 30 ? '30d' : '14d',
+      };
+    }
+
     const end = new Date();
     end.setHours(23, 59, 59, 999);
 
@@ -1616,6 +1735,7 @@ export class BootstrapService {
       configured: false,
       company: null,
       location: null,
+      attendanceTrackingEnabled: true,
       defaultGeofenceRadiusMeters: 100,
     }));
     const employeeStats = setup.company?.id
@@ -1666,23 +1786,44 @@ export class BootstrapService {
 
   async leaderboard(user: JwtUser, month?: string) {
     const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
-    const fallback = buildEmptyLeaderboardOverview(month);
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const earliestMonthKey = getOrganizationStartMonthKey(organizationSetup);
+    const resolvedMonthKey = resolveLeaderboardMonthKey(month, earliestMonthKey);
+    const fallback = buildEmptyLeaderboardOverview(resolvedMonthKey, earliestMonthKey);
+    const disabledFallback = {
+      ...fallback,
+      me: {
+        ...fallback.me,
+        employeeId: user.sub,
+      },
+    };
+
+    if (organizationSetup.attendanceTrackingEnabled === false) {
+      return {
+        mode,
+        initialData: disabledFallback,
+      };
+    }
 
     return {
       mode,
       initialData: await this.leaderboardService
-        .getOverview(user.sub, month)
-        .catch(() => ({
-          ...fallback,
-          me: {
-            ...fallback.me,
-            employeeId: user.sub,
-          },
-        })),
+        .getOverview(user.sub, resolvedMonthKey)
+        .catch(() => disabledFallback),
     };
   }
 
   async biometric(user: JwtUser, result?: string) {
+    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+
+    if (organizationSetup.attendanceTrackingEnabled === false) {
+      return {
+        employees: [],
+        reviews: null,
+        result: result ?? '__all',
+      };
+    }
+
     const biometricResult =
       result === 'FAILED' || result === 'PASSED' || result === 'REVIEW'
         ? result

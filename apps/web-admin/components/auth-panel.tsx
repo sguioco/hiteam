@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, Building2, Eye, EyeOff, Globe } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
@@ -23,6 +22,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { apiRequest } from '@/lib/api';
 import {
   readBrowserStorageItem,
@@ -49,6 +55,7 @@ gsap.registerPlugin(useGSAP);
 
 type SupportedLang = 'en' | 'ru' | 'ar';
 type AuthTab = 'signin' | 'join';
+type RegistrationMode = 'create' | 'join';
 type CompanyLookupResult = {
   token: string;
   email: string;
@@ -57,6 +64,11 @@ type CompanyLookupResult = {
   companyName: string;
   tenantName: string;
   tenantSlug: string;
+};
+type RegisterOwnerResponse = {
+  tenantId: string;
+  tenantSlug: string;
+  userId: string;
 };
 
 const langs: { code: SupportedLang; label: string }[] = [
@@ -80,7 +92,7 @@ const texts = {
     joinTitle: 'Join with work email',
     joinDesc: 'Ask your manager to add your work email to the team, then enter the same email here to continue registration.',
     joinLabel: 'Work email',
-    joinPlaceholder: 'you@company.com',
+    joinPlaceholder: 'Enter your email',
     joinAction: 'Continue',
     joinChecking: 'Checking email...',
     joinRequired: 'Enter your work email.',
@@ -96,7 +108,7 @@ const texts = {
     forgotTitle: 'Reset password',
     forgotDesc: 'Temporary mock flow. Enter your work email and we will show the reset state. We can connect the real email service next.',
     forgotEmail: 'Work email',
-    forgotPlaceholder: 'you@company.com',
+    forgotPlaceholder: 'Enter your email',
     forgotRequired: 'Enter your work email.',
     forgotSend: 'Send instructions',
     forgotSending: 'Preparing...',
@@ -106,6 +118,21 @@ const texts = {
     demoAdmin: 'Demo admin',
     demoHint: 'Current demo flow without backend',
     createOrganizationLink: 'Create new organization',
+    joinExistingTeamLink: 'Join existing team',
+    createOrganizationTitle: 'Create organization',
+    organizationName: 'Organization name',
+    timezone: 'Timezone',
+    ownerFirstName: 'Your first name',
+    ownerLastName: 'Your last name',
+    ownerEmail: 'Enter your email',
+    promoCode: 'Promo code (optional)',
+    ownerPassword: 'Password',
+    ownerConfirmPassword: 'Confirm password',
+    createOrganizationAction: 'Create organization',
+    creatingOrganization: 'Creating...',
+    createOrganizationError: 'Unable to create organization.',
+    passwordMismatch: 'Passwords do not match.',
+    passwordMinLength: 'Password must be at least 8 characters.',
   },
   ru: {
     signInTab: 'Вход',
@@ -121,7 +148,7 @@ const texts = {
     joinTitle: 'Вступить по рабочему email',
     joinDesc: 'Попросите менеджера добавить ваш рабочий email в команду, затем введите этот email здесь и продолжите регистрацию.',
     joinLabel: 'Рабочий email',
-    joinPlaceholder: 'you@company.com',
+    joinPlaceholder: 'Введите email',
     joinAction: 'Продолжить',
     joinChecking: 'Проверяем email...',
     joinRequired: 'Введите рабочий email.',
@@ -137,7 +164,7 @@ const texts = {
     forgotTitle: 'Восстановление пароля',
     forgotDesc: 'Пока это mock-сценарий. Введите рабочий email и мы покажем состояние восстановления. Реальный email-сервис подключим следующим шагом.',
     forgotEmail: 'Рабочий email',
-    forgotPlaceholder: 'you@company.com',
+    forgotPlaceholder: 'Введите email',
     forgotRequired: 'Введите рабочий email.',
     forgotSend: 'Отправить инструкцию',
     forgotSending: 'Готовим...',
@@ -147,6 +174,21 @@ const texts = {
     demoAdmin: 'Демо админ',
     demoHint: 'Текущий demo flow без backend',
     createOrganizationLink: 'Создать новую организацию',
+    joinExistingTeamLink: 'Вступить в существующую команду',
+    createOrganizationTitle: 'Создать организацию',
+    organizationName: 'Название организации',
+    timezone: 'Часовой пояс',
+    ownerFirstName: 'Ваше имя',
+    ownerLastName: 'Ваша фамилия',
+    ownerEmail: 'Введите email',
+    promoCode: 'Промокод (необязательно)',
+    ownerPassword: 'Пароль',
+    ownerConfirmPassword: 'Подтвердите пароль',
+    createOrganizationAction: 'Создать организацию',
+    creatingOrganization: 'Создаём...',
+    createOrganizationError: 'Не удалось создать организацию.',
+    passwordMismatch: 'Пароли не совпадают.',
+    passwordMinLength: 'Пароль должен быть не короче 8 символов.',
   },
   ar: {
     signInTab: 'تسجيل الدخول',
@@ -162,7 +204,7 @@ const texts = {
     joinTitle: 'الانضمام عبر بريد العمل',
     joinDesc: 'اطلب من المدير إضافة بريدك المهني إلى الفريق، ثم أدخل البريد نفسه هنا لمتابعة التسجيل.',
     joinLabel: 'بريد العمل',
-    joinPlaceholder: 'you@company.com',
+    joinPlaceholder: 'أدخل بريدك الإلكتروني',
     joinAction: 'متابعة',
     joinChecking: 'جارٍ التحقق من البريد...',
     joinRequired: 'أدخل بريد العمل.',
@@ -178,7 +220,7 @@ const texts = {
     forgotTitle: 'استعادة كلمة المرور',
     forgotDesc: 'هذا مسار تجريبي حالياً. أدخل بريد العمل وسنُظهر حالة الاستعادة. يمكننا ربط خدمة البريد الفعلية لاحقاً.',
     forgotEmail: 'بريد العمل',
-    forgotPlaceholder: 'you@company.com',
+    forgotPlaceholder: 'أدخل بريدك الإلكتروني',
     forgotRequired: 'أدخل بريد العمل.',
     forgotSend: 'إرسال التعليمات',
     forgotSending: 'جارٍ التحضير...',
@@ -188,6 +230,21 @@ const texts = {
     demoAdmin: 'مشرف تجريبي',
     demoHint: 'مسار تجريبي حالي بدون backend',
     createOrganizationLink: 'إنشاء مؤسسة جديدة',
+    joinExistingTeamLink: 'الانضمام إلى فريق موجود',
+    createOrganizationTitle: 'إنشاء مؤسسة',
+    organizationName: 'اسم المؤسسة',
+    timezone: 'المنطقة الزمنية',
+    ownerFirstName: 'اسمك الأول',
+    ownerLastName: 'اسم عائلتك',
+    ownerEmail: 'أدخل بريدك الإلكتروني',
+    promoCode: 'رمز ترويجي (اختياري)',
+    ownerPassword: 'كلمة المرور',
+    ownerConfirmPassword: 'تأكيد كلمة المرور',
+    createOrganizationAction: 'إنشاء المؤسسة',
+    creatingOrganization: 'جارٍ الإنشاء...',
+    createOrganizationError: 'تعذّر إنشاء المؤسسة.',
+    passwordMismatch: 'كلمتا المرور غير متطابقتين.',
+    passwordMinLength: 'يجب أن تكون كلمة المرور 8 أحرف على الأقل.',
   },
 };
 
@@ -199,12 +256,106 @@ const AUTH_CONTENT_MIN_HEIGHT = 430;
 const AUTH_TITLE_BLOCK_OFFSET_Y = 10;
 const AUTH_TITLE_BLOCK_MIN_HEIGHT = 56;
 const AUTH_FIELDS_BLOCK_OFFSET_Y = 60;
+const AUTH_CREATE_FIELDS_BLOCK_OFFSET_Y = 24;
 const AUTH_FIELDS_TO_ACTION_GAP = 28;
 const AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM = 10;
 const AUTH_PRIMARY_ACTION_HEIGHT = 48;
 const AUTH_ILLUSTRATION_SCALE = 1.3;
 const AUTH_SIGNIN_FORM_ID = 'auth-signin-form';
 const AUTH_JOIN_FORM_ID = 'auth-join-form';
+const AUTH_CREATE_ORGANIZATION_FORM_ID = 'auth-create-organization-form';
+
+const PREFERRED_TIME_ZONES = [
+  'UTC',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Moscow',
+  'Asia/Dubai',
+  'Asia/Tashkent',
+  'Asia/Almaty',
+  'Asia/Bangkok',
+  'Asia/Novosibirsk',
+  'Asia/Tokyo',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+];
+
+const TIME_ZONE_LABEL_OVERRIDES: Record<string, string> = {
+  'Asia/Bangkok': 'Bangkok, Thailand',
+};
+
+const TIME_ZONE_OFFSET_LABEL_OVERRIDES: Record<string, string> = {
+  'UTC+07:00': 'Bangkok, Thailand',
+};
+
+function getTimeZoneOffsetLabel(timeZone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'shortOffset',
+    });
+    const parts = formatter.formatToParts(new Date());
+    const zoneName = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT+0';
+    const normalized = zoneName.replace('GMT', 'UTC');
+    if (normalized === 'UTC') return 'UTC+00:00';
+    const match = normalized.match(/^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/);
+    if (!match) return normalized;
+    const [, sign, hours, minutes] = match;
+    return `UTC${sign}${hours.padStart(2, '0')}:${(minutes ?? '00').padStart(2, '0')}`;
+  } catch {
+    return 'UTC+00:00';
+  }
+}
+
+function parseOffsetToMinutes(offsetLabel: string) {
+  const match = offsetLabel.match(/^UTC([+-])(\d{2}):(\d{2})$/);
+  if (!match) return 0;
+  const [, sign, hours, minutes] = match;
+  const total = Number(hours) * 60 + Number(minutes);
+  return sign === '-' ? -total : total;
+}
+
+function buildTimeZoneOptions(selectedTimeZone?: string) {
+  const source = (() => {
+    try {
+      if (typeof Intl.supportedValuesOf === 'function') {
+        const values = Intl.supportedValuesOf('timeZone');
+        if (values.length) return values;
+      }
+    } catch {}
+    return PREFERRED_TIME_ZONES;
+  })();
+
+  const uniqueByOffset = new Map<string, string>();
+  for (const timeZone of [selectedTimeZone, ...PREFERRED_TIME_ZONES, ...source]) {
+    if (!timeZone) continue;
+    const offset = getTimeZoneOffsetLabel(timeZone);
+    if (!uniqueByOffset.has(offset)) uniqueByOffset.set(offset, timeZone);
+  }
+
+  return Array.from(uniqueByOffset.entries())
+    .sort(([leftOffset], [rightOffset]) => parseOffsetToMinutes(leftOffset) - parseOffsetToMinutes(rightOffset))
+    .map(([offset, timeZone]) => ({
+      label: `${offset} · ${TIME_ZONE_OFFSET_LABEL_OVERRIDES[offset] ?? TIME_ZONE_LABEL_OVERRIDES[timeZone] ?? timeZone}`,
+      timeZone,
+    }));
+}
+
+function getLocalDateInputValue() {
+  const now = new Date();
+  const timezoneOffsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+}
+
+function getBrowserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
 
 function LanguagePicker({
   lang,
@@ -244,6 +395,7 @@ export function AuthPanel() {
   const hasAnimatedAuthPanelRef = useRef(false);
   const [lang, setLang] = useState<SupportedLang>('en');
   const [tab, setTab] = useState<AuthTab>('signin');
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('create');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -253,6 +405,18 @@ export function AuthPanel() {
   const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
   const [companyLookupError, setCompanyLookupError] = useState('');
   const [companyLookupResult, setCompanyLookupResult] = useState<CompanyLookupResult | null>(null);
+  const [organizationName, setOrganizationName] = useState('');
+  const [organizationTimezone, setOrganizationTimezone] = useState('UTC');
+  const [ownerFirstName, setOwnerFirstName] = useState('');
+  const [ownerLastName, setOwnerLastName] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [organizationPromoCode, setOrganizationPromoCode] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerConfirmPassword, setOwnerConfirmPassword] = useState('');
+  const [ownerPasswordVisible, setOwnerPasswordVisible] = useState(false);
+  const [ownerConfirmPasswordVisible, setOwnerConfirmPasswordVisible] = useState(false);
+  const [createOrganizationLoading, setCreateOrganizationLoading] = useState(false);
+  const [createOrganizationError, setCreateOrganizationError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -262,19 +426,27 @@ export function AuthPanel() {
   const switcherTrackRef = useRef<HTMLDivElement | null>(null);
   const switcherIndicatorRef = useRef<HTMLDivElement | null>(null);
   const t = texts[lang];
+  const timeZoneOptions = useMemo(
+    () => buildTimeZoneOptions(organizationTimezone),
+    [organizationTimezone],
+  );
   const hasCompanyLookupResult = Boolean(companyLookupResult);
-  const createOrganizationLinkVisible = tab === 'join';
+  const registrationSwitchVisible = tab === 'join';
   const sharedPrimaryActionReserve =
     AUTH_PRIMARY_ACTION_HEIGHT +
     AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM +
     AUTH_FIELDS_TO_ACTION_GAP +
-    (createOrganizationLinkVisible ? 32 : 0);
+    (registrationSwitchVisible ? 32 : 0);
   const sharedPrimaryActionLabel =
     tab === 'signin'
       ? loginLoading
         ? t.signingIn
         : t.signIn
-      : companyLookupResult
+      : registrationMode === 'create'
+        ? createOrganizationLoading
+          ? t.creatingOrganization
+          : t.createOrganizationAction
+        : companyLookupResult
         ? companyLookupResult.registrationCompleted
           ? t.existingAccountAction
           : t.continueInMobile
@@ -282,7 +454,13 @@ export function AuthPanel() {
           ? t.joinChecking
           : t.joinAction;
   const sharedPrimaryActionDisabled =
-    tab === 'signin' ? loginLoading : companyLookupResult ? false : companyLookupLoading;
+    tab === 'signin'
+      ? loginLoading
+      : registrationMode === 'create'
+        ? createOrganizationLoading
+        : companyLookupResult
+          ? false
+          : companyLookupLoading;
   useGSAP(
     () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -299,7 +477,7 @@ export function AuthPanel() {
           ease: 'power3.out',
         },
       });
-      const createOrganizationLinks = gsap.utils.toArray<HTMLElement>('.auth-create-organization-link');
+      const registrationSwitchLinks = gsap.utils.toArray<HTMLElement>('.auth-registration-switch-link');
 
       timeline
         .fromTo(
@@ -320,9 +498,9 @@ export function AuthPanel() {
           0.05,
         );
 
-      if (createOrganizationLinks.length) {
+      if (registrationSwitchLinks.length) {
         timeline.fromTo(
-          createOrganizationLinks,
+          registrationSwitchLinks,
           { autoAlpha: 0, y: 6, filter: 'blur(2px)' },
           { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.22 },
           0.08,
@@ -338,7 +516,7 @@ export function AuthPanel() {
     },
     {
       scope: authMotionScopeRef,
-      dependencies: [tab, hasCompanyLookupResult],
+      dependencies: [tab, registrationMode, hasCompanyLookupResult],
       revertOnUpdate: true,
     },
   );
@@ -375,6 +553,8 @@ export function AuthPanel() {
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
     }
+
+    setOrganizationTimezone(getBrowserTimezone());
   }, []);
 
   useEffect(() => {
@@ -470,6 +650,67 @@ export function AuthPanel() {
     }
   }
 
+  async function handleCreateOrganizationSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedEmail = ownerEmail.trim().toLowerCase();
+
+    setCreateOrganizationError('');
+
+    if (ownerPassword.length < 8) {
+      setCreateOrganizationError(t.passwordMinLength);
+      return;
+    }
+
+    if (ownerPassword !== ownerConfirmPassword) {
+      setCreateOrganizationError(t.passwordMismatch);
+      return;
+    }
+
+    setCreateOrganizationLoading(true);
+    let navigationStarted = false;
+
+    try {
+      const registration = await apiRequest<RegisterOwnerResponse>('/auth/register-owner', {
+        method: 'POST',
+        realBackend: true,
+        body: JSON.stringify({
+          tenantName: organizationName.trim(),
+          companyName: organizationName.trim(),
+          firstName: ownerFirstName.trim(),
+          lastName: ownerLastName.trim(),
+          email: normalizedEmail,
+          password: ownerPassword,
+          employeeNumber: 'OWNER-0001',
+          hireDate: getLocalDateInputValue(),
+          timezone: organizationTimezone.trim() || 'UTC',
+          promoCode: organizationPromoCode.trim() || undefined,
+        }),
+      });
+
+      const session = await apiRequest<AuthSession>('/auth/login', {
+        method: 'POST',
+        realBackend: true,
+        body: JSON.stringify({
+          identifier: normalizedEmail,
+          password: ownerPassword,
+          tenantSlug: registration.tenantSlug,
+        }),
+      });
+
+      saveTenantSlug(registration.tenantSlug);
+      const nextRoute = resolvePostLoginRoute(session);
+      await persistSession(session);
+      navigationStarted = true;
+      window.location.replace(nextRoute);
+    } catch (error) {
+      setCreateOrganizationError(error instanceof Error ? error.message : t.createOrganizationError);
+    } finally {
+      if (!navigationStarted) {
+        setCreateOrganizationLoading(false);
+      }
+    }
+  }
+
   async function handleForgotPasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedEmail = forgotEmail.trim();
@@ -517,6 +758,22 @@ export function AuthPanel() {
     setTab(nextTab as AuthTab);
     setLoginError('');
     setCompanyLookupError('');
+    setCreateOrganizationError('');
+
+    if (nextTab === 'join') {
+      setRegistrationMode('create');
+      setCompanyLookupResult(null);
+    }
+  }
+
+  function handleRegistrationModeChange(nextMode: RegistrationMode) {
+    setRegistrationMode(nextMode);
+    setCompanyLookupError('');
+    setCreateOrganizationError('');
+
+    if (nextMode === 'create') {
+      setCompanyLookupResult(null);
+    }
   }
 
   function openCompanyJoinFlow() {
@@ -747,11 +1004,192 @@ export function AuthPanel() {
                       }}
                     >
                       <h2 className="text-[2rem] font-light tracking-[-0.04em] text-foreground">
-                        {t.joinTitle}
+                        {registrationMode === 'create' ? t.createOrganizationTitle : t.joinTitle}
                       </h2>
                     </div>
 
-                    {companyLookupResult ? (
+                    {registrationMode === 'create' ? (
+                      <form
+                        className="flex flex-1 flex-col"
+                        id={AUTH_CREATE_ORGANIZATION_FORM_ID}
+                        onSubmit={handleCreateOrganizationSubmit}
+                      >
+                        <div
+                          className="space-y-3.5"
+                          style={{
+                            marginTop: AUTH_CREATE_FIELDS_BLOCK_OFFSET_Y,
+                          }}
+                        >
+                          {createOrganizationError ? (
+                            <div className="auth-panel-field rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {createOrganizationError}
+                            </div>
+                          ) : null}
+
+                          <div className="auth-panel-field">
+                            <Input
+                              aria-label={t.organizationName}
+                              autoComplete="organization"
+                              disabled={createOrganizationLoading}
+                              id="organization-name"
+                              onChange={(event) => {
+                                setOrganizationName(event.target.value);
+                                setCreateOrganizationError('');
+                              }}
+                              placeholder={t.organizationName}
+                              required
+                              value={organizationName}
+                            />
+                          </div>
+
+                          <div className="auth-panel-field">
+                            <Select
+                              disabled={createOrganizationLoading}
+                              onValueChange={setOrganizationTimezone}
+                              value={organizationTimezone}
+                            >
+                              <SelectTrigger
+                                aria-label={t.timezone}
+                                className="org-timezone-trigger organization-studio-timezone-trigger rounded-xl border-[color:var(--border)] px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]"
+                              >
+                                <SelectValue placeholder={t.timezone} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {timeZoneOptions.map((option) => (
+                                  <SelectItem key={option.timeZone} value={option.timeZone}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="auth-panel-field">
+                              <Input
+                                aria-label={t.ownerFirstName}
+                                autoComplete="given-name"
+                                disabled={createOrganizationLoading}
+                                id="owner-first-name"
+                                onChange={(event) => {
+                                  setOwnerFirstName(event.target.value);
+                                  setCreateOrganizationError('');
+                                }}
+                                placeholder={t.ownerFirstName}
+                                required
+                                value={ownerFirstName}
+                              />
+                            </div>
+                            <div className="auth-panel-field">
+                              <Input
+                                aria-label={t.ownerLastName}
+                                autoComplete="family-name"
+                                disabled={createOrganizationLoading}
+                                id="owner-last-name"
+                                onChange={(event) => {
+                                  setOwnerLastName(event.target.value);
+                                  setCreateOrganizationError('');
+                                }}
+                                placeholder={t.ownerLastName}
+                                required
+                                value={ownerLastName}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="auth-panel-field">
+                            <Input
+                              aria-label={t.ownerEmail}
+                              autoCapitalize="none"
+                              autoComplete="email"
+                              disabled={createOrganizationLoading}
+                              id="owner-email"
+                              onChange={(event) => {
+                                setOwnerEmail(event.target.value);
+                                setCreateOrganizationError('');
+                              }}
+                              placeholder={t.ownerEmail}
+                              required
+                              type="email"
+                              value={ownerEmail}
+                            />
+                          </div>
+
+                          <div className="auth-panel-field">
+                            <Input
+                              aria-label={t.promoCode}
+                              autoCapitalize="characters"
+                              autoComplete="off"
+                              disabled={createOrganizationLoading}
+                              id="organization-promo-code"
+                              onChange={(event) => {
+                                setOrganizationPromoCode(event.target.value);
+                                setCreateOrganizationError('');
+                              }}
+                              placeholder={t.promoCode}
+                              value={organizationPromoCode}
+                            />
+                          </div>
+
+                          <div className="auth-panel-field relative">
+                            <Input
+                              aria-label={t.ownerPassword}
+                              autoComplete="new-password"
+                              className="pr-11"
+                              disabled={createOrganizationLoading}
+                              id="owner-password"
+                              onChange={(event) => {
+                                setOwnerPassword(event.target.value);
+                                setCreateOrganizationError('');
+                              }}
+                              placeholder={t.ownerPassword}
+                              required
+                              type={ownerPasswordVisible ? 'text' : 'password'}
+                              value={ownerPassword}
+                            />
+                            <button
+                              aria-label={ownerPasswordVisible ? t.hidePassword : t.showPassword}
+                              className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                              disabled={createOrganizationLoading}
+                              onClick={() => setOwnerPasswordVisible((current) => !current)}
+                              title={ownerPasswordVisible ? t.hidePassword : t.showPassword}
+                              type="button"
+                            >
+                              {ownerPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+
+                          <div className="auth-panel-field relative">
+                            <Input
+                              aria-label={t.ownerConfirmPassword}
+                              autoComplete="new-password"
+                              className="pr-11"
+                              disabled={createOrganizationLoading}
+                              id="owner-confirm-password"
+                              onChange={(event) => {
+                                setOwnerConfirmPassword(event.target.value);
+                                setCreateOrganizationError('');
+                              }}
+                              placeholder={t.ownerConfirmPassword}
+                              required
+                              type={ownerConfirmPasswordVisible ? 'text' : 'password'}
+                              value={ownerConfirmPassword}
+                            />
+                            <button
+                              aria-label={ownerConfirmPasswordVisible ? t.hidePassword : t.showPassword}
+                              className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                              disabled={createOrganizationLoading}
+                              onClick={() => setOwnerConfirmPasswordVisible((current) => !current)}
+                              title={ownerConfirmPasswordVisible ? t.hidePassword : t.showPassword}
+                              type="button"
+                            >
+                              {ownerConfirmPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                      </form>
+                    ) : companyLookupResult ? (
                       <div className="auth-panel-field rounded-[28px] border border-[#d8e5ff] bg-[#f7faff] p-5">
                         <div className="flex items-start gap-4">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-white text-[#4f6df5] shadow-[0_12px_24px_rgba(79,109,245,0.12)]">
@@ -838,18 +1276,26 @@ export function AuthPanel() {
                   className="absolute inset-x-0"
                   style={{ bottom: AUTH_PRIMARY_ACTION_ANCHOR_BOTTOM }}
                 >
-                  {createOrganizationLinkVisible ? (
-                    <div className="auth-create-organization-link mb-3 text-center">
-                      <Link
-                        className="text-sm font-[100] text-[#4f6df5] transition-[color,opacity,transform] duration-200 hover:text-[#3553db]"
-                        href="/create"
+                  {registrationSwitchVisible ? (
+                    <div className="auth-registration-switch-link mb-3 text-center">
+                      <button
+                        className="text-sm font-[100] text-[#4f6df5] transition-[color,opacity,transform] duration-200 hover:text-[#3553db] disabled:pointer-events-none disabled:opacity-50"
+                        disabled={createOrganizationLoading || companyLookupLoading}
+                        onClick={() =>
+                          handleRegistrationModeChange(
+                            registrationMode === 'create' ? 'join' : 'create',
+                          )
+                        }
                         style={{ fontWeight: 100 }}
+                        type="button"
                       >
-                        {t.createOrganizationLink}
-                      </Link>
+                        {registrationMode === 'create'
+                          ? t.joinExistingTeamLink
+                          : t.createOrganizationLink}
+                      </button>
                     </div>
                   ) : null}
-                  {tab === 'join' && companyLookupResult ? (
+                  {tab === 'join' && registrationMode === 'join' && companyLookupResult ? (
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       onClick={openCompanyJoinFlow}
@@ -863,11 +1309,19 @@ export function AuthPanel() {
                     <Button
                       className="auth-shared-action-button w-full rounded-[16px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
                       disabled={sharedPrimaryActionDisabled}
-                      form={tab === 'signin' ? AUTH_SIGNIN_FORM_ID : AUTH_JOIN_FORM_ID}
+                      form={
+                        tab === 'signin'
+                          ? AUTH_SIGNIN_FORM_ID
+                          : registrationMode === 'create'
+                            ? AUTH_CREATE_ORGANIZATION_FORM_ID
+                            : AUTH_JOIN_FORM_ID
+                      }
                       style={{ height: AUTH_PRIMARY_ACTION_HEIGHT }}
                       type="submit"
                     >
-                      {(tab === 'signin' && loginLoading) || (tab === 'join' && companyLookupLoading) ? (
+                      {(tab === 'signin' && loginLoading) ||
+                      (tab === 'join' && registrationMode === 'join' && companyLookupLoading) ||
+                      (tab === 'join' && registrationMode === 'create' && createOrganizationLoading) ? (
                         <Swirling className="mr-2 h-4 w-4" />
                       ) : null}
                       {sharedPrimaryActionLabel}

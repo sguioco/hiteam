@@ -552,6 +552,7 @@ const Employees = ({
   const [invitationDialogMode, setInvitationDialogMode] =
     useState<InvitationDialogMode>("review");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [invitationDeleting, setInvitationDeleting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [approvalCredentials, setApprovalCredentials] = useState<{
     email: string;
@@ -1654,6 +1655,55 @@ const Employees = ({
       );
     } finally {
       setReviewSubmitting(false);
+    }
+  }
+
+  async function deleteSelectedInvitationEmployee() {
+    const session = getSession();
+    if (!session || !selectedInvitation) return;
+
+    const confirmed = window.confirm(
+      runtimeLocalize(
+        "Удалить сотрудника и его приглашение?",
+        "Delete this employee and invitation?",
+        locale,
+      ),
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setInvitationDeleting(true);
+    setReviewError(null);
+
+    try {
+      await apiRequest(`/employees/invitations/${selectedInvitation.id}`, {
+        method: "DELETE",
+        token: session.accessToken,
+      });
+      setSelectedInvitation(null);
+      setInvitationDialogMode("review");
+      setPageMessage(
+        runtimeLocalize(
+          "Сотрудник и приглашение удалены.",
+          "Employee and invitation deleted.",
+          locale,
+        ),
+      );
+      await loadDirectory();
+    } catch (requestError) {
+      setReviewError(
+        requestError instanceof Error
+          ? requestError.message
+          : runtimeLocalize(
+              "Не удалось удалить сотрудника.",
+              "Failed to delete the employee.",
+              locale,
+            ),
+      );
+    } finally {
+      setInvitationDeleting(false);
     }
   }
 
@@ -3059,6 +3109,7 @@ const Employees = ({
             setSelectedInvitation(null);
             setInvitationDialogMode("review");
             setReviewError(null);
+            setInvitationDeleting(false);
           }
         }}
         open={!!selectedInvitation}
@@ -3414,28 +3465,44 @@ const Employees = ({
                 <div className="error-box">{reviewError}</div>
               ) : null}
               {invitationDialogMode === "setup" ? (
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <Button
-                    className="rounded-xl font-heading"
-                    disabled={reviewSubmitting}
-                    onClick={() => {
-                      setSelectedInvitation(null);
-                      setInvitationDialogMode("review");
-                    }}
+                    className="rounded-xl border-red-200 bg-red-50 font-heading text-red-700 hover:bg-red-100 hover:text-red-800"
+                    disabled={reviewSubmitting || invitationDeleting}
+                    onClick={() => void deleteSelectedInvitationEmployee()}
+                    type="button"
                     variant="outline"
                   >
-                    {runtimeLocalize("Позже", "Later", locale)}
+                    <Trash2 className="h-4 w-4" />
+                    {invitationDeleting
+                      ? runtimeLocalize("Удаляем...", "Deleting...", locale)
+                      : runtimeLocalize("Удалить сотрудника", "Delete employee", locale)}
                   </Button>
-                  <Button
-                    className="rounded-xl font-heading"
-                    disabled={reviewSubmitting}
-                    onClick={() => void submitInvitationSetup()}
-                  >
-                    <Check className="h-4 w-4" />
-                    {reviewSubmitting
-                      ? runtimeLocalize("Сохраняем...", "Saving...", locale)
-                      : runtimeLocalize("Сохранить настройку", "Save setup", locale)}
-                  </Button>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      className="rounded-xl font-heading"
+                      disabled={reviewSubmitting || invitationDeleting}
+                      onClick={() => {
+                        setSelectedInvitation(null);
+                        setInvitationDialogMode("review");
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      {runtimeLocalize("Позже", "Later", locale)}
+                    </Button>
+                    <Button
+                      className="rounded-xl font-heading"
+                      disabled={reviewSubmitting || invitationDeleting}
+                      onClick={() => void submitInvitationSetup()}
+                      type="button"
+                    >
+                      <Check className="h-4 w-4" />
+                      {reviewSubmitting
+                        ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                        : runtimeLocalize("Сохранить настройку", "Save setup", locale)}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-wrap justify-end gap-2">

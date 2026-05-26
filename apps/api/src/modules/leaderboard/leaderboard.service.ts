@@ -147,6 +147,7 @@ type EmployeeTask = Awaited<
 >[number];
 
 type MonthContext = {
+  earliestMonthKey: string;
   monthKey: string;
   monthStart: Date;
   monthEnd: Date;
@@ -200,7 +201,10 @@ export class LeaderboardService {
       );
     }
 
-    const context = this.createMonthContext(requestedMonthKey);
+    const earliestMonthKey = await this.loadEarliestLeaderboardMonthKey(
+      viewer.tenantId,
+    );
+    const context = this.createMonthContext(requestedMonthKey, earliestMonthKey);
     const tenantSettings = await this.prisma.tenant
       .findUnique({
         where: { id: viewer.tenantId },
@@ -339,6 +343,7 @@ export class LeaderboardService {
       };
 
     const overview: LeaderboardOverviewResponse = {
+      earliestMonthKey: context.earliestMonthKey,
       month: {
         key: context.monthKey,
         startsAt: context.monthStart.toISOString(),
@@ -402,7 +407,10 @@ export class LeaderboardService {
       return buildDemoLeaderboardCelebration(viewer.user.email);
     }
 
-    const context = this.createMonthContext();
+    const earliestMonthKey = await this.loadEarliestLeaderboardMonthKey(
+      viewer.tenantId,
+    );
+    const context = this.createMonthContext(undefined, earliestMonthKey);
     const [shifts, sessions, approvedLeaves] = await Promise.all([
       this.loadShifts(
         viewer.tenantId,
@@ -455,6 +463,21 @@ export class LeaderboardService {
       where: { userId },
       select: VIEWER_EMPLOYEE_SELECT,
     });
+  }
+
+  private async loadEarliestLeaderboardMonthKey(tenantId: string) {
+    const company = await this.prisma.company
+      .findFirst({
+        where: { tenantId },
+        select: { createdAt: true },
+        orderBy: { createdAt: "asc" },
+      })
+      .catch(() => null);
+
+    const startDate = company?.createdAt ?? new Date();
+    return this.formatMonthKey(
+      new Date(startDate.getFullYear(), startDate.getMonth(), 1),
+    );
   }
 
   private async loadTeamEmployees(tenantId: string, viewerEmployeeId: string) {
@@ -1060,15 +1083,28 @@ export class LeaderboardService {
     });
   }
 
-  private createMonthContext(requestedMonthKey?: string | null): MonthContext {
+  private createMonthContext(
+    requestedMonthKey?: string | null,
+    earliestMonthKey?: string | null,
+  ): MonthContext {
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const requestedMonthStart = this.parseMonthKey(requestedMonthKey);
-    const monthStart =
+    const parsedEarliestMonthStart = this.parseMonthKey(earliestMonthKey);
+    const earliestMonthStart =
+      parsedEarliestMonthStart &&
+      parsedEarliestMonthStart.getTime() <= currentMonthStart.getTime()
+        ? parsedEarliestMonthStart
+        : currentMonthStart;
+    let monthStart =
       requestedMonthStart &&
       requestedMonthStart.getTime() <= currentMonthStart.getTime()
         ? requestedMonthStart
         : currentMonthStart;
+
+    if (monthStart.getTime() < earliestMonthStart.getTime()) {
+      monthStart = earliestMonthStart;
+    }
     const monthEnd = new Date(
       monthStart.getFullYear(),
       monthStart.getMonth() + 1,
@@ -1093,7 +1129,8 @@ export class LeaderboardService {
     );
 
     return {
-      monthKey: this.formatDateKey(monthStart).slice(0, 7),
+      earliestMonthKey: this.formatMonthKey(earliestMonthStart),
+      monthKey: this.formatMonthKey(monthStart),
       monthStart,
       monthEnd,
       taskLookbackStart,
@@ -1236,6 +1273,10 @@ export class LeaderboardService {
 
   private formatDateKey(value: Date) {
     return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+
+  private formatMonthKey(value: Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
   }
 
   private formatDateKeyInTimeZone(value: Date, timeZone?: string | null) {

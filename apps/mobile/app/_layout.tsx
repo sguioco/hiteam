@@ -9,7 +9,7 @@ import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-g
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { HeroUINativeProvider } from 'heroui-native';
-import { restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
+import { bootstrapPushNotifications, restorePersistedSession, setUnauthorizedHandler } from '../lib/api';
 import { updateAuthFlowState, useAuthFlowState } from '../lib/auth-flow';
 import { BannerThemeProvider, loadBannerThemePreference, type BannerTheme } from '../lib/banner-theme';
 import {
@@ -233,6 +233,7 @@ export default function RootLayout() {
         });
 
         if (session?.user.workspaceAccessAllowed && !workspaceSetupStep && initialLanguage) {
+          void bootstrapPushNotifications();
           await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240, {
             language: initialLanguage,
           });

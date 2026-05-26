@@ -503,11 +503,17 @@ export type EmployeeDetailRecord = EmployeeApiRecord & {
 
 export type EmployeeProfileResponse = EmployeeApiRecord & {
   status: string;
-  company: (NamedEntityOption & { code?: string | null }) | null;
+  company: (NamedEntityOption & { code?: string | null; createdAt?: string | Date | null }) | null;
   user: {
     id: string;
     email: string;
     bannerTheme: string | null;
+    notificationAssignmentAlertsEnabled?: boolean;
+    notificationTaskDeadlineRemindersEnabled?: boolean;
+    notificationTaskDeadlineReminderMinutes?: number;
+    notificationMeetingRemindersEnabled?: boolean;
+    notificationMeetingReminderMinutes?: number;
+    notificationShiftRemindersEnabled?: boolean;
   };
   devices: Array<{
     id: string;
@@ -539,7 +545,9 @@ export type InvitationRecord = {
 };
 
 export type OrganizationSetupResponse = {
-  company: NamedEntityOption | null;
+  attendanceTrackingEnabled?: boolean;
+  company: (NamedEntityOption & { createdAt?: string | Date | null }) | null;
+  configured?: boolean;
 };
 
 export type ManagerEmployeeItem = {
@@ -646,6 +654,7 @@ export type ScheduleBootstrapInitialData<TEmployee = EmployeeApiRecord> = {
   isMockMode: boolean;
   locations: NamedEntityOption[];
   mode: 'admin' | 'employee';
+  organizationSetup?: OrganizationSetupResponse | null;
   positions: NamedEntityOption[];
   requests: ApprovalInboxItem[];
   shifts: ManagerScheduleShiftItem[];
@@ -743,6 +752,7 @@ export type DashboardBootstrapInitialData<
   requests: ApprovalInboxItem[];
   scheduleShifts: EmployeeScheduleShiftItem[];
   taskBoard: CollaborationTaskBoardResponse | null;
+  organizationSetup?: OrganizationSetupResponse | null;
 };
 
 export type DashboardBootstrapResponse<
@@ -904,6 +914,7 @@ export type LeaderboardEntry = {
 };
 
 export type LeaderboardOverviewResponse = {
+  earliestMonthKey?: string;
   month: {
     key: string;
     startsAt: string;
@@ -957,6 +968,7 @@ export type AnnouncementItem = {
   title: string;
   body: string;
   isPinned: boolean;
+  notifyParticipants?: boolean;
   groupIds?: string[];
   targetEmployeeIds?: string[];
   linkUrl?: string | null;

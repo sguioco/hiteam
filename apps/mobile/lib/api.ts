@@ -53,6 +53,7 @@ import {
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
 import { API_URL, FALLBACK_API_URL } from "./api-config";
 import type { AppLanguage } from "./i18n";
+import type { NotificationPreferences } from "./notification-preferences";
 
 const API_REQUEST_TIMEOUT_MS = 20_000;
 const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
@@ -284,6 +285,10 @@ async function refreshSession(): Promise<AppSession | null> {
   } catch {
     return null;
   }
+}
+
+export async function refreshCurrentSession(): Promise<AppSession | null> {
+  return refreshSession();
 }
 
 export function getCachedDemoSession() {
@@ -520,6 +525,24 @@ export async function updateMyBannerTheme(
   });
 }
 
+export async function updateMyNotificationPreferences(
+  preferences: NotificationPreferences,
+): Promise<EmployeeProfileResponse> {
+  return authRequest<EmployeeProfileResponse>("/employees/me/preferences", {
+    method: "PATCH",
+    body: JSON.stringify({
+      notificationAssignmentAlertsEnabled: preferences.assignmentAlertsEnabled,
+      notificationTaskDeadlineRemindersEnabled:
+        preferences.taskDeadlineRemindersEnabled,
+      notificationTaskDeadlineReminderMinutes:
+        preferences.taskDeadlineReminderMinutes,
+      notificationMeetingRemindersEnabled: preferences.meetingRemindersEnabled,
+      notificationMeetingReminderMinutes: preferences.meetingReminderMinutes,
+      notificationShiftRemindersEnabled: preferences.shiftRemindersEnabled,
+    }),
+  });
+}
+
 export async function loadPublicInvitation(token: string): Promise<{
   id: string;
   email: string | null;
@@ -702,6 +725,23 @@ export async function bootstrapPushNotifications(): Promise<void> {
   }
 
   const Notifications = await import("expo-notifications");
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      priority: Notifications.AndroidNotificationPriority.DEFAULT,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      importance: Notifications.AndroidImportance.DEFAULT,
+      name: "default",
+    });
+  }
+
   const settings = await Notifications.getPermissionsAsync();
   let status = settings.status;
 
@@ -788,6 +828,7 @@ export async function loadDashboardBootstrap(query?: {
       personalHistory: response.initialData.personalHistory ?? null,
       anomalies: response.initialData.anomalies ?? null,
       canCheckWorkdays: response.initialData.canCheckWorkdays ?? false,
+      organizationSetup: response.initialData.organizationSetup ?? null,
     },
   };
 }
@@ -797,6 +838,7 @@ export async function loadTodayBootstrap(query?: {
   dateTo?: string;
 }): Promise<{
   attendanceStatus: AttendanceStatusResponse | null;
+  attendanceTrackingEnabled: boolean;
   profile: EmployeeProfileResponse | null;
   shifts: EmployeeScheduleShiftItem[];
   tasks: TaskItem[];
@@ -806,6 +848,8 @@ export async function loadTodayBootstrap(query?: {
 
   return {
     attendanceStatus: initialData.attendanceStatus,
+    attendanceTrackingEnabled:
+      initialData.organizationSetup?.attendanceTrackingEnabled ?? true,
     profile: initialData.profile,
     shifts: initialData.scheduleShifts,
     tasks: initialData.taskBoard?.tasks ?? [],
@@ -1350,6 +1394,7 @@ export async function createManagerAnnouncement(input: {
   title: string;
   body: string;
   isPinned?: boolean;
+  notifyParticipants?: boolean;
   groupId?: string;
   groupIds?: string[];
   targetEmployeeId?: string;
@@ -1387,6 +1432,7 @@ export async function createManagerAnnouncement(input: {
       title: input.title,
       body: input.body,
       isPinned: input.isPinned ?? false,
+      notifyParticipants: input.notifyParticipants ?? false,
       ...(normalizedGroupIds.length === 1
         ? { groupId: normalizedGroupIds[0] }
         : {}),

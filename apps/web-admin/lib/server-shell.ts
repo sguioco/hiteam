@@ -30,6 +30,7 @@ function buildDemoInitialShellBootstrap(
           logoUrl: null,
           name: DEMO_COMPANY_NAME_EN,
         },
+        attendanceTrackingEnabled: true,
         configured: true,
       },
       accountProfile: {

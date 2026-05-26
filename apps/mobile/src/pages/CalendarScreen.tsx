@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import {
   Image,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -80,12 +81,14 @@ import { PressableScale } from "../../components/ui/pressable-scale";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
+  getCalendarScreenCacheKey,
   getNewsScreenCacheKey,
   NEWS_SCREEN_CACHE_TTL_MS,
   warmAnnouncementImages,
 } from "../../lib/workspace-cache";
 
 type CalendarDayItem = {
+  authorName: string;
   id: string;
   task: TaskItem;
   title: string;
@@ -150,6 +153,7 @@ type ManagerOverdueEmployeeRow = {
 };
 
 type CalendarScreenCacheValue = {
+  organizationStartDate?: string | null;
   shifts: CalendarShift[];
   tasks: TaskItem[];
   managerEmployees?: ManagerEmployee[];
@@ -191,6 +195,20 @@ function formatDateKey(date: Date) {
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function parseOrganizationStartDate(value?: string | Date | null) {
+  const parsed = value instanceof Date ? value : value ? new Date(value) : null;
+
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return startOfDay(parsed);
 }
 
 function combineDateAndTime(date: Date, time: TimeValue) {
@@ -470,6 +488,8 @@ export default function CalendarScreen({
     () => new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [selectedDay, setSelectedDay] = useState(today.getDate());
+  const [organizationStartDate, setOrganizationStartDate] =
+    useState<Date | null>(null);
   const [monthAnimationDirection, setMonthAnimationDirection] = useState<
     "next" | "prev"
   >("next");
@@ -505,7 +525,7 @@ export default function CalendarScreen({
     month: "long",
     year: "numeric",
   });
-  const calendarCacheKey = `calendar-screen:v2:${isManager ? "manager" : "employee"}:${year}-${monthIndex}`;
+  const calendarCacheKey = getCalendarScreenCacheKey(currentDate, isManager);
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<CalendarScreenCacheValue>(
@@ -526,6 +546,9 @@ export default function CalendarScreen({
     [isManager, newsCacheKey],
   );
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [refreshing, setRefreshing] = useState(false);
+  const [manualRefreshSignal, setManualRefreshSignal] = useState(0);
+  const handledManualRefreshSignalRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [shifts, setShifts] = useState<CalendarShift[]>(
     initialSnapshot?.value.shifts ?? [],
@@ -616,6 +639,12 @@ export default function CalendarScreen({
   const selectedDate = new Date(year, monthIndex, selectedDay);
   const selectedDayKey = formatDateKey(selectedDate);
   const todayStart = useMemo(() => startOfDay(today), [today]);
+  const organizationStartMonth = organizationStartDate
+    ? startOfMonth(organizationStartDate)
+    : null;
+  const canGoToPreviousMonth =
+    !organizationStartMonth ||
+    startOfMonth(currentDate).getTime() > organizationStartMonth.getTime();
 
   useEffect(() => {
     return subscribeScreenCache<CalendarScreenCacheValue>(calendarCacheKey, (entry) => {
@@ -632,6 +661,9 @@ export default function CalendarScreen({
       setManagerGroups(entry.value.managerGroups ?? []);
       setManagerShifts(entry.value.managerShifts ?? []);
       setShiftTemplates(entry.value.shiftTemplates ?? []);
+      setOrganizationStartDate(
+        parseOrganizationStartDate(entry.value.organizationStartDate),
+      );
       setLoading(false);
     });
   }, [calendarCacheKey, language]);
@@ -678,6 +710,8 @@ export default function CalendarScreen({
 
   useEffect(() => {
     let cancelled = false;
+    const isManualRefresh =
+      manualRefreshSignal !== handledManualRefreshSignalRef.current;
 
     async function loadData() {
       const cached = await readScreenCache<CalendarScreenCacheValue>(
@@ -695,6 +729,9 @@ export default function CalendarScreen({
         setManagerGroups(cached.value.managerGroups ?? []);
         setManagerShifts(cached.value.managerShifts ?? []);
         setShiftTemplates(cached.value.shiftTemplates ?? []);
+        setOrganizationStartDate(
+          parseOrganizationStartDate(cached.value.organizationStartDate),
+        );
         setLoading(false);
       } else if (!initialSnapshot) {
         setLoading(true);
@@ -705,10 +742,15 @@ export default function CalendarScreen({
           !isManager ||
           ((cached.value.managerEmployees?.length ?? 0) > 0 &&
             (cached.value.shiftTemplates?.length ?? 0) > 0);
+        const cachedHasOrganizationStartDate = Boolean(
+          cached.value.organizationStartDate,
+        );
 
         if (
+          !isManualRefresh &&
           !cached.isStale &&
-          cachedHasRequiredManagerAssignmentData
+          cachedHasRequiredManagerAssignmentData &&
+          cachedHasOrganizationStartDate
         ) {
           return;
         }
@@ -729,6 +771,7 @@ export default function CalendarScreen({
         let nextManagerGroups: ManagerGroup[] = [];
         let nextManagerShifts: ManagerScheduleShift[] = [];
         let nextShiftTemplates: ManagerShiftTemplate[] = [];
+        let nextOrganizationStartDate: Date | null = null;
         let partialLoadError: string | null = null;
 
         try {
@@ -737,6 +780,14 @@ export default function CalendarScreen({
 
           if (!scheduleData) {
             throw new Error(t("today.loadError"));
+          }
+
+          nextOrganizationStartDate = parseOrganizationStartDate(
+            scheduleData.organizationSetup?.company?.createdAt,
+          );
+
+          if (nextOrganizationStartDate && !cancelled) {
+            setOrganizationStartDate(nextOrganizationStartDate);
           }
 
           const taskBoard = scheduleData.taskBoard ?? null;
@@ -826,6 +877,14 @@ export default function CalendarScreen({
           }
 
           if (employeesResult.status === "fulfilled") {
+            nextOrganizationStartDate = parseOrganizationStartDate(
+              employeesResult.value.organizationSetup?.company?.createdAt,
+            );
+
+            if (nextOrganizationStartDate && !cancelled) {
+              setOrganizationStartDate(nextOrganizationStartDate);
+            }
+
             nextManagerEmployees = employeesResult.value.employeeRecords.length
               ? employeesResult.value.employeeRecords
               : nextManagerEmployees;
@@ -850,6 +909,8 @@ export default function CalendarScreen({
           setManagerShifts(nextManagerShifts);
           setShiftTemplates(nextShiftTemplates);
           void writeScreenCache(calendarCacheKey, {
+            organizationStartDate:
+              nextOrganizationStartDate?.toISOString() ?? null,
             shifts: nextShifts,
             tasks: nextTasks,
             managerEmployees: nextManagerEmployees,
@@ -870,6 +931,8 @@ export default function CalendarScreen({
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setRefreshing(false);
+          handledManualRefreshSignalRef.current = manualRefreshSignal;
         }
       }
     }
@@ -879,13 +942,45 @@ export default function CalendarScreen({
     return () => {
       cancelled = true;
     };
-  }, [calendarCacheKey, initialSnapshot, isManager, language, monthIndex, t, year]);
+  }, [
+    calendarCacheKey,
+    initialSnapshot,
+    isManager,
+    language,
+    manualRefreshSignal,
+    monthIndex,
+    t,
+    year,
+  ]);
 
   useEffect(() => {
     if (selectedDay > daysInMonth) {
       setSelectedDay(daysInMonth);
     }
   }, [daysInMonth, selectedDay]);
+
+  useEffect(() => {
+    if (!organizationStartDate) {
+      return;
+    }
+
+    const currentMonthStart = startOfMonth(currentDate);
+    const organizationMonthStart = startOfMonth(organizationStartDate);
+
+    if (currentMonthStart.getTime() < organizationMonthStart.getTime()) {
+      setMonthAnimationDirection("next");
+      setCurrentDate(organizationMonthStart);
+      setSelectedDay(organizationStartDate.getDate());
+      return;
+    }
+
+    if (
+      currentMonthStart.getTime() === organizationMonthStart.getTime() &&
+      selectedDay < organizationStartDate.getDate()
+    ) {
+      setSelectedDay(organizationStartDate.getDate());
+    }
+  }, [currentDate, organizationStartDate, selectedDay]);
 
   useEffect(() => {
     if (overdueSheetSignal > 0) {
@@ -940,7 +1035,14 @@ export default function CalendarScreen({
       const key = formatDateKey(dueAt);
       const nextItems = map.get(key) ?? [];
       const overdue = isOverdueTask(task, today);
+      const authorName = task.managerEmployee
+        ? buildEmployeeName(
+            task.managerEmployee.firstName,
+            task.managerEmployee.lastName,
+          )
+        : "";
       nextItems.push({
+        authorName,
         id: task.id,
         task,
         title: getTaskTitle(task, {
@@ -2302,7 +2404,22 @@ export default function CalendarScreen({
     return <Ionicons color="#9aa6b2" name="ellipse-outline" size={18} />;
   }
 
+  function isCalendarDayBeforeOrganizationStart(day: number) {
+    if (!organizationStartDate) {
+      return false;
+    }
+
+    return (
+      startOfDay(new Date(year, monthIndex, day)).getTime() <
+      organizationStartDate.getTime()
+    );
+  }
+
   function changeMonth(offset: number) {
+    if (offset < 0 && !canGoToPreviousMonth) {
+      return;
+    }
+
     hapticSelection();
     setMonthAnimationDirection(offset > 0 ? "next" : "prev");
     setCurrentDate(
@@ -2982,13 +3099,24 @@ export default function CalendarScreen({
             paddingHorizontal: 16,
             paddingTop: insets.top + 12,
           }}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => {
+                setRefreshing(true);
+                setManualRefreshSignal((current) => current + 1);
+              }}
+              refreshing={refreshing}
+              tintColor="#315cf6"
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-6">
             <View className="rounded-3xl border border-white/30 bg-white/70 p-5 shadow-sm shadow-[#1f2687]/10">
               <View className="mb-5 flex-row items-center justify-between">
                 <PressableScale
-                  className="rounded-xl p-2"
+                  className={`rounded-xl p-2 ${canGoToPreviousMonth ? "" : "opacity-40"}`}
+                  disabled={!canGoToPreviousMonth}
                   haptic="selection"
                   onPress={() => changeMonth(-1)}
                 >
@@ -3080,7 +3208,11 @@ export default function CalendarScreen({
                       >
                         {day !== null ? (
                           <PressableScale
-                            className="h-10 w-10 items-center justify-center rounded-full"
+                            className={`h-10 w-10 items-center justify-center rounded-full ${
+                              isCalendarDayBeforeOrganizationStart(day)
+                                ? "opacity-35"
+                                : ""
+                            }`}
                             contentStyle={[
                               day === selectedDay
                                 ? {
@@ -3103,6 +3235,7 @@ export default function CalendarScreen({
                                   }
                                 : null,
                             ]}
+                            disabled={isCalendarDayBeforeOrganizationStart(day)}
                             haptic="selection"
                             onPress={() => setSelectedDay(day)}
                           >
@@ -3652,6 +3785,12 @@ export default function CalendarScreen({
                                         getTaskBody(task, {
                                           hideSourceBeforeReady: true,
                                         });
+                                      const taskAuthorName = task.managerEmployee
+                                        ? buildEmployeeName(
+                                            task.managerEmployee.firstName,
+                                            task.managerEmployee.lastName,
+                                          )
+                                        : "";
                                       const rowContent = (
                                         <View className="flex-row items-start gap-3 px-1 py-2">
                                           <View className="w-6 items-center pt-0.5">
@@ -3676,6 +3815,14 @@ export default function CalendarScreen({
                                                 numberOfLines={2}
                                               >
                                                 {note}
+                                              </Text>
+                                            ) : null}
+                                            {taskAuthorName ? (
+                                              <Text
+                                                className="mt-0.5 font-body text-[12px] font-semibold leading-5 text-[#8a96ab]"
+                                                numberOfLines={1}
+                                              >
+                                                {t("calendar.shiftAuthor")}: {taskAuthorName}
                                               </Text>
                                             ) : null}
                                           </View>
@@ -3904,6 +4051,11 @@ export default function CalendarScreen({
                         ) : (
                           <View className="mt-2 h-3 w-[46%] rounded-full bg-[#edf3fb]" />
                         )}
+                        {item.authorName ? (
+                          <Text className="mt-1 font-body text-[12px] font-semibold text-[#8a96ab]">
+                            {t("calendar.shiftAuthor")}: {item.authorName}
+                          </Text>
+                        ) : null}
                       </View>
                       <Text
                         className="font-body text-xs font-semibold"

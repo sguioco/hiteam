@@ -29,6 +29,7 @@ export function useWorkspaceAutoRefresh({
   const onRefreshRef = useRef(onRefresh);
   const inFlightRefreshRef = useRef<Promise<void> | null>(null);
   const lastRefreshStartedAtRef = useRef(0);
+  const queuedSocketRefreshRef = useRef(false);
 
   useEffect(() => {
     onRefreshRef.current = onRefresh;
@@ -52,7 +53,17 @@ export function useWorkspaceAutoRefresh({
       }
 
       const now = Date.now();
-      if (inFlightRefreshRef.current || now - lastRefreshStartedAtRef.current < minGapMs) {
+      if (inFlightRefreshRef.current) {
+        if (reason === "socket") {
+          queuedSocketRefreshRef.current = true;
+        }
+        return;
+      }
+
+      if (
+        reason !== "socket" &&
+        now - lastRefreshStartedAtRef.current < minGapMs
+      ) {
         return;
       }
 
@@ -63,6 +74,11 @@ export function useWorkspaceAutoRefresh({
         .finally(() => {
           if (inFlightRefreshRef.current === refreshPromise) {
             inFlightRefreshRef.current = null;
+          }
+
+          if (active && queuedSocketRefreshRef.current) {
+            queuedSocketRefreshRef.current = false;
+            runRefresh("socket");
           }
         });
 

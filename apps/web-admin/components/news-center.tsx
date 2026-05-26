@@ -82,6 +82,7 @@ type NewsDraft = {
   body: string;
   linkUrl: string;
   isPinned: boolean;
+  notifyParticipants: boolean;
   limitParticipants: boolean;
   participantScope: "GROUP" | "EMPLOYEE";
   groupIds: string[];
@@ -105,6 +106,7 @@ const EMPTY_DRAFT: NewsDraft = {
   body: "",
   linkUrl: "",
   isPinned: false,
+  notifyParticipants: false,
   limitParticipants: false,
   participantScope: "GROUP",
   groupIds: [],
@@ -754,6 +756,7 @@ export function NewsCenter({
           title: draft.title.trim(),
           body: draft.body.trim(),
           isPinned: false,
+          notifyParticipants: draft.notifyParticipants,
           ...(draft.limitParticipants &&
           draft.participantScope === "GROUP" &&
           normalizedGroupIds.length === 1
@@ -852,6 +855,7 @@ export function NewsCenter({
       body: item.body,
       linkUrl: item.linkUrl ?? "",
       isPinned: item.isPinned,
+      notifyParticipants: false,
       limitParticipants: false,
       participantScope: "GROUP",
       groupIds: [],
@@ -1543,6 +1547,31 @@ export function NewsCenter({
                       )}
                     </div>
                   ) : null}
+                </div>
+                <div className="rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
+                  <label className="flex items-start gap-3">
+                    <Checkbox
+                      checked={draft.notifyParticipants}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({
+                          ...current,
+                          notifyParticipants: Boolean(checked),
+                        }))
+                      }
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[color:var(--foreground)]">
+                        {localize(locale, "Уведомить участников", "Notify participants")}
+                      </div>
+                      <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {localize(
+                          locale,
+                          "Отправим push всем сотрудникам, которые увидят эту новость.",
+                          "Send a push notification to every employee who can see this news item.",
+                        )}
+                      </div>
+                    </div>
+                  </label>
                 </div>
                 <div className="rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
                   <label className="flex items-start gap-3">

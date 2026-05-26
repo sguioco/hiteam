@@ -21,7 +21,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../../components/ui/text';
 import { PressableScale } from '../../../components/ui/pressable-scale';
-import { loadPublicInvitation, registerFromInvitation, signInWithEmail } from '../../../lib/api';
+import {
+  bootstrapPushNotifications,
+  loadPublicInvitation,
+  registerFromInvitation,
+  signInWithEmail,
+} from '../../../lib/api';
 import { signInLocally } from '../../../lib/auth-flow';
 import { hapticError, hapticSelection, hapticSuccess } from '../../../lib/haptics';
 import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../../lib/i18n';
@@ -102,6 +107,7 @@ export default function RegisterInvitationScreen() {
             processingBiometric: 'Завершаем настройку биометрии...',
             startBiometric: 'Открываем настройку биометрии...',
             email: 'Email',
+            emailPlaceholder: t('invite.placeholder'),
             firstName: 'Имя',
             lastName: 'Фамилия',
             middleName: 'Отчество',
@@ -136,6 +142,7 @@ export default function RegisterInvitationScreen() {
             processingBiometric: 'Finishing biometric setup...',
             startBiometric: 'Opening biometric setup...',
             email: 'Email',
+            emailPlaceholder: t('invite.placeholder'),
             firstName: 'First name',
             lastName: 'Last name',
             middleName: 'Middle name',
@@ -153,7 +160,7 @@ export default function RegisterInvitationScreen() {
             showPassword: 'Show password',
             hidePassword: 'Hide password',
           },
-    [language],
+    [language, t],
   );
 
   useEffect(() => {
@@ -361,6 +368,7 @@ export default function RegisterInvitationScreen() {
       });
 
       await signInWithEmail(normalizedEmail, form.password.trim(), invitation.tenantSlug);
+      void bootstrapPushNotifications().catch(() => undefined);
       signInLocally({ workspaceSetupStep: 'biometric' });
       setMessage(copy.startBiometric);
       hapticSuccess();
@@ -516,7 +524,7 @@ export default function RegisterInvitationScreen() {
           {step === 'password' ? (
             <View className="gap-4">
               <View>
-                <Text style={styles.fieldLabel}>{copy.email}</Text>
+                <Text style={styles.fieldLabel}>{copy.email}*</Text>
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -527,7 +535,7 @@ export default function RegisterInvitationScreen() {
                     setForm((current) => ({ ...current, email: value }));
                     setError(null);
                   }}
-                  placeholder="you@company.com"
+                  placeholder={copy.emailPlaceholder}
                   placeholderTextColor="#7f8da1"
                   selectionColor="#26334a"
                   style={[textDirectionStyle, styles.inputText]}
@@ -537,7 +545,7 @@ export default function RegisterInvitationScreen() {
               </View>
 
               <View>
-                <Text style={styles.fieldLabel}>{copy.password}</Text>
+                <Text style={styles.fieldLabel}>{copy.password}*</Text>
                 <View className="mt-2 min-h-[58px] flex-row items-center rounded-[18px] border border-[#ddd5c7] bg-white px-4">
                   <TextInput
                     autoCapitalize="none"
@@ -642,7 +650,7 @@ export default function RegisterInvitationScreen() {
                   setBirthDatePickerVisible(true);
                 }}
               >
-                <Text style={styles.inputText}>{copy.birthDate}</Text>
+                <Text style={styles.inputText}>{copy.birthDate}*</Text>
                 <Text style={[styles.inputText, form.birthDate ? null : styles.placeholderText]}>
                   {form.birthDate || copy.birthDateHint}
                 </Text>
@@ -676,17 +684,19 @@ export default function RegisterInvitationScreen() {
 
                   return (
                     <View className="flex-1 flex-row" key={gender}>
-                      <PressableScale
+                      <Pressable
                         className={`min-h-[58px] flex-1 items-center justify-center ${
                           selected ? 'bg-[#eef2ff]' : 'bg-white'
                         }`}
-                        haptic="selection"
-                        onPress={() => setForm((current) => ({ ...current, gender }))}
+                        onPress={() => {
+                          hapticSelection();
+                          setForm((current) => ({ ...current, gender }));
+                        }}
                       >
-                        <Text className={`text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
+                        <Text className={`text-center text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
                           {gender === 'male' ? copy.male : copy.female}
                         </Text>
-                      </PressableScale>
+                      </Pressable>
                       {index === 0 ? <View className="w-px bg-[#e7dfd3]" /> : null}
                     </View>
                   );
@@ -709,12 +719,9 @@ export default function RegisterInvitationScreen() {
                     <Ionicons color="#8a92ab" name="camera-outline" size={32} />
                   </View>
                 )}
-                <View className="ml-4 flex-1">
+                <View className="ml-4 flex-1 justify-center">
                   <Text className="text-[16px] font-semibold text-[#24314b]">
                     {form.avatarPreviewUri ? copy.changePhoto : copy.addPhoto}
-                  </Text>
-                  <Text className="mt-1 text-[13px] leading-5 text-[#7f8da1]">
-                    {copy.photo}
                   </Text>
                 </View>
                 <Ionicons color="#9ba5bb" name="chevron-forward" size={20} />
@@ -778,7 +785,7 @@ const styles = StyleSheet.create({
   },
   inputText: {
     color: '#24314b',
-    fontFamily: 'Manrope_700Bold',
+    fontFamily: 'Manrope_600SemiBold',
     fontSize: 16,
     includeFontPadding: false,
   },

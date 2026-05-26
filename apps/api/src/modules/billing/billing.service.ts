@@ -171,14 +171,30 @@ export class BillingService {
 
     const paidSeats = subscription.paidSeats;
     const requiredSeats = Math.max(paidSeats, billableSeats);
-    const missingSeats = Math.max(0, requiredSeats - paidSeats);
-    const firstPaidAt = await this.ensureFirstPaidAt(subscription, missingSeats);
+    const rawMissingSeats = Math.max(0, requiredSeats - paidSeats);
+    const trialActive = this.isTrialActive(subscription);
+    const futureTrialEndsAt =
+      subscription.trialEndsAt && subscription.trialEndsAt.getTime() > Date.now()
+        ? subscription.trialEndsAt
+        : null;
+    const missingSeats = trialActive ? 0 : rawMissingSeats;
+    const firstPaidAt = await this.ensureFirstPaidAt(subscription, rawMissingSeats);
     const activeBillingPeriod = this.getBillingPeriod(firstPaidAt);
+    const stripeConnected = Boolean(subscription.stripeSubscriptionId || subscription.stripeSubscriptionItemId);
+    const nextBillingAt =
+      subscription.stripeCurrentPeriodEnd ??
+      activeBillingPeriod?.end ??
+      futureTrialEndsAt ??
+      null;
     const serviceActive =
-      Boolean(firstPaidAt) &&
-      missingSeats === 0 &&
-      !this.isStripeBlockingStatus(subscription.status);
-    const status = serviceActive ? subscription.status : 'PAYMENT_REQUIRED';
+      trialActive ||
+      (Boolean(firstPaidAt) &&
+        rawMissingSeats === 0 &&
+        !this.isStripeBlockingStatus(subscription.status));
+    const status = trialActive ? 'TRIALING' : serviceActive ? subscription.status : 'PAYMENT_REQUIRED';
+    const trialDaysRemaining = trialActive && subscription.trialEndsAt
+      ? Math.max(0, Math.ceil((subscription.trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : 0;
 
     return {
       status,
@@ -195,13 +211,20 @@ export class BillingService {
       billingStartedAt: firstPaidAt?.toISOString() ?? null,
       currentPeriodStart: activeBillingPeriod?.start.toISOString() ?? null,
       currentPeriodEnd: activeBillingPeriod?.end.toISOString() ?? null,
+      nextBillingAt: nextBillingAt?.toISOString() ?? null,
       serviceActive,
-      stripeConnected: Boolean(subscription.stripeCustomerId),
+      stripeConnected,
       stripeSubscriptionId: subscription.stripeSubscriptionId,
       stripeSubscriptionStatus: subscription.status,
       stripeCancelAtPeriodEnd: subscription.stripeCancelAtPeriodEnd,
       stripeCurrentPeriodStart: subscription.stripeCurrentPeriodStart?.toISOString() ?? null,
       stripeCurrentPeriodEnd: subscription.stripeCurrentPeriodEnd?.toISOString() ?? null,
+      trialActive,
+      trialStartedAt: subscription.trialStartedAt?.toISOString() ?? null,
+      trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+      trialDaysRemaining,
+      trialSource: subscription.trialSource,
+      promoCode: subscription.promoCode,
       price: pricing,
     };
   }
@@ -292,7 +315,7 @@ export class BillingService {
   async createPortalSession(tenantId: string) {
     const subscription = await this.ensureSubscription(tenantId);
 
-    if (!subscription.stripeCustomerId) {
+    if (!subscription.stripeCustomerId || !subscription.stripeSubscriptionId) {
       throw new HttpException(
         { message: 'Stripe customer is not connected yet.' },
         HttpStatus.PRECONDITION_REQUIRED,
@@ -308,6 +331,45 @@ export class BillingService {
       mode: 'portal' as const,
       url: portalSession.url,
     };
+  }
+
+  async disconnectStripe(tenantId: string) {
+    const subscription = await this.ensureSubscription(tenantId);
+
+    if (
+      subscription.stripeSubscriptionId &&
+      !['CANCELED', 'INCOMPLETE_EXPIRED'].includes(this.normalizeStripeStatus(subscription.status))
+    ) {
+      try {
+        await this.getStripe().subscriptions.cancel(subscription.stripeSubscriptionId);
+      } catch (error) {
+        const stripeError = error as { code?: string; raw?: { code?: string } };
+        const code = stripeError.code ?? stripeError.raw?.code;
+        if (code !== 'resource_missing') {
+          throw new ServiceUnavailableException('Unable to disconnect Stripe subscription.');
+        }
+      }
+    }
+
+    await this.prisma.billingSubscription.update({
+      where: { id: subscription.id },
+      data: {
+        paidSeats: 0,
+        status: 'PAYMENT_REQUIRED',
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripeSubscriptionItemId: null,
+        stripePriceId: null,
+        stripePriceLookupKey: null,
+        stripeCurrency: null,
+        stripeCurrentPeriodStart: null,
+        stripeCurrentPeriodEnd: null,
+        stripeCancelAtPeriodEnd: false,
+      },
+    });
+    this.kommoService.recordBillingUpdated(tenantId, 'stripe_disconnected');
+
+    return this.getSummary(tenantId);
   }
 
   async syncStripeSeatQuantity(tenantId: string) {
@@ -449,6 +511,17 @@ export class BillingService {
     });
 
     return updated.firstPaidAt;
+  }
+
+  private isTrialActive(subscription: {
+    trialEndsAt: Date | null;
+    firstPaidAt: Date | null;
+  }) {
+    return Boolean(
+      !subscription.firstPaidAt &&
+        subscription.trialEndsAt &&
+        subscription.trialEndsAt.getTime() > Date.now(),
+    );
   }
 
   private getStripe() {
