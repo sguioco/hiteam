@@ -505,7 +505,7 @@ export default function RegisterInvitationScreen() {
           </Text>
           <View className="mt-5 self-start rounded-full border border-white/80 bg-white/75 px-4 py-2">
             <Text className="text-[13px] font-semibold uppercase tracking-[1.4px] text-[#6f7892]">
-              {copy.company}: {invitation.companyName}
+              {copy.company}: {invitation.tenantName}
             </Text>
           </View>
         </View>
