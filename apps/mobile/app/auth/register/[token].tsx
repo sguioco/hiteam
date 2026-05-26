@@ -114,8 +114,8 @@ export default function RegisterInvitationScreen() {
             pickPhoto: 'Выбрать фото',
             takePhoto: 'Сделать фото',
             cancel: 'Отмена',
-            male: 'Мужчина',
-            female: 'Женщина',
+            male: 'Мужской',
+            female: 'Женский',
             showPassword: 'Показать пароль',
             hidePassword: 'Скрыть пароль',
           }
@@ -634,89 +634,91 @@ export default function RegisterInvitationScreen() {
                 value={form.phone}
               />
 
-            <PressableScale
-              className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
-              haptic="selection"
-              onPress={() => {
-                Keyboard.dismiss();
-                setBirthDatePickerVisible(true);
-              }}
-            >
-              <Text style={styles.inputText}>{copy.birthDate}</Text>
-              <Text style={[styles.inputText, form.birthDate ? null : styles.placeholderText]}>
-                {form.birthDate || copy.birthDateHint}
-              </Text>
-            </PressableScale>
+              <PressableScale
+                className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
+                haptic="selection"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setBirthDatePickerVisible(true);
+                }}
+              >
+                <Text style={styles.inputText}>{copy.birthDate}</Text>
+                <Text style={[styles.inputText, form.birthDate ? null : styles.placeholderText]}>
+                  {form.birthDate || copy.birthDateHint}
+                </Text>
+              </PressableScale>
 
-            {birthDatePickerVisible ? (
-              <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-2 py-3">
-                <DateTimePicker
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  maximumDate={new Date()}
-                  mode="date"
-                  onChange={handleBirthDateChange}
-                  style={Platform.OS === 'ios' ? styles.datePickerSpinner : undefined}
-                  value={parseBirthDate(form.birthDate)}
-                />
-                {Platform.OS === 'ios' ? (
-                  <PressableScale
-                    className="mx-3 mt-2 min-h-[44px] items-center justify-center rounded-[16px] bg-white"
-                    haptic="selection"
-                    onPress={() => setBirthDatePickerVisible(false)}
-                  >
-                    <Text className="text-[16px] font-semibold text-[#546cf2]">{copy.next}</Text>
-                  </PressableScale>
-                ) : null}
-              </View>
-            ) : null}
-
-            <View className="flex-row gap-3">
-              {(['male', 'female'] as const).map((gender) => {
-                const selected = form.gender === gender;
-
-                return (
-                  <PressableScale
-                    className={`min-h-[52px] flex-1 items-center justify-center rounded-[18px] border ${
-                      selected ? 'border-[#546cf2] bg-[#eef2ff]' : 'border-[#ddd5c7] bg-white'
-                    }`}
-                    haptic="selection"
-                    key={gender}
-                    onPress={() => setForm((current) => ({ ...current, gender }))}
-                  >
-                    <Text className={`text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
-                      {gender === 'male' ? copy.male : copy.female}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </View>
-
-            <PressableScale
-              className="min-h-[112px] flex-row items-center rounded-[24px] border border-dashed border-[#c6d1e4] bg-white px-4"
-              haptic="selection"
-              onPress={openPhotoChooser}
-            >
-              {form.avatarPreviewUri ? (
-                <Image
-                  className="h-20 w-20 rounded-[22px]"
-                  resizeMode="cover"
-                  source={{ uri: form.avatarPreviewUri }}
-                />
-              ) : (
-                <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-[#f3f5fb]">
-                  <Ionicons color="#8a92ab" name="camera-outline" size={32} />
+              {birthDatePickerVisible ? (
+                <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-2 py-3">
+                  <DateTimePicker
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    maximumDate={new Date()}
+                    mode="date"
+                    onChange={handleBirthDateChange}
+                    style={Platform.OS === 'ios' ? styles.datePickerSpinner : undefined}
+                    value={parseBirthDate(form.birthDate)}
+                  />
+                  {Platform.OS === 'ios' ? (
+                    <PressableScale
+                      className="mx-3 mt-2 min-h-[44px] items-center justify-center rounded-[16px] bg-white"
+                      haptic="selection"
+                      onPress={() => setBirthDatePickerVisible(false)}
+                    >
+                      <Text className="text-[16px] font-semibold text-[#546cf2]">{copy.next}</Text>
+                    </PressableScale>
+                  ) : null}
                 </View>
-              )}
-              <View className="ml-4 flex-1">
-                <Text className="text-[16px] font-semibold text-[#24314b]">
-                  {form.avatarPreviewUri ? copy.changePhoto : copy.addPhoto}
-                </Text>
-                <Text className="mt-1 text-[13px] leading-5 text-[#7f8da1]">
-                  {copy.photo}
-                </Text>
+              ) : null}
+
+              <View className="mt-1 min-h-[58px] flex-row overflow-hidden rounded-[18px] border border-[#ddd5c7] bg-white">
+                {(['male', 'female'] as const).map((gender, index) => {
+                  const selected = form.gender === gender;
+
+                  return (
+                    <View className="flex-1 flex-row" key={gender}>
+                      <PressableScale
+                        className={`min-h-[58px] flex-1 items-center justify-center ${
+                          selected ? 'bg-[#eef2ff]' : 'bg-white'
+                        }`}
+                        haptic="selection"
+                        onPress={() => setForm((current) => ({ ...current, gender }))}
+                      >
+                        <Text className={`text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
+                          {gender === 'male' ? copy.male : copy.female}
+                        </Text>
+                      </PressableScale>
+                      {index === 0 ? <View className="w-px bg-[#e7dfd3]" /> : null}
+                    </View>
+                  );
+                })}
               </View>
-              <Ionicons color="#9ba5bb" name="chevron-forward" size={20} />
-            </PressableScale>
+
+              <PressableScale
+                className="mt-1 min-h-[112px] flex-row items-center rounded-[24px] border border-dashed border-[#c6d1e4] bg-white px-4"
+                haptic="selection"
+                onPress={openPhotoChooser}
+              >
+                {form.avatarPreviewUri ? (
+                  <Image
+                    className="h-20 w-20 rounded-[22px]"
+                    resizeMode="cover"
+                    source={{ uri: form.avatarPreviewUri }}
+                  />
+                ) : (
+                  <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-[#f3f5fb]">
+                    <Ionicons color="#8a92ab" name="camera-outline" size={32} />
+                  </View>
+                )}
+                <View className="ml-4 flex-1">
+                  <Text className="text-[16px] font-semibold text-[#24314b]">
+                    {form.avatarPreviewUri ? copy.changePhoto : copy.addPhoto}
+                  </Text>
+                  <Text className="mt-1 text-[13px] leading-5 text-[#7f8da1]">
+                    {copy.photo}
+                  </Text>
+                </View>
+                <Ionicons color="#9ba5bb" name="chevron-forward" size={20} />
+              </PressableScale>
             </View>
           )}
         </View>
