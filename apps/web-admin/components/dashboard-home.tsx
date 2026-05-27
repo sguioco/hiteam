@@ -2127,6 +2127,7 @@ export default function DashboardHome({
                       </Select>
                       {taskDraft.mode === "meeting" ? (
                         <TaskDateTimePicker
+                          className="manager-deadline-picker"
                           locale={locale}
                           minToday
                           onChange={(value) =>
@@ -2135,8 +2136,8 @@ export default function DashboardHome({
                           value={taskDraft.dueAt}
                         />
                       ) : taskDraft.isRecurring ? null : (
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
-                          <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3">
+                        <div className="manager-deadline-row">
+                          <label className="manager-deadline-toggle">
                             <Checkbox
                               checked={taskDraft.hasDueTime}
                               onCheckedChange={(checked) =>
@@ -2162,6 +2163,7 @@ export default function DashboardHome({
                             </span>
                           </label>
                           <TaskDateTimePicker
+                            className="manager-deadline-picker"
                             isDisabled={!taskDraft.hasDueTime}
                             locale={locale}
                             minToday

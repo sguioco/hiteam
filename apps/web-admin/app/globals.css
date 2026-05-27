@@ -7364,11 +7364,10 @@ body {
 
 .manager-create-dialog {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  height: min(760px, calc(100vh - 2rem));
-  max-height: calc(100vh - 2rem);
-  width: min(820px, calc(100vw - 2rem));
-  overflow: hidden;
+  grid-template-rows: auto auto auto;
+  width: min(1040px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 1.5rem);
+  overflow: visible;
 }
 
 .manager-board {
@@ -9239,19 +9238,19 @@ body {
 
 .manager-task-form {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   gap: 14px;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .manager-task-form-body {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 12px;
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 6px;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .manager-create-mode {
@@ -9334,11 +9333,11 @@ body {
 
 .manager-assignee-picker {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  max-height: 220px;
-  overflow: auto;
-  padding-right: 4px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .manager-assignee-option {
@@ -9371,8 +9370,42 @@ body {
 
 .manager-task-form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(260px, 0.9fr) minmax(520px, 1.4fr);
   gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.manager-deadline-row {
+  display: grid;
+  grid-template-columns: minmax(176px, 0.76fr) minmax(332px, 1.34fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.manager-deadline-toggle {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(247, 245, 241, 0.72);
+  padding: 0 12px;
+}
+
+.manager-deadline-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.manager-deadline-picker {
+  display: grid;
+  grid-template-columns: minmax(174px, 1fr) minmax(138px, 0.76fr);
+  gap: 8px;
+  min-width: 0;
 }
 
 .manager-task-form-actions {
@@ -9566,6 +9599,21 @@ body {
   .manager-attendance-row {
     grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(120px, 1fr));
   }
+
+  .manager-create-dialog {
+    width: min(940px, calc(100vw - 1.5rem));
+  }
+}
+
+@media (max-width: 900px) {
+  .manager-assignee-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manager-task-form-grid,
+  .manager-deadline-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -9614,6 +9662,8 @@ body {
 
   .manager-stat-grid,
   .manager-task-form-grid,
+  .manager-deadline-row,
+  .manager-deadline-picker,
   .manager-intro {
     grid-template-columns: 1fr;
   }

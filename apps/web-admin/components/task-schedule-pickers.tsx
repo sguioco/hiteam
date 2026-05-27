@@ -123,7 +123,7 @@ export function TaskDatePicker({
     <DatePicker
       applyLabel={copy.apply}
       buttonClassName={cn(
-        "h-11 w-full justify-between rounded-[14px] px-4 text-sm font-medium tabular-nums",
+        "h-11 min-w-0 w-full justify-between overflow-hidden rounded-[14px] px-3 text-sm font-medium tabular-nums",
         buttonClassName,
       )}
       cancelLabel={copy.cancel}
@@ -149,7 +149,7 @@ export function TaskTimePicker({
 
   return (
     <TimePicker
-      buttonClassName={cn("h-11 rounded-[14px] tabular-nums", buttonClassName)}
+      buttonClassName={cn("h-11 min-w-0 overflow-hidden rounded-[14px] px-3 tabular-nums", buttonClassName)}
       doneLabel={copy.apply}
       isDisabled={isDisabled}
       onChange={onChange}
@@ -170,7 +170,7 @@ export function TaskDateTimePicker({
   const parts = splitDateTimeInput(value);
 
   return (
-    <div className={cn("grid gap-2 min-[420px]:grid-cols-2", className)}>
+    <div className={cn("grid min-w-0 gap-2 min-[420px]:grid-cols-2", className)}>
       <TaskDatePicker
         isDisabled={isDisabled}
         locale={locale}
