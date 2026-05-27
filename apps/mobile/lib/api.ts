@@ -715,16 +715,9 @@ export async function bootstrapDemoDevice(force = false): Promise<void> {
   return deviceBootstrapPromise;
 }
 
-export async function bootstrapPushNotifications(): Promise<void> {
-  if (Constants.appOwnership === "expo") {
-    return;
-  }
-
-  if (Platform.OS === "web" || !Device.isDevice) {
-    return;
-  }
-
-  const Notifications = await import("expo-notifications");
+async function configurePushNotifications(
+  Notifications: typeof import("expo-notifications"),
+) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       priority: Notifications.AndroidNotificationPriority.DEFAULT,
@@ -741,25 +734,60 @@ export async function bootstrapPushNotifications(): Promise<void> {
       name: "default",
     });
   }
+}
+
+export async function ensurePushNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === "web" || !Device.isDevice) {
+    return true;
+  }
+
+  const Notifications = await import("expo-notifications");
+  await configurePushNotifications(Notifications);
 
   const settings = await Notifications.getPermissionsAsync();
   let status = settings.status;
 
   if (status !== "granted") {
-    const requested = await Notifications.requestPermissionsAsync();
+    if (settings.canAskAgain === false) {
+      return false;
+    }
+
+    const requested = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     status = requested.status;
   }
 
-  if (status !== "granted") {
-    return;
+  return status === "granted";
+}
+
+export async function bootstrapPushNotifications(): Promise<boolean> {
+  const permissionGranted = await ensurePushNotificationPermission();
+
+  if (Constants.appOwnership === "expo") {
+    return permissionGranted;
   }
+
+  if (!permissionGranted) {
+    return false;
+  }
+
+  if (Platform.OS === "web" || !Device.isDevice) {
+    return true;
+  }
+
+  const Notifications = await import("expo-notifications");
 
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId;
 
   if (!projectId) {
-    return;
+    return true;
   }
 
   const pushToken = await Notifications.getExpoPushTokenAsync({ projectId });
@@ -771,6 +799,8 @@ export async function bootstrapPushNotifications(): Promise<void> {
       platform: Platform.OS === "ios" ? "IOS" : "ANDROID",
     }),
   });
+
+  return true;
 }
 
 export async function loadAttendanceStatus(): Promise<AttendanceStatusResponse> {

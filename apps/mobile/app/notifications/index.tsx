@@ -15,6 +15,7 @@ import {
 } from '../../lib/notification-preferences';
 import { getDirectionalIconStyle, useI18n } from '../../lib/i18n';
 import {
+  ensurePushNotificationPermission,
   bootstrapPushNotifications,
   loadMyProfile,
   updateMyNotificationPreferences,
@@ -61,6 +62,7 @@ export default function NotificationsScreen() {
   const { language, t } = useI18n();
   const directionalIconStyle = useMemo(() => getDirectionalIconStyle(language), [language]);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const copy = useMemo(
     () =>
@@ -77,6 +79,7 @@ export default function NotificationsScreen() {
         minutes15: t('notifications.minutes15'),
         minutes30: t('notifications.minutes30'),
         minutes60: t('notifications.minutes60'),
+        permissionRequired: t('notifications.permissionRequired'),
       }),
     [t],
   );
@@ -109,31 +112,50 @@ export default function NotificationsScreen() {
     };
   }, []);
 
-  function updatePreferences(patch: Partial<NotificationPreferences>) {
-    setPreferences((current) => {
-      if (!current) {
-        return current;
+  async function updatePreferences(patch: Partial<NotificationPreferences>) {
+    if (!preferences) {
+      return;
+    }
+
+    const nextPreferences = {
+      ...preferences,
+      ...patch,
+    };
+    const isTurningOnNotifications =
+      (patch.assignmentAlertsEnabled === true &&
+        !preferences.assignmentAlertsEnabled) ||
+      (patch.meetingRemindersEnabled === true &&
+        !preferences.meetingRemindersEnabled) ||
+      (patch.taskDeadlineRemindersEnabled === true &&
+        !preferences.taskDeadlineRemindersEnabled) ||
+      (patch.shiftRemindersEnabled === true &&
+        !preferences.shiftRemindersEnabled);
+
+    setPermissionError(null);
+
+    if (isTurningOnNotifications) {
+      const permissionGranted = await ensurePushNotificationPermission().catch(
+        () => false,
+      );
+
+      if (!permissionGranted) {
+        setPermissionError(copy.permissionRequired);
+        return;
       }
+    }
 
-      const nextPreferences = {
-        ...current,
-        ...patch,
-      };
+    setPreferences(nextPreferences);
+    void saveNotificationPreferences(nextPreferences);
+    void updateMyNotificationPreferences(nextPreferences).catch(() => undefined);
 
-      void saveNotificationPreferences(nextPreferences);
-      void updateMyNotificationPreferences(nextPreferences).catch(() => undefined);
-
-      if (
-        nextPreferences.assignmentAlertsEnabled ||
-        nextPreferences.meetingRemindersEnabled ||
-        nextPreferences.taskDeadlineRemindersEnabled ||
-        nextPreferences.shiftRemindersEnabled
-      ) {
-        void bootstrapPushNotifications();
-      }
-
-      return nextPreferences;
-    });
+    if (
+      nextPreferences.assignmentAlertsEnabled ||
+      nextPreferences.meetingRemindersEnabled ||
+      nextPreferences.taskDeadlineRemindersEnabled ||
+      nextPreferences.shiftRemindersEnabled
+    ) {
+      void bootstrapPushNotifications().catch(() => undefined);
+    }
   }
 
   function formatReminder(minutes: ReminderOption) {
@@ -178,6 +200,14 @@ export default function NotificationsScreen() {
 
       {preferences ? (
         <View className="mt-4">
+          {permissionError ? (
+            <View className="mb-1 rounded-[22px] border border-[#fecdd3] bg-[#fff1f2] px-4 py-3">
+              <Text className="font-body text-[13px] font-semibold leading-5 text-[#dc2626]">
+                {permissionError}
+              </Text>
+            </View>
+          ) : null}
+
           <View className="border-b border-[#e6ecf6] py-5">
             <View className="flex-row items-start justify-between gap-4">
               <View className="flex-1 gap-2 pr-2">
@@ -185,7 +215,9 @@ export default function NotificationsScreen() {
                 <Text style={sectionBodyStyle}>{copy.assignmentsBody}</Text>
               </View>
               <SettingsSwitch
-                onChange={(nextValue) => updatePreferences({ assignmentAlertsEnabled: nextValue })}
+                onChange={(nextValue) => {
+                  void updatePreferences({ assignmentAlertsEnabled: nextValue });
+                }}
                 value={preferences.assignmentAlertsEnabled}
               />
             </View>
@@ -198,14 +230,18 @@ export default function NotificationsScreen() {
                 <Text style={sectionBodyStyle}>{copy.taskBody}</Text>
               </View>
               <SettingsSwitch
-                onChange={(nextValue) => updatePreferences({ taskDeadlineRemindersEnabled: nextValue })}
+                onChange={(nextValue) => {
+                  void updatePreferences({ taskDeadlineRemindersEnabled: nextValue });
+                }}
                 value={preferences.taskDeadlineRemindersEnabled}
               />
             </View>
             {preferences.taskDeadlineRemindersEnabled ? (
               <View className="mt-4">
                 <ToggleGroup
-                  onValueChange={(nextValue) => updatePreferences({ taskDeadlineReminderMinutes: Number(nextValue) as ReminderOption })}
+                  onValueChange={(nextValue) => {
+                    void updatePreferences({ taskDeadlineReminderMinutes: Number(nextValue) as ReminderOption });
+                  }}
                   value={String(preferences.taskDeadlineReminderMinutes)}
                 >
                   {reminderOptions.map((option) => (
@@ -225,14 +261,18 @@ export default function NotificationsScreen() {
                 <Text style={sectionBodyStyle}>{copy.meetingBody}</Text>
               </View>
               <SettingsSwitch
-                onChange={(nextValue) => updatePreferences({ meetingRemindersEnabled: nextValue })}
+                onChange={(nextValue) => {
+                  void updatePreferences({ meetingRemindersEnabled: nextValue });
+                }}
                 value={preferences.meetingRemindersEnabled}
               />
             </View>
             {preferences.meetingRemindersEnabled ? (
               <View className="mt-4">
                 <ToggleGroup
-                  onValueChange={(nextValue) => updatePreferences({ meetingReminderMinutes: Number(nextValue) as ReminderOption })}
+                  onValueChange={(nextValue) => {
+                    void updatePreferences({ meetingReminderMinutes: Number(nextValue) as ReminderOption });
+                  }}
                   value={String(preferences.meetingReminderMinutes)}
                 >
                   {reminderOptions.map((option) => (
@@ -252,7 +292,9 @@ export default function NotificationsScreen() {
                 <Text style={sectionBodyStyle}>{copy.shiftBody}</Text>
               </View>
               <SettingsSwitch
-                onChange={(nextValue) => updatePreferences({ shiftRemindersEnabled: nextValue })}
+                onChange={(nextValue) => {
+                  void updatePreferences({ shiftRemindersEnabled: nextValue });
+                }}
                 value={preferences.shiftRemindersEnabled}
               />
             </View>

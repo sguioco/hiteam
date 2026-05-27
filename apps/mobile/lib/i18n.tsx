@@ -520,6 +520,7 @@ const translations = {
     "calendar.noItemsForDay": "На этот день нет задач",
     "calendar.markDone": "Отметить выполненной",
     "calendar.openTaskDay": "Открыть день задачи",
+    "calendar.openTaskDayShort": "День задачи",
     "calendar.overdueSheetTitle": "Просроченные задачи",
     "calendar.overdueSheetBody":
       "Выберите задачу, чтобы быстро закрыть её или перейти к исходному дню в календаре",
@@ -656,6 +657,8 @@ const translations = {
     "notifications.minutes15": "15 мин",
     "notifications.minutes30": "30 мин",
     "notifications.minutes60": "1 час",
+    "notifications.permissionRequired":
+      "Системное разрешение не выдано. Разрешите уведомления для приложения в настройках телефона.",
 
     "workspaceReady.title": "Разрешите геолокацию",
     "workspaceReady.locationTitle": "Подтвердите настройки локации",
@@ -1475,6 +1478,7 @@ const translations = {
     "calendar.noItemsForDay": "No tasks for this day",
     "calendar.markDone": "Mark done",
     "calendar.openTaskDay": "Open task day",
+    "calendar.openTaskDayShort": "Task day",
     "calendar.overdueSheetTitle": "Overdue tasks",
     "calendar.overdueSheetBody":
       "Pick a task to finish it quickly or jump to its original day in the calendar.",
@@ -1613,6 +1617,8 @@ const translations = {
     "notifications.minutes15": "15 min",
     "notifications.minutes30": "30 min",
     "notifications.minutes60": "1 hour",
+    "notifications.permissionRequired":
+      "System permission was not granted. Allow notifications for the app in phone settings.",
 
     "workspaceReady.title": "Allow location access",
     "workspaceReady.locationTitle": "Confirm location settings",

@@ -461,7 +461,7 @@ export default function BillingPageClient({
         ) : summary && activeTab === "overview" ? (
           <>
             {summary.trialActive ? (
-              <section className="rounded-2xl border border-blue-100 bg-blue-50 px-6 py-5 font-heading shadow-[0_14px_38px_rgba(37,99,235,0.08)]">
+              <section className="font-heading">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-[#284bff]">

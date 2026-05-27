@@ -1738,12 +1738,17 @@ export default function CalendarScreen({
         const openTasks = row.plannedTasks.filter((task) =>
           isTaskOpen(task.status),
         );
-        const overdueOpenTasks = openTasks.filter((task) =>
-          isOverdueTask(task, today),
+        const pendingOpenTasks = openTasks.filter(
+          (task) => !isOverdueTask(task, today),
         );
 
         stats.all += 1;
-        stats.pending += openTasks.length - overdueOpenTasks.length;
+        stats.pending +=
+          pendingOpenTasks.length > 0
+            ? pendingOpenTasks.length
+            : row.shift
+              ? 1
+              : 0;
         stats.done += row.doneTasks.length;
 
         return stats;
@@ -1771,7 +1776,7 @@ export default function CalendarScreen({
       const pendingTasksCount = openTasks.length - overdueTasks.length;
 
       if (managerCalendarTab === "pending") {
-        return pendingTasksCount > 0;
+        return pendingTasksCount > 0 || Boolean(row.shift);
       }
 
       return row.doneTasks.length > 0;
@@ -2619,7 +2624,7 @@ export default function CalendarScreen({
             label={
               isPendingForTask && pendingTaskAction === "reschedule"
                 ? t("common.processing")
-                : t("calendar.rescheduleTask")
+                : t("calendar.moveShort")
             }
             onPress={() => openRescheduleSheet(task)}
             textClassName="text-[13px] text-foreground"
@@ -2629,7 +2634,7 @@ export default function CalendarScreen({
             <Button
               className="min-h-11 flex-1 border-[#dce4f2] bg-white"
               disabled={isPendingForTask}
-              label={t("calendar.openTaskDay")}
+              label={t("calendar.openTaskDayShort")}
               onPress={() => openTaskDay(task)}
               textClassName="text-[13px] text-foreground"
               variant="secondary"
@@ -3281,22 +3286,6 @@ export default function CalendarScreen({
 
             {isManager ? (
               <View className="gap-4">
-                <PressableScale
-                  className="h-[58px] justify-center rounded-[24px] bg-white px-5 shadow-sm shadow-[#1f2687]/10"
-                  haptic="selection"
-                  onPress={() => setManagerFilterSheetVisible(true)}
-                >
-                  <View className="flex-row items-center justify-between gap-4">
-                    <Text
-                      className="min-w-0 flex-1 font-display text-[19px] font-bold leading-6 text-foreground"
-                      numberOfLines={1}
-                    >
-                      {managerFilterLabel}
-                    </Text>
-                    <Ionicons color="#315cf6" name="chevron-down" size={22} />
-                  </View>
-                </PressableScale>
-
                 <View className="h-[52px] flex-row items-center gap-3 rounded-[22px] bg-white px-4 shadow-sm shadow-[#1f2687]/10">
                   <Ionicons color="#8a96ab" name="search-outline" size={18} />
                   <Input
@@ -3361,6 +3350,22 @@ export default function CalendarScreen({
                       </View>
                     </PressableScale>
                   </View>
+
+                  <PressableScale
+                    className="h-[58px] justify-center rounded-[24px] bg-white px-5 shadow-sm shadow-[#1f2687]/10"
+                    haptic="selection"
+                    onPress={() => setManagerFilterSheetVisible(true)}
+                  >
+                    <View className="flex-row items-center justify-between gap-4">
+                      <Text
+                        className="min-w-0 flex-1 font-display text-[19px] font-bold leading-6 text-foreground"
+                        numberOfLines={1}
+                      >
+                        {managerFilterLabel}
+                      </Text>
+                      <Ionicons color="#315cf6" name="chevron-down" size={22} />
+                    </View>
+                  </PressableScale>
 
                 </View>
 

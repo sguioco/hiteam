@@ -762,6 +762,11 @@ const Employees = ({
   const [canCheckWorkdays, setCanCheckWorkdays] = useState(
     initialData?.canCheckWorkdays ?? false,
   );
+  const [organizationSetup, setOrganizationSetup] = useState(
+    initialData?.organizationSetup ?? null,
+  );
+  const attendanceTrackingEnabled =
+    organizationSetup?.attendanceTrackingEnabled ?? true;
   const [taskDayOffConfirmOpen, setTaskDayOffConfirmOpen] = useState(false);
   const didUseInitialData = useRef(Boolean(initialData));
 
@@ -1049,6 +1054,7 @@ const Employees = ({
     setScheduleShifts(snapshot.scheduleShifts);
     setScheduleTemplates(snapshot.scheduleTemplates);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
+    setOrganizationSetup(snapshot.organizationSetup ?? null);
 
     setExpandedGroups(buildExpandedGroupsFromSnapshot(snapshot));
 
@@ -1104,6 +1110,7 @@ const Employees = ({
         setScheduleShifts([]);
         setScheduleTemplates([]);
         setCanCheckWorkdays(false);
+        setOrganizationSetup(null);
       }
     } finally {
       if (!options?.silent) {
@@ -1410,7 +1417,17 @@ const Employees = ({
       setInviteEmail("");
       setInvitePhone("");
       setInvitePhoneCountryCode(getDefaultPhoneCountryCode(locale));
-      openInvitation(invitation, "setup");
+      if (attendanceTrackingEnabled) {
+        openInvitation(invitation, "setup");
+      } else {
+        setPageMessage(
+          runtimeLocalize(
+            "Приглашение отправлено. Сотрудник заполнит профиль сам.",
+            "Invitation sent. The employee will complete the profile.",
+            locale,
+          ),
+        );
+      }
       await loadDirectory();
     } catch (requestError) {
       const message =
@@ -1552,7 +1569,9 @@ const Employees = ({
     mode: InvitationDialogMode = "review",
   ) {
     setSelectedInvitation(invitation);
-    setInvitationDialogMode(mode);
+    setInvitationDialogMode(
+      mode === "setup" && !attendanceTrackingEnabled ? "review" : mode,
+    );
     setReviewError(null);
     setReviewForm({
       firstName: invitation.firstName ?? "",
@@ -2577,13 +2596,15 @@ const Employees = ({
                   <div className="flex flex-wrap items-center gap-2">
                     {invitation.status === "INVITED" ? (
                       <>
-                        <Button
-                          className="rounded-xl font-heading"
-                          onClick={() => openInvitation(invitation, "setup")}
-                          size="sm"
-                        >
-                          {runtimeLocalize("Настроить", "Setup", locale)}
-                        </Button>
+                        {attendanceTrackingEnabled ? (
+                          <Button
+                            className="rounded-xl font-heading"
+                            onClick={() => openInvitation(invitation, "setup")}
+                            size="sm"
+                          >
+                            {runtimeLocalize("Настроить", "Setup", locale)}
+                          </Button>
+                        ) : null}
                         <Button
                           className="rounded-xl font-heading"
                           onClick={() => void handleResend(invitation.id)}
@@ -2741,11 +2762,17 @@ const Employees = ({
               {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              {runtimeLocalize(
-                "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и группы.",
-                "Add the employee email or phone. After sending, quick shift and group setup opens.",
-                locale,
-              )}
+              {attendanceTrackingEnabled
+                ? runtimeLocalize(
+                    "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и группы.",
+                    "Add the employee email or phone. After sending, quick shift and group setup opens.",
+                    locale,
+                  )
+                : runtimeLocalize(
+                    "Добавьте email или телефон. Сотрудник заполнит профиль при регистрации.",
+                    "Add the employee email or phone. The employee will complete the profile during registration.",
+                    locale,
+                  )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

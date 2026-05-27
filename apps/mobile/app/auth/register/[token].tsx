@@ -389,7 +389,7 @@ export default function RegisterInvitationScreen() {
 
   function renderShell(children: ReactNode) {
     return (
-      <SafeAreaView className="flex-1 bg-[#f3f5fb]">
+      <SafeAreaView className="flex-1 bg-[#f3f5fb]" edges={['top', 'left', 'right']}>
         <StatusBar style="dark" />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -679,28 +679,43 @@ export default function RegisterInvitationScreen() {
               ) : null}
 
               <View className="mt-1 min-h-[58px] flex-row overflow-hidden rounded-[18px] border border-[#ddd5c7] bg-white">
-                {(['male', 'female'] as const).map((gender, index) => {
-                  const selected = form.gender === gender;
-
-                  return (
-                    <View className="flex-1 flex-row" key={gender}>
-                      <Pressable
-                        className={`min-h-[58px] flex-1 items-center justify-center ${
-                          selected ? 'bg-[#eef2ff]' : 'bg-white'
-                        }`}
-                        onPress={() => {
-                          hapticSelection();
-                          setForm((current) => ({ ...current, gender }));
-                        }}
-                      >
-                        <Text className={`text-center text-[15px] font-semibold ${selected ? 'text-[#546cf2]' : 'text-[#6f7892]'}`}>
-                          {gender === 'male' ? copy.male : copy.female}
-                        </Text>
-                      </Pressable>
-                      {index === 0 ? <View className="w-px bg-[#e7dfd3]" /> : null}
-                    </View>
-                  );
-                })}
+                <Pressable
+                  className={`min-h-[58px] items-center justify-center ${
+                    form.gender === 'male' ? 'bg-[#eef2ff]' : 'bg-white'
+                  }`}
+                  onPress={() => {
+                    hapticSelection();
+                    setForm((current) => ({ ...current, gender: 'male' }));
+                  }}
+                  style={styles.genderOption}
+                >
+                  <Text
+                    className={`text-center text-[15px] font-semibold ${
+                      form.gender === 'male' ? 'text-[#546cf2]' : 'text-[#6f7892]'
+                    }`}
+                  >
+                    {copy.male}
+                  </Text>
+                </Pressable>
+                <View style={styles.genderDivider} />
+                <Pressable
+                  className={`min-h-[58px] items-center justify-center ${
+                    form.gender === 'female' ? 'bg-[#eef2ff]' : 'bg-white'
+                  }`}
+                  onPress={() => {
+                    hapticSelection();
+                    setForm((current) => ({ ...current, gender: 'female' }));
+                  }}
+                  style={styles.genderOption}
+                >
+                  <Text
+                    className={`text-center text-[15px] font-semibold ${
+                      form.gender === 'female' ? 'text-[#546cf2]' : 'text-[#6f7892]'
+                    }`}
+                  >
+                    {copy.female}
+                  </Text>
+                </Pressable>
               </View>
 
               <PressableScale
@@ -773,6 +788,15 @@ const styles = StyleSheet.create({
   },
   datePickerSpinner: {
     alignSelf: 'center',
+  },
+  genderDivider: {
+    alignSelf: 'stretch',
+    backgroundColor: '#e7dfd3',
+    width: StyleSheet.hairlineWidth,
+  },
+  genderOption: {
+    flex: 1,
+    minWidth: 0,
   },
   fieldLabel: {
     color: '#7a8094',
