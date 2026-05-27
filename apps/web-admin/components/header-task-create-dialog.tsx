@@ -315,7 +315,7 @@ export function HeaderTaskCreateDialog({
         <div className="space-y-4">
           <div className="grid gap-2 text-sm font-heading">
             <span>{localize(locale, "Получатель", "Recipient")}</span>
-            <div className="max-h-[168px] overflow-y-auto rounded-2xl border border-border/70 bg-secondary/10 p-2">
+            <div className="max-h-[168px] overflow-y-auto">
               {loadingEmployees ? (
                 <WorkspaceLoading
                   className="min-h-[120px]"
@@ -323,16 +323,16 @@ export function HeaderTaskCreateDialog({
                   label={localize(locale, "Загружаем сотрудников", "Loading employees")}
                 />
               ) : employeeOptions.length ? (
-                <div className="grid gap-1.5 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {employeeOptions.map((employee) => {
                     const selected = employee.id === selectedEmployeeId;
 
                     return (
                       <button
-                        className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left transition-[background-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+                        className={`flex min-h-14 min-w-0 items-center gap-3 rounded-[14px] border px-3 py-2 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
                           selected
-                            ? "bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)] ring-1 ring-[rgba(40,75,255,0.22)]"
-                            : "hover:bg-white/80"
+                            ? "border-[rgba(40,75,255,0.24)] bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)] ring-1 ring-[rgba(40,75,255,0.18)]"
+                            : "border-transparent hover:border-border/70 hover:bg-white/80"
                         }`}
                         key={employee.id}
                         onClick={() => setSelectedEmployeeId(employee.id)}
@@ -421,7 +421,6 @@ export function HeaderTaskCreateDialog({
                   </span>
                 </label>
                 <TaskDateTimePicker
-                  className="sm:grid-cols-[minmax(0,1fr)_118px]"
                   isDisabled={!draft.hasDueTime}
                   locale={locale}
                   minToday

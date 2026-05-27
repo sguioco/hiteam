@@ -4262,7 +4262,6 @@ const Employees = ({
                       </span>
                     </label>
                     <TaskDateTimePicker
-                      className="sm:grid-cols-[minmax(0,1fr)_118px]"
                       isDisabled={!taskDraft.hasDueTime}
                       locale={locale}
                       minToday

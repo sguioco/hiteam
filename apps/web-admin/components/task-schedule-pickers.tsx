@@ -170,7 +170,7 @@ export function TaskDateTimePicker({
   const parts = splitDateTimeInput(value);
 
   return (
-    <div className={cn("grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]", className)}>
+    <div className={cn("grid gap-2 min-[420px]:grid-cols-2", className)}>
       <TaskDatePicker
         isDisabled={isDisabled}
         locale={locale}
