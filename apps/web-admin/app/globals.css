@@ -2260,30 +2260,11 @@ textarea {
 }
 
 .shell-topbar-brandmark {
-  display: inline-flex;
   height: 42px;
   width: 42px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
   border-radius: 14px;
-  background: #141821;
-  color: #fff;
   box-shadow: 0 14px 30px rgba(20, 24, 33, 0.14);
-  transform: scale(1.18);
-  transform-origin: center;
-}
-
-.shell-topbar-brandmark img {
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
-  object-fit: cover;
-}
-
-.shell-topbar-wordmark {
-  font-size: 0.72rem;
-  letter-spacing: -0.05em;
+  transform: none;
 }
 
 .shell-topbar-copy {
@@ -6023,6 +6004,60 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+}
+
+.sidebar-company-brand {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.sidebar-company-brand.is-loading {
+  pointer-events: none;
+}
+
+.sidebar-company-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.company-brand-mark {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #141821;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(20, 24, 33, 0.12);
+}
+
+.company-brand-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.company-brand-mark span {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .sidebar-brand-mark {
