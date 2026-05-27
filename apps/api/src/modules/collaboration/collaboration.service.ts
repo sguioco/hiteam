@@ -3737,7 +3737,7 @@ export class CollaborationService {
       throw new NotFoundException("Task not found.");
     }
 
-    if (!this.canAccessTask(employee.id, task)) {
+    if (!this.canAccessTask(employee.id, task, employee.groupMemberships)) {
       throw new ForbiddenException("Current user cannot update this task.");
     }
 
@@ -3836,7 +3836,7 @@ export class CollaborationService {
       throw new NotFoundException("Task not found.");
     }
 
-    if (!this.canAccessTask(employee.id, task)) {
+    if (!this.canAccessTask(employee.id, task, employee.groupMemberships)) {
       throw new ForbiddenException("Current user cannot reschedule this task.");
     }
 
@@ -3898,6 +3898,13 @@ export class CollaborationService {
   async toggleChecklistItem(userId: string, taskId: string, itemId: string) {
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
+      include: {
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
     });
     const item = await this.prisma.taskChecklistItem.findFirst({
       where: {
@@ -3916,7 +3923,7 @@ export class CollaborationService {
       throw new NotFoundException("Checklist item not found.");
     }
 
-    if (!this.canAccessTask(employee.id, item.task)) {
+    if (!this.canAccessTask(employee.id, item.task, employee.groupMemberships)) {
       throw new ForbiddenException(
         "Current user cannot update this checklist item.",
       );
@@ -3982,6 +3989,13 @@ export class CollaborationService {
     const dto: AddTaskCommentDto = { body };
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
+      include: {
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
     });
     const task = await this.prisma.task.findFirst({
       where: {
@@ -3995,7 +4009,7 @@ export class CollaborationService {
       throw new NotFoundException("Task not found.");
     }
 
-    if (!this.canAccessTask(employee.id, task)) {
+    if (!this.canAccessTask(employee.id, task, employee.groupMemberships)) {
       throw new ForbiddenException("Current user cannot comment on this task.");
     }
 
@@ -4057,7 +4071,7 @@ export class CollaborationService {
       throw new NotFoundException("Task not found.");
     }
 
-    if (!this.canAccessTask(employee.id, task)) {
+    if (!this.canAccessTask(employee.id, task, employee.groupMemberships)) {
       throw new ForbiddenException("Current user cannot update this task.");
     }
 
@@ -4174,7 +4188,7 @@ export class CollaborationService {
       throw new NotFoundException("Task not found.");
     }
 
-    if (!this.canAccessTask(employee.id, task)) {
+    if (!this.canAccessTask(employee.id, task, employee.groupMemberships)) {
       throw new ForbiddenException("Current user cannot update this task.");
     }
 
@@ -5830,11 +5844,17 @@ export class CollaborationService {
     task: {
       managerEmployeeId: string;
       assigneeEmployeeId: string | null;
+      groupId?: string | null;
     },
+    groupMemberships: Array<{ groupId: string }> = [],
   ) {
     return (
       task.managerEmployeeId === employeeId ||
-      task.assigneeEmployeeId === employeeId
+      task.assigneeEmployeeId === employeeId ||
+      (Boolean(task.groupId) &&
+        groupMemberships.some(
+          (membership) => membership.groupId === task.groupId,
+        ))
     );
   }
 
