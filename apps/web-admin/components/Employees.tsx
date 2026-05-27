@@ -126,6 +126,9 @@ type InviteContactMethod = "email" | "phone";
 type EmployeeWorkMode = "STATIONARY" | "FIELD";
 type InvitationDialogMode = "setup" | "review";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
+const DEFAULT_TEAM_AVATAR_EMOJI = "👥";
+const TEAM_AVATAR_EMOJIS = ["👥", "💼", "⚡", "🔥", "⭐", "🛠️", "🎯", "🏆", "🌿", "🚀"];
+
 type TaskDialogState =
   | {
       mode: "employee";
@@ -466,6 +469,10 @@ function buildExpandedGroupsFromSnapshot(
   ]);
 }
 
+function resolveTeamAvatarEmoji(group?: { avatarEmoji?: string | null }) {
+  return group?.avatarEmoji?.trim() || DEFAULT_TEAM_AVATAR_EMOJI;
+}
+
 const Employees = ({
   initialData,
 }: {
@@ -539,6 +546,7 @@ const Employees = ({
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
+  const [createGroupEmoji, setCreateGroupEmoji] = useState(DEFAULT_TEAM_AVATAR_EMOJI);
   const [createGroupMembers, setCreateGroupMembers] = useState<string[]>([]);
   const [createGroupSubmitting, setCreateGroupSubmitting] = useState(false);
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
@@ -772,6 +780,7 @@ const Employees = ({
   const [groupEditorMembers, setGroupEditorMembers] = useState<string[]>([]);
   const [groupEditorName, setGroupEditorName] = useState("");
   const [groupEditorDescription, setGroupEditorDescription] = useState("");
+  const [groupEditorEmoji, setGroupEditorEmoji] = useState(DEFAULT_TEAM_AVATAR_EMOJI);
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupDeleting, setGroupDeleting] = useState(false);
   const [groupDeleteConfirmOpen, setGroupDeleteConfirmOpen] = useState(false);
@@ -1511,6 +1520,7 @@ const Employees = ({
         body: JSON.stringify({
           name: createGroupName.trim(),
           description: createGroupDescription.trim() || undefined,
+          avatarEmoji: createGroupEmoji,
           memberEmployeeIds: Array.from(new Set(createGroupMembers)),
         }),
       });
@@ -1518,14 +1528,15 @@ const Employees = ({
       setCreateGroupOpen(false);
       setCreateGroupName("");
       setCreateGroupDescription("");
+      setCreateGroupEmoji(DEFAULT_TEAM_AVATAR_EMOJI);
       setCreateGroupMembers([]);
-      setPageMessage(runtimeLocalize("Группа добавлена.", "Group added.", locale));
+      setPageMessage(runtimeLocalize("Команда добавлена.", "Team added.", locale));
       await loadDirectory();
     } catch (requestError) {
       setCreateGroupError(
         requestError instanceof Error
           ? requestError.message
-          : runtimeLocalize("Не удалось создать группу.", "Failed to create group.", locale),
+          : runtimeLocalize("Не удалось создать команду.", "Failed to create team.", locale),
       );
     } finally {
       setCreateGroupSubmitting(false);
@@ -1825,7 +1836,7 @@ const Employees = ({
 
   async function updateGroup(
     groupId: string,
-    payload: { name: string; description: string },
+    payload: { name: string; description: string; avatarEmoji?: string },
   ) {
     const session = getSession();
     if (!session) return;
@@ -1877,8 +1888,8 @@ const Employees = ({
       setMoveDialogEmployeeId(null);
       setPageMessage(
         runtimeLocalize(
-          "Группа сотрудника обновлена.",
-          "Employee group updated.",
+          "Команда сотрудника обновлена.",
+          "Employee team updated.",
           locale,
         ),
       );
@@ -1888,8 +1899,8 @@ const Employees = ({
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось обновить группу сотрудника.",
-              "Failed to update employee group.",
+              "Не удалось обновить команду сотрудника.",
+              "Failed to update employee team.",
               locale,
             ),
       );
@@ -2031,8 +2042,8 @@ const Employees = ({
               locale,
             )
           : runtimeLocalize(
-              "Задача назначена группе.",
-              "Task assigned to the group.",
+              "Задача назначена команде.",
+              "Task assigned to the team.",
               locale,
             ),
       );
@@ -2156,6 +2167,7 @@ const Employees = ({
     setGroupEditorId(groupId);
     setGroupEditorName(group.name);
     setGroupEditorDescription(group.description ?? "");
+    setGroupEditorEmoji(resolveTeamAvatarEmoji(group));
     setGroupEditorMembers(
       group.memberships.map((membership) => membership.employeeId),
     );
@@ -2169,7 +2181,7 @@ const Employees = ({
 
     if (!normalizedName) {
       setGroupError(
-        runtimeLocalize("Укажите название группы.", "Enter a group name.", locale),
+        runtimeLocalize("Укажите название команды.", "Enter a team name.", locale),
       );
       return;
     }
@@ -2182,9 +2194,12 @@ const Employees = ({
       const currentMemberIds = groupEditor.memberships.map(
         (membership) => membership.employeeId,
       );
+      const normalizedAvatarEmoji =
+        groupEditorEmoji.trim() || DEFAULT_TEAM_AVATAR_EMOJI;
       const detailsChanged =
         groupEditor.name !== normalizedName ||
-        (groupEditor.description ?? "") !== normalizedDescription;
+        (groupEditor.description ?? "") !== normalizedDescription ||
+        resolveTeamAvatarEmoji(groupEditor) !== normalizedAvatarEmoji;
       const membersChanged =
         currentMemberIds.length !== uniqueMembers.length ||
         currentMemberIds.some((id) => !uniqueMembers.includes(id)) ||
@@ -2194,6 +2209,7 @@ const Employees = ({
         await updateGroup(groupEditorId, {
           name: normalizedName,
           description: normalizedDescription,
+          avatarEmoji: normalizedAvatarEmoji,
         });
       }
 
@@ -2203,15 +2219,15 @@ const Employees = ({
 
       setGroupEditorId(null);
       setGroupDeleteConfirmOpen(false);
-      setPageMessage(runtimeLocalize("Группа обновлена.", "Group updated.", locale));
+      setPageMessage(runtimeLocalize("Команда обновлена.", "Team updated.", locale));
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось обновить группу.",
-              "Failed to update group.",
+              "Не удалось обновить команду.",
+              "Failed to update team.",
               locale,
             ),
       );
@@ -2234,15 +2250,15 @@ const Employees = ({
       });
       setGroupDeleteConfirmOpen(false);
       setGroupEditorId(null);
-      setPageMessage(runtimeLocalize("Группа удалена.", "Group deleted.", locale));
+      setPageMessage(runtimeLocalize("Команда удалена.", "Team deleted.", locale));
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось удалить группу.",
-              "Failed to delete group.",
+              "Не удалось удалить команду.",
+              "Failed to delete team.",
               locale,
             ),
       );
@@ -2293,7 +2309,7 @@ const Employees = ({
                 allowsSorting
                 className="w-[16%] min-w-[170px] team-tasks-head-center"
                 id="group"
-                label={runtimeLocalize("Группа", "Group", locale)}
+                label={runtimeLocalize("Команда", "Team", locale)}
               />
               <Table.Head
                 allowsSorting
@@ -2455,7 +2471,7 @@ const Employees = ({
                 }`}
                 onClick={() => setViewMode("groups")}
               >
-                <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Группы", "Groups", locale)} {groups.length}
+                <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Команды", "Teams", locale)} {groups.length}
               </button>
             </div>
             <Button
@@ -2465,27 +2481,24 @@ const Employees = ({
                   : ""
               }`}
               onClick={() => {
-                if (viewMode === "groups") {
-                  setCreateGroupOpen(true);
-                  setCreateGroupError(null);
-                  return;
-                }
-
                 dismissAddEmployeePrompt();
                 setInviteDialogOpen(true);
                 setInviteError(null);
                 setInviteSuccess(null);
               }}
             >
-              {viewMode === "groups" ? (
-                <>
-                  <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Добавить группу", "Add group", locale)}
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" /> {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
-                </>
-              )}
+              <UserPlus className="h-4 w-4" /> {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
+            </Button>
+            <Button
+              className="rounded-xl font-heading"
+              onClick={() => {
+                setCreateGroupOpen(true);
+                setCreateGroupError(null);
+              }}
+              type="button"
+              variant="outline"
+            >
+              <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Добавить команду", "Add team", locale)}
             </Button>
             <Button
               className="rounded-xl font-heading"
@@ -2540,8 +2553,8 @@ const Employees = ({
               >
                 <Users className="h-3.5 w-3.5" />
                 {allExpanded
-                  ? runtimeLocalize("Свернуть группы", "Collapse groups", locale)
-                  : runtimeLocalize("Развернуть группы", "Expand groups", locale)}
+                  ? runtimeLocalize("Свернуть команды", "Collapse teams", locale)
+                  : runtimeLocalize("Развернуть команды", "Expand teams", locale)}
               </Button>
             ) : null}
           </div>
@@ -2666,6 +2679,9 @@ const Employees = ({
                         ) : (
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-base shadow-sm">
+                          {resolveTeamAvatarEmoji(group)}
+                        </span>
                         <span className="font-heading font-semibold text-foreground">
                           {group.name}
                         </span>
@@ -2691,7 +2707,7 @@ const Employees = ({
                           size="sm"
                           variant="ghost"
                         >
-                          <ListTodo className="h-3 w-3" /> {runtimeLocalize("Задача группе", "Task for group", locale)}
+                          <ListTodo className="h-3 w-3" /> {runtimeLocalize("Задача команде", "Task for team", locale)}
                         </Button>
                       </div>
                     </div>
@@ -2703,8 +2719,8 @@ const Employees = ({
                     {isOpen && members.length === 0 ? (
                       <p className="p-4 text-center text-sm font-heading text-muted-foreground">
                         {runtimeLocalize(
-                          "В этой группе нет сотрудников.",
-                          "There are no employees in this group.",
+                          "В этой команде нет сотрудников.",
+                          "There are no employees in this team.",
                           locale,
                         )}
                       </p>
@@ -2726,7 +2742,7 @@ const Employees = ({
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                       <span className="font-heading font-semibold italic text-muted-foreground">
-                        {runtimeLocalize("Без группы", "No group", locale)}
+                        {runtimeLocalize("Без команды", "No team", locale)}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs font-heading text-muted-foreground">
                         <Users className="h-3.5 w-3.5" />
@@ -2760,8 +2776,8 @@ const Employees = ({
             <DialogDescription className="font-heading">
               {attendanceTrackingEnabled
                 ? runtimeLocalize(
-                    "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и группы.",
-                    "Add the employee email or phone. After sending, quick shift and group setup opens.",
+                    "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и команды.",
+                    "Add the employee email or phone. After sending, quick shift and team setup opens.",
                     locale,
                   )
                 : runtimeLocalize(
@@ -3011,6 +3027,7 @@ const Employees = ({
             setCreateGroupError(null);
             setCreateGroupName("");
             setCreateGroupDescription("");
+            setCreateGroupEmoji(DEFAULT_TEAM_AVATAR_EMOJI);
             setCreateGroupMembers([]);
           }
         }}
@@ -3019,19 +3036,39 @@ const Employees = ({
         <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Добавить группу", "Add group", locale)}
+              {runtimeLocalize("Добавить команду", "Add team", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Создайте новую группу внутри организации и сразу добавьте в неё сотрудников.",
-                "Create a new group inside the organization and add employees to it right away.",
+                "Создайте новую команду внутри организации и сразу добавьте в неё сотрудников.",
+                "Create a new team inside the organization and add employees to it right away.",
                 locale,
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid gap-2 text-sm font-heading">
+              <span>{runtimeLocalize("Эмодзи команды", "Team emoji", locale)}</span>
+              <div className="flex flex-wrap gap-2">
+                {TEAM_AVATAR_EMOJIS.map((emoji) => (
+                  <button
+                    aria-pressed={createGroupEmoji === emoji}
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition ${
+                      createGroupEmoji === emoji
+                        ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                        : "border-border bg-secondary/20 hover:bg-secondary/40"
+                    }`}
+                    key={emoji}
+                    onClick={() => setCreateGroupEmoji(emoji)}
+                    type="button"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Название группы", "Group name", locale)}</span>
+              <span>{runtimeLocalize("Название команды", "Team name", locale)}</span>
               <Input
                 maxLength={120}
                 onChange={(event) => setCreateGroupName(event.target.value)}
@@ -3052,15 +3089,15 @@ const Employees = ({
                   setCreateGroupDescription(event.target.value)
                 }
                 placeholder={runtimeLocalize(
-                  "Короткое описание группы",
-                  "Short group description",
+                  "Короткое описание команды",
+                  "Short team description",
                   locale,
                 )}
                 value={createGroupDescription}
               />
             </label>
             <div className="text-xs font-heading text-muted-foreground">
-              {runtimeLocalize("Состав группы", "Group members", locale)}
+              {runtimeLocalize("Состав команды", "Team members", locale)}
             </div>
             {employees.length > 0 ? (
               <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
@@ -3101,8 +3138,8 @@ const Employees = ({
             ) : (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-5 text-sm text-muted-foreground">
                 {runtimeLocalize(
-                  "В организации пока нет сотрудников для добавления в группу.",
-                  "There are no employees in the organization yet to add to the group.",
+                  "В организации пока нет сотрудников для добавления в команду.",
+                  "There are no employees in the organization yet to add to the team.",
                   locale,
                 )}
               </div>
@@ -3119,7 +3156,7 @@ const Employees = ({
                 <FolderOpen className="h-4 w-4" />
                 {createGroupSubmitting
                   ? runtimeLocalize("Создаём...", "Creating...", locale)
-                  : runtimeLocalize("Создать группу", "Create group", locale)}
+                  : runtimeLocalize("Создать команду", "Create team", locale)}
               </Button>
             </div>
           </div>
@@ -3149,8 +3186,8 @@ const Employees = ({
                 <DialogDescription className="font-heading">
                   {invitationDialogMode === "setup"
                     ? runtimeLocalize(
-                        "Заполните имя, фамилию, смену и группу. Остальное сотрудник заполнит сам.",
-                        "Fill in the name, shift, and group. The employee will complete the rest.",
+                        "Заполните имя, фамилию, смену и команду. Остальное сотрудник заполнит сам.",
+                        "Fill in the name, shift, and team. The employee will complete the rest.",
                         locale,
                       )
                     : runtimeLocalize(
@@ -3319,7 +3356,7 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Группа", "Group", locale)}</span>
+                  <span>{runtimeLocalize("Команда", "Team", locale)}</span>
                   <AppSelectField
                     value={
                       reviewForm.groupId === "__none" ? "" : reviewForm.groupId
@@ -3330,10 +3367,10 @@ const Employees = ({
                         groupId: value || "__none",
                       }))
                     }
-                    emptyLabel={runtimeLocalize("Без группы", "No group", locale)}
+                    emptyLabel={runtimeLocalize("Без команды", "No team", locale)}
                     options={groups.map((group) => ({
                       value: group.id,
-                      label: group.name,
+                      label: `${resolveTeamAvatarEmoji(group)} ${group.name}`,
                     }))}
                     triggerClassName={reviewFieldClassName}
                   />
@@ -3755,7 +3792,7 @@ const Employees = ({
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1 text-xs font-heading text-[color:var(--muted-foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
                     {selectedEmployee.group ||
-                      runtimeLocalize("Без группы", "No group", locale)}
+                      runtimeLocalize("Без команды", "No team", locale)}
                   </span>
                   <span
                     className={`inline-block rounded-full px-3 py-1 text-xs font-heading ${statusStyles[selectedEmployee.status]}`}
@@ -3928,7 +3965,7 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-4">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Группа", "Group", locale)}
+                          {runtimeLocalize("Команда", "Team", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployee.group || "—"}
@@ -4093,7 +4130,7 @@ const Employees = ({
                     }}
                     variant="outline"
                   >
-                    <ArrowRightLeft className="h-4 w-4" /> {runtimeLocalize("Переместить в группу", "Move to group", locale)}
+                    <ArrowRightLeft className="h-4 w-4" /> {runtimeLocalize("Переместить в команду", "Move to team", locale)}
                   </Button>
                   <Button
                     className="flex-1 rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
@@ -4121,33 +4158,33 @@ const Employees = ({
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Переместить в группу", "Move to group", locale)}
+              {runtimeLocalize("Переместить в команду", "Move to team", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Выберите группу для сотрудника. Можно оставить без группы.",
-                "Select a group for the employee. The employee can remain without a group.",
+                "Выберите команду для сотрудника. Можно оставить без команды.",
+                "Select a team for the employee. The employee can remain without a team.",
                 locale,
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Группа", "Group", locale)}</span>
+              <span>{runtimeLocalize("Команда", "Team", locale)}</span>
               <Select
                 onValueChange={setMoveTargetGroupId}
                 value={moveTargetGroupId}
               >
                 <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
-                  <SelectValue placeholder={runtimeLocalize("Выберите группу", "Select group", locale)} />
+                  <SelectValue placeholder={runtimeLocalize("Выберите команду", "Select team", locale)} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">
-                    {runtimeLocalize("Без группы", "No group", locale)}
+                    {runtimeLocalize("Без команды", "No team", locale)}
                   </SelectItem>
                   {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
-                      {group.name}
+                      {resolveTeamAvatarEmoji(group)} {group.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -4189,7 +4226,7 @@ const Employees = ({
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {taskDialog?.mode === "group"
-                ? runtimeLocalize("Задача группе", "Task for group", locale)
+                ? runtimeLocalize("Задача команде", "Task for team", locale)
                 : runtimeLocalize("Назначить задачу", "Assign task", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
@@ -4495,6 +4532,7 @@ const Employees = ({
             setGroupEditorId(null);
             setGroupDeleteConfirmOpen(false);
             setGroupError(null);
+            setGroupEditorEmoji(DEFAULT_TEAM_AVATAR_EMOJI);
           }
         }}
         open={!!groupEditorId}
@@ -4504,20 +4542,40 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  {runtimeLocalize("Изменить группу", "Edit group", locale)}
+                  {runtimeLocalize("Изменить команду", "Edit team", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
                   {runtimeLocalize(
-                    "Измените название, описание и состав группы",
-                    "Update the name, description and members of group",
+                    "Измените название, описание, эмодзи и состав команды",
+                    "Update the team name, description, emoji and members",
                     locale,
                   )}{" "}
                   «{groupEditor.name}».
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
+                <div className="grid gap-2 text-sm font-heading">
+                  <span>{runtimeLocalize("Эмодзи команды", "Team emoji", locale)}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {TEAM_AVATAR_EMOJIS.map((emoji) => (
+                      <button
+                        aria-pressed={groupEditorEmoji === emoji}
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition ${
+                          groupEditorEmoji === emoji
+                            ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                            : "border-border bg-secondary/20 hover:bg-secondary/40"
+                        }`}
+                        key={emoji}
+                        onClick={() => setGroupEditorEmoji(emoji)}
+                        type="button"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Название группы", "Group name", locale)}</span>
+                  <span>{runtimeLocalize("Название команды", "Team name", locale)}</span>
                   <Input
                     maxLength={120}
                     onChange={(event) => setGroupEditorName(event.target.value)}
@@ -4538,15 +4596,15 @@ const Employees = ({
                       setGroupEditorDescription(event.target.value)
                     }
                     placeholder={runtimeLocalize(
-                      "Короткое описание группы",
-                      "Short group description",
+                      "Короткое описание команды",
+                      "Short team description",
                       locale,
                     )}
                     value={groupEditorDescription}
                   />
                 </label>
                 <div className="text-xs font-heading text-muted-foreground">
-                  {runtimeLocalize("Состав группы", "Group members", locale)}
+                  {runtimeLocalize("Состав команды", "Team members", locale)}
                 </div>
                 <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
                   {employees.map((employee) => (
@@ -4594,7 +4652,7 @@ const Employees = ({
                     variant="destructive"
                   >
                     <Trash2 className="h-4 w-4" />
-                    {runtimeLocalize("Удалить группу", "Delete group", locale)}
+                    {runtimeLocalize("Удалить команду", "Delete team", locale)}
                   </Button>
                   <div className="flex gap-2">
                     <Button
@@ -4630,18 +4688,18 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  {runtimeLocalize("Удалить группу", "Delete group", locale)}
+                  {runtimeLocalize("Удалить команду", "Delete team", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
                   {runtimeLocalize(
-                    `Группа «${groupEditor.name}» будет удалена. Сотрудники останутся в системе без группы, а привязка у задач к этой группе будет снята.`,
-                    `Group "${groupEditor.name}" will be deleted. Employees will stay in the system without a group, and tasks will be detached from this group.`,
+                    `Команда «${groupEditor.name}» будет удалена. Сотрудники останутся в системе без команды, а привязка у задач к этой команде будет снята.`,
+                    `Team "${groupEditor.name}" will be deleted. Employees will stay in the system without a team, and tasks will be detached from this team.`,
                     locale,
                   )}
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading text-muted-foreground">
-                {runtimeLocalize("В группе", "In group", locale)}: {groupEditor.memberships.length}{" "}
+                {runtimeLocalize("В команде", "In team", locale)}: {groupEditor.memberships.length}{" "}
                 {runtimeLocalize("сотрудник(ов), задач", "employee(s), tasks", locale)}:{" "}
                 {groupEditor._count?.tasks ?? 0}.
               </div>
@@ -4666,7 +4724,7 @@ const Employees = ({
                   <Trash2 className="h-4 w-4" />
                   {groupDeleting
                     ? runtimeLocalize("Удаляем...", "Deleting...", locale)
-                    : runtimeLocalize("Удалить группу", "Delete group", locale)}
+                    : runtimeLocalize("Удалить команду", "Delete team", locale)}
                 </Button>
               </DialogFooter>
             </>

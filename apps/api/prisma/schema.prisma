@@ -1129,6 +1129,7 @@ model WorkGroup {
   managerEmployeeId String
   name              String
   description       String?
+  avatarEmoji       String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

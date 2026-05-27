@@ -235,6 +235,7 @@ export type WorkGroupItem = {
   id: string;
   name: string;
   description: string | null;
+  avatarEmoji?: string | null;
   managerEmployeeId: string;
   memberships: Array<{
     id: string;

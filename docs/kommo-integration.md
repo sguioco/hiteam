@@ -50,14 +50,15 @@ Prefer `KOMMO_LONG_LIVED_TOKEN` in production unless refresh-token persistence i
 
 ## Event mapping
 
-- organization registration -> creates/updates company, contact, lead; stage `New Registration`;
+- organization registration -> lifecycle events `user_registered` and `trial_started`; creates/updates company, contact, lead; stage `Trial Started`;
 - organization setup/location update -> refreshes company and quick links;
 - employee created/invited/approved/rejected -> refreshes employee counters and linked contacts;
 - employee check-in -> stage `First Check-In Completed`, updates activity fields;
 - employee check-out -> updates activity fields;
-- billing checkout/invoice/subscription events -> updates seats, plan, payment and stage;
+- billing checkout/invoice/subscription events -> updates seats, plan, payment and stage; emits `payment_successful`, `payment_failed`, `subscription_cancelled`;
 - device changes -> updates app-installed and device counters;
 - biometric enrollment/verification -> updates face verification counters and contact fields.
+- daily automation -> emits `trial_ending_soon`, `trial_expired`, `subscription_renewal_upcoming`, `inactive_3_days`, `key_feature_not_used` as Kommo notes/tasks.
 
 ## Admin API
 

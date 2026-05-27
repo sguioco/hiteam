@@ -41,6 +41,27 @@ type KommoSyncOptions = {
   syncAllContacts?: boolean;
 };
 
+type KommoLifecycleEvent =
+  | 'user_registered'
+  | 'trial_started'
+  | 'trial_ending_soon'
+  | 'trial_expired'
+  | 'payment_successful'
+  | 'payment_failed'
+  | 'subscription_renewal_upcoming'
+  | 'subscription_cancelled'
+  | 'inactive_3_days'
+  | 'key_feature_not_used';
+
+type KommoLifecycleEventOptions = {
+  stageName?: KommoStageName;
+  note: string;
+  taskText?: string;
+  taskDueInDays?: number;
+  key?: string;
+  syncAllContacts?: boolean;
+};
+
 type KommoSyncResult = {
   skipped?: boolean;
   leadId?: number;
@@ -133,11 +154,23 @@ export class KommoService {
   }
 
   recordOrganizationRegistered(tenantId: string) {
-    this.enqueueSync(tenantId, {
-      reason: 'organization_registered',
-      stageName: 'New Registration',
-      note: 'HiTeam organization registered.',
-      syncAllContacts: true,
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void (async () => {
+      await this.syncLifecycleEvent(tenantId, 'user_registered', {
+        stageName: 'New Registration',
+        note: 'Client registered in HiTeam.',
+        syncAllContacts: true,
+      });
+      await this.syncLifecycleEvent(tenantId, 'trial_started', {
+        stageName: 'Trial Started',
+        note: 'HiTeam trial started.',
+        syncAllContacts: true,
+      });
+    })().catch((error) => {
+      this.logger.warn(`Kommo registration lifecycle failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`);
     });
   }
 
@@ -205,6 +238,36 @@ export class KommoService {
   }
 
   recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
+    switch (reason) {
+      case 'invoice_paid':
+        this.enqueueLifecycleEvent(tenantId, 'payment_successful', {
+          stageName: 'Paid Subscription',
+          note: 'Payment received successfully.',
+          key: `lifecycle:payment_successful:${this.toDateKey(new Date())}`,
+        });
+        return;
+      case 'invoice_payment_failed':
+      case 'invoice_finalization_failed':
+        this.enqueueLifecycleEvent(tenantId, 'payment_failed', {
+          stageName: 'Payment Pending',
+          note: `Payment failed: ${reason}.`,
+          taskText: 'HiTeam payment failed. Contact the customer and help complete payment.',
+          key: `lifecycle:payment_failed:${this.toDateKey(new Date())}`,
+        });
+        return;
+      case 'subscription_cancelled':
+      case 'stripe_disconnected':
+        this.enqueueLifecycleEvent(tenantId, 'subscription_cancelled', {
+          stageName: 'Churn',
+          note: `Subscription cancelled: ${reason}.`,
+          taskText: 'HiTeam subscription was cancelled. Contact the customer for feedback and recovery.',
+          key: `lifecycle:subscription_cancelled:${this.toDateKey(new Date())}`,
+        });
+        return;
+      default:
+        break;
+    }
+
     this.enqueueSync(tenantId, {
       reason,
       note: `HiTeam billing updated: ${reason}.`,
@@ -404,54 +467,148 @@ export class KommoService {
     });
   }
 
+  private enqueueLifecycleEvent(
+    tenantId: string,
+    event: KommoLifecycleEvent,
+    options: KommoLifecycleEventOptions,
+  ) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void this.syncLifecycleEvent(tenantId, event, options).catch((error) => {
+      this.logger.warn(
+        `Kommo lifecycle event ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
+      );
+    });
+  }
+
+  private async syncLifecycleEvent(
+    tenantId: string,
+    event: KommoLifecycleEvent,
+    options: KommoLifecycleEventOptions,
+  ) {
+    const key = options.key ?? `lifecycle:${event}`;
+
+    try {
+      await this.prisma.kommoAutomationLog.create({
+        data: { tenantId, key },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return;
+      }
+      throw error;
+    }
+
+    const result = await this.syncTenant(tenantId, {
+      reason: event,
+      stageName: options.stageName,
+      note: `Lifecycle event: ${event}. ${options.note}`,
+      syncAllContacts: options.syncAllContacts,
+    });
+
+    if (!result.leadId || !options.taskText) {
+      return;
+    }
+
+    await this.createTaskOnce(
+      tenantId,
+      `${key}:task`,
+      result.leadId,
+      options.taskText,
+      new Date(Date.now() + (options.taskDueInDays ?? 1) * 24 * 60 * 60 * 1000),
+    );
+  }
+
   private async runTenantAutomations(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
     const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
     const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-    const inactiveMs = 5 * 24 * 60 * 60 * 1000;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     const paid = snapshot.metrics.paymentStatus === 'PAID';
     const trialEndingSoon =
       !paid &&
       snapshot.trialEndDate.getTime() >= now &&
       snapshot.trialEndDate.getTime() - now <= threeDaysMs;
+    const trialExpired =
+      !paid && snapshot.trialEndDate.getTime() < now;
+    const renewalDate = snapshot.tenant.billingSubscription?.stripeCurrentPeriodEnd ?? null;
+    const subscriptionRenewalUpcoming =
+      paid &&
+      renewalDate !== null &&
+      renewalDate.getTime() >= now &&
+      renewalDate.getTime() - now <= sevenDaysMs;
     const inactive =
       snapshot.metrics.totalRegisteredEmployees > 0 &&
       snapshot.metrics.lastActivityDate !== null &&
-      now - snapshot.metrics.lastActivityDate.getTime() >= inactiveMs;
-
-    if (!trialEndingSoon && !inactive) {
-      return;
-    }
-
-    const result = await this.syncTenant(snapshot.tenant.id, {
-      reason: trialEndingSoon ? 'trial_expiring_soon' : 'inactive_5_days',
-      stageName: trialEndingSoon ? 'Payment Pending' : 'Reactivation',
-      note: trialEndingSoon
-        ? 'Trial ends in 3 days or less. Manager follow-up required.'
-        : 'No HiTeam activity for 5 days. Reactivation follow-up required.',
-      syncAllContacts: false,
-    });
-
-    if (!result.leadId) {
-      return;
-    }
+      now - snapshot.metrics.lastActivityDate.getTime() >= threeDaysMs;
+    const keyFeatureNotUsed =
+      now - snapshot.tenant.createdAt.getTime() >= oneDayMs &&
+      snapshot.metrics.employeesInvited === 0 &&
+      snapshot.metrics.totalRegisteredEmployees <= 1 &&
+      !snapshot.metrics.firstCheckInDate;
 
     if (trialEndingSoon) {
-      await this.createTaskOnce(
+      await this.syncLifecycleEvent(
         snapshot.tenant.id,
-        `trial-expiring-${this.toDateKey(snapshot.trialEndDate)}`,
-        result.leadId,
-        `HiTeam trial expires on ${this.toDateKey(snapshot.trialEndDate)}. Check payment and onboarding blockers.`,
-        new Date(Date.now() + 24 * 60 * 60 * 1000),
+        'trial_ending_soon',
+        {
+          stageName: 'Payment Pending',
+          note: `Trial ends on ${this.toDateKey(snapshot.trialEndDate)}.`,
+          taskText: `HiTeam trial expires on ${this.toDateKey(snapshot.trialEndDate)}. Check payment and onboarding blockers.`,
+          key: `lifecycle:trial_ending_soon:${this.toDateKey(snapshot.trialEndDate)}`,
+        },
+      );
+    }
+
+    if (trialExpired) {
+      await this.syncLifecycleEvent(
+        snapshot.tenant.id,
+        'trial_expired',
+        {
+          stageName: 'Payment Pending',
+          note: `Trial expired on ${this.toDateKey(snapshot.trialEndDate)}.`,
+          taskText: 'HiTeam trial expired. Contact the customer and help activate subscription.',
+          key: `lifecycle:trial_expired:${this.toDateKey(snapshot.trialEndDate)}`,
+        },
+      );
+    }
+
+    if (subscriptionRenewalUpcoming && renewalDate) {
+      await this.syncLifecycleEvent(
+        snapshot.tenant.id,
+        'subscription_renewal_upcoming',
+        {
+          note: `Subscription renewal is coming on ${this.toDateKey(renewalDate)}.`,
+          taskText: `HiTeam subscription renews on ${this.toDateKey(renewalDate)}. Check payment status and customer health.`,
+          key: `lifecycle:subscription_renewal_upcoming:${this.toDateKey(renewalDate)}`,
+        },
       );
     }
 
     if (inactive) {
-      await this.createTaskOnce(
+      await this.syncLifecycleEvent(
         snapshot.tenant.id,
-        `inactive-5-days-${this.toDateKey(new Date())}`,
-        result.leadId,
-        'HiTeam has had no activity for 5 days. Contact the customer and verify blockers.',
-        new Date(Date.now() + 24 * 60 * 60 * 1000),
+        'inactive_3_days',
+        {
+          stageName: trialExpired ? undefined : 'Reactivation',
+          note: 'No HiTeam activity for 3 days.',
+          taskText: 'HiTeam has had no activity for 3 days. Contact the customer and verify blockers.',
+          key: `lifecycle:inactive_3_days:${this.toDateKey(snapshot.metrics.lastActivityDate!)}`,
+        },
+      );
+    }
+
+    if (keyFeatureNotUsed) {
+      await this.syncLifecycleEvent(
+        snapshot.tenant.id,
+        'key_feature_not_used',
+        {
+          note: 'Customer has not invited employees or completed a first check-in after registration.',
+          taskText: 'Customer has not used key HiTeam setup features. Help them invite employees and complete first check-in.',
+          key: `lifecycle:key_feature_not_used:${this.toDateKey(snapshot.tenant.createdAt)}`,
+        },
       );
     }
   }
@@ -934,8 +1091,10 @@ export class KommoService {
       activeEmployees.length +
       tenant.employeeInvitations.filter((invitation) => seatHoldingInvitationStatuses.has(invitation.status)).length;
     const trialDays = this.getConfig().trialDays;
-    const trialStartDate = tenant.createdAt;
-    const trialEndDate = new Date(tenant.createdAt.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    const trialStartDate = tenant.billingSubscription?.trialStartedAt ?? tenant.createdAt;
+    const trialEndDate =
+      tenant.billingSubscription?.trialEndsAt ??
+      new Date(trialStartDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
     const serviceActive = Boolean(tenant.billingSubscription?.firstPaidAt) && paidSeats >= usedSeats && !this.isBlockingSubscriptionStatus(tenant.billingSubscription?.status);
     const paymentStatus = serviceActive
       ? 'PAID'

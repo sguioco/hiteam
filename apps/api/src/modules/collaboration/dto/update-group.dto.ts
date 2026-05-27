@@ -10,4 +10,9 @@ export class UpdateGroupDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  avatarEmoji?: string;
 }

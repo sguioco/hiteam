@@ -11,6 +11,11 @@ export class CreateGroupDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  avatarEmoji?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   memberEmployeeIds?: string[];

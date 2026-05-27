@@ -774,12 +774,14 @@ export class BillingService {
     const currentPeriodEnd =
       this.readStripeTimestamp(subscriptionValue.current_period_end) ??
       this.readStripeTimestamp(itemValue.current_period_end);
+    const normalizedStatus = this.normalizeStripeStatus(stripeSubscription.status);
+    const cancelAtPeriodEnd = Boolean(subscriptionValue.cancel_at_period_end);
 
     await this.prisma.billingSubscription.upsert({
       where: { tenantId },
       update: {
         paidSeats: item?.quantity ?? 0,
-        status: this.normalizeStripeStatus(stripeSubscription.status),
+        status: normalizedStatus,
         stripeCustomerId: customerId,
         stripeSubscriptionId: stripeSubscription.id,
         stripeSubscriptionItemId: item?.id ?? null,
@@ -788,12 +790,12 @@ export class BillingService {
         stripeCurrency: price?.currency?.toUpperCase() ?? null,
         stripeCurrentPeriodStart: currentPeriodStart,
         stripeCurrentPeriodEnd: currentPeriodEnd,
-        stripeCancelAtPeriodEnd: Boolean(subscriptionValue.cancel_at_period_end),
+        stripeCancelAtPeriodEnd: cancelAtPeriodEnd,
       },
       create: {
         tenantId,
         paidSeats: item?.quantity ?? 0,
-        status: this.normalizeStripeStatus(stripeSubscription.status),
+        status: normalizedStatus,
         stripeCustomerId: customerId,
         stripeSubscriptionId: stripeSubscription.id,
         stripeSubscriptionItemId: item?.id ?? null,
@@ -802,10 +804,15 @@ export class BillingService {
         stripeCurrency: price?.currency?.toUpperCase() ?? null,
         stripeCurrentPeriodStart: currentPeriodStart,
         stripeCurrentPeriodEnd: currentPeriodEnd,
-        stripeCancelAtPeriodEnd: Boolean(subscriptionValue.cancel_at_period_end),
+        stripeCancelAtPeriodEnd: cancelAtPeriodEnd,
       },
     });
-    this.kommoService.recordBillingUpdated(tenantId, 'stripe_subscription_updated');
+    this.kommoService.recordBillingUpdated(
+      tenantId,
+      normalizedStatus === 'CANCELED' || cancelAtPeriodEnd
+        ? 'subscription_cancelled'
+        : 'stripe_subscription_updated',
+    );
 
     return tenantId;
   }

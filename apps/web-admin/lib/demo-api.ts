@@ -6279,6 +6279,7 @@ export async function demoApiRequest<T>(
         id: buildTaskId("group"),
         name: payload.name,
         description: payload.description ?? null,
+        avatarEmoji: payload.avatarEmoji ?? "👥",
         managerEmployeeId: "emp-1",
         memberships: [],
         _count: {
@@ -6304,6 +6305,10 @@ export async function demoApiRequest<T>(
 
       if (typeof payload.description === "string") {
         group.description = payload.description || null;
+      }
+
+      if (typeof payload.avatarEmoji === "string") {
+        group.avatarEmoji = payload.avatarEmoji || "👥";
       }
 
       state.tasks.forEach((task) => {

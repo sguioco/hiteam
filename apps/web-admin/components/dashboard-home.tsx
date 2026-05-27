@@ -28,6 +28,7 @@ import {
   AlertCircle,
   ArrowDown,
   CalendarDays,
+  CalendarRange,
   Check,
   CheckSquare,
   ChevronRight,
@@ -35,10 +36,13 @@ import {
   Minus,
   FileSignature,
   ListTodo,
+  Newspaper,
   TriangleAlert,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import type { CreateDialogAction } from "@/components/CreateDialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Button } from "@/components/ui/button";
 import type { RadioItem } from "@/components/ui/Radio";
@@ -109,6 +113,7 @@ import {
 } from "@/lib/task-priority";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { navigateWithClickSupport } from "@/lib/navigation";
+import { toAdminHref } from "@/lib/admin-routes";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type EmployeeDirectoryItem = {
@@ -1174,6 +1179,55 @@ export default function DashboardHome({
         setTaskDayOffConfirmOpen(false);
         setCreateTaskOpen(true);
       };
+  const dashboardCreateDialogActions: CreateDialogAction[] | undefined =
+    createAction
+      ? [
+          {
+            id: "task",
+            title: localize(locale, "Добавить задачу", "Add task"),
+            description: localize(
+              locale,
+              "Выбрать сотрудника и назначить новую задачу",
+              "Choose an employee and assign a new task",
+            ),
+            icon: ListTodo,
+            onSelect: createAction,
+          },
+          {
+            id: "employee",
+            href: toAdminHref("/employees"),
+            title: localize(locale, "Сотрудник", "Employee"),
+            description: localize(
+              locale,
+              "Открыть кадровый раздел и добавить нового сотрудника",
+              "Open the people section and add a new employee",
+            ),
+            icon: UsersRound,
+          },
+          {
+            id: "shift",
+            href: toAdminHref("/schedule"),
+            title: localize(locale, "Смена", "Shift"),
+            description: localize(
+              locale,
+              "Перейти в расписание для создания смены или шаблона",
+              "Open schedule to create a shift or template",
+            ),
+            icon: CalendarRange,
+          },
+          {
+            id: "news",
+            href: toAdminHref("/news?create=1"),
+            title: localize(locale, "Добавить новость", "Add news"),
+            description: localize(
+              locale,
+              "Открыть новости и добавить публикацию",
+              "Open news and add a post",
+            ),
+            icon: Newspaper,
+          },
+        ]
+      : undefined;
   const canUseDesktopAdminTools = hasDesktopAdminAccess(
     session?.user.roleCodes ?? [],
   );
@@ -1836,9 +1890,9 @@ export default function DashboardHome({
 
   return (
     <AdminShell
+      createDialogActions={dashboardCreateDialogActions}
       initialSession={session}
       mode={mode}
-      onCreateAction={createAction}
     >
       <main className="page-shell manager-page-shell">
         <section className="manager-home">

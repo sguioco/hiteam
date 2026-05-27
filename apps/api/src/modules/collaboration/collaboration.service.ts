@@ -47,6 +47,7 @@ import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-poli
 const TASK_PHOTO_PROOF_LIMIT = 7;
 const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
+const DEFAULT_GROUP_AVATAR_EMOJI = "👥";
 const TASK_META_MARKER = "[smart-task-meta]";
 const WORKSPACE_MANAGER_ROLE_CODES = [
   "tenant_owner",
@@ -122,6 +123,7 @@ export class CollaborationService {
     const memberEmployeeIds = Array.from(new Set(dto.memberEmployeeIds ?? []));
     const name = dto.name.trim();
     const description = dto.description?.trim() || null;
+    const avatarEmoji = dto.avatarEmoji?.trim() || DEFAULT_GROUP_AVATAR_EMOJI;
 
     if (!name) {
       throw new BadRequestException("Group name is required.");
@@ -150,6 +152,7 @@ export class CollaborationService {
           managerEmployeeId: manager.id,
           name,
           description,
+          avatarEmoji,
           memberships: {
             create: memberEmployeeIds.map((employeeId) => ({
               tenantId: manager.tenantId,
@@ -209,6 +212,10 @@ export class CollaborationService {
       dto.description === undefined
         ? undefined
         : dto.description.trim() || null;
+    const avatarEmoji =
+      dto.avatarEmoji === undefined
+        ? undefined
+        : dto.avatarEmoji.trim() || DEFAULT_GROUP_AVATAR_EMOJI;
 
     if (name !== undefined && !name) {
       throw new BadRequestException("Group name is required.");
@@ -221,6 +228,7 @@ export class CollaborationService {
         data: {
           name,
           description,
+          avatarEmoji,
         },
         include: {
           memberships: {
@@ -252,6 +260,7 @@ export class CollaborationService {
         previousName: group.name,
         nextName: updated.name,
         descriptionUpdated: description !== undefined,
+        avatarEmojiUpdated: avatarEmoji !== undefined,
       },
     });
 
