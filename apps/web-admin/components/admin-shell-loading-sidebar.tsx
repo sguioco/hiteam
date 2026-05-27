@@ -9,6 +9,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { BrandWordmark } from "./brand-wordmark";
 
 type LoadingSidebarLocale = "en" | "ru";
 
@@ -82,14 +83,7 @@ export function AdminShellLoadingSidebar({
     <aside className="sidebar sidebar-untitled sidebar-checking-session">
       <div className="sidebar-brand sidebar-untitled-brand">
         <div className="sidebar-untitled-brand-row">
-          <div className="sidebar-company-brand is-loading">
-            <span className="company-brand-mark">
-              <span aria-hidden="true">O</span>
-            </span>
-            <span className="sidebar-company-name">
-              {locale === "ru" ? "Организация" : "Organization"}
-            </span>
-          </div>
+          <BrandWordmark className="text-[1.8rem]" />
         </div>
       </div>
 

@@ -41,6 +41,7 @@ import { apiRequest } from "../lib/api";
 import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
 import { getMockAvatarDataUrl } from "../lib/mock-avatar";
+import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { HeaderTaskCreateDialog } from "./header-task-create-dialog";
@@ -229,45 +230,6 @@ function resolveDemoHeaderBrand(
     companyName: locale === "ru" ? DEMO_COMPANY_NAME_RU : DEMO_COMPANY_NAME_EN,
     employeeCount: DEMO_HEADER_EMPLOYEE_COUNT,
   };
-}
-
-function getCompanyInitials(name: string) {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (parts.length === 0) {
-    return "O";
-  }
-
-  const initials = parts
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-
-  return initials || "O";
-}
-
-function CompanyBrandMark({
-  className = "",
-  logoUrl,
-  name,
-}: {
-  className?: string;
-  logoUrl?: string | null;
-  name: string;
-}) {
-  return (
-    <span className={`company-brand-mark ${className}`}>
-      {logoUrl ? (
-        <img alt={name} src={logoUrl} />
-      ) : (
-        <span aria-hidden="true">{getCompanyInitials(name)}</span>
-      )}
-    </span>
-  );
 }
 
 function formatNotificationTimestamp(value: string, locale: Locale) {
@@ -1048,7 +1010,6 @@ export function AdminShell({
     organization?.company?.name?.trim() ||
     (locale === "ru" ? "Организация" : "Organization");
   const shellPageTitle = resolveShellPageTitle(pathname, locale);
-  const companyLogoUrl = organization?.company?.logoUrl ?? null;
   const resolvedProfileAvatarUrl =
     accountProfile?.avatarUrl ||
     storedAvatarUrl ||
@@ -1350,19 +1311,17 @@ export function AdminShell({
         session={session}
       />
 
-      <aside className="sidebar sidebar-untitled">
-        <div className="sidebar-brand sidebar-untitled-brand">
-          <div className="sidebar-untitled-brand-row">
-            <Link
-              className="sidebar-company-brand"
-              href={homeHref}
-              onClick={(event) => handleRouteStart(homeHref, event)}
-            >
-              <CompanyBrandMark logoUrl={companyLogoUrl} name={companyName} />
-              <span className="sidebar-company-name">{companyName}</span>
-            </Link>
+        <aside className="sidebar sidebar-untitled">
+          <div className="sidebar-brand sidebar-untitled-brand">
+            <div className="sidebar-untitled-brand-row">
+              <Link
+                href={homeHref}
+                onClick={(event) => handleRouteStart(homeHref, event)}
+              >
+                <BrandWordmark className="text-[1.8rem]" />
+              </Link>
+            </div>
           </div>
-        </div>
 
         <nav className="sidebar-nav sidebar-nav-untitled">
           {navItems.map((item) => {
@@ -1572,11 +1531,6 @@ export function AdminShell({
           {showTopbar ? (
             <header className="shell-topbar">
               <div className="shell-topbar-main">
-                <CompanyBrandMark
-                  className="shell-topbar-brandmark"
-                  logoUrl={companyLogoUrl}
-                  name={companyName}
-                />
                 <div className="shell-topbar-copy">
                   <h1>{shellPageTitle}</h1>
                 </div>
