@@ -1,10 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AttendanceSessionStatus, Prisma, ShiftStatus } from '@prisma/client';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { AttendanceSessionStatus, Prisma, ShiftStatus, UserStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
 import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { UpdateShiftDto } from './dto/update-shift.dto';
+
+const WORKSPACE_MANAGER_ROLE_CODES = [
+  'tenant_owner',
+  'hr_admin',
+  'operations_admin',
+  'manager',
+] as const;
 
 const CYRILLIC_TEMPLATE_CODE_MAP: Record<string, string> = {
   а: 'a',
@@ -156,9 +164,12 @@ const SHIFT_SELECT = {
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly collaborationRealtimeService: CollaborationRealtimeService,
   ) {}
 
   listTemplates(tenantId: string) {
@@ -246,6 +257,12 @@ export class ScheduleService {
       metadata: { code },
     });
 
+    await this.emitScheduleWorkspaceRefreshForEmployees(
+      tenantId,
+      [],
+      'schedule.template_created',
+    );
+
     return template;
   }
 
@@ -329,6 +346,12 @@ export class ScheduleService {
         fixedBreakIsPaid: shift.fixedBreakIsPaid,
       },
     });
+
+    await this.emitScheduleWorkspaceRefreshForEmployees(
+      tenantId,
+      [employee.id],
+      'schedule.shift_created',
+    );
 
     return shift;
   }
@@ -436,6 +459,12 @@ export class ScheduleService {
       },
     });
 
+    await this.emitScheduleWorkspaceRefreshForEmployees(
+      tenantId,
+      [existingShift.employeeId, employee.id],
+      'schedule.shift_updated',
+    );
+
     return shift;
   }
 
@@ -483,6 +512,12 @@ export class ScheduleService {
         employeeIds: [existingShift.employeeId],
       },
     });
+
+    await this.emitScheduleWorkspaceRefreshForEmployees(
+      tenantId,
+      [existingShift.employeeId],
+      'schedule.shift_cancelled',
+    );
 
     return shift;
   }
@@ -655,6 +690,91 @@ export class ScheduleService {
     }
 
     return endsAt;
+  }
+
+  private async emitScheduleWorkspaceRefreshForEmployees(
+    tenantId: string,
+    employeeIds: Array<string | null | undefined>,
+    reason: string,
+  ) {
+    try {
+      const userIds = new Set<string>();
+      const uniqueEmployeeIds = Array.from(
+        new Set(employeeIds.filter((id): id is string => Boolean(id))),
+      );
+
+      if (uniqueEmployeeIds.length > 0) {
+        const employees = await this.prisma.employee.findMany({
+          where: {
+            tenantId,
+            id: { in: uniqueEmployeeIds },
+          },
+          select: { userId: true },
+        });
+
+        for (const employee of employees) {
+          if (employee.userId) {
+            userIds.add(employee.userId);
+          }
+        }
+      }
+
+      const managerUserIds = await this.resolveWorkspaceManagerUserIds(tenantId);
+      for (const userId of managerUserIds) {
+        userIds.add(userId);
+      }
+
+      this.emitWorkspaceRefresh(Array.from(userIds), reason);
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resolve schedule workspace refresh audience: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async resolveWorkspaceManagerUserIds(tenantId: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        status: UserStatus.ACTIVE,
+        workspaceAccessAllowed: true,
+        roles: {
+          some: {
+            role: {
+              code: { in: [...WORKSPACE_MANAGER_ROLE_CODES] },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return users.map((user) => user.id);
+  }
+
+  private emitWorkspaceRefresh(userIds: string[], reason: string) {
+    if (userIds.length === 0) {
+      return;
+    }
+
+    const refreshedAt = new Date().toISOString();
+
+    for (const userId of new Set(userIds)) {
+      void this.collaborationRealtimeService
+        .fanoutWorkspaceRefresh(userId, {
+          reason,
+          refreshedAt,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Unable to emit schedule workspace refresh for user ${userId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
+    }
   }
 
   private async generateTemplateCode(tenantId: string, name: string) {

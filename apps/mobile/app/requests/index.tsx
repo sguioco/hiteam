@@ -25,6 +25,7 @@ import {
 import { getDateLocale, useI18n } from '../../lib/i18n';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { primeTaskTranslations, useTranslatedTaskCopy } from '../../lib/use-translated-task-copy';
+import { useWorkspaceRealtimeRefresh } from '../../lib/use-workspace-realtime-refresh';
 import {
   getRequestsScreenCacheKey,
   REQUESTS_SCREEN_CACHE_TTL_MS,
@@ -248,6 +249,10 @@ export default function RequestsScreen() {
       tasks,
     } satisfies RequestsScreenCacheValue);
   }, [balances, calendar, items, loading, requestsCacheKey, tasks]);
+
+  useWorkspaceRealtimeRefresh({
+    onRefresh: () => loadData(calendarMonth, { silent: true }),
+  });
 
   async function pickAttachments() {
     setError(null);

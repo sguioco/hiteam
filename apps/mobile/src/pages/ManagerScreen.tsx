@@ -53,6 +53,7 @@ import {
   MANAGER_SCREEN_CACHE_KEY,
   MANAGER_SCREEN_CACHE_TTL_MS,
 } from "../../lib/workspace-cache";
+import { useWorkspaceRealtimeRefresh } from "../../lib/use-workspace-realtime-refresh";
 
 type ManagerEmployee = ManagerEmployeeItem & {
   avatar?: any;
@@ -560,6 +561,11 @@ export default function ManagerScreen({
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useWorkspaceRealtimeRefresh({
+    enabled: active,
+    onRefresh: () => loadData({ force: true, silent: true }),
+  });
 
   const liveSessionByEmployeeId = useMemo(
     () =>

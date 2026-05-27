@@ -33,6 +33,7 @@ import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { shouldHideTranslatedSourceText } from '../../lib/live-translation-policy';
 import { hasResolvedLiveText, primeLiveTextMap, useLiveTextMap } from '../../lib/use-live-text-map';
+import { useWorkspaceRealtimeRefresh } from '../../lib/use-workspace-realtime-refresh';
 import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -417,6 +418,10 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
       socket?.disconnect();
     };
   }, [isManager]);
+
+  useWorkspaceRealtimeRefresh({
+    onRefresh: () => loadData({ silent: true }),
+  });
 
   async function handleOpen(item: AnnouncementItem) {
     const nextExpanded = expandedId === item.id ? null : item.id;

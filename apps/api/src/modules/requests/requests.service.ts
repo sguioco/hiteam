@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -13,8 +14,10 @@ import {
   RequestType,
   TimeOffBalanceKind,
   TimeOffTransactionType,
+  UserStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -25,11 +28,21 @@ import { RequestCalendarQueryDto } from './dto/request-calendar-query.dto';
 import { RequestActionDto } from './dto/request-action.dto';
 import { TimeOffBalanceUpsertDto } from './dto/time-off-balance-upsert.dto';
 
+const WORKSPACE_MANAGER_ROLE_CODES = [
+  'tenant_owner',
+  'hr_admin',
+  'operations_admin',
+  'manager',
+] as const;
+
 @Injectable()
 export class RequestsService {
+  private readonly logger = new Logger(RequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly notificationsService: NotificationsService,
     private readonly storageService: StorageService,
   ) {}
@@ -194,6 +207,15 @@ export class RequestsService {
         },
       });
     }
+
+    await this.emitRequestWorkspaceRefresh(
+      employee.tenantId,
+      [
+        employee.userId,
+        ...request.approvalSteps.map((step) => step.approverEmployee.userId),
+      ],
+      'request.created',
+    );
 
     return {
       ...request,
@@ -637,6 +659,15 @@ export class RequestsService {
       });
     }
 
+    await this.emitRequestWorkspaceRefresh(
+      employee.tenantId,
+      [
+        request.employee.userId,
+        ...approverUserIds.map((approver) => approver.userId),
+      ],
+      'request.comment_added',
+    );
+
     return comment;
   }
 
@@ -966,7 +997,84 @@ export class RequestsService {
       });
     }
 
+    await this.emitRequestWorkspaceRefresh(
+      approver.tenantId,
+      [
+        updatedRequest.employee.userId,
+        ...updatedRequest.approvalSteps.map((step) => step.approverEmployee.userId),
+      ],
+      updatedRequest.status === RequestStatus.PENDING
+        ? 'request.step_updated'
+        : action === ApprovalStatus.APPROVED
+          ? 'request.approved'
+          : 'request.rejected',
+    );
+
     return this.serializeRequestWithUrls(updatedRequest);
+  }
+
+  private async emitRequestWorkspaceRefresh(
+    tenantId: string,
+    candidateUserIds: Array<string | null | undefined>,
+    reason: string,
+  ) {
+    try {
+      const userIds = new Set(
+        candidateUserIds.filter((userId): userId is string => Boolean(userId)),
+      );
+      const managerUserIds = await this.resolveWorkspaceManagerUserIds(tenantId);
+
+      for (const userId of managerUserIds) {
+        userIds.add(userId);
+      }
+
+      if (userIds.size === 0) {
+        return;
+      }
+
+      const refreshedAt = new Date().toISOString();
+
+      for (const userId of userIds) {
+        void this.collaborationRealtimeService
+          .fanoutWorkspaceRefresh(userId, {
+            reason,
+            refreshedAt,
+          })
+          .catch((error) => {
+            this.logger.warn(
+              `Unable to emit request workspace refresh for user ${userId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resolve request workspace refresh audience: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async resolveWorkspaceManagerUserIds(tenantId: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        status: UserStatus.ACTIVE,
+        workspaceAccessAllowed: true,
+        roles: {
+          some: {
+            role: {
+              code: { in: [...WORKSPACE_MANAGER_ROLE_CODES] },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return users.map((user) => user.id);
   }
 
   private resolveCalendarWindow(dateFromRaw?: string, dateToRaw?: string) {
