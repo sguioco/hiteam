@@ -1038,9 +1038,7 @@ export default function Schedule({
       fixedBreakDurationMinutes: draft.fixedBreakEnabled
         ? fixedBreakDuration
         : 0,
-      fixedBreakIsPaid: draft.fixedBreakEnabled
-        ? false
-        : false,
+      fixedBreakIsPaid: false,
     };
   }
 
@@ -1059,9 +1057,7 @@ export default function Schedule({
       fixedBreakDurationMinutes: draft.fixedBreakEnabled
         ? fixedBreakDuration
         : 0,
-      fixedBreakIsPaid: draft.fixedBreakEnabled
-        ? draft.fixedBreakIsPaid
-        : false,
+      fixedBreakIsPaid: false,
     };
   }
 
@@ -2193,9 +2189,7 @@ export default function Schedule({
         fixedBreakDurationMinutes: createShiftDraft.fixedBreakEnabled
           ? Number(createShiftDraft.fixedBreakDurationMinutes)
           : 0,
-        fixedBreakIsPaid: createShiftDraft.fixedBreakEnabled
-          ? false
-          : false,
+        fixedBreakIsPaid: false,
         employee: {
           id: employee.id,
           firstName: employee.firstName,
@@ -2324,9 +2318,7 @@ export default function Schedule({
           fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
             ? Number(templateDraft.fixedBreakDurationMinutes)
             : 0,
-          fixedBreakIsPaid: templateDraft.fixedBreakEnabled
-            ? templateDraft.fixedBreakIsPaid
-            : false,
+          fixedBreakIsPaid: false,
           createdAt,
           updatedAt: createdAt,
           location,
@@ -2437,7 +2429,7 @@ export default function Schedule({
             ? new Date(`${formatDateInput(date)}T${template.fixedBreakStartsAtLocal}:00`).toISOString()
             : null,
           fixedBreakDurationMinutes: template.fixedBreakDurationMinutes ?? 0,
-          fixedBreakIsPaid: Boolean(template.fixedBreakIsPaid),
+          fixedBreakIsPaid: false,
           status: "ASSIGNED",
           createdAt,
           updatedAt: createdAt,
@@ -3670,20 +3662,6 @@ export default function Schedule({
                         type="number"
                         value={templateDraft.fixedBreakDurationMinutes}
                       />
-                    </label>
-                    <label className="flex items-center gap-3 text-sm font-semibold text-muted-foreground">
-                      <input
-                        checked={templateDraft.fixedBreakIsPaid}
-                        className="h-4 w-4 rounded border accent-primary"
-                        onChange={(event) =>
-                          setTemplateDraft((current) => ({
-                            ...current,
-                            fixedBreakIsPaid: event.target.checked,
-                          }))
-                        }
-                        type="checkbox"
-                      />
-                      {ui.fixedBreakPaid}
                     </label>
                   </div>
                 ) : null}

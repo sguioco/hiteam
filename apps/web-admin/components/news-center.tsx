@@ -1436,6 +1436,7 @@ export function NewsCenter({
                       address={draft.attachmentLocation?.address ?? ""}
                       apiKey={mapsApiKey}
                       latitude={draft.attachmentLocation?.latitude ?? ""}
+                      locale={locale}
                       longitude={draft.attachmentLocation?.longitude ?? ""}
                       onSelect={(next) =>
                         setDraft((current) => ({
@@ -2407,6 +2408,7 @@ export function NewsCenter({
                                     address={item.attachmentLocation.address}
                                     apiKey={mapsApiKey}
                                     latitude={String(item.attachmentLocation.latitude)}
+                                    locale={locale}
                                     longitude={String(item.attachmentLocation.longitude)}
                                     mode="preview"
                                     onSelect={() => undefined}

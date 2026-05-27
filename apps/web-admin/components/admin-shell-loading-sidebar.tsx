@@ -1,6 +1,6 @@
 import {
   Activity,
-  BriefcaseBusiness,
+  CalendarRange,
   ChevronRight,
   FileText,
   Home,
@@ -64,7 +64,7 @@ function getLoadingNavItems(
     {
       href: "/schedule",
       label: isRu ? "Календарь" : "Calendar",
-      icon: BriefcaseBusiness,
+      icon: CalendarRange,
     },
   ];
 }
@@ -83,7 +83,17 @@ export function AdminShellLoadingSidebar({
     <aside className="sidebar sidebar-untitled sidebar-checking-session">
       <div className="sidebar-brand sidebar-untitled-brand">
         <div className="sidebar-untitled-brand-row">
-          <BrandWordmark className="text-[1.8rem]" />
+          <span className="sidebar-full-brand-link">
+            <BrandWordmark className="text-[1.8rem]" />
+          </span>
+          <span className="sidebar-compact-toggle sidebar-compact-toggle--static">
+            <img
+              alt=""
+              aria-hidden="true"
+              className="sidebar-compact-wave"
+              src="/waving-hand-skin-1.svg"
+            />
+          </span>
         </div>
       </div>
 
@@ -98,9 +108,9 @@ export function AdminShellLoadingSidebar({
                 className={`sidebar-link sidebar-link-untitled${active ? " is-active" : ""}`}
               >
                 <a className="sidebar-link-main" href={item.href}>
-                  <span className="flex items-center gap-3">
+                  <span className="sidebar-nav-label-wrap">
                     <Icon className="size-4" />
-                    {item.label}
+                    <span className="sidebar-nav-label">{item.label}</span>
                   </span>
                 </a>
                 {item.expandable ? (

@@ -1,8 +1,7 @@
 "use client";
 
-import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
-import { DatePicker } from "@/components/application/date-picker/date-picker";
-import { TimePicker } from "@/components/application/time-picker/time-picker";
+import { Calendar as CalendarIcon, Clock } from "@untitledui/icons";
+import { getLocalTimeZone, today } from "@internationalized/date";
 import { cn } from "@/lib/utils";
 
 type Locale = "ru" | "en";
@@ -40,16 +39,6 @@ function formatDateInput(value: Date) {
   const month = `${value.getMonth() + 1}`.padStart(2, "0");
   const day = `${value.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function parseDatePickerValue(value: string) {
-  if (!value) return null;
-
-  try {
-    return parseDate(value);
-  } catch {
-    return null;
-  }
 }
 
 function splitDateTimeInput(value: string) {
@@ -108,6 +97,26 @@ function getPickerCopy(locale: Locale) {
   };
 }
 
+function getIntlLocale(locale: Locale) {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
+
+function formatDatePickerLabel(value: string, locale: Locale) {
+  if (!value) return "";
+
+  const parsed = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString(getIntlLocale(locale), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function TaskDatePicker({
   buttonClassName,
   isDisabled = false,
@@ -118,22 +127,35 @@ export function TaskDatePicker({
   value,
 }: TaskDatePickerProps) {
   const copy = getPickerCopy(locale);
+  const displayValue = formatDatePickerLabel(value, locale);
 
   return (
-    <DatePicker
-      applyLabel={copy.apply}
-      buttonClassName={cn(
-        "h-11 min-w-0 w-full justify-between overflow-hidden rounded-[14px] px-3 text-sm font-medium tabular-nums",
+    <div
+      className={cn(
+        "relative flex h-11 min-w-0 w-full items-center gap-2 overflow-hidden rounded-[14px] border border-[rgba(15,23,42,0.12)] bg-white px-3 text-sm font-medium text-[color:var(--foreground)] shadow-none ring-0 transition-colors hover:bg-white",
+        isDisabled && "cursor-not-allowed opacity-50",
         buttonClassName,
       )}
-      cancelLabel={copy.cancel}
-      isDisabled={isDisabled}
-      minValue={minToday ? today(getLocalTimeZone()) : undefined}
-      onChange={(nextValue) => onChange(nextValue ? nextValue.toString() : "")}
-      placeholder={placeholder ?? copy.datePlaceholder}
-      todayLabel={copy.today}
-      value={parseDatePickerValue(value)}
-    />
+    >
+      <CalendarIcon className="pointer-events-none size-5 shrink-0 text-fg-quaternary" />
+      <span
+        className={cn(
+          "pointer-events-none min-w-0 truncate tabular-nums",
+          !displayValue && "text-[rgba(15,23,42,0.58)]",
+        )}
+      >
+        {displayValue || placeholder || copy.datePlaceholder}
+      </span>
+      <input
+        aria-label={placeholder ?? copy.datePlaceholder}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        disabled={isDisabled}
+        min={minToday ? today(getLocalTimeZone()).toString() : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        type="date"
+        value={value}
+      />
+    </div>
   );
 }
 
@@ -146,16 +168,35 @@ export function TaskTimePicker({
   value,
 }: TaskTimePickerProps) {
   const copy = getPickerCopy(locale);
+  const displayValue = value || placeholder || copy.timePlaceholder;
 
   return (
-    <TimePicker
-      buttonClassName={cn("h-11 min-w-0 overflow-hidden rounded-[14px] px-3 tabular-nums", buttonClassName)}
-      doneLabel={copy.apply}
-      isDisabled={isDisabled}
-      onChange={onChange}
-      placeholder={placeholder ?? copy.timePlaceholder}
-      value={value}
-    />
+    <div
+      className={cn(
+        "relative flex h-11 min-w-0 w-full items-center gap-2 overflow-hidden rounded-[14px] border border-[rgba(15,23,42,0.12)] bg-white px-3 text-sm font-medium text-[color:var(--foreground)] shadow-none ring-0 transition-colors hover:bg-white",
+        isDisabled && "cursor-not-allowed opacity-50",
+        buttonClassName,
+      )}
+    >
+      <Clock className="pointer-events-none size-5 shrink-0 text-fg-quaternary" />
+      <span
+        className={cn(
+          "pointer-events-none min-w-0 truncate tabular-nums",
+          !value && "text-[rgba(15,23,42,0.58)]",
+        )}
+      >
+        {displayValue}
+      </span>
+      <input
+        aria-label={placeholder ?? copy.timePlaceholder}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        disabled={isDisabled}
+        onChange={(event) => onChange(event.target.value)}
+        step={60}
+        type="time"
+        value={value}
+      />
+    </div>
   );
 }
 

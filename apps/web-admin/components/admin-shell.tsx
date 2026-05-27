@@ -7,7 +7,6 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
-  BriefcaseBusiness,
   CalendarRange,
   ChevronDown,
   ChevronRight,
@@ -342,6 +341,7 @@ export function AdminShell({
   const [createOpen, setCreateOpen] = useState(false);
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [pendingReadIds, setPendingReadIds] = useState<string[]>([]);
@@ -869,7 +869,7 @@ export function AdminShell({
         items.push({
           href: scheduleHref,
           label: locale === "ru" ? "Календарь" : "Calendar",
-          icon: BriefcaseBusiness,
+          icon: CalendarRange,
         });
       }
 
@@ -940,7 +940,7 @@ export function AdminShell({
       items.push({
         href: scheduleHref,
         label: locale === "ru" ? "Календарь" : "Calendar",
-        icon: BriefcaseBusiness,
+        icon: CalendarRange,
       });
     }
 
@@ -1116,6 +1116,10 @@ export function AdminShell({
   useEffect(() => {
     setProfileAvatarFailed(false);
   }, [resolvedProfileAvatarUrl]);
+
+  useEffect(() => {
+    setCompactSidebarOpen(false);
+  }, [pathname]);
 
   const sidebarAvatarSrc =
     resolvedProfileAvatarUrl && !profileAvatarFailed
@@ -1311,15 +1315,48 @@ export function AdminShell({
         session={session}
       />
 
-        <aside className="sidebar sidebar-untitled">
+        <aside
+          className={`sidebar sidebar-untitled${compactSidebarOpen ? " is-mobile-open" : ""}`}
+        >
           <div className="sidebar-brand sidebar-untitled-brand">
             <div className="sidebar-untitled-brand-row">
               <Link
+                className="sidebar-full-brand-link"
                 href={homeHref}
                 onClick={(event) => handleRouteStart(homeHref, event)}
               >
                 <BrandWordmark className="text-[1.8rem]" />
               </Link>
+              <button
+                aria-label={
+                  compactSidebarOpen
+                    ? locale === "ru"
+                      ? "Свернуть меню"
+                      : "Collapse menu"
+                    : locale === "ru"
+                      ? "Открыть меню"
+                      : "Open menu"
+                }
+                className="sidebar-compact-toggle"
+                onClick={() => setCompactSidebarOpen((current) => !current)}
+                title={
+                  compactSidebarOpen
+                    ? locale === "ru"
+                      ? "Свернуть меню"
+                      : "Collapse menu"
+                    : locale === "ru"
+                      ? "Открыть меню"
+                      : "Open menu"
+                }
+                type="button"
+              >
+                <img
+                  alt=""
+                  aria-hidden="true"
+                  className="sidebar-compact-wave"
+                  src="/waving-hand-skin-1.svg"
+                />
+              </button>
             </div>
           </div>
 
@@ -1343,9 +1380,9 @@ export function AdminShell({
                       onClick={() => setNotificationsOpen(true)}
                       type="button"
                     >
-                      <span className="flex items-center gap-3">
+                      <span className="sidebar-nav-label-wrap">
                         <Icon className="size-4" />
-                        {item.label}
+                        <span className="sidebar-nav-label">{item.label}</span>
                       </span>
                       {typeof item.count === "number" && item.count > 0 ? (
                         <span className="sidebar-count-pill">{item.count}</span>
@@ -1353,9 +1390,9 @@ export function AdminShell({
                     </button>
                   ) : (
                     <a className="sidebar-link-main" href={item.href}>
-                      <span className="flex items-center gap-3">
+                      <span className="sidebar-nav-label-wrap">
                         <Icon className="size-4" />
-                        {item.label}
+                        <span className="sidebar-nav-label">{item.label}</span>
                       </span>
                       {typeof item.count === "number" && item.count > 0 ? (
                         <span className="sidebar-count-pill">{item.count}</span>
@@ -1394,9 +1431,9 @@ export function AdminShell({
                           onClick={() => setNotificationsOpen(true)}
                           type="button"
                         >
-                          <span className="flex items-center gap-3">
+                          <span className="sidebar-nav-label-wrap">
                             <SubIcon className="size-4" />
-                            {subItem.label}
+                            <span className="sidebar-nav-label">{subItem.label}</span>
                           </span>
                           {typeof subItem.count === "number" &&
                           subItem.count > 0 ? (
@@ -1411,9 +1448,9 @@ export function AdminShell({
                           href={subItem.href}
                           key={subItem.href}
                         >
-                          <span className="flex items-center gap-3">
+                          <span className="sidebar-nav-label-wrap">
                             <SubIcon className="size-4" />
-                            {subItem.label}
+                            <span className="sidebar-nav-label">{subItem.label}</span>
                           </span>
                           {typeof subItem.count === "number" &&
                           subItem.count > 0 ? (

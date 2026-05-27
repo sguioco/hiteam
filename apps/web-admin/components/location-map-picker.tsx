@@ -36,6 +36,7 @@ type LocationMapPickerProps = {
   apiKey?: string;
   geofenceRadiusMeters?: number;
   latitude: string;
+  locale?: "ru" | "en";
   mode?: "preview" | "setup";
   longitude: string;
   onSelect: (next: LocationSelection) => void;
@@ -186,6 +187,7 @@ export function LocationMapPicker({
   apiKey,
   geofenceRadiusMeters,
   latitude,
+  locale = "ru",
   longitude,
   mode = "setup",
   onSelect,
@@ -217,6 +219,48 @@ export function LocationMapPicker({
     null,
   );
   const isSetupMode = mode === "setup";
+  const copy =
+    locale === "ru"
+      ? {
+          copyTitle: "Адрес компании",
+          copyBody:
+            "Начни вводить город или адрес. Можно выбрать подсказку Google или поставить точку прямо на карте.",
+          currentLocation: "Моё местоположение",
+          locating: "Определяем...",
+          locationUnsupported:
+            "Браузер не поддерживает определение текущего местоположения.",
+          locationPermission:
+            "Разрешите доступ к геолокации в браузере, чтобы поставить точку по текущему местоположению.",
+          locationFailed: "Не удалось определить текущее местоположение.",
+          missingKey:
+            "Добавь NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, чтобы включить карту и подсказки адресов.",
+          missingKeyState:
+            "Добавь `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, чтобы включить Google Maps, подсказки адресов и обратный геокодинг.",
+          mapsFailed:
+            "Не удалось загрузить Google Maps API. Проверь API key и включённые сервисы.",
+          mapsInitFailed:
+            "Google Maps не инициализировался. Обычно это значит, что у ключа не включён Places API (New), Maps JavaScript API или ключ ограничен для localhost.",
+        }
+      : {
+          copyTitle: "Company address",
+          copyBody:
+            "Start typing a city or address. You can pick a Google suggestion or place the point directly on the map.",
+          currentLocation: "My location",
+          locating: "Locating...",
+          locationUnsupported:
+            "This browser does not support current location detection.",
+          locationPermission:
+            "Allow browser location access to place the point at your current location.",
+          locationFailed: "Unable to detect current location.",
+          missingKey:
+            "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to enable the map and address suggestions.",
+          missingKeyState:
+            "Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to enable Google Maps, address suggestions, and reverse geocoding.",
+          mapsFailed:
+            "Unable to load Google Maps API. Check the API key and enabled services.",
+          mapsInitFailed:
+            "Google Maps did not initialize. This usually means Places API (New), Maps JavaScript API, or localhost key restrictions are not configured.",
+        };
 
   function syncGeofenceCircle() {
     if (!mapRef.current || !window.google?.maps) return;
@@ -273,9 +317,7 @@ export function LocationMapPicker({
 
     if (!googleMapsApiKey) {
       setStatus("missing_key");
-      setStatusMessage(
-        "Добавь NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, чтобы включить карту и подсказки адресов.",
-      );
+      setStatusMessage(copy.missingKey);
       return;
     }
 
@@ -375,9 +417,7 @@ export function LocationMapPicker({
         }
       } catch {
         if (!cancelled) {
-          setStatusMessage(
-            "Google Maps не инициализировался. Обычно это значит, что у ключа не включён Places API (New), Maps JavaScript API или ключ ограничен для localhost.",
-          );
+          setStatusMessage(copy.mapsInitFailed);
           setStatus("error");
         }
       }
@@ -626,9 +666,7 @@ export function LocationMapPicker({
 
   function handleUseCurrentLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocationAccessMessage(
-        "Браузер не поддерживает определение текущего местоположения.",
-      );
+      setLocationAccessMessage(copy.locationUnsupported);
       return;
     }
 
@@ -679,8 +717,8 @@ export function LocationMapPicker({
         setIsLocating(false);
         setLocationAccessMessage(
           error.code === error.PERMISSION_DENIED
-            ? "Разрешите доступ к геолокации в браузере, чтобы поставить точку по текущему местоположению."
-            : "Не удалось определить текущее местоположение.",
+            ? copy.locationPermission
+            : copy.locationFailed,
         );
       },
       {
@@ -695,26 +733,17 @@ export function LocationMapPicker({
     <section className="org-map-shell">
       {isSetupMode && showCopy ? (
         <div className="org-map-copy">
-          <strong>Адрес компании</strong>
-          <p>
-            Начни вводить город или адрес. Можно выбрать подсказку Google или
-            поставить точку прямо на карте.
-          </p>
+          <strong>{copy.copyTitle}</strong>
+          <p>{copy.copyBody}</p>
         </div>
       ) : null}
 
       {status === "missing_key" ? (
-        <div className="org-map-state">
-          Добавь `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, чтобы включить Google Maps,
-          подсказки адресов и обратный геокодинг.
-        </div>
+        <div className="org-map-state">{copy.missingKeyState}</div>
       ) : null}
 
       {status === "error" ? (
-        <div className="org-map-state">
-          {statusMessage ||
-            "Не удалось загрузить Google Maps API. Проверь API key и включённые сервисы."}
-        </div>
+        <div className="org-map-state">{statusMessage || copy.mapsFailed}</div>
       ) : null}
 
       {isSetupMode ? (
@@ -738,7 +767,7 @@ export function LocationMapPicker({
               variant="outline"
             >
               <LocateFixed className="size-4" />
-              {isLocating ? "Определяем..." : "Моё местоположение"}
+              {isLocating ? copy.locating : copy.currentLocation}
             </Button>
             {locationAccessMessage ? (
               <span className="org-map-location-message">

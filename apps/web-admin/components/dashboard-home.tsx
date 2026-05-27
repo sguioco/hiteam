@@ -1858,7 +1858,7 @@ export default function DashboardHome({
             open={createTaskOpen}
           >
             <DialogContent className="manager-create-dialog">
-                  <DialogHeader>
+                  <DialogHeader className="manager-create-dialog-head">
                     <DialogTitle>
                       {taskDraft.mode === "meeting"
                         ? localize(locale, "Новая встреча", "New meeting")
@@ -2177,8 +2177,8 @@ export default function DashboardHome({
                       </div>
                       {taskDraft.mode === "task" ? (
                         <>
-                          <div className="grid grid-cols-2 gap-4">
-                          <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                          <div className="manager-task-toggle-row">
+                          <label className="manager-task-toggle">
                             <Checkbox
                               checked={taskDraft.isRecurring}
                               onCheckedChange={(checked) =>
@@ -2190,11 +2190,11 @@ export default function DashboardHome({
                                 }))
                               }
                             />
-                            <span className="whitespace-nowrap text-sm font-heading leading-none">
+                            <span className="manager-task-toggle-label">
                               {localize(locale, "Сделать регулярной задачей", "Make recurring")}
                             </span>
                           </label>
-                          <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
+                          <label className="manager-task-toggle">
                             <Checkbox
                               checked={taskDraft.requiresPhoto}
                               onCheckedChange={(checked) =>
@@ -2204,16 +2204,16 @@ export default function DashboardHome({
                                 }))
                               }
                             />
-                            <span className="whitespace-nowrap text-sm font-heading leading-none">
+                            <span className="manager-task-toggle-label">
                               {localize(locale, "Требуется фото-подтверждение", "Photo confirmation required")}
                             </span>
                           </label>
                           </div>
                           {taskDraft.isRecurring ? (
-                            <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
+                            <div className="manager-recurring-panel">
                             <label className="grid gap-2 text-sm font-heading">
                               <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
-                              <div className="grid grid-cols-7 justify-items-center gap-1.5 sm:gap-2">
+                              <div className="manager-recurring-days">
                                 {TASK_WEEKDAY_VALUES.map((day) => {
                                   const label = getWeekdayShortLabel(day, locale);
                                   const isSelected = taskDraft.weekDays.includes(day);
@@ -2242,7 +2242,7 @@ export default function DashboardHome({
                                 })}
                               </div>
                             </label>
-                            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
+                            <div className="manager-recurring-schedule-grid">
                               <label className="grid gap-2 text-sm font-heading">
                                 <span>{localize(locale, "Начало", "Start date")}</span>
                                 <TaskDatePicker
@@ -2257,7 +2257,7 @@ export default function DashboardHome({
                                 />
                               </label>
                               <div className="grid gap-2 text-sm font-heading">
-                                <label className="inline-flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-white px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]">
+                                <label className="manager-recurring-time-toggle">
                                   <Checkbox
                                     checked={taskDraft.hasDueTime}
                                     onCheckedChange={(checked) =>

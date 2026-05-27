@@ -489,10 +489,14 @@ export default function OrganizationPageClient({
                 <section className="organization-studio-fieldset organization-studio-logo-field">
                   <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
                   <ImageAdjustField
+                    applyLabel={locale === "ru" ? "Применить" : "Apply"}
+                    cancelLabel={locale === "ru" ? "Отмена" : "Cancel"}
                     dialogDescription={locale === "ru"
                       ? "Подгони логотип: можно изменить масштаб и сдвиг по X/Y перед сохранением."
                       : "Adjust the logo: you can change scale and X/Y offset before saving."}
                     dialogTitle={locale === "ru" ? "Редактировать логотип" : "Edit logo"}
+                    offsetXLabel={locale === "ru" ? "Сдвиг по X" : "Offset X"}
+                    offsetYLabel={locale === "ru" ? "Сдвиг по Y" : "Offset Y"}
                     onChange={(nextLogoDataUrl) => {
                       updateDraft("companyLogoUrl", nextLogoDataUrl ?? "");
                       setError(null);
@@ -528,6 +532,7 @@ export default function OrganizationPageClient({
                       </div>
                     )}
                     value={draft.companyLogoUrl || null}
+                    zoomLabel={locale === "ru" ? "Масштаб" : "Scale"}
                   />
                 </section>
 
@@ -656,6 +661,7 @@ export default function OrganizationPageClient({
                     apiKey={apiKey}
                     geofenceRadiusMeters={draft.geofenceRadiusMeters}
                     latitude={draft.latitude}
+                    locale={locale}
                     longitude={draft.longitude}
                     mode="setup"
                     searchLabel=""

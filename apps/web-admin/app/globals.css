@@ -6210,6 +6210,20 @@ body {
   text-align: left;
 }
 
+.sidebar-nav-label-wrap {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-link-untitled:hover .sidebar-link-main,
 .sidebar-link-untitled.is-active .sidebar-link-main {
   background: transparent;
@@ -6531,6 +6545,46 @@ body {
   white-space: nowrap;
 }
 
+.sidebar-full-brand-link {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.sidebar-compact-toggle {
+  display: none;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.sidebar-compact-toggle:hover {
+  background: #f2f4f7;
+}
+
+.sidebar-compact-toggle:active {
+  transform: scale(0.96);
+}
+
+.sidebar-compact-toggle--static {
+  cursor: default;
+  pointer-events: none;
+}
+
+.sidebar-compact-wave {
+  display: block;
+  width: 31px;
+  height: 31px;
+}
+
 @media (max-width: 1180px) {
   .admin-frame,
   .employee-frame,
@@ -6590,6 +6644,144 @@ body {
 
   .admin-frame {
     grid-template-columns: 1fr;
+  }
+
+  .admin-frame {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    width: 72px;
+    min-width: 72px;
+    height: 100vh;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+    padding: 14px 10px;
+    border-right: 1px solid rgba(16, 24, 40, 0.08);
+    border-bottom: 0;
+    overflow: hidden;
+    transition:
+      width 220ms ease,
+      box-shadow 220ms ease;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open {
+    width: min(296px, calc(100vw - 24px));
+    box-shadow: 22px 0 54px rgba(15, 23, 42, 0.12);
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) {
+    justify-items: center;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-untitled-brand {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    padding: 0;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-untitled-brand-row {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-compact-toggle {
+    display: inline-flex;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-full-brand-link {
+    display: none;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open .sidebar-untitled-brand-row {
+    justify-content: space-between;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-nav-untitled {
+    width: 100%;
+    margin-top: 4px;
+    padding-right: 0;
+    scrollbar-gutter: auto;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-link-untitled {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-link-main,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-sublink {
+    justify-content: center;
+    min-height: 46px;
+    padding: 0;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-nav-label-wrap {
+    justify-content: center;
+    gap: 0;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-nav-label,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-count-pill,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-expand-toggle,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-subnav {
+    display: none;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open .sidebar-link-untitled {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open .sidebar-link-main {
+    justify-content: space-between;
+    padding: 0 12px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open .sidebar-subnav {
+    display: grid;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-footer-untitled {
+    width: 100%;
+    justify-items: center;
+    padding-top: 0;
+    background: transparent;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-wrap {
+    width: 100%;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-card {
+    display: flex;
+    min-height: 48px;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-copy,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-card > .sidebar-expand-toggle {
+    display: none;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-avatar {
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-menu {
+    right: auto;
+    bottom: 0;
+    left: calc(100% + 10px);
   }
 }
 
@@ -7363,11 +7555,23 @@ body {
 }
 
 .manager-create-dialog {
-  display: grid;
-  grid-template-rows: auto auto auto;
-  width: min(1040px, calc(100vw - 2rem));
-  max-height: calc(100dvh - 1.5rem);
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(1080px, calc(100vw - 2rem));
+  max-width: none;
+  max-height: min(900px, calc(100dvh - 1.5rem));
+  overflow: hidden;
+  padding: 24px 26px 18px;
+}
+
+.manager-create-dialog-head {
+  flex: 0 0 auto;
+  padding-right: 34px;
+}
+
+.manager-create-dialog > .manager-create-mode {
+  flex: 0 0 auto;
 }
 
 .manager-board {
@@ -9238,10 +9442,11 @@ body {
 
 .manager-task-form {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 14px;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .manager-task-form-body {
@@ -9249,8 +9454,12 @@ body {
   align-content: start;
   gap: 12px;
   min-height: 0;
-  overflow: visible;
-  padding-right: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  margin-right: -8px;
+  scrollbar-width: thin;
 }
 
 .manager-create-mode {
@@ -9406,6 +9615,79 @@ body {
   grid-template-columns: minmax(174px, 1fr) minmax(138px, 0.76fr);
   gap: 8px;
   min-width: 0;
+}
+
+.manager-task-toggle-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: center;
+}
+
+.manager-task-toggle {
+  display: inline-flex;
+  min-width: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+}
+
+.manager-task-toggle-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.manager-recurring-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--secondary) 10%, transparent);
+}
+
+.manager-recurring-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(32px, 1fr));
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.manager-recurring-days button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+}
+
+.manager-recurring-schedule-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(176px, 220px);
+  gap: 12px;
+  min-width: 0;
+}
+
+.manager-recurring-time-toggle {
+  display: inline-flex;
+  min-height: 44px;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgb(228 231 236 / 0.9);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.manager-recurring-time-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .manager-task-form-actions {
@@ -9601,7 +9883,9 @@ body {
   }
 
   .manager-create-dialog {
-    width: min(940px, calc(100vw - 1.5rem));
+    width: min(960px, calc(100vw - 1.25rem));
+    max-height: calc(100dvh - 1rem);
+    padding: 22px 22px 16px;
   }
 }
 
@@ -9611,7 +9895,8 @@ body {
   }
 
   .manager-task-form-grid,
-  .manager-deadline-row {
+  .manager-deadline-row,
+  .manager-recurring-schedule-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -9671,6 +9956,85 @@ body {
   .manager-create-mode,
   .manager-assignee-picker {
     grid-template-columns: 1fr;
+  }
+
+  .manager-create-dialog {
+    width: calc(100vw - 0.75rem);
+    max-height: calc(100dvh - 0.75rem);
+    gap: 10px;
+    padding: 18px 16px 14px;
+    border-radius: 24px;
+  }
+
+  .manager-create-dialog-head {
+    gap: 4px;
+    padding-right: 28px;
+  }
+
+  .manager-create-dialog-head h2 {
+    font-size: 1.55rem;
+    letter-spacing: -0.02em;
+  }
+
+  .manager-create-dialog-head p {
+    line-height: 1.35;
+  }
+
+  .manager-create-dialog .manager-create-mode {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 5px;
+    border-radius: 18px;
+  }
+
+  .manager-create-dialog .manager-create-mode button {
+    min-height: 40px;
+    padding: 0 10px;
+    border-radius: 13px;
+    font-size: 0.88rem;
+  }
+
+  .manager-create-dialog .manager-create-mode--compact {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .manager-task-form {
+    gap: 10px;
+  }
+
+  .manager-task-form-body {
+    gap: 10px;
+    padding-right: 6px;
+    margin-right: -6px;
+  }
+
+  .manager-task-toggle-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .manager-recurring-panel {
+    gap: 12px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .manager-recurring-days {
+    grid-template-columns: repeat(7, minmax(28px, 1fr));
+    gap: 5px;
+  }
+
+  .manager-recurring-days button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    font-size: 0.68rem;
+  }
+
+  .manager-task-form-actions {
+    gap: 10px;
+    padding-top: 10px;
   }
 
   .manager-intro-brand {
@@ -9755,6 +10119,55 @@ body {
   .manager-line-meta {
     justify-items: start;
     text-align: left;
+  }
+}
+
+@media (max-height: 780px) and (min-width: 761px) {
+  .manager-create-dialog {
+    gap: 10px;
+    max-height: calc(100dvh - 0.75rem);
+    padding: 18px 22px 14px;
+  }
+
+  .manager-create-dialog-head {
+    gap: 3px;
+  }
+
+  .manager-create-dialog-head h2 {
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+  }
+
+  .manager-create-dialog-head p {
+    line-height: 1.35;
+  }
+
+  .manager-create-mode button {
+    min-height: 40px;
+  }
+
+  .manager-task-form,
+  .manager-task-form-body {
+    gap: 10px;
+  }
+
+  .manager-assignee-option {
+    padding: 10px 12px;
+  }
+
+  .manager-create-dialog textarea {
+    min-height: 86px;
+  }
+
+  .manager-recurring-panel {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .manager-recurring-days button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
 }
 

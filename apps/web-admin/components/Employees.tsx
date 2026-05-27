@@ -697,9 +697,7 @@ const Employees = ({
           fixedBreakDurationMinutes: templateDraft.fixedBreakEnabled
             ? fixedBreakDuration
             : 0,
-          fixedBreakIsPaid: templateDraft.fixedBreakEnabled
-            ? templateDraft.fixedBreakIsPaid
-            : false,
+          fixedBreakIsPaid: false,
         }),
       });
 
@@ -2064,7 +2062,7 @@ const Employees = ({
       fixedBreakEnabled: fixedBreakDuration > 0,
       fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
       fixedBreakDurationMinutes: String(fixedBreakDuration || 30),
-      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
+      fixedBreakIsPaid: false,
     });
     setAssignShiftDialog({
       employeeId: employee.id,
@@ -2082,7 +2080,7 @@ const Employees = ({
       fixedBreakEnabled: fixedBreakDuration > 0,
       fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
       fixedBreakDurationMinutes: String(fixedBreakDuration || 30),
-      fixedBreakIsPaid: Boolean(template?.fixedBreakIsPaid),
+      fixedBreakIsPaid: false,
     }));
   }
 
@@ -2129,9 +2127,7 @@ const Employees = ({
           fixedBreakDurationMinutes: assignShiftDraft.fixedBreakEnabled
             ? fixedBreakDuration
             : 0,
-          fixedBreakIsPaid: assignShiftDraft.fixedBreakEnabled
-            ? assignShiftDraft.fixedBreakIsPaid
-            : false,
+          fixedBreakIsPaid: false,
         }),
       });
 
@@ -3639,7 +3635,7 @@ const Employees = ({
                 {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
               </label>
               {templateDraft.fixedBreakEnabled ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
                     <TaskTimePicker
@@ -3667,20 +3663,6 @@ const Employees = ({
                       type="number"
                       value={templateDraft.fixedBreakDurationMinutes}
                     />
-                  </label>
-                  <label className="flex items-center gap-3 pt-6 text-sm font-heading text-muted-foreground">
-                    <input
-                      checked={templateDraft.fixedBreakIsPaid}
-                      className="h-4 w-4 rounded border accent-primary"
-                      onChange={(event) =>
-                        setTemplateDraft((current) => ({
-                          ...current,
-                          fixedBreakIsPaid: event.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    {runtimeLocalize("Оплачиваемый", "Paid", locale)}
                   </label>
                 </div>
               ) : null}
@@ -4783,7 +4765,7 @@ const Employees = ({
                 {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
               </label>
               {assignShiftDraft.fixedBreakEnabled ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
                     <TaskTimePicker
@@ -4811,20 +4793,6 @@ const Employees = ({
                       type="number"
                       value={assignShiftDraft.fixedBreakDurationMinutes}
                     />
-                  </label>
-                  <label className="flex items-center gap-3 pt-6 text-sm font-heading text-muted-foreground">
-                    <input
-                      checked={assignShiftDraft.fixedBreakIsPaid}
-                      className="h-4 w-4 rounded border accent-primary"
-                      onChange={(event) =>
-                        setAssignShiftDraft((current) => ({
-                          ...current,
-                          fixedBreakIsPaid: event.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    {runtimeLocalize("Оплачиваемый", "Paid", locale)}
                   </label>
                 </div>
               ) : null}
