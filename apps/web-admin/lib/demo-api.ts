@@ -93,6 +93,7 @@ type DemoState = {
     id: string;
     name: string;
     description: string | null;
+    avatarEmoji?: string | null;
     managerEmployeeId: string;
     memberships: Array<{
       id: string;
@@ -6464,9 +6465,11 @@ export async function demoApiRequest<T>(
     /^\/collaboration\/(?:groups|teams)\/([^/]+)$/,
   );
   if (groupMatch && method === "PATCH") {
-    const payload = parseBody<{ name?: string; description?: string }>(
-      options?.body,
-    );
+    const payload = parseBody<{
+      name?: string;
+      description?: string;
+      avatarEmoji?: string;
+    }>(options?.body);
     updateState((state) => {
       const group = state.groups.find((entry) => entry.id === groupMatch[1]);
       if (!group) return;
