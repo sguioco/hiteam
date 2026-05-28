@@ -21,6 +21,19 @@ export class UpdateEmployeeInvitationSetupDto {
 
   @IsOptional()
   @IsString()
+  teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['owner', 'team_leader', 'employee'])
+  role?: 'owner' | 'team_leader' | 'employee';
+
+  @IsOptional()
+  @IsString()
+  positionTitle?: string;
+
+  @IsOptional()
+  @IsString()
   @IsIn(['STATIONARY', 'FIELD'])
   workMode?: 'STATIONARY' | 'FIELD';
 }

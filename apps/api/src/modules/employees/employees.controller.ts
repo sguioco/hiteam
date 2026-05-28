@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { BulkAssignEmployeesDto } from './dto/bulk-assign-employees.dto';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
@@ -17,6 +18,7 @@ import { UpdateEmployeeBreaksDto } from './dto/update-employee-breaks.dto';
 import { UpdateEmployeeManagerAccessDto } from './dto/update-employee-manager-access.dto';
 import { UpdateEmployeeWorkModeDto } from './dto/update-employee-work-mode.dto';
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
+import { UpdateEmployeeAccessDto } from './dto/update-employee-access.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 import { EmployeesService } from './employees.service';
 
@@ -129,9 +131,27 @@ export class EmployeesController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch('bulk-assign')
+  bulkAssign(@CurrentUser() user: JwtUser, @Body() dto: BulkAssignEmployeesDto) {
+    return this.employeesService.bulkAssignEmployees(user.tenantId, user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get(':employeeId')
   getById(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
     return this.employeesService.getById(user.tenantId, employeeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch(':employeeId')
+  updateAccess(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: UpdateEmployeeAccessDto,
+  ) {
+    return this.employeesService.updateEmployeeAccess(user.tenantId, user.sub, employeeId, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -142,12 +162,7 @@ export class EmployeesController {
     @Param('employeeId') employeeId: string,
     @Body() dto: UpdateEmployeeBreaksDto,
   ) {
-    return this.employeesService.updateBreaksAccess(
-      user.tenantId,
-      user.sub,
-      employeeId,
-      dto.breaksEnabled,
-    );
+    return this.employeesService.updateBreaksAccess(user.tenantId, user.sub, employeeId, dto.breaksEnabled);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -158,12 +173,7 @@ export class EmployeesController {
     @Param('employeeId') employeeId: string,
     @Body() dto: UpdateEmployeeWorkModeDto,
   ) {
-    return this.employeesService.updateWorkMode(
-      user.tenantId,
-      user.sub,
-      employeeId,
-      dto.workMode,
-    );
+    return this.employeesService.updateWorkMode(user.tenantId, user.sub, employeeId, dto.workMode);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -181,12 +191,7 @@ export class EmployeesController {
     @Param('employeeId') employeeId: string,
     @Body() dto: UpdateEmployeeManagerAccessDto,
   ) {
-    return this.employeesService.updateManagerAccess(
-      user.tenantId,
-      user.sub,
-      employeeId,
-      dto.grantManagerAccess,
-    );
+    return this.employeesService.updateManagerAccess(user.tenantId, user.sub, employeeId, dto.grantManagerAccess);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

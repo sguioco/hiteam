@@ -49,8 +49,20 @@ export class CollaborationController {
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Get("teams")
+  teams(@CurrentUser() user: JwtUser) {
+    return this.collaborationService.listGroups(user.sub);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
   @Post("groups")
   createGroup(@CurrentUser() user: JwtUser, @Body() dto: CreateGroupDto) {
+    return this.collaborationService.createGroup(user.sub, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Post("teams")
+  createTeam(@CurrentUser() user: JwtUser, @Body() dto: CreateGroupDto) {
     return this.collaborationService.createGroup(user.sub, dto);
   }
 
@@ -65,9 +77,25 @@ export class CollaborationController {
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Patch("teams/:teamId")
+  updateTeam(
+    @CurrentUser() user: JwtUser,
+    @Param("teamId") teamId: string,
+    @Body() dto: UpdateGroupDto,
+  ) {
+    return this.collaborationService.updateGroup(user.sub, teamId, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
   @Delete("groups/:groupId")
   deleteGroup(@CurrentUser() user: JwtUser, @Param("groupId") groupId: string) {
     return this.collaborationService.deleteGroup(user.sub, groupId);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Delete("teams/:teamId")
+  deleteTeam(@CurrentUser() user: JwtUser, @Param("teamId") teamId: string) {
+    return this.collaborationService.deleteGroup(user.sub, teamId);
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
@@ -78,6 +106,16 @@ export class CollaborationController {
     @Body() dto: SetGroupMembersDto,
   ) {
     return this.collaborationService.setGroupMembers(user.sub, groupId, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Post("teams/:teamId/members")
+  setTeamMembers(
+    @CurrentUser() user: JwtUser,
+    @Param("teamId") teamId: string,
+    @Body() dto: SetGroupMembersDto,
+  ) {
+    return this.collaborationService.setGroupMembers(user.sub, teamId, dto);
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
@@ -119,7 +157,10 @@ export class CollaborationController {
     @CurrentUser() user: JwtUser,
     @Param("announcementId") announcementId: string,
   ) {
-    return this.collaborationService.markAnnouncementRead(user.sub, announcementId);
+    return this.collaborationService.markAnnouncementRead(
+      user.sub,
+      announcementId,
+    );
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
@@ -137,7 +178,10 @@ export class CollaborationController {
     @CurrentUser() user: JwtUser,
     @Param("announcementId") announcementId: string,
   ) {
-    return this.collaborationService.listAnnouncementReaders(user.sub, announcementId);
+    return this.collaborationService.listAnnouncementReaders(
+      user.sub,
+      announcementId,
+    );
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
@@ -160,7 +204,10 @@ export class CollaborationController {
     @CurrentUser() user: JwtUser,
     @Param("announcementId") announcementId: string,
   ) {
-    return this.collaborationService.deleteAnnouncement(user.sub, announcementId);
+    return this.collaborationService.deleteAnnouncement(
+      user.sub,
+      announcementId,
+    );
   }
 
   @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")

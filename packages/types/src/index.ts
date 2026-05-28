@@ -1,5 +1,6 @@
 export type AttendanceState = 'not_checked_in' | 'checked_in' | 'on_break' | 'checked_out';
 export type EmployeeWorkMode = 'STATIONARY' | 'FIELD';
+export type EmployeeAccessRole = 'owner' | 'team_leader' | 'employee';
 
 export type ManagerKpi = {
   label: string;
@@ -535,6 +536,7 @@ export type InvitationRecord = {
   firstName?: string | null;
   lastName?: string | null;
   middleName?: string | null;
+  positionTitle?: string | null;
   birthDate?: string | null;
   gender?: string | null;
   phone?: string | null;
@@ -542,6 +544,7 @@ export type InvitationRecord = {
   rejectedReason?: string | null;
   approvedShiftTemplateId?: string | null;
   approvedGroupId?: string | null;
+  role?: EmployeeAccessRole;
   workMode?: EmployeeWorkMode;
 };
 

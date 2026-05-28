@@ -44,6 +44,19 @@ export class ReviewEmployeeInvitationDto {
 
   @IsOptional()
   @IsString()
+  teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['owner', 'team_leader', 'employee'])
+  role?: 'owner' | 'team_leader' | 'employee';
+
+  @IsOptional()
+  @IsString()
+  positionTitle?: string;
+
+  @IsOptional()
+  @IsString()
   rejectedReason?: string;
 
   @IsOptional()

@@ -151,7 +151,9 @@ function dateKey(value = new Date()) {
 
 function createDemoBillingFirstPaidAt() {
   const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  ).toISOString();
 }
 
 function addUtcMonths(anchor: Date, monthOffset: number) {
@@ -707,7 +709,8 @@ function createInitialState(): DemoState {
       title,
       sortOrder: index + 1,
       isCompleted: index < completedCount,
-      completedAt: index < completedCount ? createIsoAt(0, 10 + index, 12) : null,
+      completedAt:
+        index < completedCount ? createIsoAt(0, 10 + index, 12) : null,
       completedByEmployee:
         index < completedCount
           ? {
@@ -800,16 +803,19 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-attendance-demo-ilya-1",
       title: "Илья: открыть смену и проверить зал",
-      description: "Сотрудник пришел с опозданием, но закрыл первые пункты открытия.",
+      description:
+        "Сотрудник пришел с опозданием, но закрыл первые пункты открытия.",
       dueAt: createIsoAt(0, 10, 0),
       priority: "HIGH",
       status: "DONE",
       assigneeEmployeeId: employees[1].id,
       groupId: groups[0].id,
-      checklistItems: buildChecklistProgress("task-attendance-demo-ilya-1", employees[1], [
-        "Проверить входную зону",
-        "Подготовить рабочее место",
-      ], 2),
+      checklistItems: buildChecklistProgress(
+        "task-attendance-demo-ilya-1",
+        employees[1],
+        ["Проверить входную зону", "Подготовить рабочее место"],
+        2,
+      ),
     }),
     buildTask({
       id: "task-attendance-demo-ilya-2",
@@ -830,12 +836,17 @@ function createInitialState(): DemoState {
       status: "IN_PROGRESS",
       assigneeEmployeeId: employees[1].id,
       groupId: groups[0].id,
-      checklistItems: buildChecklistProgress("task-attendance-demo-ilya-3", employees[1], [
-        "Заменить полотенца",
-        "Проверить лампы",
-        "Сделать фото кабинета",
-        "Отметить готовность в комментарии",
-      ], 2),
+      checklistItems: buildChecklistProgress(
+        "task-attendance-demo-ilya-3",
+        employees[1],
+        [
+          "Заменить полотенца",
+          "Проверить лампы",
+          "Сделать фото кабинета",
+          "Отметить готовность в комментарии",
+        ],
+        2,
+      ),
     }),
     buildTask({
       id: "task-attendance-demo-ilya-4",
@@ -866,12 +877,17 @@ function createInitialState(): DemoState {
       status: "IN_PROGRESS",
       assigneeEmployeeId: employees[2].id,
       groupId: groups[0].id,
-      checklistItems: buildChecklistProgress("task-attendance-demo-maria-2", employees[2], [
-        "Проверить записи",
-        "Обновить телефоны",
-        "Отметить предоплату",
-        "Отправить напоминания",
-      ], 3),
+      checklistItems: buildChecklistProgress(
+        "task-attendance-demo-maria-2",
+        employees[2],
+        [
+          "Проверить записи",
+          "Обновить телефоны",
+          "Отметить предоплату",
+          "Отправить напоминания",
+        ],
+        3,
+      ),
     }),
     buildTask({
       id: "task-attendance-demo-dmitry-1",
@@ -882,12 +898,17 @@ function createInitialState(): DemoState {
       status: "IN_PROGRESS",
       assigneeEmployeeId: employees[3].id,
       groupId: groups[1].id,
-      checklistItems: buildChecklistProgress("task-attendance-demo-dmitry-1", employees[3], [
-        "Сверить наличные",
-        "Проверить терминал",
-        "Сохранить Z-отчет",
-        "Передать комментарий владельцу",
-      ], 1),
+      checklistItems: buildChecklistProgress(
+        "task-attendance-demo-dmitry-1",
+        employees[3],
+        [
+          "Сверить наличные",
+          "Проверить терминал",
+          "Сохранить Z-отчет",
+          "Передать комментарий владельцу",
+        ],
+        1,
+      ),
     }),
     buildTask({
       id: "task-attendance-demo-dmitry-2",
@@ -902,23 +923,30 @@ function createInitialState(): DemoState {
     buildTask({
       id: "task-attendance-demo-olga-1",
       title: "Ольга: открыть витрину",
-      description: "Сотрудник в расписании, но прихода нет, задача остается просроченной.",
+      description:
+        "Сотрудник в расписании, но прихода нет, задача остается просроченной.",
       dueAt: createIsoAt(0, 9, 30),
       priority: "URGENT",
       status: "TODO",
       assigneeEmployeeId: employees[4].id,
       groupId: groups[1].id,
-      checklistItems: buildChecklistProgress("task-attendance-demo-olga-1", employees[4], [
-        "Включить подсветку",
-        "Проверить ценники",
-        "Сделать фото витрины",
-        "Сообщить о готовности",
-      ], 0),
+      checklistItems: buildChecklistProgress(
+        "task-attendance-demo-olga-1",
+        employees[4],
+        [
+          "Включить подсветку",
+          "Проверить ценники",
+          "Сделать фото витрины",
+          "Сообщить о готовности",
+        ],
+        0,
+      ),
     }),
     buildTask({
       id: "task-attendance-demo-alexey-1",
       title: "Алексей: подготовить позднюю смену",
-      description: "Второй no-show сотрудник: смена есть, выполненных задач нет.",
+      description:
+        "Второй no-show сотрудник: смена есть, выполненных задач нет.",
       dueAt: createIsoAt(0, 11, 15),
       priority: "HIGH",
       status: "TODO",
@@ -1733,7 +1761,8 @@ function shouldHandle(token?: string) {
   const isDemoToken = isDemoAccessToken(activeToken);
   const sessionEmail = session?.user.email.trim().toLowerCase();
   const isOwnerDemoAccount =
-    sessionEmail === DEMO_ADMIN_EMAIL && (!token || token === session?.accessToken);
+    sessionEmail === DEMO_ADMIN_EMAIL &&
+    (!token || token === session?.accessToken);
 
   return (
     isOwnerDemoAccount ||
@@ -2189,13 +2218,18 @@ function filterDemoTasks(state: DemoState, searchParams: URLSearchParams) {
 
   return state.tasks.filter((task) => {
     if (search) {
-      const haystack = [task.title, task.description ?? ""].join(" ").toLowerCase();
+      const haystack = [task.title, task.description ?? ""]
+        .join(" ")
+        .toLowerCase();
       if (!haystack.includes(search)) return false;
     }
     if (status && task.status !== status) return false;
     if (priority && task.priority !== priority) return false;
     if (groupId && task.groupId !== groupId) return false;
-    if (assigneeEmployeeId && task.assigneeEmployee?.id !== assigneeEmployeeId) {
+    if (
+      assigneeEmployeeId &&
+      task.assigneeEmployee?.id !== assigneeEmployeeId
+    ) {
       return false;
     }
     if (
@@ -2277,7 +2311,9 @@ function buildDemoCollaborationAnalytics(state: DemoState, days: number) {
       activeTasks: activeTasks.length,
       overdueTasks: overdueTasks.length,
       urgentOpenTasks: urgentOpen.length,
-      completionRate: tasks.length ? (completedTasks.length / tasks.length) * 100 : 0,
+      completionRate: tasks.length
+        ? (completedTasks.length / tasks.length) * 100
+        : 0,
       averageCompletionHours: null,
       averageChecklistCompletionRate: 0,
       groupsCount: state.groups.length,
@@ -2325,7 +2361,9 @@ function buildDemoCollaborationAnalytics(state: DemoState, days: number) {
     }),
     groupPerformance: state.groups.map((group) => {
       const groupTasks = tasks.filter((task) => task.groupId === group.id);
-      const groupCompleted = groupTasks.filter((task) => task.status === "DONE");
+      const groupCompleted = groupTasks.filter(
+        (task) => task.status === "DONE",
+      );
       const groupActive = groupTasks.filter(
         (task) => task.status === "TODO" || task.status === "IN_PROGRESS",
       );
@@ -3001,7 +3039,9 @@ function buildDemoEmployeeRecords(state: DemoState) {
           roles:
             employee.user.email === DEMO_ADMIN_EMAIL
               ? [{ role: { code: "tenant_owner" } }]
-              : [],
+              : Array.isArray((employee.user as any).roles)
+                ? (employee.user as any).roles
+                : [],
         }
       : null,
     biometricProfile: {
@@ -3033,6 +3073,29 @@ function buildDemoEmployeesBootstrap(state: DemoState) {
     },
     canCheckWorkdays: true,
   };
+}
+
+function buildDemoAccessRoleAssignments(role?: string) {
+  if (role === "owner") {
+    return [{ role: { code: "tenant_owner" } }];
+  }
+
+  if (role === "team_leader") {
+    return [{ role: { code: "employee" } }, { role: { code: "manager" } }];
+  }
+
+  if (role === "employee") {
+    return [{ role: { code: "employee" } }];
+  }
+
+  return null;
+}
+
+function applyDemoEmployeeAccessRole(employee: DemoEmployee, role?: string) {
+  const roles = buildDemoAccessRoleAssignments(role);
+  if (!roles || !employee.user) return;
+
+  (employee.user as any).roles = roles;
 }
 
 function buildDemoEmployeeManagerAccess(state: DemoState, employeeId: string) {
@@ -3096,10 +3159,12 @@ function buildDemoEmployeeDetailBootstrap(
       items: anomalies.items.filter((item) => item.employeeId === employeeId),
       totals: {
         critical: anomalies.items.filter(
-          (item) => item.employeeId === employeeId && item.severity === "critical",
+          (item) =>
+            item.employeeId === employeeId && item.severity === "critical",
         ).length,
         warning: anomalies.items.filter(
-          (item) => item.employeeId === employeeId && item.severity === "warning",
+          (item) =>
+            item.employeeId === employeeId && item.severity === "warning",
         ).length,
       },
     },
@@ -4000,7 +4065,10 @@ function buildDemoDashboardInitialData(state: DemoState, token?: string) {
     ? buildDemoEmployeeShowcaseScheduleShifts(snapshot, employeeId)
     : snapshot.shifts;
   const taskBoard = buildDemoShowcaseTaskBoardForCurrentUser(snapshot, token);
-  const personalTaskBoard = buildDemoEmployeeShowcaseTaskBoard(snapshot, employeeId);
+  const personalTaskBoard = buildDemoEmployeeShowcaseTaskBoard(
+    snapshot,
+    employeeId,
+  );
   const currentShift = scheduleShifts.find((shift) => {
     const now = Date.now();
     return (
@@ -4113,7 +4181,9 @@ export function getDemoDashboardBootstrap(token?: string) {
   };
 }
 
-export function getDemoAttendanceBootstrap(searchParams = new URLSearchParams()) {
+export function getDemoAttendanceBootstrap(
+  searchParams = new URLSearchParams(),
+) {
   const state = loadState();
   return buildDemoAttendanceBootstrap(state, searchParams);
 }
@@ -4996,15 +5066,22 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/billing/summary" && method === "GET") {
-    const usedSeats = currentState.employees.length + currentState.invitations.length;
+    const usedSeats =
+      currentState.employees.length + currentState.invitations.length;
     const requiredSeats = Math.max(
       currentState.billingPaidSeats,
       currentState.billingRequiredSeats,
       usedSeats,
     );
-    const missingSeats = Math.max(0, requiredSeats - currentState.billingPaidSeats);
-    const billingPeriod = getBillingPeriodFromFirstPayment(currentState.billingFirstPaidAt);
-    const serviceActive = Boolean(currentState.billingFirstPaidAt) && missingSeats === 0;
+    const missingSeats = Math.max(
+      0,
+      requiredSeats - currentState.billingPaidSeats,
+    );
+    const billingPeriod = getBillingPeriodFromFirstPayment(
+      currentState.billingFirstPaidAt,
+    );
+    const serviceActive =
+      Boolean(currentState.billingFirstPaidAt) && missingSeats === 0;
     const unitAmount = 3;
     const currency = "USD";
     return {
@@ -5186,7 +5263,9 @@ export async function demoApiRequest<T>(
       }
       employee.breaksEnabled = Boolean(payload.breaksEnabled);
     });
-    return next.employees.find((item) => item.id === employeeBreaksMatch[1]) as T;
+    return next.employees.find(
+      (item) => item.id === employeeBreaksMatch[1],
+    ) as T;
   }
 
   const employeeWorkModeMatch = pathname.match(
@@ -5224,7 +5303,15 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/employees/invitations" && method === "POST") {
-    const payload = parseBody<{ email?: string; phone?: string }>(options?.body);
+    const payload = parseBody<{
+      email?: string;
+      phone?: string;
+      firstName?: string;
+      lastName?: string;
+      positionTitle?: string;
+      role?: "owner" | "team_leader" | "employee";
+      teamId?: string;
+    }>(options?.body);
     const nextState = updateState((state) => {
       const invitation = {
         id: buildTaskId("invitation"),
@@ -5233,16 +5320,18 @@ export async function demoApiRequest<T>(
         expiresAt: createIsoAt(3, 23, 59),
         submittedAt: null,
         resentCount: 0,
-        firstName: null,
-        lastName: null,
+        firstName: payload.firstName ?? null,
+        lastName: payload.lastName ?? null,
         middleName: null,
+        positionTitle: payload.positionTitle ?? null,
         birthDate: null,
         gender: null,
         phone: payload.phone ?? null,
         avatarUrl: null,
         rejectedReason: null,
         approvedShiftTemplateId: null,
-        approvedGroupId: null,
+        approvedGroupId: payload.teamId || null,
+        role: payload.role ?? "employee",
       };
       state.invitations.unshift(invitation);
       state.billingRequiredSeats = Math.max(
@@ -5275,11 +5364,17 @@ export async function demoApiRequest<T>(
   if (deleteInvitationMatch && method === "DELETE") {
     updateState((state) => {
       const invitationId = deleteInvitationMatch[1];
-      const invitation = state.invitations.find((item) => item.id === invitationId);
+      const invitation = state.invitations.find(
+        (item) => item.id === invitationId,
+      );
       const employeeId = invitation?.employeeId ?? null;
-      state.invitations = state.invitations.filter((item) => item.id !== invitationId);
+      state.invitations = state.invitations.filter(
+        (item) => item.id !== invitationId,
+      );
       if (employeeId) {
-        state.employees = state.employees.filter((item) => item.id !== employeeId);
+        state.employees = state.employees.filter(
+          (item) => item.id !== employeeId,
+        );
       }
       state.billingRequiredSeats = Math.max(
         state.billingPaidSeats,
@@ -5300,8 +5395,11 @@ export async function demoApiRequest<T>(
       firstName?: string;
       lastName?: string;
       middleName?: string;
+      positionTitle?: string;
       shiftTemplateId?: string;
       groupId?: string;
+      teamId?: string;
+      role?: "owner" | "team_leader" | "employee";
     }>(options?.body);
     const nextState = updateState((state) => {
       const invitation = state.invitations.find(
@@ -5314,8 +5412,12 @@ export async function demoApiRequest<T>(
       invitation.firstName = payload.firstName?.trim() || null;
       invitation.lastName = payload.lastName?.trim() || null;
       invitation.middleName = payload.middleName?.trim() || null;
-      invitation.approvedShiftTemplateId = payload.shiftTemplateId?.trim() || null;
-      invitation.approvedGroupId = payload.groupId?.trim() || null;
+      invitation.positionTitle = payload.positionTitle?.trim() || null;
+      invitation.approvedShiftTemplateId =
+        payload.shiftTemplateId?.trim() || null;
+      invitation.approvedGroupId =
+        (payload.teamId ?? payload.groupId)?.trim() || null;
+      invitation.role = payload.role ?? invitation.role ?? "employee";
     });
 
     const invitation = nextState.invitations.find(
@@ -5341,6 +5443,14 @@ export async function demoApiRequest<T>(
         invitation.firstName = payload.firstName;
         invitation.lastName = payload.lastName;
         invitation.middleName = payload.middleName ?? null;
+        invitation.positionTitle =
+          payload.positionTitle ?? invitation.positionTitle ?? null;
+        invitation.approvedGroupId =
+          payload.teamId ??
+          payload.groupId ??
+          invitation.approvedGroupId ??
+          null;
+        invitation.role = payload.role ?? invitation.role ?? "employee";
         invitation.birthDate = payload.birthDate ?? null;
         invitation.gender = payload.gender ?? null;
         invitation.phone = payload.phone ?? null;
@@ -5404,7 +5514,11 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/bootstrap/collaboration" && method === "GET") {
-    return buildDemoCollaborationBootstrap(currentState, token, url.searchParams) as T;
+    return buildDemoCollaborationBootstrap(
+      currentState,
+      token,
+      url.searchParams,
+    ) as T;
   }
 
   const employeeDetailBootstrapMatch = pathname.match(
@@ -5431,7 +5545,11 @@ export async function demoApiRequest<T>(
   }
 
   if (pathname === "/bootstrap/requests" && method === "GET") {
-    return buildDemoRequestsBootstrap(currentState, token, url.searchParams) as T;
+    return buildDemoRequestsBootstrap(
+      currentState,
+      token,
+      url.searchParams,
+    ) as T;
   }
 
   if (pathname === "/bootstrap/activity" && method === "GET") {
@@ -5994,7 +6112,9 @@ export async function demoApiRequest<T>(
           : null,
         gracePeriodMinutes: Number(payload.gracePeriodMinutes ?? 10),
         fixedBreakStartsAtLocal: payload.fixedBreakStartsAtLocal ?? null,
-        fixedBreakDurationMinutes: Number(payload.fixedBreakDurationMinutes ?? 0),
+        fixedBreakDurationMinutes: Number(
+          payload.fixedBreakDurationMinutes ?? 0,
+        ),
         fixedBreakIsPaid: Boolean(payload.fixedBreakIsPaid),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -6028,13 +6148,19 @@ export async function demoApiRequest<T>(
           `${payload.shiftDate}T${template.endsAtLocal}:00`,
         ).toISOString(),
         fixedBreakStartsAt:
-          Number(payload.fixedBreakDurationMinutes ?? template.fixedBreakDurationMinutes ?? 0) > 0
+          Number(
+            payload.fixedBreakDurationMinutes ??
+              template.fixedBreakDurationMinutes ??
+              0,
+          ) > 0
             ? new Date(
                 `${payload.shiftDate}T${payload.fixedBreakStartsAtLocal ?? template.fixedBreakStartsAtLocal ?? "13:00"}:00`,
               ).toISOString()
             : null,
         fixedBreakDurationMinutes: Number(
-          payload.fixedBreakDurationMinutes ?? template.fixedBreakDurationMinutes ?? 0,
+          payload.fixedBreakDurationMinutes ??
+            template.fixedBreakDurationMinutes ??
+            0,
         ),
         fixedBreakIsPaid: Boolean(
           payload.fixedBreakIsPaid ?? template.fixedBreakIsPaid,
@@ -6070,7 +6196,9 @@ export async function demoApiRequest<T>(
   if (scheduleShiftMatch && method === "PATCH") {
     const payload = parseBody<any>(options?.body);
     updateState((state) => {
-      const shift = state.shifts.find((item) => item.id === scheduleShiftMatch[1]);
+      const shift = state.shifts.find(
+        (item) => item.id === scheduleShiftMatch[1],
+      );
       if (!shift) return;
       const template =
         state.templates.find((item) => item.id === payload.templateId) ??
@@ -6083,18 +6211,30 @@ export async function demoApiRequest<T>(
       const shiftDate = payload.shiftDate ?? shift.shiftDate;
 
       shift.shiftDate = shiftDate;
-      shift.startsAt = new Date(`${shiftDate}T${template.startsAtLocal}:00`).toISOString();
-      shift.endsAt = new Date(`${shiftDate}T${template.endsAtLocal}:00`).toISOString();
+      shift.startsAt = new Date(
+        `${shiftDate}T${template.startsAtLocal}:00`,
+      ).toISOString();
+      shift.endsAt = new Date(
+        `${shiftDate}T${template.endsAtLocal}:00`,
+      ).toISOString();
       shift.fixedBreakStartsAt =
-        Number(payload.fixedBreakDurationMinutes ?? shift.fixedBreakDurationMinutes ?? 0) > 0
+        Number(
+          payload.fixedBreakDurationMinutes ??
+            shift.fixedBreakDurationMinutes ??
+            0,
+        ) > 0
           ? new Date(
               `${shiftDate}T${payload.fixedBreakStartsAtLocal ?? shift.fixedBreakStartsAtLocal ?? "13:00"}:00`,
             ).toISOString()
           : null;
       shift.fixedBreakDurationMinutes = Number(
-        payload.fixedBreakDurationMinutes ?? shift.fixedBreakDurationMinutes ?? 0,
+        payload.fixedBreakDurationMinutes ??
+          shift.fixedBreakDurationMinutes ??
+          0,
       );
-      shift.fixedBreakIsPaid = Boolean(payload.fixedBreakIsPaid ?? shift.fixedBreakIsPaid);
+      shift.fixedBreakIsPaid = Boolean(
+        payload.fixedBreakIsPaid ?? shift.fixedBreakIsPaid,
+      );
       shift.employee = employee;
       shift.location = template.location;
       shift.position = template.position;
@@ -6104,10 +6244,14 @@ export async function demoApiRequest<T>(
     return undefined as T;
   }
 
-  const scheduleShiftCancelMatch = pathname.match(/^\/schedule\/shifts\/([^/]+)\/cancel$/);
+  const scheduleShiftCancelMatch = pathname.match(
+    /^\/schedule\/shifts\/([^/]+)\/cancel$/,
+  );
   if (scheduleShiftCancelMatch && method === "POST") {
     updateState((state) => {
-      const shift = state.shifts.find((item) => item.id === scheduleShiftCancelMatch[1]);
+      const shift = state.shifts.find(
+        (item) => item.id === scheduleShiftCancelMatch[1],
+      );
       if (shift) {
         shift.status = "CANCELLED";
         shift.updatedAt = new Date().toISOString();
@@ -6272,25 +6416,53 @@ export async function demoApiRequest<T>(
     return undefined as T;
   }
 
-  if (pathname === "/collaboration/groups" && method === "POST") {
+  if (
+    (pathname === "/collaboration/groups" ||
+      pathname === "/collaboration/teams") &&
+    method === "POST"
+  ) {
     const payload = parseBody<any>(options?.body);
+    const memberEmployeeIds = Array.from(
+      new Set<string>(payload.memberEmployeeIds ?? []),
+    );
+    const created = {
+      id: buildTaskId("group"),
+      name: payload.name,
+      description: payload.description ?? null,
+      avatarEmoji: payload.avatarEmoji ?? "👥",
+      managerEmployeeId: "emp-1",
+      memberships: [] as any[],
+      _count: {
+        tasks: 0,
+      },
+    };
     updateState((state) => {
-      state.groups.unshift({
-        id: buildTaskId("group"),
-        name: payload.name,
-        description: payload.description ?? null,
-        avatarEmoji: payload.avatarEmoji ?? "👥",
-        managerEmployeeId: "emp-1",
-        memberships: [],
-        _count: {
-          tasks: 0,
-        },
-      });
+      created.memberships = memberEmployeeIds
+        .map((employeeId, index) => {
+          const employee = state.employees.find(
+            (entry) => entry.id === employeeId,
+          );
+          if (!employee) return null;
+          return {
+            id: `membership-${created.id}-${employee.id}-${index}`,
+            employeeId: employee.id,
+            employee: {
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              employeeNumber: employee.employeeNumber,
+            },
+          };
+        })
+        .filter(Boolean) as any[];
+      state.groups.unshift(created);
     });
-    return undefined as T;
+    return created as T;
   }
 
-  const groupMatch = pathname.match(/^\/collaboration\/groups\/([^/]+)$/);
+  const groupMatch = pathname.match(
+    /^\/collaboration\/(?:groups|teams)\/([^/]+)$/,
+  );
   if (groupMatch && method === "PATCH") {
     const payload = parseBody<{ name?: string; description?: string }>(
       options?.body,
@@ -6337,7 +6509,7 @@ export async function demoApiRequest<T>(
   }
 
   const groupMembersMatch = pathname.match(
-    /^\/collaboration\/groups\/([^/]+)\/members$/,
+    /^\/collaboration\/(?:groups|teams)\/([^/]+)\/members$/,
   );
   if (groupMembersMatch && method === "POST") {
     const payload = parseBody<{ employeeIds: string[] }>(options?.body);
@@ -6366,6 +6538,91 @@ export async function demoApiRequest<T>(
         .filter(Boolean) as any[];
     });
     return undefined as T;
+  }
+
+  const employeePatchMatch = pathname.match(/^\/employees\/([^/]+)$/);
+  if (employeePatchMatch && method === "PATCH") {
+    const payload = parseBody<{ role?: string; teamId?: string }>(
+      options?.body,
+    );
+    updateState((state) => {
+      const employee = state.employees.find(
+        (entry) => entry.id === employeePatchMatch[1],
+      );
+      if (!employee) return;
+      applyDemoEmployeeAccessRole(employee, payload.role);
+
+      state.groups.forEach((group) => {
+        group.memberships = group.memberships.filter(
+          (membership) => membership.employeeId !== employee.id,
+        );
+      });
+
+      if (payload.teamId) {
+        const group = state.groups.find((entry) => entry.id === payload.teamId);
+        if (group) {
+          group.memberships.push({
+            id: `membership-${group.id}-${employee.id}`,
+            employeeId: employee.id,
+            employee: {
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              employeeNumber: employee.employeeNumber,
+            },
+          } as any);
+        }
+      }
+    });
+    return { success: true } as T;
+  }
+
+  if (pathname === "/employees/bulk-assign" && method === "PATCH") {
+    const payload = parseBody<{
+      employeeIds?: string[];
+      teamId?: string;
+      role?: string;
+    }>(options?.body);
+    const employeeIds = payload.employeeIds ?? [];
+    updateState((state) => {
+      employeeIds.forEach((employeeId) => {
+        const employee = state.employees.find(
+          (entry) => entry.id === employeeId,
+        );
+        if (employee) {
+          applyDemoEmployeeAccessRole(employee, payload.role);
+        }
+      });
+
+      state.groups.forEach((group) => {
+        group.memberships = group.memberships.filter(
+          (membership) => !employeeIds.includes(membership.employeeId),
+        );
+      });
+
+      if (payload.teamId) {
+        const group = state.groups.find((entry) => entry.id === payload.teamId);
+        if (group) {
+          employeeIds.forEach((employeeId) => {
+            const employee = state.employees.find(
+              (entry) => entry.id === employeeId,
+            );
+            if (!employee) return;
+            group.memberships.push({
+              id: `membership-${group.id}-${employee.id}`,
+              employeeId: employee.id,
+              employee: {
+                id: employee.id,
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                employeeNumber: employee.employeeNumber,
+              },
+            } as any);
+          });
+        }
+      }
+    });
+    return { updated: employeeIds.length } as T;
   }
 
   throw new Error(`Демо-режим пока не поддерживает ${method} ${pathname}.`);

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Crown,
   FolderOpen,
   ListTodo,
   Mail,
@@ -18,6 +19,7 @@ import {
   Settings,
   Smartphone,
   Trash2,
+  UserRound,
   UserPlus,
   Users,
   X,
@@ -27,6 +29,7 @@ import {
 import {
   AttendanceLiveSession,
   CollaborationOverviewResponse,
+  EmployeeAccessRole,
   EmployeeApiRecord,
   EmployeeBiometricHistoryResponse,
   EmployeeDetailBootstrapResponse,
@@ -96,7 +99,11 @@ import {
   getWebAdminTaskPriorityLabel,
   normalizeWebAdminTaskPriority,
 } from "@/lib/task-priority";
-import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
+import {
+  getRuntimeLocale,
+  getRuntimeLocaleTag,
+  runtimeLocalize,
+} from "@/lib/runtime-locale";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { navigateWithClickSupport } from "@/lib/navigation";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
@@ -127,7 +134,58 @@ type EmployeeWorkMode = "STATIONARY" | "FIELD";
 type InvitationDialogMode = "setup" | "review";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
 const DEFAULT_TEAM_AVATAR_EMOJI = "👥";
-const TEAM_AVATAR_EMOJIS = ["👥", "💼", "⚡", "🔥", "⭐", "🛠️", "🎯", "🏆", "🌿", "🚀"];
+const TEAM_AVATAR_EMOJIS = [
+  "👥",
+  "🍳",
+  "🛎️",
+  "🚚",
+  "💅",
+  "🧹",
+  "🏪",
+  "🏨",
+  "🔧",
+  "🛒",
+  "🎯",
+  "📦",
+  "☕",
+  "🌿",
+];
+const TEAM_SUGGESTIONS = [
+  { emoji: "🍳", nameRu: "Кухня", nameEn: "Kitchen" },
+  { emoji: "🛎️", nameRu: "Зал", nameEn: "Service floor" },
+  { emoji: "🚚", nameRu: "Доставка", nameEn: "Delivery" },
+  { emoji: "💅", nameRu: "Мастера", nameEn: "Specialists" },
+  { emoji: "🏪", nameRu: "Магазин", nameEn: "Store" },
+];
+const EMPLOYEE_ACCESS_ROLES: Array<{
+  value: EmployeeAccessRole;
+  titleRu: string;
+  titleEn: string;
+  descriptionRu: string;
+  descriptionEn: string;
+}> = [
+  {
+    value: "owner",
+    titleRu: "Владелец",
+    titleEn: "Owner",
+    descriptionRu: "Полный доступ ко всем сотрудникам, бригадам и настройкам.",
+    descriptionEn: "Full access to employees, teams, and workspace settings.",
+  },
+  {
+    value: "team_leader",
+    titleRu: "Лидер бригады",
+    titleEn: "Team leader",
+    descriptionRu: "Управляет задачами и посещаемостью своей бригады.",
+    descriptionEn: "Manages tasks and attendance for one assigned team.",
+  },
+  {
+    value: "employee",
+    titleRu: "Сотрудник",
+    titleEn: "Employee",
+    descriptionRu: "Видит свои смены, задачи, посещаемость и профиль.",
+    descriptionEn: "Sees own shifts, tasks, attendance, and profile.",
+  },
+];
 
 type TaskDialogState =
   | {
@@ -147,8 +205,11 @@ type EmployeeRowView = {
   name: string;
   employeeNumber: string;
   email: string;
+  role: EmployeeAccessRole;
+  roleLabel: string;
   groupId: string | null;
   group: string | null;
+  groupEmoji: string | null;
   location: string;
   status: EmployeeStatus;
   activeTasks: number;
@@ -163,7 +224,8 @@ const statusStyles: Record<EmployeeStatus, string> = {
   late: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
   on_shift: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
   off_shift: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
-  not_registered: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
+  not_registered:
+    "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   inactive: "bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]",
   dismissed: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
 };
@@ -222,7 +284,8 @@ const employeeWorkModeOptions: Array<{
     labelRu: "Выездной",
     labelEn: "Field",
     descriptionRu: "Несколько Say hi / Say bye в день, GPS пишется по месту.",
-    descriptionEn: "Multiple Say hi / Say bye visits per day, GPS is recorded on site.",
+    descriptionEn:
+      "Multiple Say hi / Say bye visits per day, GPS is recorded on site.",
   },
 ];
 const EMPLOYEES_DIRECTORY_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -250,8 +313,13 @@ function normalizeEmployeeWorkMode(workMode?: string | null): EmployeeWorkMode {
   return workMode === "FIELD" ? "FIELD" : "STATIONARY";
 }
 
-function getEmployeeWorkModeLabel(workMode: EmployeeWorkMode | undefined, locale: "ru" | "en") {
-  const option = employeeWorkModeOptions.find((item) => item.value === workMode);
+function getEmployeeWorkModeLabel(
+  workMode: EmployeeWorkMode | undefined,
+  locale: "ru" | "en",
+) {
+  const option = employeeWorkModeOptions.find(
+    (item) => item.value === workMode,
+  );
   return option
     ? runtimeLocalize(option.labelRu, option.labelEn, locale)
     : runtimeLocalize("Штатный", "Stationary", locale);
@@ -274,31 +342,72 @@ function getAvatarSrc(
     "avatarUrl" | "firstName" | "lastName" | "middleName"
   >,
 ) {
-  return employee.avatarUrl ?? getMockAvatarDataUrl(buildEmployeeName(employee) || employee.lastName || employee.firstName || "employee");
+  return (
+    employee.avatarUrl ??
+    getMockAvatarDataUrl(
+      buildEmployeeName(employee) ||
+        employee.lastName ||
+        employee.firstName ||
+        "employee",
+    )
+  );
 }
 
-function resolveEmployeeRoleLabel(
+function resolveEmployeeAccessRole(
   employee: EmployeeApiRecord,
-  locale: "ru" | "en",
-) {
+): EmployeeAccessRole {
   const roleCodes =
     employee.user?.roles
       ?.map((assignment) => assignment.role?.code)
       .filter((code): code is string => Boolean(code)) ?? [];
 
-  if (roleCodes.includes("tenant_owner")) {
-    return runtimeLocalize("Владелец", "Owner", locale);
-  }
+  if (roleCodes.includes("tenant_owner")) return "owner";
+  if (roleCodes.includes("manager")) return "team_leader";
+  return "employee";
+}
 
-  if (roleCodes.includes("operations_admin") || roleCodes.includes("hr_admin")) {
-    return runtimeLocalize("Администратор", "Administrator", locale);
-  }
+function getEmployeeAccessRoleLabel(
+  role: EmployeeAccessRole,
+  locale: "ru" | "en",
+) {
+  if (role === "owner") return runtimeLocalize("Владелец", "Owner", locale);
+  if (role === "team_leader") return runtimeLocalize("Лидер", "Leader", locale);
+  return runtimeLocalize("Сотрудник", "Employee", locale);
+}
 
-  if (roleCodes.includes("manager")) {
-    return runtimeLocalize("Менеджер", "Manager", locale);
+function getEmployeeAccessRoleClasses(role: EmployeeAccessRole) {
+  if (role === "owner") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
   }
+  if (role === "team_leader") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
 
-  return employee.position?.name ?? runtimeLocalize("Сотрудник", "Employee", locale);
+function getEmployeeAccessRoleIcon(role: EmployeeAccessRole) {
+  if (role === "owner") return Crown;
+  if (role === "team_leader") return Users;
+  return UserRound;
+}
+
+function RoleBadge({
+  label,
+  role,
+}: {
+  label: string;
+  role: EmployeeAccessRole;
+}) {
+  const Icon = getEmployeeAccessRoleIcon(role);
+
+  return (
+    <span
+      className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] font-semibold ${getEmployeeAccessRoleClasses(role)}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </span>
+  );
 }
 
 function hasCompletedEmployeeRegistration(
@@ -363,10 +472,14 @@ function renderEmployeeStatusBadge(status: EmployeeStatus) {
 
 function getStatusLabel(status: EmployeeStatus, locale: "ru" | "en") {
   if (status === "late") return runtimeLocalize("Опаздывает", "Late", locale);
-  if (status === "on_shift") return runtimeLocalize("На смене", "On shift", locale);
-  if (status === "off_shift") return runtimeLocalize("Не на смене", "Off shift", locale);
-  if (status === "not_registered") return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
-  if (status === "inactive") return runtimeLocalize("Неактивен", "Inactive", locale);
+  if (status === "on_shift")
+    return runtimeLocalize("На смене", "On shift", locale);
+  if (status === "off_shift")
+    return runtimeLocalize("Не на смене", "Off shift", locale);
+  if (status === "not_registered")
+    return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
+  if (status === "inactive")
+    return runtimeLocalize("Неактивен", "Inactive", locale);
   return runtimeLocalize("Уволен", "Dismissed", locale);
 }
 
@@ -385,7 +498,10 @@ function getInvitationLabel(
 
 function getTaskPriorityOptions(_locale: "ru" | "en") {
   return [
-    { value: "LOW" as TaskItem["priority"], label: getWebAdminTaskPriorityLabel("LOW") },
+    {
+      value: "LOW" as TaskItem["priority"],
+      label: getWebAdminTaskPriorityLabel("LOW"),
+    },
     {
       value: "MEDIUM" as TaskItem["priority"],
       label: getWebAdminTaskPriorityLabel("MEDIUM"),
@@ -439,9 +555,17 @@ function getBiometricStatusLabel(
     case "ENROLLED":
       return runtimeLocalize("Зарегистрирован", "Registered", locale);
     case "PENDING":
-      return runtimeLocalize("Регистрация не завершена", "Registration pending", locale);
+      return runtimeLocalize(
+        "Регистрация не завершена",
+        "Registration pending",
+        locale,
+      );
     case "FAILED":
-      return runtimeLocalize("Ошибка регистрации", "Registration failed", locale);
+      return runtimeLocalize(
+        "Ошибка регистрации",
+        "Registration failed",
+        locale,
+      );
     default:
       return runtimeLocalize("Не зарегистрирован", "Not registered", locale);
   }
@@ -484,7 +608,10 @@ const Employees = ({
   const addEmployeePromptStorageKey = activeSession
     ? buildAddEmployeePromptStorageKey(activeSession)
     : null;
-  const taskPriorityOptions = useMemo(() => getTaskPriorityOptions(locale), [locale]);
+  const taskPriorityOptions = useMemo(
+    () => getTaskPriorityOptions(locale),
+    [locale],
+  );
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("employees");
   const [shouldPulseAddEmployee, setShouldPulseAddEmployee] = useState(false);
@@ -496,9 +623,9 @@ const Employees = ({
   const [directoryLoading, setDirectoryLoading] = useState(!initialData);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState<string | null>(null);
-  const [navigatingEmployeeId, setNavigatingEmployeeId] = useState<string | null>(
-    null,
-  );
+  const [navigatingEmployeeId, setNavigatingEmployeeId] = useState<
+    string | null
+  >(null);
 
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeApiRecord[]>(
     initialData?.employeeRecords ?? [],
@@ -507,7 +634,9 @@ const Employees = ({
     initialData?.liveSessions ?? [],
   );
   const [overview, setOverview] =
-    useState<CollaborationOverviewResponse | null>(initialData?.overview ?? null);
+    useState<CollaborationOverviewResponse | null>(
+      initialData?.overview ?? null,
+    );
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null,
@@ -523,13 +652,24 @@ const Employees = ({
   const [breaksUpdating, setBreaksUpdating] = useState(false);
   const [workModeUpdating, setWorkModeUpdating] = useState(false);
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => buildExpandedGroupsFromSnapshot(initialData),
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() =>
+    buildExpandedGroupsFromSnapshot(initialData),
   );
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteStep, setInviteStep] = useState<1 | 2>(1);
   const [inviteContactMethod, setInviteContactMethod] =
     useState<InviteContactMethod>("email");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
+  const [invitePositionTitle, setInvitePositionTitle] = useState("");
+  const [inviteRole, setInviteRole] = useState<EmployeeAccessRole>("employee");
+  const [inviteAssignTeam, setInviteAssignTeam] = useState(false);
+  const [inviteTeamId, setInviteTeamId] = useState("__none");
+  const [inviteTeamName, setInviteTeamName] = useState("");
+  const [inviteTeamEmoji, setInviteTeamEmoji] = useState("🍳");
+  const [inviteTeamCreating, setInviteTeamCreating] = useState(false);
+  const [inviteTeamError, setInviteTeamError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
   const [invitePhoneCountryCode, setInvitePhoneCountryCode] = useState(
@@ -537,7 +677,6 @@ const Employees = ({
   );
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [mobileLinkCopied, setMobileLinkCopied] = useState(false);
   const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
   const [copiedInviteField, setCopiedInviteField] = useState<
@@ -546,7 +685,9 @@ const Employees = ({
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState("");
   const [createGroupDescription, setCreateGroupDescription] = useState("");
-  const [createGroupEmoji, setCreateGroupEmoji] = useState(DEFAULT_TEAM_AVATAR_EMOJI);
+  const [createGroupEmoji, setCreateGroupEmoji] = useState(
+    DEFAULT_TEAM_AVATAR_EMOJI,
+  );
   const [createGroupMembers, setCreateGroupMembers] = useState<string[]>([]);
   const [createGroupSubmitting, setCreateGroupSubmitting] = useState(false);
   const [createGroupError, setCreateGroupError] = useState<string | null>(null);
@@ -570,15 +711,16 @@ const Employees = ({
     firstName: "",
     lastName: "",
     middleName: "",
+    positionTitle: "",
     birthDate: "",
     gender: "male",
     phone: "",
     shiftTemplateId: "",
     groupId: "__none",
+    role: "employee" as EmployeeAccessRole,
     rejectedReason: "",
     avatarDataUrl: "",
     avatarPreview: "",
-    grantManagerAccess: false,
     workMode: "STATIONARY" as EmployeeWorkMode,
   });
 
@@ -586,8 +728,17 @@ const Employees = ({
     string | null
   >(null);
   const [moveTargetGroupId, setMoveTargetGroupId] = useState("__none");
+  const [moveMakeLeader, setMoveMakeLeader] = useState(false);
   const [moveSubmitting, setMoveSubmitting] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [teamFilterId, setTeamFilterId] = useState("all");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkTargetGroupId, setBulkTargetGroupId] = useState("__none");
+  const [bulkRole, setBulkRole] = useState<EmployeeAccessRole | "keep">("keep");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const [taskDialog, setTaskDialog] = useState<TaskDialogState>(null);
   const [taskDraft, setTaskDraft] = useState(initialTaskDraft);
@@ -716,7 +867,10 @@ const Employees = ({
           skipClientCache: true,
         },
       );
-      applyDirectorySnapshot(snapshot, buildEmployeesDirectoryCacheKey(session));
+      applyDirectorySnapshot(
+        snapshot,
+        buildEmployeesDirectoryCacheKey(session),
+      );
 
       const res = snapshot.scheduleTemplates;
       if (res && res.length > 0) {
@@ -726,8 +880,7 @@ const Employees = ({
               t.name === templateDraft.name.trim() &&
               t.startsAtLocal === templateDraft.startsAtLocal &&
               t.endsAtLocal === templateDraft.endsAtLocal,
-          ) ??
-          res.find((t) => t.name === templateDraft.name.trim());
+          ) ?? res.find((t) => t.name === templateDraft.name.trim());
         if (created) {
           setReviewForm((current) => ({
             ...current,
@@ -780,7 +933,9 @@ const Employees = ({
   const [groupEditorMembers, setGroupEditorMembers] = useState<string[]>([]);
   const [groupEditorName, setGroupEditorName] = useState("");
   const [groupEditorDescription, setGroupEditorDescription] = useState("");
-  const [groupEditorEmoji, setGroupEditorEmoji] = useState(DEFAULT_TEAM_AVATAR_EMOJI);
+  const [groupEditorEmoji, setGroupEditorEmoji] = useState(
+    DEFAULT_TEAM_AVATAR_EMOJI,
+  );
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupDeleting, setGroupDeleting] = useState(false);
   const [groupDeleteConfirmOpen, setGroupDeleteConfirmOpen] = useState(false);
@@ -789,10 +944,14 @@ const Employees = ({
   const groups = overview?.groups ?? [];
 
   const groupByEmployeeId = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
+    const map = new Map<string, { id: string; name: string; emoji: string }>();
     groups.forEach((group) => {
       group.memberships.forEach((membership) => {
-        map.set(membership.employeeId, { id: group.id, name: group.name });
+        map.set(membership.employeeId, {
+          id: group.id,
+          name: group.name,
+          emoji: resolveTeamAvatarEmoji(group),
+        });
       });
     });
     return map;
@@ -808,7 +967,9 @@ const Employees = ({
   }, [overview]);
 
   const liveSessionsByEmployeeId = useMemo(() => {
-    return new Map(liveSessions.map((session) => [session.employeeId, session] as const));
+    return new Map(
+      liveSessions.map((session) => [session.employeeId, session] as const),
+    );
   }, [liveSessions]);
 
   const employees = useMemo<EmployeeRowView[]>(() => {
@@ -816,18 +977,24 @@ const Employees = ({
       .map((employee) => {
         const group = groupByEmployeeId.get(employee.id);
         const liveSession = liveSessionsByEmployeeId.get(employee.id);
+        const role = resolveEmployeeAccessRole(employee);
         return {
           id: employee.id,
           name: buildEmployeeName(employee),
           employeeNumber: employee.employeeNumber,
           email: employee.user?.email ?? "",
+          role,
+          roleLabel: getEmployeeAccessRoleLabel(role, locale),
           groupId: group?.id ?? null,
           group: group?.name ?? null,
+          groupEmoji: group?.emoji ?? null,
           location: employee.primaryLocation?.name ?? "—",
           status: resolveEmployeeStatus(employee, liveSession),
           activeTasks: tasksByEmployeeId.get(employee.id) ?? 0,
           phone: employee.phone ?? "—",
-          position: resolveEmployeeRoleLabel(employee, locale),
+          position:
+            employee.position?.name ??
+            runtimeLocalize("Сотрудник", "Employee", locale),
           hireDate: employee.hireDate,
           attendance: null,
           avatarUrl: employee.avatarUrl ?? null,
@@ -849,17 +1016,31 @@ const Employees = ({
         return false;
       }
 
+      if (teamFilterId === "__none" && employee.groupId) {
+        return false;
+      }
+
+      if (
+        teamFilterId !== "all" &&
+        teamFilterId !== "__none" &&
+        employee.groupId !== teamFilterId
+      ) {
+        return false;
+      }
+
       if (!query) return true;
 
       return (
         employee.name.toLowerCase().includes(query) ||
         employee.employeeNumber.toLowerCase().includes(query) ||
         employee.position.toLowerCase().includes(query) ||
+        employee.roleLabel.toLowerCase().includes(query) ||
+        (employee.group ?? "").toLowerCase().includes(query) ||
         employee.location.toLowerCase().includes(query) ||
         employee.email.toLowerCase().includes(query)
       );
     });
-  }, [employees, search, showFormerEmployees]);
+  }, [employees, search, showFormerEmployees, teamFilterId]);
 
   const sortedEmployees = useMemo(() => {
     const collator = new Intl.Collator(locale === "ru" ? "ru" : "en", {
@@ -911,11 +1092,17 @@ const Employees = ({
           members: filteredEmployees.filter(
             (employee) => employee.groupId === group.id,
           ),
+          leader:
+            employees.find(
+              (employee) =>
+                employee.groupId === group.id &&
+                employee.role === "team_leader",
+            ) ?? null,
         }))
         .sort((left, right) =>
           left.group.name.localeCompare(right.group.name, locale),
         ),
-    [filteredEmployees, groups, locale],
+    [employees, filteredEmployees, groups, locale],
   );
 
   const ungroupedEmployees = useMemo(
@@ -935,6 +1122,16 @@ const Employees = ({
     );
   }, [expandedGroups, groups, ungroupedEmployees.length]);
 
+  useEffect(() => {
+    if (
+      teamFilterId !== "all" &&
+      teamFilterId !== "__none" &&
+      !groups.some((group) => group.id === teamFilterId)
+    ) {
+      setTeamFilterId("all");
+    }
+  }, [groups, teamFilterId]);
+
   const selectedEmployee = useMemo(
     () =>
       employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
@@ -942,17 +1139,20 @@ const Employees = ({
   );
   const selectedEmployeeBreaksEnabled = Boolean(
     selectedEmployeeDetails?.breaksEnabled ??
-      employeeRecords.find((employee) => employee.id === selectedEmployeeId)?.breaksEnabled ??
-      false,
+    employeeRecords.find((employee) => employee.id === selectedEmployeeId)
+      ?.breaksEnabled ??
+    false,
   );
   const selectedEmployeeWorkMode = normalizeEmployeeWorkMode(
     selectedEmployeeDetails?.workMode ??
-      employeeRecords.find((employee) => employee.id === selectedEmployeeId)?.workMode,
+      employeeRecords.find((employee) => employee.id === selectedEmployeeId)
+        ?.workMode,
   );
   const navigatingEmployee = useMemo(
     () =>
       navigatingEmployeeId
-        ? employees.find((employee) => employee.id === navigatingEmployeeId) ?? null
+        ? (employees.find((employee) => employee.id === navigatingEmployeeId) ??
+          null)
         : null,
     [employees, navigatingEmployeeId],
   );
@@ -972,7 +1172,11 @@ const Employees = ({
         event.shiftKey ||
         event.altKey)
     ) {
-      navigateWithClickSupport((nextHref) => router.push(nextHref), href, event);
+      navigateWithClickSupport(
+        (nextHref) => router.push(nextHref),
+        href,
+        event,
+      );
       return;
     }
 
@@ -1070,7 +1274,10 @@ const Employees = ({
     }
   }
 
-  async function loadDirectory(options?: { force?: boolean; silent?: boolean }) {
+  async function loadDirectory(options?: {
+    force?: boolean;
+    silent?: boolean;
+  }) {
     const session = getSession();
     if (!session) {
       if (!options?.silent) {
@@ -1203,7 +1410,10 @@ const Employees = ({
       shouldPromptFromRedirect
     ) {
       setShouldPulseAddEmployee(true);
-      if (shouldPromptFromRedirect && storedPrompt !== ADD_EMPLOYEE_PROMPT_PENDING) {
+      if (
+        shouldPromptFromRedirect &&
+        storedPrompt !== ADD_EMPLOYEE_PROMPT_PENDING
+      ) {
         writeBrowserStorageItem(
           addEmployeePromptStorageKey,
           ADD_EMPLOYEE_PROMPT_PENDING,
@@ -1284,7 +1494,9 @@ const Employees = ({
       );
 
       setSelectedEmployeeDetails((current) =>
-        current ? { ...current, breaksEnabled: updatedEmployee.breaksEnabled } : updatedEmployee,
+        current
+          ? { ...current, breaksEnabled: updatedEmployee.breaksEnabled }
+          : updatedEmployee,
       );
       setEmployeeRecords((current) =>
         current.map((employee) =>
@@ -1295,23 +1507,42 @@ const Employees = ({
       );
       setPageMessage(
         nextBreaksEnabled
-          ? runtimeLocalize("Перерывы включены для сотрудника", "Breaks enabled for employee", locale)
-          : runtimeLocalize("Перерывы выключены для сотрудника", "Breaks disabled for employee", locale),
+          ? runtimeLocalize(
+              "Перерывы включены для сотрудника",
+              "Breaks enabled for employee",
+              locale,
+            )
+          : runtimeLocalize(
+              "Перерывы выключены для сотрудника",
+              "Breaks disabled for employee",
+              locale,
+            ),
       );
     } catch (error) {
       setPageMessage(
         error instanceof Error
           ? error.message
-          : runtimeLocalize("Не удалось обновить перерывы", "Unable to update breaks", locale),
+          : runtimeLocalize(
+              "Не удалось обновить перерывы",
+              "Unable to update breaks",
+              locale,
+            ),
       );
     } finally {
       setBreaksUpdating(false);
     }
   }
 
-  async function updateSelectedEmployeeWorkMode(nextWorkMode: EmployeeWorkMode) {
+  async function updateSelectedEmployeeWorkMode(
+    nextWorkMode: EmployeeWorkMode,
+  ) {
     const session = getSession();
-    if (!session || !selectedEmployeeId || nextWorkMode === selectedEmployeeWorkMode) return;
+    if (
+      !session ||
+      !selectedEmployeeId ||
+      nextWorkMode === selectedEmployeeWorkMode
+    )
+      return;
 
     setWorkModeUpdating(true);
     try {
@@ -1325,7 +1556,9 @@ const Employees = ({
       );
 
       setSelectedEmployeeDetails((current) =>
-        current ? { ...current, workMode: updatedEmployee.workMode } : updatedEmployee,
+        current
+          ? { ...current, workMode: updatedEmployee.workMode }
+          : updatedEmployee,
       );
       setEmployeeRecords((current) =>
         current.map((employee) =>
@@ -1335,13 +1568,21 @@ const Employees = ({
         ),
       );
       setPageMessage(
-        runtimeLocalize("Тип сотрудника обновлён", "Employee type updated", locale),
+        runtimeLocalize(
+          "Тип сотрудника обновлён",
+          "Employee type updated",
+          locale,
+        ),
       );
     } catch (error) {
       setPageMessage(
         error instanceof Error
           ? error.message
-          : runtimeLocalize("Не удалось обновить тип сотрудника", "Unable to update employee type", locale),
+          : runtimeLocalize(
+              "Не удалось обновить тип сотрудника",
+              "Unable to update employee type",
+              locale,
+            ),
       );
     } finally {
       setWorkModeUpdating(false);
@@ -1385,56 +1626,192 @@ const Employees = ({
     );
   };
 
-  async function handleInviteSubmit() {
-    const session = getSession();
-    if (!session) return;
+  function resetInviteDraft() {
+    setInviteStep(1);
+    setInviteFirstName("");
+    setInviteLastName("");
+    setInvitePositionTitle("");
+    setInviteRole("employee");
+    setInviteAssignTeam(false);
+    setInviteTeamId("__none");
+    setInviteTeamName("");
+    setInviteTeamEmoji("🍳");
+    setInviteTeamError(null);
+    setInviteEmail("");
+    setInvitePhone("");
+    setInvitePhoneCountryCode(getDefaultPhoneCountryCode(locale));
+  }
+
+  function getInviteContactValue() {
     const contactValue =
       inviteContactMethod === "email"
         ? inviteEmail.trim().toLowerCase()
         : invitePhone.trim();
-    const invitePhoneValue =
+    const phoneValue =
       inviteContactMethod === "phone"
         ? buildPhoneWithCountryCode(invitePhoneCountryCode, contactValue)
         : "";
 
-    if (!contactValue) {
-      setInviteError(
-        inviteContactMethod === "email"
-          ? runtimeLocalize("Введите email сотрудника.", "Enter the employee email.", locale)
-          : runtimeLocalize("Введите телефон сотрудника.", "Enter the employee phone.", locale),
+    return {
+      contactValue,
+      phoneValue,
+    };
+  }
+
+  function validateInviteStepOne() {
+    const { contactValue } = getInviteContactValue();
+
+    if (!inviteFirstName.trim() || !inviteLastName.trim()) {
+      return runtimeLocalize(
+        "Укажите имя и фамилию сотрудника.",
+        "Enter the employee first and last name.",
+        locale,
       );
+    }
+
+    if (!invitePositionTitle.trim()) {
+      return runtimeLocalize(
+        "Укажите должность сотрудника.",
+        "Enter the employee position.",
+        locale,
+      );
+    }
+
+    if (!contactValue) {
+      return inviteContactMethod === "email"
+        ? runtimeLocalize(
+            "Введите email сотрудника.",
+            "Enter the employee email.",
+            locale,
+          )
+        : runtimeLocalize(
+            "Введите телефон сотрудника.",
+            "Enter the employee phone.",
+            locale,
+          );
+    }
+
+    return null;
+  }
+
+  function goToInviteStepTwo() {
+    const error = validateInviteStepOne();
+    if (error) {
+      setInviteError(error);
+      return;
+    }
+
+    setInviteError(null);
+
+    if (inviteRole === "owner") {
+      void handleInviteSubmit();
+      return;
+    }
+
+    setInviteStep(2);
+  }
+
+  async function createInlineInviteTeam() {
+    const session = getSession();
+    if (!session || !inviteTeamName.trim()) return;
+
+    setInviteTeamCreating(true);
+    setInviteTeamError(null);
+
+    try {
+      const team = await apiRequest<{ id: string }>("/collaboration/teams", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({
+          name: inviteTeamName.trim(),
+          avatarEmoji: inviteTeamEmoji,
+        }),
+      });
+      setInviteTeamId(team.id);
+      setInviteAssignTeam(true);
+      setInviteTeamName("");
+      await loadDirectory({ force: true, silent: true });
+    } catch (requestError) {
+      setInviteTeamError(
+        requestError instanceof Error
+          ? requestError.message
+          : runtimeLocalize(
+              "Не удалось создать бригаду.",
+              "Failed to create team.",
+              locale,
+            ),
+      );
+    } finally {
+      setInviteTeamCreating(false);
+    }
+  }
+
+  async function handleInviteSubmit() {
+    const session = getSession();
+    if (!session) return;
+    const { contactValue, phoneValue: invitePhoneValue } =
+      getInviteContactValue();
+
+    const stepOneError = validateInviteStepOne();
+    if (stepOneError) {
+      setInviteError(stepOneError);
+      setInviteStep(1);
+      return;
+    }
+
+    const shouldSendTeam =
+      inviteRole === "team_leader" ||
+      (inviteRole === "employee" && inviteAssignTeam);
+    const selectedTeamId = inviteTeamId === "__none" ? "" : inviteTeamId;
+
+    if (inviteRole === "team_leader" && !selectedTeamId) {
+      setInviteError(
+        runtimeLocalize(
+          "Лидеру нужно выбрать бригаду.",
+          "Select a team for the leader.",
+          locale,
+        ),
+      );
+      setInviteStep(2);
       return;
     }
 
     setInviteSubmitting(true);
     setInviteError(null);
-    setInviteSuccess(null);
 
     try {
-      const invitation = await apiRequest<InvitationRecord>("/employees/invitations", {
+      await apiRequest<InvitationRecord>("/employees/invitations", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify(
           inviteContactMethod === "email"
-            ? { email: contactValue }
-            : { phone: invitePhoneValue },
+            ? {
+                email: contactValue,
+                firstName: inviteFirstName.trim(),
+                lastName: inviteLastName.trim(),
+                positionTitle: invitePositionTitle.trim(),
+                role: inviteRole,
+                teamId: shouldSendTeam ? selectedTeamId : undefined,
+              }
+            : {
+                phone: invitePhoneValue,
+                firstName: inviteFirstName.trim(),
+                lastName: inviteLastName.trim(),
+                positionTitle: invitePositionTitle.trim(),
+                role: inviteRole,
+                teamId: shouldSendTeam ? selectedTeamId : undefined,
+              },
         ),
       });
       setInviteDialogOpen(false);
-      setInviteEmail("");
-      setInvitePhone("");
-      setInvitePhoneCountryCode(getDefaultPhoneCountryCode(locale));
-      if (attendanceTrackingEnabled) {
-        openInvitation(invitation, "setup");
-      } else {
-        setPageMessage(
-          runtimeLocalize(
-            "Приглашение отправлено. Сотрудник заполнит профиль сам.",
-            "Invitation sent. The employee will complete the profile.",
-            locale,
-          ),
-        );
-      }
+      resetInviteDraft();
+      setPageMessage(
+        runtimeLocalize(
+          `Приглашение отправлено. Роль: ${getEmployeeAccessRoleLabel(inviteRole, locale)}.`,
+          `Invitation sent. Role: ${getEmployeeAccessRoleLabel(inviteRole, locale)}.`,
+          locale,
+        ),
+      );
       await loadDirectory();
     } catch (requestError) {
       const message =
@@ -1459,10 +1836,7 @@ const Employees = ({
     }
   }
 
-  async function copyInviteValue(
-    value: string,
-    field: "email" | "password",
-  ) {
+  async function copyInviteValue(value: string, field: "email" | "password") {
     if (!value.trim()) {
       return;
     }
@@ -1514,7 +1888,7 @@ const Employees = ({
     setCreateGroupError(null);
 
     try {
-      await apiRequest("/collaboration/groups", {
+      await apiRequest("/collaboration/teams", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
@@ -1530,13 +1904,19 @@ const Employees = ({
       setCreateGroupDescription("");
       setCreateGroupEmoji(DEFAULT_TEAM_AVATAR_EMOJI);
       setCreateGroupMembers([]);
-      setPageMessage(runtimeLocalize("Команда добавлена.", "Team added.", locale));
+      setPageMessage(
+        runtimeLocalize("Бригада добавлена.", "Team added.", locale),
+      );
       await loadDirectory();
     } catch (requestError) {
       setCreateGroupError(
         requestError instanceof Error
           ? requestError.message
-          : runtimeLocalize("Не удалось создать команду.", "Failed to create team.", locale),
+          : runtimeLocalize(
+              "Не удалось создать бригаду.",
+              "Failed to create team.",
+              locale,
+            ),
       );
     } finally {
       setCreateGroupSubmitting(false);
@@ -1564,7 +1944,7 @@ const Employees = ({
       setInviteError(
         requestError instanceof Error
           ? requestError.message
-            : runtimeLocalize(
+          : runtimeLocalize(
               "Не удалось отправить приглашение повторно.",
               "Failed to resend invitation.",
               locale,
@@ -1586,15 +1966,16 @@ const Employees = ({
       firstName: invitation.firstName ?? "",
       lastName: invitation.lastName ?? "",
       middleName: invitation.middleName ?? "",
+      positionTitle: invitation.positionTitle ?? "",
       birthDate: invitation.birthDate ? invitation.birthDate.slice(0, 10) : "",
       gender: invitation.gender ?? "male",
       phone: invitation.phone ?? "",
       shiftTemplateId: invitation.approvedShiftTemplateId ?? "",
       groupId: invitation.approvedGroupId ?? "__none",
+      role: invitation.role ?? "employee",
       rejectedReason: invitation.rejectedReason ?? "",
       avatarDataUrl: "",
       avatarPreview: invitation.avatarUrl ?? "",
-      grantManagerAccess: false,
       workMode: normalizeEmployeeWorkMode(invitation.workMode),
     });
   }
@@ -1638,6 +2019,17 @@ const Employees = ({
       return;
     }
 
+    if (reviewForm.role === "team_leader" && reviewForm.groupId === "__none") {
+      setReviewError(
+        runtimeLocalize(
+          "Лидеру нужно выбрать бригаду.",
+          "Select a team for the leader.",
+          locale,
+        ),
+      );
+      return;
+    }
+
     setReviewSubmitting(true);
     setReviewError(null);
 
@@ -1651,9 +2043,11 @@ const Employees = ({
             firstName,
             lastName,
             middleName: reviewForm.middleName.trim() || undefined,
+            positionTitle: reviewForm.positionTitle.trim() || undefined,
+            role: reviewForm.role,
             shiftTemplateId:
               reviewForm.workMode === "STATIONARY" ? shiftTemplateId : "",
-            groupId:
+            teamId:
               reviewForm.groupId === "__none"
                 ? ""
                 : reviewForm.groupId || undefined,
@@ -1753,6 +2147,8 @@ const Employees = ({
             firstName: reviewForm.firstName,
             lastName: reviewForm.lastName,
             middleName: reviewForm.middleName || undefined,
+            positionTitle: reviewForm.positionTitle || undefined,
+            role: reviewForm.role,
             birthDate: reviewForm.birthDate,
             gender: reviewForm.gender,
             phone: reviewForm.phone,
@@ -1760,7 +2156,7 @@ const Employees = ({
               decision === "APPROVE" && reviewForm.workMode === "STATIONARY"
                 ? reviewForm.shiftTemplateId || undefined
                 : undefined,
-            groupId:
+            teamId:
               decision === "APPROVE"
                 ? reviewForm.groupId === "__none"
                   ? ""
@@ -1769,10 +2165,6 @@ const Employees = ({
             rejectedReason:
               decision === "REJECT" ? reviewForm.rejectedReason : undefined,
             avatarDataUrl: reviewForm.avatarDataUrl || undefined,
-            grantManagerAccess:
-              decision === "APPROVE"
-                ? reviewForm.grantManagerAccess
-                : undefined,
             workMode: reviewForm.workMode,
           }),
         },
@@ -1820,6 +2212,7 @@ const Employees = ({
   function openMoveDialog(employee: EmployeeRowView) {
     setMoveDialogEmployeeId(employee.id);
     setMoveTargetGroupId(employee.groupId ?? "__none");
+    setMoveMakeLeader(employee.role === "team_leader");
     setMoveError(null);
   }
 
@@ -1827,7 +2220,7 @@ const Employees = ({
     const session = getSession();
     if (!session) return;
 
-    await apiRequest(`/collaboration/groups/${groupId}/members`, {
+    await apiRequest(`/collaboration/teams/${groupId}/members`, {
       method: "POST",
       token: session.accessToken,
       body: JSON.stringify({ employeeIds }),
@@ -1841,7 +2234,7 @@ const Employees = ({
     const session = getSession();
     if (!session) return;
 
-    await apiRequest(`/collaboration/groups/${groupId}`, {
+    await apiRequest(`/collaboration/teams/${groupId}`, {
       method: "PATCH",
       token: session.accessToken,
       body: JSON.stringify(payload),
@@ -1851,6 +2244,18 @@ const Employees = ({
   async function handleMoveEmployee() {
     const employeeId = moveDialogEmployeeId;
     if (!employeeId) return;
+    const employee = employees.find((item) => item.id === employeeId);
+
+    if (employee?.role === "owner") {
+      setMoveError(
+        runtimeLocalize(
+          "Владельцу бригада не назначается.",
+          "Owner does not need a team assignment.",
+          locale,
+        ),
+      );
+      return;
+    }
 
     setMoveSubmitting(true);
     setMoveError(null);
@@ -1858,37 +2263,35 @@ const Employees = ({
     try {
       const nextGroupId =
         moveTargetGroupId === "__none" ? null : moveTargetGroupId;
-      const updates = groups.flatMap((group) => {
-        const currentIds = group.memberships.map(
-          (membership) => membership.employeeId,
+
+      if (moveMakeLeader && !nextGroupId) {
+        setMoveError(
+          runtimeLocalize(
+            "Лидеру нужно выбрать бригаду.",
+            "Select a team for the leader.",
+            locale,
+          ),
         );
-        const hasEmployee = currentIds.includes(employeeId);
-        const shouldInclude = group.id === nextGroupId;
-
-        let nextIds = currentIds;
-        if (shouldInclude && !hasEmployee) {
-          nextIds = [...currentIds, employeeId];
-        }
-        if (!shouldInclude && hasEmployee) {
-          nextIds = currentIds.filter((id) => id !== employeeId);
-        }
-
-        const changed =
-          nextIds.length !== currentIds.length ||
-          nextIds.some((id, index) => id !== currentIds[index]);
-
-        if (!changed) return [];
-        return [updateGroupMembers(group.id, nextIds)];
-      });
-
-      if (updates.length > 0) {
-        await Promise.all(updates);
+        setMoveSubmitting(false);
+        return;
       }
+
+      const session = getSession();
+      if (!session) return;
+
+      await apiRequest(`/employees/${employeeId}`, {
+        method: "PATCH",
+        token: session.accessToken,
+        body: JSON.stringify({
+          teamId: nextGroupId ?? "",
+          role: moveMakeLeader ? "team_leader" : "employee",
+        }),
+      });
 
       setMoveDialogEmployeeId(null);
       setPageMessage(
         runtimeLocalize(
-          "Команда сотрудника обновлена.",
+          "Бригада сотрудника обновлена.",
           "Employee team updated.",
           locale,
         ),
@@ -1899,13 +2302,91 @@ const Employees = ({
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось обновить команду сотрудника.",
+              "Не удалось обновить бригаду сотрудника.",
               "Failed to update employee team.",
               locale,
             ),
       );
     } finally {
       setMoveSubmitting(false);
+    }
+  }
+
+  function toggleEmployeeSelection(employeeId: string, checked: boolean) {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(employeeId);
+      } else {
+        next.delete(employeeId);
+      }
+      return next;
+    });
+    setBulkError(null);
+  }
+
+  function clearEmployeeSelection() {
+    setSelectedEmployeeIds(new Set());
+    setBulkError(null);
+  }
+
+  async function applyBulkAssignment() {
+    const session = getSession();
+    if (!session) return;
+    const employeeIds = Array.from(selectedEmployeeIds);
+
+    if (employeeIds.length < 2) {
+      return;
+    }
+
+    const nextTeamId = bulkTargetGroupId === "__none" ? "" : bulkTargetGroupId;
+
+    if (bulkRole === "team_leader" && !nextTeamId) {
+      setBulkError(
+        runtimeLocalize(
+          "Для роли лидера выберите бригаду.",
+          "Select a team before setting team leader role.",
+          locale,
+        ),
+      );
+      return;
+    }
+
+    setBulkSubmitting(true);
+    setBulkError(null);
+
+    try {
+      await apiRequest("/employees/bulk-assign", {
+        method: "PATCH",
+        token: session.accessToken,
+        body: JSON.stringify({
+          employeeIds,
+          teamId: nextTeamId,
+          role: bulkRole === "keep" ? undefined : bulkRole,
+        }),
+      });
+
+      clearEmployeeSelection();
+      setPageMessage(
+        runtimeLocalize(
+          "Массовое назначение применено.",
+          "Bulk assignment applied.",
+          locale,
+        ),
+      );
+      await loadDirectory({ force: true });
+    } catch (requestError) {
+      setBulkError(
+        requestError instanceof Error
+          ? requestError.message
+          : runtimeLocalize(
+              "Не удалось применить массовое назначение.",
+              "Failed to apply bulk assignment.",
+              locale,
+            ),
+      );
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
@@ -1962,7 +2443,11 @@ const Employees = ({
 
       if (!taskDraft.isRecurring) {
         const dueDate = taskDraft.dueAt ? new Date(taskDraft.dueAt) : null;
-        if (!dueDate || Number.isNaN(dueDate.getTime()) || dueDate < new Date()) {
+        if (
+          !dueDate ||
+          Number.isNaN(dueDate.getTime()) ||
+          dueDate < new Date()
+        ) {
           setTaskError(
             runtimeLocalize(
               "Выберите будущую дату и время выполнения.",
@@ -2022,7 +2507,9 @@ const Employees = ({
             description: taskDraft.description || undefined,
             priority: taskDraft.priority,
             requiresPhoto: taskDraft.requiresPhoto || undefined,
-            dueAt: taskDraft.hasDueTime ? taskDraft.dueAt || undefined : undefined,
+            dueAt: taskDraft.hasDueTime
+              ? taskDraft.dueAt || undefined
+              : undefined,
             assigneeEmployeeId:
               taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
             groupId:
@@ -2042,7 +2529,7 @@ const Employees = ({
               locale,
             )
           : runtimeLocalize(
-              "Задача назначена команде.",
+              "Задача назначена бригаде.",
               "Task assigned to the team.",
               locale,
             ),
@@ -2101,12 +2588,18 @@ const Employees = ({
 
     if (!assignShiftDraft.templateId || !assignShiftDraft.shiftDate) {
       setAssignShiftError(
-        runtimeLocalize("Выберите шаблон и дату", "Select template and date", locale),
+        runtimeLocalize(
+          "Выберите шаблон и дату",
+          "Select template and date",
+          locale,
+        ),
       );
       return;
     }
 
-    const fixedBreakDuration = Number(assignShiftDraft.fixedBreakDurationMinutes);
+    const fixedBreakDuration = Number(
+      assignShiftDraft.fixedBreakDurationMinutes,
+    );
     if (
       assignShiftDraft.fixedBreakEnabled &&
       (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
@@ -2144,14 +2637,22 @@ const Employees = ({
 
       setAssignShiftDialog(null);
       setPageMessage(
-        runtimeLocalize("Смена успешно назначена.", "Shift assigned successfully.", locale),
+        runtimeLocalize(
+          "Смена успешно назначена.",
+          "Shift assigned successfully.",
+          locale,
+        ),
       );
       await loadDirectory();
     } catch (requestError) {
       setAssignShiftError(
         requestError instanceof Error
           ? requestError.message
-          : runtimeLocalize("Не удалось назначить смену.", "Failed to assign shift.", locale),
+          : runtimeLocalize(
+              "Не удалось назначить смену.",
+              "Failed to assign shift.",
+              locale,
+            ),
       );
     } finally {
       setAssignShiftSubmitting(false);
@@ -2181,7 +2682,11 @@ const Employees = ({
 
     if (!normalizedName) {
       setGroupError(
-        runtimeLocalize("Укажите название команды.", "Enter a team name.", locale),
+        runtimeLocalize(
+          "Укажите название бригады.",
+          "Enter a team name.",
+          locale,
+        ),
       );
       return;
     }
@@ -2219,14 +2724,16 @@ const Employees = ({
 
       setGroupEditorId(null);
       setGroupDeleteConfirmOpen(false);
-      setPageMessage(runtimeLocalize("Команда обновлена.", "Team updated.", locale));
+      setPageMessage(
+        runtimeLocalize("Бригада обновлена.", "Team updated.", locale),
+      );
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось обновить команду.",
+              "Не удалось обновить бригаду.",
               "Failed to update team.",
               locale,
             ),
@@ -2244,20 +2751,22 @@ const Employees = ({
     setGroupError(null);
 
     try {
-      await apiRequest(`/collaboration/groups/${groupEditor.id}`, {
+      await apiRequest(`/collaboration/teams/${groupEditor.id}`, {
         method: "DELETE",
         token: session.accessToken,
       });
       setGroupDeleteConfirmOpen(false);
       setGroupEditorId(null);
-      setPageMessage(runtimeLocalize("Команда удалена.", "Team deleted.", locale));
+      setPageMessage(
+        runtimeLocalize("Бригада удалена.", "Team deleted.", locale),
+      );
       await loadDirectory();
     } catch (requestError) {
       setGroupError(
         requestError instanceof Error
           ? requestError.message
           : runtimeLocalize(
-              "Не удалось удалить команду.",
+              "Не удалось удалить бригаду.",
               "Failed to delete team.",
               locale,
             ),
@@ -2281,7 +2790,11 @@ const Employees = ({
       <div className={`team-tasks-table-card${cardClassName}`}>
         <div className="team-tasks-table-shell">
           <Table
-            aria-label={runtimeLocalize("Таблица сотрудников", "Employees table", locale)}
+            aria-label={runtimeLocalize(
+              "Таблица сотрудников",
+              "Employees table",
+              locale,
+            )}
             onSortChange={setSortDescriptor}
             size="sm"
             sortDescriptor={sortDescriptor}
@@ -2289,7 +2802,7 @@ const Employees = ({
             <Table.Header>
               <Table.Head
                 allowsSorting
-                className="w-[38%] min-w-[320px]"
+                className="w-[38%] min-w-[340px]"
                 id="name"
                 isRowHeader
                 label={runtimeLocalize("ФИО", "Full name", locale)}
@@ -2309,7 +2822,7 @@ const Employees = ({
                 allowsSorting
                 className="w-[16%] min-w-[170px] team-tasks-head-center"
                 id="group"
-                label={runtimeLocalize("Команда", "Team", locale)}
+                label={runtimeLocalize("Бригада", "Team", locale)}
               />
               <Table.Head
                 allowsSorting
@@ -2326,30 +2839,52 @@ const Employees = ({
 
             <Table.Body items={items}>
               {(employee) => (
-                <Table.Row className="team-tasks-table-row" id={employee.id}>
+                <Table.Row
+                  className="team-tasks-table-row group"
+                  id={employee.id}
+                >
                   <Table.Cell className="align-middle">
-                    <button
-                      className="team-tasks-row-button team-tasks-row-button--identity"
-                      onClick={(event) => openEmployeePage(employee.id, event)}
-                      type="button"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar
-                          alt={employee.name}
-                          className="shrink-0"
-                          size="sm"
-                          src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
-                        />
-                        <div className="min-w-0 space-y-0.5">
-                          <p className="truncate text-base font-medium text-[color:var(--foreground)]">
-                            {employee.name}
-                          </p>
-                          <p className="truncate text-sm text-[color:var(--muted-foreground)]">
-                            {employee.position}
-                          </p>
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={selectedEmployeeIds.has(employee.id)}
+                        onCheckedChange={(checked) =>
+                          toggleEmployeeSelection(employee.id, checked === true)
+                        }
+                      />
+                      <button
+                        className="team-tasks-row-button team-tasks-row-button--identity"
+                        onClick={(event) =>
+                          openEmployeePage(employee.id, event)
+                        }
+                        type="button"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Avatar
+                            alt={employee.name}
+                            className="shrink-0"
+                            size="sm"
+                            src={
+                              employee.avatarUrl ??
+                              getMockAvatarDataUrl(employee.name)
+                            }
+                          />
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="truncate text-base font-medium text-[color:var(--foreground)]">
+                              {employee.name}
+                            </p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <p className="truncate text-sm text-[color:var(--muted-foreground)]">
+                                {employee.position}
+                              </p>
+                              <RoleBadge
+                                role={employee.role}
+                                label={employee.roleLabel}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                    </div>
                   </Table.Cell>
 
                   <Table.Cell className="align-middle whitespace-nowrap">
@@ -2381,8 +2916,9 @@ const Employees = ({
                       type="button"
                     >
                       {employee.group ? (
-                        <span className="team-tasks-team-text">
-                          {employee.group}
+                        <span className="team-tasks-team-text inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                          <span>{employee.groupEmoji}</span>
+                          <span>{employee.group}</span>
                         </span>
                       ) : (
                         <span className="team-tasks-team-text is-empty">—</span>
@@ -2415,25 +2951,59 @@ const Employees = ({
                             <Plus className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[200px] rounded-xl font-heading">
-                          <DropdownMenuItem onClick={() => openTaskDialogForEmployee(employee)}>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-[200px] rounded-xl font-heading"
+                        >
+                          <DropdownMenuItem
+                            onClick={() => openTaskDialogForEmployee(employee)}
+                          >
                             <ListTodo className="mr-2 h-4 w-4" />
-                            {runtimeLocalize("Назначить задачу", "Assign task", locale)}
+                            {runtimeLocalize(
+                              "Назначить задачу",
+                              "Assign task",
+                              locale,
+                            )}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openAssignShiftDialog(employee)}>
+                          <DropdownMenuItem
+                            onClick={() => openAssignShiftDialog(employee)}
+                          >
                             <Clock className="mr-2 h-4 w-4" />
-                            {runtimeLocalize("Назначить смену", "Assign shift", locale)}
+                            {runtimeLocalize(
+                              "Назначить смену",
+                              "Assign shift",
+                              locale,
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openMoveDialog(employee)}
+                          >
+                            <ArrowRightLeft className="mr-2 h-4 w-4" />
+                            {employee.group
+                              ? runtimeLocalize(
+                                  "Изменить бригаду",
+                                  "Change team",
+                                  locale,
+                                )
+                              : runtimeLocalize(
+                                  "Назначить бригаду",
+                                  "Assign team",
+                                  locale,
+                                )}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                       <Button
-                        className="h-7 w-7 rounded-lg p-0"
+                        className="h-7 rounded-lg px-2 text-xs opacity-0 transition group-hover:opacity-100"
                         onClick={() => openMoveDialog(employee)}
                         size="sm"
                         type="button"
                         variant="ghost"
                       >
                         <ArrowRightLeft className="h-3.5 w-3.5" />
+                        {employee.group
+                          ? runtimeLocalize("Изменить", "Change", locale)
+                          : runtimeLocalize("Назначить", "Assign", locale)}
                       </Button>
                     </div>
                   </Table.Cell>
@@ -2460,7 +3030,8 @@ const Employees = ({
                 }`}
                 onClick={() => setViewMode("employees")}
               >
-                <Users className="h-4 w-4" /> {runtimeLocalize("Сотрудники", "Employees", locale)}{" "}
+                <Users className="h-4 w-4" />{" "}
+                {runtimeLocalize("Сотрудники", "Employees", locale)}{" "}
                 {filteredEmployees.length}
               </button>
               <button
@@ -2471,7 +3042,8 @@ const Employees = ({
                 }`}
                 onClick={() => setViewMode("groups")}
               >
-                <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Команды", "Teams", locale)} {groups.length}
+                <FolderOpen className="h-4 w-4" />{" "}
+                {runtimeLocalize("Бригады", "Teams", locale)} {groups.length}
               </button>
             </div>
             <Button
@@ -2482,12 +3054,13 @@ const Employees = ({
               }`}
               onClick={() => {
                 dismissAddEmployeePrompt();
+                resetInviteDraft();
                 setInviteDialogOpen(true);
                 setInviteError(null);
-                setInviteSuccess(null);
               }}
             >
-              <UserPlus className="h-4 w-4" /> {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
+              <UserPlus className="h-4 w-4" />{" "}
+              {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
             </Button>
             <Button
               className="rounded-xl font-heading"
@@ -2498,7 +3071,8 @@ const Employees = ({
               type="button"
               variant="outline"
             >
-              <FolderOpen className="h-4 w-4" /> {runtimeLocalize("Добавить команду", "Add team", locale)}
+              <FolderOpen className="h-4 w-4" />{" "}
+              {runtimeLocalize("Добавить бригаду", "Add team", locale)}
             </Button>
             <Button
               className="rounded-xl font-heading"
@@ -2509,7 +3083,11 @@ const Employees = ({
               <Smartphone className="h-4 w-4" />
               {mobileLinkCopied
                 ? runtimeLocalize("Скопировано", "Copied", locale)
-                : runtimeLocalize("Ссылка на приложение", "Mobile app link", locale)}
+                : runtimeLocalize(
+                    "Ссылка на приложение",
+                    "Mobile app link",
+                    locale,
+                  )}
             </Button>
           </div>
         </div>
@@ -2527,7 +3105,11 @@ const Employees = ({
               <Input
                 className="h-10 w-full rounded-xl border-border bg-secondary/30 pl-9 font-heading"
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder={runtimeLocalize("Поиск сотрудника...", "Search employee...", locale)}
+                placeholder={runtimeLocalize(
+                  "Поиск сотрудника...",
+                  "Search employee...",
+                  locale,
+                )}
                 value={search}
               />
             </div>
@@ -2553,11 +3135,152 @@ const Employees = ({
               >
                 <Users className="h-3.5 w-3.5" />
                 {allExpanded
-                  ? runtimeLocalize("Свернуть команды", "Collapse teams", locale)
-                  : runtimeLocalize("Развернуть команды", "Expand teams", locale)}
+                  ? runtimeLocalize(
+                      "Свернуть бригады",
+                      "Collapse teams",
+                      locale,
+                    )
+                  : runtimeLocalize(
+                      "Развернуть бригады",
+                      "Expand teams",
+                      locale,
+                    )}
               </Button>
             ) : null}
           </div>
+
+          {viewMode === "employees" ? (
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+              {[
+                {
+                  id: "all",
+                  label: runtimeLocalize("Все", "All", locale),
+                  count: employees.length,
+                },
+                ...groups.map((group) => ({
+                  id: group.id,
+                  label: `${resolveTeamAvatarEmoji(group)} ${group.name}`,
+                  count: employees.filter(
+                    (employee) => employee.groupId === group.id,
+                  ).length,
+                })),
+                {
+                  id: "__none",
+                  label: runtimeLocalize("Без бригады", "No team", locale),
+                  count: employees.filter((employee) => !employee.groupId)
+                    .length,
+                },
+              ].map((item) => (
+                <button
+                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-heading transition ${
+                    teamFilterId === item.id
+                      ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
+                      : "border-border bg-white text-muted-foreground hover:text-foreground"
+                  }`}
+                  key={item.id}
+                  onClick={() => setTeamFilterId(item.id)}
+                  type="button"
+                >
+                  <span>{item.label}</span>
+                  <span
+                    className={`rounded-full px-1.5 text-[11px] ${
+                      teamFilterId === item.id
+                        ? "bg-white/18 text-white"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {viewMode === "employees" && selectedEmployeeIds.size >= 2 ? (
+            <div className="mb-4 rounded-2xl border border-[rgba(49,84,255,0.24)] bg-[rgba(49,84,255,0.07)] p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-[180px] font-heading text-sm font-semibold text-[color:var(--foreground)]">
+                  {runtimeLocalize(
+                    `${selectedEmployeeIds.size} сотрудников выбрано`,
+                    `${selectedEmployeeIds.size} employees selected`,
+                    locale,
+                  )}
+                </div>
+                <div className="min-w-[200px] flex-1">
+                  <Select
+                    onValueChange={setBulkTargetGroupId}
+                    value={bulkTargetGroupId}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl border-border bg-white text-sm font-heading">
+                      <SelectValue
+                        placeholder={runtimeLocalize("Бригада", "Team", locale)}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">
+                        {runtimeLocalize("Без бригады", "No team", locale)}
+                      </SelectItem>
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {resolveTeamAvatarEmoji(group)} {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[190px]">
+                  <Select
+                    onValueChange={(value) =>
+                      setBulkRole(value as EmployeeAccessRole | "keep")
+                    }
+                    value={bulkRole}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl border-border bg-white text-sm font-heading">
+                      <SelectValue
+                        placeholder={runtimeLocalize("Роль", "Role", locale)}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keep">
+                        {runtimeLocalize("Роль не менять", "Keep role", locale)}
+                      </SelectItem>
+                      <SelectItem value="employee">
+                        {runtimeLocalize("Сотрудник", "Employee", locale)}
+                      </SelectItem>
+                      <SelectItem value="team_leader">
+                        {runtimeLocalize(
+                          "Лидер бригады",
+                          "Team leader",
+                          locale,
+                        )}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  className="rounded-xl font-heading"
+                  disabled={bulkSubmitting}
+                  onClick={() => void applyBulkAssignment()}
+                  type="button"
+                >
+                  {bulkSubmitting
+                    ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                    : runtimeLocalize("Применить", "Apply", locale)}
+                </Button>
+                <Button
+                  className="rounded-xl font-heading"
+                  onClick={clearEmployeeSelection}
+                  type="button"
+                  variant="outline"
+                >
+                  {runtimeLocalize("Сбросить", "Clear", locale)}
+                </Button>
+              </div>
+              {bulkError ? (
+                <div className="error-box mt-3">{bulkError}</div>
+              ) : null}
+            </div>
+          ) : null}
 
           {pageMessage ? (
             <div className="success-box mb-4">{pageMessage}</div>
@@ -2583,23 +3306,30 @@ const Employees = ({
                       >
                         {getInvitationLabel(invitation.status, locale)}
                       </span>
+                      <RoleBadge
+                        label={getEmployeeAccessRoleLabel(
+                          invitation.role ?? "employee",
+                          locale,
+                        )}
+                        role={invitation.role ?? "employee"}
+                      />
                     </div>
                     <p className="text-xs font-heading text-muted-foreground">
                       {invitation.submittedAt
-                        ? `${
-                            runtimeLocalize("Анкета отправлена", "Form submitted", locale)
-                          } ${new Date(invitation.submittedAt).toLocaleString(getRuntimeLocaleTag(locale))}`
-                        : `${
-                            runtimeLocalize(
-                              invitation.email
-                                ? "Email добавлен, доступ активен до"
-                                : "Телефон добавлен, доступ активен до",
-                              invitation.email
-                                ? "Email is registered, access is active until"
-                                : "Phone is registered, access is active until",
-                              locale,
-                            )
-                          } ${new Date(invitation.expiresAt).toLocaleString(getRuntimeLocaleTag(locale))}`}
+                        ? `${runtimeLocalize(
+                            "Анкета отправлена",
+                            "Form submitted",
+                            locale,
+                          )} ${new Date(invitation.submittedAt).toLocaleString(getRuntimeLocaleTag(locale))}`
+                        : `${runtimeLocalize(
+                            invitation.email
+                              ? "Email добавлен, доступ активен до"
+                              : "Телефон добавлен, доступ активен до",
+                            invitation.email
+                              ? "Email is registered, access is active until"
+                              : "Phone is registered, access is active until",
+                            locale,
+                          )} ${new Date(invitation.expiresAt).toLocaleString(getRuntimeLocaleTag(locale))}`}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2620,7 +3350,12 @@ const Employees = ({
                           size="sm"
                           variant="outline"
                         >
-                          <Mail className="h-4 w-4" /> {runtimeLocalize("Отправить повторно", "Resend", locale)}
+                          <Mail className="h-4 w-4" />{" "}
+                          {runtimeLocalize(
+                            "Отправить повторно",
+                            "Resend",
+                            locale,
+                          )}
                         </Button>
                       </>
                     ) : (
@@ -2661,7 +3396,60 @@ const Employees = ({
             )
           ) : (
             <div className="space-y-3">
-              {groupedEmployees.map(({ group, members }) => {
+              {groups.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-6 font-heading">
+                  <p className="text-lg font-semibold text-foreground">
+                    {runtimeLocalize(
+                      "Организуйте первую бригаду",
+                      "Create your first team",
+                      locale,
+                    )}
+                  </p>
+                  <p className="mt-2 max-w-[62ch] text-sm leading-6 text-muted-foreground">
+                    {runtimeLocalize(
+                      "Бригады помогают быстро назначать задачи, новости и роли лидеров.",
+                      "Teams help assign tasks, announcements, and leader roles quickly.",
+                      locale,
+                    )}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {TEAM_SUGGESTIONS.slice(0, 5).map((suggestion) => (
+                      <button
+                        className="rounded-xl border border-border bg-white px-3 py-2 text-sm hover:bg-secondary/40"
+                        key={suggestion.nameRu}
+                        onClick={() => {
+                          setCreateGroupEmoji(suggestion.emoji);
+                          setCreateGroupName(
+                            runtimeLocalize(
+                              suggestion.nameRu,
+                              suggestion.nameEn,
+                              locale,
+                            ),
+                          );
+                          setCreateGroupOpen(true);
+                        }}
+                        type="button"
+                      >
+                        {suggestion.emoji}{" "}
+                        {runtimeLocalize(
+                          suggestion.nameRu,
+                          suggestion.nameEn,
+                          locale,
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    className="mt-5 rounded-xl font-heading"
+                    onClick={() => setCreateGroupOpen(true)}
+                    type="button"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    {runtimeLocalize("Создать бригаду", "Create team", locale)}
+                  </Button>
+                </div>
+              ) : null}
+              {groupedEmployees.map(({ group, leader, members }) => {
                 const isOpen = expandedGroups.has(group.id);
                 return (
                   <div
@@ -2689,6 +3477,10 @@ const Employees = ({
                           <Users className="h-3.5 w-3.5" />
                           {members.length}
                         </span>
+                        <span className="hidden text-xs font-heading text-muted-foreground sm:inline">
+                          {runtimeLocalize("Лидер", "Leader", locale)}:{" "}
+                          {leader?.name ?? "—"}
+                        </span>
                       </button>
                       <div className="flex items-center gap-1.5">
                         <Button
@@ -2697,7 +3489,8 @@ const Employees = ({
                           size="sm"
                           variant="ghost"
                         >
-                          <Settings className="h-3 w-3" /> {runtimeLocalize("Изменить", "Edit", locale)}
+                          <Settings className="h-3 w-3" />{" "}
+                          {runtimeLocalize("Изменить", "Edit", locale)}
                         </Button>
                         <Button
                           className="h-7 rounded-lg px-2 text-xs font-heading"
@@ -2707,7 +3500,12 @@ const Employees = ({
                           size="sm"
                           variant="ghost"
                         >
-                          <ListTodo className="h-3 w-3" /> {runtimeLocalize("Задача команде", "Task for team", locale)}
+                          <ListTodo className="h-3 w-3" />{" "}
+                          {runtimeLocalize(
+                            "Задача бригаде",
+                            "Task for team",
+                            locale,
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -2719,7 +3517,7 @@ const Employees = ({
                     {isOpen && members.length === 0 ? (
                       <p className="p-4 text-center text-sm font-heading text-muted-foreground">
                         {runtimeLocalize(
-                          "В этой команде нет сотрудников.",
+                          "В этой бригаде нет сотрудников.",
                           "There are no employees in this team.",
                           locale,
                         )}
@@ -2742,7 +3540,7 @@ const Employees = ({
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                       <span className="font-heading font-semibold italic text-muted-foreground">
-                        {runtimeLocalize("Без команды", "No team", locale)}
+                        {runtimeLocalize("Без бригады", "No team", locale)}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs font-heading text-muted-foreground">
                         <Users className="h-3.5 w-3.5" />
@@ -2766,115 +3564,420 @@ const Employees = ({
         open={inviteDialogOpen}
         onOpenChange={(open) => {
           setInviteDialogOpen(open);
+          if (!open) {
+            setInviteError(null);
+            setInviteTeamError(null);
+          }
         }}
       >
-        <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+        <DialogContent className="w-[min(760px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
-              {attendanceTrackingEnabled
-                ? runtimeLocalize(
-                    "Добавьте email или телефон. После отправки сразу откроется быстрая настройка смены и команды.",
-                    "Add the employee email or phone. After sending, quick shift and team setup opens.",
-                    locale,
-                  )
-                : runtimeLocalize(
-                    "Добавьте email или телефон. Сотрудник заполнит профиль при регистрации.",
-                    "Add the employee email or phone. The employee will complete the profile during registration.",
-                    locale,
-                  )}
+              {runtimeLocalize(
+                "Шаг 1 — данные и роль. Шаг 2 — бригада, если она нужна для выбранной роли.",
+                "Step 1 is profile and role. Step 2 is team assignment when the selected role needs it.",
+                locale,
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-secondary/20 p-1">
-              <button
-                className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
-                  inviteContactMethod === "email"
-                    ? "bg-accent text-accent-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => {
-                  setInviteContactMethod("email");
-                  setInviteError(null);
-                }}
-                type="button"
-              >
-                <Mail className="h-4 w-4" />
-                Email
-              </button>
-              <button
-                className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
-                  inviteContactMethod === "phone"
-                    ? "bg-accent text-accent-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => {
-                  setInviteContactMethod("phone");
-                  setInviteError(null);
-                }}
-                type="button"
-              >
-                <Phone className="h-4 w-4" />
-                {runtimeLocalize("Телефон", "Phone", locale)}
-              </button>
+          <div className="space-y-5">
+            <div className="h-2 overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-[color:var(--accent)] transition-all"
+                style={{ width: inviteStep === 1 ? "50%" : "100%" }}
+              />
             </div>
-            <label className="grid gap-2 text-sm font-heading">
+            <div className="flex items-center justify-between text-xs font-heading font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               <span>
-                {inviteContactMethod === "email"
-                  ? runtimeLocalize("Рабочий email сотрудника", "Employee work email", locale)
-                  : runtimeLocalize("Телефон сотрудника", "Employee phone", locale)}
+                {runtimeLocalize(
+                  `Шаг ${inviteStep} из 2`,
+                  `Step ${inviteStep} of 2`,
+                  locale,
+                )}
               </span>
-              {inviteContactMethod === "email" ? (
-                <Input
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="employee@company.ru"
-                  type="email"
-                  value={inviteEmail}
-                />
-              ) : (
-                <PhoneCountryInput
-                  countryCode={invitePhoneCountryCode}
-                  countryCodeLabel={runtimeLocalize(
-                    "Телефонный код страны",
-                    "Country dial code",
-                    locale,
+              <span>
+                {inviteStep === 1
+                  ? runtimeLocalize("Данные и роль", "Profile and role", locale)
+                  : runtimeLocalize("Бригада", "Team", locale)}
+              </span>
+            </div>
+
+            {inviteStep === 1 ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>{runtimeLocalize("Имя", "First name", locale)}</span>
+                    <Input
+                      onChange={(event) =>
+                        setInviteFirstName(event.target.value)
+                      }
+                      value={inviteFirstName}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>
+                      {runtimeLocalize("Фамилия", "Last name", locale)}
+                    </span>
+                    <Input
+                      onChange={(event) =>
+                        setInviteLastName(event.target.value)
+                      }
+                      value={inviteLastName}
+                    />
+                  </label>
+                </div>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>
+                    {runtimeLocalize("Должность", "Position", locale)}
+                  </span>
+                  <Input
+                    onChange={(event) =>
+                      setInvitePositionTitle(event.target.value)
+                    }
+                    placeholder={runtimeLocalize(
+                      "Например, Бариста",
+                      "For example, Barista",
+                      locale,
+                    )}
+                    value={invitePositionTitle}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-secondary/20 p-1">
+                  <button
+                    className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
+                      inviteContactMethod === "email"
+                        ? "bg-accent text-accent-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => {
+                      setInviteContactMethod("email");
+                      setInviteError(null);
+                    }}
+                    type="button"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Email
+                  </button>
+                  <button
+                    className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
+                      inviteContactMethod === "phone"
+                        ? "bg-accent text-accent-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => {
+                      setInviteContactMethod("phone");
+                      setInviteError(null);
+                    }}
+                    type="button"
+                  >
+                    <Phone className="h-4 w-4" />
+                    {runtimeLocalize("Телефон", "Phone", locale)}
+                  </button>
+                </div>
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>
+                    {inviteContactMethod === "email"
+                      ? runtimeLocalize("Рабочий email", "Work email", locale)
+                      : runtimeLocalize("Телефон", "Phone", locale)}
+                  </span>
+                  {inviteContactMethod === "email" ? (
+                    <Input
+                      onChange={(event) => setInviteEmail(event.target.value)}
+                      placeholder="employee@company.ru"
+                      type="email"
+                      value={inviteEmail}
+                    />
+                  ) : (
+                    <PhoneCountryInput
+                      countryCode={invitePhoneCountryCode}
+                      countryCodeLabel={runtimeLocalize(
+                        "Телефонный код страны",
+                        "Country dial code",
+                        locale,
+                      )}
+                      id="invite-employee-phone"
+                      locale={locale}
+                      nationalNumber={invitePhone}
+                      onCountryCodeChange={setInvitePhoneCountryCode}
+                      onNationalNumberChange={setInvitePhone}
+                      phoneLabel={runtimeLocalize(
+                        "Телефон сотрудника",
+                        "Employee phone",
+                        locale,
+                      )}
+                    />
                   )}
-                  id="invite-employee-phone"
-                  locale={locale}
-                  nationalNumber={invitePhone}
-                  onCountryCodeChange={setInvitePhoneCountryCode}
-                  onNationalNumberChange={setInvitePhone}
-                  phoneLabel={runtimeLocalize(
-                    "Телефон сотрудника",
-                    "Employee phone",
-                    locale,
-                  )}
-                />
-              )}
-            </label>
+                </label>
+                <div className="grid gap-2 text-sm font-heading">
+                  <span>{runtimeLocalize("Роль", "Role", locale)}</span>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {EMPLOYEE_ACCESS_ROLES.map((roleOption) => {
+                      const selected = inviteRole === roleOption.value;
+                      const Icon = getEmployeeAccessRoleIcon(roleOption.value);
+                      return (
+                        <button
+                          className={`min-h-[132px] rounded-2xl border p-3 text-left transition ${
+                            selected
+                              ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)]"
+                              : "border-border bg-secondary/20 hover:bg-white"
+                          }`}
+                          key={roleOption.value}
+                          onClick={() => {
+                            setInviteRole(roleOption.value);
+                            if (roleOption.value === "owner") {
+                              setInviteAssignTeam(false);
+                              setInviteTeamId("__none");
+                            }
+                            setInviteError(null);
+                          }}
+                          type="button"
+                        >
+                          <Icon className="mb-3 h-5 w-5 text-[color:var(--accent)]" />
+                          <span className="block font-semibold text-foreground">
+                            {runtimeLocalize(
+                              roleOption.titleRu,
+                              roleOption.titleEn,
+                              locale,
+                            )}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                            {runtimeLocalize(
+                              roleOption.descriptionRu,
+                              roleOption.descriptionEn,
+                              locale,
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {inviteRole === "employee" ? (
+                  <label className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/20 p-4 text-sm font-heading">
+                    <Checkbox
+                      checked={inviteAssignTeam}
+                      onCheckedChange={(checked) =>
+                        setInviteAssignTeam(checked === true)
+                      }
+                    />
+                    <span className="grid gap-1">
+                      <span className="font-semibold text-foreground">
+                        {runtimeLocalize(
+                          "Назначить сотрудника в бригаду",
+                          "Assign employee to a team",
+                          locale,
+                        )}
+                      </span>
+                      <span className="text-xs leading-5 text-muted-foreground">
+                        {runtimeLocalize(
+                          "Можно оставить без бригады и назначить позже из списка сотрудников.",
+                          "You can leave this blank and assign a team later from the employee list.",
+                          locale,
+                        )}
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+
+                {inviteRole === "team_leader" || inviteAssignTeam ? (
+                  <div className="grid gap-3">
+                    <label className="grid gap-2 text-sm font-heading">
+                      <span>
+                        {inviteRole === "team_leader"
+                          ? runtimeLocalize(
+                              "Бригада лидера",
+                              "Leader team",
+                              locale,
+                            )
+                          : runtimeLocalize("Бригада", "Team", locale)}
+                      </span>
+                      <Select
+                        onValueChange={setInviteTeamId}
+                        value={inviteTeamId}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
+                          <SelectValue
+                            placeholder={runtimeLocalize(
+                              "Выберите бригаду",
+                              "Select team",
+                              locale,
+                            )}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inviteRole !== "team_leader" ? (
+                            <SelectItem value="__none">
+                              {runtimeLocalize(
+                                "Без бригады",
+                                "No team",
+                                locale,
+                              )}
+                            </SelectItem>
+                          ) : null}
+                          {groups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {resolveTeamAvatarEmoji(group)} {group.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </label>
+
+                    {groups.length === 0 ? (
+                      <div className="grid gap-2">
+                        <p className="text-xs font-heading text-muted-foreground">
+                          {runtimeLocalize(
+                            "Бригад пока нет. Создайте первую прямо здесь.",
+                            "No teams yet. Create the first one here.",
+                            locale,
+                          )}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {TEAM_SUGGESTIONS.map((suggestion) => (
+                            <button
+                              className="rounded-xl border border-border bg-white px-3 py-2 text-sm font-heading hover:bg-secondary/40"
+                              key={suggestion.nameRu}
+                              onClick={() => {
+                                setInviteTeamEmoji(suggestion.emoji);
+                                setInviteTeamName(
+                                  runtimeLocalize(
+                                    suggestion.nameRu,
+                                    suggestion.nameEn,
+                                    locale,
+                                  ),
+                                );
+                              }}
+                              type="button"
+                            >
+                              {suggestion.emoji}{" "}
+                              {runtimeLocalize(
+                                suggestion.nameRu,
+                                suggestion.nameEn,
+                                locale,
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {TEAM_AVATAR_EMOJIS.slice(0, 10).map((emoji) => (
+                          <button
+                            aria-pressed={inviteTeamEmoji === emoji}
+                            className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
+                              inviteTeamEmoji === emoji
+                                ? "border-accent bg-accent text-accent-foreground"
+                                : "border-border bg-white"
+                            }`}
+                            key={emoji}
+                            onClick={() => setInviteTeamEmoji(emoji)}
+                            type="button"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          className="h-10 flex-1 rounded-xl bg-white"
+                          onChange={(event) =>
+                            setInviteTeamName(event.target.value)
+                          }
+                          placeholder={runtimeLocalize(
+                            "Новая бригада",
+                            "New team",
+                            locale,
+                          )}
+                          value={inviteTeamName}
+                        />
+                        <Button
+                          className="rounded-xl font-heading"
+                          disabled={
+                            inviteTeamCreating || !inviteTeamName.trim()
+                          }
+                          onClick={() => void createInlineInviteTeam()}
+                          type="button"
+                          variant="outline"
+                        >
+                          {inviteTeamCreating
+                            ? runtimeLocalize(
+                                "Создаём...",
+                                "Creating...",
+                                locale,
+                              )
+                            : runtimeLocalize("Создать", "Create", locale)}
+                        </Button>
+                      </div>
+                      {inviteTeamError ? (
+                        <div className="error-box mt-3">{inviteTeamError}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-6 text-sm font-heading text-muted-foreground">
+                    {runtimeLocalize(
+                      "Сотрудник будет без бригады. Это не ошибка: назначить можно позже.",
+                      "The employee will have no team. You can assign one later.",
+                      locale,
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {inviteError ? (
               <div className="error-box">{inviteError}</div>
             ) : null}
-            {inviteSuccess ? (
-              <div className="success-box">{inviteSuccess}</div>
-            ) : null}
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-between gap-2">
               <Button
                 className="rounded-xl font-heading"
-                disabled={
-                  inviteSubmitting ||
-                  !(inviteContactMethod === "email" ? inviteEmail : invitePhone).trim()
-                }
-                onClick={() => void handleInviteSubmit()}
+                onClick={() => {
+                  if (inviteStep === 1) {
+                    setInviteDialogOpen(false);
+                    return;
+                  }
+                  setInviteStep(1);
+                  setInviteError(null);
+                }}
+                type="button"
+                variant="outline"
               >
-                {inviteContactMethod === "email" ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                {inviteStep === 1
+                  ? runtimeLocalize("Отмена", "Cancel", locale)
+                  : runtimeLocalize("Назад", "Back", locale)}
+              </Button>
+              <Button
+                className="rounded-xl font-heading"
+                disabled={inviteSubmitting}
+                onClick={() =>
+                  inviteStep === 1
+                    ? goToInviteStepTwo()
+                    : void handleInviteSubmit()
+                }
+                type="button"
+              >
+                {inviteStep === 1 ? (
+                  <ArrowRightLeft className="h-4 w-4" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
                 {inviteSubmitting
                   ? runtimeLocalize("Отправляем...", "Sending...", locale)
-                  : inviteContactMethod === "email"
-                    ? runtimeLocalize("Отправить email", "Send email", locale)
-                    : runtimeLocalize("Отправить SMS", "Send SMS", locale)}
+                  : inviteStep === 1
+                    ? inviteRole === "owner"
+                      ? runtimeLocalize("Отправить", "Send", locale)
+                      : runtimeLocalize("Далее", "Next", locale)
+                    : inviteContactMethod === "email"
+                      ? runtimeLocalize("Отправить email", "Send email", locale)
+                      : runtimeLocalize("Отправить SMS", "Send SMS", locale)}
               </Button>
             </div>
           </div>
@@ -2888,7 +3991,11 @@ const Employees = ({
               <AlertTriangle className="h-5 w-5" />
             </div>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Не хватает оплаченных мест", "Not enough paid seats", locale)}
+              {runtimeLocalize(
+                "Не хватает оплаченных мест",
+                "Not enough paid seats",
+                locale,
+              )}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
@@ -2940,7 +4047,11 @@ const Employees = ({
         <DialogContent className="w-[min(520px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Доступ сотрудника создан", "Employee access created", locale)}
+              {runtimeLocalize(
+                "Доступ сотрудника создан",
+                "Employee access created",
+                locale,
+              )}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
@@ -2980,7 +4091,11 @@ const Employees = ({
 
               <div className="rounded-[24px] border border-[color:var(--border)] bg-white/80 p-4">
                 <div className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                  {runtimeLocalize("Временный пароль", "Temporary password", locale)}
+                  {runtimeLocalize(
+                    "Временный пароль",
+                    "Temporary password",
+                    locale,
+                  )}
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="min-w-0 break-all font-mono text-base text-foreground">
@@ -3036,11 +4151,11 @@ const Employees = ({
         <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Добавить команду", "Add team", locale)}
+              {runtimeLocalize("Добавить бригаду", "Add team", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Создайте новую команду внутри организации и сразу добавьте в неё сотрудников.",
+                "Создайте новую бригаду внутри организации и сразу добавьте в неё сотрудников.",
                 "Create a new team inside the organization and add employees to it right away.",
                 locale,
               )}
@@ -3048,7 +4163,9 @@ const Employees = ({
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Эмодзи команды", "Team emoji", locale)}</span>
+              <span>
+                {runtimeLocalize("Эмодзи бригады", "Team emoji", locale)}
+              </span>
               <div className="flex flex-wrap gap-2">
                 {TEAM_AVATAR_EMOJIS.map((emoji) => (
                   <button
@@ -3068,7 +4185,9 @@ const Employees = ({
               </div>
             </div>
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Название команды", "Team name", locale)}</span>
+              <span>
+                {runtimeLocalize("Название бригады", "Team name", locale)}
+              </span>
               <Input
                 maxLength={120}
                 onChange={(event) => setCreateGroupName(event.target.value)}
@@ -3089,7 +4208,7 @@ const Employees = ({
                   setCreateGroupDescription(event.target.value)
                 }
                 placeholder={runtimeLocalize(
-                  "Короткое описание команды",
+                  "Короткое описание бригады",
                   "Short team description",
                   locale,
                 )}
@@ -3097,7 +4216,7 @@ const Employees = ({
               />
             </label>
             <div className="text-xs font-heading text-muted-foreground">
-              {runtimeLocalize("Состав команды", "Team members", locale)}
+              {runtimeLocalize("Состав бригады", "Team members", locale)}
             </div>
             {employees.length > 0 ? (
               <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
@@ -3111,7 +4230,10 @@ const Employees = ({
                         alt={employee.name}
                         className="shrink-0"
                         size="md"
-                        src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
+                        src={
+                          employee.avatarUrl ??
+                          getMockAvatarDataUrl(employee.name)
+                        }
                       />
                       <div className="min-w-0">
                         <p className="truncate font-heading font-medium text-foreground">
@@ -3138,7 +4260,7 @@ const Employees = ({
             ) : (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-5 text-sm text-muted-foreground">
                 {runtimeLocalize(
-                  "В организации пока нет сотрудников для добавления в команду.",
+                  "В организации пока нет сотрудников для добавления в бригаду.",
                   "There are no employees in the organization yet to add to the team.",
                   locale,
                 )}
@@ -3156,7 +4278,7 @@ const Employees = ({
                 <FolderOpen className="h-4 w-4" />
                 {createGroupSubmitting
                   ? runtimeLocalize("Создаём...", "Creating...", locale)
-                  : runtimeLocalize("Создать команду", "Create team", locale)}
+                  : runtimeLocalize("Создать бригаду", "Create team", locale)}
               </Button>
             </div>
           </div>
@@ -3180,13 +4302,21 @@ const Employees = ({
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
                   {invitationDialogMode === "setup"
-                    ? runtimeLocalize("Настроить приглашение", "Setup invitation", locale)
-                    : runtimeLocalize("Проверка анкеты сотрудника", "Employee form review", locale)}
+                    ? runtimeLocalize(
+                        "Настроить приглашение",
+                        "Setup invitation",
+                        locale,
+                      )
+                    : runtimeLocalize(
+                        "Проверка анкеты сотрудника",
+                        "Employee form review",
+                        locale,
+                      )}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
                   {invitationDialogMode === "setup"
                     ? runtimeLocalize(
-                        "Заполните имя, фамилию, смену и команду. Остальное сотрудник заполнит сам.",
+                        "Заполните имя, фамилию, смену и бригаду. Остальное сотрудник заполнит сам.",
                         "Fill in the name, shift, and team. The employee will complete the rest.",
                         locale,
                       )
@@ -3212,7 +4342,9 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Фамилия*", "Last name*", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Фамилия*", "Last name*", locale)}
+                  </span>
                   <Input
                     className={reviewFieldClassName}
                     onChange={(event) =>
@@ -3226,7 +4358,9 @@ const Employees = ({
                 </label>
                 {invitationDialogMode === "review" ? (
                   <label className="grid gap-2 text-sm font-heading">
-                    <span>{runtimeLocalize("Отчество", "Middle name", locale)}</span>
+                    <span>
+                      {runtimeLocalize("Отчество", "Middle name", locale)}
+                    </span>
                     <Input
                       className={reviewFieldClassName}
                       onChange={(event) =>
@@ -3239,10 +4373,77 @@ const Employees = ({
                     />
                   </label>
                 ) : null}
+                <label className="grid gap-2 text-sm font-heading">
+                  <span>
+                    {runtimeLocalize("Должность", "Position", locale)}
+                  </span>
+                  <Input
+                    className={reviewFieldClassName}
+                    onChange={(event) =>
+                      setReviewForm((current) => ({
+                        ...current,
+                        positionTitle: event.target.value,
+                      }))
+                    }
+                    value={reviewForm.positionTitle}
+                  />
+                </label>
+                <div className="grid gap-2 text-sm font-heading sm:col-span-2">
+                  <span>{runtimeLocalize("Роль", "Role", locale)}</span>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {EMPLOYEE_ACCESS_ROLES.map((option) => {
+                      const selected = reviewForm.role === option.value;
+                      const Icon = getEmployeeAccessRoleIcon(option.value);
+                      return (
+                        <button
+                          className={`rounded-2xl border p-3 text-left transition ${
+                            selected
+                              ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)]"
+                              : "border-border bg-secondary/20 hover:bg-white"
+                          }`}
+                          key={option.value}
+                          onClick={() =>
+                            setReviewForm((current) => ({
+                              ...current,
+                              role: option.value,
+                              groupId:
+                                option.value === "owner"
+                                  ? "__none"
+                                  : current.groupId,
+                            }))
+                          }
+                          type="button"
+                        >
+                          <Icon className="mb-2 h-4 w-4 text-[color:var(--accent)]" />
+                          <span className="block font-semibold">
+                            {runtimeLocalize(
+                              option.titleRu,
+                              option.titleEn,
+                              locale,
+                            )}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                            {runtimeLocalize(
+                              option.descriptionRu,
+                              option.descriptionEn,
+                              locale,
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 {invitationDialogMode === "review" ? (
                   <>
                     <label className="grid gap-2 text-sm font-heading">
-                      <span>{runtimeLocalize("Дата рождения*", "Date of birth*", locale)}</span>
+                      <span>
+                        {runtimeLocalize(
+                          "Дата рождения*",
+                          "Date of birth*",
+                          locale,
+                        )}
+                      </span>
                       <DateOfBirthField
                         className="grid-cols-[72px_84px_84px]"
                         value={reviewForm.birthDate}
@@ -3266,14 +4467,22 @@ const Employees = ({
                           }))
                         }
                         options={[
-                          { value: "male", label: runtimeLocalize("Мужской", "Male", locale) },
-                          { value: "female", label: runtimeLocalize("Женский", "Female", locale) },
+                          {
+                            value: "male",
+                            label: runtimeLocalize("Мужской", "Male", locale),
+                          },
+                          {
+                            value: "female",
+                            label: runtimeLocalize("Женский", "Female", locale),
+                          },
                         ]}
                         triggerClassName={reviewFieldClassName}
                       />
                     </label>
                     <label className="grid gap-2 text-sm font-heading">
-                      <span>{runtimeLocalize("Телефон*", "Phone*", locale)}</span>
+                      <span>
+                        {runtimeLocalize("Телефон*", "Phone*", locale)}
+                      </span>
                       <Input
                         className={reviewFieldClassName}
                         onChange={(event) =>
@@ -3288,7 +4497,9 @@ const Employees = ({
                   </>
                 ) : null}
                 <div className="grid gap-2 text-sm font-heading sm:col-span-2">
-                  <span>{runtimeLocalize("Тип сотрудника", "Employee type", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Тип сотрудника", "Employee type", locale)}
+                  </span>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {employeeWorkModeOptions.map((option) => {
                       const selected = reviewForm.workMode === option.value;
@@ -3305,16 +4516,26 @@ const Employees = ({
                               ...current,
                               workMode: option.value,
                               shiftTemplateId:
-                                option.value === "FIELD" ? "" : current.shiftTemplateId,
+                                option.value === "FIELD"
+                                  ? ""
+                                  : current.shiftTemplateId,
                             }))
                           }
                           type="button"
                         >
                           <span className="block font-semibold">
-                            {runtimeLocalize(option.labelRu, option.labelEn, locale)}
+                            {runtimeLocalize(
+                              option.labelRu,
+                              option.labelEn,
+                              locale,
+                            )}
                           </span>
                           <span className="mt-1 block text-xs leading-5">
-                            {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
+                            {runtimeLocalize(
+                              option.descriptionRu,
+                              option.descriptionEn,
+                              locale,
+                            )}
                           </span>
                         </button>
                       );
@@ -3339,7 +4560,11 @@ const Employees = ({
                         }));
                       }
                     }}
-                    emptyLabel={runtimeLocalize("Выберите смену", "Select shift", locale)}
+                    emptyLabel={runtimeLocalize(
+                      "Выберите смену",
+                      "Select shift",
+                      locale,
+                    )}
                     options={[
                       ...scheduleTemplates.map((template) => ({
                         value: template.id,
@@ -3347,56 +4572,73 @@ const Employees = ({
                       })),
                       {
                         value: CREATE_SHIFT_TEMPLATE_OPTION,
-                        label: runtimeLocalize("+ Добавить смену", "+ Add shift", locale),
+                        label: runtimeLocalize(
+                          "+ Добавить смену",
+                          "+ Add shift",
+                          locale,
+                        ),
                       },
                     ]}
                     triggerClassName={`${reviewFieldClassName} ${
-                      reviewForm.workMode === "FIELD" ? "pointer-events-none opacity-50" : ""
+                      reviewForm.workMode === "FIELD"
+                        ? "pointer-events-none opacity-50"
+                        : ""
                     }`}
                   />
                 </label>
-                <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Команда", "Team", locale)}</span>
-                  <AppSelectField
-                    value={
-                      reviewForm.groupId === "__none" ? "" : reviewForm.groupId
-                    }
-                    onValueChange={(value) =>
-                      setReviewForm((current) => ({
-                        ...current,
-                        groupId: value || "__none",
-                      }))
-                    }
-                    emptyLabel={runtimeLocalize("Без команды", "No team", locale)}
-                    options={groups.map((group) => ({
-                      value: group.id,
-                      label: `${resolveTeamAvatarEmoji(group)} ${group.name}`,
-                    }))}
-                    triggerClassName={reviewFieldClassName}
-                  />
-                </label>
-                {invitationDialogMode === "review" ? (
-                  <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-heading sm:col-span-2">
-                    <Checkbox
-                      checked={reviewForm.grantManagerAccess}
-                      onCheckedChange={(value) =>
+                {reviewForm.role !== "owner" ? (
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>
+                      {reviewForm.role === "team_leader"
+                        ? runtimeLocalize("Бригада*", "Team*", locale)
+                        : runtimeLocalize("Бригада", "Team", locale)}
+                    </span>
+                    <AppSelectField
+                      value={
+                        reviewForm.groupId === "__none"
+                          ? ""
+                          : reviewForm.groupId
+                      }
+                      onValueChange={(value) =>
                         setReviewForm((current) => ({
                           ...current,
-                          grantManagerAccess: value === true,
+                          groupId: value || "__none",
                         }))
                       }
+                      emptyLabel={runtimeLocalize(
+                        "Без бригады",
+                        "No team",
+                        locale,
+                      )}
+                      options={groups.map((group) => ({
+                        value: group.id,
+                        label: `${resolveTeamAvatarEmoji(group)} ${group.name}`,
+                      }))}
+                      triggerClassName={reviewFieldClassName}
                     />
-                    <span className="font-semibold text-foreground">
-                      {runtimeLocalize("Выдать менеджерский доступ", "Grant manager access", locale)}
-                    </span>
                   </label>
-                ) : null}
+                ) : (
+                  <div className="grid gap-2 text-sm font-heading">
+                    <span>{runtimeLocalize("Бригада", "Team", locale)}</span>
+                    <div className={reviewInfoBoxClassName}>
+                      {runtimeLocalize(
+                        "Владельцу бригада не назначается.",
+                        "Owner does not need a team assignment.",
+                        locale,
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               {invitationDialogMode === "setup" ? (
                 <div className="grid gap-3 rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {runtimeLocalize("Приглашение отправлено", "Invitation sent", locale)}
+                      {runtimeLocalize(
+                        "Приглашение отправлено",
+                        "Invitation sent",
+                        locale,
+                      )}
                     </span>
                     <div className="flex flex-wrap items-center gap-2 text-foreground">
                       {selectedInvitation.email ? (
@@ -3405,7 +4647,9 @@ const Employees = ({
                         <Phone className="h-4 w-4 text-muted-foreground" />
                       )}
                       <span className="font-semibold">
-                        {selectedInvitation.email ?? selectedInvitation.phone ?? "—"}
+                        {selectedInvitation.email ??
+                          selectedInvitation.phone ??
+                          "—"}
                       </span>
                     </div>
                   </div>
@@ -3418,108 +4662,128 @@ const Employees = ({
                   </p>
                 </div>
               ) : (
-              <ImageAdjustField
-                dialogDescription={runtimeLocalize(
-                  "Подгони фото сотрудника перед подтверждением анкеты.",
-                  "Adjust the employee photo before approving the form.",
-                  locale,
-                )}
-                dialogTitle={runtimeLocalize(
-                  "Редактировать фото сотрудника",
-                  "Edit employee photo",
-                  locale,
-                )}
-                onChange={handleReviewAvatar}
-                onError={setReviewError}
-                previewAlt={runtimeLocalize("Аватар сотрудника", "Employee avatar", locale)}
-                renderTrigger={({
-                  chooseFile,
-                  hasValue,
-                  openEditor,
-                  previewSrc,
-                }) => (
-                  <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
-                    <div className="flex flex-col items-center gap-3">
-                      {previewSrc ? (
-                        <img
-                          alt={runtimeLocalize("Аватар сотрудника", "Employee avatar", locale)}
-                          className="h-32 w-32 rounded-xl object-cover"
-                          src={previewSrc}
-                        />
-                      ) : (
-                        <div className="flex h-32 w-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
-                          {runtimeLocalize("Нет фото", "No photo", locale)}
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid gap-2 text-sm font-heading">
-                      <span>{runtimeLocalize("Фото", "Photo", locale)}</span>
-                      <div className={reviewInfoBoxClassName}>
-                        {hasValue
-                          ? runtimeLocalize(
-                              "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб.",
-                              "Photo selected. You can move the frame and adjust the scale if needed.",
-                              locale,
-                            )
-                          : runtimeLocalize(
-                              "Можно выбрать фото и сразу отрегулировать масштаб, X и Y.",
-                              "You can choose a photo and immediately adjust scale, X and Y.",
+                <ImageAdjustField
+                  dialogDescription={runtimeLocalize(
+                    "Подгони фото сотрудника перед подтверждением анкеты.",
+                    "Adjust the employee photo before approving the form.",
+                    locale,
+                  )}
+                  dialogTitle={runtimeLocalize(
+                    "Редактировать фото сотрудника",
+                    "Edit employee photo",
+                    locale,
+                  )}
+                  onChange={handleReviewAvatar}
+                  onError={setReviewError}
+                  previewAlt={runtimeLocalize(
+                    "Аватар сотрудника",
+                    "Employee avatar",
+                    locale,
+                  )}
+                  renderTrigger={({
+                    chooseFile,
+                    hasValue,
+                    openEditor,
+                    previewSrc,
+                  }) => (
+                    <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
+                      <div className="flex flex-col items-center gap-3">
+                        {previewSrc ? (
+                          <img
+                            alt={runtimeLocalize(
+                              "Аватар сотрудника",
+                              "Employee avatar",
                               locale,
                             )}
+                            className="h-32 w-32 rounded-xl object-cover"
+                            src={previewSrc}
+                          />
+                        ) : (
+                          <div className="flex h-32 w-32 items-center justify-center rounded-xl bg-secondary/50 text-xs text-muted-foreground">
+                            {runtimeLocalize("Нет фото", "No photo", locale)}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          className="rounded-xl font-heading"
-                          onClick={chooseFile}
-                          type="button"
-                          variant="outline"
-                        >
-                          {runtimeLocalize("Заменить файл", "Replace file", locale)}
-                        </Button>
-                        {hasValue ? (
+                      <div className="grid gap-2 text-sm font-heading">
+                        <span>{runtimeLocalize("Фото", "Photo", locale)}</span>
+                        <div className={reviewInfoBoxClassName}>
+                          {hasValue
+                            ? runtimeLocalize(
+                                "Фото выбрано. При необходимости можно подвинуть кадр и изменить масштаб.",
+                                "Photo selected. You can move the frame and adjust the scale if needed.",
+                                locale,
+                              )
+                            : runtimeLocalize(
+                                "Можно выбрать фото и сразу отрегулировать масштаб, X и Y.",
+                                "You can choose a photo and immediately adjust scale, X and Y.",
+                                locale,
+                              )}
+                        </div>
+                        <div className="flex gap-2">
                           <Button
                             className="rounded-xl font-heading"
-                            onClick={openEditor}
+                            onClick={chooseFile}
                             type="button"
                             variant="outline"
                           >
-                            {runtimeLocalize("Настроить", "Adjust", locale)}
+                            {runtimeLocalize(
+                              "Заменить файл",
+                              "Replace file",
+                              locale,
+                            )}
                           </Button>
-                        ) : null}
+                          {hasValue ? (
+                            <Button
+                              className="rounded-xl font-heading"
+                              onClick={openEditor}
+                              type="button"
+                              variant="outline"
+                            >
+                              {runtimeLocalize("Настроить", "Adjust", locale)}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <span className="mt-2">
+                          {selectedInvitation.email
+                            ? "Email"
+                            : runtimeLocalize("Телефон", "Phone", locale)}
+                        </span>
+                        <Input
+                          className={reviewFieldClassName}
+                          disabled
+                          value={
+                            selectedInvitation.email ??
+                            selectedInvitation.phone ??
+                            ""
+                          }
+                        />
+                        <span className="mt-2">
+                          {runtimeLocalize(
+                            "Причина отклонения",
+                            "Rejection reason",
+                            locale,
+                          )}
+                        </span>
+                        <Input
+                          className={reviewFieldClassName}
+                          onChange={(event) =>
+                            setReviewForm((current) => ({
+                              ...current,
+                              rejectedReason: event.target.value,
+                            }))
+                          }
+                          placeholder={runtimeLocalize(
+                            "Заполните, если отклоняете заявку",
+                            "Fill in if you reject the request",
+                            locale,
+                          )}
+                          value={reviewForm.rejectedReason}
+                        />
                       </div>
-                      <span className="mt-2">
-                        {selectedInvitation.email
-                          ? "Email"
-                          : runtimeLocalize("Телефон", "Phone", locale)}
-                      </span>
-                      <Input
-                        className={reviewFieldClassName}
-                        disabled
-                        value={selectedInvitation.email ?? selectedInvitation.phone ?? ""}
-                      />
-                      <span className="mt-2">
-                        {runtimeLocalize("Причина отклонения", "Rejection reason", locale)}
-                      </span>
-                      <Input
-                        className={reviewFieldClassName}
-                        onChange={(event) =>
-                          setReviewForm((current) => ({
-                            ...current,
-                            rejectedReason: event.target.value,
-                          }))
-                        }
-                        placeholder={runtimeLocalize(
-                          "Заполните, если отклоняете заявку",
-                          "Fill in if you reject the request",
-                          locale,
-                        )}
-                        value={reviewForm.rejectedReason}
-                      />
                     </div>
-                  </div>
-                )}
-                value={reviewForm.avatarPreview || null}
-              />
+                  )}
+                  value={reviewForm.avatarPreview || null}
+                />
               )}
               {reviewError ? (
                 <div className="error-box">{reviewError}</div>
@@ -3536,7 +4800,11 @@ const Employees = ({
                     <Trash2 className="h-4 w-4" />
                     {invitationDeleting
                       ? runtimeLocalize("Удаляем...", "Deleting...", locale)
-                      : runtimeLocalize("Удалить сотрудника", "Delete employee", locale)}
+                      : runtimeLocalize(
+                          "Удалить сотрудника",
+                          "Delete employee",
+                          locale,
+                        )}
                   </Button>
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button
@@ -3560,7 +4828,11 @@ const Employees = ({
                       <Check className="h-4 w-4" />
                       {reviewSubmitting
                         ? runtimeLocalize("Сохраняем...", "Saving...", locale)
-                        : runtimeLocalize("Сохранить настройку", "Save setup", locale)}
+                        : runtimeLocalize(
+                            "Сохранить настройку",
+                            "Save setup",
+                            locale,
+                          )}
                     </Button>
                   </div>
                 </div>
@@ -3572,7 +4844,8 @@ const Employees = ({
                     onClick={() => void submitReview("REJECT")}
                     variant="outline"
                   >
-                    <X className="h-4 w-4" /> {runtimeLocalize("Отклонить", "Reject", locale)}
+                    <X className="h-4 w-4" />{" "}
+                    {runtimeLocalize("Отклонить", "Reject", locale)}
                   </Button>
                   <Button
                     className="rounded-xl font-heading"
@@ -3601,7 +4874,11 @@ const Employees = ({
         <DialogContent className="w-[min(480px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Создать шаблон смены", "Create shift template", locale)}
+              {runtimeLocalize(
+                "Создать шаблон смены",
+                "Create shift template",
+                locale,
+              )}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
@@ -3669,7 +4946,11 @@ const Employees = ({
                   }
                   type="checkbox"
                 />
-                {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
+                {runtimeLocalize(
+                  "Фиксированный перерыв",
+                  "Fixed break",
+                  locale,
+                )}
               </label>
               {templateDraft.fixedBreakEnabled ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -3720,24 +5001,24 @@ const Employees = ({
               </div>
               <div className="grid grid-cols-7 gap-1">
                 {[1, 2, 3, 4, 5, 6, 7].map((day) => {
-                    const label = getWeekdayShortLabel(day, locale);
-                    const active = templateDraft.weekDays.includes(day);
+                  const label = getWeekdayShortLabel(day, locale);
+                  const active = templateDraft.weekDays.includes(day);
 
-                    return (
-                      <button
-                        className={`h-10 rounded-xl border text-sm font-medium transition-colors ${
-                          active
-                            ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
-                            : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
-                        }`}
-                        key={`${day}-${label}`}
-                        onClick={() => toggleTemplateWeekDay(day)}
-                        type="button"
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                  return (
+                    <button
+                      className={`h-10 rounded-xl border text-sm font-medium transition-colors ${
+                        active
+                          ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
+                          : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
+                      }`}
+                      key={`${day}-${label}`}
+                      onClick={() => toggleTemplateWeekDay(day)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -3754,7 +5035,11 @@ const Employees = ({
               >
                 {createTemplateSubmitting
                   ? runtimeLocalize("Создаём...", "Creating...", locale)
-                  : runtimeLocalize("Создать шаблон", "Create template", locale)}
+                  : runtimeLocalize(
+                      "Создать шаблон",
+                      "Create template",
+                      locale,
+                    )}
               </Button>
             </div>
           </div>
@@ -3777,7 +5062,8 @@ const Employees = ({
                     src={
                       selectedEmployeeDetails
                         ? getAvatarSrc(selectedEmployeeDetails)
-                        : selectedEmployee.avatarUrl ?? getMockAvatarDataUrl(selectedEmployee.name)
+                        : (selectedEmployee.avatarUrl ??
+                          getMockAvatarDataUrl(selectedEmployee.name))
                     }
                   />
                   <DialogHeader className="gap-2 pr-10">
@@ -3792,7 +5078,7 @@ const Employees = ({
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1 text-xs font-heading text-[color:var(--muted-foreground)] shadow-[inset_0_0_0_1px_var(--border)]">
                     {selectedEmployee.group ||
-                      runtimeLocalize("Без команды", "No team", locale)}
+                      runtimeLocalize("Без бригады", "No team", locale)}
                   </span>
                   <span
                     className={`inline-block rounded-full px-3 py-1 text-xs font-heading ${statusStyles[selectedEmployee.status]}`}
@@ -3862,7 +5148,11 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Офис / локация", "Office / location", locale)}
+                          {runtimeLocalize(
+                            "Офис / локация",
+                            "Office / location",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeDetails?.primaryLocation?.name ||
@@ -3872,7 +5162,11 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Сотрудник с", "Employee since", locale)}
+                          {runtimeLocalize(
+                            "Сотрудник с",
+                            "Employee since",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {formatHireDate(
@@ -3883,13 +5177,99 @@ const Employees = ({
                       </div>
                     </div>
                     <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="grid gap-2">
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {runtimeLocalize(
+                              "Роль и бригада",
+                              "Role and team",
+                              locale,
+                            )}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <RoleBadge
+                              label={selectedEmployee.roleLabel}
+                              role={selectedEmployee.role}
+                            />
+                            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700">
+                              {selectedEmployee.group ? (
+                                <>
+                                  <span>{selectedEmployee.groupEmoji}</span>
+                                  <span>{selectedEmployee.group}</span>
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          className="shrink-0 rounded-xl font-heading"
+                          onClick={() => openMoveDialog(selectedEmployee)}
+                          type="button"
+                          variant="outline"
+                        >
+                          <ArrowRightLeft className="h-4 w-4" />
+                          {selectedEmployee.group
+                            ? runtimeLocalize("Изменить", "Change", locale)
+                            : runtimeLocalize("Назначить", "Assign", locale)}
+                        </Button>
+                      </div>
+                      <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+                        {[
+                          {
+                            label: runtimeLocalize(
+                              "Все сотрудники",
+                              "All employees",
+                              locale,
+                            ),
+                            allowed: selectedEmployee.role === "owner",
+                          },
+                          {
+                            label: runtimeLocalize(
+                              "Своя бригада",
+                              "Own team",
+                              locale,
+                            ),
+                            allowed: selectedEmployee.role !== "employee",
+                          },
+                          {
+                            label: runtimeLocalize(
+                              "Только свой профиль",
+                              "Own profile",
+                              locale,
+                            ),
+                            allowed: true,
+                          },
+                        ].map((item) => (
+                          <div
+                            className={`rounded-xl border px-3 py-2 ${
+                              item.allowed
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-slate-200 bg-white text-slate-500"
+                            }`}
+                            key={item.label}
+                          >
+                            {item.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-4 font-heading">
                       <div className="flex flex-col gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                            {runtimeLocalize("Тип сотрудника", "Employee type", locale)}
+                            {runtimeLocalize(
+                              "Тип сотрудника",
+                              "Employee type",
+                              locale,
+                            )}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[color:var(--accent)]">
-                            {getEmployeeWorkModeLabel(selectedEmployeeWorkMode, locale)}
+                            {getEmployeeWorkModeLabel(
+                              selectedEmployeeWorkMode,
+                              locale,
+                            )}
                           </p>
                           <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
                             {selectedEmployeeWorkMode === "FIELD"
@@ -3907,7 +5287,8 @@ const Employees = ({
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {employeeWorkModeOptions.map((option) => {
-                            const selected = selectedEmployeeWorkMode === option.value;
+                            const selected =
+                              selectedEmployeeWorkMode === option.value;
                             return (
                               <button
                                 className={`rounded-2xl border p-3 text-left transition ${
@@ -3917,14 +5298,26 @@ const Employees = ({
                                 } ${workModeUpdating || detailsLoading ? "opacity-70" : ""}`}
                                 disabled={workModeUpdating || detailsLoading}
                                 key={option.value}
-                                onClick={() => void updateSelectedEmployeeWorkMode(option.value)}
+                                onClick={() =>
+                                  void updateSelectedEmployeeWorkMode(
+                                    option.value,
+                                  )
+                                }
                                 type="button"
                               >
                                 <span className="block text-sm font-semibold">
-                                  {runtimeLocalize(option.labelRu, option.labelEn, locale)}
+                                  {runtimeLocalize(
+                                    option.labelRu,
+                                    option.labelEn,
+                                    locale,
+                                  )}
                                 </span>
                                 <span className="mt-1 block text-xs leading-5">
-                                  {runtimeLocalize(option.descriptionRu, option.descriptionEn, locale)}
+                                  {runtimeLocalize(
+                                    option.descriptionRu,
+                                    option.descriptionEn,
+                                    locale,
+                                  )}
                                 </span>
                               </button>
                             );
@@ -3949,13 +5342,25 @@ const Employees = ({
                         <Button
                           className="shrink-0 rounded-xl font-heading"
                           disabled={breaksUpdating || detailsLoading}
-                          onClick={() => void updateSelectedEmployeeBreaks(!selectedEmployeeBreaksEnabled)}
+                          onClick={() =>
+                            void updateSelectedEmployeeBreaks(
+                              !selectedEmployeeBreaksEnabled,
+                            )
+                          }
                           type="button"
-                          variant={selectedEmployeeBreaksEnabled ? "secondary" : "outline"}
+                          variant={
+                            selectedEmployeeBreaksEnabled
+                              ? "secondary"
+                              : "outline"
+                          }
                         >
                           <Clock className="h-4 w-4" />
                           {breaksUpdating
-                            ? runtimeLocalize("Сохраняю...", "Saving...", locale)
+                            ? runtimeLocalize(
+                                "Сохраняю...",
+                                "Saving...",
+                                locale,
+                              )
                             : selectedEmployeeBreaksEnabled
                               ? runtimeLocalize("Выключить", "Disable", locale)
                               : runtimeLocalize("Включить", "Enable", locale)}
@@ -3965,7 +5370,7 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-4">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-center">
                         <p className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Команда", "Team", locale)}
+                          {runtimeLocalize("Бригада", "Team", locale)}
                         </p>
                         <p className="mt-1 text-sm font-heading font-semibold text-[color:var(--foreground)]">
                           {selectedEmployee.group || "—"}
@@ -4041,7 +5446,11 @@ const Employees = ({
                         </div>
                         <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                           <p className="text-xs text-[color:var(--muted-foreground)]">
-                            {runtimeLocalize("Дата рождения", "Date of birth", locale)}
+                            {runtimeLocalize(
+                              "Дата рождения",
+                              "Date of birth",
+                              locale,
+                            )}
                           </p>
                           <p className="mt-1 font-medium text-[color:var(--foreground)]">
                             {formatHireDate(selectedEmployeeDetails?.birthDate)}
@@ -4064,31 +5473,43 @@ const Employees = ({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Последняя верификация", "Last verification", locale)}
+                          {runtimeLocalize(
+                            "Последняя верификация",
+                            "Last verification",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {biometricLastVerifiedAt
-                            ? new Date(
-                                biometricLastVerifiedAt,
-                              ).toLocaleString(getRuntimeLocaleTag(locale))
+                            ? new Date(biometricLastVerifiedAt).toLocaleString(
+                                getRuntimeLocaleTag(locale),
+                              )
                             : "—"}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Дата регистрации", "Registered at", locale)}
+                          {runtimeLocalize(
+                            "Дата регистрации",
+                            "Registered at",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {biometricConnectedSince
-                            ? new Date(
-                                biometricConnectedSince,
-                              ).toLocaleString(getRuntimeLocaleTag(locale))
+                            ? new Date(biometricConnectedSince).toLocaleString(
+                                getRuntimeLocaleTag(locale),
+                              )
                             : "—"}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Табельный номер", "Employee number", locale)}
+                          {runtimeLocalize(
+                            "Табельный номер",
+                            "Employee number",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployee.employeeNumber}
@@ -4096,7 +5517,11 @@ const Employees = ({
                       </div>
                       <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                         <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {runtimeLocalize("Версия согласия", "Consent version", locale)}
+                          {runtimeLocalize(
+                            "Версия согласия",
+                            "Consent version",
+                            locale,
+                          )}
                         </p>
                         <p className="mt-1 font-medium text-[color:var(--foreground)]">
                           {selectedEmployeeBiometric?.profile?.consentVersion ||
@@ -4106,7 +5531,11 @@ const Employees = ({
                     </div>
                     <div className="rounded-2xl bg-[color:var(--panel-muted)] p-4 text-sm font-heading">
                       <p className="text-xs text-[color:var(--muted-foreground)]">
-                        {runtimeLocalize("Паспортные данные", "Passport details", locale)}
+                        {runtimeLocalize(
+                          "Паспортные данные",
+                          "Passport details",
+                          locale,
+                        )}
                       </p>
                       <p className="mt-2 leading-6 text-[color:var(--foreground)]">
                         {runtimeLocalize(
@@ -4130,7 +5559,12 @@ const Employees = ({
                     }}
                     variant="outline"
                   >
-                    <ArrowRightLeft className="h-4 w-4" /> {runtimeLocalize("Переместить в команду", "Move to team", locale)}
+                    <ArrowRightLeft className="h-4 w-4" />{" "}
+                    {runtimeLocalize(
+                      "Переместить в бригаду",
+                      "Move to team",
+                      locale,
+                    )}
                   </Button>
                   <Button
                     className="flex-1 rounded-xl bg-accent font-heading text-accent-foreground hover:bg-accent/90"
@@ -4142,7 +5576,8 @@ const Employees = ({
                       );
                     }}
                   >
-                    <ListTodo className="h-4 w-4" /> {runtimeLocalize("Назначить задачу", "Assign task", locale)}
+                    <ListTodo className="h-4 w-4" />{" "}
+                    {runtimeLocalize("Назначить задачу", "Assign task", locale)}
                   </Button>
                 </div>
               </div>
@@ -4152,17 +5587,22 @@ const Employees = ({
       </Dialog>
 
       <Dialog
-        onOpenChange={(open) => !open && setMoveDialogEmployeeId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMoveDialogEmployeeId(null);
+            setMoveMakeLeader(false);
+          }
+        }}
         open={!!moveDialogEmployeeId}
       >
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Переместить в команду", "Move to team", locale)}
+              {runtimeLocalize("Переместить в бригаду", "Move to team", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Выберите команду для сотрудника. Можно оставить без команды.",
+                "Выберите бригаду для сотрудника. Можно оставить без бригады.",
                 "Select a team for the employee. The employee can remain without a team.",
                 locale,
               )}
@@ -4170,17 +5610,23 @@ const Employees = ({
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Команда", "Team", locale)}</span>
+              <span>{runtimeLocalize("Бригада", "Team", locale)}</span>
               <Select
                 onValueChange={setMoveTargetGroupId}
                 value={moveTargetGroupId}
               >
                 <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
-                  <SelectValue placeholder={runtimeLocalize("Выберите команду", "Select team", locale)} />
+                  <SelectValue
+                    placeholder={runtimeLocalize(
+                      "Выберите бригаду",
+                      "Select team",
+                      locale,
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none">
-                    {runtimeLocalize("Без команды", "No team", locale)}
+                    {runtimeLocalize("Без бригады", "No team", locale)}
                   </SelectItem>
                   {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
@@ -4189,6 +5635,30 @@ const Employees = ({
                   ))}
                 </SelectContent>
               </Select>
+            </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/20 p-4 text-sm font-heading">
+              <Checkbox
+                checked={moveMakeLeader}
+                onCheckedChange={(checked) =>
+                  setMoveMakeLeader(checked === true)
+                }
+              />
+              <span className="grid gap-1">
+                <span className="font-semibold text-foreground">
+                  {runtimeLocalize(
+                    "Сделать лидером бригады",
+                    "Make team leader",
+                    locale,
+                  )}
+                </span>
+                <span className="text-xs leading-5 text-muted-foreground">
+                  {runtimeLocalize(
+                    "Лидер должен быть привязан к одной бригаде.",
+                    "A leader must be assigned to one team.",
+                    locale,
+                  )}
+                </span>
+              </span>
             </label>
             {moveError ? <div className="error-box">{moveError}</div> : null}
             <div className="flex justify-end gap-2">
@@ -4226,13 +5696,17 @@ const Employees = ({
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {taskDialog?.mode === "group"
-                ? runtimeLocalize("Задача команде", "Task for team", locale)
+                ? runtimeLocalize("Задача бригаде", "Task for team", locale)
                 : runtimeLocalize("Назначить задачу", "Assign task", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {taskDialog
                 ? `${runtimeLocalize("Получатель", "Recipient", locale)}: ${taskDialog.targetLabel}`
-                : runtimeLocalize("Заполните параметры задачи.", "Fill in the task details.", locale)}
+                : runtimeLocalize(
+                    "Заполните параметры задачи.",
+                    "Fill in the task details.",
+                    locale,
+                  )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -4304,7 +5778,11 @@ const Employees = ({
                         }
                       />
                       <span className="leading-snug">
-                        {runtimeLocalize("Сделать до времени", "Set deadline time", locale)}
+                        {runtimeLocalize(
+                          "Сделать до времени",
+                          "Set deadline time",
+                          locale,
+                        )}
                       </span>
                     </label>
                     <TaskDateTimePicker
@@ -4352,9 +5830,13 @@ const Employees = ({
                     }))
                   }
                 />
-                  <span className="whitespace-nowrap text-sm font-heading leading-none">
-                  {runtimeLocalize("Сделать регулярной задачей", "Make recurring", locale)}
-                  </span>
+                <span className="whitespace-nowrap text-sm font-heading leading-none">
+                  {runtimeLocalize(
+                    "Сделать регулярной задачей",
+                    "Make recurring",
+                    locale,
+                  )}
+                </span>
               </label>
               <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
                 <Checkbox
@@ -4366,19 +5848,21 @@ const Employees = ({
                     }))
                   }
                 />
-                  <span className="whitespace-nowrap text-sm font-heading leading-none">
+                <span className="whitespace-nowrap text-sm font-heading leading-none">
                   {runtimeLocalize(
                     "Требуется фото-подтверждение",
                     "Photo confirmation required",
                     locale,
                   )}
-                  </span>
+                </span>
               </label>
             </div>
             {taskDraft.isRecurring ? (
               <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Дни повтора", "Recurring days", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Дни повтора", "Recurring days", locale)}
+                  </span>
                   <div className="grid grid-cols-7 justify-items-center gap-1.5 sm:gap-2">
                     {TASK_WEEKDAY_VALUES.map((day) => {
                       const label = getWeekdayShortLabel(day, locale);
@@ -4397,7 +5881,9 @@ const Employees = ({
                               ...current,
                               weekDays: isSelected
                                 ? current.weekDays.filter((d) => d !== day)
-                                : [...current.weekDays, day].sort((left, right) => left - right),
+                                : [...current.weekDays, day].sort(
+                                    (left, right) => left - right,
+                                  ),
                             }));
                           }}
                         >
@@ -4409,7 +5895,9 @@ const Employees = ({
                 </label>
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
                   <label className="grid gap-2 text-sm font-heading">
-                    <span>{runtimeLocalize("Начало", "Start date", locale)}</span>
+                    <span>
+                      {runtimeLocalize("Начало", "Start date", locale)}
+                    </span>
                     <TaskDatePicker
                       locale={locale}
                       onChange={(value) =>
@@ -4436,7 +5924,9 @@ const Employees = ({
                           }))
                         }
                       />
-                      <span>{runtimeLocalize("Точное время", "Exact time", locale)}</span>
+                      <span>
+                        {runtimeLocalize("Точное время", "Exact time", locale)}
+                      </span>
                     </label>
                     <TaskTimePicker
                       isDisabled={!taskDraft.hasDueTime}
@@ -4542,11 +6032,11 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  {runtimeLocalize("Изменить команду", "Edit team", locale)}
+                  {runtimeLocalize("Изменить бригаду", "Edit team", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
                   {runtimeLocalize(
-                    "Измените название, описание, эмодзи и состав команды",
+                    "Измените название, описание, эмодзи и состав бригады",
                     "Update the team name, description, emoji and members",
                     locale,
                   )}{" "}
@@ -4555,7 +6045,9 @@ const Employees = ({
               </DialogHeader>
               <div className="space-y-3">
                 <div className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Эмодзи команды", "Team emoji", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Эмодзи бригады", "Team emoji", locale)}
+                  </span>
                   <div className="flex flex-wrap gap-2">
                     {TEAM_AVATAR_EMOJIS.map((emoji) => (
                       <button
@@ -4575,7 +6067,9 @@ const Employees = ({
                   </div>
                 </div>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Название команды", "Team name", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Название бригады", "Team name", locale)}
+                  </span>
                   <Input
                     maxLength={120}
                     onChange={(event) => setGroupEditorName(event.target.value)}
@@ -4588,7 +6082,9 @@ const Employees = ({
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-heading">
-                  <span>{runtimeLocalize("Описание", "Description", locale)}</span>
+                  <span>
+                    {runtimeLocalize("Описание", "Description", locale)}
+                  </span>
                   <Textarea
                     className="min-h-[96px]"
                     maxLength={500}
@@ -4596,7 +6092,7 @@ const Employees = ({
                       setGroupEditorDescription(event.target.value)
                     }
                     placeholder={runtimeLocalize(
-                      "Короткое описание команды",
+                      "Короткое описание бригады",
                       "Short team description",
                       locale,
                     )}
@@ -4604,7 +6100,7 @@ const Employees = ({
                   />
                 </label>
                 <div className="text-xs font-heading text-muted-foreground">
-                  {runtimeLocalize("Состав команды", "Team members", locale)}
+                  {runtimeLocalize("Состав бригады", "Team members", locale)}
                 </div>
                 <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
                   {employees.map((employee) => (
@@ -4617,7 +6113,10 @@ const Employees = ({
                           alt={employee.name}
                           className="shrink-0"
                           size="md"
-                          src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
+                          src={
+                            employee.avatarUrl ??
+                            getMockAvatarDataUrl(employee.name)
+                          }
                         />
                         <div className="min-w-0">
                           <p className="truncate font-heading font-medium text-foreground">
@@ -4652,7 +6151,7 @@ const Employees = ({
                     variant="destructive"
                   >
                     <Trash2 className="h-4 w-4" />
-                    {runtimeLocalize("Удалить команду", "Delete team", locale)}
+                    {runtimeLocalize("Удалить бригаду", "Delete team", locale)}
                   </Button>
                   <div className="flex gap-2">
                     <Button
@@ -4688,20 +6187,25 @@ const Employees = ({
             <>
               <DialogHeader>
                 <DialogTitle className="font-heading text-2xl">
-                  {runtimeLocalize("Удалить команду", "Delete team", locale)}
+                  {runtimeLocalize("Удалить бригаду", "Delete team", locale)}
                 </DialogTitle>
                 <DialogDescription className="font-heading">
                   {runtimeLocalize(
-                    `Команда «${groupEditor.name}» будет удалена. Сотрудники останутся в системе без команды, а привязка у задач к этой команде будет снята.`,
+                    `Бригада «${groupEditor.name}» будет удалена. Сотрудники останутся в системе без бригады, а привязка у задач к этой бригаде будет снята.`,
                     `Team "${groupEditor.name}" will be deleted. Employees will stay in the system without a team, and tasks will be detached from this team.`,
                     locale,
                   )}
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-heading text-muted-foreground">
-                {runtimeLocalize("В команде", "In team", locale)}: {groupEditor.memberships.length}{" "}
-                {runtimeLocalize("сотрудник(ов), задач", "employee(s), tasks", locale)}:{" "}
-                {groupEditor._count?.tasks ?? 0}.
+                {runtimeLocalize("В бригаде", "In team", locale)}:{" "}
+                {groupEditor.memberships.length}{" "}
+                {runtimeLocalize(
+                  "сотрудник(ов), задач",
+                  "employee(s), tasks",
+                  locale,
+                )}
+                : {groupEditor._count?.tasks ?? 0}.
               </div>
               {groupError ? (
                 <div className="error-box">{groupError}</div>
@@ -4724,7 +6228,7 @@ const Employees = ({
                   <Trash2 className="h-4 w-4" />
                   {groupDeleting
                     ? runtimeLocalize("Удаляем...", "Deleting...", locale)
-                    : runtimeLocalize("Удалить команду", "Delete team", locale)}
+                    : runtimeLocalize("Удалить бригаду", "Delete team", locale)}
                 </Button>
               </DialogFooter>
             </>
@@ -4748,7 +6252,9 @@ const Employees = ({
           </DialogHeader>
           <div className="space-y-4">
             <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Шаблон смены", "Shift template", locale)}</span>
+              <span>
+                {runtimeLocalize("Шаблон смены", "Shift template", locale)}
+              </span>
               <Select
                 onValueChange={(value) => {
                   if (value === CREATE_SHIFT_TEMPLATE_OPTION) {
@@ -4761,16 +6267,27 @@ const Employees = ({
                 value={assignShiftDraft.templateId}
               >
                 <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
-                  <SelectValue placeholder={runtimeLocalize("Выберите шаблон", "Select template", locale)} />
+                  <SelectValue
+                    placeholder={runtimeLocalize(
+                      "Выберите шаблон",
+                      "Select template",
+                      locale,
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {scheduleTemplates.map((template) => (
                     <SelectItem key={template.id} value={template.id}>
-                      {template.name} ({template.startsAtLocal}-{template.endsAtLocal})
+                      {template.name} ({template.startsAtLocal}-
+                      {template.endsAtLocal})
                     </SelectItem>
                   ))}
                   <SelectItem value={CREATE_SHIFT_TEMPLATE_OPTION}>
-                    {runtimeLocalize("+ Создать шаблон смены", "+ Create shift template", locale)}
+                    {runtimeLocalize(
+                      "+ Создать шаблон смены",
+                      "+ Create shift template",
+                      locale,
+                    )}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -4820,7 +6337,11 @@ const Employees = ({
                   }
                   type="checkbox"
                 />
-                {runtimeLocalize("Фиксированный перерыв", "Fixed break", locale)}
+                {runtimeLocalize(
+                  "Фиксированный перерыв",
+                  "Fixed break",
+                  locale,
+                )}
               </label>
               {assignShiftDraft.fixedBreakEnabled ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -4881,9 +6402,7 @@ const Employees = ({
       </Dialog>
 
       {navigatingEmployeeId ? (
-        <div
-          className="pointer-events-none absolute inset-0 z-[30] flex items-center justify-center bg-[rgba(244,247,252,0.38)] backdrop-blur-[2px]"
-        >
+        <div className="pointer-events-none absolute inset-0 z-[30] flex items-center justify-center bg-[rgba(244,247,252,0.38)] backdrop-blur-[2px]">
           <div className="flex items-center gap-4 rounded-[24px] border border-border/80 bg-white/96 px-5 py-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
             <WorkspaceLoading
               className="min-h-0"
@@ -4905,7 +6424,11 @@ const Employees = ({
               <span className="text-xs text-muted-foreground">
                 {navigatingEmployee
                   ? navigatingEmployee.name
-                  : runtimeLocalize("Переходим на страницу", "Navigating to page", locale)}
+                  : runtimeLocalize(
+                      "Переходим на страницу",
+                      "Navigating to page",
+                      locale,
+                    )}
               </span>
             </div>
           </div>

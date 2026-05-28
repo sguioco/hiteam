@@ -43,4 +43,17 @@ export class CreateEmployeeDto {
   @IsString()
   @IsIn(['STATIONARY', 'FIELD'])
   workMode?: 'STATIONARY' | 'FIELD';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['owner', 'team_leader', 'employee'])
+  role?: 'owner' | 'team_leader' | 'employee';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  groupId?: string;
 }

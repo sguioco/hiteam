@@ -24,6 +24,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { BulkAssignEmployeesDto } from './dto/bulk-assign-employees.dto';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
@@ -31,6 +32,7 @@ import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { RegisterEmployeeInvitationDto } from './dto/register-employee-invitation.dto';
 import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dto';
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
+import { UpdateEmployeeAccessDto } from './dto/update-employee-access.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
 import { EmployeeInvitationsMailerService } from './employee-invitations.mailer';
 
@@ -40,6 +42,9 @@ const EMPLOYEE_REVIEW_TRANSACTION_OPTIONS = {
   maxWait: 10_000,
   timeout: 20_000,
 } as const;
+
+type EmployeeAccessRoleCode = 'OWNER' | 'TEAM_LEADER' | 'EMPLOYEE';
+type EmployeeAccessRoleInput = 'owner' | 'team_leader' | 'employee';
 
 const NAMED_ENTITY_SELECT = {
   id: true,
@@ -166,9 +171,7 @@ export class EmployeesService {
   private syncBillingSeatsInBackground(tenantId: string) {
     void this.billingService.syncStripeSeatQuantity(tenantId).catch((error) => {
       this.logger.warn(
-        `Unable to sync Stripe seats for tenant ${tenantId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Unable to sync Stripe seats for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
   }
@@ -198,16 +201,129 @@ export class EmployeesService {
     return tenant?.attendanceTrackingEnabled ?? true;
   }
 
+  private normalizeEmployeeAccessRole(
+    value?: string | null,
+    fallback: EmployeeAccessRoleCode = 'EMPLOYEE',
+  ): EmployeeAccessRoleCode {
+    const normalized = value?.trim().toUpperCase();
+    if (!normalized) return fallback;
+    if (normalized === 'OWNER') return 'OWNER';
+    if (normalized === 'TEAM_LEADER') return 'TEAM_LEADER';
+    if (normalized === 'EMPLOYEE') return 'EMPLOYEE';
+    return fallback;
+  }
+
+  private toClientAccessRole(role?: string | null): EmployeeAccessRoleInput {
+    const normalized = this.normalizeEmployeeAccessRole(role);
+    if (normalized === 'OWNER') return 'owner';
+    if (normalized === 'TEAM_LEADER') return 'team_leader';
+    return 'employee';
+  }
+
+  private resolveAccessRoleFromAssignments(
+    assignments?: Array<{ role?: { code?: string | null } | null }> | null,
+  ): EmployeeAccessRoleCode {
+    const roleCodes =
+      assignments?.map((assignment) => assignment.role?.code).filter((code): code is string => Boolean(code)) ?? [];
+
+    if (roleCodes.includes('tenant_owner')) return 'OWNER';
+    if (roleCodes.includes('manager')) return 'TEAM_LEADER';
+    return 'EMPLOYEE';
+  }
+
+  private normalizeRequestedTeamId(dto: { teamId?: string | null; team_id?: string | null; groupId?: string | null }) {
+    const raw = dto.teamId ?? dto.team_id ?? dto.groupId;
+    return typeof raw === 'string' ? raw.trim() || null : undefined;
+  }
+
+  private async assertTeamExists(tenantId: string, teamId: string | null) {
+    if (!teamId) return null;
+
+    const team = await this.prisma.workGroup.findFirst({
+      where: { tenantId, id: teamId },
+      select: { id: true },
+    });
+
+    if (!team) {
+      throw new BadRequestException('Selected team was not found.');
+    }
+
+    return team.id;
+  }
+
+  private async resolveEmployeeTeamId(tenantId: string, employeeId: string) {
+    const membership = await this.prisma.workGroupMembership.findFirst({
+      where: { tenantId, employeeId },
+      select: { groupId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return membership?.groupId ?? null;
+  }
+
   async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
+    const requestedRole = query.role ? this.normalizeEmployeeAccessRole(query.role, 'EMPLOYEE') : null;
+    const roleCode =
+      requestedRole === 'OWNER'
+        ? 'tenant_owner'
+        : requestedRole === 'TEAM_LEADER'
+          ? 'manager'
+          : requestedRole === 'EMPLOYEE'
+            ? 'employee'
+            : null;
+    const requestedTeamId =
+      this.normalizeRequestedTeamId({
+        teamId: query.teamId,
+        team_id: query.team_id,
+        groupId: query.groupId,
+      }) ?? null;
+    const onlyUnassigned =
+      requestedTeamId === '__none' || requestedTeamId === 'none' || requestedTeamId === 'unassigned';
+    const teamId = requestedTeamId && !onlyUnassigned ? await this.assertTeamExists(tenantId, requestedTeamId) : null;
+
     const employeeRecords = await this.prisma.employee.findMany({
       where: {
         tenantId,
+        ...(roleCode
+          ? {
+              user: {
+                roles: {
+                  some: {
+                    role: {
+                      code: roleCode,
+                    },
+                  },
+                },
+              },
+            }
+          : {}),
+        ...(teamId
+          ? {
+              groupMemberships: {
+                some: {
+                  groupId: teamId,
+                },
+              },
+            }
+          : onlyUnassigned
+            ? {
+                groupMemberships: {
+                  none: {},
+                },
+              }
+            : {}),
         OR: query.search
           ? [
               { firstName: { contains: query.search, mode: 'insensitive' } },
               { lastName: { contains: query.search, mode: 'insensitive' } },
-              { employeeNumber: { contains: query.search, mode: 'insensitive' } },
-              { user: { email: { contains: query.search, mode: 'insensitive' } } },
+              {
+                employeeNumber: { contains: query.search, mode: 'insensitive' },
+              },
+              {
+                user: {
+                  email: { contains: query.search, mode: 'insensitive' },
+                },
+              },
             ]
           : undefined,
       },
@@ -218,18 +334,14 @@ export class EmployeesService {
       ...employee,
       avatarUrl:
         employee.avatarUrl ??
-        (employee.avatarStorageKey
-          ? this.storageService.getObjectUrl(employee.avatarStorageKey)
-          : null),
+        (employee.avatarStorageKey ? this.storageService.getObjectUrl(employee.avatarStorageKey) : null),
     }));
 
     if (!actorUserId || query.search?.trim()) {
       return employees;
     }
 
-    const currentEmployeeIndex = employees.findIndex(
-      (employee) => employee.userId === actorUserId,
-    );
+    const currentEmployeeIndex = employees.findIndex((employee) => employee.userId === actorUserId);
 
     if (currentEmployeeIndex >= 0) {
       if (currentEmployeeIndex === 0) {
@@ -318,12 +430,7 @@ export class EmployeesService {
     };
   }
 
-  async updateManagerAccess(
-    tenantId: string,
-    actorUserId: string,
-    employeeId: string,
-    grantManagerAccess: boolean,
-  ) {
+  async updateManagerAccess(tenantId: string, actorUserId: string, employeeId: string, grantManagerAccess: boolean) {
     const employee = await this.prisma.employee.findFirstOrThrow({
       where: { tenantId, id: employeeId },
       include: {
@@ -381,12 +488,176 @@ export class EmployeesService {
     return this.getManagerAccess(tenantId, employeeId);
   }
 
-  async updateBreaksAccess(
-    tenantId: string,
-    actorUserId: string,
-    employeeId: string,
-    breaksEnabled: boolean,
-  ) {
+  async updateEmployeeAccess(tenantId: string, actorUserId: string, employeeId: string, dto: UpdateEmployeeAccessDto) {
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId },
+      select: {
+        id: true,
+        userId: true,
+        user: {
+          select: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const requestedTeamInput = this.normalizeRequestedTeamId(dto);
+    const currentTeamId =
+      requestedTeamInput === undefined ? await this.resolveEmployeeTeamId(tenantId, employee.id) : requestedTeamInput;
+    const requestedRole = dto.role ? this.normalizeEmployeeAccessRole(dto.role) : undefined;
+    const finalRole = requestedRole ?? this.resolveAccessRoleFromAssignments(employee.user?.roles);
+
+    if (requestedRole && employee.userId === actorUserId) {
+      throw new BadRequestException('You cannot change your own access role.');
+    }
+
+    const finalTeamId = finalRole === 'OWNER' ? null : await this.assertTeamExists(tenantId, currentTeamId ?? null);
+
+    if (finalRole === 'TEAM_LEADER' && !finalTeamId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (requestedTeamInput !== undefined || finalRole === 'OWNER') {
+        await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, finalTeamId);
+      }
+
+      if (requestedRole) {
+        await this.syncEmployeeAccessRole(tx, employee.userId, tenantId, requestedRole);
+      }
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: employee.id,
+      action: 'employee.access_updated',
+      metadata: {
+        employeeId: employee.id,
+        role: this.toClientAccessRole(finalRole),
+        teamId: finalTeamId,
+      },
+    });
+
+    this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'access_updated');
+    this.emitWorkspaceRefreshForUser(employee.userId, 'employee_access_updated');
+
+    return {
+      employeeId: employee.id,
+      role: this.toClientAccessRole(finalRole),
+      teamId: finalTeamId,
+    };
+  }
+
+  async bulkAssignEmployees(tenantId: string, actorUserId: string, dto: BulkAssignEmployeesDto) {
+    const employeeIds = Array.from(new Set([...(dto.employeeIds ?? []), ...(dto.employee_ids ?? [])]));
+
+    if (employeeIds.length === 0) {
+      throw new BadRequestException('Select at least one employee.');
+    }
+
+    const requestedRole = dto.role ? this.normalizeEmployeeAccessRole(dto.role) : undefined;
+    const requestedTeamInput = this.normalizeRequestedTeamId(dto);
+    const finalTeamId =
+      requestedRole === 'OWNER'
+        ? null
+        : requestedTeamInput === undefined
+          ? undefined
+          : await this.assertTeamExists(tenantId, requestedTeamInput);
+
+    if (requestedRole === 'TEAM_LEADER' && !finalTeamId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, id: { in: employeeIds } },
+      select: {
+        id: true,
+        userId: true,
+        user: {
+          select: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (employees.length !== employeeIds.length) {
+      throw new BadRequestException('Some employees were not found in this workspace.');
+    }
+
+    if (requestedRole && employees.some((employee) => employee.userId === actorUserId)) {
+      throw new BadRequestException('You cannot change your own access role.');
+    }
+
+    if (
+      requestedRole === undefined &&
+      finalTeamId !== undefined &&
+      employees.some((employee) => this.resolveAccessRoleFromAssignments(employee.user?.roles) === 'OWNER')
+    ) {
+      throw new BadRequestException('Owner does not need a team assignment.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (finalTeamId !== undefined) {
+        await tx.workGroupMembership.deleteMany({
+          where: { tenantId, employeeId: { in: employeeIds } },
+        });
+
+        if (finalTeamId) {
+          await tx.workGroupMembership.createMany({
+            data: employeeIds.map((employeeId) => ({
+              tenantId,
+              groupId: finalTeamId,
+              employeeId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      if (requestedRole) {
+        for (const employee of employees) {
+          await this.syncEmployeeAccessRole(tx, employee.userId, tenantId, requestedRole);
+        }
+      }
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: 'bulk',
+      action: 'employee.bulk_access_updated',
+      metadata: {
+        employeeIds,
+        teamId: finalTeamId ?? null,
+        role: requestedRole ? this.toClientAccessRole(requestedRole) : null,
+      },
+    });
+
+    for (const employee of employees) {
+      this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'bulk_access_updated');
+      this.emitWorkspaceRefreshForUser(employee.userId, 'employee_access_updated');
+    }
+
+    return {
+      updated: employees.length,
+      teamId: finalTeamId ?? null,
+      role: requestedRole ? this.toClientAccessRole(requestedRole) : null,
+    };
+  }
+
+  async updateBreaksAccess(tenantId: string, actorUserId: string, employeeId: string, breaksEnabled: boolean) {
     const employee = await this.prisma.employee.findFirstOrThrow({
       where: { tenantId, id: employeeId },
       select: { id: true, breaksEnabled: true },
@@ -414,12 +685,7 @@ export class EmployeesService {
     return this.getById(tenantId, employeeId);
   }
 
-  async updateWorkMode(
-    tenantId: string,
-    actorUserId: string,
-    employeeId: string,
-    workMode: EmployeeWorkModeInput,
-  ) {
+  async updateWorkMode(tenantId: string, actorUserId: string, employeeId: string, workMode: EmployeeWorkModeInput) {
     const employee = await this.prisma.employee.findFirstOrThrow({
       where: { tenantId, id: employeeId },
       select: { id: true, workMode: true },
@@ -450,10 +716,7 @@ export class EmployeesService {
     });
 
     if (refreshedEmployee?.userId) {
-      this.emitWorkspaceRefreshForUser(
-        refreshedEmployee.userId,
-        'employee_work_mode_updated',
-      );
+      this.emitWorkspaceRefreshForUser(refreshedEmployee.userId, 'employee_work_mode_updated');
     }
 
     return this.getById(tenantId, employeeId);
@@ -492,22 +755,34 @@ export class EmployeesService {
       data: {
         ...(dto.bannerTheme ? { bannerTheme: dto.bannerTheme } : {}),
         ...(dto.notificationAssignmentAlertsEnabled !== undefined
-          ? { notificationAssignmentAlertsEnabled: dto.notificationAssignmentAlertsEnabled }
+          ? {
+              notificationAssignmentAlertsEnabled: dto.notificationAssignmentAlertsEnabled,
+            }
           : {}),
         ...(dto.notificationTaskDeadlineRemindersEnabled !== undefined
-          ? { notificationTaskDeadlineRemindersEnabled: dto.notificationTaskDeadlineRemindersEnabled }
+          ? {
+              notificationTaskDeadlineRemindersEnabled: dto.notificationTaskDeadlineRemindersEnabled,
+            }
           : {}),
         ...(dto.notificationTaskDeadlineReminderMinutes !== undefined
-          ? { notificationTaskDeadlineReminderMinutes: dto.notificationTaskDeadlineReminderMinutes }
+          ? {
+              notificationTaskDeadlineReminderMinutes: dto.notificationTaskDeadlineReminderMinutes,
+            }
           : {}),
         ...(dto.notificationMeetingRemindersEnabled !== undefined
-          ? { notificationMeetingRemindersEnabled: dto.notificationMeetingRemindersEnabled }
+          ? {
+              notificationMeetingRemindersEnabled: dto.notificationMeetingRemindersEnabled,
+            }
           : {}),
         ...(dto.notificationMeetingReminderMinutes !== undefined
-          ? { notificationMeetingReminderMinutes: dto.notificationMeetingReminderMinutes }
+          ? {
+              notificationMeetingReminderMinutes: dto.notificationMeetingReminderMinutes,
+            }
           : {}),
         ...(dto.notificationShiftRemindersEnabled !== undefined
-          ? { notificationShiftRemindersEnabled: dto.notificationShiftRemindersEnabled }
+          ? {
+              notificationShiftRemindersEnabled: dto.notificationShiftRemindersEnabled,
+            }
           : {}),
       },
     });
@@ -530,16 +805,23 @@ export class EmployeesService {
     await this.billingService.assertCanAddSeatOccupant(tenantId);
 
     const passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
-    const attendanceTrackingEnabled =
-      await this.isAttendanceTrackingEnabled(tenantId);
+    const attendanceTrackingEnabled = await this.isAttendanceTrackingEnabled(tenantId);
+    const accessRole = this.normalizeEmployeeAccessRole(
+      dto.role,
+      !attendanceTrackingEnabled || dto.grantManagerAccess ? 'TEAM_LEADER' : 'EMPLOYEE',
+    );
+    const requestedTeamId =
+      this.normalizeRequestedTeamId({
+        teamId: dto.teamId,
+        groupId: dto.groupId,
+      }) ?? null;
+    const teamId = accessRole === 'OWNER' ? null : await this.assertTeamExists(tenantId, requestedTeamId);
+
+    if (accessRole === 'TEAM_LEADER' && !teamId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
+    }
 
     const employee = await this.prisma.$transaction(async (tx) => {
-      const employeeRole = await this.ensureEmployeeRole(tx);
-      const managerRole =
-        !attendanceTrackingEnabled || dto.grantManagerAccess
-          ? await this.ensureManagerRole(tx)
-          : null;
-
       const user = await tx.user.create({
         data: {
           tenantId,
@@ -549,28 +831,9 @@ export class EmployeesService {
         },
       });
 
-      await tx.userRole.createMany({
-        data: [
-          {
-            userId: user.id,
-            roleId: employeeRole.id,
-            scopeType: 'tenant',
-            scopeId: tenantId,
-          },
-          ...(managerRole
-            ? [
-                {
-                  userId: user.id,
-                  roleId: managerRole.id,
-                  scopeType: 'tenant',
-                  scopeId: tenantId,
-                },
-              ]
-            : []),
-        ],
-      });
+      await this.syncEmployeeAccessRole(tx, user.id, tenantId, accessRole);
 
-      return tx.employee.create({
+      const employee = await tx.employee.create({
         data: {
           tenantId,
           userId: user.id,
@@ -581,9 +844,7 @@ export class EmployeesService {
           employeeNumber: dto.employeeNumber,
           firstName: dto.firstName,
           lastName: dto.lastName,
-          workMode: attendanceTrackingEnabled
-            ? this.normalizeWorkMode(dto.workMode)
-            : EmployeeWorkMode.FIELD,
+          workMode: attendanceTrackingEnabled ? this.normalizeWorkMode(dto.workMode) : EmployeeWorkMode.FIELD,
           birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
           status: EmployeeStatus.ACTIVE,
           hireDate: new Date(dto.hireDate),
@@ -596,6 +857,10 @@ export class EmployeesService {
           position: true,
         },
       });
+
+      await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, teamId);
+
+      return employee;
     });
     this.syncBillingSeatsInBackground(tenantId);
     this.kommoService.recordEmployeeCreated(tenantId, employee.id);
@@ -604,7 +869,7 @@ export class EmployeesService {
   }
 
   async listPendingInvitations(tenantId: string) {
-    return this.prisma.employeeInvitation.findMany({
+    const invitations = await this.prisma.employeeInvitation.findMany({
       where: {
         tenantId,
         status: {
@@ -617,6 +882,13 @@ export class EmployeesService {
       },
       orderBy: [{ submittedAt: 'desc' }, { updatedAt: 'desc' }],
     });
+
+    return invitations.map((invitation) => ({
+      ...invitation,
+      expiresAt: invitation.expiresAt.toISOString(),
+      submittedAt: invitation.submittedAt?.toISOString() ?? null,
+      role: this.toClientAccessRole(invitation.approvedRole),
+    }));
   }
 
   async lookupInvitationByEmail(rawEmail: string) {
@@ -696,9 +968,18 @@ export class EmployeesService {
     const token = randomBytes(24).toString('hex');
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-    const workMode = tenant.attendanceTrackingEnabled
-      ? this.normalizeWorkMode(dto.workMode)
-      : EmployeeWorkMode.FIELD;
+    const workMode = tenant.attendanceTrackingEnabled ? this.normalizeWorkMode(dto.workMode) : EmployeeWorkMode.FIELD;
+    const approvedRole = this.normalizeEmployeeAccessRole(dto.role);
+    const requestedTeamId =
+      this.normalizeRequestedTeamId({
+        teamId: dto.teamId,
+        groupId: dto.groupId,
+      }) ?? null;
+    const approvedGroupId = approvedRole === 'OWNER' ? null : await this.assertTeamExists(tenantId, requestedTeamId);
+
+    if (approvedRole === 'TEAM_LEADER' && !approvedGroupId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
+    }
 
     const existingInvitation = await this.prisma.employeeInvitation.findFirst({
       where: {
@@ -726,6 +1007,11 @@ export class EmployeesService {
       approvedByUserId: null,
       rejectedAt: null,
       rejectedReason: null,
+      firstName: dto.firstName?.trim() || null,
+      lastName: dto.lastName?.trim() || null,
+      positionTitle: dto.positionTitle?.trim() || null,
+      approvedGroupId,
+      approvedRole,
       userId: null,
       employeeId: null,
       workMode,
@@ -765,7 +1051,14 @@ export class EmployeesService {
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: email ? 'employee.join_email_registered' : 'employee.join_phone_registered',
-      metadata: { email, phone, expiresAt: expiresAt.toISOString(), workMode },
+      metadata: {
+        email,
+        phone,
+        expiresAt: expiresAt.toISOString(),
+        workMode,
+        role: this.toClientAccessRole(approvedRole),
+        teamId: approvedGroupId,
+      },
     });
     this.syncBillingSeatsInBackground(tenantId);
     this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
@@ -783,6 +1076,8 @@ export class EmployeesService {
       middleName: invitation.middleName ?? null,
       approvedShiftTemplateId: invitation.approvedShiftTemplateId ?? null,
       approvedGroupId: invitation.approvedGroupId ?? null,
+      role: this.toClientAccessRole(invitation.approvedRole),
+      positionTitle: invitation.positionTitle ?? null,
       workMode: invitation.workMode,
       companyName: tenant.companies[0]?.name ?? tenant.name,
       tenantName: tenant.name,
@@ -814,14 +1109,12 @@ export class EmployeesService {
     const firstName = dto.firstName.trim();
     const lastName = dto.lastName.trim();
     const middleName = dto.middleName?.trim() || null;
-    const attendanceTrackingEnabled =
-      await this.isAttendanceTrackingEnabled(tenantId);
+    const positionTitle = dto.positionTitle?.trim() || null;
+    const attendanceTrackingEnabled = await this.isAttendanceTrackingEnabled(tenantId);
     const workMode = attendanceTrackingEnabled
       ? this.normalizeWorkMode(dto.workMode ?? invitation.workMode)
       : EmployeeWorkMode.FIELD;
-    const shiftTemplateId = attendanceTrackingEnabled
-      ? (dto.shiftTemplateId?.trim() ?? '')
-      : '';
+    const shiftTemplateId = attendanceTrackingEnabled ? (dto.shiftTemplateId?.trim() ?? '') : '';
 
     if (!firstName || !lastName) {
       throw new BadRequestException('Укажите имя и фамилию сотрудника.');
@@ -843,18 +1136,21 @@ export class EmployeesService {
       throw new BadRequestException('Selected shift template was not found.');
     }
 
-    const rawGroupId = dto.groupId?.trim();
-    const requestedGroupId = rawGroupId ? rawGroupId : null;
+    const approvedRole = this.normalizeEmployeeAccessRole(dto.role, invitation.approvedRole);
+    const requestedTeamInput = this.normalizeRequestedTeamId({
+      teamId: dto.teamId,
+      groupId: dto.groupId,
+    });
+    const requestedGroupId =
+      approvedRole === 'OWNER'
+        ? null
+        : await this.assertTeamExists(
+            tenantId,
+            requestedTeamInput === undefined ? (invitation.approvedGroupId ?? null) : requestedTeamInput,
+          );
 
-    if (requestedGroupId) {
-      const approvedGroup = await this.prisma.workGroup.findFirst({
-        where: { tenantId, id: requestedGroupId },
-        select: { id: true },
-      });
-
-      if (!approvedGroup) {
-        throw new BadRequestException('Selected work group was not found.');
-      }
+    if (approvedRole === 'TEAM_LEADER' && !requestedGroupId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
     }
 
     const updated = await this.prisma.employeeInvitation.update({
@@ -863,9 +1159,11 @@ export class EmployeesService {
         firstName,
         lastName,
         middleName,
+        positionTitle,
         workMode,
         approvedShiftTemplateId: shiftTemplate?.id ?? null,
         approvedGroupId: requestedGroupId,
+        approvedRole,
       },
     });
 
@@ -879,6 +1177,7 @@ export class EmployeesService {
         workMode,
         shiftTemplateId: shiftTemplate?.id ?? null,
         groupId: requestedGroupId,
+        role: this.toClientAccessRole(approvedRole),
         email: updated.email,
         phone: updated.phone,
       },
@@ -898,6 +1197,8 @@ export class EmployeesService {
       middleName: updated.middleName ?? null,
       approvedShiftTemplateId: updated.approvedShiftTemplateId ?? null,
       approvedGroupId: updated.approvedGroupId ?? null,
+      role: this.toClientAccessRole(updated.approvedRole),
+      positionTitle: updated.positionTitle ?? null,
       workMode: updated.workMode,
     };
   }
@@ -1035,7 +1336,11 @@ export class EmployeesService {
       entityType: 'employee_invitation',
       entityId: invitation.id,
       action: 'employee.join_email_refreshed',
-      metadata: { email: invitation.email, phone: invitation.phone, resentCount: updated.resentCount },
+      metadata: {
+        email: invitation.email,
+        phone: invitation.phone,
+        resentCount: updated.resentCount,
+      },
     });
 
     return {
@@ -1080,7 +1385,10 @@ export class EmployeesService {
       registrationCompleted: Boolean(invitation.userId),
       firstName: invitation.firstName ?? null,
       lastName: invitation.lastName ?? null,
+      positionTitle: invitation.positionTitle ?? null,
       phone: invitation.phone ?? null,
+      approvedGroupId: invitation.approvedGroupId ?? null,
+      role: this.toClientAccessRole(invitation.approvedRole),
       workMode: invitation.workMode,
     };
   }
@@ -1094,8 +1402,7 @@ export class EmployeesService {
       throw new NotFoundException('Invitation not found.');
     }
 
-    const canRegisterApprovedInvitation =
-      invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
+    const canRegisterApprovedInvitation = invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
     const canRegisterPendingInvitation =
       invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL && !invitation.userId;
 
@@ -1135,12 +1442,11 @@ export class EmployeesService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const attendanceTrackingEnabled =
-      await this.isAttendanceTrackingEnabled(invitation.tenantId);
+    const attendanceTrackingEnabled = await this.isAttendanceTrackingEnabled(invitation.tenantId);
     const effectiveWorkMode = attendanceTrackingEnabled
       ? this.normalizeWorkMode(invitation.workMode)
       : EmployeeWorkMode.FIELD;
-    
+
     const realUserCount = await this.prisma.user.count({
       where: {
         tenantId: invitation.tenantId,
@@ -1150,8 +1456,7 @@ export class EmployeesService {
 
     const isFirstUser = realUserCount === 0;
     const isPreApproved = invitation.status === EmployeeInvitationStatus.APPROVED && !invitation.userId;
-    const roleCode = isFirstUser ? 'tenant_owner' : 'employee';
-    const roleName = isFirstUser ? 'Tenant Owner' : 'Employee';
+    const approvedRole = isFirstUser ? 'OWNER' : this.normalizeEmployeeAccessRole(invitation.approvedRole);
     const shouldAutoApprove =
       invitation.status === EmployeeInvitationStatus.INVITED ||
       invitation.status === EmployeeInvitationStatus.PENDING_APPROVAL ||
@@ -1163,15 +1468,9 @@ export class EmployeesService {
       throw new BadRequestException('Добавьте фото профиля.');
     }
 
-    const assignedRole = await this.prisma.role.upsert({
-      where: { code: roleCode },
-      update: {},
-      create: {
-        code: roleCode,
-        name: roleName,
-        description: isFirstUser ? 'Owner of the workspace' : 'Standard employee access',
-      },
-    });
+    if (approvedRole === 'TEAM_LEADER' && !invitation.approvedGroupId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
+    }
 
     const avatar = await this.uploadOptionalAvatarSafely(
       invitation.tenantId,
@@ -1180,7 +1479,10 @@ export class EmployeesService {
       'registerFromInvitation',
     );
 
-    let result: { user: { id: string }; invitation: { id: string; employeeId: string | null } };
+    let result: {
+      user: { id: string };
+      invitation: { id: string; employeeId: string | null };
+    };
 
     try {
       result = await this.prisma.$transaction(async (tx) => {
@@ -1194,39 +1496,26 @@ export class EmployeesService {
           },
         });
 
-        await tx.userRole.create({
-          data: {
-            userId: user.id,
-            roleId: assignedRole.id,
-            scopeType: 'tenant',
-            scopeId: invitation.tenantId,
-          },
-        });
-        if (!attendanceTrackingEnabled && !isFirstUser) {
-          const managerRole = await this.ensureManagerRole(tx);
-          await tx.userRole.createMany({
-            data: [
-              {
-                userId: user.id,
-                roleId: managerRole.id,
-                scopeType: 'tenant',
-                scopeId: invitation.tenantId,
-              },
-            ],
-            skipDuplicates: true,
-          });
-        }
+        await this.syncEmployeeAccessRole(tx, user.id, invitation.tenantId, approvedRole);
 
         const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
         const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
         const approvedShiftTemplate =
           effectiveWorkMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId
-          ? await tx.shiftTemplate.findFirst({
-              where: { tenantId: invitation.tenantId, id: invitation.approvedShiftTemplateId },
-            })
-          : null;
-        const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId);
-        const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, invitation.tenantId);
+            ? await tx.shiftTemplate.findFirst({
+                where: {
+                  tenantId: invitation.tenantId,
+                  id: invitation.approvedShiftTemplateId,
+                },
+              })
+            : null;
+        const primaryLocationId =
+          approvedShiftTemplate?.locationId ??
+          (await this.resolveDefaultLocationId(tx, invitation.tenantId, companyId));
+        const positionId =
+          approvedShiftTemplate?.positionId ??
+          (await this.resolvePositionIdByTitle(tx, invitation.tenantId, invitation.positionTitle)) ??
+          (await this.resolveDefaultPositionId(tx, invitation.tenantId));
 
         const employeeAvatarStorageKey = avatar?.key ?? invitation.avatarStorageKey ?? null;
         const employeeAvatarUrl = avatar?.url ?? invitation.avatarUrl ?? null;
@@ -1258,11 +1547,13 @@ export class EmployeesService {
           await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
         }
 
-        if (
-          effectiveWorkMode === EmployeeWorkMode.STATIONARY &&
-          invitation.approvedShiftTemplateId
-        ) {
-          await this.createInitialShiftFromTemplate(tx, invitation.tenantId, employee.id, invitation.approvedShiftTemplateId);
+        if (effectiveWorkMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId) {
+          await this.createInitialShiftFromTemplate(
+            tx,
+            invitation.tenantId,
+            employee.id,
+            invitation.approvedShiftTemplateId,
+          );
         }
 
         const updatedInvitation = await tx.employeeInvitation.update({
@@ -1274,15 +1565,14 @@ export class EmployeesService {
             status: EmployeeInvitationStatus.APPROVED,
             workMode: effectiveWorkMode,
             approvedShiftTemplateId:
-              effectiveWorkMode === EmployeeWorkMode.STATIONARY
-                ? invitation.approvedShiftTemplateId
-                : null,
+              effectiveWorkMode === EmployeeWorkMode.STATIONARY ? invitation.approvedShiftTemplateId : null,
             submittedAt: new Date(),
             approvedAt: invitation.approvedAt ?? new Date(),
             approvedByUserId: invitation.approvedByUserId ?? invitation.invitedByUserId,
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
             middleName: dto.middleName?.trim() || null,
+            positionTitle: invitation.positionTitle ?? null,
             birthDate: new Date(dto.birthDate),
             gender: dto.gender,
             phone: dto.phone.trim(),
@@ -1350,11 +1640,13 @@ export class EmployeesService {
       throw new BadRequestException('Invitation is not waiting for review.');
     }
 
-    const attendanceTrackingEnabled =
-      await this.isAttendanceTrackingEnabled(tenantId);
+    const attendanceTrackingEnabled = await this.isAttendanceTrackingEnabled(tenantId);
+    const approvedRole = this.normalizeEmployeeAccessRole(dto.role, invitation.approvedRole);
     const grantManagerAccess =
       dto.decision === 'APPROVE' &&
-      (!attendanceTrackingEnabled || dto.grantManagerAccess === true);
+      (approvedRole === 'TEAM_LEADER' ||
+        (!attendanceTrackingEnabled && approvedRole !== 'OWNER') ||
+        dto.grantManagerAccess === true);
     const workMode = attendanceTrackingEnabled
       ? this.normalizeWorkMode(dto.workMode ?? invitation.workMode)
       : EmployeeWorkMode.FIELD;
@@ -1362,42 +1654,38 @@ export class EmployeesService {
       dto.decision === 'APPROVE' && workMode === EmployeeWorkMode.STATIONARY
         ? dto.shiftTemplateId?.trim() || invitation.approvedShiftTemplateId || null
         : null;
-    const approvedShiftTemplate =
-      requestedShiftTemplateId
-        ? await this.prisma.shiftTemplate.findFirst({
-            where: { tenantId, id: requestedShiftTemplateId },
-          })
-        : null;
+    const approvedShiftTemplate = requestedShiftTemplateId
+      ? await this.prisma.shiftTemplate.findFirst({
+          where: { tenantId, id: requestedShiftTemplateId },
+        })
+      : null;
 
-    if (
-      dto.decision === 'APPROVE' &&
-      workMode === EmployeeWorkMode.STATIONARY &&
-      !approvedShiftTemplate
-    ) {
+    if (dto.decision === 'APPROVE' && workMode === EmployeeWorkMode.STATIONARY && !approvedShiftTemplate) {
       throw new BadRequestException('Пожалуйста, выберите смену перед подтверждением анкеты.');
     }
 
-    const rawGroupId = typeof dto.groupId === 'string' ? dto.groupId.trim() : undefined;
+    const rawGroupId = this.normalizeRequestedTeamId({
+      teamId: dto.teamId,
+      groupId: dto.groupId,
+    });
     const requestedGroupId =
-      dto.decision === 'APPROVE'
-        ? rawGroupId === undefined
-          ? invitation.approvedGroupId || null
-          : rawGroupId || null
-        : invitation.approvedGroupId || null;
+      approvedRole === 'OWNER'
+        ? null
+        : dto.decision === 'APPROVE'
+          ? await this.assertTeamExists(
+              tenantId,
+              rawGroupId === undefined ? invitation.approvedGroupId || null : rawGroupId,
+            )
+          : invitation.approvedGroupId || null;
 
-    if (requestedGroupId) {
-      const approvedGroup = await this.prisma.workGroup.findFirst({
-        where: { tenantId, id: requestedGroupId },
-        select: { id: true },
-      });
-
-      if (!approvedGroup) {
-        throw new BadRequestException('Selected work group was not found.');
-      }
+    if (dto.decision === 'APPROVE' && approvedRole === 'TEAM_LEADER' && !requestedGroupId) {
+      throw new BadRequestException('Team leader must be assigned to a team.');
     }
 
     if (dto.decision === 'APPROVE' && !invitation.userId && !invitation.email) {
-      throw new BadRequestException('У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.');
+      throw new BadRequestException(
+        'У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.',
+      );
     }
 
     const invitationEmail = invitation.email;
@@ -1412,6 +1700,7 @@ export class EmployeesService {
       firstName: dto.firstName?.trim() ?? invitation.firstName,
       lastName: dto.lastName?.trim() ?? invitation.lastName,
       middleName: dto.middleName?.trim() ?? invitation.middleName,
+      positionTitle: dto.positionTitle?.trim() ?? invitation.positionTitle,
       birthDate: dto.birthDate ? new Date(dto.birthDate) : invitation.birthDate,
       gender: dto.gender ?? invitation.gender,
       phone: dto.phone?.trim() ?? invitation.phone,
@@ -1421,9 +1710,16 @@ export class EmployeesService {
       companyId: invitation.companyId ?? null,
       approvedShiftTemplateId: approvedShiftTemplate?.id ?? null,
       approvedGroupId: requestedGroupId,
+      approvedRole,
     };
 
-    if (!updatePayload.firstName || !updatePayload.lastName || !updatePayload.birthDate || !updatePayload.gender || !updatePayload.phone) {
+    if (
+      !updatePayload.firstName ||
+      !updatePayload.lastName ||
+      !updatePayload.birthDate ||
+      !updatePayload.gender ||
+      !updatePayload.phone
+    ) {
       throw new BadRequestException('Employee profile is incomplete.');
     }
 
@@ -1498,7 +1794,9 @@ export class EmployeesService {
 
     if (!invitation.userId) {
       if (!invitationEmail) {
-        throw new BadRequestException('У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.');
+        throw new BadRequestException(
+          'У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.',
+        );
       }
 
       const generatedPassword = this.generateTemporaryPassword();
@@ -1517,13 +1815,14 @@ export class EmployeesService {
           throw new ConflictException('Такой email уже зарегистрирован в компании.');
         }
 
-        const employeeRole = await this.ensureEmployeeRole(tx);
-        const managerRole = grantManagerAccess ? await this.ensureManagerRole(tx) : null;
         const companyId = await this.resolveInvitationCompanyId(tx, tenantId, updatePayload.companyId);
         const departmentId = await this.resolveDefaultDepartmentId(tx, tenantId);
         const primaryLocationId =
           approvedShiftTemplate?.locationId ?? (await this.resolveDefaultLocationId(tx, tenantId, companyId));
-        const positionId = approvedShiftTemplate?.positionId ?? (await this.resolveDefaultPositionId(tx, tenantId));
+        const positionId =
+          approvedShiftTemplate?.positionId ??
+          (await this.resolvePositionIdByTitle(tx, tenantId, updatePayload.positionTitle)) ??
+          (await this.resolveDefaultPositionId(tx, tenantId));
 
         const user = await tx.user.create({
           data: {
@@ -1535,26 +1834,7 @@ export class EmployeesService {
           },
         });
 
-        await tx.userRole.createMany({
-          data: [
-            {
-              userId: user.id,
-              roleId: employeeRole.id,
-              scopeType: 'tenant',
-              scopeId: tenantId,
-            },
-            ...(managerRole
-              ? [
-                  {
-                    userId: user.id,
-                    roleId: managerRole.id,
-                    scopeType: 'tenant',
-                    scopeId: tenantId,
-                  },
-                ]
-              : []),
-          ],
-        });
+        await this.syncEmployeeAccessRole(tx, user.id, tenantId, approvedRole);
 
         const employee = await tx.employee.create({
           data: {
@@ -1611,6 +1891,7 @@ export class EmployeesService {
           employeeId: approved.employeeId,
           shiftTemplateId: approvedShiftTemplate?.id ?? null,
           groupId: requestedGroupId,
+          role: this.toClientAccessRole(approvedRole),
           grantManagerAccess,
         },
       });
@@ -1635,52 +1916,55 @@ export class EmployeesService {
 
       const companyId = await this.resolveInvitationCompanyId(tx, tenantId, updatePayload.companyId);
       const departmentId = await this.resolveDefaultDepartmentId(tx, tenantId);
-      const primaryLocationId = approvedShiftTemplate?.locationId ?? await this.resolveDefaultLocationId(tx, tenantId, companyId);
-      const positionId = approvedShiftTemplate?.positionId ?? await this.resolveDefaultPositionId(tx, tenantId);
+      const primaryLocationId =
+        approvedShiftTemplate?.locationId ?? (await this.resolveDefaultLocationId(tx, tenantId, companyId));
+      const positionId =
+        approvedShiftTemplate?.positionId ??
+        (await this.resolvePositionIdByTitle(tx, tenantId, updatePayload.positionTitle)) ??
+        (await this.resolveDefaultPositionId(tx, tenantId));
 
-      const employee =
-        existingEmployee
-          ? await tx.employee.update({
-              where: { id: existingEmployee.id },
-              data: {
-                companyId,
-                departmentId,
-                primaryLocationId,
-                positionId,
-                firstName: updatePayload.firstName!,
-                lastName: updatePayload.lastName!,
-                middleName: updatePayload.middleName ?? null,
-                workMode: updatePayload.workMode,
-                birthDate: updatePayload.birthDate!,
-                gender: updatePayload.gender!,
-                phone: updatePayload.phone!,
-                avatarStorageKey: updatePayload.avatarStorageKey ?? null,
-                avatarUrl: updatePayload.avatarUrl ?? null,
-                status: EmployeeStatus.ACTIVE,
-              },
-            })
-          : await tx.employee.create({
-              data: {
-                tenantId,
-                userId: invitation.userId!,
-                companyId,
-                departmentId,
-                primaryLocationId,
-                positionId,
-                employeeNumber: await this.generateEmployeeNumber(tx, tenantId),
-                firstName: updatePayload.firstName!,
-                lastName: updatePayload.lastName!,
-                middleName: updatePayload.middleName ?? null,
-                workMode: updatePayload.workMode,
-                birthDate: updatePayload.birthDate!,
-                gender: updatePayload.gender!,
-                phone: updatePayload.phone!,
-                avatarStorageKey: updatePayload.avatarStorageKey ?? null,
-                avatarUrl: updatePayload.avatarUrl ?? null,
-                status: EmployeeStatus.ACTIVE,
-                hireDate: new Date(),
-              },
-            });
+      const employee = existingEmployee
+        ? await tx.employee.update({
+            where: { id: existingEmployee.id },
+            data: {
+              companyId,
+              departmentId,
+              primaryLocationId,
+              positionId,
+              firstName: updatePayload.firstName!,
+              lastName: updatePayload.lastName!,
+              middleName: updatePayload.middleName ?? null,
+              workMode: updatePayload.workMode,
+              birthDate: updatePayload.birthDate!,
+              gender: updatePayload.gender!,
+              phone: updatePayload.phone!,
+              avatarStorageKey: updatePayload.avatarStorageKey ?? null,
+              avatarUrl: updatePayload.avatarUrl ?? null,
+              status: EmployeeStatus.ACTIVE,
+            },
+          })
+        : await tx.employee.create({
+            data: {
+              tenantId,
+              userId: invitation.userId!,
+              companyId,
+              departmentId,
+              primaryLocationId,
+              positionId,
+              employeeNumber: await this.generateEmployeeNumber(tx, tenantId),
+              firstName: updatePayload.firstName!,
+              lastName: updatePayload.lastName!,
+              middleName: updatePayload.middleName ?? null,
+              workMode: updatePayload.workMode,
+              birthDate: updatePayload.birthDate!,
+              gender: updatePayload.gender!,
+              phone: updatePayload.phone!,
+              avatarStorageKey: updatePayload.avatarStorageKey ?? null,
+              avatarUrl: updatePayload.avatarUrl ?? null,
+              status: EmployeeStatus.ACTIVE,
+              hireDate: new Date(),
+            },
+          });
 
       await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, requestedGroupId);
 
@@ -1693,7 +1977,7 @@ export class EmployeesService {
         data: { workspaceAccessAllowed: true },
       });
 
-      await this.syncManagerRole(tx, invitation.userId!, tenantId, grantManagerAccess);
+      await this.syncEmployeeAccessRole(tx, invitation.userId!, tenantId, approvedRole);
 
       return tx.employeeInvitation.update({
         where: { id: invitation.id },
@@ -1729,6 +2013,7 @@ export class EmployeesService {
         employeeId: approved.employeeId,
         shiftTemplateId: approvedShiftTemplate?.id ?? null,
         groupId: requestedGroupId,
+        role: this.toClientAccessRole(approvedRole),
         grantManagerAccess,
       },
     });
@@ -1737,7 +2022,11 @@ export class EmployeesService {
       this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
     }
 
-    return { id: approved.id, status: approved.status, employeeId: approved.employeeId };
+    return {
+      id: approved.id,
+      status: approved.status,
+      employeeId: approved.employeeId,
+    };
   }
 
   async getAccessStatus(user: JwtUser) {
@@ -1789,12 +2078,62 @@ export class EmployeesService {
     });
   }
 
-  private async createInitialShiftFromTemplate(
-    tx: PrismaTx,
-    tenantId: string,
-    employeeId: string,
-    templateId: string,
-  ) {
+  private async resolvePositionIdByTitle(tx: PrismaTx, tenantId: string, rawTitle?: string | null) {
+    const title = rawTitle?.trim();
+    if (!title) {
+      return null;
+    }
+
+    const existing = await tx.position.findFirst({
+      where: {
+        tenantId,
+        name: {
+          equals: title,
+          mode: 'insensitive',
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const baseCode =
+      title
+        .normalize('NFKD')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s_]+/g, '_')
+        .replace(/_+/g, '_')
+        .slice(0, 24) || 'POSITION';
+    let code = baseCode;
+    let suffix = 2;
+
+    while (
+      await tx.position.findFirst({
+        where: { tenantId, code },
+        select: { id: true },
+      })
+    ) {
+      code = `${baseCode.slice(0, 20)}_${suffix}`;
+      suffix += 1;
+    }
+
+    const created = await tx.position.create({
+      data: {
+        tenantId,
+        name: title,
+        code,
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async createInitialShiftFromTemplate(tx: PrismaTx, tenantId: string, employeeId: string, templateId: string) {
     const template = await tx.shiftTemplate.findFirst({
       where: { tenantId, id: templateId },
       select: {
@@ -1894,9 +2233,7 @@ export class EmployeesService {
   }
 
   private normalizeWorkMode(workMode: EmployeeWorkModeInput) {
-    return workMode === EmployeeWorkMode.FIELD
-      ? EmployeeWorkMode.FIELD
-      : EmployeeWorkMode.STATIONARY;
+    return workMode === EmployeeWorkMode.FIELD ? EmployeeWorkMode.FIELD : EmployeeWorkMode.STATIONARY;
   }
 
   private hashToken(token: string) {
@@ -1938,10 +2275,7 @@ export class EmployeesService {
         continue;
       }
 
-      if (
-        invitation.status === EmployeeInvitationStatus.INVITED &&
-        invitation.expiresAt.getTime() <= Date.now()
-      ) {
+      if (invitation.status === EmployeeInvitationStatus.INVITED && invitation.expiresAt.getTime() <= Date.now()) {
         await this.markInvitationExpired(invitation.id).catch(() => undefined);
         continue;
       }
@@ -1960,7 +2294,9 @@ export class EmployeesService {
     }
 
     if (activeInvitations.length > 1) {
-      throw new ConflictException('Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.');
+      throw new ConflictException(
+        'Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.',
+      );
     }
 
     return activeInvitations[0];
@@ -1992,10 +2328,7 @@ export class EmployeesService {
         continue;
       }
 
-      if (
-        invitation.status === EmployeeInvitationStatus.INVITED &&
-        invitation.expiresAt.getTime() <= Date.now()
-      ) {
+      if (invitation.status === EmployeeInvitationStatus.INVITED && invitation.expiresAt.getTime() <= Date.now()) {
         await this.markInvitationExpired(invitation.id).catch(() => undefined);
         continue;
       }
@@ -2014,7 +2347,9 @@ export class EmployeesService {
     }
 
     if (activeInvitations.length > 1) {
-      throw new ConflictException('Этот телефон найден в нескольких организациях. Попросите менеджера отправить точную ссылку.');
+      throw new ConflictException(
+        'Этот телефон найден в нескольких организациях. Попросите менеджера отправить точную ссылку.',
+      );
     }
 
     return activeInvitations[0];
@@ -2064,6 +2399,64 @@ export class EmployeesService {
         description: 'Can manage team attendance, approvals, and tasks',
       },
     });
+  }
+
+  private async ensureTenantOwnerRole(tx: PrismaTx) {
+    return tx.role.upsert({
+      where: { code: 'tenant_owner' },
+      update: {},
+      create: {
+        code: 'tenant_owner',
+        name: 'Tenant Owner',
+        description: 'Full company access',
+      },
+    });
+  }
+
+  private async ensureRoleAssignment(tx: PrismaTx, userId: string, roleId: string, tenantId: string) {
+    await tx.userRole.createMany({
+      data: [
+        {
+          userId,
+          roleId,
+          scopeType: 'tenant',
+          scopeId: tenantId,
+        },
+      ],
+      skipDuplicates: true,
+    });
+  }
+
+  private async removeRoleAssignment(tx: PrismaTx, userId: string, roleId: string, tenantId: string) {
+    await tx.userRole.deleteMany({
+      where: {
+        userId,
+        roleId,
+        scopeType: 'tenant',
+        scopeId: tenantId,
+      },
+    });
+  }
+
+  private async syncEmployeeAccessRole(tx: PrismaTx, userId: string, tenantId: string, role: EmployeeAccessRoleCode) {
+    const employeeRole = await this.ensureEmployeeRole(tx);
+    const managerRole = await this.ensureManagerRole(tx);
+
+    if (role === 'OWNER') {
+      const ownerRole = await this.ensureTenantOwnerRole(tx);
+      await this.ensureRoleAssignment(tx, userId, ownerRole.id, tenantId);
+      await this.removeRoleAssignment(tx, userId, managerRole.id, tenantId);
+      return;
+    }
+
+    await this.ensureRoleAssignment(tx, userId, employeeRole.id, tenantId);
+
+    if (role === 'TEAM_LEADER') {
+      await this.ensureRoleAssignment(tx, userId, managerRole.id, tenantId);
+      return;
+    }
+
+    await this.removeRoleAssignment(tx, userId, managerRole.id, tenantId);
   }
 
   private async syncManagerRole(tx: PrismaTx, userId: string, tenantId: string, grantManagerAccess: boolean) {

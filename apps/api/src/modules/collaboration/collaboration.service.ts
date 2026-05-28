@@ -55,6 +55,23 @@ const WORKSPACE_MANAGER_ROLE_CODES = [
   "operations_admin",
   "manager",
 ] as const;
+const WORKSPACE_ADMIN_ROLE_CODES = new Set([
+  "tenant_owner",
+  "hr_admin",
+  "operations_admin",
+]);
+
+type WorkGroupActor = {
+  id: string;
+  tenantId: string;
+  user?: {
+    roles?: Array<{
+      role?: {
+        code: string;
+      } | null;
+    }> | null;
+  } | null;
+};
 
 const MINIMAL_EMPLOYEE_SELECT = {
   id: true,
@@ -81,20 +98,47 @@ export class CollaborationService {
     private readonly translationService: TranslationService,
   ) {}
 
-  async listGroups(userId: string) {
-    const employee = await this.prisma.employee.findUniqueOrThrow({
+  private async getWorkGroupActor(userId: string) {
+    return this.prisma.employee.findUniqueOrThrow({
       where: { userId },
-      select: {
-        id: true,
-        tenantId: true,
+      include: {
+        user: {
+          select: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
       },
     });
+  }
+
+  private canManageAllWorkGroups(actor: WorkGroupActor) {
+    const roleCodes =
+      actor.user?.roles
+        ?.map((assignment) => assignment.role?.code)
+        .filter((code): code is string => Boolean(code)) ?? [];
+
+    return roleCodes.some((code) => WORKSPACE_ADMIN_ROLE_CODES.has(code));
+  }
+
+  private buildWorkGroupScope(actor: WorkGroupActor, groupId?: string) {
+    return {
+      ...(groupId ? { id: groupId } : {}),
+      tenantId: actor.tenantId,
+      ...(this.canManageAllWorkGroups(actor)
+        ? {}
+        : { managerEmployeeId: actor.id }),
+    };
+  }
+
+  async listGroups(userId: string) {
+    const employee = await this.getWorkGroupActor(userId);
 
     return this.prisma.workGroup.findMany({
-      where: {
-        tenantId: employee.tenantId,
-        managerEmployeeId: employee.id,
-      },
+      where: this.buildWorkGroupScope(employee),
       include: {
         memberships: {
           include: {
@@ -117,9 +161,7 @@ export class CollaborationService {
   }
 
   async createGroup(userId: string, dto: CreateGroupDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({
-      where: { userId },
-    });
+    const manager = await this.getWorkGroupActor(userId);
     const memberEmployeeIds = Array.from(new Set(dto.memberEmployeeIds ?? []));
     const name = dto.name.trim();
     const description = dto.description?.trim() || null;
@@ -192,15 +234,9 @@ export class CollaborationService {
   }
 
   async updateGroup(userId: string, groupId: string, dto: UpdateGroupDto) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({
-      where: { userId },
-    });
+    const manager = await this.getWorkGroupActor(userId);
     const group = await this.prisma.workGroup.findFirst({
-      where: {
-        id: groupId,
-        tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
-      },
+      where: this.buildWorkGroupScope(manager, groupId),
     });
 
     if (!group) {
@@ -268,15 +304,9 @@ export class CollaborationService {
   }
 
   async deleteGroup(userId: string, groupId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({
-      where: { userId },
-    });
+    const manager = await this.getWorkGroupActor(userId);
     const group = await this.prisma.workGroup.findFirst({
-      where: {
-        id: groupId,
-        tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
-      },
+      where: this.buildWorkGroupScope(manager, groupId),
       include: {
         memberships: {
           select: {
@@ -322,15 +352,9 @@ export class CollaborationService {
     groupId: string,
     dto: SetGroupMembersDto,
   ) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({
-      where: { userId },
-    });
+    const manager = await this.getWorkGroupActor(userId);
     const group = await this.prisma.workGroup.findFirst({
-      where: {
-        id: groupId,
-        tenantId: manager.tenantId,
-        managerEmployeeId: manager.id,
-      },
+      where: this.buildWorkGroupScope(manager, groupId),
     });
 
     if (!group) {
@@ -395,16 +419,11 @@ export class CollaborationService {
   }
 
   async managerOverview(userId: string) {
-    const manager = await this.prisma.employee.findUniqueOrThrow({
-      where: { userId },
-    });
+    const manager = await this.getWorkGroupActor(userId);
 
     const [groups, tasks, stats] = await Promise.all([
       this.prisma.workGroup.findMany({
-        where: {
-          tenantId: manager.tenantId,
-          managerEmployeeId: manager.id,
-        },
+        where: this.buildWorkGroupScope(manager),
         include: {
           memberships: {
             include: { employee: true },
@@ -1071,7 +1090,9 @@ export class CollaborationService {
     });
 
     return notifications.filter((notification) => {
-      const metadata = this.parseNotificationMetadata(notification.metadataJson);
+      const metadata = this.parseNotificationMetadata(
+        notification.metadataJson,
+      );
       const announcementId =
         typeof metadata?.announcementId === "string"
           ? metadata.announcementId
@@ -1117,7 +1138,9 @@ export class CollaborationService {
   ) {
     return announcements.map((announcement) => {
       const relatedNotifications = notifications.filter((notification) => {
-        const metadata = this.parseNotificationMetadata(notification.metadataJson);
+        const metadata = this.parseNotificationMetadata(
+          notification.metadataJson,
+        );
         return metadata?.announcementId === announcement.id;
       });
 
@@ -1129,7 +1152,10 @@ export class CollaborationService {
         ...this.serializeAnnouncementWithImage(announcement),
         totalRecipients: relatedNotifications.length,
         readRecipients,
-        unreadRecipients: Math.max(0, relatedNotifications.length - readRecipients),
+        unreadRecipients: Math.max(
+          0,
+          relatedNotifications.length - readRecipients,
+        ),
       };
     });
   }
@@ -1218,9 +1244,7 @@ export class CollaborationService {
     };
   }
 
-  private parseAnnouncementAttachments(
-    raw: string | null,
-  ): Array<{
+  private parseAnnouncementAttachments(raw: string | null): Array<{
     id: string;
     fileName: string;
     contentType: string | null;
@@ -1257,8 +1281,7 @@ export class CollaborationService {
           id: item.id?.trim() || `attachment-${index + 1}`,
           fileName: item.fileName,
           contentType: item.contentType ?? null,
-          sizeBytes:
-            typeof item.sizeBytes === "number" ? item.sizeBytes : null,
+          sizeBytes: typeof item.sizeBytes === "number" ? item.sizeBytes : null,
           storageKey: item.storageKey,
         }));
     } catch {
@@ -1528,7 +1551,10 @@ export class CollaborationService {
       };
     }
 
-    const updated = await this.notificationsService.markRead(userId, notification.id);
+    const updated = await this.notificationsService.markRead(
+      userId,
+      notification.id,
+    );
 
     return {
       success: true,
@@ -2733,7 +2759,8 @@ export class CollaborationService {
       );
       boardTasks = [...boardTasks, ...recurringTasks].sort((left, right) => {
         const leftDone =
-          left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+          left.status === TaskStatus.DONE ||
+          left.status === TaskStatus.CANCELLED
             ? 1
             : 0;
         const rightDone =
@@ -2756,7 +2783,8 @@ export class CollaborationService {
         }
 
         return (
-          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+          new Date(right.createdAt).getTime() -
+          new Date(left.createdAt).getTime()
         );
       });
     }
@@ -3237,7 +3265,8 @@ export class CollaborationService {
         ...recurringTasks,
       ].sort((left, right) => {
         const leftDone =
-          left.status === TaskStatus.DONE || left.status === TaskStatus.CANCELLED
+          left.status === TaskStatus.DONE ||
+          left.status === TaskStatus.CANCELLED
             ? 1
             : 0;
         const rightDone =
@@ -3702,10 +3731,13 @@ export class CollaborationService {
     });
 
     if (employee.userId) {
-      void this.collaborationRealtimeService.fanoutThreadUpdated(employee.userId, {
-        threadId,
-        readAt: new Date().toISOString(),
-      });
+      void this.collaborationRealtimeService.fanoutThreadUpdated(
+        employee.userId,
+        {
+          threadId,
+          readAt: new Date().toISOString(),
+        },
+      );
     }
 
     return { success: true };
@@ -3932,7 +3964,9 @@ export class CollaborationService {
       throw new NotFoundException("Checklist item not found.");
     }
 
-    if (!this.canAccessTask(employee.id, item.task, employee.groupMemberships)) {
+    if (
+      !this.canAccessTask(employee.id, item.task, employee.groupMemberships)
+    ) {
       throw new ForbiddenException(
         "Current user cannot update this checklist item.",
       );
@@ -3964,7 +3998,10 @@ export class CollaborationService {
       include: this.taskInclude(),
     });
 
-    await this.emitWorkspaceRefreshForTasks([updated], "task.checklist_toggled");
+    await this.emitWorkspaceRefreshForTasks(
+      [updated],
+      "task.checklist_toggled",
+    );
 
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
@@ -3985,7 +4022,9 @@ export class CollaborationService {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
 
     if (!match) {
-      throw new BadRequestException("Announcement asset is not a valid data URL.");
+      throw new BadRequestException(
+        "Announcement asset is not a valid data URL.",
+      );
     }
 
     return {
@@ -4156,7 +4195,10 @@ export class CollaborationService {
       },
     });
 
-    await this.emitWorkspaceRefreshForTasks([updated], "task.photo_proof_added");
+    await this.emitWorkspaceRefreshForTasks(
+      [updated],
+      "task.photo_proof_added",
+    );
 
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
@@ -4267,7 +4309,10 @@ export class CollaborationService {
       },
     });
 
-    await this.emitWorkspaceRefreshForTasks([updated], "task.photo_proof_deleted");
+    await this.emitWorkspaceRefreshForTasks(
+      [updated],
+      "task.photo_proof_deleted",
+    );
 
     return this.serializeTaskWithPhotoProofUrls(updated);
   }
@@ -4369,7 +4414,10 @@ export class CollaborationService {
     locationId: string | null | undefined,
     authorEmployeeId: string,
   ) {
-    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(groupId, groupIds);
+    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(
+      groupId,
+      groupIds,
+    );
     const normalizedTargetEmployeeIds = this.normalizeAnnouncementScopeIds(
       targetEmployeeId,
       targetEmployeeIds,
@@ -4390,7 +4438,10 @@ export class CollaborationService {
         audience === AnnouncementAudience.EMPLOYEE) &&
       (normalizedGroupIds.length > 0 || normalizedTargetEmployeeIds.length > 0)
     ) {
-      const recipientsById = new Map<string, Prisma.EmployeeGetPayload<{ include: { user: true } }>>();
+      const recipientsById = new Map<
+        string,
+        Prisma.EmployeeGetPayload<{ include: { user: true } }>
+      >();
 
       if (normalizedGroupIds.length > 0) {
         const memberships = await this.prisma.workGroupMembership.findMany({
@@ -4446,7 +4497,10 @@ export class CollaborationService {
       });
     }
 
-    if (audience === AnnouncementAudience.GROUP && normalizedGroupIds.length > 0) {
+    if (
+      audience === AnnouncementAudience.GROUP &&
+      normalizedGroupIds.length > 0
+    ) {
       const memberships = await this.prisma.workGroupMembership.findMany({
         where: {
           tenantId,
@@ -4540,7 +4594,9 @@ export class CollaborationService {
       dto.imageAspectRatio &&
       !ANNOUNCEMENT_IMAGE_ASPECT_RATIOS.has(dto.imageAspectRatio)
     ) {
-      throw new BadRequestException("Unsupported announcement image aspect ratio.");
+      throw new BadRequestException(
+        "Unsupported announcement image aspect ratio.",
+      );
     }
 
     if ((dto.attachments?.length ?? 0) > ANNOUNCEMENT_ATTACHMENT_LIMIT) {
@@ -4580,7 +4636,8 @@ export class CollaborationService {
         isPinned: dto.isPinned ?? false,
         notifyParticipants: dto.notifyParticipants ?? false,
         linkUrl: normalizedLinkUrl,
-        attachmentLocationAddress: dto.attachmentLocation?.address?.trim() || null,
+        attachmentLocationAddress:
+          dto.attachmentLocation?.address?.trim() || null,
         attachmentLocationPlaceId:
           dto.attachmentLocation?.placeId?.trim() || null,
         attachmentLocationLatitude: dto.attachmentLocation?.latitude ?? null,
@@ -4692,7 +4749,9 @@ export class CollaborationService {
           locationId: announcement.locationId,
           linkUrl: announcement.linkUrl,
           scheduledFor: scheduledFor?.toISOString() ?? null,
-          hasAttachmentLocation: Boolean(announcement.attachmentLocationAddress),
+          hasAttachmentLocation: Boolean(
+            announcement.attachmentLocationAddress,
+          ),
           attachmentCount: dto.attachments?.length ?? 0,
           ...metadata,
         },
@@ -4727,32 +4786,30 @@ export class CollaborationService {
     });
   }
 
-  private async completeAnnouncementPublication(
-    params: {
-      actorUserId?: string;
-      announcement: Prisma.AnnouncementGetPayload<{
-        include: {
-          authorEmployee: true;
-          group: true;
-          department: true;
-          location: true;
-          targetEmployee: true;
-          groupTargets: true;
-          employeeTargets: true;
-        };
-      }>;
-      auditAction: string;
-      authorEmployeeId: string;
-      authorUserId?: string | null;
-      departmentId?: string | null;
-      locationId?: string | null;
-      metadata?: Record<string, unknown>;
-      normalizedGroupIds: string[];
-      normalizedTargetEmployeeIds: string[];
-      reason: string;
-      tenantId: string;
-    },
-  ) {
+  private async completeAnnouncementPublication(params: {
+    actorUserId?: string;
+    announcement: Prisma.AnnouncementGetPayload<{
+      include: {
+        authorEmployee: true;
+        group: true;
+        department: true;
+        location: true;
+        targetEmployee: true;
+        groupTargets: true;
+        employeeTargets: true;
+      };
+    }>;
+    auditAction: string;
+    authorEmployeeId: string;
+    authorUserId?: string | null;
+    departmentId?: string | null;
+    locationId?: string | null;
+    metadata?: Record<string, unknown>;
+    normalizedGroupIds: string[];
+    normalizedTargetEmployeeIds: string[];
+    reason: string;
+    tenantId: string;
+  }) {
     const recipients = await this.resolveAnnouncementRecipients(
       params.tenantId,
       params.announcement.audience,
@@ -4811,7 +4868,9 @@ export class CollaborationService {
         linkUrl: params.announcement.linkUrl,
         scheduledFor: params.announcement.scheduledFor?.toISOString() ?? null,
         publishedAt: params.announcement.publishedAt?.toISOString() ?? null,
-        hasAttachmentLocation: Boolean(params.announcement.attachmentLocationAddress),
+        hasAttachmentLocation: Boolean(
+          params.announcement.attachmentLocationAddress,
+        ),
         attachmentCount: this.parseAnnouncementAttachments(
           params.announcement.attachmentsJson ?? null,
         ).length,
@@ -4883,7 +4942,10 @@ export class CollaborationService {
     }
 
     const storageKey = `tenants/${tenantId}/announcements/${announcementId}/attachments/${Date.now()}-${index}-${sanitizedFileName}`;
-    const uploaded = await this.storageService.uploadDataUrl(storageKey, dataUrl);
+    const uploaded = await this.storageService.uploadDataUrl(
+      storageKey,
+      dataUrl,
+    );
 
     return {
       id: `${Date.now()}-${index}`,
@@ -4904,7 +4966,10 @@ export class CollaborationService {
     departmentId?: string | null,
     locationId?: string | null,
   ) {
-    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(groupId, groupIds);
+    const normalizedGroupIds = this.normalizeAnnouncementScopeIds(
+      groupId,
+      groupIds,
+    );
     const normalizedTargetEmployeeIds = this.normalizeAnnouncementScopeIds(
       targetEmployeeId,
       targetEmployeeIds,
@@ -4929,7 +4994,10 @@ export class CollaborationService {
       );
     }
 
-    if (audience === AnnouncementAudience.GROUP && normalizedGroupIds.length === 0) {
+    if (
+      audience === AnnouncementAudience.GROUP &&
+      normalizedGroupIds.length === 0
+    ) {
       throw new BadRequestException("Group announcement requires groupId.");
     }
 
@@ -5054,7 +5122,9 @@ export class CollaborationService {
       texts.add(body);
     }
 
-    const rawMeta = description.slice(markerIndex + TASK_META_MARKER.length).trim();
+    const rawMeta = description
+      .slice(markerIndex + TASK_META_MARKER.length)
+      .trim();
     try {
       const parsed = JSON.parse(rawMeta) as {
         kind?: string;
@@ -5090,7 +5160,9 @@ export class CollaborationService {
       return false;
     }
 
-    const rawMeta = description.slice(markerIndex + TASK_META_MARKER.length).trim();
+    const rawMeta = description
+      .slice(markerIndex + TASK_META_MARKER.length)
+      .trim();
     try {
       const parsed = JSON.parse(rawMeta) as { kind?: string };
       return parsed.kind === "meeting";
@@ -5100,7 +5172,9 @@ export class CollaborationService {
   }
 
   private queueTranslationPrewarm(texts: Array<string | null | undefined>) {
-    void this.translationService.prewarmTranslations(texts).catch(() => undefined);
+    void this.translationService
+      .prewarmTranslations(texts)
+      .catch(() => undefined);
   }
 
   private async ensureDirectChatThread(
@@ -5828,10 +5902,13 @@ export class CollaborationService {
           data: { updatedAt: new Date() },
         });
 
-        void this.collaborationRealtimeService.fanoutThreadMessage(directThread.id, {
-          threadId: directThread.id,
-          message,
-        });
+        void this.collaborationRealtimeService.fanoutThreadMessage(
+          directThread.id,
+          {
+            threadId: directThread.id,
+            message,
+          },
+        );
       }
     }
   }
@@ -5969,9 +6046,7 @@ export class CollaborationService {
     requiresPhoto: boolean;
   }) {
     const anchorDate = this.getEmployeeVisibleTaskAnchorDate(task);
-    const anchorKey = anchorDate
-      ? this.formatDateKey(anchorDate)
-      : "no-date";
+    const anchorKey = anchorDate ? this.formatDateKey(anchorDate) : "no-date";
     const kindKey = /^(встреча|meeting):/i.test(task.title)
       ? "meeting"
       : "task";
@@ -6203,10 +6278,7 @@ export class CollaborationService {
           : undefined,
         priority: query.priority,
         groupId: query.groupId,
-        OR: [
-          { endDate: null },
-          { endDate: { gte: this.utcDayStart(start) } },
-        ],
+        OR: [{ endDate: null }, { endDate: { gte: this.utcDayStart(start) } }],
       },
       include: {
         managerEmployee: true,
@@ -6634,7 +6706,10 @@ export class CollaborationService {
       },
     });
 
-    await this.emitWorkspaceRefreshForTasks([movedTask], "task.rescheduled_from_recurring");
+    await this.emitWorkspaceRefreshForTasks(
+      [movedTask],
+      "task.rescheduled_from_recurring",
+    );
 
     return {
       task: this.serializeTaskWithPhotoProofUrls(movedTask),
@@ -6926,7 +7001,8 @@ export class CollaborationService {
 
     if (directTaskConflict?.assigneeEmployee) {
       return {
-        employeeName: `${directTaskConflict.assigneeEmployee.firstName} ${directTaskConflict.assigneeEmployee.lastName}`.trim(),
+        employeeName:
+          `${directTaskConflict.assigneeEmployee.firstName} ${directTaskConflict.assigneeEmployee.lastName}`.trim(),
       };
     }
 
@@ -6968,11 +7044,15 @@ export class CollaborationService {
 
     if (
       recurringTemplateConflict &&
-      this.isTemplateDueOnOccurrence(recurringTemplateConflict, occurrenceDate) &&
+      this.isTemplateDueOnOccurrence(
+        recurringTemplateConflict,
+        occurrenceDate,
+      ) &&
       recurringTemplateConflict.assigneeEmployee
     ) {
       return {
-        employeeName: `${recurringTemplateConflict.assigneeEmployee.firstName} ${recurringTemplateConflict.assigneeEmployee.lastName}`.trim(),
+        employeeName:
+          `${recurringTemplateConflict.assigneeEmployee.firstName} ${recurringTemplateConflict.assigneeEmployee.lastName}`.trim(),
       };
     }
 
