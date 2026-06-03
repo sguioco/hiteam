@@ -879,7 +879,12 @@ export class KommoService {
         const field = existingByName.get(spec.name);
         const id = Number(field?.id);
         if (Number.isFinite(id)) {
-          fields[entityType].set(spec.key, { ...spec, id });
+          const actualEnums = this.readFieldEnumValues(field);
+          fields[entityType].set(spec.key, {
+            ...spec,
+            id,
+            enums: actualEnums.length > 0 ? actualEnums : spec.enums,
+          });
         }
       }
     }
@@ -1208,7 +1213,7 @@ export class KommoService {
     const trialEndDate =
       tenant.billingSubscription?.trialEndsAt ??
       new Date(trialStartDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
-    const normalizedSubscriptionStatus = (tenant.billingSubscription?.status ?? 'TRIAL').toUpperCase();
+    const normalizedSubscriptionStatus = this.normalizeSubscriptionStatus(tenant.billingSubscription?.status);
     const hasEverPaid = Boolean(tenant.billingSubscription?.firstPaidAt);
     const subscriptionCancelled =
       ['CANCELED', 'CANCELLED'].includes(normalizedSubscriptionStatus) ||
@@ -1277,7 +1282,7 @@ export class KommoService {
         usedSeats,
         serviceActive,
         paymentStatus,
-        subscriptionStatus: serviceActive ? 'ACTIVE' : tenant.billingSubscription?.status ?? 'TRIAL',
+        subscriptionStatus: serviceActive ? 'ACTIVE' : normalizedSubscriptionStatus,
         lastActivityDate,
         lastAdminActivityDate: latestAdminAudit?.createdAt ?? null,
         lastEmployeeActivityDate: this.maxDate([lastCheckIn?.occurredAt ?? null, lastCheckOut?.occurredAt ?? null]),
@@ -1692,6 +1697,11 @@ export class KommoService {
     const stringValue = String(value).trim();
     if (!stringValue) {
       return null;
+    }
+
+    if (field.type === 'select') {
+      const selectValue = this.resolveSelectFieldValue(field, stringValue);
+      return selectValue ? [{ value: selectValue }] : null;
     }
 
     return [{ value: stringValue }];
@@ -2344,9 +2354,71 @@ export class KommoService {
   }
 
   private isBlockingSubscriptionStatus(status?: string | null) {
-    return ['CANCELED', 'INCOMPLETE', 'INCOMPLETE_EXPIRED', 'PAST_DUE', 'PAYMENT_FAILED', 'INVOICE_FINALIZATION_FAILED', 'UNPAID'].includes(
-      (status ?? '').toUpperCase(),
+    return ['CANCELED', 'CANCELLED', 'INCOMPLETE', 'INCOMPLETE_EXPIRED', 'PAST_DUE', 'PAYMENT_FAILED', 'INVOICE_FINALIZATION_FAILED', 'UNPAID'].includes(
+      this.normalizeStatusToken(status),
     );
+  }
+
+  private normalizeSubscriptionStatus(status?: string | null) {
+    const normalized = this.normalizeStatusToken(status) || 'TRIAL';
+    switch (normalized) {
+      case 'TRIALING':
+        return 'TRIAL';
+      case 'ACTIVE':
+      case 'PAYMENT_REQUIRED':
+      case 'PAST_DUE':
+      case 'CANCELED':
+      case 'CANCELLED':
+      case 'INCOMPLETE':
+      case 'INCOMPLETE_EXPIRED':
+      case 'UNPAID':
+      case 'UNKNOWN':
+      case 'TRIAL':
+        return normalized;
+      default:
+        return 'UNKNOWN';
+    }
+  }
+
+  private normalizeStatusToken(status?: string | null) {
+    return (status ?? '').trim().toUpperCase().replace(/[-\s]+/g, '_');
+  }
+
+  private resolveSelectFieldValue(field: KommoFieldInfo, rawValue: string) {
+    const allowedValues = field.enums ?? [];
+    const normalized = this.normalizeStatusToken(rawValue);
+    const candidates = [rawValue, rawValue.toUpperCase(), normalized];
+
+    if (field.key === 'subscriptionStatus') {
+      candidates.push(this.normalizeSubscriptionStatus(rawValue));
+    }
+
+    for (const candidate of candidates) {
+      const match = allowedValues.find((value) => value.toLowerCase() === candidate.toLowerCase());
+      if (match) {
+        return match;
+      }
+    }
+
+    return allowedValues.length > 0 ? null : rawValue;
+  }
+
+  private readFieldEnumValues(field?: KommoApiObject) {
+    const enums = Array.isArray(field?.enums) ? field.enums : [];
+    const values: string[] = [];
+
+    for (const item of enums) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const value = this.readString((item as KommoApiObject).value);
+      if (value) {
+        values.push(value);
+      }
+    }
+
+    return values;
   }
 
   private extractEmbedded(response: unknown, key: string): KommoApiObject[] {
