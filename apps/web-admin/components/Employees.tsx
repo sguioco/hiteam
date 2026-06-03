@@ -85,6 +85,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -520,6 +521,10 @@ function TeamEmojiPickerField({
   locale: "ru" | "en";
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const quickEmojiOptions = TEAM_AVATAR_EMOJIS.slice(
+    0,
+    Math.max(0, TEAM_AVATAR_EMOJIS.length - 3),
+  );
   const chooseEmojiLabel = runtimeLocalize(
     "Выбрать эмодзи",
     "Choose emoji",
@@ -543,14 +548,14 @@ function TeamEmojiPickerField({
           <span className="sr-only">{chooseEmojiLabel}</span>
         </button>
         {[
-          ...(value && !TEAM_AVATAR_EMOJIS.includes(value) ? [value] : []),
-          ...TEAM_AVATAR_EMOJIS,
+          ...(value && !quickEmojiOptions.includes(value) ? [value] : []),
+          ...quickEmojiOptions,
         ].map((emoji) => (
           <button
             aria-pressed={value === emoji}
             className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] ${
               value === emoji
-                ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                ? "border-accent bg-white shadow-[0_0_0_1px_var(--accent)]"
                 : "border-border bg-secondary/20 hover:bg-secondary/40"
             }`}
             key={emoji}
@@ -568,7 +573,7 @@ function TeamEmojiPickerField({
         <div className="absolute left-0 top-12 z-[90] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
           <EmojiPicker
             emojiStyle={EmojiStyle.APPLE}
-            height={360}
+            height={320}
             lazyLoadEmojis
             onEmojiClick={(emoji: EmojiClickData) => {
               onChange(emoji.emoji);
@@ -582,6 +587,96 @@ function TeamEmojiPickerField({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function TeamMembersDropdown({
+  employees,
+  selectedIds,
+  onChange,
+  locale,
+}: {
+  employees: EmployeeRowView[];
+  selectedIds: string[];
+  onChange: (nextIds: string[]) => void;
+  locale: "ru" | "en";
+}) {
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedEmployees = employees.filter((employee) =>
+    selectedSet.has(employee.id),
+  );
+  const triggerLabel =
+    selectedEmployees.length === 0
+      ? runtimeLocalize("Выберите сотрудников", "Select employees", locale)
+      : selectedEmployees.length === 1
+        ? (selectedEmployees[0]?.name ?? "")
+        : runtimeLocalize(
+            `${selectedEmployees.length} сотрудников выбрано`,
+            `${selectedEmployees.length} employees selected`,
+            locale,
+          );
+
+  function toggleEmployee(employeeId: string) {
+    const next = new Set(selectedIds);
+    if (next.has(employeeId)) {
+      next.delete(employeeId);
+    } else {
+      next.add(employeeId);
+    }
+    onChange(Array.from(next));
+  }
+
+  if (employees.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-5 text-sm text-muted-foreground">
+        {runtimeLocalize(
+          "В организации пока нет сотрудников для добавления в бригаду.",
+          "There are no employees in the organization yet to add to the team.",
+          locale,
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-border bg-white px-4 py-2 text-left font-heading transition-[background-color,border-color] hover:bg-secondary/20"
+          type="button"
+        >
+          <span className="min-w-0 truncate text-sm text-foreground">
+            {triggerLabel}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-[min(340px,calc(100vh-10rem))] w-[var(--radix-dropdown-menu-trigger-width)] rounded-[22px] border-border bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.16)]"
+        sideOffset={8}
+      >
+        {employees.map((employee) => (
+          <DropdownMenuCheckboxItem
+            checked={selectedSet.has(employee.id)}
+            className="min-h-14 rounded-2xl px-3 py-2 pr-9 font-heading text-sm focus:bg-[color:var(--accent)] focus:text-white"
+            key={employee.id}
+            onCheckedChange={() => toggleEmployee(employee.id)}
+            onSelect={(event) => event.preventDefault()}
+          >
+            <Avatar
+              alt={employee.name}
+              className="shrink-0"
+              size="sm"
+              src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
+            />
+            <span className="min-w-0 truncate font-semibold">
+              {employee.name}
+            </span>
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -3743,7 +3838,7 @@ const Employees = ({
           }
         }}
       >
-        <DialogContent className="w-[min(760px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+        <DialogContent className="max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-1.5rem))] max-w-none overflow-y-auto rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)] p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {runtimeLocalize("Добавить сотрудника", "Add employee", locale)}
@@ -4064,7 +4159,9 @@ const Employees = ({
                         </button>
                         {[
                           ...(inviteTeamEmoji &&
-                          !TEAM_AVATAR_EMOJIS.includes(inviteTeamEmoji)
+                          !TEAM_AVATAR_EMOJIS.slice(0, 10).includes(
+                            inviteTeamEmoji,
+                          )
                             ? [inviteTeamEmoji]
                             : []),
                           ...TEAM_AVATAR_EMOJIS.slice(0, 10),
@@ -4073,7 +4170,7 @@ const Employees = ({
                             aria-pressed={inviteTeamEmoji === emoji}
                             className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
                               inviteTeamEmoji === emoji
-                                ? "border-accent bg-accent text-accent-foreground"
+                                ? "border-accent bg-white shadow-[0_0_0_1px_var(--accent)]"
                                 : "border-border bg-white"
                             }`}
                             key={emoji}
@@ -4087,10 +4184,10 @@ const Employees = ({
                           </button>
                         ))}
                         {inviteEmojiPickerOpen ? (
-                          <div className="absolute left-0 top-11 z-[80] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
+                          <div className="absolute bottom-11 left-0 z-[80] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
                             <EmojiPicker
                               emojiStyle={EmojiStyle.APPLE}
-                              height={360}
+                              height={300}
                               lazyLoadEmojis
                               onEmojiClick={(emoji: EmojiClickData) => {
                                 setInviteTeamEmoji(emoji.emoji);
@@ -4490,7 +4587,7 @@ const Employees = ({
         }}
         open={createGroupOpen}
       >
-        <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+        <DialogContent className="max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-1.5rem))] max-w-none overflow-y-auto rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)] p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
               {runtimeLocalize("Добавить бригаду", "Add team", locale)}
@@ -4548,54 +4645,12 @@ const Employees = ({
             <div className="text-xs font-heading text-muted-foreground">
               {runtimeLocalize("Состав бригады", "Team members", locale)}
             </div>
-            {employees.length > 0 ? (
-              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-                {employees.map((employee) => (
-                  <label
-                    className="flex items-center justify-between rounded-2xl border border-border bg-secondary/20 px-4 py-3"
-                    key={employee.id}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        alt={employee.name}
-                        className="shrink-0"
-                        size="md"
-                        src={
-                          employee.avatarUrl ??
-                          getMockAvatarDataUrl(employee.name)
-                        }
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate font-heading font-medium text-foreground">
-                          {employee.name}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {employee.position} • {employee.location}
-                        </p>
-                      </div>
-                    </div>
-                    <Checkbox
-                      checked={createGroupMembers.includes(employee.id)}
-                      onCheckedChange={(checked) =>
-                        setCreateGroupMembers((current) =>
-                          checked === true
-                            ? Array.from(new Set([...current, employee.id]))
-                            : current.filter((id) => id !== employee.id),
-                        )
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-5 text-sm text-muted-foreground">
-                {runtimeLocalize(
-                  "В организации пока нет сотрудников для добавления в бригаду.",
-                  "There are no employees in the organization yet to add to the team.",
-                  locale,
-                )}
-              </div>
-            )}
+            <TeamMembersDropdown
+              employees={employees}
+              locale={locale}
+              onChange={setCreateGroupMembers}
+              selectedIds={createGroupMembers}
+            />
             {createGroupError ? (
               <div className="error-box">{createGroupError}</div>
             ) : null}
@@ -4626,7 +4681,7 @@ const Employees = ({
         }}
         open={!!selectedInvitation}
       >
-        <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+        <DialogContent className="max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-1.5rem))] max-w-none overflow-y-auto rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)] p-4 sm:p-6">
           {selectedInvitation ? (
             <>
               <DialogHeader>
@@ -6405,44 +6460,12 @@ const Employees = ({
                 <div className="text-xs font-heading text-muted-foreground">
                   {runtimeLocalize("Состав бригады", "Team members", locale)}
                 </div>
-                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-                  {employees.map((employee) => (
-                    <label
-                      className="flex items-center justify-between rounded-2xl border border-border bg-secondary/20 px-4 py-3"
-                      key={employee.id}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar
-                          alt={employee.name}
-                          className="shrink-0"
-                          size="md"
-                          src={
-                            employee.avatarUrl ??
-                            getMockAvatarDataUrl(employee.name)
-                          }
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate font-heading font-medium text-foreground">
-                            {employee.name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {employee.position} • {employee.location}
-                          </p>
-                        </div>
-                      </div>
-                      <Checkbox
-                        checked={groupEditorMembers.includes(employee.id)}
-                        onCheckedChange={(checked) =>
-                          setGroupEditorMembers((current) =>
-                            checked === true
-                              ? Array.from(new Set([...current, employee.id]))
-                              : current.filter((id) => id !== employee.id),
-                          )
-                        }
-                      />
-                    </label>
-                  ))}
-                </div>
+                <TeamMembersDropdown
+                  employees={employees}
+                  locale={locale}
+                  onChange={setGroupEditorMembers}
+                  selectedIds={groupEditorMembers}
+                />
                 {groupError ? (
                   <div className="error-box">{groupError}</div>
                 ) : null}
