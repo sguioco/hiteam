@@ -1302,7 +1302,7 @@ export class BootstrapService {
   }
 
   async employeeDetail(user: JwtUser, employeeId: string) {
-    const [employee, history, anomalies, biometricHistory, managerAccess] =
+    const [employee, history, anomalies, biometricHistory, managerAccess, groups] =
       await Promise.all([
         this.employeesService.getById(user.tenantId, employeeId).catch(() => null),
         this.attendanceService
@@ -1319,6 +1319,7 @@ export class BootstrapService {
               .getManagerAccess(user.tenantId, employeeId)
               .catch(() => null)
           : Promise.resolve(null),
+        this.collaborationService.listGroups(user.sub).catch(() => []),
       ]);
 
     return {
@@ -1328,6 +1329,7 @@ export class BootstrapService {
       anomalies,
       biometricHistory,
       managerAccess,
+      groups,
     };
   }
 

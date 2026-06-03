@@ -698,6 +698,7 @@ export type EmployeeDetailBootstrapResponse = {
   biometricHistory: EmployeeBiometricHistoryResponse | null;
   employee: EmployeeDetailRecord | null;
   employeeId: string;
+  groups: WorkGroupItem[];
   history: AttendanceHistoryResponse | null;
   managerAccess: EmployeeManagerAccessResponse | null;
 };

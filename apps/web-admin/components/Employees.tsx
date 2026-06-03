@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -38,7 +39,13 @@ import {
   InvitationRecord,
   ScheduleShiftTemplateRecord,
   TaskItem,
+  WorkGroupItem,
 } from "@smart/types";
+import {
+  EmojiStyle,
+  Theme,
+  type EmojiClickData,
+} from "emoji-picker-react";
 import type { SortDescriptor } from "react-aria-components";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
@@ -118,6 +125,7 @@ type ReviewInvitationResponse = {
 
 type ShiftTemplateRecord = ScheduleShiftTemplateRecord;
 type EmployeesDirectorySnapshot = EmployeesBootstrapResponse;
+type TeamOption = WorkGroupItem;
 
 export type EmployeesInitialData = EmployeesDirectorySnapshot;
 
@@ -247,6 +255,9 @@ const invitationStyles: Record<InvitationRecord["status"], string> = {
 };
 
 const CREATE_SHIFT_TEMPLATE_OPTION = "__create_shift_template__";
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+});
 
 const initialTaskDraft = {
   title: "",
@@ -407,6 +418,160 @@ function RoleBadge({
       <Icon className="h-3 w-3" />
       {label}
     </span>
+  );
+}
+
+function TeamChoiceGrid({
+  groups,
+  selectedGroupId,
+  onSelect,
+  locale,
+  includeNoTeam = true,
+  onCreateTeam,
+}: {
+  groups: TeamOption[];
+  selectedGroupId: string;
+  onSelect: (groupId: string) => void;
+  locale: "ru" | "en";
+  includeNoTeam?: boolean;
+  onCreateTeam?: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {groups.map((group) => {
+        const selected = selectedGroupId === group.id;
+        return (
+          <button
+            aria-pressed={selected}
+            className={`min-h-[96px] rounded-2xl border p-3 text-center font-heading transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+              selected
+                ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] shadow-[0_10px_26px_rgba(37,99,235,0.13)]"
+                : "border-border bg-white hover:border-[rgba(49,84,255,0.28)] hover:bg-[rgba(49,84,255,0.04)]"
+            }`}
+            key={group.id}
+            onClick={() => onSelect(group.id)}
+            type="button"
+          >
+            <span className="block text-2xl leading-none">
+              {resolveTeamAvatarEmoji(group)}
+            </span>
+            <span className="mt-2 block truncate text-sm font-semibold text-foreground">
+              {group.name}
+            </span>
+            <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+              {runtimeLocalize(
+                `${group.memberships.length} чел.`,
+                `${group.memberships.length} people`,
+                locale,
+              )}
+            </span>
+          </button>
+        );
+      })}
+      {includeNoTeam ? (
+        <button
+          aria-pressed={selectedGroupId === "__none"}
+          className={`min-h-[96px] rounded-2xl border p-3 text-center font-heading transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+            selectedGroupId === "__none"
+              ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] shadow-[0_10px_26px_rgba(37,99,235,0.13)]"
+              : "border-dashed border-border bg-white hover:border-[rgba(49,84,255,0.28)] hover:bg-[rgba(49,84,255,0.04)]"
+          }`}
+          onClick={() => onSelect("__none")}
+          type="button"
+        >
+          <span className="block text-2xl leading-none">—</span>
+          <span className="mt-2 block text-sm font-semibold text-foreground">
+            {runtimeLocalize("Без бригады", "No team", locale)}
+          </span>
+          <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+            {runtimeLocalize("Снять привязку", "Clear team", locale)}
+          </span>
+        </button>
+      ) : null}
+      {onCreateTeam ? (
+        <button
+          className="min-h-[96px] rounded-2xl border border-dashed border-border bg-white p-3 text-center font-heading transition-[background-color,border-color,transform] duration-150 hover:border-[rgba(49,84,255,0.28)] hover:bg-[rgba(49,84,255,0.04)] active:scale-[0.96]"
+          onClick={onCreateTeam}
+          type="button"
+        >
+          <span className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-secondary text-foreground">
+            <Plus className="h-4 w-4" />
+          </span>
+          <span className="mt-2 block text-sm font-semibold text-foreground">
+            {runtimeLocalize("Новая", "New team", locale)}
+          </span>
+          <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+            {runtimeLocalize("Создать", "Create", locale)}
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function TeamEmojiPickerField({
+  value,
+  onChange,
+  locale,
+}: {
+  value: string;
+  onChange: (emoji: string) => void;
+  locale: "ru" | "en";
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          className="flex h-11 min-w-11 items-center justify-center rounded-xl border border-[rgba(37,99,235,0.18)] bg-white text-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-transform active:scale-[0.96]"
+          onClick={() => setPickerOpen((current) => !current)}
+          type="button"
+        >
+          {value || DEFAULT_TEAM_AVATAR_EMOJI}
+        </button>
+        {TEAM_AVATAR_EMOJIS.map((emoji) => (
+          <button
+            aria-pressed={value === emoji}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] ${
+              value === emoji
+                ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                : "border-border bg-secondary/20 hover:bg-secondary/40"
+            }`}
+            key={emoji}
+            onClick={() => onChange(emoji)}
+            type="button"
+          >
+            {emoji}
+          </button>
+        ))}
+        <Button
+          className="rounded-xl font-heading"
+          onClick={() => setPickerOpen((current) => !current)}
+          type="button"
+          variant="outline"
+        >
+          {runtimeLocalize("Все эмодзи", "All emoji", locale)}
+        </Button>
+      </div>
+      {pickerOpen ? (
+        <div className="w-[min(360px,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.14)]">
+          <EmojiPicker
+            emojiStyle={EmojiStyle.APPLE}
+            height={360}
+            lazyLoadEmojis
+            onEmojiClick={(emoji: EmojiClickData) => {
+              onChange(emoji.emoji);
+              setPickerOpen(false);
+            }}
+            previewConfig={{ showPreview: false }}
+            searchPlaceholder={runtimeLocalize("Поиск", "Search", locale)}
+            theme={Theme.LIGHT}
+            width="100%"
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -637,6 +802,9 @@ const Employees = ({
     useState<CollaborationOverviewResponse | null>(
       initialData?.overview ?? null,
     );
+  const [directoryGroups, setDirectoryGroups] = useState<WorkGroupItem[]>(
+    initialData?.groups ?? [],
+  );
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null,
@@ -737,6 +905,7 @@ const Employees = ({
   );
   const [bulkTargetGroupId, setBulkTargetGroupId] = useState("__none");
   const [bulkRole, setBulkRole] = useState<EmployeeAccessRole | "keep">("keep");
+  const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
 
@@ -941,7 +1110,7 @@ const Employees = ({
   const [groupDeleteConfirmOpen, setGroupDeleteConfirmOpen] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
 
-  const groups = overview?.groups ?? [];
+  const groups = overview?.groups ?? directoryGroups;
 
   const groupByEmployeeId = useMemo(() => {
     const map = new Map<string, { id: string; name: string; emoji: string }>();
@@ -1261,6 +1430,7 @@ const Employees = ({
     setEmployeeRecords(snapshot.employeeRecords);
     setLiveSessions(snapshot.liveSessions ?? []);
     setOverview(snapshot.overview);
+    setDirectoryGroups(snapshot.groups ?? []);
     setPendingInvitations(snapshot.pendingInvitations);
     setScheduleShifts(snapshot.scheduleShifts);
     setScheduleTemplates(snapshot.scheduleTemplates);
@@ -1320,6 +1490,7 @@ const Employees = ({
         setEmployeeRecords([]);
         setLiveSessions([]);
         setOverview(null);
+        setDirectoryGroups([]);
         setPendingInvitations([]);
         setScheduleShifts([]);
         setScheduleTemplates([]);
@@ -1880,6 +2051,15 @@ const Employees = ({
     }
   }
 
+  function openCreateGroupForEmployees(employeeIds: string[] = []) {
+    setCreateGroupMembers(Array.from(new Set(employeeIds)));
+    setCreateGroupName("");
+    setCreateGroupDescription("");
+    setCreateGroupEmoji(DEFAULT_TEAM_AVATAR_EMOJI);
+    setCreateGroupError(null);
+    setCreateGroupOpen(true);
+  }
+
   async function handleCreateGroup() {
     const session = getSession();
     if (!session || !createGroupName.trim()) return;
@@ -2366,6 +2546,7 @@ const Employees = ({
         }),
       });
 
+      setBulkAssignDialogOpen(false);
       clearEmployeeSelection();
       setPageMessage(
         runtimeLocalize(
@@ -2994,7 +3175,11 @@ const Employees = ({
                         </DropdownMenuContent>
                       </DropdownMenu>
                       <Button
-                        className="h-7 rounded-lg px-2 text-xs opacity-0 transition group-hover:opacity-100"
+                        className={`h-8 rounded-lg px-2.5 text-xs transition ${
+                          employee.group
+                            ? "opacity-0 group-hover:opacity-100"
+                            : "border border-[rgba(37,99,235,0.16)] bg-[rgba(37,99,235,0.08)] text-[color:var(--accent)] opacity-100 hover:bg-[rgba(37,99,235,0.12)]"
+                        }`}
                         onClick={() => openMoveDialog(employee)}
                         size="sm"
                         type="button"
@@ -3003,7 +3188,11 @@ const Employees = ({
                         <ArrowRightLeft className="h-3.5 w-3.5" />
                         {employee.group
                           ? runtimeLocalize("Изменить", "Change", locale)
-                          : runtimeLocalize("Назначить", "Assign", locale)}
+                          : runtimeLocalize(
+                              "Назначить бригаду",
+                              "Assign team",
+                              locale,
+                            )}
                       </Button>
                     </div>
                   </Table.Cell>
@@ -3157,6 +3346,12 @@ const Employees = ({
                   label: runtimeLocalize("Все", "All", locale),
                   count: employees.length,
                 },
+                {
+                  id: "__none",
+                  label: runtimeLocalize("Без бригады", "No team", locale),
+                  count: employees.filter((employee) => !employee.groupId)
+                    .length,
+                },
                 ...groups.map((group) => ({
                   id: group.id,
                   label: `${resolveTeamAvatarEmoji(group)} ${group.name}`,
@@ -3164,12 +3359,6 @@ const Employees = ({
                     (employee) => employee.groupId === group.id,
                   ).length,
                 })),
-                {
-                  id: "__none",
-                  label: runtimeLocalize("Без бригады", "No team", locale),
-                  count: employees.filter((employee) => !employee.groupId)
-                    .length,
-                },
               ].map((item) => (
                 <button
                   className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-heading transition ${
@@ -3197,84 +3386,56 @@ const Employees = ({
           ) : null}
 
           {viewMode === "employees" && selectedEmployeeIds.size >= 2 ? (
-            <div className="mb-4 rounded-2xl border border-[rgba(49,84,255,0.24)] bg-[rgba(49,84,255,0.07)] p-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-[180px] font-heading text-sm font-semibold text-[color:var(--foreground)]">
+            <div className="mb-4 rounded-2xl border border-[rgba(49,84,255,0.24)] bg-[rgba(49,84,255,0.07)] p-3 shadow-[0_14px_36px_rgba(37,99,235,0.08)]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-[220px] items-center gap-3 font-heading text-sm font-semibold text-[color:var(--foreground)]">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:var(--accent)] text-white">
+                    <Check className="h-4 w-4" />
+                  </span>
                   {runtimeLocalize(
                     `${selectedEmployeeIds.size} сотрудников выбрано`,
                     `${selectedEmployeeIds.size} employees selected`,
                     locale,
                   )}
                 </div>
-                <div className="min-w-[200px] flex-1">
-                  <Select
-                    onValueChange={setBulkTargetGroupId}
-                    value={bulkTargetGroupId}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    className="rounded-xl font-heading"
+                    onClick={() => {
+                      setBulkError(null);
+                      setBulkAssignDialogOpen(true);
+                    }}
+                    type="button"
                   >
-                    <SelectTrigger className="h-10 rounded-xl border-border bg-white text-sm font-heading">
-                      <SelectValue
-                        placeholder={runtimeLocalize("Бригада", "Team", locale)}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none">
-                        {runtimeLocalize("Без бригады", "No team", locale)}
-                      </SelectItem>
-                      {groups.map((group) => (
-                        <SelectItem key={group.id} value={group.id}>
-                          {resolveTeamAvatarEmoji(group)} {group.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-[190px]">
-                  <Select
-                    onValueChange={(value) =>
-                      setBulkRole(value as EmployeeAccessRole | "keep")
-                    }
-                    value={bulkRole}
+                    <Users className="h-4 w-4" />
+                    {runtimeLocalize(
+                      "Назначить в бригаду",
+                      "Assign to team",
+                      locale,
+                    )}
+                  </Button>
+                  <Button
+                    className="rounded-xl font-heading"
+                    onClick={() => {
+                      setBulkRole("team_leader");
+                      setBulkError(null);
+                      setBulkAssignDialogOpen(true);
+                    }}
+                    type="button"
+                    variant="outline"
                   >
-                    <SelectTrigger className="h-10 rounded-xl border-border bg-white text-sm font-heading">
-                      <SelectValue
-                        placeholder={runtimeLocalize("Роль", "Role", locale)}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="keep">
-                        {runtimeLocalize("Роль не менять", "Keep role", locale)}
-                      </SelectItem>
-                      <SelectItem value="employee">
-                        {runtimeLocalize("Сотрудник", "Employee", locale)}
-                      </SelectItem>
-                      <SelectItem value="team_leader">
-                        {runtimeLocalize(
-                          "Лидер бригады",
-                          "Team leader",
-                          locale,
-                        )}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <Crown className="h-4 w-4" />
+                    {runtimeLocalize("Сменить роль", "Change role", locale)}
+                  </Button>
+                  <Button
+                    className="rounded-xl font-heading"
+                    onClick={clearEmployeeSelection}
+                    type="button"
+                    variant="outline"
+                  >
+                    {runtimeLocalize("Сбросить", "Clear", locale)}
+                  </Button>
                 </div>
-                <Button
-                  className="rounded-xl font-heading"
-                  disabled={bulkSubmitting}
-                  onClick={() => void applyBulkAssignment()}
-                  type="button"
-                >
-                  {bulkSubmitting
-                    ? runtimeLocalize("Сохраняем...", "Saving...", locale)
-                    : runtimeLocalize("Применить", "Apply", locale)}
-                </Button>
-                <Button
-                  className="rounded-xl font-heading"
-                  onClick={clearEmployeeSelection}
-                  type="button"
-                  variant="outline"
-                >
-                  {runtimeLocalize("Сбросить", "Clear", locale)}
-                </Button>
               </div>
               {bulkError ? (
                 <div className="error-box mt-3">{bulkError}</div>
@@ -4038,6 +4199,125 @@ const Employees = ({
 
       <Dialog
         onOpenChange={(open) => {
+          setBulkAssignDialogOpen(open);
+          if (!open) {
+            setBulkError(null);
+          }
+        }}
+        open={bulkAssignDialogOpen}
+      >
+        <DialogContent className="w-[min(640px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-2xl">
+              {runtimeLocalize("Назначить в бригаду", "Assign to team", locale)}
+            </DialogTitle>
+            <DialogDescription className="font-heading">
+              {runtimeLocalize(
+                `${selectedEmployeeIds.size} сотрудника будут обновлены. Текущую роль можно оставить без изменений.`,
+                `${selectedEmployeeIds.size} employees will be updated. You can keep their current role.`,
+                locale,
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <TeamChoiceGrid
+              groups={groups}
+              locale={locale}
+              onCreateTeam={() => {
+                openCreateGroupForEmployees(Array.from(selectedEmployeeIds));
+                setBulkAssignDialogOpen(false);
+              }}
+              onSelect={setBulkTargetGroupId}
+              selectedGroupId={bulkTargetGroupId}
+            />
+            <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+              <div className="mb-2 text-xs font-heading font-semibold uppercase text-muted-foreground">
+                {runtimeLocalize("Роль", "Role", locale)}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {[
+                  {
+                    value: "keep" as const,
+                    title: runtimeLocalize("Не менять", "Keep role", locale),
+                    note: runtimeLocalize(
+                      "Оставить текущие роли",
+                      "Keep current roles",
+                      locale,
+                    ),
+                  },
+                  {
+                    value: "employee" as const,
+                    title: runtimeLocalize("Сотрудник", "Employee", locale),
+                    note: runtimeLocalize(
+                      "Обычный доступ",
+                      "Regular access",
+                      locale,
+                    ),
+                  },
+                  {
+                    value: "team_leader" as const,
+                    title: runtimeLocalize("Лидер", "Team leader", locale),
+                    note: runtimeLocalize(
+                      "Доступ лидера бригады",
+                      "Team leader access",
+                      locale,
+                    ),
+                  },
+                ].map((option) => {
+                  const selected = bulkRole === option.value;
+                  return (
+                    <button
+                      className={`rounded-xl border px-3 py-2 text-left font-heading transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] ${
+                        selected
+                          ? "border-[color:var(--accent)] bg-[rgba(49,84,255,0.08)] text-foreground"
+                          : "border-border bg-white text-muted-foreground hover:text-foreground"
+                      }`}
+                      key={option.value}
+                      onClick={() => setBulkRole(option.value)}
+                      type="button"
+                    >
+                      <span className="block text-sm font-semibold">
+                        {option.title}
+                      </span>
+                      <span className="mt-1 block text-[11px]">
+                        {option.note}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {bulkError ? <div className="error-box">{bulkError}</div> : null}
+            <div className="flex justify-end gap-2">
+              <Button
+                className="rounded-xl font-heading"
+                onClick={() => setBulkAssignDialogOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                {runtimeLocalize("Отмена", "Cancel", locale)}
+              </Button>
+              <Button
+                className="rounded-xl font-heading"
+                disabled={bulkSubmitting}
+                onClick={() => void applyBulkAssignment()}
+                type="button"
+              >
+                {bulkSubmitting
+                  ? runtimeLocalize("Сохраняем...", "Saving...", locale)
+                  : runtimeLocalize(
+                      `Назначить ${selectedEmployeeIds.size}`,
+                      `Assign ${selectedEmployeeIds.size}`,
+                      locale,
+                    )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
           if (!open) {
             setApprovalCredentials(null);
           }
@@ -4166,23 +4446,11 @@ const Employees = ({
               <span>
                 {runtimeLocalize("Эмодзи бригады", "Team emoji", locale)}
               </span>
-              <div className="flex flex-wrap gap-2">
-                {TEAM_AVATAR_EMOJIS.map((emoji) => (
-                  <button
-                    aria-pressed={createGroupEmoji === emoji}
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition ${
-                      createGroupEmoji === emoji
-                        ? "border-accent bg-accent text-accent-foreground shadow-sm"
-                        : "border-border bg-secondary/20 hover:bg-secondary/40"
-                    }`}
-                    key={emoji}
-                    onClick={() => setCreateGroupEmoji(emoji)}
-                    type="button"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+              <TeamEmojiPickerField
+                locale={locale}
+                onChange={setCreateGroupEmoji}
+                value={createGroupEmoji}
+              />
             </div>
             <label className="grid gap-2 text-sm font-heading">
               <span>
@@ -5598,44 +5866,29 @@ const Employees = ({
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-none rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)]">
           <DialogHeader>
             <DialogTitle className="font-heading text-2xl">
-              {runtimeLocalize("Переместить в бригаду", "Move to team", locale)}
+              {runtimeLocalize("Назначить в бригаду", "Assign to a team", locale)}
             </DialogTitle>
             <DialogDescription className="font-heading">
               {runtimeLocalize(
-                "Выберите бригаду для сотрудника. Можно оставить без бригады.",
-                "Select a team for the employee. The employee can remain without a team.",
+                "Выберите бригаду для сотрудника. Можно сразу сделать его лидером.",
+                "Select a team for the employee. You can also make them the team leader.",
                 locale,
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <label className="grid gap-2 text-sm font-heading">
-              <span>{runtimeLocalize("Бригада", "Team", locale)}</span>
-              <Select
-                onValueChange={setMoveTargetGroupId}
-                value={moveTargetGroupId}
-              >
-                <SelectTrigger className="h-11 rounded-xl border-border bg-secondary/30 text-sm font-heading">
-                  <SelectValue
-                    placeholder={runtimeLocalize(
-                      "Выберите бригаду",
-                      "Select team",
-                      locale,
-                    )}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">
-                    {runtimeLocalize("Без бригады", "No team", locale)}
-                  </SelectItem>
-                  {groups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {resolveTeamAvatarEmoji(group)} {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
+            <TeamChoiceGrid
+              groups={groups}
+              locale={locale}
+              onCreateTeam={() => {
+                if (moveDialogEmployeeId) {
+                  openCreateGroupForEmployees([moveDialogEmployeeId]);
+                  setMoveDialogEmployeeId(null);
+                }
+              }}
+              onSelect={setMoveTargetGroupId}
+              selectedGroupId={moveTargetGroupId}
+            />
             <label className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/20 p-4 text-sm font-heading">
               <Checkbox
                 checked={moveMakeLeader}
@@ -6048,23 +6301,11 @@ const Employees = ({
                   <span>
                     {runtimeLocalize("Эмодзи бригады", "Team emoji", locale)}
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {TEAM_AVATAR_EMOJIS.map((emoji) => (
-                      <button
-                        aria-pressed={groupEditorEmoji === emoji}
-                        className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition ${
-                          groupEditorEmoji === emoji
-                            ? "border-accent bg-accent text-accent-foreground shadow-sm"
-                            : "border-border bg-secondary/20 hover:bg-secondary/40"
-                        }`}
-                        key={emoji}
-                        onClick={() => setGroupEditorEmoji(emoji)}
-                        type="button"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                  <TeamEmojiPickerField
+                    locale={locale}
+                    onChange={setGroupEditorEmoji}
+                    value={groupEditorEmoji}
+                  />
                 </div>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>

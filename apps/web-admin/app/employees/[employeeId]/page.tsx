@@ -24,6 +24,7 @@ export default async function EmployeeCardPage({
       anomalies: null,
       biometricHistory: null,
       managerAccess: null,
+      groups: [],
     }));
 
   return <EmployeeCardPageClient initialData={initialData} />;

@@ -4,25 +4,30 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Briefcase,
   Calendar,
   CheckCircle2,
   Clock,
+  Crown,
   MapPin,
   Monitor,
   ScanFace,
   ShieldAlert,
   User,
+  Users,
   XCircle,
 } from "lucide-react";
 import {
   AttendanceAnomalyResponse,
+  EmployeeAccessRole,
   EmployeeDetailBootstrapResponse,
   EmployeeDetailRecord,
   AttendanceHistoryResponse,
   EmployeeBiometricHistoryResponse,
   EmployeeManagerAccessResponse,
   EmployeeWorkMode,
+  WorkGroupItem,
 } from "@smart/types";
 import { AdminShell } from "../../../components/admin-shell";
 import { Table } from "../../../components/application/table/table";
@@ -51,6 +56,7 @@ type EmployeeDetails = EmployeeDetailRecord;
 type Tab = "info" | "attendance" | "biometric" | "anomalies";
 
 type EmployeeManagerAccess = EmployeeManagerAccessResponse;
+const DEFAULT_TEAM_AVATAR_EMOJI = "👥";
 
 function formatHours(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -159,6 +165,87 @@ function getEnrollmentStatusClassName(status: string | null | undefined) {
   }
 }
 
+function resolveTeamAvatarEmoji(group?: { avatarEmoji?: string | null }) {
+  return group?.avatarEmoji?.trim() || DEFAULT_TEAM_AVATAR_EMOJI;
+}
+
+function getEmployeeAccessRoleFromManagerAccess(
+  managerAccess?: EmployeeManagerAccess | null,
+): EmployeeAccessRole {
+  if (managerAccess?.hasAdminRole) return "owner";
+  if (managerAccess?.hasManagerAccess) return "team_leader";
+  return "employee";
+}
+
+function getEmployeeAccessRoleLabel(role: EmployeeAccessRole, locale: string) {
+  if (role === "owner") return locale === "ru" ? "Владелец" : "Owner";
+  if (role === "team_leader")
+    return locale === "ru" ? "Лидер бригады" : "Team leader";
+  return locale === "ru" ? "Сотрудник" : "Employee";
+}
+
+function TeamChoiceGrid({
+  groups,
+  selectedGroupId,
+  onSelect,
+  locale,
+}: {
+  groups: WorkGroupItem[];
+  selectedGroupId: string;
+  onSelect: (groupId: string) => void;
+  locale: string;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {groups.map((group) => {
+        const selected = selectedGroupId === group.id;
+        return (
+          <button
+            aria-pressed={selected}
+            className={`min-h-[92px] rounded-2xl border p-3 text-center transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+              selected
+                ? "border-[#546cf2] bg-[#eef3ff] shadow-[0_10px_26px_rgba(37,99,235,0.12)]"
+                : "border-border bg-white text-muted-foreground hover:border-[#cbd5ff] hover:bg-[#f7f9ff] hover:text-foreground"
+            }`}
+            key={group.id}
+            onClick={() => onSelect(group.id)}
+            type="button"
+          >
+            <span className="block text-2xl leading-none">
+              {resolveTeamAvatarEmoji(group)}
+            </span>
+            <span className="mt-2 block truncate text-sm font-semibold text-foreground">
+              {group.name}
+            </span>
+            <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+              {group.memberships.length}{" "}
+              {locale === "ru" ? "чел." : "people"}
+            </span>
+          </button>
+        );
+      })}
+      <button
+        aria-pressed={selectedGroupId === "__none"}
+        className={`min-h-[92px] rounded-2xl border border-dashed p-3 text-center transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+          selectedGroupId === "__none"
+            ? "border-[#546cf2] bg-[#eef3ff] shadow-[0_10px_26px_rgba(37,99,235,0.12)]"
+            : "border-border bg-white text-muted-foreground hover:border-[#cbd5ff] hover:bg-[#f7f9ff] hover:text-foreground"
+        }`}
+        onClick={() => onSelect("__none")}
+        type="button"
+      >
+        <span className="block text-2xl leading-none">—</span>
+        <span className="mt-2 block text-sm font-semibold text-foreground">
+          {locale === "ru" ? "Без бригады" : "No team"}
+        </span>
+        <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+          {locale === "ru" ? "Снять привязку" : "Clear team"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 async function settleRequest<T>(request: Promise<T>) {
   try {
     return { ok: true as const, data: await request };
@@ -213,9 +300,17 @@ export default function EmployeeCardPageClient({
     );
   const [managerAccess, setManagerAccess] =
     useState<EmployeeManagerAccess | null>(initialData?.managerAccess ?? null);
+  const [groups, setGroups] = useState<WorkGroupItem[]>(
+    initialData?.groups ?? [],
+  );
   const [tab, setTab] = useState<Tab>("attendance");
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
   const [roleActionPending, setRoleActionPending] = useState(false);
+  const [teamActionPending, setTeamActionPending] = useState(false);
+  const [assignmentTeamId, setAssignmentTeamId] = useState("__none");
+  const [assignmentRole, setAssignmentRole] =
+    useState<EmployeeAccessRole>("employee");
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [workModeActionPending, setWorkModeActionPending] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "success" | "error";
@@ -236,6 +331,7 @@ export default function EmployeeCardPageClient({
       initialData?.history &&
       initialData?.anomalies &&
       initialData?.biometricHistory &&
+      initialData?.groups &&
       (!canManageRoles || initialData?.managerAccess),
   );
   const didUseInitialData = useRef(Boolean(initialData) && initialDataIsComplete);
@@ -269,6 +365,7 @@ export default function EmployeeCardPageClient({
     setAnomalies(result.data.anomalies);
     setBiometricHistory(result.data.biometricHistory);
     setManagerAccess(result.data.managerAccess);
+    setGroups(result.data.groups ?? []);
   }
 
   useEffect(() => {
@@ -322,6 +419,15 @@ export default function EmployeeCardPageClient({
   const fullName = employee
     ? `${employee.firstName} ${employee.lastName}`
     : "...";
+  const currentTeam = useMemo(
+    () =>
+      groups.find((group) =>
+        group.memberships.some((membership) => membership.employeeId === employeeId),
+      ) ?? null,
+    [groups, employeeId],
+  );
+  const currentAccessRole = getEmployeeAccessRoleFromManagerAccess(managerAccess);
+  const canManageTeamAssignment = canManageWorkMode && currentAccessRole !== "owner";
   const employeeWorkMode = normalizeEmployeeWorkMode(employee?.workMode);
   const isFieldManager =
     employeeWorkMode === "FIELD" && Boolean(managerAccess?.hasManagerAccess);
@@ -386,6 +492,78 @@ export default function EmployeeCardPageClient({
 
     return null;
   }, [biometricHistory]);
+
+  useEffect(() => {
+    setAssignmentTeamId(currentTeam?.id ?? "__none");
+    setAssignmentRole(currentAccessRole);
+    setAssignmentError(null);
+  }, [currentTeam?.id, currentAccessRole, employeeId]);
+
+  async function handleSaveTeamAssignment() {
+    const session = getSession();
+    if (!session || !employeeId || !employee || teamActionPending) return;
+
+    const nextTeamId = assignmentTeamId === "__none" ? "" : assignmentTeamId;
+
+    if (assignmentRole === "team_leader" && !nextTeamId) {
+      setAssignmentError(
+        locale === "ru"
+          ? "Лидеру бригады нужно выбрать бригаду."
+          : "Team leader must be assigned to a team.",
+      );
+      return;
+    }
+
+    if (assignmentRole === "owner" && nextTeamId) {
+      setAssignmentError(
+        locale === "ru"
+          ? "Владельца нельзя привязать к бригаде."
+          : "Owner cannot be assigned to a team.",
+      );
+      return;
+    }
+
+    const payload: { teamId: string; role?: EmployeeAccessRole } = {
+      teamId: nextTeamId,
+    };
+
+    if (assignmentRole !== currentAccessRole && assignmentRole !== "owner") {
+      payload.role = assignmentRole;
+    }
+
+    setTeamActionPending(true);
+    setAssignmentError(null);
+
+    try {
+      await apiRequest(`/employees/${employeeId}`, {
+        method: "PATCH",
+        token: session.accessToken,
+        body: JSON.stringify(payload),
+      });
+      await loadEmployeePageData(employeeId);
+      setNotice({
+        kind: "success",
+        text:
+          locale === "ru"
+            ? "Бригада и роль сотрудника обновлены."
+            : "Employee team and role updated.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : locale === "ru"
+            ? "Не удалось сохранить назначение."
+            : "Failed to save assignment.";
+      setAssignmentError(message);
+      setNotice({
+        kind: "error",
+        text: message,
+      });
+    } finally {
+      setTeamActionPending(false);
+    }
+  }
 
   async function handleDetachDevice(deviceId: string, deviceLabel: string) {
     const session = getSession();
@@ -729,6 +907,14 @@ export default function EmployeeCardPageClient({
                   >
                     {getEmployeeWorkModeLabel(employeeWorkMode, locale)}
                   </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                    <Users className="size-3" />
+                    {currentTeam
+                      ? `${resolveTeamAvatarEmoji(currentTeam)} ${currentTeam.name}`
+                      : locale === "ru"
+                        ? "Без бригады"
+                        : "No team"}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -821,6 +1007,128 @@ export default function EmployeeCardPageClient({
             {notice.text}
           </div>
         )}
+
+        {employee && canManageWorkMode ? (
+          <section
+            className={`mb-6 rounded-2xl border p-4 sm:p-5 ${
+              currentAccessRole === "owner"
+                ? "border-border bg-card"
+                : "border-amber-200 bg-amber-50/60"
+            }`}
+          >
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 font-heading text-sm font-bold text-foreground">
+                  <Users className="size-4 text-[#546cf2]" />
+                  {locale === "ru"
+                    ? `Назначить ${fullName} в бригаду`
+                    : `Assign ${fullName} to a team`}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {currentAccessRole === "owner"
+                    ? locale === "ru"
+                      ? "Владелец остается без бригады и имеет полный доступ."
+                      : "Owner stays outside teams and keeps full access."
+                    : locale === "ru"
+                      ? "Выберите бригаду сотрудника. Здесь же можно сделать его лидером бригады."
+                      : "Choose the employee team. You can also make them a team leader here."}
+                </p>
+              </div>
+              <div className="grid min-w-[240px] gap-2 text-xs sm:grid-cols-2">
+                <div className="rounded-xl border border-border bg-white px-3 py-2">
+                  <span className="block text-muted-foreground">
+                    {locale === "ru" ? "Роль" : "Role"}
+                  </span>
+                  <span className="mt-1 block font-semibold text-foreground">
+                    {getEmployeeAccessRoleLabel(currentAccessRole, locale)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-border bg-white px-3 py-2">
+                  <span className="block text-muted-foreground">
+                    {locale === "ru" ? "Бригада" : "Team"}
+                  </span>
+                  <span className="mt-1 block truncate font-semibold text-foreground">
+                    {currentTeam
+                      ? `${resolveTeamAvatarEmoji(currentTeam)} ${currentTeam.name}`
+                      : locale === "ru"
+                        ? "Нет"
+                        : "None"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {canManageTeamAssignment ? (
+              <>
+                <TeamChoiceGrid
+                  groups={groups}
+                  locale={locale}
+                  onSelect={setAssignmentTeamId}
+                  selectedGroupId={assignmentTeamId}
+                />
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {(["employee", "team_leader"] as const).map((role) => {
+                    const selected = assignmentRole === role;
+                    const Icon = role === "team_leader" ? Crown : User;
+
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        className={`rounded-2xl border p-4 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
+                          selected
+                            ? "border-[#546cf2] bg-white shadow-[0_10px_26px_rgba(37,99,235,0.12)]"
+                            : "border-border bg-white/80 text-muted-foreground hover:border-[#cbd5ff] hover:bg-white hover:text-foreground"
+                        }`}
+                        key={role}
+                        onClick={() => setAssignmentRole(role)}
+                        type="button"
+                      >
+                        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                          <Icon className="size-4 text-[#546cf2]" />
+                          {getEmployeeAccessRoleLabel(role, locale)}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                          {role === "team_leader"
+                            ? locale === "ru"
+                              ? "Сможет управлять задачами и посещаемостью своей бригады."
+                              : "Can manage tasks and attendance for this team."
+                            : locale === "ru"
+                              ? "Обычный доступ сотрудника без управления бригадой."
+                              : "Regular employee access without team management."}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {assignmentError ? (
+                  <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {assignmentError}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#0f63e9] px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-[#0b55cf] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={teamActionPending}
+                    onClick={() => void handleSaveTeamAssignment()}
+                    type="button"
+                  >
+                    {teamActionPending
+                      ? locale === "ru"
+                        ? "Сохраняем..."
+                        : "Saving..."
+                      : locale === "ru"
+                        ? "Сохранить назначение"
+                        : "Save assignment"}
+                    <ArrowRightLeft className="size-4" />
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* Tab Content */}
         <div className="space-y-3">
@@ -1272,6 +1580,18 @@ export default function EmployeeCardPageClient({
                     {locale === "ru" ? "Организация" : "Organization"}
                   </h3>
                   <dl className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Бригада" : "Team"}
+                      </dt>
+                      <dd className="truncate font-medium">
+                        {currentTeam
+                          ? `${resolveTeamAvatarEmoji(currentTeam)} ${currentTeam.name}`
+                          : locale === "ru"
+                            ? "Нет"
+                            : "None"}
+                      </dd>
+                    </div>
                     <div className="flex justify-between">
                       <dt className="text-muted-foreground">
                         {locale === "ru" ? "Отдел" : "Department"}
