@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Settings,
+  SmilePlus,
   Smartphone,
   Trash2,
   UserRound,
@@ -531,30 +532,37 @@ function TeamEmojiPickerField({
         <button
           aria-expanded={pickerOpen}
           aria-label={chooseEmojiLabel}
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,99,235,0.26)] bg-white text-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-[background-color,border-color,transform] duration-150 hover:border-accent hover:bg-[rgba(49,84,255,0.06)] active:scale-[0.96]"
+          className={`flex h-11 w-11 items-center justify-center rounded-xl border bg-secondary/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-[background-color,border-color,transform] duration-150 hover:bg-secondary/40 active:scale-[0.96] ${
+            pickerOpen ? "border-accent" : "border-border"
+          }`}
           onClick={() => setPickerOpen((current) => !current)}
           title={chooseEmojiLabel}
           type="button"
         >
-          {value || DEFAULT_TEAM_AVATAR_EMOJI}
+          <SmilePlus className="h-5 w-5 text-muted-foreground" />
           <span className="sr-only">{chooseEmojiLabel}</span>
         </button>
-        {TEAM_AVATAR_EMOJIS.filter((emoji) => emoji !== value).map(
-          (emoji) => (
-            <button
-              aria-pressed={value === emoji}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-secondary/20 text-lg transition-[background-color,border-color,transform] duration-150 hover:bg-secondary/40 active:scale-[0.96]"
-              key={emoji}
-              onClick={() => {
-                onChange(emoji);
-                setPickerOpen(false);
-              }}
-              type="button"
-            >
-              {emoji}
-            </button>
-          ),
-        )}
+        {[
+          ...(value && !TEAM_AVATAR_EMOJIS.includes(value) ? [value] : []),
+          ...TEAM_AVATAR_EMOJIS,
+        ].map((emoji) => (
+          <button
+            aria-pressed={value === emoji}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] ${
+              value === emoji
+                ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                : "border-border bg-secondary/20 hover:bg-secondary/40"
+            }`}
+            key={emoji}
+            onClick={() => {
+              onChange(emoji);
+              setPickerOpen(false);
+            }}
+            type="button"
+          >
+            {emoji}
+          </button>
+        ))}
       </div>
       {pickerOpen ? (
         <div className="absolute left-0 top-12 z-[90] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
@@ -4042,36 +4050,42 @@ const Employees = ({
                             "Choose custom emoji",
                             locale,
                           )}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent bg-accent text-base text-accent-foreground transition-[background-color,transform] duration-150 active:scale-[0.96]"
+                          className={`flex h-9 w-9 items-center justify-center rounded-xl border bg-secondary/20 transition-[background-color,border-color,transform] duration-150 hover:bg-secondary/40 active:scale-[0.96] ${
+                            inviteEmojiPickerOpen
+                              ? "border-accent"
+                              : "border-border"
+                          }`}
                           onClick={() =>
                             setInviteEmojiPickerOpen((current) => !current)
                           }
                           type="button"
                         >
-                          {inviteTeamEmoji || DEFAULT_TEAM_AVATAR_EMOJI}
+                          <SmilePlus className="h-4 w-4 text-muted-foreground" />
                         </button>
-                        {TEAM_AVATAR_EMOJIS.filter(
-                          (emoji) => emoji !== inviteTeamEmoji,
-                        )
-                          .slice(0, 9)
-                          .map((emoji) => (
-                            <button
-                              aria-pressed={inviteTeamEmoji === emoji}
-                              className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
-                                inviteTeamEmoji === emoji
-                                  ? "border-accent bg-accent text-accent-foreground"
-                                  : "border-border bg-white"
-                              }`}
-                              key={emoji}
-                              onClick={() => {
-                                setInviteTeamEmoji(emoji);
-                                setInviteEmojiPickerOpen(false);
-                              }}
-                              type="button"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
+                        {[
+                          ...(inviteTeamEmoji &&
+                          !TEAM_AVATAR_EMOJIS.includes(inviteTeamEmoji)
+                            ? [inviteTeamEmoji]
+                            : []),
+                          ...TEAM_AVATAR_EMOJIS.slice(0, 10),
+                        ].map((emoji) => (
+                          <button
+                            aria-pressed={inviteTeamEmoji === emoji}
+                            className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
+                              inviteTeamEmoji === emoji
+                                ? "border-accent bg-accent text-accent-foreground"
+                                : "border-border bg-white"
+                            }`}
+                            key={emoji}
+                            onClick={() => {
+                              setInviteTeamEmoji(emoji);
+                              setInviteEmojiPickerOpen(false);
+                            }}
+                            type="button"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
                         {inviteEmojiPickerOpen ? (
                           <div className="absolute left-0 top-11 z-[80] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
                             <EmojiPicker
