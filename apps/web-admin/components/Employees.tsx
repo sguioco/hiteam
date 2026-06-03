@@ -519,43 +519,45 @@ function TeamEmojiPickerField({
   locale: "ru" | "en";
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const chooseEmojiLabel = runtimeLocalize(
+    "Выбрать эмодзи",
+    "Choose emoji",
+    locale,
+  );
 
   return (
-    <div className="space-y-2">
+    <div className="relative">
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className="flex h-11 min-w-11 items-center justify-center rounded-xl border border-[rgba(37,99,235,0.18)] bg-white text-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-transform active:scale-[0.96]"
+          aria-expanded={pickerOpen}
+          aria-label={chooseEmojiLabel}
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,99,235,0.26)] bg-white text-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] transition-[background-color,border-color,transform] duration-150 hover:border-accent hover:bg-[rgba(49,84,255,0.06)] active:scale-[0.96]"
           onClick={() => setPickerOpen((current) => !current)}
+          title={chooseEmojiLabel}
           type="button"
         >
           {value || DEFAULT_TEAM_AVATAR_EMOJI}
+          <span className="sr-only">{chooseEmojiLabel}</span>
         </button>
-        {TEAM_AVATAR_EMOJIS.map((emoji) => (
-          <button
-            aria-pressed={value === emoji}
-            className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg transition-[background-color,border-color,transform] duration-150 active:scale-[0.96] ${
-              value === emoji
-                ? "border-accent bg-accent text-accent-foreground shadow-sm"
-                : "border-border bg-secondary/20 hover:bg-secondary/40"
-            }`}
-            key={emoji}
-            onClick={() => onChange(emoji)}
-            type="button"
-          >
-            {emoji}
-          </button>
-        ))}
-        <Button
-          className="rounded-xl font-heading"
-          onClick={() => setPickerOpen((current) => !current)}
-          type="button"
-          variant="outline"
-        >
-          {runtimeLocalize("Все эмодзи", "All emoji", locale)}
-        </Button>
+        {TEAM_AVATAR_EMOJIS.filter((emoji) => emoji !== value).map(
+          (emoji) => (
+            <button
+              aria-pressed={value === emoji}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-secondary/20 text-lg transition-[background-color,border-color,transform] duration-150 hover:bg-secondary/40 active:scale-[0.96]"
+              key={emoji}
+              onClick={() => {
+                onChange(emoji);
+                setPickerOpen(false);
+              }}
+              type="button"
+            >
+              {emoji}
+            </button>
+          ),
+        )}
       </div>
       {pickerOpen ? (
-        <div className="w-[min(360px,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.14)]">
+        <div className="absolute left-0 top-12 z-[90] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
           <EmojiPicker
             emojiStyle={EmojiStyle.APPLE}
             height={360}
@@ -836,6 +838,7 @@ const Employees = ({
   const [inviteTeamId, setInviteTeamId] = useState("__none");
   const [inviteTeamName, setInviteTeamName] = useState("");
   const [inviteTeamEmoji, setInviteTeamEmoji] = useState("🍳");
+  const [inviteEmojiPickerOpen, setInviteEmojiPickerOpen] = useState(false);
   const [inviteTeamCreating, setInviteTeamCreating] = useState(false);
   const [inviteTeamError, setInviteTeamError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -3728,6 +3731,7 @@ const Employees = ({
           if (!open) {
             setInviteError(null);
             setInviteTeamError(null);
+            setInviteEmojiPickerOpen(false);
           }
         }}
       >
@@ -4006,6 +4010,7 @@ const Employees = ({
                               key={suggestion.nameRu}
                               onClick={() => {
                                 setInviteTeamEmoji(suggestion.emoji);
+                                setInviteEmojiPickerOpen(false);
                                 setInviteTeamName(
                                   runtimeLocalize(
                                     suggestion.nameRu,
@@ -4029,22 +4034,65 @@ const Employees = ({
                     ) : null}
 
                     <div className="rounded-2xl border border-border bg-secondary/20 p-3">
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        {TEAM_AVATAR_EMOJIS.slice(0, 10).map((emoji) => (
-                          <button
-                            aria-pressed={inviteTeamEmoji === emoji}
-                            className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
-                              inviteTeamEmoji === emoji
-                                ? "border-accent bg-accent text-accent-foreground"
-                                : "border-border bg-white"
-                            }`}
-                            key={emoji}
-                            onClick={() => setInviteTeamEmoji(emoji)}
-                            type="button"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
+                      <div className="relative mb-3 flex flex-wrap gap-2">
+                        <button
+                          aria-expanded={inviteEmojiPickerOpen}
+                          aria-label={runtimeLocalize(
+                            "Выбрать свой эмодзи",
+                            "Choose custom emoji",
+                            locale,
+                          )}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent bg-accent text-base text-accent-foreground transition-[background-color,transform] duration-150 active:scale-[0.96]"
+                          onClick={() =>
+                            setInviteEmojiPickerOpen((current) => !current)
+                          }
+                          type="button"
+                        >
+                          {inviteTeamEmoji || DEFAULT_TEAM_AVATAR_EMOJI}
+                        </button>
+                        {TEAM_AVATAR_EMOJIS.filter(
+                          (emoji) => emoji !== inviteTeamEmoji,
+                        )
+                          .slice(0, 9)
+                          .map((emoji) => (
+                            <button
+                              aria-pressed={inviteTeamEmoji === emoji}
+                              className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition ${
+                                inviteTeamEmoji === emoji
+                                  ? "border-accent bg-accent text-accent-foreground"
+                                  : "border-border bg-white"
+                              }`}
+                              key={emoji}
+                              onClick={() => {
+                                setInviteTeamEmoji(emoji);
+                                setInviteEmojiPickerOpen(false);
+                              }}
+                              type="button"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        {inviteEmojiPickerOpen ? (
+                          <div className="absolute left-0 top-11 z-[80] w-[min(360px,calc(100vw-4rem))] overflow-hidden rounded-2xl border border-border bg-white p-2 shadow-[0_20px_70px_rgba(15,23,42,0.18)]">
+                            <EmojiPicker
+                              emojiStyle={EmojiStyle.APPLE}
+                              height={360}
+                              lazyLoadEmojis
+                              onEmojiClick={(emoji: EmojiClickData) => {
+                                setInviteTeamEmoji(emoji.emoji);
+                                setInviteEmojiPickerOpen(false);
+                              }}
+                              previewConfig={{ showPreview: false }}
+                              searchPlaceholder={runtimeLocalize(
+                                "Поиск",
+                                "Search",
+                                locale,
+                              )}
+                              theme={Theme.LIGHT}
+                              width="100%"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Input
@@ -4083,13 +4131,13 @@ const Employees = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-secondary/10 px-4 py-6 text-sm font-heading text-muted-foreground">
+                  <p className="px-1 text-sm font-heading text-muted-foreground">
                     {runtimeLocalize(
-                      "Сотрудник будет без бригады. Это не ошибка: назначить можно позже.",
-                      "The employee will have no team. You can assign one later.",
+                      "Сотрудник будет без бригады. Назначить можно позже",
+                      "The employee will have no team. You can assign one later",
                       locale,
                     )}
-                  </div>
+                  </p>
                 )}
               </div>
             )}
