@@ -171,6 +171,36 @@ function resolveRequestTimeoutMs(path: string, options?: ApiRequestOptions) {
   return 30_000;
 }
 
+function createRequestSignal(timeoutMs: number, providedSignal?: AbortSignal | null) {
+  if (providedSignal) {
+    return { signal: providedSignal, cleanup: () => undefined };
+  }
+
+  if (
+    typeof AbortSignal !== "undefined" &&
+    typeof AbortSignal.timeout === "function"
+  ) {
+    return {
+      signal: AbortSignal.timeout(timeoutMs),
+      cleanup: () => undefined,
+    };
+  }
+
+  if (typeof AbortController === "undefined") {
+    return { signal: undefined, cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
 async function fetchAndCacheApiRequest<T>(
   cacheKey: string,
   path: string,
@@ -262,13 +292,20 @@ async function performApiFetch(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return fetch(`${API_URL}/api/v1${path}`, {
-    ...options,
-    headers,
-    signal:
-      options?.signal ??
-      AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
-  });
+  const requestSignal = createRequestSignal(
+    resolveRequestTimeoutMs(path, options),
+    options?.signal,
+  );
+
+  try {
+    return await fetch(`${API_URL}/api/v1${path}`, {
+      ...options,
+      headers,
+      signal: requestSignal.signal,
+    });
+  } finally {
+    requestSignal.cleanup();
+  }
 }
 
 async function performApiDownloadFetch(
@@ -283,13 +320,20 @@ async function performApiDownloadFetch(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return fetch(`${API_URL}/api/v1${path}`, {
-    ...options,
-    headers,
-    signal:
-      options?.signal ??
-      AbortSignal.timeout(resolveRequestTimeoutMs(path, options)),
-  });
+  const requestSignal = createRequestSignal(
+    resolveRequestTimeoutMs(path, options),
+    options?.signal,
+  );
+
+  try {
+    return await fetch(`${API_URL}/api/v1${path}`, {
+      ...options,
+      headers,
+      signal: requestSignal.signal,
+    });
+  } finally {
+    requestSignal.cleanup();
+  }
 }
 
 async function refreshStoredSession(): Promise<AuthSession | null> {

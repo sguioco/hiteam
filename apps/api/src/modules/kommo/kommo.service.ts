@@ -15,10 +15,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   KOMMO_FIELD_SPECS,
   KOMMO_PIPELINE_NAME,
+  KOMMO_PIPELINE_SPECS,
   KOMMO_STAGE_SPECS,
   KOMMO_TAGS,
   KommoEntityType,
   KommoFieldSpec,
+  KommoPipelineKey,
 } from './kommo.constants';
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -26,10 +28,21 @@ type KommoFieldInfo = KommoFieldSpec & { id: number };
 type KommoFieldMap = Record<KommoEntityType, Map<string, KommoFieldInfo>>;
 type KommoStageName = (typeof KOMMO_STAGE_SPECS)[number]['name'];
 
-type KommoAccountSetup = {
-  pipelineId: number;
+type KommoPipelineSetup = {
+  id: number;
   statusesByName: Map<string, number>;
+};
+
+type KommoAccountSetup = {
+  pipelines: Record<KommoPipelineKey, KommoPipelineSetup>;
   fields: KommoFieldMap;
+};
+
+type KommoStageTarget = {
+  pipelineKey: KommoPipelineKey;
+  pipelineId: number;
+  stageName: KommoStageName;
+  statusId?: number;
 };
 
 type KommoSyncOptions = {
@@ -44,6 +57,7 @@ type KommoSyncOptions = {
 type KommoLifecycleEvent =
   | 'user_registered'
   | 'trial_started'
+  | 'activation_started'
   | 'trial_ending_soon'
   | 'trial_expired'
   | 'payment_successful'
@@ -59,6 +73,8 @@ type KommoLifecycleEventOptions = {
   taskText?: string;
   taskDueInDays?: number;
   key?: string;
+  employeeId?: string;
+  invitationId?: string;
   syncAllContacts?: boolean;
 };
 
@@ -88,8 +104,8 @@ type KommoConfig = {
   clientSecret: string | null;
   redirectUri: string | null;
   responsibleUserId: number | null;
-  pipelineId: number | null;
-  pipelineName: string;
+  pipelineIds: Record<KommoPipelineKey, number | null>;
+  pipelineNames: Record<KommoPipelineKey, string>;
   trialDays: number;
   eventNotesEnabled: boolean;
 };
@@ -125,8 +141,13 @@ export class KommoService {
     return {
       enabled: config.enabled,
       baseUrl: config.baseUrl,
-      pipelineName: config.pipelineName,
-      pipelineId: config.pipelineId,
+      pipelineName: config.pipelineNames.trial,
+      pipelineId: config.pipelineIds.trial,
+      pipelines: KOMMO_PIPELINE_SPECS.map((pipeline) => ({
+        key: pipeline.key,
+        name: config.pipelineNames[pipeline.key],
+        pipelineId: config.pipelineIds[pipeline.key],
+      })),
       hasAccessToken: Boolean(config.accessToken),
       hasRefreshFlow: Boolean(config.refreshToken && config.clientId && config.clientSecret),
       eventNotesEnabled: config.eventNotesEnabled,
@@ -161,12 +182,12 @@ export class KommoService {
     void (async () => {
       await this.syncLifecycleEvent(tenantId, 'user_registered', {
         stageName: 'New Registration',
-        note: 'Client registered in HiTeam.',
+        note: 'Client registered in HiTeam. Configure Pochtovik template for webhook user_registered on this stage.',
         syncAllContacts: true,
       });
       await this.syncLifecycleEvent(tenantId, 'trial_started', {
         stageName: 'Trial Started',
-        note: 'HiTeam trial started.',
+        note: 'HiTeam trial started. Configure Pochtovik template for webhook trial_started on this stage.',
         syncAllContacts: true,
       });
     })().catch((error) => {
@@ -213,7 +234,6 @@ export class KommoService {
   recordEmployeeInvited(tenantId: string, invitationId: string) {
     this.enqueueSync(tenantId, {
       reason: 'employee_invited',
-      stageName: 'Employees Invited',
       note: 'HiTeam employee invitation sent.',
       invitationId,
       syncAllContacts: true,
@@ -231,7 +251,6 @@ export class KommoService {
   recordAttendanceEvent(tenantId: string, employeeId: string, eventType: 'check_in' | 'check_out') {
     this.enqueueSync(tenantId, {
       reason: `attendance_${eventType}`,
-      stageName: eventType === 'check_in' ? 'First Check-In Completed' : undefined,
       note: eventType === 'check_in' ? 'Employee check-in completed.' : 'Employee check-out completed.',
       employeeId,
     });
@@ -240,25 +259,16 @@ export class KommoService {
   recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
     switch (reason) {
       case 'invoice_paid':
-        this.enqueueLifecycleEvent(tenantId, 'payment_successful', {
-          stageName: 'Paid Subscription',
-          note: 'Payment received successfully.',
-          key: `lifecycle:payment_successful:${this.toDateKey(new Date())}`,
-        });
+        void this.enqueuePaymentSuccessful(tenantId);
         return;
       case 'invoice_payment_failed':
       case 'invoice_finalization_failed':
-        this.enqueueLifecycleEvent(tenantId, 'payment_failed', {
-          stageName: 'Payment Pending',
-          note: `Payment failed: ${reason}.`,
-          taskText: 'HiTeam payment failed. Contact the customer and help complete payment.',
-          key: `lifecycle:payment_failed:${this.toDateKey(new Date())}`,
-        });
+        void this.enqueuePaymentFailed(tenantId, reason);
         return;
       case 'subscription_cancelled':
       case 'stripe_disconnected':
         this.enqueueLifecycleEvent(tenantId, 'subscription_cancelled', {
-          stageName: 'Churn',
+          stageName: 'Subscription Cancelled',
           note: `Subscription cancelled: ${reason}.`,
           taskText: 'HiTeam subscription was cancelled. Contact the customer for feedback and recovery.',
           key: `lifecycle:subscription_cancelled:${this.toDateKey(new Date())}`,
@@ -313,9 +323,19 @@ export class KommoService {
       return { accepted: true, processed: 0, ignored: 0 };
     }
 
-    const stageNameByStatusId = new Map<number, string>();
-    for (const [name, id] of this.setupCache?.value.statusesByName.entries() ?? []) {
-      stageNameByStatusId.set(id, name);
+    const setup = await this.ensureAccountSetup();
+    const stageByStatusId = new Map<number, { stageName: KommoStageName; pipelineKey: KommoPipelineKey; pipelineId: number }>();
+    for (const pipeline of KOMMO_PIPELINE_SPECS) {
+      const pipelineSetup = setup.pipelines[pipeline.key];
+      for (const [name, id] of pipelineSetup.statusesByName.entries()) {
+        if (this.isKommoStageName(name)) {
+          stageByStatusId.set(id, {
+            stageName: name,
+            pipelineKey: pipeline.key,
+            pipelineId: pipelineSetup.id,
+          });
+        }
+      }
     }
 
     let processed = 0;
@@ -334,18 +354,21 @@ export class KommoService {
         continue;
       }
 
-      const stageName = event.statusId ? stageNameByStatusId.get(event.statusId) ?? null : null;
+      const stage = event.statusId ? stageByStatusId.get(event.statusId) ?? null : null;
       const metadata = this.mergeMetadata(link.metadataJson, {
         lastInboundAction: event.action,
         lastInboundAt: new Date().toISOString(),
         kommoStatusId: event.statusId,
         kommoOldStatusId: event.oldStatusId,
         kommoPipelineId: event.pipelineId,
-        ...(stageName
+        ...(stage
           ? {
-              kommoStageName: stageName,
-              manualStageName: stageName,
+              kommoStageName: stage.stageName,
+              kommoPipelineKey: stage.pipelineKey,
+              manualStageName: stage.stageName,
+              manualPipelineKey: stage.pipelineKey,
               manualStatusId: event.statusId,
+              manualPipelineId: stage.pipelineId,
               manualStageUpdatedAt: new Date().toISOString(),
             }
           : {}),
@@ -371,7 +394,8 @@ export class KommoService {
             statusId: event.statusId,
             oldStatusId: event.oldStatusId,
             pipelineId: event.pipelineId,
-            stageName,
+            stageName: stage?.stageName ?? null,
+            pipelineKey: stage?.pipelineKey ?? null,
           }),
         },
       });
@@ -399,14 +423,13 @@ export class KommoService {
       const existingLeadLink = await this.findLink(snapshot.tenant.id, 'tenant', snapshot.tenant.id, 'leads');
       const manualStageName = options.stageName ? null : this.readManualStageName(existingLeadLink?.metadataJson, setup);
       const stageName = options.stageName ?? manualStageName ?? this.resolveStageName(snapshot);
-      const statusId = setup.statusesByName.get(stageName);
+      const stageTarget = this.resolveStageTarget(setup, stageName);
       const tags = this.resolveTags(snapshot);
       const companyId = await this.syncCompany(setup, snapshot);
       const primaryContactId = await this.syncPrimaryContact(setup, snapshot, companyId);
       const employeeContactIds = await this.syncEmployeeContacts(setup, snapshot, companyId, options);
       const leadId = await this.syncLead(setup, snapshot, {
-        stageName,
-        statusId,
+        stage: stageTarget,
         tags,
         companyId,
         primaryContactId,
@@ -483,6 +506,60 @@ export class KommoService {
     });
   }
 
+  private async enqueuePaymentSuccessful(tenantId: string) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    try {
+      const previousPaymentEvent = await this.prisma.kommoAutomationLog.findFirst({
+        where: {
+          tenantId,
+          key: { startsWith: 'lifecycle:payment_successful:' },
+        },
+        select: { id: true },
+      });
+      const renewed = Boolean(previousPaymentEvent);
+
+      await this.syncLifecycleEvent(tenantId, 'payment_successful', {
+        stageName: renewed ? 'Renewed' : 'New Customer',
+        note: renewed
+          ? 'Subscription payment received successfully. Customer renewed.'
+          : 'First payment received successfully. Customer moved to paid onboarding.',
+        key: `lifecycle:payment_successful:${this.toDateKey(new Date())}`,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Kommo payment lifecycle failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private async enqueuePaymentFailed(tenantId: string, reason: string) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    try {
+      const subscription = await this.prisma.billingSubscription.findUnique({
+        where: { tenantId },
+        select: { firstPaidAt: true },
+      });
+      const hasEverPaid = Boolean(subscription?.firstPaidAt);
+
+      await this.syncLifecycleEvent(tenantId, 'payment_failed', {
+        stageName: hasEverPaid ? 'Churn Risk' : 'Trial Ending Soon',
+        note: `Payment failed: ${reason}.`,
+        taskText: 'HiTeam payment failed. Contact the customer and help complete payment.',
+        key: `lifecycle:payment_failed:${this.toDateKey(new Date())}`,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Kommo payment failure lifecycle failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
+      );
+    }
+  }
+
   private async syncLifecycleEvent(
     tenantId: string,
     event: KommoLifecycleEvent,
@@ -505,6 +582,8 @@ export class KommoService {
       reason: event,
       stageName: options.stageName,
       note: `Lifecycle event: ${event}. ${options.note}`,
+      employeeId: options.employeeId,
+      invitationId: options.invitationId,
       syncAllContacts: options.syncAllContacts,
     });
 
@@ -526,7 +605,7 @@ export class KommoService {
     const oneDayMs = 24 * 60 * 60 * 1000;
     const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const paid = snapshot.metrics.paymentStatus === 'PAID';
+    const paid = snapshot.metrics.hasEverPaid;
     const trialEndingSoon =
       !paid &&
       snapshot.trialEndDate.getTime() >= now &&
@@ -539,10 +618,9 @@ export class KommoService {
       renewalDate !== null &&
       renewalDate.getTime() >= now &&
       renewalDate.getTime() - now <= sevenDaysMs;
+    const inactivityAnchor = snapshot.metrics.lastActivityDate ?? snapshot.tenant.createdAt;
     const inactive =
-      snapshot.metrics.totalRegisteredEmployees > 0 &&
-      snapshot.metrics.lastActivityDate !== null &&
-      now - snapshot.metrics.lastActivityDate.getTime() >= threeDaysMs;
+      now - inactivityAnchor.getTime() >= threeDaysMs;
     const keyFeatureNotUsed =
       now - snapshot.tenant.createdAt.getTime() >= oneDayMs &&
       snapshot.metrics.employeesInvited === 0 &&
@@ -554,7 +632,7 @@ export class KommoService {
         snapshot.tenant.id,
         'trial_ending_soon',
         {
-          stageName: 'Payment Pending',
+          stageName: 'Trial Ending Soon',
           note: `Trial ends on ${this.toDateKey(snapshot.trialEndDate)}.`,
           taskText: `HiTeam trial expires on ${this.toDateKey(snapshot.trialEndDate)}. Check payment and onboarding blockers.`,
           key: `lifecycle:trial_ending_soon:${this.toDateKey(snapshot.trialEndDate)}`,
@@ -567,7 +645,7 @@ export class KommoService {
         snapshot.tenant.id,
         'trial_expired',
         {
-          stageName: 'Payment Pending',
+          stageName: 'Trial Expired',
           note: `Trial expired on ${this.toDateKey(snapshot.trialEndDate)}.`,
           taskText: 'HiTeam trial expired. Contact the customer and help activate subscription.',
           key: `lifecycle:trial_expired:${this.toDateKey(snapshot.trialEndDate)}`,
@@ -580,6 +658,7 @@ export class KommoService {
         snapshot.tenant.id,
         'subscription_renewal_upcoming',
         {
+          stageName: 'Renewal Soon',
           note: `Subscription renewal is coming on ${this.toDateKey(renewalDate)}.`,
           taskText: `HiTeam subscription renews on ${this.toDateKey(renewalDate)}. Check payment status and customer health.`,
           key: `lifecycle:subscription_renewal_upcoming:${this.toDateKey(renewalDate)}`,
@@ -592,10 +671,10 @@ export class KommoService {
         snapshot.tenant.id,
         'inactive_3_days',
         {
-          stageName: trialExpired ? undefined : 'Reactivation',
+          stageName: paid ? 'Churn Risk' : 'Non-Activation Risk',
           note: 'No HiTeam activity for 3 days.',
           taskText: 'HiTeam has had no activity for 3 days. Contact the customer and verify blockers.',
-          key: `lifecycle:inactive_3_days:${this.toDateKey(snapshot.metrics.lastActivityDate!)}`,
+          key: `lifecycle:inactive_3_days:${this.toDateKey(inactivityAnchor)}`,
         },
       );
     }
@@ -634,22 +713,55 @@ export class KommoService {
   }
 
   private async buildAccountSetup(): Promise<KommoAccountSetup> {
-    const pipelineId = await this.ensurePipeline();
-    const statusesByName = await this.ensurePipelineStages(pipelineId);
+    const pipelines = {} as Record<KommoPipelineKey, KommoPipelineSetup>;
+    for (const pipeline of KOMMO_PIPELINE_SPECS) {
+      const pipelineId = await this.ensurePipeline(pipeline.key);
+      pipelines[pipeline.key] = {
+        id: pipelineId,
+        statusesByName: await this.ensurePipelineStages(pipeline.key, pipelineId),
+      };
+    }
     const fields = await this.ensureCustomFields();
 
-    return { pipelineId, statusesByName, fields };
+    return { pipelines, fields };
   }
 
-  private async ensurePipeline() {
+  private getPipelineSpec(pipelineKey: KommoPipelineKey) {
+    return KOMMO_PIPELINE_SPECS.find((pipeline) => pipeline.key === pipelineKey)!;
+  }
+
+  private getPipelineStages(pipelineKey: KommoPipelineKey) {
+    return KOMMO_STAGE_SPECS.filter((stage) => stage.pipelineKey === pipelineKey);
+  }
+
+  private getStageSpec(stageName: KommoStageName) {
+    return KOMMO_STAGE_SPECS.find((stage) => stage.name === stageName)!;
+  }
+
+  private resolveStageTarget(setup: KommoAccountSetup, stageName: KommoStageName): KommoStageTarget {
+    const stageSpec = this.getStageSpec(stageName);
+    const pipeline = setup.pipelines[stageSpec.pipelineKey];
+
+    return {
+      pipelineKey: stageSpec.pipelineKey,
+      pipelineId: pipeline.id,
+      stageName,
+      statusId: pipeline.statusesByName.get(stageName),
+    };
+  }
+
+  private async ensurePipeline(pipelineKey: KommoPipelineKey) {
     const config = this.getConfig();
-    if (config.pipelineId) {
-      return config.pipelineId;
+    const configuredPipelineId = config.pipelineIds[pipelineKey];
+    if (configuredPipelineId) {
+      return configuredPipelineId;
     }
 
+    const pipelineSpec = this.getPipelineSpec(pipelineKey);
+    const pipelineName = config.pipelineNames[pipelineKey];
     const listResponse = await this.request<KommoApiObject>('GET', '/api/v4/leads/pipelines');
     const pipelines = this.extractEmbedded(listResponse, 'pipelines');
-    const existing = pipelines.find((pipeline) => this.readString(pipeline.name) === config.pipelineName);
+    const existing = pipelines.find((pipeline) => this.readString(pipeline.name) === pipelineName);
 
     if (existing?.id) {
       return Number(existing.id);
@@ -658,12 +770,12 @@ export class KommoService {
     try {
       const createResponse = await this.request<KommoApiObject>('POST', '/api/v4/leads/pipelines', [
         {
-          name: config.pipelineName,
-          sort: 100,
+          name: pipelineName,
+          sort: pipelineSpec.sort,
           is_main: false,
           is_unsorted_on: false,
           _embedded: {
-            statuses: KOMMO_STAGE_SPECS.map((stage) => ({
+            statuses: this.getPipelineStages(pipelineKey).map((stage) => ({
               name: stage.name,
               sort: stage.sort,
             })),
@@ -686,7 +798,7 @@ export class KommoService {
     return Number(mainPipeline.id);
   }
 
-  private async ensurePipelineStages(pipelineId: number) {
+  private async ensurePipelineStages(pipelineKey: KommoPipelineKey, pipelineId: number) {
     const listResponse = await this.request<KommoApiObject>('GET', `/api/v4/leads/pipelines/${pipelineId}/statuses`);
     const existingStatuses = this.extractEmbedded(listResponse, 'statuses');
     const statusesByName = new Map<string, number>();
@@ -699,7 +811,7 @@ export class KommoService {
       }
     }
 
-    const missing = KOMMO_STAGE_SPECS.filter((stage) => !statusesByName.has(stage.name));
+    const missing = this.getPipelineStages(pipelineKey).filter((stage) => !statusesByName.has(stage.name));
     if (missing.length > 0) {
       const createResponse = await this.request<KommoApiObject>(
         'POST',
@@ -938,6 +1050,7 @@ export class KommoService {
         _count: {
           select: {
             pushDevices: true,
+            taskTemplates: true,
           },
         },
       },
@@ -1095,6 +1208,11 @@ export class KommoService {
     const trialEndDate =
       tenant.billingSubscription?.trialEndsAt ??
       new Date(trialStartDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    const normalizedSubscriptionStatus = (tenant.billingSubscription?.status ?? 'TRIAL').toUpperCase();
+    const hasEverPaid = Boolean(tenant.billingSubscription?.firstPaidAt);
+    const subscriptionCancelled =
+      ['CANCELED', 'CANCELLED'].includes(normalizedSubscriptionStatus) ||
+      Boolean(tenant.billingSubscription?.stripeCancelAtPeriodEnd);
     const serviceActive = Boolean(tenant.billingSubscription?.firstPaidAt) && paidSeats >= usedSeats && !this.isBlockingSubscriptionStatus(tenant.billingSubscription?.status);
     const paymentStatus = serviceActive
       ? 'PAID'
@@ -1111,6 +1229,11 @@ export class KommoService {
     const engagementLevel = weeklyUsageScore >= 70 ? 'HIGH' : weeklyUsageScore >= 30 ? 'MEDIUM' : 'LOW';
     const primaryCompany = tenant.companies[0] ?? null;
     const primaryLocation = tenant.locations[0] ?? null;
+    const configuredLocations = tenant.locations.filter((location) =>
+      location.address !== 'Not set yet' &&
+      location.address !== 'Demo address' &&
+      !(location.latitude === 0 && location.longitude === 0),
+    );
     const country = primaryLocation?.country ?? this.inferCountryFromAddress(primaryLocation?.address ?? null);
     const latestLoginByUserId = new Map(
       latestLoginsByUser
@@ -1168,6 +1291,23 @@ export class KommoService {
         checklistFeatureEnabled: true,
         payrollModuleEnabled: Boolean(tenant.payrollPolicy),
         diagnosticsNeedsSupport: Boolean(diagnosticsSnapshot && diagnosticsSnapshot.criticalAlerts > 0),
+        hasEverPaid,
+        subscriptionCancelled,
+        renewalDate: tenant.billingSubscription?.stripeCurrentPeriodEnd ?? null,
+        firstLoginCompleted: Boolean(latestLogin),
+        employeesAddedCompleted:
+          tenant.employeeInvitations.length > 0 ||
+          tenant.employees.length > 1,
+        firstQrCreatedCompleted: configuredLocations.length > 0,
+        firstCheckInCompleted: Boolean(firstCheckIn),
+        checklistsConfiguredCompleted: tenant._count.taskTemplates > 0,
+        activationMilestonesCompleted: [
+          Boolean(latestLogin),
+          tenant.employeeInvitations.length > 0 || tenant.employees.length > 1,
+          configuredLocations.length > 0,
+          Boolean(firstCheckIn),
+        ].filter(Boolean).length,
+        configuredTaskTemplates: tenant._count.taskTemplates,
       },
     };
   }
@@ -1330,8 +1470,7 @@ export class KommoService {
     setup: KommoAccountSetup,
     snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
     args: {
-      stageName: KommoStageName;
-      statusId?: number;
+      stage: KommoStageTarget;
       tags: string[];
       companyId: number;
       primaryContactId: number;
@@ -1345,11 +1484,11 @@ export class KommoService {
     const uniqueContactIds = Array.from(new Set([args.primaryContactId, ...args.employeeContactIds])).slice(0, 100);
     const basePayload = {
       name,
-      pipeline_id: setup.pipelineId,
-      status_id: args.statusId,
+      pipeline_id: args.stage.pipelineId,
+      status_id: args.stage.statusId,
       price: Math.round(this.resolveTotalMonthlyPayment(snapshot) ?? 0),
       responsible_user_id: config.responsibleUserId ?? undefined,
-      custom_fields_values: this.buildLeadFieldValues(setup, snapshot),
+      custom_fields_values: this.buildLeadFieldValues(setup, snapshot, args.stage),
       _embedded: {
         companies: [{ id: args.companyId }],
         contacts: uniqueContactIds.map((id, index) => ({ id, is_main: index === 0 })),
@@ -1369,8 +1508,10 @@ export class KommoService {
     const metadata = this.mergeMetadata(
       link?.metadataJson,
       {
-        stageName: args.stageName,
-        statusId: args.statusId ?? null,
+        stageName: args.stage.stageName,
+        pipelineKey: args.stage.pipelineKey,
+        pipelineId: args.stage.pipelineId,
+        statusId: args.stage.statusId ?? null,
         lastOutboundSyncAt: new Date().toISOString(),
       },
       args.clearManualStage ? ['manualStageName', 'manualStatusId', 'manualStageUpdatedAt'] : [],
@@ -1392,6 +1533,7 @@ export class KommoService {
   private buildLeadFieldValues(
     setup: KommoAccountSetup,
     snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
+    stage: KommoStageTarget,
   ) {
     const country = snapshot.country;
     const city = this.inferCityFromAddress(snapshot.primaryLocation?.address ?? null);
@@ -1413,7 +1555,7 @@ export class KommoService {
       numberOfLocations: snapshot.tenant.locations.length,
       totalEmployees: snapshot.metrics.totalEmployees,
       activeEmployees: snapshot.metrics.activeEmployees,
-      trialStatus: snapshot.metrics.paymentStatus !== 'PAID',
+      trialStatus: !snapshot.metrics.hasEverPaid,
       currentPlan: plan,
       subscriptionStatus: snapshot.metrics.serviceActive ? 'ACTIVE' : snapshot.metrics.subscriptionStatus,
       paymentStatus: snapshot.metrics.paymentStatus,
@@ -1425,6 +1567,10 @@ export class KommoService {
       referralSource: this.configService.get<string>('KOMMO_DEFAULT_REFERRAL_SOURCE') ?? 'HiTeam signup',
       salesManager: this.configService.get<string>('KOMMO_SALES_MANAGER_NAME') ?? null,
       onboardingManager: this.configService.get<string>('KOMMO_ONBOARDING_MANAGER_NAME') ?? null,
+      lifecycleWebhook: this.resolveWebhookName(stage.stageName),
+      lifecycleStage: stage.stageName,
+      lifecyclePipeline: stage.pipelineKey,
+      lastLifecycleEventAt: new Date(),
       dashboardLink,
       adminLink: dashboardLink,
       mobileAppInstalled: snapshot.metrics.mobileAppInstalled,
@@ -1438,6 +1584,11 @@ export class KommoService {
       lastEmployeeCheckIn: snapshot.metrics.lastEmployeeCheckIn,
       lastEmployeeCheckOut: snapshot.metrics.lastEmployeeCheckOut,
       lastSyncStatus: `OK ${new Date().toISOString()}`,
+      firstLoginCompleted: snapshot.metrics.firstLoginCompleted,
+      employeesAddedCompleted: snapshot.metrics.employeesAddedCompleted,
+      firstQrCreatedCompleted: snapshot.metrics.firstQrCreatedCompleted,
+      firstCheckInCompleted: snapshot.metrics.firstCheckInCompleted,
+      checklistsConfiguredCompleted: snapshot.metrics.checklistsConfiguredCompleted,
       integrationStatus: 'ACTIVE',
       totalRegisteredEmployees: snapshot.metrics.totalRegisteredEmployees,
       employeesInvited: snapshot.metrics.employeesInvited,
@@ -1702,8 +1853,16 @@ export class KommoService {
 
     const metadata = this.readRecord(this.parseJson(metadataJson));
     const stageName = this.readString(metadata?.manualStageName);
+    const pipelineKey = this.readString(metadata?.manualPipelineKey);
 
-    if (stageName && this.isKommoStageName(stageName) && setup.statusesByName.has(stageName)) {
+    if (!stageName || !this.isKommoStageName(stageName)) {
+      return null;
+    }
+
+    const stageSpec = this.getStageSpec(stageName);
+    const resolvedPipelineKey = this.isKommoPipelineKey(pipelineKey) ? pipelineKey : stageSpec.pipelineKey;
+
+    if (setup.pipelines[resolvedPipelineKey].statusesByName.has(stageName)) {
       return stageName;
     }
 
@@ -1738,40 +1897,104 @@ export class KommoService {
     return metadata;
   }
 
-  private resolveStageName(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>): KommoStageName {
-    if (snapshot.metrics.diagnosticsNeedsSupport) {
-      return 'Support Needed';
+  private resolveWebhookName(stageName: KommoStageName) {
+    switch (stageName) {
+      case 'New Registration':
+        return 'user_registered';
+      case 'Trial Started':
+        return 'trial_started';
+      case 'Activation':
+        return 'activation_started';
+      case 'Non-Activation Risk':
+      case 'Churn Risk':
+        return 'inactive_3_days';
+      case 'Trial Ending Soon':
+        return 'trial_ending_soon';
+      case 'Paid':
+      case 'New Customer':
+      case 'Renewed':
+        return 'payment_successful';
+      case 'Trial Expired':
+      case 'Lost Lead':
+        return 'trial_expired';
+      case 'Renewal Soon':
+        return 'subscription_renewal_upcoming';
+      case 'Subscription Cancelled':
+      case 'Winback':
+        return 'subscription_cancelled';
+      case 'Onboarding':
+        return 'onboarding_started';
+      case 'Active Customer':
+        return 'active_customer';
+      default:
+        return 'hiteam_status_updated';
     }
+  }
 
-    if (snapshot.metrics.paymentStatus === 'PAID') {
-      return 'Paid Subscription';
+  private resolveStageName(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>): KommoStageName {
+    const now = Date.now();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const inactivityAnchor = snapshot.metrics.lastActivityDate ?? snapshot.tenant.createdAt;
+    const inactive3Days =
+      now - inactivityAnchor.getTime() >= threeDaysMs;
+    const renewalSoon =
+      snapshot.metrics.renewalDate !== null &&
+      snapshot.metrics.renewalDate.getTime() >= now &&
+      snapshot.metrics.renewalDate.getTime() - now <= sevenDaysMs;
+
+    if (snapshot.metrics.hasEverPaid) {
+      if (snapshot.metrics.subscriptionCancelled) {
+        return 'Subscription Cancelled';
+      }
+
+      if (renewalSoon) {
+        return 'Renewal Soon';
+      }
+
+      if (inactive3Days) {
+        return 'Churn Risk';
+      }
+
+      const customerOnboardingComplete =
+        snapshot.metrics.employeesAddedCompleted &&
+        snapshot.metrics.firstQrCreatedCompleted &&
+        snapshot.metrics.checklistsConfiguredCompleted &&
+        (snapshot.metrics.firstCheckInCompleted || snapshot.metrics.weeklyUsageScore >= 50);
+
+      if (customerOnboardingComplete) {
+        return 'Active Customer';
+      }
+
+      return 'Onboarding';
     }
 
     if (snapshot.metrics.paymentStatus === 'FAILED') {
-      return 'Payment Pending';
+      return snapshot.trialEndDate.getTime() < now ? 'Trial Expired' : 'Trial Ending Soon';
+    }
+
+    if (snapshot.trialEndDate.getTime() < now) {
+      return 'Lost Lead';
+    }
+
+    if (snapshot.trialEndDate.getTime() - now <= threeDaysMs) {
+      return 'Trial Ending Soon';
+    }
+
+    if (inactive3Days) {
+      return 'Non-Activation Risk';
     }
 
     if (
-      snapshot.metrics.lastActivityDate &&
-      snapshot.metrics.totalRegisteredEmployees > 0 &&
-      Date.now() - snapshot.metrics.lastActivityDate.getTime() > 5 * 24 * 60 * 60 * 1000
+      snapshot.metrics.firstLoginCompleted ||
+      snapshot.metrics.employeesAddedCompleted ||
+      snapshot.metrics.firstQrCreatedCompleted ||
+      snapshot.metrics.firstCheckInCompleted
     ) {
-      return 'Reactivation';
+      return 'Activation';
     }
 
-    if (snapshot.metrics.weeklyUsageScore >= 50) {
-      return 'Active Usage';
-    }
-
-    if (snapshot.metrics.firstCheckInDate) {
-      return 'First Check-In Completed';
-    }
-
-    if (snapshot.metrics.employeesInvited > 0 || snapshot.metrics.employeesActivated > 1) {
-      return 'Employees Invited';
-    }
-
-    if (snapshot.trialEndDate.getTime() > Date.now()) {
+    if (snapshot.trialEndDate.getTime() > now) {
       return 'Trial Started';
     }
 
@@ -1782,22 +2005,46 @@ export class KommoService {
     const tags = new Set<string>();
     const now = Date.now();
 
-    if (snapshot.metrics.paymentStatus === 'PAID') {
+    if (snapshot.metrics.hasEverPaid) {
       tags.add('Paid');
     } else {
       tags.add('Trial');
     }
 
-    if (snapshot.trialEndDate.getTime() - now <= 3 * 24 * 60 * 60 * 1000 && snapshot.metrics.paymentStatus !== 'PAID') {
+    if (snapshot.trialEndDate.getTime() - now <= 3 * 24 * 60 * 60 * 1000 && !snapshot.metrics.hasEverPaid) {
       tags.add('Expiring Soon');
     }
 
-    if (
-      snapshot.metrics.lastActivityDate &&
-      snapshot.metrics.totalRegisteredEmployees > 0 &&
-      now - snapshot.metrics.lastActivityDate.getTime() > 5 * 24 * 60 * 60 * 1000
-    ) {
+    if (now - (snapshot.metrics.lastActivityDate ?? snapshot.tenant.createdAt).getTime() >= 3 * 24 * 60 * 60 * 1000) {
       tags.add('No Activity');
+      if (snapshot.metrics.hasEverPaid) {
+        tags.add('Churn Risk');
+      }
+    }
+
+    if (snapshot.metrics.activationMilestonesCompleted > 0) {
+      tags.add('Activated');
+    }
+
+    const customerOnboardingComplete =
+      snapshot.metrics.employeesAddedCompleted &&
+      snapshot.metrics.firstQrCreatedCompleted &&
+      snapshot.metrics.checklistsConfiguredCompleted &&
+      (snapshot.metrics.firstCheckInCompleted || snapshot.metrics.weeklyUsageScore >= 50);
+
+    if (snapshot.metrics.hasEverPaid && !customerOnboardingComplete) {
+      tags.add('Onboarding');
+    }
+
+    if (snapshot.metrics.hasEverPaid && snapshot.metrics.subscriptionCancelled) {
+      tags.add('Cancelled');
+    }
+
+    if (snapshot.metrics.hasEverPaid && snapshot.metrics.renewalDate) {
+      const renewalDelta = snapshot.metrics.renewalDate.getTime() - now;
+      if (renewalDelta >= 0 && renewalDelta <= 7 * 24 * 60 * 60 * 1000) {
+        tags.add('Renewal Soon');
+      }
     }
 
     if (snapshot.metrics.weeklyUsageScore >= 70) {
@@ -2010,8 +2257,19 @@ export class KommoService {
       clientSecret,
       redirectUri: this.configService.get<string>('KOMMO_REDIRECT_URI')?.trim() || null,
       responsibleUserId: this.readNumberConfig('KOMMO_RESPONSIBLE_USER_ID'),
-      pipelineId: this.readNumberConfig('KOMMO_PIPELINE_ID'),
-      pipelineName: this.configService.get<string>('KOMMO_PIPELINE_NAME')?.trim() || KOMMO_PIPELINE_NAME,
+      pipelineIds: {
+        trial: this.readNumberConfig('KOMMO_TRIAL_PIPELINE_ID') ?? this.readNumberConfig('KOMMO_PIPELINE_ID'),
+        customers: this.readNumberConfig('KOMMO_CUSTOMERS_PIPELINE_ID'),
+      },
+      pipelineNames: {
+        trial:
+          this.configService.get<string>('KOMMO_TRIAL_PIPELINE_NAME')?.trim() ||
+          this.configService.get<string>('KOMMO_PIPELINE_NAME')?.trim() ||
+          KOMMO_PIPELINE_NAME,
+        customers:
+          this.configService.get<string>('KOMMO_CUSTOMERS_PIPELINE_NAME')?.trim() ||
+          this.getPipelineSpec('customers').name,
+      },
       trialDays: this.readNumberConfig('KOMMO_TRIAL_DAYS') ?? 7,
       eventNotesEnabled: this.configService.get<string>('KOMMO_EVENT_NOTES_ENABLED')?.trim().toLowerCase() !== 'false',
     };
@@ -2158,6 +2416,10 @@ export class KommoService {
 
   private isKommoStageName(value: string): value is KommoStageName {
     return KOMMO_STAGE_SPECS.some((stage) => stage.name === value);
+  }
+
+  private isKommoPipelineKey(value: string | null): value is KommoPipelineKey {
+    return Boolean(value && KOMMO_PIPELINE_SPECS.some((pipeline) => pipeline.key === value));
   }
 
   private parseJson(text: string) {

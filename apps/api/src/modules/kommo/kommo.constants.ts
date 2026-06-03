@@ -20,19 +20,32 @@ export type KommoFieldSpec = {
   enums?: string[];
 };
 
-export const KOMMO_PIPELINE_NAME = 'HiTeam';
+export type KommoPipelineKey = 'trial' | 'customers';
+
+export const KOMMO_PIPELINE_SPECS = [
+  { key: 'trial', name: 'HiTeam - Trial to Payment', sort: 100 },
+  { key: 'customers', name: 'HiTeam - Customers', sort: 110 },
+] as const;
+
+export const KOMMO_PIPELINE_NAME = KOMMO_PIPELINE_SPECS[0].name;
 
 export const KOMMO_STAGE_SPECS = [
-  { name: 'New Registration', sort: 10, color: '#99ccff' },
-  { name: 'Trial Started', sort: 20, color: '#c1e0ff' },
-  { name: 'Employees Invited', sort: 30, color: '#f9de7e' },
-  { name: 'First Check-In Completed', sort: 40, color: '#fffd7f' },
-  { name: 'Active Usage', sort: 50, color: '#deff81' },
-  { name: 'Payment Pending', sort: 60, color: '#ffce5a' },
-  { name: 'Paid Subscription', sort: 70, color: '#87f2c0' },
-  { name: 'Reactivation', sort: 80, color: '#d6d8f9' },
-  { name: 'Churn', sort: 90, color: '#cccccc' },
-  { name: 'Support Needed', sort: 100, color: '#ff8f92' },
+  { pipelineKey: 'trial', name: 'New Registration', sort: 10, color: '#99ccff' },
+  { pipelineKey: 'trial', name: 'Trial Started', sort: 20, color: '#c1e0ff' },
+  { pipelineKey: 'trial', name: 'Activation', sort: 30, color: '#fffd7f' },
+  { pipelineKey: 'trial', name: 'Non-Activation Risk', sort: 40, color: '#ffce5a' },
+  { pipelineKey: 'trial', name: 'Trial Ending Soon', sort: 50, color: '#f9de7e' },
+  { pipelineKey: 'trial', name: 'Paid', sort: 60, color: '#87f2c0' },
+  { pipelineKey: 'trial', name: 'Trial Expired', sort: 70, color: '#cccccc' },
+  { pipelineKey: 'trial', name: 'Lost Lead', sort: 80, color: '#aaaaaa' },
+  { pipelineKey: 'customers', name: 'New Customer', sort: 10, color: '#87f2c0' },
+  { pipelineKey: 'customers', name: 'Onboarding', sort: 20, color: '#c1e0ff' },
+  { pipelineKey: 'customers', name: 'Active Customer', sort: 30, color: '#deff81' },
+  { pipelineKey: 'customers', name: 'Churn Risk', sort: 40, color: '#ffce5a' },
+  { pipelineKey: 'customers', name: 'Renewal Soon', sort: 50, color: '#f9de7e' },
+  { pipelineKey: 'customers', name: 'Renewed', sort: 60, color: '#87f2c0' },
+  { pipelineKey: 'customers', name: 'Subscription Cancelled', sort: 70, color: '#ff8f92' },
+  { pipelineKey: 'customers', name: 'Winback', sort: 80, color: '#d6d8f9' },
 ] as const;
 
 export const KOMMO_TAGS = [
@@ -41,6 +54,11 @@ export const KOMMO_TAGS = [
   'Expiring Soon',
   'No Activity',
   'High Engagement',
+  'Activated',
+  'Onboarding',
+  'Churn Risk',
+  'Renewal Soon',
+  'Cancelled',
   'Enterprise',
   'Multi-Location',
   'Needs Support',
@@ -98,6 +116,10 @@ export const KOMMO_FIELD_SPECS: KommoFieldSpec[] = [
   { key: 'referralSource', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Referral Source', type: 'text', sort: 190 },
   { key: 'salesManager', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Sales Manager', type: 'text', sort: 200 },
   { key: 'onboardingManager', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Onboarding Manager', type: 'text', sort: 210 },
+  { key: 'lifecycleWebhook', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Lifecycle Webhook', type: 'text', sort: 220 },
+  { key: 'lifecycleStage', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Lifecycle Stage', type: 'text', sort: 230 },
+  { key: 'lifecyclePipeline', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Lifecycle Pipeline', type: 'text', sort: 240 },
+  { key: 'lastLifecycleEventAt', entityType: 'leads', groupName: 'HiTeam - Company', name: 'Last Lifecycle Event At', type: 'date_time', sort: 250 },
 
   { key: 'dashboardLink', entityType: 'leads', groupName: 'HiTeam - Product', name: 'HiTeam Dashboard Link', type: 'url', sort: 10 },
   { key: 'adminLink', entityType: 'leads', groupName: 'HiTeam - Product', name: 'HiTeam Admin Link', type: 'url', sort: 20 },
@@ -112,6 +134,11 @@ export const KOMMO_FIELD_SPECS: KommoFieldSpec[] = [
   { key: 'lastEmployeeCheckIn', entityType: 'leads', groupName: 'HiTeam - Product', name: 'Last Employee Check-In', type: 'date_time', sort: 110 },
   { key: 'lastEmployeeCheckOut', entityType: 'leads', groupName: 'HiTeam - Product', name: 'Last Employee Check-Out', type: 'date_time', sort: 120 },
   { key: 'lastSyncStatus', entityType: 'leads', groupName: 'HiTeam - Product', name: 'Last Sync Status', type: 'text', sort: 130 },
+  { key: 'firstLoginCompleted', entityType: 'leads', groupName: 'HiTeam - Product', name: 'First Login Completed', type: 'checkbox', sort: 131 },
+  { key: 'employeesAddedCompleted', entityType: 'leads', groupName: 'HiTeam - Product', name: 'Employees Added Completed', type: 'checkbox', sort: 132 },
+  { key: 'firstQrCreatedCompleted', entityType: 'leads', groupName: 'HiTeam - Product', name: 'First QR Created Completed', type: 'checkbox', sort: 133 },
+  { key: 'firstCheckInCompleted', entityType: 'leads', groupName: 'HiTeam - Product', name: 'First Check-In Completed', type: 'checkbox', sort: 134 },
+  { key: 'checklistsConfiguredCompleted', entityType: 'leads', groupName: 'HiTeam - Product', name: 'Checklists Configured Completed', type: 'checkbox', sort: 135 },
   {
     key: 'integrationStatus',
     entityType: 'leads',

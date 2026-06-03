@@ -5,7 +5,7 @@
 The API syncs HiTeam tenants to Kommo as:
 
 - one Kommo company per HiTeam tenant;
-- one Kommo lead in the `HiTeam` pipeline;
+- one Kommo lead that starts in the `HiTeam - Trial to Payment` pipeline and moves to `HiTeam - Customers` after payment;
 - one primary contact for the admin/owner;
 - linked contacts for employees and pending employee invitations;
 - custom field groups for company, product, employees, payment, activity, quick links;
@@ -24,7 +24,12 @@ KOMMO_LONG_LIVED_TOKEN=...
 WEB_ADMIN_BASE_URL=https://admin.example.com
 
 # Optional
-KOMMO_PIPELINE_NAME=HiTeam
+KOMMO_TRIAL_PIPELINE_NAME=HiTeam - Trial to Payment
+KOMMO_TRIAL_PIPELINE_ID=
+KOMMO_CUSTOMERS_PIPELINE_NAME=HiTeam - Customers
+KOMMO_CUSTOMERS_PIPELINE_ID=
+# Backward compatible fallback for the trial pipeline
+KOMMO_PIPELINE_NAME=
 KOMMO_PIPELINE_ID=
 KOMMO_RESPONSIBLE_USER_ID=
 KOMMO_TRIAL_DAYS=7
@@ -48,16 +53,45 @@ KOMMO_REDIRECT_URI=...
 
 Prefer `KOMMO_LONG_LIVED_TOKEN` in production unless refresh-token persistence is moved to a secure store.
 
-## Event mapping
+## Pipeline and Pochtovik mapping
 
-- organization registration -> lifecycle events `user_registered` and `trial_started`; creates/updates company, contact, lead; stage `Trial Started`;
-- organization setup/location update -> refreshes company and quick links;
+Pochtovik does not require a separate backend API call. Configure Pochtovik templates in Kommo digital pipeline actions for these stages; the API moves the lead and fills custom fields.
+
+Trial pipeline `HiTeam - Trial to Payment`:
+
+- `New Registration` -> `Lifecycle Webhook = user_registered`;
+- `Trial Started` -> `trial_started`;
+- `Activation` -> `activation_started` when the customer logs in, adds employees, configures the first work location/geofence, or completes the first check-in;
+- `Non-Activation Risk` -> `inactive_3_days` when there is no activity for 3 days;
+- `Trial Ending Soon` -> `trial_ending_soon`;
+- `Trial Expired` -> `trial_expired`;
+- `Lost Lead` -> final trial loss stage after an expired unpaid trial.
+
+Customers pipeline `HiTeam - Customers`:
+
+- `New Customer` -> first `payment_successful`;
+- `Onboarding` -> paid customer still configuring employees, checklists, geolocation and check-ins;
+- `Active Customer` -> active paid usage;
+- `Churn Risk` -> `inactive_3_days` for paid customers;
+- `Renewal Soon` -> `subscription_renewal_upcoming`;
+- `Renewed` -> repeated `payment_successful`;
+- `Subscription Cancelled` -> `subscription_cancelled`;
+- `Winback` -> manual recovery stage.
+
+Useful Pochtovik variables are available as Kommo lead fields:
+
+- `Lifecycle Webhook`, `Lifecycle Stage`, `Lifecycle Pipeline`, `Last Lifecycle Event At`;
+- `First Login Completed`, `Employees Added Completed`, `First QR Created Completed`, `First Check-In Completed`, `Checklists Configured Completed`;
+- payment, seats, activity, employee roster and quick link fields.
+
+Other sync events:
+
+- organization setup/location update -> refreshes company, activation signals and quick links;
 - employee created/invited/approved/rejected -> refreshes employee counters and linked contacts;
-- employee check-in -> stage `First Check-In Completed`, updates activity fields;
-- employee check-out -> updates activity fields;
-- billing checkout/invoice/subscription events -> updates seats, plan, payment and stage; emits `payment_successful`, `payment_failed`, `subscription_cancelled`;
+- employee check-in/check-out -> updates activity fields and can move trial customers to `Activation` or paid customers to `Active Customer`;
+- billing checkout/invoice/subscription events -> updates seats, plan, payment and customer stage;
 - device changes -> updates app-installed and device counters;
-- biometric enrollment/verification -> updates face verification counters and contact fields.
+- biometric enrollment/verification -> updates face verification counters and contact fields;
 - daily automation -> emits `trial_ending_soon`, `trial_expired`, `subscription_renewal_upcoming`, `inactive_3_days`, `key_feature_not_used` as Kommo notes/tasks.
 
 ## Admin API
