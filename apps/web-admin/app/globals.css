@@ -624,6 +624,25 @@ body:has(.landing-shell) {
   border-top-right-radius: 26px;
 }
 
+@media (max-width: 1360px) and (min-width: 1181px) {
+  .dashboard-layout {
+    grid-template-columns:
+      minmax(270px, 300px) minmax(0, 1fr) minmax(210px, 230px);
+    grid-template-rows: minmax(0, 1fr) 240px;
+    gap: 12px;
+    padding: 8px 12px 0;
+  }
+
+  .dashboard-activity-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.78fr);
+    gap: 12px;
+  }
+
+  .dashboard-layout:not(.dashboard-layout--employee) .dashboard-calendar-card {
+    margin-right: -4px;
+  }
+}
+
 .dashboard-actions-center-shell {
   display: block;
   height: 100%;
@@ -8672,6 +8691,80 @@ body {
   font-size: 0.82rem;
   letter-spacing: 0.06em;
   font-weight: 500;
+}
+
+@media (max-width: 1360px) and (min-width: 1181px) {
+  .dashboard-layout:not(.dashboard-layout--employee) .dashboard-calendar-card .manager-week-grid--bottom {
+    border-top-right-radius: 22px;
+  }
+
+  .dashboard-layout:not(.dashboard-layout--employee) .dashboard-calendar-card .manager-week-day:last-child {
+    border-top-right-radius: 22px;
+  }
+
+  .manager-week-grid {
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
+  }
+
+  .manager-week-grid--bottom {
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
+  }
+
+  .manager-week-day {
+    gap: 8px;
+    padding: 12px 9px 10px;
+  }
+
+  .manager-week-day:first-child {
+    border-top-left-radius: 22px;
+  }
+
+  .manager-week-day:last-child {
+    border-top-right-radius: 22px;
+  }
+
+  .manager-week-day-head {
+    column-gap: 4px;
+  }
+
+  .manager-week-day-copy .manager-week-day-weekday {
+    font-size: 0.46rem;
+    letter-spacing: 0.04em;
+  }
+
+  .manager-week-day-copy strong {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .manager-week-day-date {
+    padding-right: 0;
+  }
+
+  .manager-week-day-date strong {
+    font-size: clamp(1.86rem, 2.15vw, 2.18rem);
+    letter-spacing: -0.04em;
+  }
+
+  .manager-week-empty {
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+  }
+
+  .birthdays-sidebar {
+    border-radius: 22px 22px 0 0;
+  }
+
+  .birthdays-sidebar-header {
+    padding: 14px 14px 10px;
+  }
+
+  .birthdays-sidebar-empty {
+    padding: 18px 14px;
+    font-size: 0.78rem;
+  }
 }
 
 .manager-line-item:has(.manager-severity.is-critical)::before {
