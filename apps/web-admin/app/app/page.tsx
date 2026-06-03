@@ -28,7 +28,7 @@ async function loadInitialDashboardBootstrap(
     const snapshot = await serverApiRequestWithSession<
       DashboardBootstrapResponse<unknown, EmployeeProfileResponse | null>
     >(session, "/bootstrap/dashboard", {
-      signal: AbortSignal.timeout(2500),
+      timeoutMs: 2500,
     });
 
     return snapshot.initialData as DashboardInitialData;
@@ -50,7 +50,7 @@ async function shouldOpenOrganizationSetup(session: AuthSession) {
     const snapshot = await serverApiRequestWithSession<{
       setup?: { configured?: boolean } | null;
     }>(session, "/bootstrap/organization", {
-      signal: AbortSignal.timeout(2500),
+      timeoutMs: 2500,
     });
 
     return snapshot.setup?.configured === false;

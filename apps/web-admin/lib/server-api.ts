@@ -8,43 +8,77 @@ const SERVER_API_TIMEOUT_MS = Number(process.env.INTERNAL_API_TIMEOUT_MS ?? 1200
 
 type ServerApiOptions = RequestInit & {
   token?: string;
+  timeoutMs?: number;
 };
+
+function createServerRequestSignal(
+  timeoutMs: number,
+  providedSignal?: AbortSignal | null,
+) {
+  if (providedSignal) {
+    return { signal: providedSignal, cleanup: () => undefined };
+  }
+
+  if (typeof AbortController === "undefined") {
+    return { signal: undefined, cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
 
 export async function serverApiRequest<T>(
   path: string,
   options?: ServerApiOptions,
 ): Promise<T> {
+  const { token, timeoutMs, ...requestOptions } = options ?? {};
   const headers = new Headers(options?.headers ?? {});
 
   if (!(options?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  if (options?.token) {
-    headers.set("Authorization", `Bearer ${options.token}`);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${SERVER_API_URL}/api/v1${path}`, {
-    ...options,
-    headers,
-    cache: "no-store",
-    signal: options?.signal ?? AbortSignal.timeout(SERVER_API_TIMEOUT_MS),
-  });
+  const { signal, cleanup } = createServerRequestSignal(
+    timeoutMs ?? SERVER_API_TIMEOUT_MS,
+    requestOptions.signal,
+  );
 
-  if (!response.ok) {
-    const text = await response.text();
-    const error = new Error(
-      text || `Request failed with status ${response.status}`,
-    ) as Error & { status?: number };
-    error.status = response.status;
-    throw error;
+  try {
+    const response = await fetch(`${SERVER_API_URL}/api/v1${path}`, {
+      ...requestOptions,
+      headers,
+      cache: "no-store",
+      signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const error = new Error(
+        text || `Request failed with status ${response.status}`,
+      ) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    cleanup();
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
 }
 
 export async function serverApiRequestWithSession<T>(

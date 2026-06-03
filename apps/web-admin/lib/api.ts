@@ -176,16 +176,6 @@ function createRequestSignal(timeoutMs: number, providedSignal?: AbortSignal | n
     return { signal: providedSignal, cleanup: () => undefined };
   }
 
-  if (
-    typeof AbortSignal !== "undefined" &&
-    typeof AbortSignal.timeout === "function"
-  ) {
-    return {
-      signal: AbortSignal.timeout(timeoutMs),
-      cleanup: () => undefined,
-    };
-  }
-
   if (typeof AbortController === "undefined") {
     return { signal: undefined, cleanup: () => undefined };
   }

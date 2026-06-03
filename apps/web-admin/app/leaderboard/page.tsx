@@ -21,7 +21,7 @@ async function loadInitialLeaderboardData(
       session,
       `/bootstrap/leaderboard${query}`,
       {
-        signal: AbortSignal.timeout(LEADERBOARD_SERVER_BOOTSTRAP_TIMEOUT_MS),
+        timeoutMs: LEADERBOARD_SERVER_BOOTSTRAP_TIMEOUT_MS,
       },
     );
 
