@@ -12484,3 +12484,630 @@ body {
     padding: 2px 0 10px 32px;
   }
 }
+
+/* Final narrow-screen overrides. Desktop above 1500px intentionally stays on base CSS. */
+@media (max-width: 1500px) and (min-width: 1181px) {
+  .admin-frame {
+    grid-template-columns: 208px minmax(0, 1fr);
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled {
+    gap: 10px;
+    padding: 12px 9px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-full-brand-link .brand-wordmark {
+    font-size: 1.42rem;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-nav-untitled {
+    gap: 4px;
+    margin-top: 8px;
+    padding-right: 0;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-link-main {
+    gap: 8px;
+    min-height: 39px;
+    padding: 0 9px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-nav-label-wrap {
+    gap: 8px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-nav-label {
+    font-size: 0.86rem;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-expand-toggle {
+    width: 24px;
+    height: 24px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-user-card {
+    min-height: 48px;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-user-avatar {
+    width: 34px;
+    min-width: 34px;
+    max-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-user-copy strong {
+    font-size: 0.86rem;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-user-copy span {
+    font-size: 0.74rem;
+  }
+
+  .shell-topbar,
+  .employee-topbar {
+    min-height: 74px;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .shell-topbar-copy h1 {
+    font-size: clamp(1.65rem, 3.35vw, 2.55rem);
+    letter-spacing: -0.055em;
+  }
+
+  .shell-topbar-actions,
+  .employee-topbar-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .shell-topbar-actions a,
+  .shell-topbar-actions button {
+    font-size: 0.82rem;
+  }
+
+  .page-shell {
+    padding: 18px;
+  }
+
+  .page-shell:has(.manager-home),
+  .manager-page-shell {
+    padding: 0;
+  }
+
+  .dashboard-layout {
+    grid-template-columns: minmax(220px, 240px) minmax(0, 1fr) minmax(170px, 190px);
+    grid-template-rows: minmax(0, 1fr) 220px;
+    gap: 10px;
+    padding: 6px 10px 0;
+  }
+
+  .dashboard-activity-shell {
+    grid-template-columns: minmax(0, 1.08fr) minmax(220px, 0.7fr);
+    gap: 10px;
+  }
+
+  .dashboard-layout .dashboard-card {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .tasks-sidebar-card {
+    border-radius: 24px;
+  }
+
+  .tasks-radio .smart-radio__copy {
+    min-height: 27px;
+    gap: 3px;
+    padding: 5px 2px;
+    font-size: 0.64rem;
+  }
+
+  .tasks-overdue-switch {
+    font-size: 0.74rem;
+  }
+
+  .daily-activity-panel,
+  .today-attendance-panel {
+    gap: 10px;
+  }
+
+  .daily-activity-body {
+    padding: 12px;
+  }
+
+  .daily-activity-item {
+    grid-template-columns: 10px 36px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .daily-activity-kind {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .daily-activity-item-copy {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .daily-activity-actor-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+  }
+
+  .daily-activity-text p {
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .daily-activity-meta {
+    gap: 6px;
+    font-size: 0.7rem;
+  }
+
+  .daily-activity-empty {
+    min-height: 100%;
+    padding: 18px 12px;
+  }
+
+  .daily-activity-empty-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+  }
+
+  .daily-activity-empty-title {
+    font-size: 0.92rem;
+  }
+
+  .daily-activity-empty-copy {
+    font-size: 0.78rem;
+  }
+
+  .today-attendance-head {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .today-attendance-title-group {
+    min-height: 36px;
+    gap: 0;
+    margin-right: 0;
+  }
+
+  .today-attendance-title-group h2,
+  .today-attendance-head-count {
+    display: none;
+  }
+
+  .today-attendance-date-label {
+    font-size: 0.86rem;
+  }
+
+  .today-attendance-nav-button,
+  .today-attendance-today-button {
+    min-height: 36px;
+    font-size: 0.82rem;
+  }
+
+  .today-attendance-nav-button {
+    width: 36px;
+  }
+
+  .today-attendance-today-button {
+    padding: 0 12px;
+  }
+
+  .today-attendance-body {
+    padding: 10px 10px 0;
+    border-radius: 16px;
+  }
+
+  .today-attendance-body.is-empty {
+    padding: 6px 0 0;
+  }
+
+  .today-attendance-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 8px 0;
+  }
+
+  .today-attendance-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+  }
+
+  .today-attendance-row-copy strong {
+    font-size: 0.84rem;
+  }
+
+  .today-attendance-row-lines {
+    font-size: 0.68rem;
+  }
+
+  .today-attendance-row-side {
+    grid-column: 2;
+    justify-self: stretch;
+    align-items: flex-start;
+    min-width: 0;
+    gap: 3px;
+    text-align: left;
+  }
+
+  .today-attendance-row-arrival,
+  .today-attendance-row-note {
+    text-align: left;
+  }
+
+  .today-attendance-row-arrival {
+    font-size: 0.95rem;
+  }
+
+  .today-attendance-row-note {
+    font-size: 0.68rem;
+    line-height: 1.2;
+  }
+
+  .today-attendance-empty {
+    min-height: auto;
+    padding: 20px 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 0.82rem;
+  }
+
+  .birthdays-sidebar-header {
+    padding: 12px 10px 8px;
+  }
+
+  .birthdays-sidebar-title h2 {
+    font-size: 0.82rem;
+  }
+
+  .birthdays-sidebar-empty {
+    padding: 16px 10px;
+    font-size: 0.74rem;
+  }
+
+  .manager-week-day {
+    gap: 8px;
+    padding: 10px 8px 8px;
+  }
+
+  .manager-week-day-head {
+    column-gap: 3px;
+  }
+
+  .manager-week-day-copy .manager-week-day-weekday {
+    font-size: 0.44rem;
+    letter-spacing: 0.03em;
+  }
+
+  .manager-week-day-copy strong {
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .manager-week-day-date {
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .manager-week-day-date strong {
+    font-size: clamp(1.65rem, 2.1vw, 1.95rem);
+    letter-spacing: -0.035em;
+  }
+
+  .manager-week-day-list {
+    gap: 6px;
+  }
+
+  .manager-week-task-time {
+    font-size: 0.7rem;
+  }
+
+  .manager-week-task-title {
+    font-size: 0.62rem;
+  }
+
+  .manager-week-task + .manager-week-task {
+    padding-top: 6px;
+  }
+
+  .manager-week-empty {
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+  }
+}
+
+@media (max-width: 1180px) {
+  .admin-content:has(.manager-page-shell) {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .admin-frame {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled {
+    width: 56px;
+    min-width: 56px;
+    padding: 12px 7px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-compact-toggle {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-compact-wave {
+    width: 27px;
+    height: 27px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-link-main,
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-sublink {
+    min-height: 40px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled:not(.is-mobile-open) .sidebar-user-avatar {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+  }
+
+  .shell-topbar,
+  .employee-topbar {
+    min-height: 72px;
+    padding: 12px 14px;
+  }
+
+  .shell-topbar-copy h1 {
+    font-size: clamp(1.48rem, 4.2vw, 2.2rem);
+    letter-spacing: -0.052em;
+  }
+
+  .page-shell {
+    padding: 16px;
+  }
+
+  .page-shell:has(.manager-home),
+  .shell-stage:has(.manager-page-shell),
+  .manager-page-shell {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .manager-home {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .dashboard-layout {
+    height: auto;
+    min-height: 100%;
+    gap: 10px;
+    overflow: visible;
+    padding: 6px 10px 0;
+  }
+
+  .dashboard-tasks-rail,
+  .dashboard-main-card,
+  .dashboard-calendar-card,
+  .dashboard-birthdays-rail {
+    height: auto;
+    overflow: visible;
+  }
+
+  .dashboard-tasks-rail .tasks-sidebar-card {
+    height: auto !important;
+    min-height: 320px;
+    max-height: 430px;
+  }
+
+  .dashboard-main-card {
+    border-radius: 18px;
+  }
+
+  .dashboard-activity-shell {
+    height: auto;
+  }
+
+  .daily-activity-panel,
+  .today-attendance-panel {
+    height: 360px;
+  }
+
+  .dashboard-calendar-card {
+    height: 220px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .dashboard-layout .dashboard-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .today-attendance-title-group h2,
+  .today-attendance-head-count {
+    display: none;
+  }
+
+  .today-attendance-title-group {
+    margin-right: 0;
+  }
+
+  .today-attendance-date-label {
+    font-size: 0.86rem;
+  }
+
+  .today-attendance-body.is-empty {
+    padding: 6px 0 0;
+  }
+
+  .today-attendance-empty {
+    min-height: auto;
+    padding: 20px 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .manager-week-day {
+    gap: 8px;
+    padding: 10px 8px 8px;
+  }
+
+  .manager-week-day-head {
+    column-gap: 4px;
+  }
+
+  .manager-week-day-copy .manager-week-day-weekday {
+    font-size: 0.44rem;
+    letter-spacing: 0.03em;
+  }
+
+  .manager-week-day-copy strong {
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+  }
+
+  .manager-week-day-date {
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .manager-week-day-date strong {
+    font-size: clamp(1.58rem, 2.4vw, 1.9rem);
+    letter-spacing: -0.035em;
+  }
+
+  .manager-week-task-time {
+    font-size: 0.7rem;
+  }
+
+  .manager-week-task-title {
+    font-size: 0.62rem;
+  }
+
+  .manager-week-empty {
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-frame {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled {
+    width: 48px;
+    min-width: 48px;
+    padding: 10px 5px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-compact-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled .sidebar-compact-wave {
+    width: 25px;
+    height: 25px;
+  }
+
+  .admin-frame > .sidebar.sidebar-untitled.is-mobile-open {
+    width: min(276px, calc(100vw - 12px));
+  }
+
+  .page-shell,
+  .shell-topbar,
+  .employee-topbar {
+    padding: 12px 10px;
+  }
+
+  .page-shell:has(.manager-home),
+  .manager-page-shell {
+    padding: 0;
+  }
+
+  .shell-topbar,
+  .employee-topbar {
+    min-height: 62px;
+    gap: 8px;
+  }
+
+  .shell-topbar-copy h1 {
+    font-size: clamp(1.36rem, 7vw, 1.86rem);
+  }
+
+  .shell-topbar-actions,
+  .employee-topbar-actions {
+    gap: 6px;
+  }
+
+  .dashboard-layout {
+    gap: 8px;
+    padding: 6px 4px 0;
+  }
+
+  .dashboard-layout .dashboard-card {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .dashboard-calendar-card {
+    overflow-x: auto;
+  }
+
+  .dashboard-calendar-card .manager-week-shell {
+    min-width: 620px;
+  }
+
+  .today-attendance-head {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .today-attendance-nav-button,
+  .today-attendance-today-button {
+    min-height: 34px;
+    font-size: 0.78rem;
+  }
+
+  .today-attendance-nav-button {
+    width: 34px;
+  }
+
+  .today-attendance-today-button {
+    padding: 0 10px;
+  }
+
+  .today-attendance-date-label {
+    font-size: 0.8rem;
+  }
+}
