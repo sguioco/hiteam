@@ -82,8 +82,13 @@ Customers pipeline `HiTeam - Customers`:
 Useful lifecycle variables are available as Kommo lead fields:
 
 - `Lifecycle Webhook`, `Lifecycle Stage`, `Lifecycle Pipeline`, `Last Lifecycle Event At`;
+- `Last Lifecycle Email Event`, `Last Lifecycle Email Status`, `Last Lifecycle Email Provider`, `Last Lifecycle Email At`;
+- `Last Lifecycle Email Sender`, `Last Lifecycle Email Reply-To`, `Last Lifecycle Email Recipients`, `Last Lifecycle Email Recipient Count`;
+- `Last Lifecycle Email Subject`, `Last Lifecycle Email Preview`, `Last Lifecycle Email CTA`, `Last Lifecycle Email Error`;
 - `First Login Completed`, `Employees Added Completed`, `First QR Created Completed`, `First Check-In Completed`, `Checklists Configured Completed`;
 - payment, seats, activity, employee roster and quick link fields.
+
+Each lifecycle email attempt also creates a `HiTeam Email` note on the lead with the event, status, sender, recipients, subject, CTA links and error text when delivery fails.
 
 Other sync events:
 

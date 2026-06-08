@@ -34,6 +34,32 @@ type LifecycleEmailTemplate = {
   ctaUrl: string;
 };
 
+export type LifecycleEmailSendStatus =
+  | 'disabled'
+  | 'missing_tenant'
+  | 'no_recipient'
+  | 'accepted'
+  | 'failed';
+
+export type LifecycleEmailSendResult = {
+  event: LifecycleEmailEvent;
+  status: LifecycleEmailSendStatus;
+  provider: 'disabled' | 'missing_tenant' | 'no_recipient' | 'microsoft_graph';
+  sender: string;
+  replyTo: string;
+  recipients: string[];
+  recipientCount: number;
+  recordedAt: string;
+  subject?: string;
+  preview?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  dashboardUrl?: string;
+  billingUrl?: string;
+  employeesUrl?: string;
+  errorMessage?: string;
+};
+
 type GraphTokenCache = {
   accessToken: string;
   expiresAt: number;
@@ -52,31 +78,84 @@ export class LifecycleEmailService {
   async sendLifecycleEmail(params: {
     tenantId: string;
     event: LifecycleEmailEvent;
-  }) {
+  }): Promise<LifecycleEmailSendResult> {
+    const sender = this.resolveSender();
+    const replyTo = this.resolveReplyTo(sender);
+
     if (!this.isEnabled()) {
-      return { provider: 'disabled' as const };
+      return this.buildSendResult({
+        event: params.event,
+        status: 'disabled',
+        provider: 'disabled',
+        sender,
+        replyTo,
+      });
     }
 
     const snapshot = await this.loadEmailSnapshot(params.tenantId);
     if (!snapshot) {
-      return { provider: 'missing_tenant' as const };
+      return this.buildSendResult({
+        event: params.event,
+        status: 'missing_tenant',
+        provider: 'missing_tenant',
+        sender,
+        replyTo,
+      });
     }
 
     const recipients = this.resolveRecipients(snapshot);
-    if (recipients.length === 0) {
-      this.logger.warn(`Lifecycle email ${params.event} skipped for tenant ${params.tenantId}: no recipient.`);
-      return { provider: 'no_recipient' as const };
-    }
-
     const context = this.buildContext(snapshot);
     const template = this.buildTemplate(params.event, context);
 
-    return this.sendWithMicrosoftGraph({
-      to: recipients,
-      subject: template.subject,
-      html: this.renderHtml(template, context),
-      text: this.renderText(template, context),
-    });
+    if (recipients.length === 0) {
+      this.logger.warn(`Lifecycle email ${params.event} skipped for tenant ${params.tenantId}: no recipient.`);
+      return this.buildSendResult({
+        event: params.event,
+        status: 'no_recipient',
+        provider: 'no_recipient',
+        sender,
+        replyTo,
+        template,
+        context,
+      });
+    }
+
+    try {
+      await this.sendWithMicrosoftGraph({
+        sender,
+        replyTo,
+        to: recipients,
+        subject: template.subject,
+        html: this.renderHtml(template, context),
+        text: this.renderText(template, context),
+      });
+
+      return this.buildSendResult({
+        event: params.event,
+        status: 'accepted',
+        provider: 'microsoft_graph',
+        sender,
+        replyTo,
+        recipients,
+        template,
+        context,
+      });
+    } catch (error) {
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.warn(`Lifecycle email ${params.event} failed for tenant ${params.tenantId}: ${errorMessage}`);
+
+      return this.buildSendResult({
+        event: params.event,
+        status: 'failed',
+        provider: 'microsoft_graph',
+        sender,
+        replyTo,
+        recipients,
+        template,
+        context,
+        errorMessage,
+      });
+    }
   }
 
   isEnabled() {
@@ -353,14 +432,15 @@ export class LifecycleEmailService {
   }
 
   private async sendWithMicrosoftGraph(params: {
+    sender: string;
+    replyTo: string;
     to: string[];
     subject: string;
     html: string;
     text: string;
   }) {
-    const sender = this.configService.get<string>('MICROSOFT_GRAPH_SENDER')?.trim() || 'info@hiteam.net';
     const token = await this.getAccessToken();
-    const response = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`, {
+    const response = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(params.sender)}/sendMail`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -379,7 +459,7 @@ export class LifecycleEmailService {
           replyTo: [
             {
               emailAddress: {
-                address: this.configService.get<string>('LIFECYCLE_EMAIL_REPLY_TO')?.trim() || sender,
+                address: params.replyTo,
               },
             },
           ],
@@ -392,8 +472,47 @@ export class LifecycleEmailService {
       const body = await response.text();
       throw new Error(`Microsoft Graph sendMail rejected lifecycle email: ${response.status} ${body}`);
     }
+  }
 
-    return { provider: 'microsoft_graph' as const, recipients: params.to.length };
+  private buildSendResult(params: {
+    event: LifecycleEmailEvent;
+    status: LifecycleEmailSendStatus;
+    provider: LifecycleEmailSendResult['provider'];
+    sender: string;
+    replyTo: string;
+    recipients?: string[];
+    template?: LifecycleEmailTemplate;
+    context?: LifecycleEmailContext;
+    errorMessage?: string;
+  }): LifecycleEmailSendResult {
+    const recipients = params.recipients ?? [];
+
+    return {
+      event: params.event,
+      status: params.status,
+      provider: params.provider,
+      sender: params.sender,
+      replyTo: params.replyTo,
+      recipients,
+      recipientCount: recipients.length,
+      recordedAt: new Date().toISOString(),
+      subject: params.template?.subject,
+      preview: params.template?.preview,
+      ctaLabel: params.template?.ctaLabel,
+      ctaUrl: params.template?.ctaUrl,
+      dashboardUrl: params.context?.dashboardUrl,
+      billingUrl: params.context?.billingUrl,
+      employeesUrl: params.context?.employeesUrl,
+      errorMessage: params.errorMessage,
+    };
+  }
+
+  private resolveSender() {
+    return this.configService.get<string>('MICROSOFT_GRAPH_SENDER')?.trim() || 'info@hiteam.net';
+  }
+
+  private resolveReplyTo(sender: string) {
+    return this.configService.get<string>('LIFECYCLE_EMAIL_REPLY_TO')?.trim() || sender;
   }
 
   private async getAccessToken() {
@@ -436,6 +555,10 @@ export class LifecycleEmailService {
     }
 
     return value;
+  }
+
+  private getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error);
   }
 
   private formatDate(value: Date | null) {

@@ -17,6 +17,13 @@ Lifecycle emails are sent directly by the API through Microsoft Graph. Pochtovik
 
 The API deduplicates lifecycle sends through `KommoAutomationLog`, but email sending does not require `KOMMO_ENABLED=true`.
 
+When `KOMMO_ENABLED=true`, every lifecycle email attempt is also written back to the Kommo lead:
+
+- a `HiTeam Email` note with event, status, sender, reply-to, recipients, subject, preview, CTA links and error text
+- `HiTeam - Lifecycle Email` custom fields with the latest email event, status, provider, time, recipients, subject, preview, CTA and error
+
+`ACCEPTED` means Microsoft Graph accepted the message for delivery and saved it to the sender mailbox sent items. Microsoft Graph does not return a per-message ID from `sendMail`.
+
 ## Microsoft 365 setup
 
 1. Open Microsoft Entra admin center
@@ -65,3 +72,4 @@ WEB_ADMIN_BASE_URL=https://hiteam.net
 - daily cron sends trial ending, trial expired, renewal upcoming, inactivity and key-feature-not-used emails
 
 If Microsoft Graph credentials are missing while `LIFECYCLE_EMAILS_ENABLED=true`, the event is logged as failed in API logs and does not block the original lifecycle flow.
+With Kommo enabled, that failure is also visible on the lead as `Last Lifecycle Email Status = FAILED`.

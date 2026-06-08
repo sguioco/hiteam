@@ -11,7 +11,7 @@ import {
   Prisma,
   ShiftStatus,
 } from '@prisma/client';
-import { LifecycleEmailService } from '../mail/lifecycle-email.service';
+import { LifecycleEmailService, type LifecycleEmailSendResult } from '../mail/lifecycle-email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   KOMMO_FIELD_SPECS,
@@ -53,6 +53,7 @@ type KommoSyncOptions = {
   employeeId?: string;
   invitationId?: string;
   syncAllContacts?: boolean;
+  lifecycleEmailResult?: LifecycleEmailSendResult;
 };
 
 type KommoLifecycleEvent =
@@ -433,10 +434,15 @@ export class KommoService {
         primaryContactId,
         employeeContactIds,
         clearManualStage: Boolean(options.stageName),
+        lifecycleEmailResult: options.lifecycleEmailResult,
       });
 
       if (options.note && (config.eventNotesEnabled || options.reason === 'manual_sync')) {
         await this.addLeadNote(leadId, this.buildEventNote(snapshot, options.note, options.reason));
+      }
+
+      if (options.lifecycleEmailResult) {
+        await this.addLeadNote(leadId, this.buildLifecycleEmailNote(options.lifecycleEmailResult));
       }
 
       await this.markTenantSyncState(tenantId, 'OK', null, leadId);
@@ -565,11 +571,13 @@ export class KommoService {
       throw error;
     }
 
+    let lifecycleEmailResult: LifecycleEmailSendResult | undefined;
     if (lifecycleEmailsEnabled) {
-      await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
+      lifecycleEmailResult = await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
         this.logger.warn(
           `Lifecycle email ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
         );
+        return undefined;
       });
     }
 
@@ -584,6 +592,7 @@ export class KommoService {
       employeeId: options.employeeId,
       invitationId: options.invitationId,
       syncAllContacts: options.syncAllContacts,
+      lifecycleEmailResult,
     });
 
     if (!result.leadId || !options.taskText) {
@@ -1480,6 +1489,7 @@ export class KommoService {
       primaryContactId: number;
       employeeContactIds: number[];
       clearManualStage: boolean;
+      lifecycleEmailResult?: LifecycleEmailSendResult;
     },
   ) {
     const config = this.getConfig();
@@ -1492,7 +1502,7 @@ export class KommoService {
       status_id: args.stage.statusId,
       price: Math.round(this.resolveTotalMonthlyPayment(snapshot) ?? 0),
       responsible_user_id: config.responsibleUserId ?? undefined,
-      custom_fields_values: this.buildLeadFieldValues(setup, snapshot, args.stage),
+      custom_fields_values: this.buildLeadFieldValues(setup, snapshot, args.stage, args.lifecycleEmailResult),
       _embedded: {
         companies: [{ id: args.companyId }],
         contacts: uniqueContactIds.map((id, index) => ({ id, is_main: index === 0 })),
@@ -1538,6 +1548,7 @@ export class KommoService {
     setup: KommoAccountSetup,
     snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
     stage: KommoStageTarget,
+    lifecycleEmailResult?: LifecycleEmailSendResult,
   ) {
     const country = snapshot.country;
     const city = this.inferCityFromAddress(snapshot.primaryLocation?.address ?? null);
@@ -1575,6 +1586,18 @@ export class KommoService {
       lifecycleStage: stage.stageName,
       lifecyclePipeline: stage.pipelineKey,
       lastLifecycleEventAt: new Date(),
+      lastLifecycleEmailEvent: lifecycleEmailResult?.event,
+      lastLifecycleEmailStatus: lifecycleEmailResult?.status ? this.formatLifecycleEmailStatus(lifecycleEmailResult.status) : null,
+      lastLifecycleEmailProvider: lifecycleEmailResult?.provider,
+      lastLifecycleEmailAt: lifecycleEmailResult?.recordedAt,
+      lastLifecycleEmailSender: lifecycleEmailResult?.sender,
+      lastLifecycleEmailReplyTo: lifecycleEmailResult?.replyTo,
+      lastLifecycleEmailRecipients: lifecycleEmailResult ? this.formatEmailRecipients(lifecycleEmailResult) : null,
+      lastLifecycleEmailRecipientCount: lifecycleEmailResult?.recipientCount,
+      lastLifecycleEmailSubject: lifecycleEmailResult?.subject,
+      lastLifecycleEmailPreview: lifecycleEmailResult?.preview,
+      lastLifecycleEmailCta: lifecycleEmailResult?.ctaUrl,
+      lastLifecycleEmailError: lifecycleEmailResult?.errorMessage,
       dashboardLink,
       adminLink: dashboardLink,
       mobileAppInstalled: snapshot.metrics.mobileAppInstalled,
@@ -2121,6 +2144,42 @@ export class KommoService {
       `Weekly usage score: ${snapshot.metrics.weeklyUsageScore}`,
       `Dashboard: ${this.buildWebUrl('/app')}`,
     ].join('\n');
+  }
+
+  private buildLifecycleEmailNote(result: LifecycleEmailSendResult) {
+    const lines = [
+      `[HiTeam Email] ${this.formatLifecycleEmailStatus(result.status)}`,
+      `Event: ${result.event}`,
+      `Provider: ${result.provider}`,
+      `From: ${result.sender}`,
+      `Reply-To: ${result.replyTo}`,
+      `Recipients (${result.recipientCount}): ${this.formatEmailRecipients(result)}`,
+      `Subject: ${result.subject ?? 'n/a'}`,
+      `Preview: ${result.preview ?? 'n/a'}`,
+      `CTA: ${result.ctaLabel ?? 'n/a'} ${result.ctaUrl ?? 'n/a'}`,
+      `Dashboard: ${result.dashboardUrl ?? 'n/a'}`,
+      `Billing: ${result.billingUrl ?? 'n/a'}`,
+      `Employees: ${result.employeesUrl ?? 'n/a'}`,
+      `Recorded at: ${result.recordedAt}`,
+    ];
+
+    if (result.errorMessage) {
+      lines.push(`Error: ${result.errorMessage}`);
+    }
+
+    return lines.join('\n').slice(0, 6000);
+  }
+
+  private formatLifecycleEmailStatus(status: LifecycleEmailSendResult['status']) {
+    return status.toUpperCase();
+  }
+
+  private formatEmailRecipients(result: LifecycleEmailSendResult) {
+    if (result.recipients.length === 0) {
+      return 'No recipients';
+    }
+
+    return result.recipients.join(', ').slice(0, 4000);
   }
 
   private async request<T>(
