@@ -11,6 +11,7 @@ import {
   Prisma,
   ShiftStatus,
 } from '@prisma/client';
+import { LifecycleEmailService } from '../mail/lifecycle-email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   KOMMO_FIELD_SPECS,
@@ -133,6 +134,7 @@ export class KommoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly lifecycleEmailService: LifecycleEmailService,
   ) {}
 
   getStatus() {
@@ -175,19 +177,15 @@ export class KommoService {
   }
 
   recordOrganizationRegistered(tenantId: string) {
-    if (!this.getConfig().enabled) {
-      return;
-    }
-
     void (async () => {
       await this.syncLifecycleEvent(tenantId, 'user_registered', {
         stageName: 'New Registration',
-        note: 'Client registered in HiTeam. Configure Pochtovik template for webhook user_registered on this stage.',
+        note: 'Client registered in HiTeam.',
         syncAllContacts: true,
       });
       await this.syncLifecycleEvent(tenantId, 'trial_started', {
         stageName: 'Trial Started',
-        note: 'HiTeam trial started. Configure Pochtovik template for webhook trial_started on this stage.',
+        note: 'HiTeam trial started.',
         syncAllContacts: true,
       });
     })().catch((error) => {
@@ -459,11 +457,6 @@ export class KommoService {
 
   @Cron('0 9 * * *')
   async runDailyAutomations() {
-    const config = this.getConfig();
-    if (!config.enabled) {
-      return;
-    }
-
     const tenants = await this.prisma.tenant.findMany({
       select: { id: true },
       orderBy: { createdAt: 'asc' },
@@ -495,10 +488,6 @@ export class KommoService {
     event: KommoLifecycleEvent,
     options: KommoLifecycleEventOptions,
   ) {
-    if (!this.getConfig().enabled) {
-      return;
-    }
-
     void this.syncLifecycleEvent(tenantId, event, options).catch((error) => {
       this.logger.warn(
         `Kommo lifecycle event ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
@@ -507,10 +496,6 @@ export class KommoService {
   }
 
   private async enqueuePaymentSuccessful(tenantId: string) {
-    if (!this.getConfig().enabled) {
-      return;
-    }
-
     try {
       const previousPaymentEvent = await this.prisma.kommoAutomationLog.findFirst({
         where: {
@@ -536,10 +521,6 @@ export class KommoService {
   }
 
   private async enqueuePaymentFailed(tenantId: string, reason: string) {
-    if (!this.getConfig().enabled) {
-      return;
-    }
-
     try {
       const subscription = await this.prisma.billingSubscription.findUnique({
         where: { tenantId },
@@ -565,6 +546,12 @@ export class KommoService {
     event: KommoLifecycleEvent,
     options: KommoLifecycleEventOptions,
   ) {
+    const kommoEnabled = this.getConfig().enabled;
+    const lifecycleEmailsEnabled = this.lifecycleEmailService.isEnabled();
+    if (!kommoEnabled && !lifecycleEmailsEnabled) {
+      return;
+    }
+
     const key = options.key ?? `lifecycle:${event}`;
 
     try {
@@ -576,6 +563,18 @@ export class KommoService {
         return;
       }
       throw error;
+    }
+
+    if (lifecycleEmailsEnabled) {
+      await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
+        this.logger.warn(
+          `Lifecycle email ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
+        );
+      });
+    }
+
+    if (!kommoEnabled) {
+      return;
     }
 
     const result = await this.syncTenant(tenantId, {

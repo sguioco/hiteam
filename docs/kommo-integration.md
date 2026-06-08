@@ -53,9 +53,10 @@ KOMMO_REDIRECT_URI=...
 
 Prefer `KOMMO_LONG_LIVED_TOKEN` in production unless refresh-token persistence is moved to a secure store.
 
-## Pipeline and Pochtovik mapping
+## Pipeline and lifecycle email mapping
 
-Pochtovik does not require a separate backend API call. Configure Pochtovik templates in Kommo digital pipeline actions for these stages; the API moves the lead and fills custom fields.
+Pochtovik is not used. Lifecycle emails are sent directly by the API through Microsoft Graph from `info@hiteam.net`; see `docs/lifecycle-emails-microsoft-graph.md`.
+Kommo can still be used for CRM stages; the API moves the lead and fills custom fields.
 
 Trial pipeline `HiTeam - Trial to Payment`:
 
@@ -78,7 +79,7 @@ Customers pipeline `HiTeam - Customers`:
 - `Subscription Cancelled` -> `subscription_cancelled`;
 - `Winback` -> manual recovery stage.
 
-Useful Pochtovik variables are available as Kommo lead fields:
+Useful lifecycle variables are available as Kommo lead fields:
 
 - `Lifecycle Webhook`, `Lifecycle Stage`, `Lifecycle Pipeline`, `Last Lifecycle Event At`;
 - `First Login Completed`, `Employees Added Completed`, `First QR Created Completed`, `First Check-In Completed`, `Checklists Configured Completed`;

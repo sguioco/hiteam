@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { KommoController } from './kommo.controller';
 import { KommoWebhookController } from './kommo-webhook.controller';
@@ -7,7 +8,7 @@ import { KommoService } from './kommo.service';
 
 @Global()
 @Module({
-  imports: [ConfigModule, PrismaModule],
+  imports: [ConfigModule, PrismaModule, MailModule],
   controllers: [KommoController, KommoWebhookController],
   providers: [KommoService],
   exports: [KommoService],
