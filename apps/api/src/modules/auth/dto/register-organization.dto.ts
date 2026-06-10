@@ -13,5 +13,9 @@ export class RegisterOrganizationDto {
 
   @IsOptional()
   @IsString()
+  locale?: string;
+
+  @IsOptional()
+  @IsString()
   promoCode?: string;
 }

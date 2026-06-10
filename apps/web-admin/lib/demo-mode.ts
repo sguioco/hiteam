@@ -52,6 +52,7 @@ export function createDemoSession(): AuthSession {
       tenantId: "demo-tenant",
       roleCodes: ["tenant_owner"],
       workspaceAccessAllowed: true,
+      preferredLocale: "en",
     },
   };
 }

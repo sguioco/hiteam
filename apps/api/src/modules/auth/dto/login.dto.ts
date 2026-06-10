@@ -7,6 +7,10 @@ export class LoginDto {
 
   @IsOptional()
   @IsString()
+  locale?: string;
+
+  @IsOptional()
+  @IsString()
   identifier?: string;
 
   @IsOptional()

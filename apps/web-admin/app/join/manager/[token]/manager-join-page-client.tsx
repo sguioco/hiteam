@@ -481,6 +481,7 @@ export default function ManagerJoinPageClient({
         body: JSON.stringify({
           ...form,
           phone: `${normalizeCountryCode(countryCode)} ${form.phone.trim()}`.trim(),
+          locale,
           avatarDataUrl: avatarDataUrl ?? undefined,
         }),
       });
@@ -504,6 +505,7 @@ export default function ManagerJoinPageClient({
             tenantSlug: invitation.tenantSlug,
             email: invitationEmail,
             password: form.password,
+            locale,
           }),
         });
       } catch {

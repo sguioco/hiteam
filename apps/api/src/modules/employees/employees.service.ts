@@ -45,6 +45,7 @@ const EMPLOYEE_REVIEW_TRANSACTION_OPTIONS = {
 
 type EmployeeAccessRoleCode = 'OWNER' | 'TEAM_LEADER' | 'EMPLOYEE';
 type EmployeeAccessRoleInput = 'owner' | 'team_leader' | 'employee';
+type EmailLocale = 'en' | 'ru';
 
 const NAMED_ENTITY_SELECT = {
   id: true,
@@ -61,6 +62,7 @@ const COMPANY_SELECT = {
 const EMPLOYEE_USER_SELECT = {
   id: true,
   email: true,
+  preferredLocale: true,
   roles: {
     include: {
       role: true,
@@ -174,6 +176,24 @@ export class EmployeesService {
         `Unable to sync Stripe seats for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+  }
+
+  private normalizeEmailLocale(locale?: string | null): EmailLocale {
+    return locale?.trim().toLowerCase() === 'ru' ? 'ru' : 'en';
+  }
+
+  private async resolveActorEmailLocale(
+    actorUserId: string,
+    fallbackLocale?: string | null,
+  ): Promise<EmailLocale> {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { preferredLocale: true },
+    });
+
+    return this.normalizeEmailLocale(
+      actor?.preferredLocale ?? fallbackLocale,
+    );
   }
 
   private emitWorkspaceRefreshForUser(userId: string, reason: string) {
@@ -964,6 +984,10 @@ export class EmployeesService {
         },
       },
     });
+    const invitationLocale = await this.resolveActorEmailLocale(
+      actorUserId,
+      tenant.locale,
+    );
 
     const token = randomBytes(24).toString('hex');
     const tokenHash = this.hashToken(token);
@@ -1000,6 +1024,7 @@ export class EmployeesService {
       tokenHash,
       expiresAt,
       status: EmployeeInvitationStatus.INVITED,
+      locale: invitationLocale,
       lastSentAt: new Date(),
       resentCount: 0,
       submittedAt: null,
@@ -1035,6 +1060,7 @@ export class EmployeesService {
         companyName: tenant.companies[0]?.name ?? tenant.name,
         tenantName: tenant.name,
         token,
+        locale: invitationLocale,
       });
     } else if (phone) {
       await this.invitationsMailer.sendInvitationSms({
@@ -1304,10 +1330,15 @@ export class EmployeesService {
     }
 
     const token = randomBytes(24).toString('hex');
+    const invitationLocale = await this.resolveActorEmailLocale(
+      actorUserId,
+      invitation.tenant.locale,
+    );
     const updated = await this.prisma.employeeInvitation.update({
       where: { id: invitation.id },
       data: {
         tokenHash: this.hashToken(token),
+        locale: invitationLocale,
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         lastSentAt: new Date(),
         resentCount: { increment: 1 },
@@ -1320,6 +1351,7 @@ export class EmployeesService {
         companyName: invitation.tenant.companies[0]?.name ?? invitation.tenant.name,
         tenantName: invitation.tenant.name,
         token,
+        locale: invitationLocale,
       });
     } else if (updated.phone) {
       await this.invitationsMailer.sendInvitationSms({
@@ -1442,6 +1474,9 @@ export class EmployeesService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const preferredLocale = this.normalizeEmailLocale(
+      dto.locale ?? invitation.locale,
+    );
     const attendanceTrackingEnabled = await this.isAttendanceTrackingEnabled(invitation.tenantId);
     const effectiveWorkMode = attendanceTrackingEnabled
       ? this.normalizeWorkMode(invitation.workMode)
@@ -1492,6 +1527,7 @@ export class EmployeesService {
             email: registrationEmail,
             passwordHash,
             status: UserStatus.ACTIVE,
+            preferredLocale,
             workspaceAccessAllowed: shouldAutoApprove,
           },
         });
@@ -1830,6 +1866,7 @@ export class EmployeesService {
             email: invitationEmail,
             passwordHash,
             status: UserStatus.ACTIVE,
+            preferredLocale: this.normalizeEmailLocale(invitation.locale),
             workspaceAccessAllowed: true,
           },
         });

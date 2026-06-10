@@ -29,6 +29,10 @@ const langs: { code: SupportedLang; label: string }[] = [
   { code: 'ar', label: 'العربية' },
 ];
 
+function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
+  return lang === 'ru' ? 'ru' : 'en';
+}
+
 const texts = {
   en: {
     title: 'Create your account',
@@ -152,7 +156,13 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
     try {
       const session = await apiRequest<AuthSession>('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ firstName, lastName, email, password }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          password,
+          locale: toBackendLocale(lang),
+        }),
       });
       const nextRoute = resolvePostLoginRoute(session);
       await persistSession(session);

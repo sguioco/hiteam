@@ -42,6 +42,10 @@ const langs: { code: SupportedLang; label: string }[] = [
   { code: 'ar', label: 'العربية' },
 ];
 
+function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
+  return lang === 'ru' ? 'ru' : 'en';
+}
+
 const texts = {
   en: {
     title: 'Create organization',
@@ -296,6 +300,7 @@ export function CreateOrganizationPanel() {
           employeeNumber: 'OWNER-0001',
           hireDate: getLocalDateInputValue(),
           timezone: timezone.trim() || 'UTC',
+          locale: toBackendLocale(lang),
           promoCode: promoCode.trim() || undefined,
         }),
       });
@@ -307,6 +312,7 @@ export function CreateOrganizationPanel() {
           identifier: normalizedEmail,
           password,
           tenantSlug: registration.tenantSlug,
+          locale: toBackendLocale(lang),
         }),
       });
 

@@ -77,6 +77,10 @@ const langs: { code: SupportedLang; label: string }[] = [
   { code: 'ar', label: 'العربية' },
 ];
 
+function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
+  return lang === 'ru' ? 'ru' : 'en';
+}
+
 const texts = {
   en: {
     signInTab: 'Sign in',
@@ -603,6 +607,7 @@ export function AuthPanel() {
             : companyLookupResult?.tenantSlug
             ? { tenantSlug: companyLookupResult.tenantSlug }
             : {}),
+          locale: toBackendLocale(lang),
         }),
       });
 
@@ -683,6 +688,7 @@ export function AuthPanel() {
           employeeNumber: 'OWNER-0001',
           hireDate: getLocalDateInputValue(),
           timezone: organizationTimezone.trim() || 'UTC',
+          locale: toBackendLocale(lang),
           promoCode: organizationPromoCode.trim() || undefined,
         }),
       });
@@ -694,6 +700,7 @@ export function AuthPanel() {
           identifier: normalizedEmail,
           password: ownerPassword,
           tenantSlug: registration.tenantSlug,
+          locale: toBackendLocale(lang),
         }),
       });
 
@@ -742,6 +749,7 @@ export function AuthPanel() {
           identifier: DEMO_ADMIN_EMAIL,
           password: DEMO_ADMIN_PASSWORD,
           tenantSlug: 'demo',
+          locale: toBackendLocale(lang),
         }),
       });
       disableDemoMode();

@@ -17,6 +17,26 @@ const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
 const PROMO_TRIAL_SOURCE = 'PROMO_CODE';
 const DEFAULT_TRIAL_SOURCE = 'DEFAULT_7D';
 
+type PreferredLocale = 'en' | 'ru';
+
+type AuthSessionUser = {
+  id: string;
+  email: string;
+  tenantId: string;
+  roleCodes: string[];
+  workspaceAccessAllowed: boolean;
+  preferredLocale: PreferredLocale;
+};
+
+type AuthUserWithRoles = {
+  id: string;
+  email: string;
+  tenantId: string;
+  workspaceAccessAllowed: boolean;
+  preferredLocale: string | null;
+  roles: Array<{ role: { code: string } }>;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -28,6 +48,24 @@ export class AuthService {
 
   private normalizeOrganizationName(value: string): string {
     return value.trim();
+  }
+
+  private normalizePreferredLocale(value?: string | null): PreferredLocale {
+    return value?.trim().toLowerCase() === 'ru' ? 'ru' : 'en';
+  }
+
+  private serializeAuthUser(
+    user: AuthUserWithRoles,
+    roleCodes = user.roles.map((entry) => entry.role.code),
+  ): AuthSessionUser {
+    return {
+      id: user.id,
+      email: user.email,
+      tenantId: user.tenantId,
+      roleCodes,
+      workspaceAccessAllowed: user.workspaceAccessAllowed,
+      preferredLocale: this.normalizePreferredLocale(user.preferredLocale),
+    };
   }
 
   private async assertOrganizationAvailability(args: {
@@ -232,6 +270,7 @@ export class AuthService {
     email: string;
     tenantId: string;
     workspaceAccessAllowed: boolean;
+    preferredLocale: string | null;
     roles: Array<{ role: { code: string } }>;
   }): Promise<{
     accessToken: string;
@@ -247,6 +286,7 @@ export class AuthService {
       email: user.email,
       roleCodes,
       workspaceAccessAllowed: user.workspaceAccessAllowed,
+      preferredLocale: this.normalizePreferredLocale(user.preferredLocale),
     };
 
     const accessExpiresIn = (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as SignOptions['expiresIn'];
@@ -274,7 +314,7 @@ export class AuthService {
   async login(dto: LoginDto): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: { id: string; email: string; tenantId: string; roleCodes: string[]; workspaceAccessAllowed: boolean };
+    user: AuthSessionUser;
   }> {
     const identifier = (dto.identifier ?? dto.email ?? '').trim();
     if (!identifier) {
@@ -333,7 +373,7 @@ export class AuthService {
       throw new UnauthorizedException('Multiple workspaces found for this account. Contact support or use a direct invite link.');
     }
 
-    const user = matches[0];
+    let user = matches[0];
 
     if (!user || user.status !== UserStatus.ACTIVE || this.isBlockedDemoAccount(user.email)) {
       throw new UnauthorizedException('This account is inactive.');
@@ -342,6 +382,24 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid password.');
+    }
+
+    const requestedLocale = dto.locale
+      ? this.normalizePreferredLocale(dto.locale)
+      : null;
+
+    if (requestedLocale && this.normalizePreferredLocale(user.preferredLocale) !== requestedLocale) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { preferredLocale: requestedLocale },
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
     }
 
     const {
@@ -373,20 +431,14 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        tenantId: user.tenantId,
-        roleCodes,
-        workspaceAccessAllowed: user.workspaceAccessAllowed,
-      },
+      user: this.serializeAuthUser(user, roleCodes),
     };
   }
 
   async refresh(refreshToken: string): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: { id: string; email: string; tenantId: string; roleCodes: string[]; workspaceAccessAllowed: boolean };
+    user: AuthSessionUser;
   }> {
     const token = refreshToken.trim();
     if (!token) {
@@ -459,13 +511,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: nextRefreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        tenantId: user.tenantId,
-        roleCodes,
-        workspaceAccessAllowed: user.workspaceAccessAllowed,
-      },
+      user: this.serializeAuthUser(user, roleCodes),
     };
   }
 
@@ -506,13 +552,15 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
+    const preferredLocale = this.normalizePreferredLocale(dto.locale);
+
     const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: tenantName,
           slug: tenantSlug,
           timezone: dto.timezone ?? 'UTC',
-          locale: 'ru',
+          locale: preferredLocale,
         },
       });
       await this.createInitialTrialSubscription(tx, tenant.id, dto.promoCode);
@@ -560,6 +608,7 @@ export class AuthService {
           email: ownerEmail,
           passwordHash,
           status: UserStatus.ACTIVE,
+          preferredLocale,
         },
       });
 
@@ -635,13 +684,15 @@ export class AuthService {
     const timezone = dto.timezone?.trim() || 'UTC';
     const token = randomBytes(24).toString('hex');
 
+    const preferredLocale = this.normalizePreferredLocale(dto.locale);
+
     const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: organizationName,
           slug: tenantSlug,
           timezone,
-          locale: 'ru',
+          locale: preferredLocale,
         },
       });
       await this.createInitialTrialSubscription(tx, tenant.id, dto.promoCode);
@@ -674,6 +725,7 @@ export class AuthService {
           email: `system+${tenant.id}@smart.local`,
           passwordHash: await bcrypt.hash(randomBytes(16).toString('hex'), 10),
           status: UserStatus.ACTIVE,
+          preferredLocale,
         },
         select: { id: true },
       });
@@ -684,6 +736,7 @@ export class AuthService {
           companyId: company.id,
           email: managerEmail,
           invitedByUserId: systemUser.id,
+          locale: preferredLocale,
           tokenHash: this.hashInvitationToken(token),
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           status: EmployeeInvitationStatus.INVITED,
@@ -726,7 +779,7 @@ export class AuthService {
     };
   }
 
-  async me(userId: string): Promise<{ id: string; email: string; tenantId: string; roleCodes: string[]; workspaceAccessAllowed: boolean }> {
+  async me(userId: string): Promise<AuthSessionUser> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       include: {
@@ -738,13 +791,21 @@ export class AuthService {
       },
     });
 
-    return {
-      id: user.id,
-      email: user.email,
-      tenantId: user.tenantId,
-      roleCodes: user.roles.map((entry) => entry.role.code),
-      workspaceAccessAllowed: user.workspaceAccessAllowed,
-    };
+    return this.serializeAuthUser(user);
+  }
+
+  async updatePreferredLocale(
+    userId: string,
+    locale: PreferredLocale,
+  ): Promise<{ preferredLocale: PreferredLocale }> {
+    const preferredLocale = this.normalizePreferredLocale(locale);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { preferredLocale },
+    });
+
+    return { preferredLocale };
   }
 
   async deleteAccount(userId: string): Promise<{ success: true }> {

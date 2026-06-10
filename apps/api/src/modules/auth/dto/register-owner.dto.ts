@@ -36,5 +36,9 @@ export class RegisterOwnerDto {
 
   @IsOptional()
   @IsString()
+  locale?: string;
+
+  @IsOptional()
+  @IsString()
   promoCode?: string;
 }

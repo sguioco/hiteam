@@ -472,6 +472,7 @@ model User {
   passwordHash                             String
   status                                   UserStatus @default(INVITED)
   workspaceAccessAllowed                   Boolean    @default(true)
+  preferredLocale                          String     @default("en")
   bannerTheme                              String     @default("blue")
   notificationAssignmentAlertsEnabled      Boolean    @default(true)
   notificationTaskDeadlineRemindersEnabled Boolean    @default(true)
@@ -703,6 +704,7 @@ model EmployeeInvitation {
   approvedShiftTemplateId String?
   approvedGroupId         String?
   approvedRole            EmployeeAccessRole       @default(EMPLOYEE)
+  locale                  String                   @default("en")
   status                  EmployeeInvitationStatus @default(INVITED)
   tokenHash               String                   @unique
   expiresAt               DateTime

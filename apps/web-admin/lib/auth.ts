@@ -23,6 +23,7 @@ export type AuthSession = {
     tenantId: string;
     roleCodes: string[];
     workspaceAccessAllowed: boolean;
+    preferredLocale?: "en" | "ru";
   };
 };
 

@@ -17,6 +17,7 @@ export type LifecycleEmailEvent =
   | 'key_feature_not_used';
 
 type LifecycleEmailContext = {
+  locale: EmailLocale;
   tenantName: string;
   companyName: string;
   dashboardUrl: string;
@@ -33,6 +34,8 @@ type LifecycleEmailTemplate = {
   ctaLabel: string;
   ctaUrl: string;
 };
+
+type EmailLocale = 'en' | 'ru';
 
 export type LifecycleEmailSendStatus =
   | 'disabled'
@@ -104,7 +107,8 @@ export class LifecycleEmailService {
     }
 
     const recipients = this.resolveRecipients(snapshot);
-    const context = this.buildContext(snapshot);
+    const locale = this.resolveEmailLocale(snapshot);
+    const context = this.buildContext(snapshot, locale);
     const template = this.buildTemplate(params.event, context);
 
     if (recipients.length === 0) {
@@ -169,12 +173,14 @@ export class LifecycleEmailService {
         id: true,
         name: true,
         slug: true,
+        locale: true,
         users: {
           where: {
             status: UserStatus.ACTIVE,
           },
           select: {
             email: true,
+            preferredLocale: true,
             createdAt: true,
             roles: {
               select: {
@@ -198,6 +204,7 @@ export class LifecycleEmailService {
           },
           select: {
             email: true,
+            locale: true,
             invitedAt: true,
           },
           orderBy: { invitedAt: 'asc' },
@@ -235,6 +242,24 @@ export class LifecycleEmailService {
     return [...emails];
   }
 
+  private resolveEmailLocale(
+    snapshot: NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>,
+  ): EmailLocale {
+    const adminUsers = snapshot.users.filter((user) =>
+      user.roles.some((entry) =>
+        ['tenant_owner', 'hr_admin', 'operations_admin'].includes(entry.role.code),
+      ),
+    );
+    const primaryUser = adminUsers[0] ?? snapshot.users[0] ?? null;
+    const primaryInvitation = snapshot.employeeInvitations[0] ?? null;
+
+    return this.normalizeEmailLocale(
+      primaryUser?.preferredLocale ??
+        primaryInvitation?.locale ??
+        snapshot.locale,
+    );
+  }
+
   private addRecipient(recipients: Set<string>, email: string | null | undefined) {
     const normalized = email?.trim().toLowerCase();
     if (!normalized || normalized.endsWith('@smart.local')) {
@@ -244,7 +269,10 @@ export class LifecycleEmailService {
     recipients.add(normalized);
   }
 
-  private buildContext(snapshot: NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>): LifecycleEmailContext {
+  private buildContext(
+    snapshot: NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>,
+    locale: EmailLocale,
+  ): LifecycleEmailContext {
     const baseUrl = (
       this.configService.get<string>('WEB_ADMIN_BASE_URL') ??
       this.configService.get<string>('APP_BASE_URL') ??
@@ -253,17 +281,22 @@ export class LifecycleEmailService {
     const tenantQuery = snapshot.slug ? `?tenant=${encodeURIComponent(snapshot.slug)}` : '';
 
     return {
+      locale,
       tenantName: snapshot.name,
       companyName: snapshot.companies[0]?.name ?? snapshot.name,
       dashboardUrl: `${baseUrl}/app${tenantQuery}`,
       billingUrl: `${baseUrl}/billing${tenantQuery}`,
       employeesUrl: `${baseUrl}/employees${tenantQuery}`,
-      trialEndDate: this.formatDate(snapshot.billingSubscription?.trialEndsAt ?? null),
-      renewalDate: this.formatDate(snapshot.billingSubscription?.stripeCurrentPeriodEnd ?? null),
+      trialEndDate: this.formatDate(snapshot.billingSubscription?.trialEndsAt ?? null, locale),
+      renewalDate: this.formatDate(snapshot.billingSubscription?.stripeCurrentPeriodEnd ?? null, locale),
     };
   }
 
   private buildTemplate(event: LifecycleEmailEvent, context: LifecycleEmailContext): LifecycleEmailTemplate {
+    if (context.locale === 'en') {
+      return this.buildEnglishTemplate(event, context);
+    }
+
     switch (event) {
       case 'user_registered':
         return {
@@ -390,6 +423,133 @@ export class LifecycleEmailService {
     }
   }
 
+  private buildEnglishTemplate(event: LifecycleEmailEvent, context: LifecycleEmailContext): LifecycleEmailTemplate {
+    switch (event) {
+      case 'user_registered':
+        return {
+          subject: 'Welcome to HiTeam',
+          preview: 'Your workspace is ready',
+          paragraphs: [
+            `Hi! We created the workspace for ${context.companyName}`,
+            'You can now set up your team, locations, and the first check-in',
+          ],
+          ctaLabel: 'Open HiTeam',
+          ctaUrl: context.dashboardUrl,
+        };
+      case 'trial_started':
+        return {
+          subject: 'Your HiTeam trial has started',
+          preview: 'The trial period is active',
+          paragraphs: [
+            'Your HiTeam trial is active. Use this time to test shift tracking, employees, and check-ins',
+            'The best first step is to add employees and set up your main location',
+          ],
+          ctaLabel: 'Add employees',
+          ctaUrl: context.employeesUrl,
+        };
+      case 'trial_ending_soon':
+        return {
+          subject: 'Your trial is ending soon',
+          preview: `The trial ends ${context.trialEndDate ?? 'soon'}`,
+          paragraphs: [
+            `Your HiTeam trial ends ${context.trialEndDate ?? 'in the next few days'}`,
+            'To keep the team running without a pause, check your subscription and payment method in advance',
+          ],
+          ctaLabel: 'Open billing',
+          ctaUrl: context.billingUrl,
+        };
+      case 'trial_expired':
+        return {
+          subject: 'Your HiTeam trial has ended',
+          preview: 'The trial period is over',
+          paragraphs: [
+            'Your HiTeam trial has ended. Your team data is saved',
+            'To continue without limits, activate the subscription in Billing',
+          ],
+          ctaLabel: 'Activate subscription',
+          ctaUrl: context.billingUrl,
+        };
+      case 'payment_successful':
+        return {
+          subject: 'HiTeam payment successful',
+          preview: 'Your subscription is active',
+          paragraphs: [
+            'Thank you, the payment was received',
+            'Your HiTeam subscription is active and the team can continue working without limits',
+          ],
+          ctaLabel: 'Open workspace',
+          ctaUrl: context.dashboardUrl,
+        };
+      case 'payment_failed':
+        return {
+          subject: 'HiTeam payment failed',
+          preview: 'Check your payment method',
+          paragraphs: [
+            'The HiTeam subscription payment did not go through',
+            'Check your card or payment method so the team access does not pause',
+          ],
+          ctaLabel: 'Check payment',
+          ctaUrl: context.billingUrl,
+        };
+      case 'subscription_renewal_upcoming':
+        return {
+          subject: 'HiTeam subscription renews soon',
+          preview: `The subscription renews ${context.renewalDate ?? 'soon'}`,
+          paragraphs: [
+            `Your HiTeam subscription renews ${context.renewalDate ?? 'in the next few days'}`,
+            'Check the payment method and employee count before the renewal date',
+          ],
+          ctaLabel: 'Open Billing',
+          ctaUrl: context.billingUrl,
+        };
+      case 'subscription_cancelled':
+        return {
+          subject: 'HiTeam subscription cancelled',
+          preview: 'The subscription will no longer renew',
+          paragraphs: [
+            'Your HiTeam subscription was cancelled and will no longer renew automatically',
+            'If this was a mistake, restore payment or contact us and we will help return access',
+          ],
+          ctaLabel: 'Open Billing',
+          ctaUrl: context.billingUrl,
+        };
+      case 'inactive_3_days':
+        return {
+          subject: 'Need help launching HiTeam?',
+          preview: 'There has been no workspace activity for 3 days',
+          paragraphs: [
+            'We noticed there has been no activity in your HiTeam workspace for 3 days',
+            'If you need help, start by adding employees and your first location. That is the fastest way to launch the system',
+          ],
+          ctaLabel: 'Continue setup',
+          ctaUrl: context.dashboardUrl,
+        };
+      case 'key_feature_not_used':
+        return {
+          subject: 'Complete the first step in HiTeam',
+          preview: 'Add employees or complete the first check-in',
+          paragraphs: [
+            'It looks like the key first step is not complete yet: employees are not added or the first check-in has not happened',
+            'Add your team to see the full effect of shift and attendance tracking',
+          ],
+          ctaLabel: 'Add employees',
+          ctaUrl: context.employeesUrl,
+        };
+      case 'activation_started':
+      default:
+        return {
+          subject: 'HiTeam setup has started',
+          preview: 'You made the first product step',
+          paragraphs: [
+            'You started setting up HiTeam. The next step is to bring your team and locations to a working state',
+            'Open the workspace and continue setup',
+          ],
+          ctaLabel: 'Open HiTeam',
+          ctaUrl: context.dashboardUrl,
+        };
+    }
+  }
+
   private renderHtml(template: LifecycleEmailTemplate, context: LifecycleEmailContext) {
     const escapedSubject = this.escapeHtml(template.subject);
     const paragraphs = template.paragraphs
@@ -410,7 +570,7 @@ export class LifecycleEmailService {
       `<h1 style="margin:10px 0 18px;color:#111827;font-size:24px;line-height:1.25;">${escapedSubject}</h1>`,
       paragraphs,
       `<p style="margin:24px 0;"><a href="${this.escapeAttribute(template.ctaUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;padding:12px 18px;font-size:15px;font-weight:700;">${this.escapeHtml(template.ctaLabel)}</a></p>`,
-      `<p style="margin:22px 0 0;color:#6b7280;font-size:13px;line-height:1.5;">Компания: ${this.escapeHtml(context.companyName)}</p>`,
+      `<p style="margin:22px 0 0;color:#6b7280;font-size:13px;line-height:1.5;">${this.escapeHtml(context.locale === 'ru' ? 'Компания' : 'Company')}: ${this.escapeHtml(context.companyName)}</p>`,
       '</td></tr>',
       '</table>',
       '</td></tr>',
@@ -427,7 +587,7 @@ export class LifecycleEmailService {
       '',
       `${template.ctaLabel}: ${template.ctaUrl}`,
       '',
-      `Компания: ${context.companyName}`,
+      `${context.locale === 'ru' ? 'Компания' : 'Company'}: ${context.companyName}`,
     ].join('\n');
   }
 
@@ -561,12 +721,16 @@ export class LifecycleEmailService {
     return error instanceof Error ? error.message : String(error);
   }
 
-  private formatDate(value: Date | null) {
+  private normalizeEmailLocale(locale?: string | null): EmailLocale {
+    return locale?.trim().toLowerCase() === 'ru' ? 'ru' : 'en';
+  }
+
+  private formatDate(value: Date | null, locale: EmailLocale) {
     if (!value) {
       return null;
     }
 
-    return new Intl.DateTimeFormat('ru-RU', {
+    return new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
       day: '2-digit',
       month: 'long',
       year: 'numeric',

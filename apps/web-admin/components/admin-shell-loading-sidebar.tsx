@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Activity,
   CalendarRange,
@@ -9,6 +11,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { useI18n } from "@/lib/i18n";
 import { BrandWordmark } from "./brand-wordmark";
 
 type LoadingSidebarLocale = "en" | "ru";
@@ -71,13 +74,15 @@ function getLoadingNavItems(
 
 export function AdminShellLoadingSidebar({
   activeHref = "/app",
-  locale = "ru",
+  locale,
 }: {
   activeHref?: string;
   locale?: LoadingSidebarLocale;
 }) {
-  const profileName = locale === "ru" ? "Алекс Петров" : "Alex Petrov";
-  const profileRole = locale === "ru" ? "Владелец" : "Owner";
+  const { locale: contextLocale } = useI18n();
+  const resolvedLocale = locale ?? contextLocale;
+  const profileName = resolvedLocale === "ru" ? "Алекс Петров" : "Alex Petrov";
+  const profileRole = resolvedLocale === "ru" ? "Владелец" : "Owner";
 
   return (
     <aside className="sidebar sidebar-untitled sidebar-checking-session">
@@ -98,7 +103,7 @@ export function AdminShellLoadingSidebar({
       </div>
 
       <nav className="sidebar-nav sidebar-nav-untitled">
-        {getLoadingNavItems(locale, activeHref).map((item) => {
+        {getLoadingNavItems(resolvedLocale, activeHref).map((item) => {
           const Icon = item.icon;
           const active = item.href === activeHref;
 

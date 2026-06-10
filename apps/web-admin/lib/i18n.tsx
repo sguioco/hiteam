@@ -8,7 +8,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import { apiRequest } from "./api";
+import { getSession, saveSession } from "./auth";
 import { writeBrowserStorageItem } from "./browser-storage";
+import { isDemoAccessToken } from "./demo-mode";
 
 export type Locale = "en" | "ru";
 
@@ -22,6 +25,10 @@ type I18nContextValue = {
 
 const STORAGE_KEY = "smart-admin-locale";
 const fallbackLocale: Locale = "en";
+
+function normalizeSessionLocale(locale?: string | null): Locale {
+  return locale === "ru" ? "ru" : "en";
+}
 
 const dictionaries = {
   en: {
@@ -1746,6 +1753,36 @@ export function I18nProvider({
     document.documentElement.lang = locale;
     writeBrowserStorageItem(STORAGE_KEY, locale);
     document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
+
+    const session = getSession();
+    if (
+      !session ||
+      isDemoAccessToken(session.accessToken) ||
+      normalizeSessionLocale(session.user.preferredLocale) === locale
+    ) {
+      return;
+    }
+
+    void apiRequest<{ preferredLocale: Locale }>("/auth/me/locale", {
+      method: "PATCH",
+      token: session.accessToken,
+      body: JSON.stringify({ locale }),
+    })
+      .then((payload) => {
+        const latestSession = getSession();
+        if (!latestSession || latestSession.user.id !== session.user.id) {
+          return;
+        }
+
+        saveSession({
+          ...latestSession,
+          user: {
+            ...latestSession.user,
+            preferredLocale: payload.preferredLocale,
+          },
+        });
+      })
+      .catch(() => undefined);
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(

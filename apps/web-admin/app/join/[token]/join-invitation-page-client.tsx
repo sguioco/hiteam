@@ -89,6 +89,7 @@ export default function JoinInvitationPageClient({
         body: JSON.stringify({
           ...form,
           email: normalizedEmail,
+          locale,
           avatarDataUrl: avatarDataUrl ?? undefined,
         }),
       });
@@ -112,6 +113,7 @@ export default function JoinInvitationPageClient({
           tenantSlug: invitation?.tenantSlug,
           email: normalizedEmail,
           password: form.password,
+          locale,
         }),
       });
 

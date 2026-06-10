@@ -4,8 +4,10 @@ export default function ActivityLoading() {
   return (
     <AdminShellLoadingFrame
       activeHref="/activity"
-      label="Загружаем активность"
-      locale="ru"
+      label={{
+        en: "Loading activity",
+        ru: "Загружаем активность",
+      }}
     />
   );
 }

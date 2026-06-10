@@ -9,6 +9,7 @@ import {
   AnnouncementAudience,
   AnnouncementTemplateFrequency,
   ChatThreadKind,
+  EmployeeStatus,
   NotificationType,
   Prisma,
   TaskActivityKind,
@@ -44,6 +45,8 @@ import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
 import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
 
+type PrismaTx = Prisma.TransactionClient;
+
 const TASK_PHOTO_PROOF_LIMIT = 7;
 const ANNOUNCEMENT_ATTACHMENT_LIMIT = 5;
 const ANNOUNCEMENT_IMAGE_ASPECT_RATIOS = new Set(["1:1", "16:9", "4:3"]);
@@ -55,6 +58,9 @@ const WORKSPACE_MANAGER_ROLE_CODES = [
   "operations_admin",
   "manager",
 ] as const;
+const WORKSPACE_MANAGER_ROLE_CODE_SET = new Set<string>(
+  WORKSPACE_MANAGER_ROLE_CODES,
+);
 const WORKSPACE_ADMIN_ROLE_CODES = new Set([
   "tenant_owner",
   "hr_admin",
@@ -99,7 +105,7 @@ export class CollaborationService {
   ) {}
 
   private async getWorkGroupActor(userId: string) {
-    return this.prisma.employee.findUniqueOrThrow({
+    const employee = await this.prisma.employee.findUnique({
       where: { userId },
       include: {
         user: {
@@ -113,6 +119,244 @@ export class CollaborationService {
         },
       },
     });
+
+    if (employee) {
+      return employee;
+    }
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+    const roleCodes = user.roles
+      .map((assignment) => assignment.role?.code)
+      .filter((code): code is string => Boolean(code));
+
+    if (!roleCodes.some((code) => WORKSPACE_MANAGER_ROLE_CODE_SET.has(code))) {
+      throw new ForbiddenException(
+        "Employee profile is required to manage teams.",
+      );
+    }
+
+    const createdEmployee = await this.ensureWorkGroupActorEmployee(user);
+
+    return {
+      ...createdEmployee,
+      user: {
+        roles: user.roles,
+      },
+    };
+  }
+
+  private async ensureWorkGroupActorEmployee(user: {
+    id: string;
+    tenantId: string;
+    email: string;
+  }) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.employee.findUnique({
+          where: { userId: user.id },
+        });
+
+        if (existing) {
+          return existing;
+        }
+
+        const companyId = await this.resolveDefaultCompanyId(tx, user.tenantId);
+        const departmentId = await this.resolveDefaultDepartmentId(
+          tx,
+          user.tenantId,
+        );
+        const primaryLocationId = await this.resolveDefaultLocationId(
+          tx,
+          user.tenantId,
+          companyId,
+        );
+        const positionId = await this.resolveDefaultPositionId(
+          tx,
+          user.tenantId,
+        );
+        const displayName = this.resolveActorDisplayName(user.email);
+
+        return tx.employee.create({
+          data: {
+            tenantId: user.tenantId,
+            userId: user.id,
+            companyId,
+            departmentId,
+            primaryLocationId,
+            positionId,
+            employeeNumber: await this.generateActorEmployeeNumber(
+              tx,
+              user.tenantId,
+            ),
+            firstName: displayName.firstName,
+            lastName: displayName.lastName,
+            status: EmployeeStatus.ACTIVE,
+            hireDate: new Date(),
+          },
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return this.prisma.employee.findUniqueOrThrow({
+          where: { userId: user.id },
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private resolveActorDisplayName(email: string) {
+    const localPart = email.split("@")[0]?.trim() || "Owner";
+    const parts = localPart
+      .replace(/[._-]+/g, " ")
+      .split(/\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    return {
+      firstName: parts[0] ?? "Owner",
+      lastName: parts.slice(1).join(" ") || "User",
+    };
+  }
+
+  private async resolveDefaultCompanyId(tx: PrismaTx, tenantId: string) {
+    const company = await tx.company.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (company) {
+      return company.id;
+    }
+
+    const created = await tx.company.upsert({
+      where: { tenantId_code: { tenantId, code: "GENERAL" } },
+      update: {},
+      create: {
+        tenantId,
+        name: "General Company",
+        code: "GENERAL",
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async resolveDefaultDepartmentId(tx: PrismaTx, tenantId: string) {
+    const department = await tx.department.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (department) {
+      return department.id;
+    }
+
+    const created = await tx.department.upsert({
+      where: { tenantId_code: { tenantId, code: "GENERAL" } },
+      update: {},
+      create: {
+        tenantId,
+        name: "General",
+        code: "GENERAL",
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async resolveDefaultPositionId(tx: PrismaTx, tenantId: string) {
+    const position = await tx.position.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (position) {
+      return position.id;
+    }
+
+    const created = await tx.position.upsert({
+      where: { tenantId_code: { tenantId, code: "OWNER" } },
+      update: {},
+      create: {
+        tenantId,
+        name: "Owner",
+        code: "OWNER",
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async resolveDefaultLocationId(
+    tx: PrismaTx,
+    tenantId: string,
+    companyId: string,
+  ) {
+    const location = await tx.location.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (location) {
+      return location.id;
+    }
+
+    const created = await tx.location.upsert({
+      where: { tenantId_code: { tenantId, code: "DEFAULT" } },
+      update: {},
+      create: {
+        tenantId,
+        companyId,
+        name: "Default location",
+        code: "DEFAULT",
+        address: "Not set yet",
+        latitude: 0,
+        longitude: 0,
+        timezone: "UTC",
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async generateActorEmployeeNumber(tx: PrismaTx, tenantId: string) {
+    const count = await tx.employee.count({ where: { tenantId } });
+
+    for (let sequence = count + 1; sequence < count + 500; sequence += 1) {
+      const candidate = `EMP-${String(sequence).padStart(4, "0")}`;
+      const existing = await tx.employee.findFirst({
+        where: { tenantId, employeeNumber: candidate },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    return `EMP-${Date.now()}`;
   }
 
   private canManageAllWorkGroups(actor: WorkGroupActor) {

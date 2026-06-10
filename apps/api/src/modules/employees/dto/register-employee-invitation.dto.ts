@@ -32,4 +32,8 @@ export class RegisterEmployeeInvitationDto {
   @IsOptional()
   @IsString()
   avatarDataUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  locale?: string;
 }

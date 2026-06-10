@@ -27,6 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: true,
         status: true,
         workspaceAccessAllowed: true,
+        preferredLocale: true,
         roles: {
           select: {
             role: {
@@ -54,6 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       roleCodes: user.roles.map((entry) => entry.role.code),
       workspaceAccessAllowed: user.workspaceAccessAllowed,
+      preferredLocale: user.preferredLocale?.trim().toLowerCase() === 'ru' ? 'ru' : 'en',
     };
   }
 }

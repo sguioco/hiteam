@@ -4,4 +4,5 @@ export type JwtUser = {
   email: string;
   roleCodes: string[];
   workspaceAccessAllowed: boolean;
+  preferredLocale: 'en' | 'ru';
 };

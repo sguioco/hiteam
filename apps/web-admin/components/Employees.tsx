@@ -4079,15 +4079,16 @@ const Employees = ({
                           />
                         </SelectTrigger>
                         <SelectContent>
-                          {inviteRole !== "team_leader" ? (
-                            <SelectItem value="__none">
-                              {runtimeLocalize(
-                                "Без бригады",
-                                "No team",
-                                locale,
-                              )}
-                            </SelectItem>
-                          ) : null}
+                          <SelectItem
+                            disabled={inviteRole === "team_leader"}
+                            value="__none"
+                          >
+                            {runtimeLocalize(
+                              "Без бригады",
+                              "No team",
+                              locale,
+                            )}
+                          </SelectItem>
                           {groups.map((group) => (
                             <SelectItem key={group.id} value={group.id}>
                               {resolveTeamAvatarEmoji(group)} {group.name}
