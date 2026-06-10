@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   InternalServerErrorException,
   Injectable,
   Logger,
@@ -1620,6 +1621,14 @@ export class EmployeesService {
         return { user, invitation: updatedInvitation };
       }, EMPLOYEE_REVIEW_TRANSACTION_OPTIONS);
     } catch (error) {
+      if (
+        error instanceof HttpException ||
+        error instanceof Prisma.PrismaClientKnownRequestError ||
+        error instanceof Prisma.PrismaClientValidationError
+      ) {
+        throw error;
+      }
+
       this.logger.error(
         `registerFromInvitation failed for invitation ${invitation.id} in tenant ${invitation.tenantId}`,
         error instanceof Error ? error.stack : undefined,

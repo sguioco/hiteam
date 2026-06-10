@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -44,7 +44,7 @@ export class StorageService {
 
   async uploadBuffer(key: string, buffer: Buffer, contentType = 'application/octet-stream') {
     if (!this.isConfigured()) {
-      throw new InternalServerErrorException('Object storage is not configured.');
+      throw new ServiceUnavailableException('Object storage is not configured.');
     }
 
     await this.client.send(
@@ -59,7 +59,7 @@ export class StorageService {
 
   async getObjectBuffer(key: string) {
     if (!this.isConfigured()) {
-      throw new InternalServerErrorException('Object storage is not configured.');
+      throw new ServiceUnavailableException('Object storage is not configured.');
     }
 
     const response = await this.client.send(
@@ -73,7 +73,7 @@ export class StorageService {
     const body = response.Body;
 
     if (!body || typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] !== 'function') {
-      throw new InternalServerErrorException('Object storage returned an unreadable stream.');
+      throw new ServiceUnavailableException('Object storage returned an unreadable stream.');
     }
 
     for await (const chunk of body as AsyncIterable<Uint8Array>) {
@@ -102,7 +102,7 @@ export class StorageService {
   private parseDataUrl(dataUrl: string) {
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
     if (!match) {
-      throw new InternalServerErrorException('Biometric artifact is not a valid data URL.');
+      throw new BadRequestException('Biometric artifact is not a valid data URL.');
     }
 
     return {

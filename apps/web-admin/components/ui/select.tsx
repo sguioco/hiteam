@@ -5,6 +5,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { runtimeLocalize } from "@/lib/runtime-locale";
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
@@ -225,12 +226,30 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onClick, ...props }, ref) => (
   <SelectPrimitive.Item
     className={cn(
       "relative flex min-h-[38px] w-full cursor-default select-none items-center rounded-[20px] border border-transparent px-3 py-2 pr-10 text-sm outline-none transition-[background-color,color,transform] duration-150 focus:bg-[rgba(15,23,42,0.04)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[state=checked]:bg-[color:var(--accent)] data-[state=checked]:text-white data-[state=checked]:[&_[data-select-description]]:text-white/70 data-[state=checked]:[&_[data-select-icon]]:bg-white/18 data-[state=checked]:[&_[data-select-icon]]:text-white data-[state=checked]:[&_[data-select-icon]_svg]:!text-white",
       className,
     )}
+    onClick={(event) => {
+      onClick?.(event);
+      if (
+        !event.defaultPrevented &&
+        event.currentTarget.getAttribute("data-state") === "checked"
+      ) {
+        const target = event.currentTarget;
+        window.setTimeout(() => {
+          target.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              bubbles: true,
+              cancelable: true,
+              key: "Escape",
+            }),
+          );
+        }, 0);
+      }
+    }}
     ref={ref}
     {...props}
   >
@@ -245,6 +264,25 @@ const SelectItem = React.forwardRef<
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
+
+const SelectEmptyItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  Omit<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>, "value">
+>(({ className, children, ...props }, ref) => (
+  <SelectItem
+    className={cn(
+      "justify-center py-3 text-center text-muted-foreground data-[disabled]:opacity-100",
+      className,
+    )}
+    disabled
+    ref={ref}
+    value="__select_empty_state__"
+    {...props}
+  >
+    {children}
+  </SelectItem>
+));
+SelectEmptyItem.displayName = "SelectEmptyItem";
 
 const SelectSeparator = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Separator>,
@@ -267,6 +305,7 @@ type AppSelectFieldProps = {
   className?: string;
   contentClassName?: string;
   emptyLabel?: React.ReactNode;
+  emptyOptionsLabel?: React.ReactNode;
   onValueChange: (value: string) => void;
   options: AppSelectOption[];
   placeholder?: string;
@@ -276,10 +315,15 @@ type AppSelectFieldProps = {
 
 const APP_SELECT_EMPTY_VALUE = "__app_select_empty__";
 
+function getDefaultEmptyOptionsLabel() {
+  return runtimeLocalize("Пока ничего нет", "No options yet");
+}
+
 function AppSelectField({
   className,
   contentClassName,
   emptyLabel,
+  emptyOptionsLabel,
   onValueChange,
   options,
   placeholder,
@@ -293,6 +337,10 @@ function AppSelectField({
       : hasEmptyOption
         ? APP_SELECT_EMPTY_VALUE
         : undefined;
+  const resolvedPlaceholder =
+    !hasEmptyOption && options.length === 0
+      ? emptyOptionsLabel ?? getDefaultEmptyOptionsLabel()
+      : placeholder;
 
   return (
     <Select
@@ -301,18 +349,27 @@ function AppSelectField({
         onValueChange(nextValue === APP_SELECT_EMPTY_VALUE ? "" : nextValue)
       }
     >
-      <SelectTrigger className={cn("w-full", triggerClassName, className)}>
-        <SelectValue placeholder={placeholder} />
+      <SelectTrigger
+        className={cn("w-full", triggerClassName, className)}
+        disabled={!hasEmptyOption && options.length === 0}
+      >
+        <SelectValue placeholder={resolvedPlaceholder} />
       </SelectTrigger>
       <SelectContent className={contentClassName}>
         {hasEmptyOption ? (
           <SelectItem value={APP_SELECT_EMPTY_VALUE}>{emptyLabel}</SelectItem>
         ) : null}
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
+        {options.length > 0 ? (
+          options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))
+        ) : hasEmptyOption ? (
+          <SelectEmptyItem>
+            {emptyOptionsLabel ?? getDefaultEmptyOptionsLabel()}
+          </SelectEmptyItem>
+        ) : null}
       </SelectContent>
     </Select>
   );
@@ -322,6 +379,7 @@ export {
   AppSelectField,
   Select,
   SelectContent,
+  SelectEmptyItem,
   SelectGroup,
   SelectItem,
   SelectLabel,

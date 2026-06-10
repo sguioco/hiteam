@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectEmptyItem,
   SelectItem,
   SelectOptionAvatar,
   SelectOptionContent,
@@ -55,6 +56,7 @@ import {
   SelectTrigger,
   SelectTriggerLabel,
 } from "@/components/ui/select";
+import { SelectableOptionButton } from "@/components/ui/selectable-listbox";
 import { apiRequest } from "@/lib/api";
 import { getSession, isEmployeeOnlyRole } from "@/lib/auth";
 import { isDemoAccessToken } from "@/lib/demo-mode";
@@ -630,8 +632,6 @@ const initialTemplateDraft: CreateTemplateDraft = {
   fixedBreakIsPaid: false,
 };
 
-const EMPTY_SELECT_VALUE = "__empty_select__";
-
 const scheduleCopy = {
   ru: {
     title: "Календарь",
@@ -693,7 +693,7 @@ const scheduleCopy = {
     fixedBreakPaid: "Оплачиваемый",
     fixedBreakValidation: "Укажите длительность фиксированного перерыва.",
     templateCreated: "Шаблон смены создан.",
-    noShiftTemplates: "Нет шаблонов смен",
+    noShiftTemplates: "Шаблонов пока нет",
     massAssignValidation: "Выберите шаблон и диапазон дат.",
     templateNotFound: "Шаблон не найден.",
     templateDefaultsMissing: "Сначала настройте хотя бы одну локацию и должность.",
@@ -820,7 +820,7 @@ const scheduleCopy = {
     fixedBreakPaid: "Paid",
     fixedBreakValidation: "Enter fixed break duration.",
     templateCreated: "Shift template created.",
-    noShiftTemplates: "No shift templates",
+    noShiftTemplates: "No templates yet",
     massAssignValidation: "Select a template and date range.",
     templateNotFound: "Template not found.",
     templateDefaultsMissing: "Set up at least one location and one role first.",
@@ -3348,22 +3348,16 @@ export default function Schedule({
                       const isSelected = createShiftDraft.employeeIds.includes(employee.id);
 
                       return (
-                        <button
-                          aria-selected={isSelected}
-                          className={`relative flex min-h-[48px] w-full items-center gap-3 rounded-[20px] px-3 py-2 pr-10 text-left transition-[background-color,color,transform] duration-150 active:scale-[0.96] ${
-                            isSelected
-                              ? "bg-[color:var(--accent)] text-white"
-                              : "text-foreground hover:bg-[rgba(15,23,42,0.05)]"
-                          }`}
+                        <SelectableOptionButton
                           key={employee.id}
-                          onClick={() => {
+                          onClose={() => setCreateShiftEmployeePickerOpen(false)}
+                          onSelect={() => {
                             toggleCreateShiftEmployee(employee.id);
                             if (editingShiftId) {
                               setCreateShiftEmployeePickerOpen(false);
                             }
                           }}
-                          role="option"
-                          type="button"
+                          selected={isSelected}
                         >
                           <SelectOptionAvatar
                             alt={label}
@@ -3391,7 +3385,7 @@ export default function Schedule({
                           {isSelected ? (
                             <Check className="absolute right-3 size-4 text-white" />
                           ) : null}
-                        </button>
+                        </SelectableOptionButton>
                       );
                     })}
                   </div>
@@ -3413,29 +3407,42 @@ export default function Schedule({
                 }
                 value={createShiftDraft.templateId}
               >
-                <SelectTrigger>
-                  <SelectTriggerLabel>
-                    {createShiftDraft.templateId
-                      ? templates.find(
-                          (template) => template.id === createShiftDraft.templateId,
-                        )?.name
-                      : ui.selectTemplate}
+                <SelectTrigger disabled={templates.length === 0}>
+                  <SelectTriggerLabel
+                    className={
+                      templates.find(
+                        (template) => template.id === createShiftDraft.templateId,
+                      )?.name
+                        ? undefined
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {templates.find(
+                      (template) => template.id === createShiftDraft.templateId,
+                    )?.name ??
+                      (templates.length > 0
+                        ? ui.selectTemplate
+                        : ui.noShiftTemplates)}
                   </SelectTriggerLabel>
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      <SelectOptionContent>
-                        <SelectOptionText>
-                          <SelectOptionTitle>{template.name}</SelectOptionTitle>
-                          <SelectOptionDescription data-select-description>
-                            {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
-                            {template.location.name}
-                          </SelectOptionDescription>
-                        </SelectOptionText>
-                      </SelectOptionContent>
-                    </SelectItem>
-                  ))}
+                  {templates.length > 0 ? (
+                    templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        <SelectOptionContent>
+                          <SelectOptionText>
+                            <SelectOptionTitle>{template.name}</SelectOptionTitle>
+                            <SelectOptionDescription data-select-description>
+                              {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
+                              {template.location.name}
+                            </SelectOptionDescription>
+                          </SelectOptionText>
+                        </SelectOptionContent>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectEmptyItem>{ui.noShiftTemplates}</SelectEmptyItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -3524,7 +3531,11 @@ export default function Schedule({
               >
                 {ui.templates}
               </Button>
-              <Button onClick={() => void handleCreateShift()} type="button">
+              <Button
+                disabled={templates.length === 0}
+                onClick={() => void handleCreateShift()}
+                type="button"
+              >
                 {ui.saveShift}
               </Button>
             </div>
@@ -3545,32 +3556,38 @@ export default function Schedule({
 
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
-              {templates.map((template) => (
-                <article
-                  className="rounded-2xl border border-border bg-secondary/30 p-4"
-                  key={template.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="font-heading text-lg font-bold text-foreground">
-                        {template.name}
-                      </h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {template.startsAtLocal}-{template.endsAtLocal}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
-                      </p>
-                      {(template.fixedBreakDurationMinutes ?? 0) > 0 ? (
-                        <p className="mt-1 text-xs font-medium text-[color:var(--accent-strong)]">
-                          {ui.fixedBreak}: {template.fixedBreakStartsAtLocal} ·{" "}
-                          {template.fixedBreakDurationMinutes} {ui.minutesShort}
+              {templates.length > 0 ? (
+                templates.map((template) => (
+                  <article
+                    className="rounded-2xl border border-border bg-secondary/30 p-4"
+                    key={template.id}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="font-heading text-lg font-bold text-foreground">
+                          {template.name}
+                        </h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {template.startsAtLocal}-{template.endsAtLocal}
                         </p>
-                      ) : null}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
+                        </p>
+                        {(template.fixedBreakDurationMinutes ?? 0) > 0 ? (
+                          <p className="mt-1 text-xs font-medium text-[color:var(--accent-strong)]">
+                            {ui.fixedBreak}: {template.fixedBreakStartsAtLocal} ·{" "}
+                            {template.fixedBreakDurationMinutes} {ui.minutesShort}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ))
+              ) : (
+                <div className="flex min-h-[132px] items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 px-4 text-center text-sm font-medium text-muted-foreground">
+                  {ui.noShiftTemplates}
+                </div>
+              )}
             </div>
 
             <div className="space-y-4 rounded-2xl border border-border bg-white p-5">
@@ -3724,7 +3741,7 @@ export default function Schedule({
               }
               value={massAssignDraft.templateId}
             >
-              <SelectTrigger>
+              <SelectTrigger disabled={templates.length === 0}>
                 <SelectTriggerLabel
                   className={
                     templates.find(
@@ -3750,9 +3767,7 @@ export default function Schedule({
                     </SelectItem>
                   ))
                 ) : (
-                  <SelectItem disabled value={EMPTY_SELECT_VALUE}>
-                    {ui.noShiftTemplates}
-                  </SelectItem>
+                  <SelectEmptyItem>{ui.noShiftTemplates}</SelectEmptyItem>
                 )}
               </SelectContent>
             </Select>
@@ -3862,7 +3877,11 @@ export default function Schedule({
             />
           </div>
 
-          <Button onClick={() => void handleMassAssign()} type="button">
+          <Button
+            disabled={templates.length === 0}
+            onClick={() => void handleMassAssign()}
+            type="button"
+          >
             {ui.assignShifts}
           </Button>
         </DialogContent>

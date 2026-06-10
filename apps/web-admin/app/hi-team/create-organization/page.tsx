@@ -175,8 +175,21 @@ export default function InternalCreateOrganizationPage() {
       });
 
       const raw = await response.text();
-      const payload = (raw ? JSON.parse(raw) : {}) as RegisterOrganizationResponse & { message?: string };
+      let payload = {} as RegisterOrganizationResponse & { message?: string };
+      try {
+        payload = (raw ? JSON.parse(raw) : {}) as RegisterOrganizationResponse & { message?: string };
+      } catch {
+        if (!response.ok) {
+          throw new Error(response.status >= 500 ? t.createFailed : raw || t.createFailed);
+        }
+
+        throw new Error(t.createFailed);
+      }
       if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(t.createFailed);
+        }
+
         throw new Error(payload.message || t.createFailed);
       }
 

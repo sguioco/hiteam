@@ -17,6 +17,7 @@ import {
   type StyleProp,
   type TextStyle,
 } from "react-native";
+import { updatePreferredLocale } from "./api";
 import { generatedTranslations } from "./generated-translations";
 
 export const supportedAppLanguages = [
@@ -2219,6 +2220,8 @@ export function I18nProvider({
       } catch {
         // Best effort save
       }
+
+      void updatePreferredLocale(next).catch(() => undefined);
 
       if (didDirectionChange) {
         const layout = await applyLanguageLayoutDirection(next, {

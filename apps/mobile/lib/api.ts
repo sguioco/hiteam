@@ -60,6 +60,8 @@ const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
 const API_REQUEST_RETRY_DELAY_MS = 450;
 const DEVICE_BOOTSTRAP_TTL_MS = 60 * 60_000;
 
+type BackendLocale = "en" | "ru";
+
 type AppSession = {
   accessToken: string;
   refreshToken: string;
@@ -69,6 +71,7 @@ type AppSession = {
     tenantId: string;
     roleCodes: string[];
     workspaceAccessAllowed: boolean;
+    preferredLocale?: BackendLocale;
   };
 };
 
@@ -95,6 +98,77 @@ function isNetworkError(error: unknown) {
 
 function getApiConnectivityErrorMessage(apiUrl = API_URL) {
   return `Unable to reach the API server. Current mobile API URL: ${apiUrl}`;
+}
+
+function toBackendLocale(language?: AppLanguage | null): BackendLocale {
+  return language === "ru" ? "ru" : "en";
+}
+
+function getRuntimeBackendLocale(): BackendLocale {
+  if (cachedSession?.user.preferredLocale === "ru") {
+    return "ru";
+  }
+
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale.startsWith("ru")
+      ? "ru"
+      : "en";
+  } catch {
+    return "en";
+  }
+}
+
+function getGenericServerErrorMessage(status: number) {
+  const locale = getRuntimeBackendLocale();
+
+  if (status === 503) {
+    return locale === "ru"
+      ? "Сервис временно недоступен. Попробуйте ещё раз."
+      : "The service is temporarily unavailable. Please try again.";
+  }
+
+  return locale === "ru"
+    ? "На сервере произошла ошибка. Попробуйте ещё раз."
+    : "A server error occurred. Please try again.";
+}
+
+function isRawInternalServerError(message: string) {
+  return message.trim().toLowerCase() === "internal server error";
+}
+
+function humanizeApiMessage(message: string) {
+  const locale = getRuntimeBackendLocale();
+
+  switch (message) {
+    case "Unexpected server error. Please try again.":
+      return getGenericServerErrorMessage(500);
+    case "The service is temporarily unavailable. Please try again.":
+      return getGenericServerErrorMessage(503);
+    case "This record already exists.":
+      return locale === "ru"
+        ? "Такая запись уже существует."
+        : "This record already exists.";
+    case "Record not found.":
+      return locale === "ru" ? "Запись не найдена." : "Record not found.";
+    case "The request contains invalid data.":
+      return locale === "ru"
+        ? "В запросе некорректные данные."
+        : "The request contains invalid data.";
+    case "The request references data that cannot be changed.":
+      return locale === "ru"
+        ? "Запрос ссылается на данные, которые нельзя изменить."
+        : "The request references data that cannot be changed.";
+    case "Database request failed. Check the submitted data.":
+      return locale === "ru"
+        ? "Не удалось сохранить данные. Проверьте введённые значения."
+        : "Database request failed. Check the submitted data.";
+    case "The database schema is not up to date. Apply the latest migration.":
+      return locale === "ru"
+        ? "Сервис обновляется. Попробуйте ещё раз чуть позже."
+        : "The service is updating. Please try again shortly.";
+    default:
+      return message;
+  }
 }
 
 function resolveRequestTimeoutMs(path: string) {
@@ -298,6 +372,10 @@ export function getCachedDemoSession() {
 async function readErrorMessage(response: Response, fallbackMessage: string) {
   const text = await response.text();
 
+  if (response.status >= 500) {
+    return getGenericServerErrorMessage(response.status);
+  }
+
   if (!text) {
     return fallbackMessage;
   }
@@ -324,23 +402,30 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
     }
 
     if (typeof parsed.message === "string" && parsed.message.trim()) {
-      return parsed.message;
+      if (isRawInternalServerError(parsed.message)) {
+        return getGenericServerErrorMessage(response.status);
+      }
+
+      return humanizeApiMessage(parsed.message);
     }
 
     if (typeof parsed.error === "string" && parsed.error.trim()) {
-      return parsed.error;
+      return humanizeApiMessage(parsed.error);
     }
   } catch {
     // Fall back to raw response text when the server does not return JSON.
   }
 
-  return text;
+  return isRawInternalServerError(text)
+    ? getGenericServerErrorMessage(response.status)
+    : text;
 }
 
 async function authenticateSession(payload: {
   tenantSlug?: string;
   email: string;
   password: string;
+  language?: AppLanguage;
 }) {
   const response = await fetchWithTimeout("/api/v1/auth/login", {
     method: "POST",
@@ -350,6 +435,7 @@ async function authenticateSession(payload: {
     body: JSON.stringify({
       email: payload.email,
       password: payload.password,
+      locale: toBackendLocale(payload.language),
       ...(payload.tenantSlug ? { tenantSlug: payload.tenantSlug } : {}),
     }),
   });
@@ -492,12 +578,46 @@ export async function signInWithEmail(
   email: string,
   password: string,
   tenantSlug?: string,
+  language?: AppLanguage,
 ) {
   return authenticateSession({
     tenantSlug,
     email,
     password,
+    language,
   });
+}
+
+export async function updatePreferredLocale(language: AppLanguage) {
+  const preferredLocale = toBackendLocale(language);
+  const existingSession = cachedSession ?? (await readPersistedSession());
+
+  if (!existingSession) {
+    return { preferredLocale };
+  }
+
+  if (existingSession.user.preferredLocale === preferredLocale) {
+    return { preferredLocale };
+  }
+
+  const payload = await authRequest<{ preferredLocale: BackendLocale }>(
+    "/auth/me/locale",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ locale: preferredLocale }),
+    },
+  );
+  const latestSession = cachedSession ?? existingSession;
+  cachedSession = {
+    ...latestSession,
+    user: {
+      ...latestSession.user,
+      preferredLocale: payload.preferredLocale,
+    },
+  };
+  await persistSession(cachedSession);
+
+  return payload;
 }
 
 export async function loadMyProfile(): Promise<EmployeeProfileResponse> {
@@ -647,12 +767,14 @@ export async function registerFromInvitation(
     gender: "male" | "female";
     phone: string;
     avatarDataUrl?: string;
+    locale?: AppLanguage;
   },
 ): Promise<{
   invitationId: string;
   status: "APPROVED" | "PENDING_APPROVAL";
   accessGranted: boolean;
 }> {
+  const { locale, ...registrationPayload } = payload;
   const response = await fetchWithTimeout(
     `/api/v1/employees/invitations/public/${encodeURIComponent(token)}/register`,
     {
@@ -660,7 +782,10 @@ export async function registerFromInvitation(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...registrationPayload,
+        locale: toBackendLocale(locale),
+      }),
     },
   );
 

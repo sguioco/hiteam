@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule as NestScheduleModule } from '@nestjs/schedule';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -34,6 +34,7 @@ import { KommoModule } from './modules/kommo/kommo.module';
 import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
 import { HttpResponseCacheInterceptor } from './common/cache/http-response-cache.interceptor';
 import { ResponseCacheService } from './common/cache/response-cache.service';
+import { AppExceptionFilter } from './common/filters/app-exception.filter';
 
 @Module({
   imports: [
@@ -77,6 +78,10 @@ import { ResponseCacheService } from './common/cache/response-cache.service';
   ],
   providers: [
     ResponseCacheService,
+    {
+      provide: APP_FILTER,
+      useClass: AppExceptionFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: WorkspaceAccessGuard,

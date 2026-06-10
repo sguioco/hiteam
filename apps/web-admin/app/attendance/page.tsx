@@ -1,6 +1,5 @@
 import Attendance, { type AttendanceInitialData } from "@/components/Attendance";
 import { AdminShell } from "@/components/admin-shell";
-import { getDemoAttendanceBootstrap } from "@/lib/demo-api";
 import { DEMO_ADMIN_EMAIL, isDemoAccessToken } from "@/lib/demo-mode";
 import { requireServerSession } from "@/lib/server-auth";
 import { serverApiRequestWithSession } from "@/lib/server-api";
@@ -11,7 +10,7 @@ async function loadInitialAttendanceData(): Promise<AttendanceInitialData | null
     session.user.email.trim().toLowerCase() === DEMO_ADMIN_EMAIL;
 
   if (isDemoAccessToken(session.accessToken) || isOwnerDemoAccount) {
-    return getDemoAttendanceBootstrap() as AttendanceInitialData;
+    return null;
   }
 
   try {

@@ -8,7 +8,6 @@ import DashboardHome, {
 } from "@/components/dashboard-home";
 import { type AuthSession, isEmployeeOnlyRole } from "@/lib/auth";
 import { toAdminHref } from "@/lib/admin-routes";
-import { getDemoDashboardBootstrap } from "@/lib/demo-api";
 import { DEMO_ADMIN_EMAIL, isDemoAccessToken } from "@/lib/demo-mode";
 import { serverApiRequestWithSession } from "@/lib/server-api";
 import { requireServerSession } from "@/lib/server-auth";
@@ -20,8 +19,7 @@ async function loadInitialDashboardBootstrap(
     session.user.email.trim().toLowerCase() === DEMO_ADMIN_EMAIL;
 
   if (isDemoAccessToken(session.accessToken) || isOwnerDemoAccount) {
-    return getDemoDashboardBootstrap(session.accessToken)
-      .initialData as DashboardInitialData;
+    return null;
   }
 
   try {

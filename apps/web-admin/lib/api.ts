@@ -388,9 +388,53 @@ function humanizeAuthErrorMessage(message: string): string {
       return locale === "ru"
         ? "Для этого аккаунта найдено несколько рабочих пространств. Открой прямую ссылку-приглашение или обратись к администратору."
         : "Multiple workspaces were found for this account. Open a direct invite link or contact your administrator.";
+    case "Unexpected server error. Please try again.":
+      return getGenericServerErrorMessage(500);
+    case "The service is temporarily unavailable. Please try again.":
+      return getGenericServerErrorMessage(503);
+    case "This record already exists.":
+      return locale === "ru"
+        ? "Такая запись уже существует."
+        : "This record already exists.";
+    case "Record not found.":
+      return locale === "ru" ? "Запись не найдена." : "Record not found.";
+    case "The request contains invalid data.":
+      return locale === "ru"
+        ? "В запросе некорректные данные."
+        : "The request contains invalid data.";
+    case "The request references data that cannot be changed.":
+      return locale === "ru"
+        ? "Запрос ссылается на данные, которые нельзя изменить."
+        : "The request references data that cannot be changed.";
+    case "Database request failed. Check the submitted data.":
+      return locale === "ru"
+        ? "Не удалось сохранить данные. Проверь введённые значения."
+        : "Database request failed. Check the submitted data.";
+    case "The database schema is not up to date. Apply the latest migration.":
+      return locale === "ru"
+        ? "Сервис обновляется. Попробуй ещё раз чуть позже."
+        : "The service is updating. Please try again shortly.";
     default:
       return humanizeValidationError(message);
   }
+}
+
+function getGenericServerErrorMessage(status: number): string {
+  const locale = getRuntimeLocale();
+
+  if (status === 503) {
+    return locale === "ru"
+      ? "Сервис временно недоступен. Попробуй ещё раз."
+      : "The service is temporarily unavailable. Please try again.";
+  }
+
+  return locale === "ru"
+    ? "На сервере произошла ошибка. Попробуй ещё раз."
+    : "A server error occurred. Please try again.";
+}
+
+function isRawInternalServerError(message: string) {
+  return message.trim().toLowerCase() === "internal server error";
 }
 
 async function getApiErrorMessage(
@@ -406,6 +450,10 @@ async function getApiErrorMessage(
       : "Error 401. The session expired or the token is invalid. Sign in again.";
   }
 
+  if (response.status >= 500) {
+    return getGenericServerErrorMessage(response.status);
+  }
+
   if (text) {
     try {
       const payload = JSON.parse(text) as { message?: string | string[] };
@@ -414,10 +462,16 @@ async function getApiErrorMessage(
       }
 
       if (typeof payload.message === "string" && payload.message.trim()) {
+        if (isRawInternalServerError(payload.message)) {
+          return getGenericServerErrorMessage(response.status);
+        }
+
         return humanizeAuthErrorMessage(payload.message);
       }
     } catch {
-      return text;
+      return isRawInternalServerError(text)
+        ? getGenericServerErrorMessage(response.status)
+        : text;
     }
   }
 

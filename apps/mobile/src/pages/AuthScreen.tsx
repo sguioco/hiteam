@@ -972,7 +972,12 @@ const AuthScreen = () => {
         throw new Error(t('login.signInPhoneHint'));
       }
 
-      const session = await signInWithEmail(trimmedIdentifier, trimmedPassword);
+      const session = await signInWithEmail(
+        trimmedIdentifier,
+        trimmedPassword,
+        undefined,
+        language,
+      );
       hapticSuccess();
 
       if (!session.user.workspaceAccessAllowed) {

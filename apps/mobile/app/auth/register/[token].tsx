@@ -365,9 +365,15 @@ export default function RegisterInvitationScreen() {
         gender: form.gender,
         phone: form.phone.trim(),
         avatarDataUrl: form.avatarDataUrl,
+        locale: language,
       });
 
-      await signInWithEmail(normalizedEmail, form.password.trim(), invitation.tenantSlug);
+      await signInWithEmail(
+        normalizedEmail,
+        form.password.trim(),
+        invitation.tenantSlug,
+        language,
+      );
       void bootstrapPushNotifications().catch(() => undefined);
       signInLocally({ workspaceSetupStep: 'biometric' });
       setMessage(copy.startBiometric);

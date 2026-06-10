@@ -84,7 +84,7 @@ import {
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
 import { getDemoDashboardBootstrap } from "@/lib/demo-api";
-import { isDemoAccessToken } from "@/lib/demo-mode";
+import { DEMO_ADMIN_EMAIL, isDemoAccessToken } from "@/lib/demo-mode";
 import {
   buildEmployeeWorkdayLookup,
   formatWorkdayDateLabel,
@@ -868,7 +868,9 @@ export default function DashboardHome({
   }
   const priorityOptions = useMemo(() => getPriorityOptions(locale), [locale]);
   const session = initialSession ?? getSession();
-  const isDemoSession = isDemoAccessToken(session?.accessToken);
+  const isDemoSession =
+    isDemoAccessToken(session?.accessToken) ||
+    session?.user.email.trim().toLowerCase() === DEMO_ADMIN_EMAIL;
   const isEmployeeMode =
     mode === "employee" || isEmployeeOnlyRole(session?.user.roleCodes ?? []);
   const attendanceTodayKey = useMemo(() => formatDateKey(startOfDay(new Date())), []);

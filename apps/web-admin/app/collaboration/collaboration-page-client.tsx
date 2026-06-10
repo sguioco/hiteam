@@ -206,32 +206,49 @@ export default function CollaborationPageClient({
     return `/bootstrap/collaboration?${searchParams.toString()}`;
   }
 
-  async function loadData() {
+  async function loadData(options?: { silent?: boolean }) {
     const session = getSession();
-    if (!session) return;
+    if (!session) {
+      if (!options?.silent) {
+        setMessage(locale === 'ru' ? 'Сессия не найдена. Войди заново.' : 'Session not found. Sign in again.');
+      }
+      return;
+    }
 
-    const snapshot = await apiRequest<CollaborationBootstrapResponse<EmployeeOption>>(buildBootstrapQuery(), {
-      token: session.accessToken,
-    });
+    try {
+      const snapshot = await apiRequest<CollaborationBootstrapResponse<EmployeeOption>>(buildBootstrapQuery(), {
+        token: session.accessToken,
+      });
 
-    setOverview(snapshot.overview);
-    setAnalytics(snapshot.analytics);
-    setTaskBoard(snapshot.taskBoard);
-    setAutomationPolicy(snapshot.automationPolicy);
-    setTaskTemplates(snapshot.taskTemplates);
-    setAnnouncementTemplates(snapshot.announcementTemplates);
-    setEmployees(snapshot.employees);
-    setAnnouncements(snapshot.announcements);
-    setChats(snapshot.chats);
-    setSelectedChatId((current) => current || snapshot.chats[0]?.id || '');
-    setGroupMembersDraft(
-      Object.fromEntries(
-        (snapshot.overview?.groups ?? []).map((group) => [
-          group.id,
-          group.memberships.map((membership) => membership.employeeId),
-        ]),
-      ),
-    );
+      setOverview(snapshot.overview);
+      setAnalytics(snapshot.analytics);
+      setTaskBoard(snapshot.taskBoard);
+      setAutomationPolicy(snapshot.automationPolicy);
+      setTaskTemplates(snapshot.taskTemplates);
+      setAnnouncementTemplates(snapshot.announcementTemplates);
+      setEmployees(snapshot.employees);
+      setAnnouncements(snapshot.announcements);
+      setChats(snapshot.chats);
+      setSelectedChatId((current) => current || snapshot.chats[0]?.id || '');
+      setGroupMembersDraft(
+        Object.fromEntries(
+          (snapshot.overview?.groups ?? []).map((group) => [
+            group.id,
+            group.memberships.map((membership) => membership.employeeId),
+          ]),
+        ),
+      );
+    } catch (error) {
+      if (!options?.silent) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : locale === 'ru'
+              ? 'Не удалось загрузить рабочее пространство.'
+              : 'Failed to load the workspace.',
+        );
+      }
+    }
   }
 
   useEffect(() => {
@@ -252,10 +269,10 @@ export default function CollaborationPageClient({
     const socket = createCollaborationSocket(session.accessToken);
 
     socket.on('chat:message', () => {
-      void loadData();
+      void loadData({ silent: true });
     });
     socket.on('chat:thread-updated', () => {
-      void loadData();
+      void loadData({ silent: true });
     });
 
     return () => {
