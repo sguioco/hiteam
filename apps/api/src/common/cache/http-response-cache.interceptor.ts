@@ -148,6 +148,10 @@ export class HttpResponseCacheInterceptor implements NestInterceptor {
       return false;
     }
 
+    if (/\/media(?:\/|$)/.test(path)) {
+      return false;
+    }
+
     return true;
   }
 

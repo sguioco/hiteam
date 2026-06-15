@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Image, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { SaveFormat, manipulateAsync } from "expo-image-manipulator";
 import { BiometricPolicyResponse } from "@smart/types";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { BrandWordmark } from "../../src/components/brand-wordmark";
@@ -17,6 +18,8 @@ import {
 import { signOutLocally, updateAuthFlowState } from "../../lib/auth-flow";
 import { useI18n } from "../../lib/i18n";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+const BIOMETRIC_CAPTURE_WIDTH = 960;
 
 export default function BiometricPage() {
   const router = useRouter();
@@ -201,13 +204,36 @@ export default function BiometricPage() {
     try {
       const picture = await cameraRef.current.takePictureAsync({
         base64: true,
-        quality: 0.8,
-        skipProcessing: true,
+        quality: 0.7,
+        skipProcessing: false,
       });
       if (!picture.base64) {
         throw new Error(t("biometric.captureMissingData"));
       }
-      setArtifacts([`data:image/jpeg;base64,${picture.base64}`]);
+
+      let artifactDataUrl = `data:image/jpeg;base64,${picture.base64}`;
+
+      if (picture.uri) {
+        try {
+          const optimizedPicture = await manipulateAsync(
+            picture.uri,
+            [{ resize: { width: BIOMETRIC_CAPTURE_WIDTH } }],
+            {
+              base64: true,
+              compress: 0.72,
+              format: SaveFormat.JPEG,
+            },
+          );
+
+          if (optimizedPicture.base64) {
+            artifactDataUrl = `data:image/jpeg;base64,${optimizedPicture.base64}`;
+          }
+        } catch {
+          // Keep the original processed capture if local optimization fails.
+        }
+      }
+
+      setArtifacts([artifactDataUrl]);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : t("biometric.captureFailed"),

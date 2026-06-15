@@ -166,6 +166,26 @@ function humanizeApiMessage(message: string) {
       return locale === "ru"
         ? "Сервис обновляется. Попробуйте ещё раз чуть позже."
         : "The service is updating. Please try again shortly.";
+    case "No face detected in the photo. Retake it in better light and keep your face centered in the frame.":
+      return locale === "ru"
+        ? "Лицо не распознано. Пересними фото при хорошем свете и держи лицо по центру."
+        : message;
+    case "More than one face was detected in the photo. Keep only one person in the frame and try again.":
+      return locale === "ru"
+        ? "В кадре больше одного лица. Оставь в кадре только одного человека и попробуй снова."
+        : message;
+    case "Biometric verification requires a face match score.":
+      return locale === "ru"
+        ? "Не удалось сравнить лицо. Пересними фото и попробуй снова."
+        : "Unable to compare the face. Retake the photo and try again.";
+    case "Biometric reference or verification image is missing.":
+      return locale === "ru"
+        ? "Не удалось получить фото для проверки лица. Пересними и попробуй снова."
+        : "Unable to read the face photo. Retake it and try again.";
+    case "Face verification service is temporarily unavailable. Please try again in a minute.":
+      return locale === "ru"
+        ? "Сервис проверки лица временно недоступен. Попробуй ещё раз через минуту."
+        : message;
     default:
       return message;
   }

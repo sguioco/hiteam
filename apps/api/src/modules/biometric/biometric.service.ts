@@ -211,7 +211,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const awsReady = awsProviderEnabled && Boolean(awsLivenessResult?.confidence !== null);
+    const awsReady = awsProviderEnabled && awsLivenessResult?.confidence != null;
 
     if (awsProviderEnabled) {
       providerUsed = 'aws-rekognition';
@@ -238,6 +238,17 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     if (!templateRef) {
       throw new BadRequestException('Unable to create a biometric reference image for enrollment.');
     }
+
+    const templateBytes = await this.resolveCapturedBiometricBytes(
+      providerReferenceKey,
+      dto.artifacts?.[0] ?? null,
+      uploadedArtifacts[0]?.storageKey ?? dto.templateRef ?? null,
+    );
+    await this.assertEnrollmentFaceReadable({
+      awsProviderEnabled,
+      comprefaceAvailable,
+      templateBytes,
+    });
 
     const profile = await this.prisma.biometricProfile.upsert({
       where: { employeeId: employee.id },
@@ -588,7 +599,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     const comprefaceFallbackEnabled = this.biometricProviderService.canUseCompreFaceFallback();
     const comprefaceAvailable = comprefaceEnabled || comprefaceFallbackEnabled;
 
-    const uploadedArtifacts = await this.saveArtifacts({
+    const uploadedArtifactsPromise = this.saveArtifacts({
       tenantId: employee.tenantId,
       employeeId: employee.id,
       artifacts: dto.artifacts ?? [],
@@ -609,7 +620,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const awsReady = awsProviderEnabled && awsLivenessResult?.confidence !== null;
+    const awsReady = awsProviderEnabled && awsLivenessResult?.confidence != null;
 
     const providerReferenceKey =
       awsReady && awsLivenessResult?.referenceImageBytes && this.storageService.isConfigured()
@@ -621,16 +632,22 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
             dto.captureMetadata ?? null,
           )
         : null;
-    const targetArtifactRef = providerReferenceKey ?? uploadedArtifacts[0]?.storageKey ?? dto.artifacts?.[0] ?? null;
     const templateRef = employee.biometricProfile.templateRef;
-    const [sourceBytes, targetBytes] = await Promise.all([
+    const [sourceBytes, targetBytes, uploadedArtifacts] = await Promise.all([
       this.resolveBiometricReferenceBytes(templateRef),
-      this.resolveBiometricReferenceBytes(targetArtifactRef),
+      this.resolveCapturedBiometricBytes(
+        providerReferenceKey,
+        dto.artifacts?.[0] ?? null,
+        uploadedArtifactsPromise.then(
+          (items) => items[0]?.storageKey ?? null,
+        ),
+      ),
+      uploadedArtifactsPromise,
     ]);
     const awsComparisonAvailable = awsProviderEnabled && Boolean(sourceBytes && targetBytes);
 
     if ((awsComparisonAvailable || comprefaceAvailable) && (!sourceBytes || !targetBytes)) {
-      throw new BadRequestException('Biometric reference or verification image is missing for AWS comparison.');
+      throw new BadRequestException('Biometric reference or verification image is missing.');
     }
 
     let providerMatchScore: number | null = null;
@@ -1146,6 +1163,75 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     return this.storageService.getObjectBuffer(reference).catch(() => null);
   }
 
+  private async resolveCapturedBiometricBytes(
+    providerReference: string | null | undefined,
+    inlineArtifact: string | null | undefined,
+    storageReference:
+      | string
+      | null
+      | undefined
+      | Promise<string | null | undefined>,
+  ) {
+    if (providerReference) {
+      return this.resolveBiometricReferenceBytes(providerReference);
+    }
+
+    const inlineBytes = this.parseInlineBiometricReference(inlineArtifact);
+    if (inlineBytes) {
+      return inlineBytes;
+    }
+
+    const resolvedStorageReference = await storageReference;
+    return this.resolveBiometricReferenceBytes(resolvedStorageReference);
+  }
+
+  private async assertEnrollmentFaceReadable(params: {
+    awsProviderEnabled: boolean;
+    comprefaceAvailable: boolean;
+    templateBytes: Buffer | null;
+  }) {
+    if (!params.templateBytes) {
+      throw new BadRequestException(
+        'No face detected in the photo. Retake it in better light and keep your face centered in the frame.',
+      );
+    }
+
+    if (params.awsProviderEnabled) {
+      try {
+        const selfMatchScore = await this.biometricProviderService.compareFaces(
+          params.templateBytes,
+          params.templateBytes,
+        );
+
+        if (
+          selfMatchScore !== null &&
+          selfMatchScore >= this.biometricProviderService.getAwsSimilarityThreshold()
+        ) {
+          return;
+        }
+      } catch (error) {
+        if (!params.comprefaceAvailable) {
+          throw error;
+        }
+
+        this.logAwsFallback('enrollment', error);
+      }
+    }
+
+    if (params.comprefaceAvailable) {
+      await this.biometricProviderService.assertCompreFaceFaceReadable(
+        params.templateBytes,
+      );
+      return;
+    }
+
+    if (params.awsProviderEnabled) {
+      throw new BadRequestException(
+        'No face detected in the photo. Retake it in better light and keep your face centered in the frame.',
+      );
+    }
+  }
+
   private resolveBiometricReferenceUrl(reference: string | null | undefined) {
     if (!reference) {
       return null;
@@ -1170,7 +1256,11 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     return typeof reference === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(reference);
   }
 
-  private parseInlineBiometricReference(reference: string) {
+  private parseInlineBiometricReference(reference: string | null | undefined) {
+    if (!reference) {
+      return null;
+    }
+
     const match = reference.match(/^data:(.+);base64,(.+)$/);
     if (!match) {
       return null;

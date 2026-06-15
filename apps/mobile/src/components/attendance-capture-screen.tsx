@@ -646,7 +646,7 @@ export function AttendanceCaptureScreen({
       const picture = await cameraRef.current.takePictureAsync({
         base64: true,
         quality: 0.55,
-        skipProcessing: true,
+        skipProcessing: false,
       });
       if (!picture.base64) {
         throw new Error(t("biometric.captureMissingData"));

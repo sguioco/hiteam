@@ -162,6 +162,7 @@ export default function TaskList({
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, language);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
   const [photoSourceAction, setPhotoSourceAction] = useState<PhotoSourceAction>('add');
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -191,6 +192,9 @@ export default function TaskList({
     ];
   }, [activeTask, pendingPhotosByTaskId, taskPhotos]);
   const selectedPhoto = activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ?? activeTaskPhotos[0] ?? null;
+  const selectedPhotoFailed = selectedPhoto
+    ? failedPhotoIds.includes(selectedPhoto.id)
+    : false;
   const activeTaskHasPhotos = activeTaskPhotos.length > 0;
   const photoReportLayout = activeTaskHasPhotos
     ? PHOTO_REPORT_LAYOUT.withPhotos
@@ -212,6 +216,16 @@ export default function TaskList({
       mediaError ? 240 : 280,
     ),
   );
+
+  function markPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) =>
+      current.includes(photoId) ? current : [...current, photoId],
+    );
+  }
+
+  function clearPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) => current.filter((id) => id !== photoId));
+  }
 
   useEffect(() => {
     const signature = tasks
@@ -792,10 +806,20 @@ export default function TaskList({
                       style={{ height: photoPreviewHeight }}
                     >
                       <Image
+                        onError={() => markPhotoLoadFailed(selectedPhoto.id)}
+                        onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                         resizeMode="contain"
                         source={{ uri: selectedPhoto.uri }}
                         style={StyleSheet.absoluteFillObject}
                       />
+                      {selectedPhotoFailed && !selectedPhoto.isPending ? (
+                        <View className="absolute inset-0 items-center justify-center bg-[#dbe7ff] px-6 pb-24">
+                          <Ionicons color="#6d73ff" name="image-outline" size={28} />
+                          <Text className="mt-3 text-center font-body text-sm leading-6 text-muted-foreground">
+                            {t('common.photoUnavailable')}
+                          </Text>
+                        </View>
+                      ) : null}
                       {selectedPhoto.isPending ? (
                         <View className="absolute inset-0 items-center justify-center bg-[#0f172a]/18">
                           <View className="items-center gap-3 rounded-[22px] bg-white/88 px-5 py-4">

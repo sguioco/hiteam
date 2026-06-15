@@ -175,6 +175,12 @@ type ShiftTemplateDraft = {
 
 const CALENDAR_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 
+const styles = StyleSheet.create({
+  rescheduleDatePickerSpinner: {
+    alignSelf: "center",
+  },
+});
+
 function createDefaultShiftTemplateDraft(): ShiftTemplateDraft {
   return {
     name: "",
@@ -478,6 +484,7 @@ export default function CalendarScreen({
     viewportHeight - insets.top - 12,
     viewportHeight * 0.76,
   );
+  const rescheduleDatePickerWidth = Math.min(viewportWidth - 40, 430);
   const overdueListBottomPadding = Math.max(insets.bottom + 28, 54);
   const { language, t, tp } = useI18n();
   const { roleCodes } = useAuthFlowState();
@@ -633,6 +640,7 @@ export default function CalendarScreen({
     null,
   );
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
     useTranslatedTaskCopy(tasks, language);
   const isCurrentMonth =
@@ -1139,10 +1147,23 @@ export default function CalendarScreen({
     activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ??
     activeTaskPhotos[0] ??
     null;
+  const selectedPhotoFailed = selectedPhoto
+    ? failedPhotoIds.includes(selectedPhoto.id)
+    : false;
   const photoViewerPreviewHeight = Math.max(
     190,
     Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
   );
+
+  function markPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) =>
+      current.includes(photoId) ? current : [...current, photoId],
+    );
+  }
+
+  function clearPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) => current.filter((id) => id !== photoId));
+  }
 
   useEffect(() => {
     if (!activeTaskPhotos.length) {
@@ -3333,11 +3354,7 @@ export default function CalendarScreen({
                       </View>
                     </View>
                     <PressableScale
-                      className={`h-[40px] justify-center rounded-[20px] px-4 ${
-                        canAssignShiftForSelectedDay
-                          ? "bg-[#2563eb]"
-                          : "bg-[#dbe3ef]"
-                      }`}
+                      className="h-[40px] justify-center rounded-[20px] bg-[#315cf6] px-4 shadow-sm shadow-[#315cf6]/25"
                       disabled={!canAssignShiftForSelectedDay}
                       haptic="selection"
                       onPress={() => openAssignShiftSheet()}
@@ -4171,10 +4188,20 @@ export default function CalendarScreen({
                   style={{ height: photoViewerPreviewHeight }}
                 >
                   <Image
+                    onError={() => markPhotoLoadFailed(selectedPhoto.id)}
+                    onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                     resizeMode="contain"
                     source={{ uri: selectedPhoto.uri }}
                     style={StyleSheet.absoluteFillObject}
                   />
+                  {selectedPhotoFailed ? (
+                    <View className="absolute inset-0 items-center justify-center bg-[#dbe7ff] px-6 pb-24">
+                      <Ionicons color="#6d73ff" name="image-outline" size={28} />
+                      <Text className="mt-3 text-center font-body text-sm leading-6 text-muted-foreground">
+                        {t("common.photoUnavailable")}
+                      </Text>
+                    </View>
+                  ) : null}
                   <View
                     className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
                     style={{ backgroundColor: "rgba(15, 23, 42, 0.38)" }}
@@ -5201,12 +5228,16 @@ export default function CalendarScreen({
                 {t("calendar.date")}
               </Text>
               {Platform.OS === "ios" ? (
-                <View className="mt-2 self-stretch">
+                <View className="mt-2 w-full items-center overflow-hidden">
                   <DateTimePicker
                     display="spinner"
                     minimumDate={todayStart}
                     mode="date"
                     onChange={handleRescheduleDateChange}
+                    style={[
+                      styles.rescheduleDatePickerSpinner,
+                      { width: rescheduleDatePickerWidth },
+                    ]}
                     textColor="#000000"
                     value={rescheduleDateValue}
                   />
@@ -5268,7 +5299,7 @@ export default function CalendarScreen({
             </View>
             <View className="flex-1">
               <Button
-                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#dce4f2] bg-white`}
+                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25`}
                 fullWidth
                 label={
                   pendingTaskAction === "reschedule"
@@ -5278,7 +5309,7 @@ export default function CalendarScreen({
                 onPress={() => {
                   void submitTaskReschedule();
                 }}
-                textClassName="text-foreground"
+                textClassName="text-white"
                 variant="secondary"
               />
             </View>

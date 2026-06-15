@@ -407,6 +407,7 @@ export default function ManagerScreen({
     null,
   );
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
   const [failedAvatarEmployeeIds, setFailedAvatarEmployeeIds] = useState<
     Set<string>
   >(new Set());
@@ -719,10 +720,23 @@ export default function ManagerScreen({
     activeTaskPhotos.find((photo) => photo.id === selectedPhotoId) ??
     activeTaskPhotos[0] ??
     null;
+  const selectedPhotoFailed = selectedPhoto
+    ? failedPhotoIds.includes(selectedPhoto.id)
+    : false;
   const photoViewerPreviewHeight = Math.max(
     190,
     Math.min(viewportWidth - 40, viewportHeight * 0.42, 360),
   );
+
+  function markPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) =>
+      current.includes(photoId) ? current : [...current, photoId],
+    );
+  }
+
+  function clearPhotoLoadFailed(photoId: string) {
+    setFailedPhotoIds((current) => current.filter((id) => id !== photoId));
+  }
 
   useEffect(() => {
     if (!activeTaskPhotos.length) {
@@ -1233,10 +1247,20 @@ export default function ManagerScreen({
                   style={{ height: photoViewerPreviewHeight }}
                 >
                   <Image
+                    onError={() => markPhotoLoadFailed(selectedPhoto.id)}
+                    onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                     resizeMode="contain"
                     source={{ uri: selectedPhoto.uri }}
                     style={StyleSheet.absoluteFillObject}
                   />
+                  {selectedPhotoFailed ? (
+                    <View className="absolute inset-0 items-center justify-center bg-[#dbe7ff] px-6 pb-24">
+                      <Ionicons color="#6d73ff" name="image-outline" size={28} />
+                      <Text className="mt-3 text-center font-body text-sm leading-6 text-muted-foreground">
+                        {t("common.photoUnavailable")}
+                      </Text>
+                    </View>
+                  ) : null}
                   <View
                     className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-6"
                     style={{ backgroundColor: "rgba(15, 23, 42, 0.38)" }}

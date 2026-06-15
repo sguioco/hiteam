@@ -99,7 +99,7 @@ Do not send secrets into chat if you do not want them persisted. You can also ad
 - `AWS_BIOMETRIC_EXTERNAL_ID` optional
 - `COMPRE_FACE_BASE_URL` optional fallback
 - `COMPRE_FACE_API_KEY` optional fallback
-- `COMPRE_FACE_SIMILARITY_THRESHOLD=0.60` optional fallback
+- `COMPRE_FACE_SIMILARITY_THRESHOLD=0.75` optional fallback
 - `FRONTEND_URL`
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`

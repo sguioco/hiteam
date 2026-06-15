@@ -16,6 +16,8 @@ import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 
 @Injectable()
 export class BiometricProviderService {
+  private static readonly DEFAULT_COMPREFACE_SIMILARITY_THRESHOLD = 0.75;
+  private static readonly MIN_COMPREFACE_SIMILARITY_THRESHOLD = 0.72;
   private readonly logger = new Logger(BiometricProviderService.name);
   private readonly client: RekognitionClient;
   private readonly stsClient: STSClient;
@@ -38,15 +40,21 @@ export class BiometricProviderService {
     const rawCompreFaceThreshold = Number(
       this.configService.get<string>(
         "COMPRE_FACE_SIMILARITY_THRESHOLD",
-        "0.60",
+        String(BiometricProviderService.DEFAULT_COMPREFACE_SIMILARITY_THRESHOLD),
       ),
     );
     const rawCompreFaceTimeoutMs = Number(
       this.configService.get<string>("COMPRE_FACE_TIMEOUT_MS", "10000"),
     );
-    this.comprefaceSimilarityThreshold = Number.isFinite(rawCompreFaceThreshold)
+    const configuredCompreFaceThreshold = Number.isFinite(
+      rawCompreFaceThreshold,
+    )
       ? Math.min(Math.max(rawCompreFaceThreshold, 0), 1)
-      : 0.6;
+      : BiometricProviderService.DEFAULT_COMPREFACE_SIMILARITY_THRESHOLD;
+    this.comprefaceSimilarityThreshold = Math.max(
+      configuredCompreFaceThreshold,
+      BiometricProviderService.MIN_COMPREFACE_SIMILARITY_THRESHOLD,
+    );
     this.comprefaceTimeoutMs =
       Number.isFinite(rawCompreFaceTimeoutMs) && rawCompreFaceTimeoutMs > 0
         ? Math.round(rawCompreFaceTimeoutMs)
@@ -169,6 +177,25 @@ export class BiometricProviderService {
         match && typeof match.similarity === "number" ? match.similarity : 0,
       rawResult: response ?? null,
     };
+  }
+
+  async assertCompreFaceFaceReadable(
+    imageBytes: Buffer,
+    contentType = "image/jpeg",
+  ) {
+    const result = await this.compareCompreFaceFaces(
+      imageBytes,
+      imageBytes,
+      contentType,
+    );
+
+    if (!result || result.similarity < this.comprefaceSimilarityThreshold) {
+      throw new BadRequestException(
+        "No face detected in the photo. Retake it in better light and keep your face centered in the frame.",
+      );
+    }
+
+    return result;
   }
 
   async compareFaces(sourceBytes: Buffer, targetBytes: Buffer) {
@@ -394,7 +421,13 @@ export class BiometricProviderService {
   }
 
   private mapCompreFaceMessage(message: string, code: number | null) {
-    if (code === 28 || /No face is found in the given image/i.test(message)) {
+    if (
+      code === 28 ||
+      /No face is found in the given image/i.test(message) ||
+      /No face.*found/i.test(message) ||
+      /face.*not.*found/i.test(message) ||
+      /no faces?/i.test(message)
+    ) {
       return "No face detected in the photo. Retake it in better light and keep your face centered in the frame.";
     }
 
