@@ -3,7 +3,7 @@
     "name": "HiTeam",
     "slug": "smart",
     "scheme": "hiteam",
-    "version": "0.1.0",
+    "version": "5.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
@@ -79,7 +79,7 @@
         "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"
       }
     },
-    "runtimeVersion": "0.1.1",
+    "runtimeVersion": "5.0.0",
     "updates": {
       "url": "https://u.expo.dev/35bb3b6c-af5d-410a-b463-0d3da3c0de78"
     }
