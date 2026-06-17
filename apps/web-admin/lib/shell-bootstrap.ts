@@ -7,6 +7,7 @@ export type OrganizationHeaderState = {
   } | null;
   attendanceTrackingEnabled?: boolean;
   configured: boolean;
+  organizationId?: string | null;
 };
 
 export type AccountProfile = {

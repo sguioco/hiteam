@@ -35,7 +35,10 @@ import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dt
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateEmployeeAccessDto } from './dto/update-employee-access.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
-import { EmployeeInvitationsMailerService } from './employee-invitations.mailer';
+import {
+  EmployeeEmailDeliveryResult,
+  EmployeeInvitationsMailerService,
+} from './employee-invitations.mailer';
 
 type PrismaTx = Prisma.TransactionClient | PrismaService;
 
@@ -89,6 +92,8 @@ const EMPLOYEE_LIST_SELECT = {
   phone: true,
   avatarStorageKey: true,
   avatarUrl: true,
+  workMode: true,
+  breaksEnabled: true,
   status: true,
   hireDate: true,
   createdAt: true,
@@ -195,6 +200,53 @@ export class EmployeesService {
     return this.normalizeEmailLocale(
       actor?.preferredLocale ?? fallbackLocale,
     );
+  }
+
+  private async sendInvitationStatusEmailSafely(params: {
+    email: string;
+    companyName: string;
+    tenantName: string;
+    status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+    rejectedReason?: string | null;
+    locale?: string | null;
+  }): Promise<EmployeeEmailDeliveryResult> {
+    try {
+      return await this.invitationsMailer.sendInvitationStatusEmail(params);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to send invitation ${params.status} email to ${params.email}: ${errorMessage}`);
+
+      return {
+        status: 'failed',
+        provider: 'none',
+        recipients: [params.email],
+        recordedAt: new Date().toISOString(),
+        errorMessage,
+      };
+    }
+  }
+
+  private async sendGeneratedCredentialsEmailSafely(params: {
+    email: string;
+    companyName: string;
+    tenantName: string;
+    password: string;
+    locale?: string | null;
+  }): Promise<EmployeeEmailDeliveryResult> {
+    try {
+      return await this.invitationsMailer.sendGeneratedCredentialsEmail(params);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to send generated credentials email to ${params.email}: ${errorMessage}`);
+
+      return {
+        status: 'failed',
+        provider: 'none',
+        recipients: [params.email],
+        recordedAt: new Date().toISOString(),
+        errorMessage,
+      };
+    }
   }
 
   private emitWorkspaceRefreshForUser(userId: string, reason: string) {
@@ -1429,6 +1481,20 @@ export class EmployeesService {
   async registerFromInvitation(token: string, dto: RegisterEmployeeInvitationDto) {
     const invitation = await this.prisma.employeeInvitation.findUnique({
       where: { tokenHash: this.hashToken(token) },
+      include: {
+        tenant: {
+          include: {
+            companies: {
+              take: 1,
+              orderBy: { createdAt: 'asc' },
+              select: { name: true },
+            },
+          },
+        },
+        company: {
+          select: { name: true },
+        },
+      },
     });
 
     if (!invitation) {
@@ -1650,6 +1716,15 @@ export class EmployeesService {
         migratedFromPendingApproval: canRegisterPendingInvitation,
       },
     });
+    const companyName = invitation.company?.name ?? invitation.tenant.companies[0]?.name ?? invitation.tenant.name;
+    const statusEmailResult = await this.sendInvitationStatusEmailSafely({
+      email: registrationEmail,
+      companyName,
+      tenantName: invitation.tenant.name,
+      status: 'APPROVED',
+      locale: preferredLocale,
+    });
+
     if (result.invitation.employeeId) {
       this.kommoService.recordEmployeeUpdated(invitation.tenantId, result.invitation.employeeId, 'profile_submitted');
     } else {
@@ -1660,6 +1735,8 @@ export class EmployeesService {
       invitationId: invitation.id,
       status: EmployeeInvitationStatus.APPROVED,
       accessGranted: true,
+      emailDeliveryStatus: statusEmailResult.status,
+      emailDeliveryProvider: statusEmailResult.provider,
     };
   }
 
@@ -1671,7 +1748,21 @@ export class EmployeesService {
   ) {
     const invitation = await this.prisma.employeeInvitation.findFirst({
       where: { id: invitationId, tenantId },
-      include: { user: true },
+      include: {
+        user: true,
+        tenant: {
+          include: {
+            companies: {
+              take: 1,
+              orderBy: { createdAt: 'asc' },
+              select: { name: true },
+            },
+          },
+        },
+        company: {
+          select: { name: true },
+        },
+      },
     });
 
     if (!invitation) {
@@ -1733,7 +1824,8 @@ export class EmployeesService {
       );
     }
 
-    const invitationEmail = invitation.email;
+    const invitationEmail = invitation.email ?? invitation.user?.email ?? null;
+    const reviewCompanyName = invitation.company?.name ?? invitation.tenant.companies[0]?.name ?? invitation.tenant.name;
     const avatar = await this.uploadOptionalAvatarSafely(
       tenantId,
       invitationEmail ?? invitation.phone ?? invitation.id,
@@ -1833,8 +1925,23 @@ export class EmployeesService {
       } else {
         this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
       }
+      const statusEmailResult = invitationEmail
+        ? await this.sendInvitationStatusEmailSafely({
+            email: invitationEmail,
+            companyName: reviewCompanyName,
+            tenantName: invitation.tenant.name,
+            status: 'REJECTED',
+            rejectedReason: rejected.rejectedReason,
+            locale: invitation.user?.preferredLocale ?? invitation.locale,
+          })
+        : null;
 
-      return { id: rejected.id, status: rejected.status };
+      return {
+        id: rejected.id,
+        status: rejected.status,
+        emailDeliveryStatus: statusEmailResult?.status ?? 'no_recipient',
+        emailDeliveryProvider: statusEmailResult?.provider ?? 'none',
+      };
     }
 
     if (!invitation.userId) {
@@ -1945,6 +2052,13 @@ export class EmployeesService {
       if (approved.employeeId) {
         this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
       }
+      const credentialsEmailResult = await this.sendGeneratedCredentialsEmailSafely({
+        email: invitationEmail,
+        companyName: reviewCompanyName,
+        tenantName: invitation.tenant.name,
+        password: generatedPassword,
+        locale: invitation.locale,
+      });
 
       return {
         id: approved.id,
@@ -1952,6 +2066,8 @@ export class EmployeesService {
         employeeId: approved.employeeId,
         email: invitationEmail,
         generatedPassword,
+        emailDeliveryStatus: credentialsEmailResult.status,
+        emailDeliveryProvider: credentialsEmailResult.provider,
       };
     }
 
@@ -2067,11 +2183,22 @@ export class EmployeesService {
     if (approved.employeeId) {
       this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
     }
+    const statusEmailResult = invitationEmail
+      ? await this.sendInvitationStatusEmailSafely({
+          email: invitationEmail,
+          companyName: reviewCompanyName,
+          tenantName: invitation.tenant.name,
+          status: 'APPROVED',
+          locale: invitation.user?.preferredLocale ?? invitation.locale,
+        })
+      : null;
 
     return {
       id: approved.id,
       status: approved.status,
       employeeId: approved.employeeId,
+      emailDeliveryStatus: statusEmailResult?.status ?? 'no_recipient',
+      emailDeliveryProvider: statusEmailResult?.provider ?? 'none',
     };
   }
 

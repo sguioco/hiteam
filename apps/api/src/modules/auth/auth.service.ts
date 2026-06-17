@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -10,6 +10,7 @@ import { SignOptions } from 'jsonwebtoken';
 import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { KommoService } from '../kommo/kommo.service';
+import { EmployeeInvitationsMailerService } from '../employees/employee-invitations.mailer';
 
 const DEMO_OWNER_EMAIL = 'owner@demo.smart';
 const DEMO_EMAIL_DOMAIN = '@demo.smart';
@@ -39,11 +40,14 @@ type AuthUserWithRoles = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly auditService: AuditService,
     private readonly kommoService: KommoService,
+    private readonly employeeInvitationsMailer: EmployeeInvitationsMailerService,
   ) {}
 
   private normalizeOrganizationName(value: string): string {
@@ -666,6 +670,9 @@ export class AuthService {
     companyId: string;
     managerEmail: string;
     managerSetupUrl: string;
+    managerEmailDeliveryStatus?: string;
+    managerEmailDeliveryProvider?: string;
+    managerEmailDeliveryError?: string;
   }> {
     const organizationName = this.normalizeOrganizationName(dto.organizationName);
     const managerEmail = dto.managerEmail.trim().toLowerCase();
@@ -754,6 +761,38 @@ export class AuthService {
 
     const webBaseUrl = (process.env.WEB_ADMIN_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     const managerSetupUrl = `${webBaseUrl}/join/manager/${token}`;
+    let managerEmailDelivery: {
+      status: string;
+      provider: string;
+      errorMessage?: string;
+    } = {
+      status: 'failed',
+      provider: 'none',
+      errorMessage: 'Email delivery was not attempted.',
+    };
+
+    try {
+      const delivery = await this.employeeInvitationsMailer.sendManagerSetupEmail({
+        email: managerEmail,
+        companyName: organizationName,
+        tenantName: organizationName,
+        setupUrl: managerSetupUrl,
+        locale: preferredLocale,
+      });
+      managerEmailDelivery = {
+        status: delivery.status,
+        provider: delivery.provider,
+        errorMessage: delivery.errorMessage,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to send manager setup email to ${managerEmail}: ${errorMessage}`);
+      managerEmailDelivery = {
+        status: 'failed',
+        provider: 'none',
+        errorMessage,
+      };
+    }
 
     await this.auditService.log({
       tenantId: result.tenantId,
@@ -764,6 +803,9 @@ export class AuthService {
         organizationName,
         tenantSlug,
         managerEmail,
+        managerEmailDeliveryStatus: managerEmailDelivery.status,
+        managerEmailDeliveryProvider: managerEmailDelivery.provider,
+        managerEmailDeliveryError: managerEmailDelivery.errorMessage ?? null,
         promoCode: this.normalizePromoCode(dto.promoCode),
       },
     });
@@ -776,6 +818,11 @@ export class AuthService {
       companyId: result.companyId,
       managerEmail,
       managerSetupUrl,
+      managerEmailDeliveryStatus: managerEmailDelivery.status,
+      managerEmailDeliveryProvider: managerEmailDelivery.provider,
+      ...(managerEmailDelivery.errorMessage
+        ? { managerEmailDeliveryError: managerEmailDelivery.errorMessage }
+        : {}),
     };
   }
 

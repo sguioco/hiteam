@@ -29,6 +29,7 @@ const LOCATION_SETUP_SELECT = {
 } as const;
 
 const TENANT_SETUP_SELECT = {
+  businessId: true,
   attendanceTrackingEnabled: true,
 } as const;
 
@@ -135,6 +136,7 @@ export class OrgService {
 
     if (this.isPlaceholderSetup({ company, location })) {
       return {
+        organizationId: tenant?.businessId ?? null,
         configured: false,
         company: null,
         location: null,
@@ -151,6 +153,7 @@ export class OrgService {
     );
 
     return {
+      organizationId: tenant?.businessId ?? null,
       configured,
       company,
       location,
@@ -330,6 +333,7 @@ export class OrgService {
       }
 
       return {
+        organizationId: tenant.businessId,
         configured: true,
         company,
         location,

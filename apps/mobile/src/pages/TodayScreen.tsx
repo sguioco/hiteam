@@ -140,6 +140,12 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       TODAY_SCREEN_CACHE_KEY,
       (entry) => {
         if (!entry) {
+          setAttendanceStatus(null);
+          setAttendanceTrackingEnabled(true);
+          setProfile(null);
+          setShifts([]);
+          setTasks([]);
+          setAttendanceLoading(true);
           return;
         }
 

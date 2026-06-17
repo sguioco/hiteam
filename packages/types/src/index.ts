@@ -552,6 +552,7 @@ export type OrganizationSetupResponse = {
   attendanceTrackingEnabled?: boolean;
   company: (NamedEntityOption & { createdAt?: string | Date | null }) | null;
   configured?: boolean;
+  organizationId?: string | null;
 };
 
 export type ManagerEmployeeItem = {

@@ -111,6 +111,9 @@ export async function POST(request: NextRequest) {
       managerEmail?: string;
       managerSetupUrl?: string;
       managerTemporaryPassword?: string;
+      managerEmailDeliveryStatus?: string;
+      managerEmailDeliveryProvider?: string;
+      managerEmailDeliveryError?: string;
     };
 
     if (!payload.managerEmail || !payload.managerSetupUrl) {
@@ -121,6 +124,9 @@ export async function POST(request: NextRequest) {
       {
         managerEmail: payload.managerEmail,
         managerSetupUrl: payload.managerSetupUrl,
+        managerEmailDeliveryStatus: payload.managerEmailDeliveryStatus,
+        managerEmailDeliveryProvider: payload.managerEmailDeliveryProvider,
+        managerEmailDeliveryError: payload.managerEmailDeliveryError,
         ...(payload.managerTemporaryPassword
           ? { managerTemporaryPassword: payload.managerTemporaryPassword }
           : {}),

@@ -3047,21 +3047,30 @@ textarea {
 }
 
 .organization-studio-meta-stack {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
   justify-items: start;
 }
 
 .organization-studio-code {
+  display: inline-flex;
+  max-width: min(100%, 42rem);
+  align-items: baseline;
+  gap: 4px;
   color: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.9rem;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .organization-studio-code strong {
   color: var(--foreground);
   font-weight: 700;
   letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
 }
 
 .organization-studio-grid {

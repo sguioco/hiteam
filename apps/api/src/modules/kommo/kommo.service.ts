@@ -559,16 +559,13 @@ export class KommoService {
     }
 
     const key = options.key ?? `lifecycle:${event}`;
+    const existingLog = await this.prisma.kommoAutomationLog.findFirst({
+      where: { tenantId, key },
+      select: { id: true },
+    });
 
-    try {
-      await this.prisma.kommoAutomationLog.create({
-        data: { tenantId, key },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        return;
-      }
-      throw error;
+    if (existingLog) {
+      return;
     }
 
     let lifecycleEmailResult: LifecycleEmailSendResult | undefined;
@@ -579,9 +576,15 @@ export class KommoService {
         );
         return undefined;
       });
+
+      if (!lifecycleEmailResult || lifecycleEmailResult.status === 'failed') {
+        this.logger.warn(`Lifecycle event ${event} for tenant ${tenantId} will be retried because email delivery failed.`);
+        return;
+      }
     }
 
     if (!kommoEnabled) {
+      await this.createAutomationLogOnce(tenantId, key);
       return;
     }
 
@@ -595,17 +598,17 @@ export class KommoService {
       lifecycleEmailResult,
     });
 
-    if (!result.leadId || !options.taskText) {
-      return;
+    if (result.leadId && options.taskText) {
+      await this.createTaskOnce(
+        tenantId,
+        `${key}:task`,
+        result.leadId,
+        options.taskText,
+        new Date(Date.now() + (options.taskDueInDays ?? 1) * 24 * 60 * 60 * 1000),
+      );
     }
 
-    await this.createTaskOnce(
-      tenantId,
-      `${key}:task`,
-      result.leadId,
-      options.taskText,
-      new Date(Date.now() + (options.taskDueInDays ?? 1) * 24 * 60 * 60 * 1000),
-    );
+    await this.createAutomationLogOnce(tenantId, key);
   }
 
   private async runTenantAutomations(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
@@ -1782,6 +1785,20 @@ export class KommoService {
     ]);
   }
 
+  private async createAutomationLogOnce(tenantId: string, key: string) {
+    try {
+      await this.prisma.kommoAutomationLog.create({
+        data: { tenantId, key },
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   private async createTaskOnce(tenantId: string, key: string, leadId: number, text: string, completeTill: Date) {
     try {
       await this.prisma.kommoAutomationLog.create({
@@ -2139,6 +2156,7 @@ export class KommoService {
       `[HiTeam] ${note}`,
       `Reason: ${reason}`,
       `Organization: ${snapshot.tenant.name}`,
+      `Organization ID: ${snapshot.tenant.businessId}`,
       `Employees: ${snapshot.metrics.activeEmployees}/${snapshot.metrics.totalEmployees} active`,
       `Payment: ${snapshot.metrics.paymentStatus}`,
       `Weekly usage score: ${snapshot.metrics.weeklyUsageScore}`,

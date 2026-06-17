@@ -63,6 +63,24 @@ export type LifecycleEmailSendResult = {
   errorMessage?: string;
 };
 
+export type TransactionalEmailSendStatus =
+  | 'disabled'
+  | 'no_recipient'
+  | 'accepted'
+  | 'failed';
+
+export type TransactionalEmailSendResult = {
+  status: TransactionalEmailSendStatus;
+  provider: 'disabled' | 'no_recipient' | 'microsoft_graph';
+  sender: string;
+  replyTo: string;
+  recipients: string[];
+  recipientCount: number;
+  recordedAt: string;
+  subject?: string;
+  errorMessage?: string;
+};
+
 type GraphTokenCache = {
   accessToken: string;
   expiresAt: number;
@@ -162,8 +180,82 @@ export class LifecycleEmailService {
     }
   }
 
+  async sendTransactionalEmail(params: {
+    to: string | string[] | null | undefined;
+    subject: string;
+    html: string;
+    text: string;
+    replyTo?: string | null;
+  }): Promise<TransactionalEmailSendResult> {
+    const sender = this.resolveSender();
+    const replyTo = params.replyTo?.trim() || this.resolveReplyTo(sender);
+    const recipients = this.normalizeRecipientList(params.to);
+
+    if (recipients.length === 0) {
+      return this.buildTransactionalSendResult({
+        status: 'no_recipient',
+        provider: 'no_recipient',
+        sender,
+        replyTo,
+        subject: params.subject,
+      });
+    }
+
+    if (!this.isEnabled()) {
+      return this.buildTransactionalSendResult({
+        status: 'disabled',
+        provider: 'disabled',
+        sender,
+        replyTo,
+        recipients,
+        subject: params.subject,
+      });
+    }
+
+    try {
+      await this.sendWithMicrosoftGraph({
+        sender,
+        replyTo,
+        to: recipients,
+        subject: params.subject,
+        html: params.html,
+        text: params.text,
+      });
+
+      return this.buildTransactionalSendResult({
+        status: 'accepted',
+        provider: 'microsoft_graph',
+        sender,
+        replyTo,
+        recipients,
+        subject: params.subject,
+      });
+    } catch (error) {
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.warn(`Transactional email failed for ${recipients.join(', ')}: ${errorMessage}`);
+
+      return this.buildTransactionalSendResult({
+        status: 'failed',
+        provider: 'microsoft_graph',
+        sender,
+        replyTo,
+        recipients,
+        subject: params.subject,
+        errorMessage,
+      });
+    }
+  }
+
   isEnabled() {
-    return this.configService.get<string>('LIFECYCLE_EMAILS_ENABLED')?.trim().toLowerCase() === 'true';
+    const flag = this.configService.get<string>('LIFECYCLE_EMAILS_ENABLED')?.trim().toLowerCase();
+    if (flag === 'false') {
+      return false;
+    }
+    if (flag === 'true') {
+      return true;
+    }
+
+    return this.isGraphConfigured();
   }
 
   private async loadEmailSnapshot(tenantId: string) {
@@ -267,6 +359,17 @@ export class LifecycleEmailService {
     }
 
     recipients.add(normalized);
+  }
+
+  private normalizeRecipientList(value: string | string[] | null | undefined) {
+    const emails = new Set<string>();
+    const values = Array.isArray(value) ? value : [value];
+
+    for (const item of values) {
+      this.addRecipient(emails, item);
+    }
+
+    return [...emails];
   }
 
   private buildContext(
@@ -667,6 +770,30 @@ export class LifecycleEmailService {
     };
   }
 
+  private buildTransactionalSendResult(params: {
+    status: TransactionalEmailSendStatus;
+    provider: TransactionalEmailSendResult['provider'];
+    sender: string;
+    replyTo: string;
+    recipients?: string[];
+    subject?: string;
+    errorMessage?: string;
+  }): TransactionalEmailSendResult {
+    const recipients = params.recipients ?? [];
+
+    return {
+      status: params.status,
+      provider: params.provider,
+      sender: params.sender,
+      replyTo: params.replyTo,
+      recipients,
+      recipientCount: recipients.length,
+      recordedAt: new Date().toISOString(),
+      subject: params.subject,
+      errorMessage: params.errorMessage,
+    };
+  }
+
   private resolveSender() {
     return this.configService.get<string>('MICROSOFT_GRAPH_SENDER')?.trim() || 'info@hiteam.net';
   }
@@ -715,6 +842,14 @@ export class LifecycleEmailService {
     }
 
     return value;
+  }
+
+  private isGraphConfigured() {
+    return Boolean(
+      this.configService.get<string>('MICROSOFT_GRAPH_TENANT_ID')?.trim() &&
+        this.configService.get<string>('MICROSOFT_GRAPH_CLIENT_ID')?.trim() &&
+        this.configService.get<string>('MICROSOFT_GRAPH_CLIENT_SECRET')?.trim(),
+    );
   }
 
   private getErrorMessage(error: unknown) {

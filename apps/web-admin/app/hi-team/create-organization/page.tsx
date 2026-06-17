@@ -23,6 +23,9 @@ type RegisterOrganizationResponse = {
   managerEmail: string;
   managerSetupUrl: string;
   managerTemporaryPassword?: string;
+  managerEmailDeliveryStatus?: string;
+  managerEmailDeliveryProvider?: string;
+  managerEmailDeliveryError?: string;
 };
 
 type SupportedLang = "en" | "ru";
@@ -42,6 +45,8 @@ const texts = {
       "Send the manager setup link to the manager. After setup, the manager will add employee work emails in organization settings.",
     managerLogin: "Manager login",
     managerTemporaryPassword: "Manager temporary password",
+    emailDeliveryAccepted: "Manager email accepted by provider",
+    emailDeliveryFailed: "Manager email was not sent",
     copied: "Copied",
     copy: "Copy",
     createAnother: "Create another organization",
@@ -65,6 +70,8 @@ const texts = {
       "Передай ссылку менеджеру для desktop setup. После настройки менеджер добавит рабочие email сотрудников в настройках организации.",
     managerLogin: "Вход менеджера",
     managerTemporaryPassword: "Временный пароль менеджера",
+    emailDeliveryAccepted: "Письмо менеджеру принято провайдером",
+    emailDeliveryFailed: "Письмо менеджеру не отправлено",
     copied: "Скопировано",
     copy: "Копировать",
     createAnother: "Создать ещё одну организацию",
@@ -230,6 +237,22 @@ export default function InternalCreateOrganizationPage() {
                   <p className="mt-2 text-emerald-800">
                     {t.successBody}
                   </p>
+                  {result.managerEmailDeliveryStatus ? (
+                    <p
+                      className={
+                        result.managerEmailDeliveryStatus === "accepted"
+                          ? "mt-2 text-emerald-800"
+                          : "mt-2 text-amber-800"
+                      }
+                    >
+                      {result.managerEmailDeliveryStatus === "accepted"
+                        ? t.emailDeliveryAccepted
+                        : t.emailDeliveryFailed}
+                      {result.managerEmailDeliveryProvider
+                        ? ` (${result.managerEmailDeliveryProvider})`
+                        : ""}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4">

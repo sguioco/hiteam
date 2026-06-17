@@ -1,9 +1,10 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
+import { EmployeeInvitationsMailerService } from '../employees/employee-invitations.mailer';
 import { RegisterOrganizationDto } from '../auth/dto/register-organization.dto';
 import { GenerateTrialPromoCodesDto } from './dto/generate-trial-promo-codes.dto';
 
@@ -11,9 +12,12 @@ const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
 
 @Injectable()
 export class SystemService {
+  private readonly logger = new Logger(SystemService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly employeeInvitationsMailer: EmployeeInvitationsMailerService,
   ) {}
 
   async createTenant(dto: CreateTenantDto) {
@@ -66,14 +70,46 @@ export class SystemService {
       },
     });
 
+    const webBaseUrl = (process.env.WEB_ADMIN_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    const setupUrl = `${webBaseUrl}/join/manager/${token}`;
+    let managerEmailDelivery = {
+      status: 'failed',
+      provider: 'none',
+      errorMessage: 'Email delivery was not attempted.',
+    };
+
+    try {
+      const delivery = await this.employeeInvitationsMailer.sendManagerSetupEmail({
+        email: dto.managerEmail,
+        companyName: tenant.name,
+        tenantName: tenant.name,
+        setupUrl,
+      });
+      managerEmailDelivery = {
+        status: delivery.status,
+        provider: delivery.provider,
+        errorMessage: delivery.errorMessage ?? '',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to send tenant manager setup email to ${dto.managerEmail}: ${errorMessage}`);
+      managerEmailDelivery = {
+        status: 'failed',
+        provider: 'none',
+        errorMessage,
+      };
+    }
+
     return {
       tenantId: tenant.id,
       businessId: tenant.businessId,
       slug: tenant.slug,
       invitationId: invitation.id,
       token,
-      // Provide a generic URL that the frontend can use or map to
-      setupUrl: `/join/manager/${token}`,
+      setupUrl,
+      managerEmailDeliveryStatus: managerEmailDelivery.status,
+      managerEmailDeliveryProvider: managerEmailDelivery.provider,
+      managerEmailDeliveryError: managerEmailDelivery.errorMessage || undefined,
     };
   }
 

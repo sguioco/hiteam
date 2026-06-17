@@ -198,6 +198,11 @@ export default function RequestsScreen() {
       requestsCacheKey,
       (entry) => {
         if (!entry) {
+          setBalances(null);
+          setItems([]);
+          setCalendar(null);
+          setTasks([]);
+          setLoading(true);
           return;
         }
 

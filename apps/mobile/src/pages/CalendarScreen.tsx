@@ -658,6 +658,14 @@ export default function CalendarScreen({
   useEffect(() => {
     return subscribeScreenCache<CalendarScreenCacheValue>(calendarCacheKey, (entry) => {
       if (!entry) {
+        setShifts([]);
+        setTasks([]);
+        setManagerEmployees([]);
+        setManagerGroups([]);
+        setManagerShifts([]);
+        setShiftTemplates([]);
+        setOrganizationStartDate(null);
+        setLoading(true);
         return;
       }
 
@@ -687,6 +695,7 @@ export default function CalendarScreen({
       newsCacheKey,
       (entry) => {
         if (!entry) {
+          setAnnouncements([]);
           return;
         }
 

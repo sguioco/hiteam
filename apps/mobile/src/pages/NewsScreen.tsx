@@ -332,6 +332,8 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
   useEffect(() => {
     return subscribeScreenCache<AnnouncementItem[]>(cacheKey, (entry) => {
       if (!entry) {
+        setItems([]);
+        setLoading(true);
         return;
       }
 

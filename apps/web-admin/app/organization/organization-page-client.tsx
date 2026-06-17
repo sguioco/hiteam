@@ -48,6 +48,7 @@ type OrganizationSetupResponse = {
   configured: boolean;
   defaultGeofenceRadiusMeters: number;
   location: Location | null;
+  organizationId?: string | null;
 };
 
 type SetupDraft = {
@@ -94,6 +95,7 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
   configured: false,
   defaultGeofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS,
   location: null,
+  organizationId: null,
 };
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
@@ -425,6 +427,7 @@ export default function OrganizationPageClient({
             company: nextSetup.company,
             attendanceTrackingEnabled: nextSetup.attendanceTrackingEnabled,
             configured: nextSetup.configured,
+            organizationId: nextSetup.organizationId,
           },
         }),
       );
@@ -480,6 +483,11 @@ export default function OrganizationPageClient({
                     <Users className="h-4 w-4" />
                     {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
                   </span>
+                  {setup.organizationId ? (
+                    <span className="organization-studio-code">
+                      ID: <strong>{setup.organizationId}</strong>
+                    </span>
+                  ) : null}
                 </div>
               </label>
             </div>

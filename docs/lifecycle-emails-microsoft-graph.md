@@ -54,18 +54,24 @@ Test-ApplicationAccessPolicy `
 ## API environment
 
 ```env
-LIFECYCLE_EMAILS_ENABLED=true
+# Empty = auto-enable when Microsoft Graph credentials are configured.
+# Set false only when lifecycle and transactional emails must be disabled.
+LIFECYCLE_EMAILS_ENABLED=
 MICROSOFT_GRAPH_TENANT_ID=...
 MICROSOFT_GRAPH_CLIENT_ID=...
 MICROSOFT_GRAPH_CLIENT_SECRET=...
 MICROSOFT_GRAPH_SENDER=info@hiteam.net
 LIFECYCLE_EMAIL_REPLY_TO=info@hiteam.net
 WEB_ADMIN_BASE_URL=https://hiteam.net
+RESEND_API_KEY=...
+EMAIL_FROM=HiTeam <info@hiteam.net>
 ```
 
 ## Sending logic
 
 - registration sends `user_registered` and `trial_started`
+- employee invitations and manager setup emails use Microsoft Graph first and Resend as a fallback
+- employee invitation status changes send approval/rejection/temporary-password emails
 - Stripe paid invoice sends `payment_successful`
 - Stripe failed invoice sends `payment_failed`
 - cancellation sends `subscription_cancelled`

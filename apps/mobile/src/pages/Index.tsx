@@ -82,6 +82,8 @@ type StartShiftPromptState = {
   minutesUntilStart: number;
 };
 
+const START_SHIFT_PROMPT_DISMISS_MS = 5 * 60_000;
+
 function SystemTopBlur({
   insetTop,
   dark = false,
@@ -320,6 +322,7 @@ const Index = () => {
     initialTodaySnapshot?.value.attendanceTrackingEnabled ?? true,
   );
   const appStateRef = useRef(AppState.currentState);
+  const startShiftPromptDismissedUntilRef = useRef(0);
   const handWaveRotation = useSharedValue(0);
   const isManager = hasManagerAccess(roleCodes);
   const isTasksOnlyOrganization = !attendanceTrackingEnabled;
@@ -361,6 +364,17 @@ const Index = () => {
       lastName: navProfile.lastName,
     });
   }, [navProfile]);
+
+  const applyStartShiftPrompt = useCallback(
+    (nextPrompt: StartShiftPromptState | null) => {
+      setStartShiftPrompt(nextPrompt);
+      setStartShiftPromptVisible(
+        Boolean(nextPrompt) &&
+          Date.now() >= startShiftPromptDismissedUntilRef.current,
+      );
+    },
+    [],
+  );
 
   function markTabMounted(tab: Tab) {
     setMountedTabs((current) => {
@@ -498,6 +512,7 @@ const Index = () => {
       return;
     }
 
+    startShiftPromptDismissedUntilRef.current = 0;
     setStartShiftPrompt(null);
     setStartShiftPromptVisible(false);
   }, [isTasksOnlyOrganization]);
@@ -572,6 +587,7 @@ const Index = () => {
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
+      startShiftPromptDismissedUntilRef.current = 0;
       setStartShiftPrompt(null);
       setStartShiftPromptVisible(false);
       return;
@@ -693,8 +709,7 @@ const Index = () => {
               todayBootstrap.shifts,
             )
           : null;
-        setStartShiftPrompt(nextPrompt);
-        setStartShiftPromptVisible(Boolean(nextPrompt));
+        applyStartShiftPrompt(nextPrompt);
       } catch {
         if (!cancelled) {
           setStartShiftPrompt(null);
@@ -709,7 +724,13 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [appEntrySignal, hasWorkspaceEntry, language, roleCodes]);
+  }, [
+    appEntrySignal,
+    applyStartShiftPrompt,
+    hasWorkspaceEntry,
+    language,
+    roleCodes,
+  ]);
 
   function navigateToTab(tab: Tab, options?: { overdue?: number }) {
     const nextTab =
@@ -727,6 +748,8 @@ const Index = () => {
   }
 
   function closeStartShiftPrompt() {
+    startShiftPromptDismissedUntilRef.current =
+      Date.now() + START_SHIFT_PROMPT_DISMISS_MS;
     setStartShiftPromptVisible(false);
   }
 

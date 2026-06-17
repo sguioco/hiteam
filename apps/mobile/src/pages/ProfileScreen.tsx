@@ -62,6 +62,9 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
       PROFILE_SCREEN_CACHE_KEY,
       (entry) => {
         if (!entry) {
+          setProfile(null);
+          setAvatarLoadFailed(false);
+          setLoading(true);
           return;
         }
 

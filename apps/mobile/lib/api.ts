@@ -54,6 +54,7 @@ import { resolveEmployeeAvatarSource } from "./employee-avatar";
 import { API_URL, FALLBACK_API_URL } from "./api-config";
 import type { AppLanguage } from "./i18n";
 import type { NotificationPreferences } from "./notification-preferences";
+import { setScreenCacheScope } from "./screen-cache";
 
 const API_REQUEST_TIMEOUT_MS = 20_000;
 const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
@@ -80,6 +81,19 @@ const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ""}smart-auth-se
 let unauthorizedHandler: (() => void) | null = null;
 let deviceBootstrapPromise: Promise<void> | null = null;
 let lastDeviceBootstrapAt = 0;
+
+function getSessionCacheScope(session: AppSession | null) {
+  if (!session) {
+    return null;
+  }
+
+  return `tenant:${session.user.tenantId}:user:${session.user.id}`;
+}
+
+function applySession(session: AppSession | null) {
+  cachedSession = session;
+  setScreenCacheScope(getSessionCacheScope(session));
+}
 
 function buildApiUrl(path: string, apiUrl = API_URL) {
   return `${apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
@@ -344,7 +358,7 @@ async function clearPersistedSession() {
 }
 
 function handleUnauthorized() {
-  cachedSession = null;
+  applySession(null);
   resetDeviceBootstrapState();
   void clearPersistedSession();
   unauthorizedHandler?.();
@@ -373,7 +387,7 @@ async function refreshSession(): Promise<AppSession | null> {
     }
 
     const nextSession = (await response.json()) as AppSession;
-    cachedSession = nextSession;
+    applySession(nextSession);
     await persistSession(nextSession);
     return nextSession;
   } catch {
@@ -464,10 +478,11 @@ async function authenticateSession(payload: {
     throw new Error(await readErrorMessage(response, "Unable to sign in."));
   }
 
-  cachedSession = (await response.json()) as AppSession;
+  const nextSession = (await response.json()) as AppSession;
+  applySession(nextSession);
   resetDeviceBootstrapState();
-  await persistSession(cachedSession);
-  return cachedSession;
+  await persistSession(nextSession);
+  return nextSession;
 }
 
 async function performAuthorizedRequest(
@@ -541,7 +556,7 @@ export async function getDemoSession(): Promise<AppSession> {
 
   const restoredSession = await readPersistedSession();
   if (restoredSession) {
-    cachedSession = restoredSession;
+    applySession(restoredSession);
     return restoredSession;
   }
 
@@ -549,7 +564,7 @@ export async function getDemoSession(): Promise<AppSession> {
 }
 
 export function resetDemoSession() {
-  cachedSession = null;
+  applySession(null);
   resetDeviceBootstrapState();
   void clearPersistedSession();
 }
@@ -564,11 +579,13 @@ export function hasCachedDemoSession() {
 
 export async function restorePersistedSession() {
   if (cachedSession) {
+    setScreenCacheScope(getSessionCacheScope(cachedSession));
     return cachedSession;
   }
 
-  cachedSession = await readPersistedSession();
-  return cachedSession;
+  const restoredSession = await readPersistedSession();
+  applySession(restoredSession);
+  return restoredSession;
 }
 
 export async function getDemoAccessToken(): Promise<string> {
@@ -628,14 +645,15 @@ export async function updatePreferredLocale(language: AppLanguage) {
     },
   );
   const latestSession = cachedSession ?? existingSession;
-  cachedSession = {
+  const nextSession = {
     ...latestSession,
     user: {
       ...latestSession.user,
       preferredLocale: payload.preferredLocale,
     },
   };
-  await persistSession(cachedSession);
+  applySession(nextSession);
+  await persistSession(nextSession);
 
   return payload;
 }

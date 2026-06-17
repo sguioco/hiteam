@@ -422,6 +422,12 @@ export default function ManagerScreen({
       tasks: TaskItem[];
     }>(MANAGER_SCREEN_CACHE_KEY, (entry) => {
       if (!entry) {
+        setProfile(null);
+        setEmployees([]);
+        setLiveSessions([]);
+        setTasks([]);
+        setFailedAvatarEmployeeIds(new Set());
+        setLoading(true);
         return;
       }
 

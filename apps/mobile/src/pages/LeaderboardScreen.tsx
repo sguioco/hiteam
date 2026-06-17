@@ -94,6 +94,8 @@ export default function LeaderboardScreen({
       leaderboardCacheKey,
       (entry) => {
         if (!entry) {
+          setOverview(null);
+          setLoading(true);
           return;
         }
 

@@ -12,8 +12,14 @@ type CacheSnapshot<T> = {
 };
 
 const CACHE_DIR = `${FileSystem.documentDirectory ?? ''}screen-cache/`;
+const DEFAULT_CACHE_SCOPE = 'anonymous';
 const memoryCache = new Map<string, CacheEnvelope<unknown>>();
-const cacheListeners = new Map<string, Set<(entry: CacheEnvelope<unknown> | null) => void>>();
+const cacheListeners = new Map<
+  string,
+  Set<(entry: CacheEnvelope<unknown> | null) => void>
+>();
+let activeCacheScope = DEFAULT_CACHE_SCOPE;
+let activeCacheGeneration = 0;
 
 function canUseFileSystem() {
   return Boolean(FileSystem.documentDirectory);
@@ -23,11 +29,27 @@ function sanitizeKey(key: string) {
   return key.replace(/[^a-z0-9._-]+/gi, '_').toLowerCase();
 }
 
-function getCachePath(key: string) {
-  return `${CACHE_DIR}${sanitizeKey(key)}.json`;
+function normalizeCacheScope(scope: string | null | undefined) {
+  const nextScope = scope?.trim();
+  return nextScope ? nextScope : DEFAULT_CACHE_SCOPE;
 }
 
-function buildSnapshot<T>(entry: CacheEnvelope<T>, maxAgeMs?: number): CacheSnapshot<T> {
+function getScopedCacheKey(key: string) {
+  return `${activeCacheScope}:${key}`;
+}
+
+function getCachePathForStorageKey(storageKey: string) {
+  return `${CACHE_DIR}${sanitizeKey(storageKey)}.json`;
+}
+
+function getCachePath(key: string) {
+  return getCachePathForStorageKey(getScopedCacheKey(key));
+}
+
+function buildSnapshot<T>(
+  entry: CacheEnvelope<T>,
+  maxAgeMs?: number,
+): CacheSnapshot<T> {
   const now = Date.now();
 
   return {
@@ -52,7 +74,10 @@ function areCacheValuesEqual(left: unknown, right: unknown) {
   }
 }
 
-function notifyCacheListeners(key: string, entry: CacheEnvelope<unknown> | null) {
+function notifyCacheListeners(
+  key: string,
+  entry: CacheEnvelope<unknown> | null,
+) {
   const listeners = cacheListeners.get(key);
 
   if (!listeners?.size) {
@@ -61,6 +86,14 @@ function notifyCacheListeners(key: string, entry: CacheEnvelope<unknown> | null)
 
   listeners.forEach((listener) => {
     listener(entry);
+  });
+}
+
+function notifyAllCacheListeners(entry: CacheEnvelope<unknown> | null) {
+  cacheListeners.forEach((listeners) => {
+    listeners.forEach((listener) => {
+      listener(entry);
+    });
   });
 }
 
@@ -76,7 +109,9 @@ async function ensureCacheDir() {
 }
 
 export async function readScreenCache<T>(key: string, maxAgeMs?: number) {
-  const fromMemory = memoryCache.get(key) as CacheEnvelope<T> | undefined;
+  const scopedKey = getScopedCacheKey(key);
+  const generation = activeCacheGeneration;
+  const fromMemory = memoryCache.get(scopedKey) as CacheEnvelope<T> | undefined;
 
   if (fromMemory) {
     return buildSnapshot(fromMemory, maxAgeMs);
@@ -86,7 +121,7 @@ export async function readScreenCache<T>(key: string, maxAgeMs?: number) {
     return null;
   }
 
-  const path = getCachePath(key);
+  const path = getCachePathForStorageKey(scopedKey);
 
   try {
     const info = await FileSystem.getInfoAsync(path);
@@ -105,7 +140,11 @@ export async function readScreenCache<T>(key: string, maxAgeMs?: number) {
       return null;
     }
 
-    memoryCache.set(key, parsed);
+    if (generation !== activeCacheGeneration) {
+      return null;
+    }
+
+    memoryCache.set(scopedKey, parsed);
     return buildSnapshot(parsed, maxAgeMs);
   } catch {
     return null;
@@ -113,7 +152,9 @@ export async function readScreenCache<T>(key: string, maxAgeMs?: number) {
 }
 
 export function peekScreenCache<T>(key: string, maxAgeMs?: number) {
-  const fromMemory = memoryCache.get(key) as CacheEnvelope<T> | undefined;
+  const fromMemory = memoryCache.get(getScopedCacheKey(key)) as
+    | CacheEnvelope<T>
+    | undefined;
 
   if (!fromMemory) {
     return null;
@@ -135,7 +176,9 @@ export function subscribeScreenCache<T>(
     listener(buildSnapshot(entry as CacheEnvelope<T>));
   };
 
-  const listeners = cacheListeners.get(key) ?? new Set<(entry: CacheEnvelope<unknown> | null) => void>();
+  const listeners =
+    cacheListeners.get(key) ??
+    new Set<(entry: CacheEnvelope<unknown> | null) => void>();
   listeners.add(wrappedListener);
   cacheListeners.set(key, listeners);
 
@@ -155,14 +198,16 @@ export function subscribeScreenCache<T>(
 }
 
 export async function writeScreenCache<T>(key: string, value: T) {
-  const previous = memoryCache.get(key) as CacheEnvelope<T> | undefined;
+  const scopedKey = getScopedCacheKey(key);
+  const path = getCachePathForStorageKey(scopedKey);
+  const previous = memoryCache.get(scopedKey) as CacheEnvelope<T> | undefined;
   const envelope: CacheEnvelope<T> = {
     storedAt: Date.now(),
     value,
   };
   const shouldNotify = !previous || !areCacheValuesEqual(previous.value, value);
 
-  memoryCache.set(key, envelope);
+  memoryCache.set(scopedKey, envelope);
 
   if (shouldNotify) {
     notifyCacheListeners(key, envelope);
@@ -175,7 +220,7 @@ export async function writeScreenCache<T>(key: string, value: T) {
   try {
     await ensureCacheDir();
     await FileSystem.writeAsStringAsync(
-      getCachePath(key),
+      path,
       JSON.stringify(envelope),
     );
   } catch {
@@ -184,7 +229,7 @@ export async function writeScreenCache<T>(key: string, value: T) {
 }
 
 export async function clearScreenCache(key: string) {
-  memoryCache.delete(key);
+  memoryCache.delete(getScopedCacheKey(key));
   notifyCacheListeners(key, null);
 
   if (!canUseFileSystem()) {
@@ -196,4 +241,17 @@ export async function clearScreenCache(key: string) {
   } catch {
     // Best effort cache delete.
   }
+}
+
+export function setScreenCacheScope(scope: string | null | undefined) {
+  const nextScope = normalizeCacheScope(scope);
+
+  if (nextScope === activeCacheScope) {
+    return;
+  }
+
+  activeCacheScope = nextScope;
+  activeCacheGeneration += 1;
+  memoryCache.clear();
+  notifyAllCacheListeners(null);
 }
