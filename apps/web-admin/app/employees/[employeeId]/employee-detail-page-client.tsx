@@ -1566,6 +1566,18 @@ export default function EmployeeCardPageClient({
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Дата рождения" : "Date of birth"}
+                      </dt>
+                      <dd className="font-medium">
+                        {employee.birthDate
+                          ? formatDate(employee.birthDate)
+                          : locale === "ru"
+                            ? "Не указана"
+                            : "Not set"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">
                         {locale === "ru" ? "Дата найма" : "Hire date"}
                       </dt>
                       <dd className="font-medium">

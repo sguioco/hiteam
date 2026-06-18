@@ -625,6 +625,32 @@ export async function signInWithEmail(
   });
 }
 
+export async function requestPasswordReset(
+  email: string,
+  tenantSlug?: string,
+  language?: AppLanguage,
+) {
+  const response = await fetchWithTimeout("/api/v1/auth/password-reset/request", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      tenantSlug,
+      locale: toBackendLocale(language),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, "Unable to send reset instructions."),
+    );
+  }
+
+  return response.json() as Promise<{ success: true }>;
+}
+
 export async function updatePreferredLocale(language: AppLanguage) {
   const preferredLocale = toBackendLocale(language);
   const existingSession = cachedSession ?? (await readPersistedSession());

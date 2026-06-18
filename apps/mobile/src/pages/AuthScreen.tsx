@@ -22,6 +22,7 @@ import {
   bootstrapPushNotifications,
   lookupInvitationByEmail,
   lookupInvitationByPhone,
+  requestPasswordReset,
   signInWithEmail,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
@@ -1007,6 +1008,32 @@ const AuthScreen = () => {
     }
   }
 
+  async function handleForgotPassword() {
+    const trimmedIdentifier = identifier.trim().toLowerCase();
+
+    if (!trimmedIdentifier || !trimmedIdentifier.includes('@')) {
+      hapticError();
+      setMessage(t('login.signInErrorEmail'));
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      await requestPasswordReset(trimmedIdentifier, undefined, language);
+      hapticSuccess();
+      setMessage(t('login.forgotPasswordSuccess'));
+    } catch (error) {
+      hapticError();
+      setMessage(
+        error instanceof Error ? error.message : t('login.forgotPasswordError'),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function renderHeroSubtitle(textColorClassName: string) {
     if (language === 'en') {
       return (
@@ -1431,6 +1458,16 @@ const AuthScreen = () => {
                                   </PressableScale>
                                 )}
                               </View>
+                              <PressableScale
+                                className="min-h-[32px] items-center justify-center"
+                                disabled={submitting}
+                                haptic="selection"
+                                onPress={() => void handleForgotPassword()}
+                              >
+                                <Text className="text-center text-[13px] font-semibold text-[#546cf2]">
+                                  {t('login.forgotPassword')}
+                                </Text>
+                              </PressableScale>
                             </>
                           )}
                           {message ? <Text style={joinProfileErrorStyle}>{message}</Text> : null}

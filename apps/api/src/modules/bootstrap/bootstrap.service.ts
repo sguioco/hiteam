@@ -8,6 +8,7 @@ import { CollaborationService } from '../collaboration/collaboration.service';
 import { EmployeesService } from '../employees/employees.service';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { OrgService } from '../org/org.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { RequestsService } from '../requests/requests.service';
 import { ScheduleService } from '../schedule/schedule.service';
 import type { ListManagerTasksQueryDto } from '../collaboration/dto/list-manager-tasks-query.dto';
@@ -1038,6 +1039,7 @@ export class BootstrapService {
     private readonly employeesService: EmployeesService,
     private readonly leaderboardService: LeaderboardService,
     private readonly orgService: OrgService,
+    private readonly prisma: PrismaService,
     private readonly requestsService: RequestsService,
     private readonly scheduleService: ScheduleService,
   ) {}
@@ -1072,6 +1074,66 @@ export class BootstrapService {
       attendanceTrackingEnabled: true,
       defaultGeofenceRadiusMeters: 100,
     }));
+  }
+
+  private async resolveActivityVisibilityScope(user: JwtUser) {
+    if (!isEmployeeOnlyRole(user.roleCodes)) {
+      return undefined;
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        userId: user.sub,
+      },
+      select: {
+        id: true,
+        groupMemberships: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      return {
+        visibleEmployeeIds: [],
+        visibleGroupIds: [],
+      };
+    }
+
+    const visibleGroupIds = Array.from(
+      new Set(
+        employee.groupMemberships
+          .map((membership) => membership.groupId)
+          .filter(Boolean),
+      ),
+    );
+    const visibleEmployeeIds = new Set<string>([employee.id]);
+
+    if (visibleGroupIds.length) {
+      const memberships = await this.prisma.workGroupMembership.findMany({
+        where: {
+          tenantId: user.tenantId,
+          groupId: {
+            in: visibleGroupIds,
+          },
+        },
+        select: {
+          employeeId: true,
+        },
+      });
+
+      for (const membership of memberships) {
+        visibleEmployeeIds.add(membership.employeeId);
+      }
+    }
+
+    return {
+      visibleEmployeeIds: [...visibleEmployeeIds],
+      visibleGroupIds,
+    };
   }
 
   async tasks(user: JwtUser, dateFrom?: string, dateTo?: string) {
@@ -1645,12 +1707,19 @@ export class BootstrapService {
   }
 
   async activity(user: JwtUser, dateFrom?: string, dateTo?: string) {
+    const visibilityScope = await this.resolveActivityVisibilityScope(user).catch(() =>
+      isEmployeeOnlyRole(user.roleCodes)
+        ? { visibleEmployeeIds: [], visibleGroupIds: [] }
+        : undefined,
+    );
+
     return {
       items: await this.auditService
         .listCompanyActivity(user.tenantId, {
           dateFrom,
           dateTo,
           limit: 80,
+          visibilityScope,
         })
         .catch(() => []),
     };

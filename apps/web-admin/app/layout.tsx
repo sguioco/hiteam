@@ -130,6 +130,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const requestHeaders = await headers();
   const cookieStore = await cookies();
   const isPublicRoute = requestHeaders.get("x-smart-public-route") === "1";
+  const pathname = requestHeaders.get("x-smart-pathname");
+  const shouldRenderWidget = pathname !== "/mobile";
   const initialLocale = resolveInitialLocale(
     requestHeaders.get("accept-language"),
     cookieStore.get("smart-admin-locale")?.value,
@@ -154,27 +156,31 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers initialLocale={initialLocale}>{children}</Providers>
-        <a
-          className="umnico-widget-logo"
-          data-umnico-logo="true"
-          draggable={false}
-          href="https://umnico.com/?utm_source=widget&utm_medium=online_chat&utm_campaign=button"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <img
-            alt="Umnico logo"
-            className="umnico-widget-logo-image"
-            draggable={false}
-            src="https://umnico.com/assets/index/umnico1.svg"
-          />
-        </a>
-        <div className="umnico-widget-loader" data-umnico-loader="true">
-          Loading
-        </div>
-        <Script id="umnico-widget-loader" strategy="afterInteractive">
-          {umnicoWidgetScript}
-        </Script>
+        {shouldRenderWidget ? (
+          <>
+            <a
+              className="umnico-widget-logo"
+              data-umnico-logo="true"
+              draggable={false}
+              href="https://umnico.com/?utm_source=widget&utm_medium=online_chat&utm_campaign=button"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <img
+                alt="Umnico logo"
+                className="umnico-widget-logo-image"
+                draggable={false}
+                src="https://umnico.com/assets/index/umnico1.svg"
+              />
+            </a>
+            <div className="umnico-widget-loader" data-umnico-loader="true">
+              Loading
+            </div>
+            <Script id="umnico-widget-loader" strategy="afterInteractive">
+              {umnicoWidgetScript}
+            </Script>
+          </>
+        ) : null}
       </body>
     </html>
   );

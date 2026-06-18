@@ -976,6 +976,8 @@ export default function Schedule({
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [shiftActionId, setShiftActionId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesReturnToCreateShift, setTemplatesReturnToCreateShift] =
+    useState(false);
   const [massAssignOpen, setMassAssignOpen] = useState(false);
   const [createShiftEmployeePickerOpen, setCreateShiftEmployeePickerOpen] =
     useState(false);
@@ -2055,6 +2057,24 @@ export default function Schedule({
     setCreateShiftOpen(true);
   }
 
+  function openTemplatesDialog(options?: { returnToCreateShift?: boolean }) {
+    setTemplatesReturnToCreateShift(Boolean(options?.returnToCreateShift));
+    setTemplatesOpen(true);
+  }
+
+  function handleTemplatesOpenChange(open: boolean) {
+    setTemplatesOpen(open);
+    if (!open) {
+      setTemplatesReturnToCreateShift(false);
+    }
+  }
+
+  function returnToCreateShiftFromTemplates() {
+    setTemplatesOpen(false);
+    setTemplatesReturnToCreateShift(false);
+    setCreateShiftOpen(true);
+  }
+
   function openEditShiftDialog(shift: EnrichedShift) {
     setEditingShiftId(shift.id);
     setCreateShiftEmployeePickerOpen(false);
@@ -2566,7 +2586,7 @@ export default function Schedule({
               </Button>
               <Button
                 className="font-heading"
-                onClick={() => setTemplatesOpen(true)}
+                onClick={() => openTemplatesDialog()}
                 size="lg"
                 type="button"
                 variant="outline"
@@ -2656,7 +2676,7 @@ export default function Schedule({
                     </Button>
                     <Button
                       className="font-heading"
-                      onClick={() => setTemplatesOpen(true)}
+                      onClick={() => openTemplatesDialog()}
                       size="lg"
                       type="button"
                       variant="outline"
@@ -3349,6 +3369,7 @@ export default function Schedule({
 
                       return (
                         <SelectableOptionButton
+                          closeOnSelected={false}
                           key={employee.id}
                           onClose={() => setCreateShiftEmployeePickerOpen(false)}
                           onSelect={() => {
@@ -3524,7 +3545,7 @@ export default function Schedule({
               <Button
                 onClick={() => {
                   setCreateShiftOpen(false);
-                  setTemplatesOpen(true);
+                  openTemplatesDialog({ returnToCreateShift: true });
                 }}
                 type="button"
                 variant="outline"
@@ -3543,15 +3564,29 @@ export default function Schedule({
         </DialogContent>
       </Dialog>
 
-      <Dialog onOpenChange={setTemplatesOpen} open={templatesOpen}>
+      <Dialog onOpenChange={handleTemplatesOpenChange} open={templatesOpen}>
         <DialogContent className="max-w-3xl rounded-[28px]">
           <DialogHeader>
-            <DialogTitle className="font-heading text-2xl">
-              {ui.templatesDialogTitle}
-            </DialogTitle>
-            <DialogDescription>
-              {ui.templatesDialogDescription}
-            </DialogDescription>
+            <div className="flex items-start gap-2">
+              {templatesReturnToCreateShift ? (
+                <button
+                  aria-label={locale === "ru" ? "Назад к созданию смены" : "Back to create shift"}
+                  className="-ml-2 flex size-10 shrink-0 items-center justify-center text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.96]"
+                  onClick={returnToCreateShiftFromTemplates}
+                  type="button"
+                >
+                  <ChevronLeft className="size-5" />
+                </button>
+              ) : null}
+              <div>
+                <DialogTitle className="font-heading text-2xl">
+                  {ui.templatesDialogTitle}
+                </DialogTitle>
+                <DialogDescription>
+                  {ui.templatesDialogDescription}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">

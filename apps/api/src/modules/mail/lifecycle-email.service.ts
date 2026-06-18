@@ -47,7 +47,7 @@ export type LifecycleEmailSendStatus =
 export type LifecycleEmailSendResult = {
   event: LifecycleEmailEvent;
   status: LifecycleEmailSendStatus;
-  provider: 'disabled' | 'missing_tenant' | 'no_recipient' | 'microsoft_graph';
+  provider: 'disabled' | 'missing_tenant' | 'no_recipient' | 'microsoft_graph' | 'resend';
   sender: string;
   replyTo: string;
   recipients: string[];
@@ -71,7 +71,7 @@ export type TransactionalEmailSendStatus =
 
 export type TransactionalEmailSendResult = {
   status: TransactionalEmailSendStatus;
-  provider: 'disabled' | 'no_recipient' | 'microsoft_graph';
+  provider: 'disabled' | 'no_recipient' | 'microsoft_graph' | 'resend';
   sender: string;
   replyTo: string;
   recipients: string[];
@@ -143,7 +143,7 @@ export class LifecycleEmailService {
     }
 
     try {
-      await this.sendWithMicrosoftGraph({
+      const deliveryProvider = await this.sendWithConfiguredProvider({
         sender,
         replyTo,
         to: recipients,
@@ -155,7 +155,7 @@ export class LifecycleEmailService {
       return this.buildSendResult({
         event: params.event,
         status: 'accepted',
-        provider: 'microsoft_graph',
+        provider: deliveryProvider,
         sender,
         replyTo,
         recipients,
@@ -169,7 +169,7 @@ export class LifecycleEmailService {
       return this.buildSendResult({
         event: params.event,
         status: 'failed',
-        provider: 'microsoft_graph',
+        provider: this.resolveFailureProvider(),
         sender,
         replyTo,
         recipients,
@@ -213,7 +213,7 @@ export class LifecycleEmailService {
     }
 
     try {
-      await this.sendWithMicrosoftGraph({
+      const deliveryProvider = await this.sendWithConfiguredProvider({
         sender,
         replyTo,
         to: recipients,
@@ -224,7 +224,7 @@ export class LifecycleEmailService {
 
       return this.buildTransactionalSendResult({
         status: 'accepted',
-        provider: 'microsoft_graph',
+        provider: deliveryProvider,
         sender,
         replyTo,
         recipients,
@@ -236,7 +236,7 @@ export class LifecycleEmailService {
 
       return this.buildTransactionalSendResult({
         status: 'failed',
-        provider: 'microsoft_graph',
+        provider: this.resolveFailureProvider(),
         sender,
         replyTo,
         recipients,
@@ -255,7 +255,7 @@ export class LifecycleEmailService {
       return true;
     }
 
-    return this.isGraphConfigured();
+    return this.hasConfiguredEmailProvider();
   }
 
   private async loadEmailSnapshot(tenantId: string) {
@@ -737,6 +737,66 @@ export class LifecycleEmailService {
     }
   }
 
+  private async sendWithResend(params: {
+    sender: string;
+    to: string[];
+    subject: string;
+    html: string;
+    text: string;
+  }) {
+    const apiKey = this.requireConfig('RESEND_API_KEY');
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: this.resolveResendFrom(params.sender),
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        text: params.text,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Resend rejected email: ${response.status} ${body}`);
+    }
+  }
+
+  private async sendWithConfiguredProvider(params: {
+    sender: string;
+    replyTo: string;
+    to: string[];
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<'microsoft_graph' | 'resend'> {
+    const errors: string[] = [];
+
+    if (this.isGraphConfigured()) {
+      try {
+        await this.sendWithMicrosoftGraph(params);
+        return 'microsoft_graph';
+      } catch (error) {
+        errors.push(`Microsoft Graph: ${this.getErrorMessage(error)}`);
+      }
+    }
+
+    if (this.isResendConfigured()) {
+      try {
+        await this.sendWithResend(params);
+        return 'resend';
+      } catch (error) {
+        errors.push(`Resend: ${this.getErrorMessage(error)}`);
+      }
+    }
+
+    throw new Error(errors.length ? errors.join(' | ') : 'No email provider is configured.');
+  }
+
   private buildSendResult(params: {
     event: LifecycleEmailEvent;
     status: LifecycleEmailSendStatus;
@@ -802,6 +862,11 @@ export class LifecycleEmailService {
     return this.configService.get<string>('LIFECYCLE_EMAIL_REPLY_TO')?.trim() || sender;
   }
 
+  private resolveResendFrom(sender: string) {
+    const configuredFrom = this.configService.get<string>('EMAIL_FROM')?.trim();
+    return configuredFrom || `HiTeam <${sender}>`;
+  }
+
   private async getAccessToken() {
     const cached = this.tokenCache;
     if (cached && cached.expiresAt > Date.now() + 60_000) {
@@ -850,6 +915,26 @@ export class LifecycleEmailService {
         this.configService.get<string>('MICROSOFT_GRAPH_CLIENT_ID')?.trim() &&
         this.configService.get<string>('MICROSOFT_GRAPH_CLIENT_SECRET')?.trim(),
     );
+  }
+
+  private isResendConfigured() {
+    return Boolean(this.configService.get<string>('RESEND_API_KEY')?.trim());
+  }
+
+  private hasConfiguredEmailProvider() {
+    return this.isGraphConfigured() || this.isResendConfigured();
+  }
+
+  private resolveFailureProvider(): 'disabled' | 'microsoft_graph' | 'resend' {
+    if (this.isGraphConfigured()) {
+      return 'microsoft_graph';
+    }
+
+    if (this.isResendConfigured()) {
+      return 'resend';
+    }
+
+    return 'disabled';
   }
 
   private getErrorMessage(error: unknown) {

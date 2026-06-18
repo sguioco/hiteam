@@ -218,7 +218,7 @@ export class EmployeeInvitationsMailerService {
     if (graphResult.status === 'accepted') {
       return this.buildDeliveryResult({
         status: 'accepted',
-        provider: 'microsoft_graph',
+        provider: graphResult.provider === 'resend' ? 'resend' : 'microsoft_graph',
         recipients: graphResult.recipients,
         actionUrl: params.actionUrl,
       });

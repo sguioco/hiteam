@@ -85,6 +85,10 @@ const translations = {
     "login.emailPlaceholder": "Email",
     "login.passwordPlaceholder": "Пароль",
     "login.forgotPassword": "Забыли пароль?",
+    "login.forgotPasswordSuccess":
+      "Если аккаунт с этим email существует, инструкция по восстановлению отправлена.",
+    "login.forgotPasswordError":
+      "Не удалось отправить инструкцию по восстановлению.",
     "login.signIn": "Войти",
     "login.demoHint": "Демо-сотрудник со сменой 09:00 - 18:00 UTC+7",
     "login.noAccount": "Нет аккаунта?",
@@ -1049,6 +1053,9 @@ const translations = {
     "login.emailPlaceholder": "Email",
     "login.passwordPlaceholder": "Password",
     "login.forgotPassword": "Forgot password?",
+    "login.forgotPasswordSuccess":
+      "If an account with this email exists, reset instructions have been sent.",
+    "login.forgotPasswordError": "Unable to send reset instructions.",
     "login.signIn": "Sign in",
     "login.demoHint": "Demo employee with a 09:00 - 18:00 UTC+7 shift",
     "login.noAccount": "Don't have an account?",

@@ -45,6 +45,7 @@ import {
 import {
   AuthSession,
   clearSession,
+  getTenantSlug,
   persistSession,
   resolvePostLoginRoute,
   saveTenantSlug,
@@ -110,13 +111,13 @@ const texts = {
     selectedWorkspace: 'Selected workspace',
     forgotPassword: 'Forgot password?',
     forgotTitle: 'Reset password',
-    forgotDesc: 'Temporary mock flow. Enter your work email and we will show the reset state. We can connect the real email service next.',
+    forgotDesc: 'Enter your work email and we will send password reset instructions.',
     forgotEmail: 'Work email',
     forgotPlaceholder: 'Enter your email',
     forgotRequired: 'Enter your work email.',
     forgotSend: 'Send instructions',
     forgotSending: 'Preparing...',
-    forgotSuccess: 'If an account with this email exists, reset instructions will be sent here. This is a mock flow for now.',
+    forgotSuccess: 'If an account with this email exists, reset instructions have been sent.',
     close: 'Close',
     demoTitle: 'Quick access',
     demoAdmin: 'Demo admin',
@@ -166,13 +167,13 @@ const texts = {
     selectedWorkspace: 'Выбранное пространство',
     forgotPassword: 'Забыли пароль?',
     forgotTitle: 'Восстановление пароля',
-    forgotDesc: 'Пока это mock-сценарий. Введите рабочий email и мы покажем состояние восстановления. Реальный email-сервис подключим следующим шагом.',
+    forgotDesc: 'Введите рабочий email, и мы отправим инструкцию для восстановления пароля.',
     forgotEmail: 'Рабочий email',
     forgotPlaceholder: 'Введите email',
     forgotRequired: 'Введите рабочий email.',
     forgotSend: 'Отправить инструкцию',
     forgotSending: 'Готовим...',
-    forgotSuccess: 'Если аккаунт с таким email существует, сюда будет отправлена инструкция по восстановлению. Пока это mock flow.',
+    forgotSuccess: 'Если аккаунт с таким email существует, инструкция по восстановлению отправлена.',
     close: 'Закрыть',
     demoTitle: 'Быстрый доступ',
     demoAdmin: 'Демо админ',
@@ -222,13 +223,13 @@ const texts = {
     selectedWorkspace: 'مساحة العمل المحددة',
     forgotPassword: 'هل نسيت كلمة المرور؟',
     forgotTitle: 'استعادة كلمة المرور',
-    forgotDesc: 'هذا مسار تجريبي حالياً. أدخل بريد العمل وسنُظهر حالة الاستعادة. يمكننا ربط خدمة البريد الفعلية لاحقاً.',
+    forgotDesc: 'أدخل بريد العمل وسنرسل تعليمات إعادة تعيين كلمة المرور.',
     forgotEmail: 'بريد العمل',
     forgotPlaceholder: 'أدخل بريدك الإلكتروني',
     forgotRequired: 'أدخل بريد العمل.',
     forgotSend: 'إرسال التعليمات',
     forgotSending: 'جارٍ التحضير...',
-    forgotSuccess: 'إذا كان هذا البريد مرتبطاً بحساب، فستُرسل تعليمات الاستعادة إليه. هذا مسار تجريبي حالياً.',
+    forgotSuccess: 'إذا كان هذا البريد مرتبطاً بحساب، فقد تم إرسال تعليمات الاستعادة إليه.',
     close: 'إغلاق',
     demoTitle: 'وصول سريع',
     demoAdmin: 'مشرف تجريبي',
@@ -720,7 +721,7 @@ export function AuthPanel() {
 
   async function handleForgotPasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedEmail = forgotEmail.trim();
+    const trimmedEmail = forgotEmail.trim().toLowerCase();
 
     if (!trimmedEmail) {
       setForgotError(t.forgotRequired);
@@ -730,12 +731,23 @@ export function AuthPanel() {
     setForgotError('');
     setForgotLoading(true);
 
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 700);
-    });
-
-    setForgotLoading(false);
-    setForgotSubmitted(true);
+    try {
+      const tenantSlug = companyLookupResult?.tenantSlug ?? getTenantSlug();
+      await apiRequest('/auth/password-reset/request', {
+        method: 'POST',
+        realBackend: true,
+        body: JSON.stringify({
+          email: trimmedEmail,
+          tenantSlug: tenantSlug || undefined,
+          locale: toBackendLocale(lang),
+        }),
+      });
+      setForgotSubmitted(true);
+    } catch (error) {
+      setForgotError(error instanceof Error ? error.message : t.forgotRequired);
+    } finally {
+      setForgotLoading(false);
+    }
   }
 
   async function handleDemoAccess() {

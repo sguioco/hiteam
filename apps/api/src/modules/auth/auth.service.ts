@@ -1,9 +1,11 @@
-import { BadRequestException, Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, ConflictException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterOrganizationDto } from './dto/register-organization.dto';
 import { RegisterOwnerDto } from './dto/register-owner.dto';
+import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import * as bcrypt from 'bcrypt';
 import { Prisma, UserStatus, EmployeeStatus, EmployeeInvitationStatus } from '@prisma/client';
 import { SignOptions } from 'jsonwebtoken';
@@ -11,12 +13,15 @@ import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { KommoService } from '../kommo/kommo.service';
 import { EmployeeInvitationsMailerService } from '../employees/employee-invitations.mailer';
+import { AuthMailerService } from './auth-mailer.service';
 
 const DEMO_OWNER_EMAIL = 'owner@demo.smart';
 const DEMO_EMAIL_DOMAIN = '@demo.smart';
 const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
 const PROMO_TRIAL_SOURCE = 'PROMO_CODE';
 const DEFAULT_TRIAL_SOURCE = 'DEFAULT_7D';
+const PASSWORD_RESET_TOKEN_BYTES = 32;
+const PASSWORD_RESET_TOKEN_TTL_MINUTES = 30;
 
 type PreferredLocale = 'en' | 'ru';
 
@@ -48,6 +53,7 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly kommoService: KommoService,
     private readonly employeeInvitationsMailer: EmployeeInvitationsMailerService,
+    private readonly authMailerService: AuthMailerService,
   ) {}
 
   private normalizeOrganizationName(value: string): string {
@@ -186,6 +192,14 @@ export class AuthService {
 
   private hashInvitationToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private hashPasswordResetToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private buildPasswordResetExpiry() {
+    return new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MINUTES * 60 * 1000);
   }
 
   private isBlockedDemoAccount(email?: string | null): boolean {
@@ -436,6 +450,176 @@ export class AuthService {
       accessToken,
       refreshToken,
       user: this.serializeAuthUser(user, roleCodes),
+    };
+  }
+
+  async requestPasswordReset(dto: RequestPasswordResetDto) {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const normalizedTenantSlug = dto.tenantSlug?.trim().toLowerCase();
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+        status: UserStatus.ACTIVE,
+        ...(normalizedTenantSlug
+          ? {
+              tenant: {
+                slug: normalizedTenantSlug,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        preferredLocale: true,
+      },
+      take: 2,
+    });
+
+    const user = users[0] ?? null;
+    if (
+      users.length !== 1 ||
+      !user ||
+      user.email.trim().toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)
+    ) {
+      return { success: true };
+    }
+
+    const token = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
+    const tokenHash = this.hashPasswordResetToken(token);
+
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.deleteMany({
+        where: {
+          userId: user.id,
+          usedAt: null,
+        },
+      }),
+      this.prisma.passwordResetToken.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
+        },
+      }),
+      this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: this.buildPasswordResetExpiry(),
+        },
+      }),
+    ]);
+
+    const delivery = await this.authMailerService.sendPasswordResetEmail({
+      email: user.email,
+      resetToken: token,
+      locale: dto.locale ?? user.preferredLocale,
+    });
+
+    if (delivery.status !== 'accepted') {
+      throw new ServiceUnavailableException(
+        delivery.errorMessage ??
+          'Password reset email provider is not configured or rejected the message.',
+      );
+    }
+
+    await this.auditService.log({
+      tenantId: user.tenantId,
+      actorUserId: user.id,
+      entityType: 'user',
+      entityId: user.id,
+      action: 'auth.password_reset_requested',
+      metadata: {
+        email: user.email,
+        provider: delivery.provider,
+      },
+    });
+
+    return { success: true };
+  }
+
+  async confirmPasswordReset(dto: ConfirmPasswordResetDto) {
+    const tokenHash = this.hashPasswordResetToken(dto.token.trim());
+    const now = new Date();
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          include: {
+            tenant: {
+              select: {
+                slug: true,
+              },
+            },
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt.getTime() <= now.getTime() ||
+      resetToken.user.status !== UserStatus.ACTIVE ||
+      resetToken.user.email.trim().toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)
+    ) {
+      throw new BadRequestException('Password reset link is invalid or expired.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: now },
+      }),
+      this.prisma.session.deleteMany({
+        where: { userId: resetToken.userId },
+      }),
+    ]);
+
+    await this.auditService.log({
+      tenantId: resetToken.user.tenantId,
+      actorUserId: resetToken.user.id,
+      entityType: 'user',
+      entityId: resetToken.user.id,
+      action: 'auth.password_reset_completed',
+      metadata: {
+        email: resetToken.user.email,
+      },
+    });
+
+    void this.authMailerService
+      .sendPasswordChangedEmail({
+        email: resetToken.user.email,
+        locale: resetToken.user.preferredLocale,
+      })
+      .catch((error) => {
+        this.logger.warn(
+          `Password changed email failed for ${resetToken.user.email}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+
+    return {
+      success: true,
+      tenantSlug: resetToken.user.tenant.slug,
     };
   }
 

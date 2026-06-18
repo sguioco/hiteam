@@ -1,89 +1,172 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { preload } from "react-dom";
+import { cookies, headers } from "next/headers";
 import { BrandWordmark } from "@/components/brand-wordmark";
-import {
-  AppStoreButton,
-  GooglePlayButton,
-} from "@/components/landing-page";
+import { AppStoreButton, GooglePlayButton } from "@/components/landing-page";
 
-const IOS_APP_URL = process.env.NEXT_PUBLIC_IOS_APP_URL ?? "https://apps.apple.com/";
+const IOS_APP_URL =
+  process.env.NEXT_PUBLIC_IOS_APP_URL ?? "https://apps.apple.com/";
 const ANDROID_APP_URL =
-  process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? "https://play.google.com/store/apps";
+  process.env.NEXT_PUBLIC_ANDROID_APP_URL ??
+  "https://play.google.com/store/apps";
+const LANDING_LOCALE_COOKIE_NAME = "hiteam-landing-locale";
+const ADMIN_LOCALE_COOKIE_NAME = "smart-admin-locale";
 
-export const metadata: Metadata = {
-  title: "HiTeam mobile app",
-  description: "Download the HiTeam mobile app for iPhone and Android.",
+type LandingLocale = "en" | "ru" | "es" | "ar";
+type MobileSearchParamsValue = {
+  locale?: string | string[] | undefined;
+};
+type MobileSearchParams = Promise<MobileSearchParamsValue>;
+
+const COPY: Record<
+  LandingLocale,
+  {
+    dir: "ltr" | "rtl";
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+  }
+> = {
+  en: {
+    dir: "ltr",
+    eyebrow: "Mobile access",
+    title: "Please use mobile app",
+    subtitle:
+      "The web workspace is available from desktop. Open HiTeam from the mobile app on this phone.",
+  },
+  ru: {
+    dir: "ltr",
+    eyebrow: "Мобильный доступ",
+    title: "Пожалуйста, используйте мобильное приложение",
+    subtitle:
+      "Веб-кабинет доступен с компьютера. На телефоне откройте HiTeam через мобильное приложение.",
+  },
+  es: {
+    dir: "ltr",
+    eyebrow: "Acceso móvil",
+    title: "Por favor, usa la app móvil",
+    subtitle:
+      "El panel web está disponible desde escritorio. Abre HiTeam desde la app móvil en este teléfono.",
+  },
+  ar: {
+    dir: "rtl",
+    eyebrow: "الوصول عبر الهاتف",
+    title: "يرجى استخدام تطبيق الجوال",
+    subtitle:
+      "مساحة العمل على الويب متاحة من الكمبيوتر. افتح HiTeam من تطبيق الجوال على هذا الهاتف.",
+  },
 };
 
-function resolveLocale(acceptLanguage: string | null) {
-  return acceptLanguage?.toLowerCase().startsWith("ru") ? "ru" : "en";
+export const metadata: Metadata = {
+  title: "Please use mobile app | HiTeam",
+  description: "Use the HiTeam mobile app on iPhone and Android.",
+};
+
+function isLandingLocale(
+  value: string | null | undefined,
+): value is LandingLocale {
+  return value === "en" || value === "ru" || value === "es" || value === "ar";
 }
 
-export default async function MobileDownloadPage() {
-  const requestHeaders = await headers();
-  const locale = resolveLocale(requestHeaders.get("accept-language"));
-  const isRu = locale === "ru";
-  const screenshotSrc = isRu ? "/mob_ru.webp" : "/mob_en.webp";
+function getSearchLocale(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
-  preload(screenshotSrc, {
-    as: "image",
-    fetchPriority: "high",
-    type: "image/webp",
-  });
+function parsePreferredLocale(
+  acceptLanguage: string | null,
+): LandingLocale | null {
+  if (!acceptLanguage) {
+    return null;
+  }
+
+  const tokens = acceptLanguage
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const token of tokens) {
+    const locale = token.split(";")[0]?.trim();
+
+    if (!locale) {
+      continue;
+    }
+
+    if (locale === "ru" || locale.startsWith("ru-")) return "ru";
+    if (locale === "es" || locale.startsWith("es-")) return "es";
+    if (locale === "ar" || locale.startsWith("ar-")) return "ar";
+    if (locale === "en" || locale.startsWith("en-")) return "en";
+  }
+
+  return null;
+}
+
+async function resolveLocale(
+  searchParams?: MobileSearchParams,
+): Promise<LandingLocale> {
+  const [requestHeaders, cookieStore] = await Promise.all([
+    headers(),
+    cookies(),
+  ]);
+  const params: MobileSearchParamsValue = searchParams
+    ? await searchParams
+    : {};
+  const queryLocale = getSearchLocale(params.locale);
+  const landingLocale = cookieStore.get(LANDING_LOCALE_COOKIE_NAME)?.value;
+  const adminLocale = cookieStore.get(ADMIN_LOCALE_COOKIE_NAME)?.value;
+
+  if (isLandingLocale(queryLocale)) return queryLocale;
+  if (isLandingLocale(landingLocale)) return landingLocale;
+  if (isLandingLocale(adminLocale)) return adminLocale;
+
+  return parsePreferredLocale(requestHeaders.get("accept-language")) ?? "en";
+}
+
+export default async function MobileDownloadPage({
+  searchParams,
+}: {
+  searchParams?: MobileSearchParams;
+}) {
+  const locale = await resolveLocale(searchParams);
+  const copy = COPY[locale];
 
   return (
-    <main className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_18%_18%,rgba(59,130,246,0.18),transparent_25%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.14),transparent_30%),radial-gradient(circle_at_50%_82%,rgba(96,165,250,0.18),transparent_32%),linear-gradient(180deg,#ecf4ff_0%,#dfeaff_100%)] px-5 py-5 text-[#182131] sm:px-8 lg:px-10">
-      <section className="mx-auto flex h-full max-w-6xl flex-col">
-        <header className="flex shrink-0 items-center">
-          <BrandWordmark className="text-[1.9rem]" />
+    <main
+      className="relative min-h-[100dvh] overflow-x-hidden bg-[radial-gradient(circle_at_18%_14%,rgba(125,211,252,0.36),transparent_28%),radial-gradient(circle_at_88%_8%,rgba(59,130,246,0.34),transparent_32%),linear-gradient(160deg,#082f8f_0%,#1e3a8a_48%,#2563eb_100%)] px-5 py-4 text-white sm:py-6"
+      dir={copy.dir}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.13),rgba(255,255,255,0)_38%,rgba(15,23,42,0.18)_100%)]" />
+      <section className="relative mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-[460px] flex-col items-center sm:min-h-[calc(100dvh-3rem)]">
+        <header className="flex w-full justify-center">
+          <BrandWordmark className="text-[1.85rem] text-white drop-shadow-[0_10px_24px_rgba(15,23,42,0.28)] sm:text-[2.1rem]" />
         </header>
 
-        <div className="grid min-h-0 flex-1 items-center gap-7 py-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:py-2">
-          <div className="max-w-2xl">
-            <h1 className="text-[clamp(2.15rem,7vw,4.35rem)] font-semibold leading-[0.96] tracking-[-0.055em] text-[#141c2a]">
-              {isRu ? "Скачайте HiTeam на телефон" : "Download HiTeam on your phone"}
-            </h1>
-            <p className="mt-5 max-w-[46ch] text-base leading-7 text-[#647085] sm:text-lg">
-              {isRu
-                ? "Отправьте сотрудникам эту страницу: iPhone и Android ведут на нужный магазин с одной общей ссылки."
-                : "Share this page with employees: iPhone and Android users get the right store from one shared link."}
-            </p>
+        <div className="mt-[clamp(1.5rem,10dvh,5.5rem)] w-full rounded-[24px] border border-white/22 bg-white/14 px-4 py-5 text-center shadow-[0_28px_90px_rgba(15,23,42,0.30),inset_0_1px_0_rgba(255,255,255,0.22)] backdrop-blur-xl sm:px-7 sm:py-7">
+          <p className="text-[0.72rem] font-bold tracking-[0.18em] text-sky-100 uppercase">
+            {copy.eyebrow}
+          </p>
+          <h1 className="mt-4 text-[clamp(1.7rem,9.6vw,3.35rem)] font-semibold leading-[0.98] text-white">
+            {copy.title}
+          </h1>
+          <p className="mx-auto mt-4 max-w-[31ch] text-[0.9rem] leading-6 text-sky-50/82 sm:mt-5 sm:text-[0.96rem] sm:leading-7">
+            {copy.subtitle}
+          </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <AppStoreButton
-                className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.16)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                href={IOS_APP_URL}
-                rel="noreferrer"
-                size="md"
-                target="_blank"
-              />
-              <GooglePlayButton
-                className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.16)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                href={ANDROID_APP_URL}
-                rel="noreferrer"
-                size="md"
-                target="_blank"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-1 justify-center lg:justify-end">
-            <div className="relative lg:translate-x-4">
-              <div className="relative rounded-[2.75rem] bg-[#141c2a]/90 p-2 shadow-2xl shadow-[#4f6df5]/10">
-                <div className="absolute left-1/2 top-0 z-20 h-[24px] w-[108px] -translate-x-1/2 rounded-b-[1.1rem] bg-[#141c2a]/90" />
-                <div className="relative aspect-[9/19.5] w-[min(70vw,236px)] overflow-hidden rounded-[2.35rem] bg-white sm:w-[252px] md:w-[276px] lg:w-[300px]">
-                  <img
-                    alt={isRu ? "Скриншот приложения" : "App screenshot"}
-                    className="h-full w-full object-cover object-top"
-                    decoding="sync"
-                    fetchPriority="high"
-                    loading="eager"
-                    src={screenshotSrc}
-                  />
-                </div>
-              </div>
-            </div>
+          <div className="mt-6 flex flex-wrap justify-center gap-3 sm:mt-8">
+            <GooglePlayButton
+              aria-label="Google Play"
+              className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.24)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
+              href={ANDROID_APP_URL}
+              rel="noreferrer"
+              size="md"
+              target="_blank"
+            />
+            <AppStoreButton
+              aria-label="iOS"
+              className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.24)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
+              href={IOS_APP_URL}
+              rel="noreferrer"
+              size="md"
+              target="_blank"
+            />
           </div>
         </div>
       </section>

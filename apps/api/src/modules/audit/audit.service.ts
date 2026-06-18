@@ -27,6 +27,49 @@ type ActivityPerson = {
   avatarUrl: string | null;
 };
 
+type ActivityGroupRef = {
+  id: string;
+  name: string;
+  members: ActivityPerson[];
+};
+
+type ActivityShiftRef = {
+  id: string;
+  title: string | null;
+  employee: ActivityPerson | null;
+  shiftDate: string;
+  startsAt: string;
+  endsAt: string;
+};
+
+type ActivityAnnouncementRef = {
+  id: string;
+  title: string;
+  audience: string;
+  groupName: string | null;
+  departmentName: string | null;
+  locationName: string | null;
+  targetEmployee: ActivityPerson | null;
+};
+
+type ActivityRefs = {
+  actorMap: Map<string, ActivityPerson>;
+  employeeMap: Map<string, ActivityPerson>;
+  groupMap: Map<string, ActivityGroupRef>;
+  shiftMap: Map<string, ActivityShiftRef>;
+  announcementMap: Map<string, ActivityAnnouncementRef>;
+};
+
+type ActivityVisibilityScope = {
+  visibleEmployeeIds: string[];
+  visibleGroupIds: string[];
+};
+
+type NormalizedActivityVisibilityScope = {
+  visibleEmployeeIds: Set<string>;
+  visibleGroupIds: Set<string>;
+};
+
 export type CompanyActivityItem = {
   id: string;
   kind: ActivityKind;
@@ -43,6 +86,7 @@ type CompanyActivityListOptions = {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+  visibilityScope?: ActivityVisibilityScope;
 };
 
 const COMPANY_ACTIVITY_ACTIONS = [
@@ -140,6 +184,9 @@ export class AuditService {
   ): Promise<CompanyActivityItem[]> {
     const limit = Math.max(1, Math.min(options?.limit ?? 36, 80));
     const createdAt = resolveActivityCreatedAtFilter(options);
+    const visibilityScope = this.normalizeActivityVisibilityScope(
+      options?.visibilityScope,
+    );
 
     const logs = await this.prisma.auditLog.findMany({
       where: {
@@ -152,7 +199,7 @@ export class AuditService {
       orderBy: {
         createdAt: 'desc',
       },
-      take: limit * 4,
+      take: Math.min(limit * (visibilityScope ? 10 : 4), 600),
     });
 
     if (!logs.length) {
@@ -439,20 +486,146 @@ export class AuditService {
       ]),
     );
 
+    const refs = {
+      actorMap,
+      employeeMap,
+      groupMap,
+      shiftMap,
+      announcementMap,
+    };
+
     const items = logs
-      .map((log) =>
-        this.mapCompanyActivityLog(log, metadataByLogId.get(log.id) ?? {}, {
-          actorMap,
-          employeeMap,
-          groupMap,
-          shiftMap,
-          announcementMap,
-        }),
-      )
+      .map((log) => {
+        const metadata = metadataByLogId.get(log.id) ?? {};
+        const item = this.mapCompanyActivityLog(log, metadata, refs);
+
+        if (!item) {
+          return null;
+        }
+
+        if (
+          visibilityScope &&
+          !this.isCompanyActivityVisibleToScope(
+            log,
+            metadata,
+            item,
+            refs,
+            visibilityScope,
+          )
+        ) {
+          return null;
+        }
+
+        return item;
+      })
       .filter((item): item is CompanyActivityItem => Boolean(item))
       .slice(0, limit);
 
     return items;
+  }
+
+  private normalizeActivityVisibilityScope(
+    scope?: ActivityVisibilityScope,
+  ): NormalizedActivityVisibilityScope | null {
+    if (!scope) {
+      return null;
+    }
+
+    return {
+      visibleEmployeeIds: new Set(
+        scope.visibleEmployeeIds
+          .map((employeeId) => employeeId.trim())
+          .filter(Boolean),
+      ),
+      visibleGroupIds: new Set(
+        scope.visibleGroupIds
+          .map((groupId) => groupId.trim())
+          .filter(Boolean),
+      ),
+    };
+  }
+
+  private isCompanyActivityVisibleToScope(
+    log: {
+      id: string;
+      actorUserId: string | null;
+      entityId: string;
+      action: string;
+      createdAt: Date;
+    },
+    metadata: Record<string, unknown>,
+    item: CompanyActivityItem,
+    refs: ActivityRefs,
+    scope: NormalizedActivityVisibilityScope,
+  ) {
+    const shiftId =
+      this.readString(metadata.shiftId) ??
+      (log.action === 'schedule.shift_created' ? log.entityId : null);
+    const shift = shiftId ? refs.shiftMap.get(shiftId) ?? null : null;
+    if (shift?.employee) {
+      return scope.visibleEmployeeIds.has(shift.employee.id);
+    }
+
+    const groupIds = this.collectActivityGroupIds(metadata);
+    if (groupIds.size) {
+      for (const groupId of groupIds) {
+        if (scope.visibleGroupIds.has(groupId)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    const employeeIds = this.collectActivityEmployeeIds(metadata);
+    if (employeeIds.size) {
+      for (const employeeId of employeeIds) {
+        if (scope.visibleEmployeeIds.has(employeeId)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    if (this.hasNonTeamAnnouncementTarget(log.action, metadata)) {
+      return false;
+    }
+
+    return Boolean(item.actor && scope.visibleEmployeeIds.has(item.actor.id));
+  }
+
+  private collectActivityEmployeeIds(metadata: Record<string, unknown>) {
+    return new Set([
+      this.readString(metadata.employeeId),
+      this.readString(metadata.assigneeEmployeeId),
+      this.readString(metadata.targetEmployeeId),
+      ...this.readStringArray(metadata.employeeIds),
+      ...this.readStringArray(metadata.assigneeEmployeeIds),
+      ...this.readStringArray(metadata.targetEmployeeIds),
+    ].filter((value): value is string => Boolean(value)));
+  }
+
+  private collectActivityGroupIds(metadata: Record<string, unknown>) {
+    return new Set([
+      this.readString(metadata.groupId),
+      ...this.readStringArray(metadata.groupIds),
+    ].filter((value): value is string => Boolean(value)));
+  }
+
+  private hasNonTeamAnnouncementTarget(
+    action: string,
+    metadata: Record<string, unknown>,
+  ) {
+    if (action !== 'announcement.created' && action !== 'announcement.generated') {
+      return false;
+    }
+
+    return Boolean(
+      this.readString(metadata.audience) ||
+        this.readString(metadata.departmentId) ||
+        this.readString(metadata.locationId),
+    );
   }
 
   private mapCompanyActivityLog(
@@ -464,37 +637,7 @@ export class AuditService {
       createdAt: Date;
     },
     metadata: Record<string, unknown>,
-    refs: {
-      actorMap: Map<string, ActivityPerson>;
-      employeeMap: Map<string, ActivityPerson>;
-      groupMap: Map<
-        string,
-        { id: string; name: string; members: ActivityPerson[] }
-      >;
-      shiftMap: Map<
-        string,
-        {
-          id: string;
-          title: string | null;
-          employee: ActivityPerson | null;
-          shiftDate: string;
-          startsAt: string;
-          endsAt: string;
-        }
-      >;
-      announcementMap: Map<
-        string,
-        {
-          id: string;
-          title: string;
-          audience: string;
-          groupName: string | null;
-          departmentName: string | null;
-          locationName: string | null;
-          targetEmployee: ActivityPerson | null;
-        }
-      >;
-    },
+    refs: ActivityRefs,
   ): CompanyActivityItem | null {
     const actor = log.actorUserId ? refs.actorMap.get(log.actorUserId) ?? null : null;
 

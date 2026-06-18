@@ -487,6 +487,7 @@ model User {
   roles                         UserRole[]
   employee                      Employee?
   sessions                      Session[]
+  passwordResetTokens           PasswordResetToken[]
   notifications                 Notification[]
   pushDevices                   PushDevice[]
   pushDeliveries                PushDelivery[]
@@ -496,6 +497,20 @@ model User {
   approvedEmployeeInvitations   EmployeeInvitation[] @relation("EmployeeInvitationApprover")
 
   @@unique([tenantId, email])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
 }
 
 model Role {

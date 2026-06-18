@@ -235,6 +235,7 @@ type Copy = {
 };
 
 const LANDING_LOCALE_STORAGE_KEY = "hiteam-landing-locale";
+const LANDING_LOCALE_COOKIE_NAME = "hiteam-landing-locale";
 const EMPLOYEE_OPTIONS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 150, 200];
 const TESTIMONIAL_AVATARS = [
   { seed: "Jessica Park", gender: "female" },
@@ -2178,6 +2179,14 @@ function resolveBrowserLocale(): LandingLocale {
   return "en";
 }
 
+function writeLandingLocaleCookie(locale: LandingLocale) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.cookie = `${LANDING_LOCALE_COOKIE_NAME}=${locale}; path=/; max-age=31536000; samesite=lax`;
+}
+
 function formatMoney(value: number) {
   return `$${value.toLocaleString("en-US", {
     maximumFractionDigits: value % 1 === 0 ? 0 : 2,
@@ -3548,9 +3557,13 @@ export function SalesLandingPage() {
 
   useEffect(() => {
     const storedLocale = readBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY);
-    setLandingLocale(
-      isLandingLocale(storedLocale) ? storedLocale : resolveBrowserLocale(),
-    );
+    const nextLocale = isLandingLocale(storedLocale)
+      ? storedLocale
+      : resolveBrowserLocale();
+
+    setLandingLocale(nextLocale);
+    writeBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY, nextLocale);
+    writeLandingLocaleCookie(nextLocale);
   }, []);
 
   useEffect(() => {
@@ -3590,6 +3603,7 @@ export function SalesLandingPage() {
     setIsLocaleMenuOpen(false);
     setIsMobileMenuOpen(false);
     writeBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY, nextLocale);
+    writeLandingLocaleCookie(nextLocale);
 
     if (nextLocale === "en" || nextLocale === "ru") {
       setAppLocale(nextLocale);
