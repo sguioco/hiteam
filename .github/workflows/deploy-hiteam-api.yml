@@ -35,6 +35,50 @@ jobs:
 
             echo "[deploy] revision $(git rev-parse --short HEAD)"
 
+      - name: Ensure Docker Compose on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            if docker compose version >/dev/null 2>&1; then
+              docker compose version
+              exit 0
+            fi
+
+            if command -v docker-compose >/dev/null 2>&1; then
+              docker-compose version
+              exit 0
+            fi
+
+            arch="$(uname -m)"
+            case "$arch" in
+              x86_64|amd64) arch="x86_64" ;;
+              aarch64|arm64) arch="aarch64" ;;
+              *)
+                echo "Unsupported Docker Compose architecture: $arch"
+                exit 127
+                ;;
+            esac
+
+            url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${arch}"
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "$url" -o /usr/local/bin/docker-compose
+            elif command -v wget >/dev/null 2>&1; then
+              wget -qO /usr/local/bin/docker-compose "$url"
+            else
+              echo "Neither curl nor wget is available to install Docker Compose"
+              exit 127
+            fi
+
+            chmod +x /usr/local/bin/docker-compose
+            docker-compose version
+
       - name: Prisma push on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
