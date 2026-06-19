@@ -1,0 +1,57 @@
+services:
+  api:
+    image: hiteam-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - ${HITEAM_ENV_FILE:-/root/hiteam/.env}
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-4000}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    restart: unless-stopped
+
+  prisma:
+    image: hiteam-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - ${HITEAM_ENV_FILE:-/root/hiteam/.env}
+    environment:
+      NODE_ENV: production
+    command:
+      - node
+      - ./node_modules/prisma/build/index.js
+      - db
+      - push
+      - --schema
+      - prisma/schema.prisma
+
+  web-admin:
+    image: hiteam-web-admin:local
+    build:
+      context: .
+      dockerfile: apps/web-admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_GRAPHQL_URL: ${NEXT_PUBLIC_GRAPHQL_URL}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+        NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ${NEXT_PUBLIC_WEB_ADMIN_BASE_URL}
+    env_file:
+      - ${HITEAM_ENV_FILE:-/root/hiteam/.env}
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_GRAPHQL_URL: ${NEXT_PUBLIC_GRAPHQL_URL}
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+      NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ${NEXT_PUBLIC_WEB_ADMIN_BASE_URL}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:4000}
+      WEB_ADMIN_BASE_URL: ${WEB_ADMIN_BASE_URL}
+    ports:
+      - "${WEB_ADMIN_PORT:-3000}:3000"
+    restart: unless-stopped
+    depends_on:
+      - api

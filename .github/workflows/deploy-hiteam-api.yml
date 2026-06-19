@@ -48,36 +48,63 @@ jobs:
 
             if docker compose version >/dev/null 2>&1; then
               docker compose version
-              exit 0
-            fi
-
-            if command -v docker-compose >/dev/null 2>&1; then
+            elif command -v docker-compose >/dev/null 2>&1; then
               docker-compose version
-              exit 0
+            else
+              arch="$(uname -m)"
+              case "$arch" in
+                x86_64|amd64) arch="x86_64" ;;
+                aarch64|arm64) arch="aarch64" ;;
+                *)
+                  echo "Unsupported Docker Compose architecture: $arch"
+                  exit 127
+                  ;;
+              esac
+
+              url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${arch}"
+              if command -v curl >/dev/null 2>&1; then
+                curl -fsSL "$url" -o /usr/local/bin/docker-compose
+              elif command -v wget >/dev/null 2>&1; then
+                wget -qO /usr/local/bin/docker-compose "$url"
+              else
+                echo "Neither curl nor wget is available to install Docker Compose"
+                exit 127
+              fi
+
+              chmod +x /usr/local/bin/docker-compose
+              docker-compose version
             fi
 
-            arch="$(uname -m)"
-            case "$arch" in
-              x86_64|amd64) arch="x86_64" ;;
-              aarch64|arm64) arch="aarch64" ;;
-              *)
-                echo "Unsupported Docker Compose architecture: $arch"
-                exit 127
-                ;;
-            esac
+            cat > /usr/local/bin/hiteam-compose-prod <<'SCRIPT'
+            #!/usr/bin/env bash
+            set -euo pipefail
 
-            url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${arch}"
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "$url" -o /usr/local/bin/docker-compose
-            elif command -v wget >/dev/null 2>&1; then
-              wget -qO /usr/local/bin/docker-compose "$url"
+            cd /root/hiteam/repo
+
+            if docker compose version >/dev/null 2>&1; then
+              compose=(docker compose)
+            elif command -v docker-compose >/dev/null 2>&1; then
+              compose=(docker-compose)
             else
-              echo "Neither curl nor wget is available to install Docker Compose"
+              echo "Docker Compose is not available" >&2
               exit 127
             fi
 
-            chmod +x /usr/local/bin/docker-compose
-            docker-compose version
+            if [ -f /root/hiteam/.env ]; then
+              export HITEAM_ENV_FILE=/root/hiteam/.env
+            elif [ -f .env.local ]; then
+              export HITEAM_ENV_FILE=.env.local
+            else
+              echo "Missing /root/hiteam/.env for legacy VPS deploy" >&2
+              exit 1
+            fi
+
+            exec "${compose[@]}" --env-file "$HITEAM_ENV_FILE" -p hiteam -f docker-compose.prod.yml "$@"
+            SCRIPT
+
+            sed -i 's/^            //' /usr/local/bin/hiteam-compose-prod
+            chmod +x /usr/local/bin/hiteam-compose-prod
+            /usr/local/bin/hiteam-compose-prod config --services
 
       - name: Prisma push on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -90,20 +117,12 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd /root/hiteam
             export COMPOSE_DOCKER_CLI_BUILD=1
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            compose() {
-              if docker compose version >/dev/null 2>&1; then
-                docker compose "$@"
-              else
-                docker-compose "$@"
-              fi
-            }
-
-            compose -p hiteam -f docker-compose.prod.yml run --rm prisma
+            hiteam-compose-prod build api
+            hiteam-compose-prod run --rm prisma
 
       - name: Build API image on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -116,20 +135,11 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd /root/hiteam
             export COMPOSE_DOCKER_CLI_BUILD=1
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            compose() {
-              if docker compose version >/dev/null 2>&1; then
-                docker compose "$@"
-              else
-                docker-compose "$@"
-              fi
-            }
-
-            compose -p hiteam -f docker-compose.prod.yml build api
+            hiteam-compose-prod build api
 
       - name: Build Web Admin image on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -142,20 +152,11 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd /root/hiteam
             export COMPOSE_DOCKER_CLI_BUILD=1
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            compose() {
-              if docker compose version >/dev/null 2>&1; then
-                docker compose "$@"
-              else
-                docker-compose "$@"
-              fi
-            }
-
-            compose -p hiteam -f docker-compose.prod.yml build web-admin
+            hiteam-compose-prod build web-admin
 
       - name: Restart services on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -168,13 +169,4 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd /root/hiteam
-            compose() {
-              if docker compose version >/dev/null 2>&1; then
-                docker compose "$@"
-              else
-                docker-compose "$@"
-              fi
-            }
-
-            compose -p hiteam -f docker-compose.prod.yml up -d api web-admin
+            hiteam-compose-prod up -d api web-admin
