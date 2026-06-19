@@ -11,6 +11,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useI18n } from "@/lib/i18n";
 import { BrandWordmark } from "./brand-wordmark";
 
@@ -22,9 +23,6 @@ type LoadingNavItem = {
   icon: ComponentType<{ className?: string }>;
   expandable?: boolean;
 };
-
-const DEMO_ADMIN_AVATAR_URL =
-  "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
 function getLoadingNavItems(
   locale: LoadingSidebarLocale,
@@ -132,11 +130,13 @@ export function AdminShellLoadingSidebar({
       <div className="sidebar-footer-untitled">
         <div className="sidebar-user-card sidebar-loading-user-card">
           <div className="sidebar-user-avatar">
-            <img
-              alt={profileName}
-              className="h-full w-full rounded-full object-cover"
-              src={DEMO_ADMIN_AVATAR_URL}
-            />
+            <span
+              aria-label={profileName}
+              className="flex h-full w-full items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-sm font-semibold text-[rgba(72,84,104,0.72)]"
+              role="img"
+            >
+              {getAvatarInitials(profileName)}
+            </span>
           </div>
           <div className="sidebar-user-copy">
             <strong>{profileName}</strong>

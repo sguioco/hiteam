@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
-import { Check, ImagePlus, Users, Save } from "lucide-react";
+import { Check, Copy, ImagePlus, Pencil, Users, Save } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
@@ -243,6 +243,7 @@ export default function OrganizationPageClient({
   const successTimeoutRef = useRef<number | null>(null);
   const employeesRedirectTimeoutRef = useRef<number | null>(null);
   const didUseInitialData = useRef(Boolean(initialData));
+  const companyNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
@@ -336,6 +337,25 @@ export default function OrganizationPageClient({
       setSaveSuccess(false);
     }
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function copyOrganizationId() {
+    const organizationId = setup.organizationId?.trim();
+    if (!organizationId) return;
+
+    try {
+      await navigator.clipboard.writeText(organizationId);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = organizationId;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
   }
 
   function handleMapSelect(next: LocationSelection) {
@@ -469,27 +489,52 @@ export default function OrganizationPageClient({
             ) : null}
 
             <div className="organization-studio-identity">
-              <label className="organization-studio-name-field">
-                <Input
-                  aria-label={locale === "ru" ? "Название организации" : "Organization name"}
-                  className="organization-studio-name-input"
-                  onChange={(e) => updateDraft("companyName", e.target.value)}
-                  placeholder={locale === "ru" ? "Название организации" : "Organization name"}
-                  required
-                  value={draft.companyName}
-                />
+              <div className="organization-studio-name-field">
+                <div className="organization-studio-name-row">
+                  <span
+                    className="organization-studio-name-input-shell"
+                    data-value={
+                      draft.companyName ||
+                      (locale === "ru" ? "Название организации" : "Organization name")
+                    }
+                  >
+                    <Input
+                      aria-label={locale === "ru" ? "Название организации" : "Organization name"}
+                      className="organization-studio-name-input"
+                      onChange={(e) => updateDraft("companyName", e.target.value)}
+                      placeholder={locale === "ru" ? "Название организации" : "Organization name"}
+                      ref={companyNameInputRef}
+                      required
+                      value={draft.companyName}
+                    />
+                  </span>
+                  <button
+                    aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
+                    className="organization-studio-inline-icon"
+                    onClick={() => companyNameInputRef.current?.focus()}
+                    type="button"
+                  >
+                    <Pencil className="h-5 w-5" />
+                  </button>
+                </div>
                 <div className="organization-studio-meta-stack">
                   <span className="organization-studio-meta">
                     <Users className="h-4 w-4" />
                     {employeeCount} {locale === "ru" ? "сотрудников" : "employees"}
                   </span>
                   {setup.organizationId ? (
-                    <span className="organization-studio-code">
+                    <button
+                      aria-label={locale === "ru" ? "Скопировать ID организации" : "Copy organization ID"}
+                      className="organization-studio-code"
+                      onClick={() => void copyOrganizationId()}
+                      type="button"
+                    >
                       ID: <strong>{setup.organizationId}</strong>
-                    </span>
+                      <Copy className="organization-studio-code-icon h-4 w-4" />
+                    </button>
                   ) : null}
                 </div>
-              </label>
+              </div>
             </div>
 
             <div className="organization-studio-grid">

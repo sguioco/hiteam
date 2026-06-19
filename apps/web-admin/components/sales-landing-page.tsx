@@ -36,8 +36,8 @@ import {
   readBrowserStorageItem,
   writeBrowserStorageItem,
 } from "@/lib/browser-storage";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { cx } from "@/lib/utils/cx";
 
 type LandingLocale = "en" | "ru" | "es" | "ar";
@@ -237,11 +237,6 @@ type Copy = {
 const LANDING_LOCALE_STORAGE_KEY = "hiteam-landing-locale";
 const LANDING_LOCALE_COOKIE_NAME = "hiteam-landing-locale";
 const EMPLOYEE_OPTIONS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 150, 200];
-const TESTIMONIAL_AVATARS = [
-  { seed: "Jessica Park", gender: "female" },
-  { seed: "Amir Khalil", gender: "male" },
-  { seed: "Sofia Mendes", gender: "female" },
-] as const;
 const FEATURE_ICON_NAMES: FeatureIconName[] = [
   "clock",
   "photo",
@@ -261,6 +256,27 @@ const PRICING_DURATIONS: Record<
   six: { months: 6, bonusMonths: 1, unitPrice: 3.5 },
   year: { months: 12, bonusMonths: 2, unitPrice: 3 },
 };
+
+function InitialsAvatar({
+  className,
+  name,
+}: {
+  className: string;
+  name: string;
+}) {
+  return (
+    <span
+      aria-label={name}
+      className={cx(
+        className,
+        "flex shrink-0 items-center justify-center bg-[linear-gradient(135deg,#eef4ff,#dbeafe)] font-extrabold text-[#2855d9]",
+      )}
+      role="img"
+    >
+      {getAvatarInitials(name)}
+    </span>
+  );
+}
 
 const COPY: Record<LandingLocale, Copy> = {
   en: {
@@ -3404,28 +3420,24 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
   const attendanceRows = [
     {
       name: "Lena Kovač",
-      gender: "female",
       value: "",
       badge: "Not checked in",
       tone: "muted",
     },
     {
       name: "Ahmed Al Rashid",
-      gender: "male",
       value: "09:18",
       badge: "Late by 18 min",
       tone: "late",
     },
     {
       name: "Sofia Mendes",
-      gender: "female",
       value: "08:59",
       badge: "On time",
       tone: "ok",
     },
     {
       name: "Amir Khalil",
-      gender: "male",
       value: "09:01",
       badge: "On time",
       tone: "ok",
@@ -3442,10 +3454,9 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
             className="flex items-center gap-2 rounded-[7px] px-2 py-1.5 transition hover:bg-[#f8faff]"
             key={row.name}
           >
-            <img
-              alt={row.name}
-              className="h-[26px] w-[26px] shrink-0 rounded-full object-cover ring-1 ring-black/10"
-              src={getMockAvatarDataUrl(row.name, row.gender)}
+            <InitialsAvatar
+              className="h-[26px] w-[26px] rounded-full ring-1 ring-black/10 text-[0.56rem]"
+              name={row.name}
             />
             <span className="min-w-0 flex-1 text-[0.68rem] font-semibold text-slate-950">
               {row.name}
@@ -4764,50 +4775,41 @@ export function SalesLandingPage() {
               title={copy.testimonials.title}
             />
             <div className="grid items-stretch gap-5 md:grid-cols-3">
-              {copy.testimonials.items.map((item, index) => {
-                const avatar =
-                  TESTIMONIAL_AVATARS[index % TESTIMONIAL_AVATARS.length];
-
-                return (
-                  <motion.article
-                    className="flex h-full flex-col rounded-[14px] border border-slate-200 bg-white p-7"
-                    initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-                    key={item.name}
-                    transition={{
-                      delay: index * 0.06,
-                      duration: 0.42,
-                      ease: "easeOut",
-                    }}
-                    viewport={{ amount: 0.35, once: true }}
-                    whileInView={
-                      reduceMotion ? undefined : { opacity: 1, y: 0 }
-                    }
-                  >
-                    <RatingStars />
-                    <p className="mt-5 text-base leading-7 text-slate-700">
-                      {item.quote}
-                    </p>
-                    <div className="mt-auto pt-7">
-                      <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
-                        <img
-                          alt={item.name}
-                          className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-black/10"
-                          src={getMockAvatarDataUrl(
-                            avatar.seed,
-                            avatar.gender,
-                          )}
-                        />
-                        <div className="min-w-0">
-                          <p className="font-semibold">{item.name}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {item.role}
-                          </p>
-                        </div>
+              {copy.testimonials.items.map((item, index) => (
+                <motion.article
+                  className="flex h-full flex-col rounded-[14px] border border-slate-200 bg-white p-7"
+                  initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                  key={item.name}
+                  transition={{
+                    delay: index * 0.06,
+                    duration: 0.42,
+                    ease: "easeOut",
+                  }}
+                  viewport={{ amount: 0.35, once: true }}
+                  whileInView={
+                    reduceMotion ? undefined : { opacity: 1, y: 0 }
+                  }
+                >
+                  <RatingStars />
+                  <p className="mt-5 text-base leading-7 text-slate-700">
+                    {item.quote}
+                  </p>
+                  <div className="mt-auto pt-7">
+                    <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+                      <InitialsAvatar
+                        className="h-10 w-10 rounded-full ring-1 ring-black/10 text-xs"
+                        name={item.name}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold">{item.name}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {item.role}
+                        </p>
                       </div>
                     </div>
-                  </motion.article>
-                );
-              })}
+                  </div>
+                </motion.article>
+              ))}
             </div>
           </div>
         </section>

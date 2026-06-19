@@ -30,7 +30,6 @@ import { getSession } from "@/lib/auth";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { type Locale, useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 export type LeaderboardCenterInitialData = LeaderboardOverviewResponse;
@@ -355,7 +354,7 @@ function getEmployeeSubtitle(
 function getEmployeeAvatarSrc(
   entry: LeaderboardOverviewResponse["leaderboard"][number],
 ) {
-  return entry.employee.avatarUrl ?? getMockAvatarDataUrl(getEmployeeFullName(entry) || entry.employee.id);
+  return entry.employee.avatarUrl ?? null;
 }
 
 function getProgressDayLabel(locale: Locale, isCurrentMonth: boolean) {
@@ -841,6 +840,7 @@ export function LeaderboardCenter({
                           ? "ring-amber-200"
                           : "ring-white"
                     }`}
+                    initials={fullName}
                     size={isFirstPlace ? "2xl" : "xl"}
                     src={getEmployeeAvatarSrc(entry)}
                   />
@@ -1130,6 +1130,7 @@ export function LeaderboardCenter({
                               <Avatar
                                 alt={fullName}
                                 className="shrink-0"
+                                initials={fullName}
                                 size="sm"
                                 src={getEmployeeAvatarSrc(entry)}
                               />

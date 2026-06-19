@@ -4,7 +4,6 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { runtimeLocalize } from "@/lib/runtime-locale";
 
 const Select = SelectPrimitive.Root;
@@ -55,11 +54,33 @@ function SelectOptionAvatar({
   seed: string;
   className?: string;
 }) {
+  const initials = (alt || seed)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  if (!src) {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-xs font-semibold text-[rgba(72,84,104,0.72)]",
+          className,
+        )}
+      >
+        {initials || "?"}
+      </span>
+    );
+  }
+
   return (
     <img
       alt={alt ?? ""}
       className={cn("size-8 shrink-0 rounded-full object-cover", className)}
-      src={src || getMockAvatarDataUrl(alt || seed)}
+      src={src}
     />
   );
 }
@@ -79,6 +100,7 @@ function SelectOptionTitle({
 }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
+      data-select-title
       className={cn(
         "truncate text-sm font-semibold leading-[1.2] text-current",
         className,
@@ -95,6 +117,7 @@ function SelectOptionDescription({
 }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
+      data-select-description
       className={cn(
         "truncate text-xs leading-[1.25] text-[rgba(72,84,104,0.72)]",
         className,
@@ -111,6 +134,7 @@ function SelectOptionContent({
 }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
+      data-select-content
       className={cn(
         "flex min-w-0 items-center gap-3 text-left [&_[data-select-description]]:text-[rgba(72,84,104,0.72)]",
         className,
@@ -229,7 +253,7 @@ const SelectItem = React.forwardRef<
 >(({ className, children, onClick, ...props }, ref) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex min-h-[38px] w-full cursor-default select-none items-center rounded-[20px] border border-transparent px-3 py-2 pr-10 text-sm outline-none transition-[background-color,color,transform] duration-150 focus:bg-[rgba(15,23,42,0.04)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[state=checked]:bg-[color:var(--accent)] data-[state=checked]:text-white data-[state=checked]:[&_[data-select-description]]:text-white/70 data-[state=checked]:[&_[data-select-icon]]:bg-white/18 data-[state=checked]:[&_[data-select-icon]]:text-white data-[state=checked]:[&_[data-select-icon]_svg]:!text-white",
+      "group relative flex min-h-[38px] w-full cursor-default select-none items-center rounded-[20px] border border-transparent px-3 py-2 pr-10 text-sm outline-none transition-[background-color,color,transform] duration-150 focus:bg-[rgba(15,23,42,0.04)] data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[state=checked]:bg-[color:var(--accent)] data-[state=checked]:text-white data-[state=checked]:[&_[data-select-title]]:!text-white data-[state=checked]:[&_[data-select-description]]:!text-white data-[state=checked]:[&_[data-select-icon]]:bg-white/18 data-[state=checked]:[&_[data-select-icon]]:text-white data-[state=checked]:[&_[data-select-icon]_svg]:!text-white",
       className,
     )}
     onClick={(event) => {

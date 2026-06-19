@@ -20,7 +20,7 @@ import {
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { cn } from "@/lib/utils";
 
 type PeriodPreset = "7d" | "14d" | "custom";
@@ -164,6 +164,7 @@ function ActivityFeedItem({
 }) {
   const Icon = getActivityIcon(item);
   const { actorName, actionLabel } = resolveActionCopy(item, locale);
+  const actorAvatarSource = item.actor ? getAvatarSource(item.actor, locale) : null;
   const itemTitle = item.title?.trim() || null;
   const targetLabel = resolveTargetLabel(item, locale);
 
@@ -182,19 +183,18 @@ function ActivityFeedItem({
 
       <div className="daily-activity-item-main">
         <div className="daily-activity-item-copy">
-          {item.actor ? (
+          {actorAvatarSource ? (
             <div className="daily-activity-actor-avatar">
               <img
                 alt={actorName}
-                src={getAvatarSource(item.actor, locale)}
+                src={actorAvatarSource}
               />
             </div>
           ) : (
             <div className="daily-activity-actor-avatar">
-              <img
-                alt={actorName}
-                src={getMockAvatarDataUrl(actorName)}
-              />
+              <span className="text-xs font-semibold text-[color:var(--accent)]">
+                {getAvatarInitials(actorName)}
+              </span>
             </div>
           )}
 

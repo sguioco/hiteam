@@ -28,7 +28,6 @@ import {
 import { apiRequest } from '../../lib/api';
 import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
-import { getMockAvatarDataUrl } from '../../lib/mock-avatar';
 import { navigateWithClickSupport } from '../../lib/navigation';
 
 type EmployeeOption = EmployeeApiRecord;
@@ -382,7 +381,8 @@ function getEnrollmentStatusLabel(
                                   alt={item.employeeName}
                                   className="shrink-0"
                                   size="sm"
-                                  src={employeeProfile?.avatarUrl || getMockAvatarDataUrl(item.employeeName)}
+                                  initials={item.employeeName}
+                                  src={employeeProfile?.avatarUrl ?? null}
                                 />
                                 <div className="min-w-0 space-y-0.5">
                                   <p className="truncate text-base font-medium text-[color:var(--foreground)]">

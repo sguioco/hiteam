@@ -49,7 +49,7 @@ import {
   getRuntimeLocale,
   getRuntimeLocaleTag,
 } from "../../../lib/runtime-locale";
-import { getMockAvatarDataUrl } from "../../../lib/mock-avatar";
+import { getAvatarInitials } from "../../../lib/avatar-placeholder";
 
 type EmployeeDetails = EmployeeDetailRecord;
 
@@ -844,17 +844,17 @@ export default function EmployeeCardPageClient({
           </Link>
 
           <div className="flex flex-wrap items-center gap-4">
-            <img
-              alt={
-                employee
-                  ? fullName
-                  : locale === "ru"
-                    ? "Фото сотрудника"
-                    : "Employee photo"
-              }
-              className="size-14 rounded-full object-cover"
-              src={employee?.avatarUrl || getMockAvatarDataUrl(fullName)}
-            />
+            {employee?.avatarUrl ? (
+              <img
+                alt={fullName}
+                className="size-14 rounded-full object-cover"
+                src={employee.avatarUrl}
+              />
+            ) : (
+              <span className="flex size-14 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-base font-semibold text-[rgba(72,84,104,0.72)]">
+                {getAvatarInitials(fullName)}
+              </span>
+            )}
             <div>
               <h1 className="font-heading text-2xl font-bold text-foreground">
                 {fullName}

@@ -53,7 +53,6 @@ import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -1256,8 +1255,7 @@ export function ManagerTasksPage({
         employeeSubtitle: employeeSubtitle
           ? employeeMetaTextMap[employeeSubtitle] ?? employeeSubtitle
           : employeeSubtitle,
-        employeeAvatarUrl:
-          entry.employee.avatarUrl ?? getMockAvatarDataUrl(employeeName || entry.employee.id),
+        employeeAvatarUrl: entry.employee.avatarUrl ?? null,
         ...statusSummary,
         teams,
         teamsSort: teams.join(" "),
@@ -1398,7 +1396,7 @@ export function ManagerTasksPage({
         const employeeAvatarUrl =
           directoryEmployee?.avatarUrl ??
           getTaskAssigneeAvatarUrl(task) ??
-          getMockAvatarDataUrl(employeeName || task.id);
+          null;
         const photoProofs = getActivePhotoProofs(task)
           .filter(
             (proof): proof is (typeof task.photoProofs)[number] & { url: string } =>
@@ -2214,6 +2212,7 @@ export function ManagerTasksPage({
                           <Avatar
                             alt={match.employeeName}
                             className="team-tasks-search-result-avatar"
+                            initials={match.employeeName}
                             size="sm"
                             src={match.employeeAvatarUrl}
                           />
@@ -2394,6 +2393,7 @@ export function ManagerTasksPage({
                                 <Avatar
                                   alt={item.employeeName}
                                   className="shrink-0"
+                                  initials={item.employeeName}
                                   size="sm"
                                   src={item.employeeAvatarUrl}
                                 />

@@ -11,7 +11,7 @@ import {
   LogOut,
   UserRoundCheck,
 } from "lucide-react";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
@@ -88,8 +88,7 @@ function resolvePersonName(
 }
 
 export function getAvatarSource(person: DashboardActivityPerson, locale: "ru" | "en") {
-  const displayName = resolvePersonName(person, locale);
-  return person.avatarUrl || getMockAvatarDataUrl(displayName);
+  return person.avatarUrl || null;
 }
 
 export function getActivityIcon(item: DashboardActivityItem) {
@@ -223,13 +222,18 @@ export function ActivityTargetAvatars({
     <div className="daily-activity-targets">
       {visiblePeople.map((person) => {
         const displayName = resolvePersonName(person, locale);
+        const avatarSource = getAvatarSource(person, locale);
         return (
           <div
             className="daily-activity-target-avatar"
             key={person.id}
             title={displayName}
           >
-            <img alt={displayName} src={getAvatarSource(person, locale)} />
+            {avatarSource ? (
+              <img alt={displayName} src={avatarSource} />
+            ) : (
+              <span aria-hidden="true">{getAvatarInitials(displayName)}</span>
+            )}
           </div>
         );
       })}
@@ -315,19 +319,18 @@ export function DailyActivityPanel({
 
                   <div className="daily-activity-item-main">
                     <div className="daily-activity-item-copy">
-                      {item.actor ? (
+                      {item.actor?.avatarUrl ? (
                         <div className="daily-activity-actor-avatar">
                           <img
                             alt={actorName}
-                            src={getAvatarSource(item.actor, locale)}
+                            src={item.actor.avatarUrl}
                           />
                         </div>
                       ) : (
                         <div className="daily-activity-actor-avatar">
-                          <img
-                            alt={actorName}
-                            src={getMockAvatarDataUrl(actorName)}
-                          />
+                          <span className="text-xs font-semibold text-[color:var(--accent)]">
+                            {getAvatarInitials(actorName)}
+                          </span>
                         </div>
                       )}
 

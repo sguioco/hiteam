@@ -1,6 +1,6 @@
 import { Check, Clock3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 
 export type TaskPresencePerson = {
   id: string;
@@ -26,7 +26,7 @@ export function TaskPresenceStrip({
       {items.map((item) => (
         <div className="task-presence-pill" key={item.id}>
           <div className={`task-avatar ${item.done ? "is-complete" : ""}`}>
-            <img alt={item.name} src={getMockAvatarDataUrl(item.name || item.id)} />
+            <span aria-hidden="true">{getAvatarInitials(item.name || item.id)}</span>
             {item.done ? <Check className="task-avatar-check size-4" /> : null}
           </div>
           <div className="grid gap-0.5">

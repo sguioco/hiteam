@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 
 type ActionCategory =
   | "all"
@@ -476,9 +476,7 @@ export function getMockActionCenterItems(locale: "ru" | "en"): ActionCenterItem[
     const translatedAction = translateActionItem(action, locale);
     return {
       ...translatedAction,
-      avatarUrl:
-        translatedAction.avatarUrl ||
-        getMockAvatarDataUrl(translatedAction.from),
+      avatarUrl: translatedAction.avatarUrl ?? null,
     };
   });
 }
@@ -684,11 +682,17 @@ const ActionRow = ({
 
       {/* Avatar */}
       <div className="relative z-[1] shrink-0">
-        <img
-          alt={action.from}
-          className="h-10 w-10 rounded-xl object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-          src={action.avatarUrl || getMockAvatarDataUrl(action.from)}
-        />
+        {action.avatarUrl ? (
+          <img
+            alt={action.from}
+            className="h-10 w-10 rounded-xl object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+            src={action.avatarUrl}
+          />
+        ) : (
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(227,231,239,0.78)] text-xs font-semibold text-[rgba(72,84,104,0.72)] shadow-[0_8px_20px_rgba(40,75,255,0.08)]">
+            {getAvatarInitials(action.from)}
+          </span>
+        )}
       </div>
 
       {/* Content */}
@@ -804,11 +808,17 @@ const ActionDetailDialog = ({
           {/* Meta info */}
           <div className="space-y-3 mb-5">
             <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
-              <img
-                alt={action.from}
-                className="h-9 w-9 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-                src={action.avatarUrl || getMockAvatarDataUrl(action.from)}
-              />
+              {action.avatarUrl ? (
+                <img
+                  alt={action.from}
+                  className="h-9 w-9 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+                  src={action.avatarUrl}
+                />
+              ) : (
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-xs font-semibold text-[rgba(72,84,104,0.72)] shadow-[0_8px_20px_rgba(40,75,255,0.08)]">
+                  {getAvatarInitials(action.from)}
+                </span>
+              )}
               <span className="font-heading font-semibold text-[14px] text-foreground">
                 {action.from}
               </span>

@@ -21,38 +21,24 @@ const COPY: Record<
   LandingLocale,
   {
     dir: "ltr" | "rtl";
-    eyebrow: string;
     title: string;
-    subtitle: string;
   }
 > = {
   en: {
     dir: "ltr",
-    eyebrow: "Mobile access",
     title: "Please use mobile app",
-    subtitle:
-      "The web workspace is available from desktop. Open HiTeam from the mobile app on this phone.",
   },
   ru: {
     dir: "ltr",
-    eyebrow: "Мобильный доступ",
     title: "Пожалуйста, используйте мобильное приложение",
-    subtitle:
-      "Веб-кабинет доступен с компьютера. На телефоне откройте HiTeam через мобильное приложение.",
   },
   es: {
     dir: "ltr",
-    eyebrow: "Acceso móvil",
     title: "Por favor, usa la app móvil",
-    subtitle:
-      "El panel web está disponible desde escritorio. Abre HiTeam desde la app móvil en este teléfono.",
   },
   ar: {
     dir: "rtl",
-    eyebrow: "الوصول عبر الهاتف",
     title: "يرجى استخدام تطبيق الجوال",
-    subtitle:
-      "مساحة العمل على الويب متاحة من الكمبيوتر. افتح HiTeam من تطبيق الجوال على هذا الهاتف.",
   },
 };
 
@@ -140,15 +126,9 @@ export default async function MobileDownloadPage({
         </header>
 
         <div className="mt-[clamp(1.5rem,10dvh,5.5rem)] w-full rounded-[24px] border border-white/22 bg-white/14 px-4 py-5 text-center shadow-[0_28px_90px_rgba(15,23,42,0.30),inset_0_1px_0_rgba(255,255,255,0.22)] backdrop-blur-xl sm:px-7 sm:py-7">
-          <p className="text-[0.72rem] font-bold tracking-[0.18em] text-sky-100 uppercase">
-            {copy.eyebrow}
-          </p>
-          <h1 className="mt-4 text-[clamp(1.7rem,9.6vw,3.35rem)] font-semibold leading-[0.98] text-white">
+          <h1 className="text-[clamp(1.7rem,9.6vw,3.35rem)] font-semibold leading-[0.98] text-white">
             {copy.title}
           </h1>
-          <p className="mx-auto mt-4 max-w-[31ch] text-[0.9rem] leading-6 text-sky-50/82 sm:mt-5 sm:text-[0.96rem] sm:leading-7">
-            {copy.subtitle}
-          </p>
 
           <div className="mt-6 flex flex-wrap justify-center gap-3 sm:mt-8">
             <GooglePlayButton

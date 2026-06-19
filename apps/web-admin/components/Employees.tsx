@@ -50,6 +50,7 @@ import {
 import type { SortDescriptor } from "react-aria-components";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
+import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
@@ -113,7 +114,6 @@ import {
   getRuntimeLocaleTag,
   runtimeLocalize,
 } from "@/lib/runtime-locale";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { navigateWithClickSupport } from "@/lib/navigation";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
@@ -200,7 +200,7 @@ const EMPLOYEE_ACCESS_ROLES: Array<{
 type TaskDialogState =
   | {
       mode: "employee";
-      targetId: string;
+      targetIds: string[];
       targetLabel: string;
     }
   | {
@@ -355,15 +355,7 @@ function getAvatarSrc(
     "avatarUrl" | "firstName" | "lastName" | "middleName"
   >,
 ) {
-  return (
-    employee.avatarUrl ??
-    getMockAvatarDataUrl(
-      buildEmployeeName(employee) ||
-        employee.lastName ||
-        employee.firstName ||
-        "employee",
-    )
-  );
+  return employee.avatarUrl ?? null;
 }
 
 function resolveEmployeeAccessRole(
@@ -667,8 +659,9 @@ function TeamMembersDropdown({
             <Avatar
               alt={employee.name}
               className="shrink-0"
+              initials={employee.name}
               size="sm"
-              src={employee.avatarUrl ?? getMockAvatarDataUrl(employee.name)}
+              src={employee.avatarUrl ?? null}
             />
             <span className="min-w-0 truncate font-semibold">
               {employee.name}
@@ -1284,6 +1277,41 @@ const Employees = ({
     tasksByEmployeeId,
   ]);
 
+  const taskEmployeeOptions = useMemo(
+    () => employees.filter((employee) => employee.status !== "dismissed"),
+    [employees],
+  );
+  const taskRecipientSummary = useMemo(() => {
+    if (taskDialog?.mode !== "employee") {
+      return taskDialog?.targetLabel ?? null;
+    }
+
+    const selectedIds = taskDialog.targetIds;
+    if (
+      selectedIds.length === taskEmployeeOptions.length &&
+      taskEmployeeOptions.length > 0
+    ) {
+      return runtimeLocalize("Все сотрудники", "All employees", locale);
+    }
+
+    if (selectedIds.length === 1) {
+      return (
+        taskEmployeeOptions.find((employee) => employee.id === selectedIds[0])
+          ?.name ?? taskDialog.targetLabel
+      );
+    }
+
+    if (selectedIds.length > 1) {
+      return runtimeLocalize(
+        `${selectedIds.length} сотрудников выбрано`,
+        `${selectedIds.length} employees selected`,
+        locale,
+      );
+    }
+
+    return null;
+  }, [locale, taskDialog, taskEmployeeOptions]);
+
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
     return employees.filter((employee) => {
@@ -1484,6 +1512,7 @@ const Employees = ({
     if (
       !canCheckWorkdays ||
       taskDialog?.mode !== "employee" ||
+      taskDialog.targetIds.length !== 1 ||
       !taskDraft.hasDueTime ||
       !taskDraft.dueAt
     ) {
@@ -1492,7 +1521,7 @@ const Employees = ({
 
     return getEmployeeWorkdayStatus(
       employeeWorkdayLookup,
-      taskDialog.targetId,
+      taskDialog.targetIds[0],
       taskDraft.dueAt,
     );
   }, [
@@ -2089,7 +2118,7 @@ const Employees = ({
           locale,
         ),
       );
-      await loadDirectory();
+      await loadDirectory({ force: true });
     } catch (requestError) {
       const message =
         requestError instanceof Error
@@ -2193,7 +2222,7 @@ const Employees = ({
       setPageMessage(
         runtimeLocalize("Бригада добавлена.", "Team added.", locale),
       );
-      await loadDirectory();
+      await loadDirectory({ force: true });
     } catch (requestError) {
       setCreateGroupError(
         requestError instanceof Error
@@ -2683,7 +2712,7 @@ const Employees = ({
     setTaskDayOffConfirmOpen(false);
     setTaskDialog({
       mode: "employee",
-      targetId: employee.id,
+      targetIds: [employee.id],
       targetLabel: employee.name,
     });
   }
@@ -2702,8 +2731,23 @@ const Employees = ({
   async function handleCreateTask(allowDayOff = false) {
     const session = getSession();
     if (!session || !taskDialog) return;
+    const assigneeEmployeeIds =
+      taskDialog.mode === "employee"
+        ? Array.from(new Set(taskDialog.targetIds.filter(Boolean)))
+        : [];
 
     setTaskError(null);
+
+    if (taskDialog.mode === "employee" && assigneeEmployeeIds.length === 0) {
+      setTaskError(
+        runtimeLocalize(
+          "Выберите хотя бы одного сотрудника.",
+          "Select at least one employee.",
+          locale,
+        ),
+      );
+      return;
+    }
 
     if (taskDraft.isRecurring && taskDraft.weekDays.length === 0) {
       setTaskError(
@@ -2762,47 +2806,89 @@ const Employees = ({
 
     try {
       if (taskDraft.isRecurring) {
-        await apiRequest("/collaboration/task-templates", {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({
-            title: taskDraft.title,
-            description: taskDraft.description || undefined,
-            priority: taskDraft.priority,
-            requiresPhoto: taskDraft.requiresPhoto || undefined,
-            expandOnDemand: true,
-            frequency: "WEEKLY",
-            weekDays: taskDraft.weekDays,
-            startDate:
-              taskDraft.startDate || new Date().toISOString().split("T")[0],
-            dueAfterDays: 0,
-            dueTimeLocal: taskDraft.hasDueTime
-              ? taskDraft.dueTimeLocal || undefined
-              : undefined,
-            assigneeEmployeeId:
-              taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
-            groupId:
-              taskDialog.mode === "group" ? taskDialog.targetId : undefined,
-          }),
-        });
+        if (taskDialog.mode === "employee") {
+          await Promise.all(
+            assigneeEmployeeIds.map((assigneeEmployeeId) =>
+              apiRequest("/collaboration/task-templates", {
+                method: "POST",
+                token: session.accessToken,
+                body: JSON.stringify({
+                  title: taskDraft.title,
+                  description: taskDraft.description || undefined,
+                  priority: taskDraft.priority,
+                  requiresPhoto: taskDraft.requiresPhoto || undefined,
+                  expandOnDemand: true,
+                  frequency: "WEEKLY",
+                  weekDays: taskDraft.weekDays,
+                  startDate:
+                    taskDraft.startDate || new Date().toISOString().split("T")[0],
+                  dueAfterDays: 0,
+                  dueTimeLocal: taskDraft.hasDueTime
+                    ? taskDraft.dueTimeLocal || undefined
+                    : undefined,
+                  assigneeEmployeeId,
+                }),
+              }),
+            ),
+          );
+        } else {
+          await apiRequest("/collaboration/task-templates", {
+            method: "POST",
+            token: session.accessToken,
+            body: JSON.stringify({
+              title: taskDraft.title,
+              description: taskDraft.description || undefined,
+              priority: taskDraft.priority,
+              requiresPhoto: taskDraft.requiresPhoto || undefined,
+              expandOnDemand: true,
+              frequency: "WEEKLY",
+              weekDays: taskDraft.weekDays,
+              startDate:
+                taskDraft.startDate || new Date().toISOString().split("T")[0],
+              dueAfterDays: 0,
+              dueTimeLocal: taskDraft.hasDueTime
+                ? taskDraft.dueTimeLocal || undefined
+                : undefined,
+              groupId: taskDialog.targetId,
+            }),
+          });
+        }
       } else {
-        await apiRequest<TaskItem[]>("/collaboration/tasks", {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({
-            title: taskDraft.title,
-            description: taskDraft.description || undefined,
-            priority: taskDraft.priority,
-            requiresPhoto: taskDraft.requiresPhoto || undefined,
-            dueAt: taskDraft.hasDueTime
-              ? taskDraft.dueAt || undefined
-              : undefined,
-            assigneeEmployeeId:
-              taskDialog.mode === "employee" ? taskDialog.targetId : undefined,
-            groupId:
-              taskDialog.mode === "group" ? taskDialog.targetId : undefined,
-          }),
-        });
+        if (taskDialog.mode === "employee") {
+          await Promise.all(
+            assigneeEmployeeIds.map((assigneeEmployeeId) =>
+              apiRequest<TaskItem[]>("/collaboration/tasks", {
+                method: "POST",
+                token: session.accessToken,
+                body: JSON.stringify({
+                  title: taskDraft.title,
+                  description: taskDraft.description || undefined,
+                  priority: taskDraft.priority,
+                  requiresPhoto: taskDraft.requiresPhoto || undefined,
+                  dueAt: taskDraft.hasDueTime
+                    ? taskDraft.dueAt || undefined
+                    : undefined,
+                  assigneeEmployeeId,
+                }),
+              }),
+            ),
+          );
+        } else {
+          await apiRequest<TaskItem[]>("/collaboration/tasks", {
+            method: "POST",
+            token: session.accessToken,
+            body: JSON.stringify({
+              title: taskDraft.title,
+              description: taskDraft.description || undefined,
+              priority: taskDraft.priority,
+              requiresPhoto: taskDraft.requiresPhoto || undefined,
+              dueAt: taskDraft.hasDueTime
+                ? taskDraft.dueAt || undefined
+                : undefined,
+              groupId: taskDialog.targetId,
+            }),
+          });
+        }
       }
 
       setTaskDialog(null);
@@ -2810,18 +2896,24 @@ const Employees = ({
       setTaskDayOffConfirmOpen(false);
       setPageMessage(
         taskDialog.mode === "employee"
-          ? runtimeLocalize(
-              "Задача назначена сотруднику.",
-              "Task assigned to the employee.",
-              locale,
-            )
+          ? assigneeEmployeeIds.length === 1
+            ? runtimeLocalize(
+                "Задача назначена сотруднику.",
+                "Task assigned to the employee.",
+                locale,
+              )
+            : runtimeLocalize(
+                `Задача назначена ${assigneeEmployeeIds.length} сотрудникам.`,
+                `Task assigned to ${assigneeEmployeeIds.length} employees.`,
+                locale,
+              )
           : runtimeLocalize(
               "Задача назначена бригаде.",
               "Task assigned to the team.",
               locale,
             ),
       );
-      await loadDirectory();
+      await loadDirectory({ force: true });
     } catch (requestError) {
       setTaskError(
         requestError instanceof Error
@@ -3149,11 +3241,9 @@ const Employees = ({
                           <Avatar
                             alt={employee.name}
                             className="shrink-0"
+                            initials={employee.name}
                             size="sm"
-                            src={
-                              employee.avatarUrl ??
-                              getMockAvatarDataUrl(employee.name)
-                            }
+                            src={employee.avatarUrl ?? null}
                           />
                           <div className="min-w-0 space-y-0.5">
                             <p className="truncate text-base font-medium text-[color:var(--foreground)]">
@@ -5444,12 +5534,12 @@ const Employees = ({
                   <Avatar
                     alt={selectedEmployee.name}
                     className="shrink-0 shadow-[0_12px_32px_rgba(40,75,255,0.16)]"
+                    initials={selectedEmployee.name}
                     size="2xl"
                     src={
                       selectedEmployeeDetails
                         ? getAvatarSrc(selectedEmployeeDetails)
-                        : (selectedEmployee.avatarUrl ??
-                          getMockAvatarDataUrl(selectedEmployee.name))
+                        : (selectedEmployee.avatarUrl ?? null)
                     }
                   />
                   <DialogHeader className="gap-2 pr-10">
@@ -6072,7 +6162,9 @@ const Employees = ({
             </DialogTitle>
             <DialogDescription className="font-heading">
               {taskDialog
-                ? `${runtimeLocalize("Получатель", "Recipient", locale)}: ${taskDialog.targetLabel}`
+                ? `${runtimeLocalize("Получатель", "Recipient", locale)}: ${
+                    taskRecipientSummary ?? taskDialog.targetLabel
+                  }`
                 : runtimeLocalize(
                     "Заполните параметры задачи.",
                     "Fill in the task details.",
@@ -6081,6 +6173,59 @@ const Employees = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {taskDialog?.mode === "employee" ? (
+              <div className="grid gap-2 text-sm font-heading">
+                <span>{runtimeLocalize("Получатель", "Recipient", locale)}</span>
+                <EmployeeDropdown
+                  allEmployeesLabel={runtimeLocalize(
+                    "Все сотрудники",
+                    "All employees",
+                    locale,
+                  )}
+                  employeeLabel={runtimeLocalize("Сотрудник", "Employee", locale)}
+                  employees={taskEmployeeOptions}
+                  loadingLabel={runtimeLocalize(
+                    "Загружаем сотрудников",
+                    "Loading employees",
+                    locale,
+                  )}
+                  mode="multiple"
+                  noEmployeesLabel={runtimeLocalize(
+                    "Сотрудники не найдены.",
+                    "No employees found.",
+                    locale,
+                  )}
+                  onSelectedEmployeeIdsChange={(employeeIds) =>
+                    setTaskDialog((current) =>
+                      current?.mode === "employee"
+                        ? {
+                            ...current,
+                            targetIds: employeeIds,
+                          }
+                        : current,
+                    )
+                  }
+                  placeholder={runtimeLocalize(
+                    "Выберите сотрудника",
+                    "Select employee",
+                    locale,
+                  )}
+                  searchPlaceholder={runtimeLocalize(
+                    "Поиск сотрудника",
+                    "Search employee",
+                    locale,
+                  )}
+                  selectedEmployeeIds={taskDialog.targetIds}
+                  selectedEmployeesLabel={(count) =>
+                    runtimeLocalize(
+                      `${count} сотрудников выбрано`,
+                      `${count} employees selected`,
+                      locale,
+                    )
+                  }
+                />
+              </div>
+            ) : null}
             <label className="grid gap-2 text-sm font-heading">
               <span>{runtimeLocalize("Название", "Title", locale)}</span>
               <Input
@@ -6137,7 +6282,7 @@ const Employees = ({
               {!taskDraft.isRecurring ? (
                 <div className="grid gap-2 text-sm font-heading">
                   <div className="grid gap-2">
-                    <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3 py-2">
+                    <label className="inline-flex min-h-5 cursor-pointer items-center gap-3 justify-self-start">
                       <Checkbox
                         checked={taskDraft.hasDueTime}
                         onCheckedChange={(checked) =>
@@ -6157,6 +6302,7 @@ const Employees = ({
                       </span>
                     </label>
                     <TaskDateTimePicker
+                      className="self-end"
                       isDisabled={!taskDraft.hasDueTime}
                       locale={locale}
                       minToday
@@ -6328,6 +6474,8 @@ const Employees = ({
                 disabled={
                   taskSubmitting ||
                   !taskDraft.title.trim() ||
+                  (taskDialog?.mode === "employee" &&
+                    taskDialog.targetIds.length === 0) ||
                   (taskDraft.isRecurring && taskDraft.weekDays.length === 0) ||
                   (taskDraft.hasDueTime &&
                     (taskDraft.isRecurring
@@ -6357,8 +6505,8 @@ const Employees = ({
             <DialogDescription className="font-heading">
               {taskDialog?.mode === "employee" && taskDayStatus
                 ? locale === "ru"
-                  ? `У сотрудника ${taskDialog.targetLabel} выходной день ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Вы хотите назначить задачу на этот день?`
-                  : `${taskDialog.targetLabel} has a day off on ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Do you want to assign a task for this day?`
+                  ? `У сотрудника ${taskRecipientSummary ?? taskDialog.targetLabel} выходной день ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Вы хотите назначить задачу на этот день?`
+                  : `${taskRecipientSummary ?? taskDialog.targetLabel} has a day off on ${formatWorkdayDateLabel(taskDayStatus.dayKey, locale)}. Do you want to assign a task for this day?`
                 : runtimeLocalize(
                     "У сотрудника выходной день. Вы хотите назначить задачу на этот день?",
                     "The employee has a day off. Do you want to assign a task for this day?",

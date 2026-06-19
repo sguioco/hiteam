@@ -3010,7 +3010,38 @@ textarea {
   letter-spacing: 0.04em;
 }
 
+.organization-studio-name-row {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+}
+
+.organization-studio-name-input-shell {
+  display: inline-grid;
+  max-width: calc(100% - 36px);
+  min-width: 1ch;
+}
+
+.organization-studio-name-input-shell::after {
+  content: attr(data-value) " ";
+  grid-area: 1 / 1;
+  min-width: 1ch;
+  visibility: hidden;
+  white-space: pre;
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .organization-studio-name-input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
   height: auto;
   padding: 0;
   border: 0;
@@ -3025,6 +3056,37 @@ textarea {
   letter-spacing: -0.05em;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.organization-studio-inline-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.organization-studio-inline-icon:hover {
+  color: var(--foreground);
+}
+
+.organization-studio-inline-icon:active {
+  transform: scale(0.96);
+}
+
+.organization-studio-inline-icon:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
 }
 
 .organization-studio-name-input:focus-visible {
@@ -3057,12 +3119,17 @@ textarea {
 .organization-studio-code {
   display: inline-flex;
   max-width: min(100%, 42rem);
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--muted-foreground);
+  cursor: pointer;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.9rem;
   font-weight: 500;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
@@ -3071,6 +3138,21 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.04em;
   overflow-wrap: anywhere;
+}
+
+.organization-studio-code-icon {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+.organization-studio-code:hover .organization-studio-code-icon {
+  color: var(--foreground);
+}
+
+.organization-studio-code:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 999px;
 }
 
 .organization-studio-grid {
@@ -8627,23 +8709,36 @@ body {
   gap: 16px;
 }
 
+.manager-event-dialog-details {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+}
+
 .manager-event-dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 .manager-event-card,
 .manager-event-copy {
   display: grid;
   gap: 6px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(246, 247, 251, 0.94);
+  padding: 15px 0;
+  background: transparent;
 }
 
-.manager-event-card span,
-.manager-event-copy span {
+.manager-event-card + .manager-event-card {
+  border-left: 1px solid rgba(15, 23, 42, 0.1);
+  padding-left: 18px;
+}
+
+.manager-event-copy {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.manager-event-card > span,
+.manager-event-card-head > span,
+.manager-event-copy > span {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -8658,6 +8753,56 @@ body {
   color: var(--foreground);
 }
 
+.manager-event-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manager-event-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.manager-event-avatars {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  margin-top: 4px;
+}
+
+.manager-event-avatar {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid var(--background);
+  border-radius: 999px;
+  background: linear-gradient(
+    135deg,
+    rgba(40, 75, 255, 0.14),
+    rgba(124, 58, 237, 0.14)
+  );
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.manager-event-avatar + .manager-event-avatar {
+  margin-left: -8px;
+}
+
+.manager-event-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .manager-event-copy p {
   line-height: 1.5;
 }
@@ -8665,6 +8810,18 @@ body {
 .manager-event-dialog-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .manager-event-dialog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-event-card + .manager-event-card {
+    border-left: 0;
+    border-top: 1px solid rgba(15, 23, 42, 0.1);
+    padding-left: 0;
+  }
 }
 
 .dashboard-toast {
@@ -9628,55 +9785,16 @@ body {
   gap: 12px;
 }
 
-.manager-form-block-head strong,
-.manager-assignee-copy strong {
+.manager-form-block-head strong {
   font-size: 0.94rem;
   color: #101828;
 }
 
 .manager-form-block-head span,
-.manager-assignee-copy span,
 .manager-form-hint {
   color: #667085;
   font-size: 0.84rem;
   line-height: 1.5;
-}
-
-.manager-assignee-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  max-height: none;
-  overflow: visible;
-  padding-right: 0;
-}
-
-.manager-assignee-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(24, 24, 27, 0.08);
-  border-radius: 18px;
-  background: rgba(247, 245, 241, 0.72);
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.manager-assignee-option.is-selected {
-  border-color: rgba(40, 75, 255, 0.22);
-  background: rgba(232, 240, 255, 0.9);
-  box-shadow: 0 10px 24px rgba(40, 75, 255, 0.08);
-}
-
-.manager-assignee-copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  align-self: center;
 }
 
 .manager-task-form-grid {
@@ -9992,10 +10110,6 @@ body {
 }
 
 @media (max-width: 900px) {
-  .manager-assignee-picker {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .manager-task-form-grid,
   .manager-deadline-row,
   .manager-recurring-schedule-grid {
@@ -10055,8 +10169,7 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .manager-create-mode,
-  .manager-assignee-picker {
+  .manager-create-mode {
     grid-template-columns: 1fr;
   }
 
@@ -10251,10 +10364,6 @@ body {
   .manager-task-form,
   .manager-task-form-body {
     gap: 10px;
-  }
-
-  .manager-assignee-option {
-    padding: 10px 12px;
   }
 
   .manager-create-dialog textarea {

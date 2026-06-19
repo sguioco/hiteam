@@ -2,7 +2,7 @@
 
 import type { EmployeeApiRecord, TaskItem } from "@smart/types";
 import { useEffect, useMemo, useState } from "react";
-import { Avatar } from "@/components/base/avatar/avatar";
+import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,11 +20,9 @@ import {
   TaskDateTimePicker,
   TaskTimePicker,
 } from "@/components/task-schedule-pickers";
-import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import type { AuthSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import {
   getWebAdminTaskPriorityLabel,
   normalizeWebAdminTaskPriority,
@@ -82,11 +80,6 @@ function buildEmployeeName(employee: {
     .trim();
 }
 
-function getEmployeeAvatarSrc(employee: Pick<EmployeeApiRecord, "avatarUrl" | "firstName" | "lastName" | "middleName">) {
-  const name = buildEmployeeName(employee) || employee.lastName || employee.firstName || "employee";
-  return employee.avatarUrl ?? getMockAvatarDataUrl(name);
-}
-
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
   const normalizedDay = day === 7 ? 0 : day;
 
@@ -129,7 +122,7 @@ export function HeaderTaskCreateDialog({
 }: HeaderTaskCreateDialogProps) {
   const { locale } = useI18n();
   const [employees, setEmployees] = useState<EmployeeApiRecord[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<HeaderTaskDraft>(() => getInitialTaskDraft());
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -144,9 +137,19 @@ export function HeaderTaskCreateDialog({
       .sort((left, right) => left.displayName.localeCompare(right.displayName, locale));
   }, [employees, locale]);
 
-  const selectedEmployee = employeeOptions.find(
-    (employee) => employee.id === selectedEmployeeId,
-  );
+  const selectedEmployeeSummary =
+    selectedEmployeeIds.length === employeeOptions.length && employeeOptions.length > 0
+      ? localize(locale, "Все сотрудники", "All employees")
+      : selectedEmployeeIds.length === 1
+        ? employeeOptions.find((employee) => employee.id === selectedEmployeeIds[0])
+            ?.displayName
+        : selectedEmployeeIds.length > 1
+          ? localize(
+              locale,
+              `${selectedEmployeeIds.length} сотрудников выбрано`,
+              `${selectedEmployeeIds.length} employees selected`,
+            )
+          : null;
 
   const priorityOptions = useMemo(
     () =>
@@ -164,7 +167,7 @@ export function HeaderTaskCreateDialog({
 
     setDraft(getInitialTaskDraft());
     setError(null);
-    setSelectedEmployeeId("");
+    setSelectedEmployeeIds([]);
 
     if (!session?.accessToken) {
       return;
@@ -185,7 +188,9 @@ export function HeaderTaskCreateDialog({
           (employee) => !["DISMISSED", "dismissed"].includes(employee.status ?? ""),
         );
         setEmployees(activeItems);
-        setSelectedEmployeeId((current) => current || activeItems[0]?.id || "");
+        setSelectedEmployeeIds((current) =>
+          current.length > 0 ? current : activeItems[0]?.id ? [activeItems[0].id] : [],
+        );
       })
       .catch((requestError) => {
         if (cancelled) {
@@ -210,7 +215,11 @@ export function HeaderTaskCreateDialog({
   }, [locale, open, session?.accessToken]);
 
   async function handleSubmit() {
-    if (!session?.accessToken || !selectedEmployeeId) {
+    const assigneeEmployeeIds = Array.from(
+      new Set(selectedEmployeeIds.filter(Boolean)),
+    );
+
+    if (!session?.accessToken || assigneeEmployeeIds.length === 0) {
       return;
     }
 
@@ -246,36 +255,44 @@ export function HeaderTaskCreateDialog({
 
     try {
       if (draft.isRecurring) {
-        await apiRequest("/collaboration/task-templates", {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({
-            title: draft.title.trim(),
-            description: draft.description.trim() || undefined,
-            priority: draft.priority,
-            requiresPhoto: draft.requiresPhoto || undefined,
-            expandOnDemand: true,
-            frequency: "WEEKLY",
-            weekDays: draft.weekDays,
-            startDate: draft.startDate || new Date().toISOString().split("T")[0],
-            dueAfterDays: 0,
-            dueTimeLocal: draft.hasDueTime ? draft.dueTimeLocal || undefined : undefined,
-            assigneeEmployeeId: selectedEmployeeId,
-          }),
-        });
+        await Promise.all(
+          assigneeEmployeeIds.map((assigneeEmployeeId) =>
+            apiRequest("/collaboration/task-templates", {
+              method: "POST",
+              token: session.accessToken,
+              body: JSON.stringify({
+                title: draft.title.trim(),
+                description: draft.description.trim() || undefined,
+                priority: draft.priority,
+                requiresPhoto: draft.requiresPhoto || undefined,
+                expandOnDemand: true,
+                frequency: "WEEKLY",
+                weekDays: draft.weekDays,
+                startDate: draft.startDate || new Date().toISOString().split("T")[0],
+                dueAfterDays: 0,
+                dueTimeLocal: draft.hasDueTime ? draft.dueTimeLocal || undefined : undefined,
+                assigneeEmployeeId,
+              }),
+            }),
+          ),
+        );
       } else {
-        await apiRequest<TaskItem[]>("/collaboration/tasks", {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({
-            title: draft.title.trim(),
-            description: draft.description.trim() || undefined,
-            priority: draft.priority,
-            requiresPhoto: draft.requiresPhoto || undefined,
-            dueAt: draft.hasDueTime ? draft.dueAt || undefined : undefined,
-            assigneeEmployeeId: selectedEmployeeId,
-          }),
-        });
+        await Promise.all(
+          assigneeEmployeeIds.map((assigneeEmployeeId) =>
+            apiRequest<TaskItem[]>("/collaboration/tasks", {
+              method: "POST",
+              token: session.accessToken,
+              body: JSON.stringify({
+                title: draft.title.trim(),
+                description: draft.description.trim() || undefined,
+                priority: draft.priority,
+                requiresPhoto: draft.requiresPhoto || undefined,
+                dueAt: draft.hasDueTime ? draft.dueAt || undefined : undefined,
+                assigneeEmployeeId,
+              }),
+            }),
+          ),
+        );
       }
 
       setDraft(getInitialTaskDraft());
@@ -294,7 +311,7 @@ export function HeaderTaskCreateDialog({
 
   const canSubmit =
     Boolean(draft.title.trim()) &&
-    Boolean(selectedEmployeeId) &&
+    selectedEmployeeIds.length > 0 &&
     (!draft.isRecurring || draft.weekDays.length > 0) &&
     (!draft.hasDueTime || (draft.isRecurring ? Boolean(draft.dueTimeLocal) : Boolean(draft.dueAt)));
 
@@ -306,8 +323,8 @@ export function HeaderTaskCreateDialog({
             {localize(locale, "Назначить задачу", "Assign task")}
           </DialogTitle>
           <DialogDescription className="font-heading">
-            {selectedEmployee
-              ? `${localize(locale, "Получатель", "Recipient")}: ${selectedEmployee.displayName}`
+            {selectedEmployeeSummary
+              ? `${localize(locale, "Получатель", "Recipient")}: ${selectedEmployeeSummary}`
               : localize(locale, "Выберите сотрудника и заполните задачу.", "Choose an employee and fill in the task.")}
           </DialogDescription>
         </DialogHeader>
@@ -315,53 +332,26 @@ export function HeaderTaskCreateDialog({
         <div className="space-y-4">
           <div className="grid gap-2 text-sm font-heading">
             <span>{localize(locale, "Получатель", "Recipient")}</span>
-            <div className="max-h-[168px] overflow-y-auto">
-              {loadingEmployees ? (
-                <WorkspaceLoading
-                  className="min-h-[120px]"
-                  iconClassName="size-8"
-                  label={localize(locale, "Загружаем сотрудников", "Loading employees")}
-                />
-              ) : employeeOptions.length ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {employeeOptions.map((employee) => {
-                    const selected = employee.id === selectedEmployeeId;
-
-                    return (
-                      <button
-                        className={`flex min-h-14 min-w-0 items-center gap-3 rounded-[14px] border px-3 py-2 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.96] ${
-                          selected
-                            ? "border-[rgba(40,75,255,0.24)] bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)] ring-1 ring-[rgba(40,75,255,0.18)]"
-                            : "border-transparent hover:border-border/70 hover:bg-white/80"
-                        }`}
-                        key={employee.id}
-                        onClick={() => setSelectedEmployeeId(employee.id)}
-                        type="button"
-                      >
-                        <Avatar
-                          alt={employee.displayName}
-                          className="shrink-0"
-                          size="sm"
-                          src={getEmployeeAvatarSrc(employee)}
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-[color:var(--foreground)]">
-                            {employee.displayName}
-                          </span>
-                          <span className="block truncate text-xs font-normal text-[color:var(--muted-foreground)]">
-                            {employee.user?.email || employee.employeeNumber}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="px-3 py-6 text-center text-sm text-[color:var(--muted-foreground)]">
-                  {localize(locale, "Сотрудники не найдены.", "No employees found.")}
-                </div>
-              )}
-            </div>
+            <EmployeeDropdown
+              allEmployeesLabel={localize(locale, "Все сотрудники", "All employees")}
+              employeeLabel={localize(locale, "Сотрудник", "Employee")}
+              employees={employeeOptions}
+              isLoading={loadingEmployees}
+              loadingLabel={localize(locale, "Загружаем сотрудников", "Loading employees")}
+              mode="multiple"
+              noEmployeesLabel={localize(locale, "Сотрудники не найдены.", "No employees found.")}
+              onSelectedEmployeeIdsChange={setSelectedEmployeeIds}
+              placeholder={localize(locale, "Выберите сотрудника", "Select employee")}
+              searchPlaceholder={localize(locale, "Поиск сотрудника", "Search employee")}
+              selectedEmployeeIds={selectedEmployeeIds}
+              selectedEmployeesLabel={(count) =>
+                localize(
+                  locale,
+                  `${count} сотрудников выбрано`,
+                  `${count} employees selected`,
+                )
+              }
+            />
           </div>
 
           <label className="grid gap-2 text-sm font-heading">

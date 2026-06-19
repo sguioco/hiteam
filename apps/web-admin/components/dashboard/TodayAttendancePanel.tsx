@@ -8,7 +8,7 @@ import {
   AttendanceLiveSession,
 } from "@smart/types";
 import type { EmployeeScheduleShift } from "@/lib/employee-workdays";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { localizePersonName } from "@/lib/transliteration";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 
@@ -403,13 +403,7 @@ export function TodayAttendancePanel({
         : fallbackName || localize(locale, "Сотрудник", "Employee");
       return {
         id: employeeId,
-        avatarUrl:
-          employee?.avatarUrl ||
-          getMockAvatarDataUrl(
-            employee
-              ? `${employee.firstName} ${employee.lastName}`.trim()
-              : fullName,
-          ),
+        avatarUrl: employee?.avatarUrl ?? null,
         department:
           employee?.department?.name ??
           historyRow?.department ??
@@ -503,7 +497,11 @@ export function TodayAttendancePanel({
             localizedRows.map((row) => (
               <article className="today-attendance-row" key={row.id}>
                 <div className="today-attendance-avatar">
-                  <img alt={row.fullName} src={row.avatarUrl} />
+                  {row.avatarUrl ? (
+                    <img alt={row.fullName} src={row.avatarUrl} />
+                  ) : (
+                    <span aria-hidden="true">{getAvatarInitials(row.fullName)}</span>
+                  )}
                 </div>
 
                 <div className="today-attendance-row-copy">

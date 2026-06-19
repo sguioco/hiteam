@@ -17,7 +17,6 @@ import {
 import { AuthSession, destroySession, getSession, isEmployeeOnlyRole, redirectToLogin } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
-import { getMockAvatarDataUrl } from '../../lib/mock-avatar';
 import { buildUserDisplayName } from '../../lib/profile-display';
 import { readStoredProfileAvatar, writeStoredProfileAvatar } from '../../lib/profile-avatar';
 
@@ -143,7 +142,6 @@ export default function ProfilePageClient({
   const roleLabel = user.roleCodes.map((code) => roleLabels[code] ?? code).join(', ');
   const fullName = buildUserDisplayName(employee?.firstName, employee?.lastName);
   const displayName = fullName || user.email;
-  const avatarFallbackSrc = getMockAvatarDataUrl(displayName || user.email);
 
   return (
     <AdminShell mode={employeeMode ? "employee" : "admin"}>
@@ -178,7 +176,7 @@ export default function ProfilePageClient({
                         {previewSrc ? (
                           <img alt={displayName} src={previewSrc} />
                         ) : (
-                          <img alt={displayName} src={avatarFallbackSrc} />
+                          <UserRound className="size-10 text-muted-foreground" />
                         )}
                       </span>
                     </button>

@@ -6,7 +6,6 @@ import {
   Camera,
   Calendar,
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -33,6 +32,7 @@ import {
   TaskItem,
 } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
+import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { TimePicker } from "@/components/application/time-picker/time-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,12 +43,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
   SelectEmptyItem,
   SelectItem,
-  SelectOptionAvatar,
   SelectOptionContent,
   SelectOptionDescription,
   SelectOptionText,
@@ -56,12 +56,11 @@ import {
   SelectTrigger,
   SelectTriggerLabel,
 } from "@/components/ui/select";
-import { SelectableOptionButton } from "@/components/ui/selectable-listbox";
 import { apiRequest } from "@/lib/api";
 import { getSession, isEmployeeOnlyRole } from "@/lib/auth";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
@@ -87,7 +86,7 @@ type EnrichedShift = {
   employeeId: string;
   employeeName: string;
   employeeNumber: string;
-  avatarSrc: string;
+  avatarSrc: string | null;
   shiftDate: Date;
   startsAtDate: Date;
   endsAtDate: Date;
@@ -123,7 +122,7 @@ type ChangeLogEntry = {
 type CalendarTaskEvent = {
   assigneeName: string;
   authorName: string;
-  avatarSrc: string;
+  avatarSrc: string | null;
   completedAt: string | null;
   date: Date;
   description: string;
@@ -150,7 +149,7 @@ type CalendarTaskEvent = {
 };
 
 type CalendarDayEntryDetail = {
-  avatarSrc: string;
+  avatarSrc: string | null;
   employeeId: string | null;
   id: string;
   metaLabel?: string;
@@ -227,6 +226,22 @@ function buildEmployeeName(employee: {
     .filter(Boolean)
     .join(" ")
     .trim();
+}
+
+function renderScheduleAvatar(src: string | null, label: string, className: string) {
+  if (src) {
+    return <img alt={label} className={className} src={src} />;
+  }
+
+  return (
+    <span
+      aria-label={label}
+      className={`${className} flex shrink-0 items-center justify-center bg-[rgba(227,231,239,0.78)] text-[11px] font-semibold text-[rgba(72,84,104,0.72)]`}
+      role="img"
+    >
+      {getAvatarInitials(label)}
+    </span>
+  );
 }
 
 function cloneDate(value: Date) {
@@ -979,8 +994,6 @@ export default function Schedule({
   const [templatesReturnToCreateShift, setTemplatesReturnToCreateShift] =
     useState(false);
   const [massAssignOpen, setMassAssignOpen] = useState(false);
-  const [createShiftEmployeePickerOpen, setCreateShiftEmployeePickerOpen] =
-    useState(false);
 
   const [createShiftDraft, setCreateShiftDraft] = useState<CreateShiftDraft>({
     employeeIds: [],
@@ -1107,46 +1120,6 @@ export default function Schedule({
     };
   }, [calendarDays, today]);
 
-  const selectedEmployee = useMemo(
-    () =>
-      selectedEmployeeId === "all"
-        ? null
-        : employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
-    [employees, selectedEmployeeId],
-  );
-
-  const createShiftSelectedEmployees = useMemo(() => {
-    const selectedIds = new Set(createShiftDraft.employeeIds);
-    return employees.filter((employee) => selectedIds.has(employee.id));
-  }, [createShiftDraft.employeeIds, employees]);
-
-  const createShiftEmployeeLabel =
-    createShiftSelectedEmployees.length === 0
-      ? ui.selectEmployee
-      : createShiftSelectedEmployees.length === 1
-        ? buildEmployeeName(createShiftSelectedEmployees[0])
-        : ui.selectedEmployees(createShiftSelectedEmployees.length);
-
-  function toggleCreateShiftEmployee(employeeId: string) {
-    setCreateShiftDraft((current) => {
-      if (editingShiftId) {
-        return {
-          ...current,
-          employeeIds: [employeeId],
-        };
-      }
-
-      const isSelected = current.employeeIds.includes(employeeId);
-
-      return {
-        ...current,
-        employeeIds: isSelected
-          ? current.employeeIds.filter((id) => id !== employeeId)
-          : [...current.employeeIds, employeeId],
-      };
-    });
-  }
-
   const employeeById = useMemo(
     () =>
       new Map(
@@ -1158,11 +1131,7 @@ export default function Schedule({
             roleId: employee.position?.id ?? null,
             roleName: employee.position?.name ?? ui.noRole,
             employeeNumber: employee.employeeNumber,
-            avatarSrc:
-              employee.avatarUrl ||
-              getMockAvatarDataUrl(
-                buildEmployeeName(employee) || employee.lastName || employee.id,
-              ),
+            avatarSrc: employee.avatarUrl ?? null,
           },
         ]),
       ),
@@ -1201,8 +1170,7 @@ export default function Schedule({
           employeeId: shift.employee.id,
           employeeName,
           employeeNumber: employeeMeta?.employeeNumber ?? "",
-          avatarSrc:
-            employeeMeta?.avatarSrc || getMockAvatarDataUrl(employeeName || shift.id),
+          avatarSrc: employeeMeta?.avatarSrc ?? null,
           shiftDate: parseIsoDate(shift.shiftDate),
           startsAtDate: parseIsoDate(shift.startsAt),
           endsAtDate: parseIsoDate(shift.endsAt),
@@ -1296,9 +1264,9 @@ export default function Schedule({
         const avatarSrc =
           (task.assigneeEmployeeId
             ? employeeById.get(task.assigneeEmployeeId)?.avatarSrc
-            : null) ||
-          task.assigneeEmployee?.avatarUrl ||
-          getMockAvatarDataUrl(assigneeName || task.id);
+            : null) ??
+          task.assigneeEmployee?.avatarUrl ??
+          null;
 
         return {
           id: task.id,
@@ -1634,9 +1602,9 @@ export default function Schedule({
                     existing.employeeIds.push(event.employeeId);
                   }
                   existing.detailItems.push({
-                    avatarSrc:
-                      (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
-                      getMockAvatarDataUrl(event.assigneeName || event.id),
+                    avatarSrc: event.employeeId
+                      ? employeeById.get(event.employeeId)?.avatarSrc ?? null
+                      : null,
                     employeeId: event.employeeId,
                     id: event.id,
                     title: event.assigneeName,
@@ -1677,9 +1645,9 @@ export default function Schedule({
                 employeeIds: event.employeeId ? [event.employeeId] : [],
                 detailItems: [
                   {
-                    avatarSrc:
-                      (event.employeeId ? employeeById.get(event.employeeId)?.avatarSrc : null) ||
-                      getMockAvatarDataUrl(event.assigneeName || event.id),
+                    avatarSrc: event.employeeId
+                      ? employeeById.get(event.employeeId)?.avatarSrc ?? null
+                      : null,
                     employeeId: event.employeeId,
                     id: event.id,
                     title: event.assigneeName,
@@ -1979,10 +1947,7 @@ export default function Schedule({
   }, [searchParams]);
 
   useEffect(() => {
-    if (!createShiftOpen) {
-      setCreateShiftEmployeePickerOpen(false);
-      return;
-    }
+    if (!createShiftOpen) return;
 
     setCreateShiftDraft((current) => ({
       employeeIds:
@@ -2044,7 +2009,6 @@ export default function Schedule({
 
   function openCreateShiftForDay(day = selectedDay ?? today) {
     setEditingShiftId(null);
-    setCreateShiftEmployeePickerOpen(false);
     setCreateShiftDraft({
       shiftDate: formatDateInput(day),
       employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
@@ -2077,7 +2041,6 @@ export default function Schedule({
 
   function openEditShiftDialog(shift: EnrichedShift) {
     setEditingShiftId(shift.id);
-    setCreateShiftEmployeePickerOpen(false);
     setCreateShiftDraft({
       employeeIds: [shift.employeeId],
       templateId: shift.templateId,
@@ -2272,7 +2235,7 @@ export default function Schedule({
       setEditingShiftId(null);
       resetCreateShiftDraft();
       setMessage(wasEditing ? ui.shiftUpdated : ui.shiftCreated);
-      await loadData();
+      await loadData({ force: true });
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -2372,7 +2335,7 @@ export default function Schedule({
 
       setTemplateDraft(initialTemplateDraft);
       setMessage(ui.templateCreated);
-      await loadData();
+      await loadData({ force: true });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : ui.templateCreated);
     }
@@ -2490,7 +2453,7 @@ export default function Schedule({
 
       setMassAssignOpen(false);
       setMessage(ui.massAssignCreated(dates.length * eligibleEmployees.length));
-      await loadData();
+      await loadData({ force: true });
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -2549,7 +2512,7 @@ export default function Schedule({
       });
 
       setMessage(action === "approve" ? ui.requestApproved : ui.requestRejected);
-      await loadData();
+      await loadData({ force: true });
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : ui.requestRejected,
@@ -2727,45 +2690,27 @@ export default function Schedule({
                       <label className="mb-1 block text-[10px] font-heading font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                         {ui.employees}
                       </label>
-                      <Select
-                        onValueChange={setSelectedEmployeeId}
-                        value={selectedEmployeeId}
-                      >
-                        <SelectTrigger className="min-h-8 h-8 rounded-xl border-border bg-white px-3 shadow-none">
-                          <SelectTriggerLabel className="text-xs font-heading font-medium">
-                            {selectedEmployee
-                              ? buildEmployeeName(selectedEmployee)
-                              : ui.allEmployees}
-                          </SelectTriggerLabel>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">{ui.allEmployees}</SelectItem>
-                          {employees.map((employee) => {
-                            const label = buildEmployeeName(employee);
-                            return (
-                              <SelectItem key={employee.id} value={employee.id}>
-                                <SelectOptionContent>
-                                  <SelectOptionAvatar
-                                    alt={label}
-                                    seed={label || employee.id}
-                                    src={
-                                      employee.avatarUrl ||
-                                      getMockAvatarDataUrl(label || employee.id)
-                                    }
-                                  />
-                                  <SelectOptionText>
-                                    <SelectOptionTitle>{label}</SelectOptionTitle>
-                                    <SelectOptionDescription data-select-description>
-                                      {employee.position?.name || ui.employee} ·{" "}
-                                      {employee.employeeNumber}
-                                    </SelectOptionDescription>
-                                  </SelectOptionText>
-                                </SelectOptionContent>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                      <EmployeeDropdown
+                        allEmployeesLabel={ui.allEmployees}
+                        allOptionBehavior="empty"
+                        buttonClassName="min-h-8 h-8 rounded-xl border-border bg-white px-3 text-xs shadow-none"
+                        employeeLabel={ui.employee}
+                        employees={employees}
+                        loadingLabel={ui.loading}
+                        mode="single"
+                        noEmployeesLabel={ui.noEligibleEmployees}
+                        onSelectedEmployeeIdsChange={(employeeIds) =>
+                          setSelectedEmployeeId(employeeIds[0] ?? "all")
+                        }
+                        placeholder={ui.allEmployees}
+                        searchPlaceholder={ui.search}
+                        selectedEmployeeIds={
+                          selectedEmployeeId === "all" ? [] : [selectedEmployeeId]
+                        }
+                        selectedEmployeesLabel={(count) =>
+                          ui.selectedEmployees(count)
+                        }
+                      />
                     </div>
                     ) : null}
 
@@ -2991,11 +2936,11 @@ export default function Schedule({
                           role="button"
                           tabIndex={0}
                         >
-                          <img
-                            alt={assigneeLabel}
-                            className="mt-0.5 size-10 rounded-2xl object-cover"
-                            src={event.avatarSrc}
-                          />
+                          {renderScheduleAvatar(
+                            event.avatarSrc,
+                            assigneeLabel,
+                            "mt-0.5 size-10 rounded-2xl object-cover",
+                          )}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start gap-2">
                               <p className="min-w-0 flex-1 font-heading text-[15px] font-semibold leading-5 text-foreground">
@@ -3169,16 +3114,18 @@ export default function Schedule({
             {scheduleRequests.length ? (
               scheduleRequests.map((item) => {
                 const employeeName = buildEmployeeName(item.request.employee);
+                const employeeAvatarSrc =
+                  (item.request.employee as { avatarUrl?: string | null }).avatarUrl ?? null;
                 const busy = requestActionId === item.request.id;
                 return (
                   <article className="dashboard-card" key={item.id}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="flex min-w-0 items-start gap-3">
-                        <img
-                          alt={employeeName}
-                          className="size-12 rounded-full object-cover"
-                          src={getMockAvatarDataUrl(employeeName || item.request.id)}
-                        />
+                        {renderScheduleAvatar(
+                          employeeAvatarSrc,
+                          employeeName || item.request.id,
+                          "size-12 rounded-full object-cover",
+                        )}
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="font-heading text-lg font-bold text-foreground">
@@ -3332,86 +3279,27 @@ export default function Schedule({
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {ui.employee}
               </label>
-              <div className="relative">
-                <button
-                  aria-expanded={createShiftEmployeePickerOpen}
-                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[20px] border border-border bg-white px-4 py-2.5 text-left text-sm font-medium text-foreground shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-[border-color,box-shadow,transform] duration-150 active:scale-[0.96]"
-                  onClick={() =>
-                    setCreateShiftEmployeePickerOpen((current) => !current)
-                  }
-                  type="button"
-                >
-                  <span
-                    className={`min-w-0 truncate ${
-                      createShiftSelectedEmployees.length > 0
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {createShiftEmployeeLabel}
-                  </span>
-                  <ChevronDown
-                    className={`size-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
-                      createShiftEmployeePickerOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {createShiftEmployeePickerOpen ? (
-                  <div
-                    aria-multiselectable={!editingShiftId}
-                    className="absolute left-0 right-0 z-50 mt-1 max-h-[320px] overflow-y-auto rounded-[26px] border border-border bg-white/95 p-2 shadow-[0_22px_60px_rgba(15,23,42,0.18)] backdrop-blur"
-                    role="listbox"
-                  >
-                    {employees.map((employee) => {
-                      const label = buildEmployeeName(employee);
-                      const isSelected = createShiftDraft.employeeIds.includes(employee.id);
-
-                      return (
-                        <SelectableOptionButton
-                          closeOnSelected={false}
-                          key={employee.id}
-                          onClose={() => setCreateShiftEmployeePickerOpen(false)}
-                          onSelect={() => {
-                            toggleCreateShiftEmployee(employee.id);
-                            if (editingShiftId) {
-                              setCreateShiftEmployeePickerOpen(false);
-                            }
-                          }}
-                          selected={isSelected}
-                        >
-                          <SelectOptionAvatar
-                            alt={label}
-                            seed={label || employee.id}
-                            src={
-                              employee.avatarUrl ||
-                              getMockAvatarDataUrl(label || employee.id)
-                            }
-                          />
-                          <span className="grid min-w-0 gap-0.5">
-                            <span className="truncate text-sm font-semibold leading-[1.2] text-current">
-                              {label}
-                            </span>
-                            <span
-                              className={`truncate text-xs leading-[1.25] ${
-                                isSelected
-                                  ? "text-white/75"
-                                  : "text-[rgba(72,84,104,0.72)]"
-                              }`}
-                            >
-                              {employee.position?.name || ui.employee} ·{" "}
-                              {employee.employeeNumber}
-                            </span>
-                          </span>
-                          {isSelected ? (
-                            <Check className="absolute right-3 size-4 text-white" />
-                          ) : null}
-                        </SelectableOptionButton>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
+              <EmployeeDropdown
+                allEmployeesLabel={ui.allEmployees}
+                employeeLabel={ui.employee}
+                employees={employees}
+                loadingLabel={ui.loading}
+                mode={editingShiftId ? "single" : "multiple"}
+                noEmployeesLabel={ui.noEligibleEmployees}
+                onSelectedEmployeeIdsChange={(employeeIds) =>
+                  setCreateShiftDraft((current) => ({
+                    ...current,
+                    employeeIds: editingShiftId
+                      ? employeeIds.slice(0, 1)
+                      : employeeIds,
+                  }))
+                }
+                placeholder={ui.selectEmployee}
+                searchPlaceholder={ui.search}
+                selectedEmployeeIds={createShiftDraft.employeeIds}
+                selectedEmployeesLabel={(count) => ui.selectedEmployees(count)}
+                showAllEmployeesOption={!editingShiftId}
+              />
             </div>
 
             <div>
@@ -3448,19 +3336,45 @@ export default function Schedule({
                 </SelectTrigger>
                 <SelectContent>
                   {templates.length > 0 ? (
-                    templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        <SelectOptionContent>
-                          <SelectOptionText>
-                            <SelectOptionTitle>{template.name}</SelectOptionTitle>
-                            <SelectOptionDescription data-select-description>
-                              {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
-                              {template.location.name}
-                            </SelectOptionDescription>
-                          </SelectOptionText>
-                        </SelectOptionContent>
-                      </SelectItem>
-                    ))
+                    templates.map((template) => {
+                      const isSelected =
+                        createShiftDraft.templateId === template.id;
+
+                      return (
+                        <SelectItem
+                          key={template.id}
+                          onClick={() => {
+                            if (!isSelected) {
+                              return;
+                            }
+
+                            setCreateShiftDraft((current) =>
+                              current.templateId === template.id
+                                ? {
+                                    ...current,
+                                    templateId: "",
+                                    fixedBreakEnabled: false,
+                                    fixedBreakStartsAtLocal: "13:00",
+                                    fixedBreakDurationMinutes: "30",
+                                    fixedBreakIsPaid: false,
+                                  }
+                                : current,
+                            );
+                          }}
+                          value={template.id}
+                        >
+                          <SelectOptionContent>
+                            <SelectOptionText>
+                              <SelectOptionTitle>{template.name}</SelectOptionTitle>
+                              <SelectOptionDescription>
+                                {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
+                                {template.location.name}
+                              </SelectOptionDescription>
+                            </SelectOptionText>
+                          </SelectOptionContent>
+                        </SelectItem>
+                      );
+                    })
                   ) : (
                     <SelectEmptyItem>{ui.noShiftTemplates}</SelectEmptyItem>
                   )}
@@ -3589,34 +3503,34 @@ export default function Schedule({
             </div>
           </DialogHeader>
 
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-3">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div>
               {templates.length > 0 ? (
-                templates.map((template) => (
-                  <article
-                    className="rounded-2xl border border-border bg-secondary/30 p-4"
-                    key={template.id}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h2 className="font-heading text-lg font-bold text-foreground">
-                          {template.name}
-                        </h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {template.startsAtLocal}-{template.endsAtLocal}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
-                        </p>
-                        {(template.fixedBreakDurationMinutes ?? 0) > 0 ? (
-                          <p className="mt-1 text-xs font-medium text-[color:var(--accent-strong)]">
-                            {ui.fixedBreak}: {template.fixedBreakStartsAtLocal} ·{" "}
-                            {template.fixedBreakDurationMinutes} {ui.minutesShort}
+                templates.map((template, index) => (
+                  <div key={template.id}>
+                    {index > 0 ? <Separator className="bg-border/70" /> : null}
+                    <article className="py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h2 className="font-heading text-lg font-bold text-foreground">
+                            {template.name}
+                          </h2>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {template.startsAtLocal}-{template.endsAtLocal}
                           </p>
-                        ) : null}
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatTemplateWeekDaysSummary(template.weekDaysJson, ui.dayHeaders, localeTag)}
+                          </p>
+                          {(template.fixedBreakDurationMinutes ?? 0) > 0 ? (
+                            <p className="mt-1 text-xs font-medium text-[color:var(--accent-strong)]">
+                              {ui.fixedBreak}: {template.fixedBreakStartsAtLocal} ·{" "}
+                              {template.fixedBreakDurationMinutes} {ui.minutesShort}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </article>
+                    </article>
+                  </div>
                 ))
               ) : (
                 <div className="flex min-h-[132px] items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 px-4 text-center text-sm font-medium text-muted-foreground">
@@ -3643,8 +3557,9 @@ export default function Schedule({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <Input
+                  className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
                   onChange={(event) =>
                     setTemplateDraft((current) => ({
                       ...current,
@@ -3655,6 +3570,7 @@ export default function Schedule({
                   value={templateDraft.startsAtLocal}
                 />
                 <Input
+                  className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
                   onChange={(event) =>
                     setTemplateDraft((current) => ({
                       ...current,
@@ -3689,6 +3605,7 @@ export default function Schedule({
                         {ui.fixedBreakStart}
                       </span>
                       <Input
+                        className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
                         onChange={(event) =>
                           setTemplateDraft((current) => ({
                             ...current,
@@ -3724,14 +3641,14 @@ export default function Schedule({
                   <p className="text-sm font-medium text-foreground">{ui.templateDays}</p>
                   <p className="text-xs text-muted-foreground">{ui.templateDaysHint}</p>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-7 gap-1.5">
                   {ui.dayHeaders.map((label, index) => {
                     const day = index + 1;
                     const active = templateDraft.weekDays.includes(day);
 
                     return (
                       <button
-                        className={`flex items-center justify-center rounded-xl border px-3 py-2 text-center text-sm font-medium transition-colors ${
+                        className={`flex aspect-square min-w-0 items-center justify-center rounded-full border p-0 text-center text-[11px] font-semibold leading-none transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
@@ -3796,11 +3713,32 @@ export default function Schedule({
               </SelectTrigger>
               <SelectContent>
                 {templates.length > 0 ? (
-                  templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name}
-                    </SelectItem>
-                  ))
+                  templates.map((template) => {
+                    const isSelected = massAssignDraft.templateId === template.id;
+
+                    return (
+                      <SelectItem
+                        key={template.id}
+                        onClick={() => {
+                          if (!isSelected) {
+                            return;
+                          }
+
+                          setMassAssignDraft((current) =>
+                            current.templateId === template.id
+                              ? {
+                                  ...current,
+                                  templateId: "",
+                                }
+                              : current,
+                          );
+                        }}
+                        value={template.id}
+                      >
+                        {template.name}
+                      </SelectItem>
+                    );
+                  })
                 ) : (
                   <SelectEmptyItem>{ui.noShiftTemplates}</SelectEmptyItem>
                 )}
@@ -4020,11 +3958,11 @@ export default function Schedule({
                                 className="flex items-start gap-3 py-1"
                                 key={item.id}
                               >
-                                <img
-                                  alt={item.title}
-                                  className="size-9 rounded-full object-cover"
-                                  src={item.avatarSrc}
-                                />
+                                {renderScheduleAvatar(
+                                  item.avatarSrc,
+                                  item.title,
+                                  "size-9 rounded-full object-cover",
+                                )}
                                 <div className="min-w-0 flex-1">
                                   <p className="font-heading text-[15px] font-medium text-foreground">
                                     {item.title}

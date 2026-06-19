@@ -42,6 +42,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { EmployeeDropdown } from "@/components/employee-dropdown";
 import type { CreateDialogAction } from "@/components/CreateDialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,7 @@ import {
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
 import { useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { appendTaskMeta, parseTaskMeta } from "@/lib/task-meta";
 import {
   getMockActionCenterItems,
@@ -147,6 +148,12 @@ type TaskDraft = {
   meetingLocation: string;
 };
 
+type PersonalCalendarParticipant = {
+  avatarUrl: string | null;
+  id: string;
+  name: string;
+};
+
 type PersonalCalendarEvent = {
   date: Date;
   description: string;
@@ -158,9 +165,8 @@ type PersonalCalendarEvent = {
   meetingLink: string | null;
   meetingLocation: string | null;
   participantLabel: string;
-  participants: string[];
+  participants: PersonalCalendarParticipant[];
   time: string | null;
-  tooltipLabel: string;
 };
 
 type DashboardMessageAction = {
@@ -262,10 +268,7 @@ function buildActionCenterItems(
   const employeeAvatarMap = new Map(
     employees.map((employee) => [
       employee.id,
-      employee.avatarUrl ||
-        getMockAvatarDataUrl(
-          `${employee.firstName} ${employee.lastName}`.trim(),
-        ),
+      employee.avatarUrl ?? null,
     ]),
   );
 
@@ -310,9 +313,7 @@ function buildActionCenterItems(
         title: item.request.title,
         from: localizedName,
         avatar: localizedName.slice(0, 2).toUpperCase(),
-        avatarUrl:
-          employeeAvatarMap.get(item.request.employee.id) ||
-          getMockAvatarDataUrl(localizedName),
+        avatarUrl: employeeAvatarMap.get(item.request.employee.id) ?? null,
         description:
           descriptionParts.join(" · ") ||
           localize(locale, "Требуется действие", "Action required"),
@@ -610,26 +611,22 @@ function formatParticipantSummary(
     : `${names[0]}, ${names[1]} and ${names.length - 2} more`;
 }
 
-function formatParticipantLabel(
-  count: number,
-  kind: "meeting" | "task",
+function getTaskParticipant(
+  task: TaskItem,
   locale: "ru" | "en",
-) {
-  if (locale === "en") {
-    if (kind === "meeting") {
-      return count === 1 ? "1 participant" : `${count} participants`;
-    }
-    return count === 1 ? "1 assignee" : `${count} assignees`;
-  }
-  if (kind === "meeting") {
-    if (count === 1) return "1 участник";
-    if (count >= 2 && count <= 4) return `${count} участника`;
-    return `${count} участников`;
-  }
+): PersonalCalendarParticipant {
+  const assigneeName = task.assigneeEmployee
+    ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}`.trim()
+    : "";
+  const groupName = task.group?.name?.trim() ?? "";
+  const fallbackName = localize(locale, "Без исполнителя", "No assignee");
+  const name = assigneeName || groupName || fallbackName;
 
-  if (count === 1) return "1 исполнитель";
-  if (count >= 2 && count <= 4) return `${count} исполнителя`;
-  return `${count} исполнителей`;
+  return {
+    avatarUrl: task.assigneeEmployee?.avatarUrl ?? null,
+    id: task.assigneeEmployee?.id ?? task.group?.id ?? name,
+    name,
+  };
 }
 
 function sortWeeklyCalendarTasks(left: TaskItem, right: TaskItem) {
@@ -1356,7 +1353,7 @@ export default function DashboardHome({
             day: "numeric",
             month: "long",
           }),
-          avatarUrl: item.avatarUrl || getMockAvatarDataUrl(item.from),
+          avatarUrl: item.avatarUrl ?? null,
         };
       });
     }
@@ -1392,9 +1389,7 @@ export default function DashboardHome({
               : `${item.employee.firstName} ${item.employee.lastName}`.trim()
             ).toLowerCase(),
           ) ||
-          getMockAvatarDataUrl(
-            `${item.employee.firstName} ${item.employee.lastName}`.trim(),
-          ),
+          null,
       }));
   }, [actionCenterAvatarMap, employees, isDemoSession, locale]);
   const today = startOfDay(new Date());
@@ -1505,7 +1500,10 @@ export default function DashboardHome({
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
 
-    const eventMap = new Map<string, Omit<PersonalCalendarEvent, "participantLabel" | "tooltipLabel" | "date">>();
+    const eventMap = new Map<
+      string,
+      Omit<PersonalCalendarEvent, "participantLabel" | "date">
+    >();
 
     dashboardTasks
       .filter((task) => {
@@ -1530,16 +1528,14 @@ export default function DashboardHome({
         const displayTitle = getTaskTitle(task, {
           stripMeetingPrefix: kind === "meeting",
         });
-        const participantName = task.assigneeEmployee
-          ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}`
-          : task.group?.name ?? localize(locale, "Без исполнителя", "No assignee");
+        const participant = getTaskParticipant(task, locale);
         const eventKey = `${task.dueAt}|${kind}|${isCompleted ? "done" : "open"}|${displayTitle.toLowerCase()}`;
         const existing = eventMap.get(eventKey);
 
         if (existing) {
           existing.duplicateCount += 1;
-          if (!existing.participants.includes(participantName)) {
-            existing.participants.push(participantName);
+          if (!existing.participants.some((item) => item.id === participant.id)) {
+            existing.participants.push(participant);
           }
           const translatedBody = getTaskBody(task);
           if (!existing.description && translatedBody) {
@@ -1561,7 +1557,7 @@ export default function DashboardHome({
           isCompleted,
           time: isCompleted ? null : formatTime(task.dueAt, locale),
           kind,
-          participants: [participantName],
+          participants: [participant],
           duplicateCount: 1,
           description: getTaskBody(task),
           meetingLocation: getTaskMeetingLocation(task) || null,
@@ -1574,12 +1570,7 @@ export default function DashboardHome({
         ...event,
         date,
         participantLabel: formatParticipantSummary(
-          event.participants,
-          event.kind,
-          locale,
-        ),
-        tooltipLabel: formatParticipantLabel(
-          event.participants.length,
+          event.participants.map((participant) => participant.name),
           event.kind,
           locale,
         ),
@@ -1881,15 +1872,6 @@ export default function DashboardHome({
       (item) => item.value === normalizeWebAdminTaskPriority(taskDraft.priority),
     ) ?? priorityOptions[1];
 
-  function toggleTaskAssignee(employeeId: string, checked: boolean) {
-    setTaskDraft((current) => ({
-      ...current,
-      assigneeEmployeeIds: checked
-        ? Array.from(new Set([...current.assigneeEmployeeIds, employeeId]))
-        : current.assigneeEmployeeIds.filter((id) => id !== employeeId),
-    }));
-  }
-
   return (
     <AdminShell
       createDialogActions={dashboardCreateDialogActions}
@@ -2030,45 +2012,54 @@ export default function DashboardHome({
                         </button>
                       </div>
                       {taskDraft.targetMode === "employees" ? (
-                        <div className="manager-assignee-picker">
-                          {employees.map((employee) => {
-                            const isSelected =
-                              taskDraft.assigneeEmployeeIds.includes(employee.id);
-                            const employeeName =
-                              `${employee.firstName} ${employee.lastName}`.trim();
-                            return (
-                              <label
-                                className={`manager-assignee-option${isSelected ? " is-selected" : ""}`}
-                                key={employee.id}
-                              >
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={(checked) =>
-                                    toggleTaskAssignee(
-                                      employee.id,
-                                      checked === true,
-                                    )
-                                  }
-                                />
-                                <img
-                                  alt={employeeName}
-                                  className="h-10 w-10 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-                                  src={
-                                    employee.avatarUrl ||
-                                    getMockAvatarDataUrl(employeeName)
-                                  }
-                                />
-                                <span className="manager-assignee-copy">
-                                  <strong>{employeeName}</strong>
-                                  <span>
-                                    {employee.department?.name ??
-                                      localize(locale, "Команда", "Team")}
-                                  </span>
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
+                        <EmployeeDropdown
+                          allEmployeesLabel={localize(
+                            locale,
+                            "Все сотрудники",
+                            "All employees",
+                          )}
+                          employeeLabel={localize(locale, "Сотрудник", "Employee")}
+                          employees={employees.map((employee) => ({
+                            ...employee,
+                            displayName: `${employee.firstName} ${employee.lastName}`.trim(),
+                            position: employee.department?.name ?? null,
+                          }))}
+                          loadingLabel={localize(
+                            locale,
+                            "Загружаем сотрудников",
+                            "Loading employees",
+                          )}
+                          mode="multiple"
+                          noEmployeesLabel={localize(
+                            locale,
+                            "Сотрудники не найдены.",
+                            "No employees found.",
+                          )}
+                          onSelectedEmployeeIdsChange={(employeeIds) =>
+                            setTaskDraft((current) => ({
+                              ...current,
+                              assigneeEmployeeIds: employeeIds,
+                            }))
+                          }
+                          placeholder={localize(
+                            locale,
+                            "Выберите сотрудника",
+                            "Select employee",
+                          )}
+                          searchPlaceholder={localize(
+                            locale,
+                            "Поиск сотрудника",
+                            "Search employee",
+                          )}
+                          selectedEmployeeIds={taskDraft.assigneeEmployeeIds}
+                          selectedEmployeesLabel={(count) =>
+                            localize(
+                              locale,
+                              `Выбрано ${count}`,
+                              `Selected ${count}`,
+                            )
+                          }
+                        />
                       ) : groups.length ? (
                         <Select
                           onValueChange={(value) =>
@@ -2563,50 +2554,81 @@ export default function DashboardHome({
                     </DialogDescription>
                   </DialogHeader>
                   <div className="manager-event-dialog-body">
-                    <div className="manager-event-dialog-grid">
-                      <div className="manager-event-card">
-                        <span>{localize(locale, "Тип", "Type")}</span>
-                        <strong>
-                          {selectedCalendarEvent.kind === "meeting"
-                            ? localize(locale, "Встреча", "Meeting")
-                            : localize(locale, "Задача", "Task")}
-                        </strong>
+                    <div className="manager-event-dialog-details">
+                      <div className="manager-event-dialog-grid">
+                        <div className="manager-event-card">
+                          <span>{localize(locale, "Тип", "Type")}</span>
+                          <strong>
+                            {selectedCalendarEvent.kind === "meeting"
+                              ? localize(locale, "Встреча", "Meeting")
+                              : localize(locale, "Задача", "Task")}
+                          </strong>
+                        </div>
+                        <div className="manager-event-card manager-event-card--people">
+                          <div className="manager-event-card-head">
+                            <span>
+                              {selectedCalendarEvent.kind === "meeting"
+                                ? localize(locale, "Участники", "Participants")
+                                : localize(locale, "Исполнители", "Assignees")}
+                            </span>
+                            <strong className="manager-event-count">
+                              {selectedCalendarEvent.participants.length}
+                            </strong>
+                          </div>
+                          <div
+                            aria-label={selectedCalendarEvent.participantLabel}
+                            className="manager-event-avatars"
+                          >
+                            {selectedCalendarEvent.participants.map((participant) => (
+                              <span
+                                className="manager-event-avatar"
+                                key={participant.id}
+                                title={participant.name}
+                              >
+                                {participant.avatarUrl ? (
+                                  <img
+                                    alt={participant.name}
+                                    src={participant.avatarUrl}
+                                  />
+                                ) : (
+                                  <span>{getAvatarInitials(participant.name)}</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="manager-event-card">
+                      {selectedCalendarEvent.description ? (
+                        <div className="manager-event-copy">
+                          <span>{localize(locale, "Описание", "Description")}</span>
+                          <p>{selectedCalendarEvent.description}</p>
+                        </div>
+                      ) : null}
+                      <div className="manager-event-copy">
                         <span>
                           {selectedCalendarEvent.kind === "meeting"
-                            ? localize(locale, "Участники", "Participants")
-                            : localize(locale, "Исполнители", "Assignees")}
+                            ? localize(locale, "Кто участвует", "Participants")
+                            : localize(locale, "Кто назначен", "Assigned to")}
                         </span>
-                        <strong>{selectedCalendarEvent.tooltipLabel}</strong>
+                        <p>
+                          {selectedCalendarEvent.participants
+                            .map((participant) => participant.name)
+                            .join(", ")}
+                        </p>
                       </div>
+                      {selectedCalendarEvent.meetingLocation ? (
+                        <div className="manager-event-copy">
+                          <span>{localize(locale, "Место", "Location")}</span>
+                          <p>{selectedCalendarEvent.meetingLocation}</p>
+                        </div>
+                      ) : null}
+                      {selectedCalendarEvent.meetingLink ? (
+                        <div className="manager-event-copy">
+                          <span>{localize(locale, "Ссылка", "Link")}</span>
+                          <p>{selectedCalendarEvent.meetingLink}</p>
+                        </div>
+                      ) : null}
                     </div>
-                    {selectedCalendarEvent.description ? (
-                      <div className="manager-event-copy">
-                        <span>{localize(locale, "Описание", "Description")}</span>
-                        <p>{selectedCalendarEvent.description}</p>
-                      </div>
-                    ) : null}
-                    <div className="manager-event-copy">
-                      <span>
-                        {selectedCalendarEvent.kind === "meeting"
-                          ? localize(locale, "Кто участвует", "Participants")
-                          : localize(locale, "Кто назначен", "Assigned to")}
-                      </span>
-                      <p>{selectedCalendarEvent.participants.join(", ")}</p>
-                    </div>
-                    {selectedCalendarEvent.meetingLocation ? (
-                      <div className="manager-event-copy">
-                        <span>{localize(locale, "Место", "Location")}</span>
-                        <p>{selectedCalendarEvent.meetingLocation}</p>
-                      </div>
-                    ) : null}
-                    {selectedCalendarEvent.meetingLink ? (
-                      <div className="manager-event-copy">
-                        <span>{localize(locale, "Ссылка", "Link")}</span>
-                        <p>{selectedCalendarEvent.meetingLink}</p>
-                      </div>
-                    ) : null}
                     <div className="manager-event-dialog-actions">
                       <Button
                         onClick={(event) =>

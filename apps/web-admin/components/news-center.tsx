@@ -11,6 +11,7 @@ import {
 } from "@smart/types";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import {
+  Bell,
   CalendarClock,
   ChevronDown,
   Eye,
@@ -24,10 +25,11 @@ import {
   Pin,
   Newspaper,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/base/toggle/toggle";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/application/date-picker/date-picker";
@@ -50,8 +53,8 @@ import { toAdminHref } from "@/lib/admin-routes";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { Locale, useI18n } from "@/lib/i18n";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { localizePersonName } from "@/lib/transliteration";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
@@ -121,6 +124,15 @@ const EMPTY_DRAFT: NewsDraft = {
   scheduleEnabled: false,
   scheduledDate: "",
   scheduledTime: "09:00",
+};
+
+type CreateOptionalSection = "link" | "documents" | "location";
+type CreateOptionalSections = Record<CreateOptionalSection, boolean>;
+
+const EMPTY_CREATE_OPTIONAL_SECTIONS: CreateOptionalSections = {
+  documents: false,
+  link: false,
+  location: false,
 };
 
 const NEWS_CACHE_TTL_MS = 60_000;
@@ -208,6 +220,60 @@ function formatAbsoluteDateTime(value: string, locale: Locale) {
   });
 }
 
+type NewsComposeOptionProps = {
+  action?: ReactNode;
+  children?: ReactNode;
+  checked: boolean;
+  description?: ReactNode;
+  icon: ReactNode;
+  onCheckedChange: (checked: boolean) => void;
+  title: string;
+};
+
+function NewsComposeOption({
+  action,
+  children,
+  checked,
+  description,
+  icon,
+  onCheckedChange,
+  title,
+}: NewsComposeOptionProps) {
+  return (
+    <section className="py-4 first:pt-0 last:pb-0">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Toggle
+            aria-label={title}
+            className="shrink-0"
+            isSelected={checked}
+            onChange={onCheckedChange}
+            size="sm"
+            slim
+          />
+          <span className="flex size-5 shrink-0 items-center justify-center text-sky-700">
+            {icon}
+          </span>
+          <div className="min-w-0 text-sm font-semibold text-[color:var(--foreground)]">
+            {title}
+          </div>
+        </div>
+        {checked && action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      {checked && (description || children) ? (
+        <div className="mt-3 grid gap-3 pl-[68px] max-sm:pl-0">
+          {description ? (
+            <div className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+              {description}
+            </div>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function formatAttachmentSize(sizeBytes: number | null, locale: Locale) {
   if (!sizeBytes || sizeBytes <= 0) {
     return null;
@@ -276,6 +342,34 @@ function formatEmployeeName(
   return localizePersonName(
     [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim(),
     locale,
+  );
+}
+
+function renderReaderAvatar(reader: AnnouncementReadReceipt, locale: Locale) {
+  const label =
+    formatEmployeeName(reader, locale) ??
+    reader.employeeId ??
+    reader.notificationId ??
+    localize(locale, "Сотрудник", "Employee");
+
+  if (reader.avatarUrl) {
+    return (
+      <img
+        alt={label}
+        className="h-8 w-8 rounded-full object-cover"
+        src={reader.avatarUrl}
+      />
+    );
+  }
+
+  return (
+    <span
+      aria-label={label}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-[11px] font-semibold text-[rgba(72,84,104,0.72)]"
+      role="img"
+    >
+      {getAvatarInitials(label)}
+    </span>
   );
 }
 
@@ -479,6 +573,9 @@ export function NewsCenter({
   const [createOpen, setCreateOpen] = useState(autoOpenCreate && isManagerView);
   const [deleteTarget, setDeleteTarget] = useState<AnnouncementItem | null>(null);
   const [draft, setDraft] = useState<NewsDraft>(EMPTY_DRAFT);
+  const [createOptionalSections, setCreateOptionalSections] = useState<CreateOptionalSections>(
+    EMPTY_CREATE_OPTIONAL_SECTIONS,
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<NewsDraft>(EMPTY_DRAFT);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -499,8 +596,32 @@ export function NewsCenter({
     }
 
     setDraft(EMPTY_DRAFT);
+    setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
     setCreateOpen(true);
   }, [autoOpenCreate, isManagerView]);
+
+  function toggleCreateOptionalSection(section: CreateOptionalSection, checked: boolean) {
+    setCreateOptionalSections((current) => ({
+      ...current,
+      [section]: checked,
+    }));
+
+    if (checked) {
+      return;
+    }
+
+    setDraft((current) => {
+      if (section === "link") {
+        return { ...current, linkUrl: "" };
+      }
+
+      if (section === "documents") {
+        return { ...current, attachments: [] };
+      }
+
+      return { ...current, attachmentLocation: null };
+    });
+  }
 
   function applyCachedSnapshot(snapshot: NewsCenterCachePayload) {
     setItems(snapshot.items);
@@ -818,6 +939,7 @@ export function NewsCenter({
 
       setItems((current) => [created, ...current]);
       setDraft(EMPTY_DRAFT);
+      setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
       setCreateOpen(false);
       setFeedback(
         created.scheduledFor && !created.publishedAt
@@ -1127,6 +1249,7 @@ export function NewsCenter({
             <Button
               onClick={() => {
                 setDraft(EMPTY_DRAFT);
+                setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
                 setCreateOpen(true);
               }}
               type="button"
@@ -1157,6 +1280,7 @@ export function NewsCenter({
             setCreateOpen(open);
             if (!open) {
               setDraft(EMPTY_DRAFT);
+              setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
               setError(null);
             }
           }}
@@ -1307,207 +1431,192 @@ export function NewsCenter({
                   viewportAspectRatio={getAnnouncementImageAspectRatioValue(draft.imageAspectRatio)}
                   viewportSize={360}
                 />
-                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
-                    <Link2 className="size-4 text-sky-700" />
-                    {localize(locale, "Ссылка", "Link")}
-                  </div>
-                  <Input
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        linkUrl: event.target.value,
-                      }))
-                    }
-                    placeholder={localize(
-                      locale,
-                      "https://example.com или домен без https",
-                      "https://example.com or a domain without https",
-                    )}
-                    value={draft.linkUrl}
-                  />
-                </div>
-
-                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
-                    <Paperclip className="size-4 text-sky-700" />
-                    {localize(locale, "Документы", "Documents")}
-                  </div>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-[20px] border border-dashed border-[rgba(148,163,184,0.35)] bg-slate-50/70 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50/70">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
-                      <FileText className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-[color:var(--foreground)]">
-                        {localize(locale, "Добавить файлы", "Add files")}
-                      </span>
-                      <span className="mt-1 block text-sm text-[color:var(--muted-foreground)]">
-                        {localize(
-                          locale,
-                          "PDF, Excel, Word, CSV, TXT, ZIP и другие документы.",
-                          "PDF, Excel, Word, CSV, TXT, ZIP, and other documents.",
-                        )}
-                      </span>
-                    </span>
-                    <input
-                      accept={ANNOUNCEMENT_DOCUMENT_ACCEPT}
-                      className="hidden"
-                      multiple
-                      onChange={(event) => {
-                        void handleDraftAttachmentSelection(event.target.files);
-                        event.currentTarget.value = "";
-                      }}
-                      type="file"
+                <div className="divide-y divide-[rgba(148,163,184,0.22)] border-y border-[rgba(148,163,184,0.22)]">
+                  <NewsComposeOption
+                    checked={createOptionalSections.link}
+                    icon={<Link2 className="size-4" />}
+                    onCheckedChange={(checked) => toggleCreateOptionalSection("link", checked)}
+                    title={localize(locale, "Ссылка", "Link")}
+                  >
+                    <Input
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          linkUrl: event.target.value,
+                        }))
+                      }
+                      placeholder={localize(
+                        locale,
+                        "https://example.com или домен без https",
+                        "https://example.com or a domain without https",
+                      )}
+                      value={draft.linkUrl}
                     />
-                  </label>
+                  </NewsComposeOption>
 
-                  {draft.attachments.length ? (
-                    <div className="grid gap-2">
-                      {draft.attachments.map((attachment, index) => (
-                        <div
-                          className="flex items-center justify-between gap-3 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70 px-3 py-3"
-                          key={`${attachment.fileName}-${index}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                              {attachment.fileName}
-                            </div>
-                            <div className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                              {formatAttachmentSize(attachment.sizeBytes, locale) ??
-                                localize(locale, "Документ", "Document")}
-                            </div>
-                          </div>
-                          <Button
-                            className="text-rose-700"
-                            onClick={() =>
-                              setDraft((current) => ({
-                                ...current,
-                                attachments: current.attachments.filter(
-                                  (_, attachmentIndex) => attachmentIndex !== index,
-                                ),
-                              }))
-                            }
-                            size="sm"
-                            type="button"
-                            variant="ghost"
+                  <NewsComposeOption
+                    checked={createOptionalSections.documents}
+                    icon={<Paperclip className="size-4" />}
+                    onCheckedChange={(checked) => toggleCreateOptionalSection("documents", checked)}
+                    title={localize(locale, "Документы", "Documents")}
+                  >
+                    <label className="flex cursor-pointer items-center gap-3 rounded-[20px] border border-dashed border-[rgba(148,163,184,0.35)] bg-slate-50/70 px-4 py-4 transition hover:border-sky-300 hover:bg-sky-50/70">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                        <FileText className="size-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+                          {localize(locale, "Добавить файлы", "Add files")}
+                        </span>
+                        <span className="mt-1 block text-sm text-[color:var(--muted-foreground)]">
+                          {localize(
+                            locale,
+                            "PDF, Excel, Word, CSV, TXT, ZIP и другие документы.",
+                            "PDF, Excel, Word, CSV, TXT, ZIP, and other documents.",
+                          )}
+                        </span>
+                      </span>
+                      <input
+                        accept={ANNOUNCEMENT_DOCUMENT_ACCEPT}
+                        className="hidden"
+                        multiple
+                        onChange={(event) => {
+                          void handleDraftAttachmentSelection(event.target.files);
+                          event.currentTarget.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
+
+                    {draft.attachments.length ? (
+                      <div className="grid gap-2">
+                        {draft.attachments.map((attachment, index) => (
+                          <div
+                            className="flex items-center justify-between gap-3 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-slate-50/70 px-3 py-3"
+                            key={`${attachment.fileName}-${index}`}
                           >
-                            <X className="size-4" />
-                            {localize(locale, "Убрать", "Remove")}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
-                      <MapPin className="size-4 text-sky-700" />
-                      {localize(locale, "Геолокация", "Geolocation")}
-                    </div>
-                    {draft.attachmentLocation ? (
-                      <Button
-                        className="text-rose-700"
-                        onClick={() =>
-                          setDraft((current) => ({
-                            ...current,
-                            attachmentLocation: null,
-                          }))
-                        }
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <X className="size-4" />
-                        {localize(locale, "Очистить", "Clear")}
-                      </Button>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
+                                {attachment.fileName}
+                              </div>
+                              <div className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                                {formatAttachmentSize(attachment.sizeBytes, locale) ??
+                                  localize(locale, "Документ", "Document")}
+                              </div>
+                            </div>
+                            <Button
+                              className="text-rose-700"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  attachments: current.attachments.filter(
+                                    (_, attachmentIndex) => attachmentIndex !== index,
+                                  ),
+                                }))
+                              }
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <X className="size-4" />
+                              {localize(locale, "Убрать", "Remove")}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
-                  </div>
-                  <div className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {localize(
+                  </NewsComposeOption>
+
+                  <NewsComposeOption
+                    action={
+                      draft.attachmentLocation ? (
+                        <Button
+                          className="text-rose-700"
+                          onClick={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              attachmentLocation: null,
+                            }))
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <X className="size-4" />
+                          {localize(locale, "Очистить", "Clear")}
+                        </Button>
+                      ) : null
+                    }
+                    checked={createOptionalSections.location}
+                    description={localize(
                       locale,
                       "Можно выбрать адрес через Google Maps или поставить точку по текущему местоположению.",
                       "Pick an address via Google Maps or place a point using the current location.",
                     )}
-                  </div>
-                  <div className="[&_.org-map-canvas]:min-h-[260px]">
-                    <LocationMapPicker
-                      address={draft.attachmentLocation?.address ?? ""}
-                      apiKey={mapsApiKey}
-                      latitude={draft.attachmentLocation?.latitude ?? ""}
-                      locale={locale}
-                      longitude={draft.attachmentLocation?.longitude ?? ""}
-                      onSelect={(next) =>
-                        setDraft((current) => ({
-                          ...current,
-                          attachmentLocation: {
-                            address:
-                              next.address ??
-                              next.details?.formattedAddress ??
-                              current.attachmentLocation?.address ??
-                              "",
-                            latitude: next.latitude,
-                            longitude: next.longitude,
-                            placeId:
-                              next.googlePlaceId ??
-                              current.attachmentLocation?.placeId ??
-                              "",
-                          },
-                        }))
-                      }
-                      searchLabel={localize(locale, "Точка для новости", "News location")}
-                      searchPlaceholder={localize(
-                        locale,
-                        "Например, Новосибирск, Красный проспект 25",
-                        "For example, Novosibirsk, Krasny Avenue 25",
-                      )}
-                      showCopy={false}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <label className="flex items-start gap-3">
-                    <Checkbox
-                      checked={draft.scheduleEnabled}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          scheduleEnabled: Boolean(checked),
-                          scheduledDate:
-                            Boolean(checked) && !current.scheduledDate
-                              ? formatDateInput(new Date())
-                              : current.scheduledDate,
-                        }))
-                      }
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
-                        <CalendarClock className="size-4 text-sky-700" />
-                        {localize(
+                    icon={<MapPin className="size-4" />}
+                    onCheckedChange={(checked) => toggleCreateOptionalSection("location", checked)}
+                    title={localize(locale, "Геолокация", "Geolocation")}
+                  >
+                    <div className="[&_.org-map-canvas]:min-h-[260px]">
+                      <LocationMapPicker
+                        address={draft.attachmentLocation?.address ?? ""}
+                        apiKey={mapsApiKey}
+                        latitude={draft.attachmentLocation?.latitude ?? ""}
+                        locale={locale}
+                        longitude={draft.attachmentLocation?.longitude ?? ""}
+                        onSelect={(next) =>
+                          setDraft((current) => ({
+                            ...current,
+                            attachmentLocation: {
+                              address:
+                                next.address ??
+                                next.details?.formattedAddress ??
+                                current.attachmentLocation?.address ??
+                                "",
+                              latitude: next.latitude,
+                              longitude: next.longitude,
+                              placeId:
+                                next.googlePlaceId ??
+                                current.attachmentLocation?.placeId ??
+                                "",
+                            },
+                          }))
+                        }
+                        searchLabel={localize(locale, "Точка для новости", "News location")}
+                        searchPlaceholder={localize(
                           locale,
-                          "Запланированная публикация",
-                          "Scheduled publication",
+                          "Например, Новосибирск, Красный проспект 25",
+                          "For example, Novosibirsk, Krasny Avenue 25",
                         )}
-                      </div>
-                      <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                        {draft.scheduleEnabled
-                          ? localize(
-                              locale,
-                              "Новость появится у сотрудников в выбранные дату и время.",
-                              "The news will appear for employees at the selected date and time.",
-                            )
-                          : localize(
-                              locale,
-                              "Если выключено, новость публикуется сразу.",
-                              "When disabled, the news is published immediately.",
-                            )}
-                      </div>
+                        showCopy={false}
+                      />
                     </div>
-                  </label>
+                  </NewsComposeOption>
 
-                  {draft.scheduleEnabled ? (
+                  <NewsComposeOption
+                    checked={draft.scheduleEnabled}
+                    description={localize(
+                      locale,
+                      "Новость появится у сотрудников в выбранные дату и время.",
+                      "The news will appear for employees at the selected date and time.",
+                    )}
+                    icon={<CalendarClock className="size-4" />}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        scheduleEnabled: checked,
+                        scheduledDate:
+                          checked && !current.scheduledDate
+                            ? formatDateInput(new Date())
+                            : current.scheduledDate,
+                      }))
+                    }
+                    title={localize(
+                      locale,
+                      "Запланированная публикация",
+                      "Scheduled publication",
+                    )}
+                  >
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),180px]">
                       <DatePicker
                         buttonClassName="h-11 w-full justify-between rounded-[16px]"
@@ -1534,79 +1643,55 @@ export function NewsCenter({
                         value={draft.scheduledTime}
                       />
                     </div>
-                  ) : null}
 
-                  {draft.scheduleEnabled && draft.scheduledDate ? (
-                    <div className="text-xs text-[color:var(--muted-foreground)]">
-                      {localize(locale, "Публикация:", "Publish at:")}{" "}
-                      {formatAbsoluteDateTime(
-                        buildScheduledAnnouncementIso(
-                          draft.scheduledDate,
-                          draft.scheduledTime,
-                        ) ?? new Date().toISOString(),
-                        locale,
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <label className="flex items-start gap-3">
-                    <Checkbox
-                      checked={draft.notifyParticipants}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          notifyParticipants: Boolean(checked),
-                        }))
-                      }
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {localize(locale, "Уведомить участников", "Notify participants")}
-                      </div>
-                      <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                        {localize(
+                    {draft.scheduledDate ? (
+                      <div className="text-xs text-[color:var(--muted-foreground)]">
+                        {localize(locale, "Публикация:", "Publish at:")}{" "}
+                        {formatAbsoluteDateTime(
+                          buildScheduledAnnouncementIso(
+                            draft.scheduledDate,
+                            draft.scheduledTime,
+                          ) ?? new Date().toISOString(),
                           locale,
-                          "Отправим push всем сотрудникам, которые увидят эту новость.",
-                          "Send a push notification to every employee who can see this news item.",
                         )}
                       </div>
-                    </div>
-                  </label>
-                </div>
-                <div className="rounded-[24px] border border-[rgba(148,163,184,0.16)] bg-white/80 p-4">
-                  <label className="flex items-start gap-3">
-                    <Checkbox
-                      checked={draft.limitParticipants}
-                      onCheckedChange={(checked) =>
-                        setDraft((current) => ({
-                          ...current,
-                          limitParticipants: Boolean(checked),
-                        }))
-                      }
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {localize(locale, "Только для выбранных участников", "Only for selected participants")}
-                      </div>
-                      <div className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                        {draft.limitParticipants
-                          ? localize(
-                              locale,
-                              "Новость увидят только выбранные группы или сотрудники в одном типе выбора.",
-                              "This news will be visible only to the selected groups or employees within one scope.",
-                            )
-                          : localize(
-                              locale,
-                              "По умолчанию новость увидят все сотрудники компании.",
-                              "By default, this news will be visible to all employees in the company.",
-                            )}
-                      </div>
-                    </div>
-                  </label>
+                    ) : null}
+                  </NewsComposeOption>
 
-                  {draft.limitParticipants ? (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <NewsComposeOption
+                    checked={draft.notifyParticipants}
+                    description={localize(
+                      locale,
+                      "Отправим push всем сотрудникам, которые увидят эту новость.",
+                      "Send a push notification to every employee who can see this news item.",
+                    )}
+                    icon={<Bell className="size-4" />}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        notifyParticipants: checked,
+                      }))
+                    }
+                    title={localize(locale, "Уведомить участников", "Notify participants")}
+                  />
+
+                  <NewsComposeOption
+                    checked={draft.limitParticipants}
+                    description={localize(
+                      locale,
+                      "Новость увидят только выбранные группы или сотрудники в одном типе выбора.",
+                      "This news will be visible only to the selected groups or employees within one scope.",
+                    )}
+                    icon={<Users className="size-4" />}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        limitParticipants: checked,
+                      }))
+                    }
+                    title={localize(locale, "Только для выбранных участников", "Only for selected participants")}
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <AppSelectField
                         onValueChange={(value) =>
                           setDraft((current) => ({
@@ -1704,7 +1789,7 @@ export function NewsCenter({
                         </div>
                       )}
                     </div>
-                  ) : null}
+                  </NewsComposeOption>
                 </div>
               </div>
             </div>
@@ -1829,14 +1914,7 @@ export function NewsCenter({
                                             <div key={reader.notificationId}>
                                               <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                                 <div className="flex min-w-0 items-center gap-3">
-                                                  <img
-                                                    alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                                    className="h-8 w-8 rounded-full object-cover"
-                                                    src={
-                                                      reader.avatarUrl ||
-                                                      getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
-                                                    }
-                                                  />
+                                                  {renderReaderAvatar(reader, locale)}
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                                     {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
@@ -1859,14 +1937,7 @@ export function NewsCenter({
                                   <div key={reader.notificationId}>
                                     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                       <div className="flex min-w-0 items-center gap-3">
-                                        <img
-                                          alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                          className="h-8 w-8 rounded-full object-cover"
-                                          src={
-                                            reader.avatarUrl ||
-                                            getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
-                                          }
-                                        />
+                                        {renderReaderAvatar(reader, locale)}
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                           {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>
@@ -1931,14 +2002,7 @@ export function NewsCenter({
                                             <div key={reader.notificationId}>
                                               <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                                 <div className="flex min-w-0 items-center gap-3">
-                                                  <img
-                                                    alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                                    className="h-8 w-8 rounded-full object-cover"
-                                                    src={
-                                                      reader.avatarUrl ||
-                                                      getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
-                                                    }
-                                                  />
+                                                  {renderReaderAvatar(reader, locale)}
                                                   <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                                     {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                                   </div>
@@ -1961,14 +2025,7 @@ export function NewsCenter({
                                   <div key={reader.notificationId}>
                                     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                                       <div className="flex min-w-0 items-center gap-3">
-                                        <img
-                                          alt={formatEmployeeName(reader, locale) ?? localize(locale, "Сотрудник", "Employee")}
-                                          className="h-8 w-8 rounded-full object-cover"
-                                          src={
-                                            reader.avatarUrl ||
-                                            getMockAvatarDataUrl(formatEmployeeName(reader, locale) ?? reader.employeeId ?? reader.notificationId)
-                                          }
-                                        />
+                                        {renderReaderAvatar(reader, locale)}
                                         <div className="truncate text-sm font-medium text-[color:var(--foreground)]">
                                           {formatEmployeeName(reader, locale) ?? localize(locale, "Без имени", "Unnamed")}
                                         </div>

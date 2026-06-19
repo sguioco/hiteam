@@ -39,7 +39,7 @@ import { toAdminHref } from "../lib/admin-routes";
 import { apiRequest } from "../lib/api";
 import { createNotificationsSocket } from "../lib/notifications-socket";
 import { Locale, useI18n } from "../lib/i18n";
-import { getMockAvatarDataUrl } from "../lib/mock-avatar";
+import { getAvatarInitials } from "../lib/avatar-placeholder";
 import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
@@ -87,8 +87,6 @@ const SHELL_NOTIFICATIONS_CACHE_TTL_MS = 45 * 1000;
 const DEMO_COMPANY_NAME_EN = "Beauty Saloon";
 const DEMO_COMPANY_NAME_RU = "Салон Красоты";
 const DEMO_HEADER_EMPLOYEE_COUNT = 16;
-const DEMO_ADMIN_AVATAR_URL =
-  "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
 function buildShellHeaderCacheKey(
   session: AuthSession,
@@ -274,7 +272,7 @@ function resolveDemoSidebarProfile(
   if (normalizedEmail === DEMO_ADMIN_EMAIL) {
     return {
       name: locale === "ru" ? "Алекс Петров" : "Alex Petrov",
-      avatarUrl: DEMO_ADMIN_AVATAR_URL,
+      avatarUrl: null,
     };
   }
   return null;
@@ -1124,7 +1122,10 @@ export function AdminShell({
   const sidebarAvatarSrc =
     resolvedProfileAvatarUrl && !profileAvatarFailed
       ? resolvedProfileAvatarUrl
-      : getMockAvatarDataUrl(displayProfileName || session?.user.email || companyName);
+      : null;
+  const sidebarAvatarInitials = getAvatarInitials(
+    displayProfileName || session?.user.email || companyName,
+  );
 
   function resolveNotificationHref(actionUrl: string | null) {
     if (!actionUrl) return notificationsHref;
@@ -1536,12 +1537,18 @@ export function AdminShell({
               type="button"
             >
               <div className="sidebar-user-avatar">
-                <img
-                  alt={displayProfileName}
-                  className="h-full w-full rounded-full object-cover"
-                  onError={() => setProfileAvatarFailed(true)}
-                  src={sidebarAvatarSrc}
-                />
+                {sidebarAvatarSrc ? (
+                  <img
+                    alt={displayProfileName}
+                    className="h-full w-full rounded-full object-cover"
+                    onError={() => setProfileAvatarFailed(true)}
+                    src={sidebarAvatarSrc}
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-xs font-semibold text-[rgba(72,84,104,0.72)]">
+                    {sidebarAvatarInitials}
+                  </span>
+                )}
               </div>
               <div className="sidebar-user-copy">
                 <strong>{displayProfileName}</strong>

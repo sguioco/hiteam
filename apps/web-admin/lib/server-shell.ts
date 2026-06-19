@@ -1,7 +1,6 @@
 import type { AuthSession } from "./auth";
 import { isEmployeeOnlyRole } from "./auth";
 import { isDemoAccessToken } from "./demo-mode";
-import { getMockAvatarDataUrl } from "./mock-avatar";
 import type {
   InitialShellBootstrap,
   ShellBootstrapResponse,
@@ -10,8 +9,6 @@ import { serverApiRequestWithSession } from "./server-api";
 
 const DEMO_COMPANY_NAME_EN = "Beauty Saloon";
 const DEMO_HEADER_EMPLOYEE_COUNT = 16;
-const DEMO_ADMIN_AVATAR_URL =
-  "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
 function buildDemoInitialShellBootstrap(
   session: AuthSession,
@@ -36,9 +33,7 @@ function buildDemoInitialShellBootstrap(
       accountProfile: {
         firstName: isEmployee ? "Alex" : "Alex",
         lastName: isEmployee ? "Mironov" : "Petrov",
-        avatarUrl: isEmployee
-          ? getMockAvatarDataUrl("Alex Mironov", "male")
-          : DEMO_ADMIN_AVATAR_URL,
+        avatarUrl: null,
         company: {
           logoUrl: null,
           name: DEMO_COMPANY_NAME_EN,

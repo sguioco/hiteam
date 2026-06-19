@@ -28,7 +28,7 @@ import { AttendanceAuditMap } from "@/components/AttendanceAuditMap";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { getRuntimeLocale, getRuntimeLocaleTag, runtimeLocalize } from "@/lib/runtime-locale";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
@@ -325,14 +325,18 @@ function AttendanceAvatar({
         : "h-11 w-11 text-xs";
 
   return (
-    <img
-      alt={name}
+    <div
       className={cn(
-        "rounded-full border border-[color:var(--border)] object-cover",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--border)] bg-[rgba(227,231,239,0.78)] font-semibold text-[rgba(72,84,104,0.72)]",
         sizeClass,
       )}
-      src={avatarUrl || getMockAvatarDataUrl(name)}
-    />
+    >
+      {avatarUrl ? (
+        <img alt={name} className="h-full w-full object-cover" src={avatarUrl} />
+      ) : (
+        getAvatarInitials(name)
+      )}
+    </div>
   );
 }
 

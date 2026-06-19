@@ -14,15 +14,12 @@ import {
   readBrowserStorageItem,
   writeBrowserStorageItem,
 } from "./browser-storage";
-import { getMockAvatarDataUrl, resolveMockAvatarGender } from "./mock-avatar";
 import { appendTaskMeta } from "./task-meta";
 
 const DEMO_STATE_KEY = "smart-admin-demo-state";
 const DEMO_COMPANY_NAME_EN = "Beauty Saloon";
 const DEMO_COMPANY_NAME_RU = "Салон Красоты";
 const DEMO_HEADER_EMPLOYEE_COUNT = 16;
-const DEMO_ADMIN_AVATAR_URL =
-  "https://www.untitledui.com/images/avatars/transparent/nicolas-trevino?bg=%23E0E0E0";
 
 type DemoEmployee = {
   id: string;
@@ -479,9 +476,6 @@ function getDemoCompanyName(locale: "ru" | "en" = "en") {
 function buildDemoAuthBootstrap(state: DemoState, token?: string) {
   const role = currentDemoRole(token);
   const isEmployee = role === "employee";
-  const fallbackAvatarUrl = isEmployee
-    ? getMockAvatarDataUrl("Alex Mironov", "male")
-    : DEMO_ADMIN_AVATAR_URL;
   const unreadCount = state.notifications.filter((item) => !item.isRead).length;
 
   return {
@@ -497,7 +491,7 @@ function buildDemoAuthBootstrap(state: DemoState, token?: string) {
       accountProfile: {
         firstName: isEmployee ? "Alex" : "Alex",
         lastName: isEmployee ? "Mironov" : "Petrov",
-        avatarUrl: fallbackAvatarUrl,
+        avatarUrl: null,
         company: {
           logoUrl: state.organization.company?.logoUrl ?? null,
           name: getDemoCompanyName("en"),
@@ -523,7 +517,7 @@ function withDemoOwnerIdentity(employee: DemoEmployee) {
     ...employee,
     firstName: "Alex",
     lastName: "Petrov",
-    avatarUrl: DEMO_ADMIN_AVATAR_URL,
+    avatarUrl: null,
   };
 }
 
@@ -538,9 +532,7 @@ function createInitialState(): DemoState {
 
   const employees: DemoEmployee[] = scheduleData.employees.map(
     (employee, index) => {
-      const gender = resolveMockAvatarGender(
-        `${employee.firstName} ${employee.lastName}`,
-      );
+      const gender = index % 2 === 0 ? "male" : "female";
       return {
         ...employee,
         firstName: index === 0 ? "Alex" : employee.firstName,
@@ -552,13 +544,7 @@ function createInitialState(): DemoState {
         birthDate: buildDemoBirthDate(index),
         gender,
         phone: `+7 999 000 0${index}${index}`,
-        avatarUrl:
-          index === 0
-            ? DEMO_ADMIN_AVATAR_URL
-            : getMockAvatarDataUrl(
-                `${employee.firstName} ${employee.lastName}`,
-                gender,
-              ),
+        avatarUrl: null,
         breaksEnabled: false,
         workMode: index === 1 ? "FIELD" : "STATIONARY",
         status: "ACTIVE",
@@ -1602,20 +1588,14 @@ function loadState(): DemoState {
     }
 
     normalized.employees = normalized.employees.map((employee, index) => {
-      const fullName = `${employee.firstName} ${employee.lastName}`.trim();
-      const normalizedGender = resolveMockAvatarGender(fullName);
-      const nextAvatarUrl = getMockAvatarDataUrl(fullName, normalizedGender);
+      const normalizedGender =
+        employee.gender === "female" ? "female" : "male";
       const nextBirthDate = employee.birthDate ?? buildDemoBirthDate(index);
-      const isOwner = employee.user?.email === DEMO_ADMIN_EMAIL;
       const nextMiddleName =
         normalizedGender === "male" ? "Александрович" : "Игоревна";
-      const shouldReplaceAvatar =
-        !employee.avatarUrl ||
-        employee.avatarUrl.startsWith("data:") ||
-        employee.avatarUrl.includes("/avatars/") === false;
 
       if (
-        shouldReplaceAvatar ||
+        employee.avatarUrl !== null ||
         employee.birthDate !== nextBirthDate ||
         employee.gender !== normalizedGender ||
         employee.middleName !== nextMiddleName ||
@@ -1630,11 +1610,7 @@ function loadState(): DemoState {
         middleName: nextMiddleName,
         birthDate: nextBirthDate,
         status: "ACTIVE",
-        avatarUrl: isOwner
-          ? DEMO_ADMIN_AVATAR_URL
-          : shouldReplaceAvatar
-            ? nextAvatarUrl
-            : employee.avatarUrl,
+        avatarUrl: null,
       };
     });
 
@@ -4488,7 +4464,7 @@ function buildDemoLeaderboardEntries(monthKey?: string | null) {
           firstName,
           lastName,
           employeeNumber,
-          avatarUrl: getMockAvatarDataUrl(`${firstName} ${lastName}`),
+          avatarUrl: null,
           department: {
             id: `department-${departmentName.toLowerCase()}`,
             name: departmentName,

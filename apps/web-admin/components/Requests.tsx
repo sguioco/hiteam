@@ -49,7 +49,7 @@ import { getSession } from "@/lib/auth";
 import { readClientCache, writeClientCache } from "@/lib/client-cache";
 import { useI18n } from "@/lib/i18n";
 import { createMockApprovalInboxItems } from "@/lib/mock-admin-data";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { localizePersonName } from "@/lib/transliteration";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 import { cn } from "@/lib/utils";
@@ -1112,16 +1112,17 @@ export default function Requests({
                 <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className={cn("rounded-[24px] p-5", requestBlueSurfaceClass)}>
                     <div className="flex items-center gap-3">
-                      <img
-                        alt={`${selectedItem.request.employee.firstName} ${selectedItem.request.employee.lastName}`.trim()}
+                      <span
+                        aria-hidden="true"
                         className={cn(
-                          "h-11 w-11 rounded-full object-cover",
+                          "flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-xs font-semibold text-[rgba(72,84,104,0.72)]",
                           requestBlueInsetClass,
                         )}
-                        src={getMockAvatarDataUrl(
+                      >
+                        {getAvatarInitials(
                           `${selectedItem.request.employee.firstName} ${selectedItem.request.employee.lastName}`.trim(),
                         )}
-                      />
+                      </span>
                       <div>
                         <p className="text-sm font-semibold text-[color:var(--foreground)]">
                           {selectedItem.request.employee.firstName}{" "}

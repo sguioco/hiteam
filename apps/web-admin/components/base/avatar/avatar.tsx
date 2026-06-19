@@ -2,8 +2,8 @@
 
 import { type FC, type ReactNode, useState } from "react";
 import { User01 } from "@untitledui/icons";
+import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { cx } from "@/lib/utils/cx";
-import { getMockAvatarDataUrl } from "@/lib/mock-avatar";
 import { AvatarOnlineIndicator, VerifiedTick } from "./base-components";
 import { AvatarCount } from "./base-components/avatar-count";
 
@@ -96,25 +96,20 @@ export const Avatar = ({
     contentClassName,
 }: AvatarProps) => {
     const [isFailed, setIsFailed] = useState(false);
-    const [isFallbackFailed, setIsFallbackFailed] = useState(false);
 
     const canShowImage = src && !isFailed;
-    const fallbackAvatarSrc = getMockAvatarDataUrl(alt || initials || "user");
+    const fallbackInitials = initials || alt ? getAvatarInitials(initials || alt) : null;
 
     const renderMainContent = () => {
         if (canShowImage) {
             return <img data-avatar-img className="size-full object-cover" src={src} alt={alt} onError={() => setIsFailed(true)} />;
         }
 
-        if (!isFallbackFailed) {
+        if (fallbackInitials) {
             return (
-                <img
-                    data-avatar-img
-                    className="size-full object-cover"
-                    src={fallbackAvatarSrc}
-                    alt={alt}
-                    onError={() => setIsFallbackFailed(true)}
-                />
+                <span className={cx("text-fg-quaternary", styles[size].initials)}>
+                    {fallbackInitials}
+                </span>
             );
         }
 
