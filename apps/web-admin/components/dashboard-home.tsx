@@ -45,6 +45,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import type { CreateDialogAction } from "@/components/CreateDialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import type { RadioItem } from "@/components/ui/Radio";
 import {
@@ -2182,7 +2183,8 @@ export default function DashboardHome({
                           }
                           value={taskDraft.dueAt}
                         />
-                      ) : taskDraft.isRecurring ? null : (
+                      ) : (
+                        <AnimatedDisclosure show={!taskDraft.isRecurring}>
                         <div className="manager-deadline-row">
                           <label className="manager-deadline-toggle">
                             <Checkbox
@@ -2220,6 +2222,7 @@ export default function DashboardHome({
                             value={taskDraft.dueAt}
                           />
                         </div>
+                        </AnimatedDisclosure>
                       )}
                       </div>
                       {taskDraft.mode === "task" ? (
@@ -2256,7 +2259,7 @@ export default function DashboardHome({
                             </span>
                           </label>
                           </div>
-                          {taskDraft.isRecurring ? (
+                          <AnimatedDisclosure show={taskDraft.isRecurring}>
                             <div className="manager-recurring-panel">
                             <label className="grid gap-2 text-sm font-heading">
                               <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
@@ -2332,9 +2335,9 @@ export default function DashboardHome({
                                   value={taskDraft.hasDueTime ? taskDraft.dueTimeLocal : ""}
                                 />
                               </div>
+                              </div>
                             </div>
-                            </div>
-                          ) : null}
+                          </AnimatedDisclosure>
                         </>
                       ) : null}
                       {canCheckWorkdays &&

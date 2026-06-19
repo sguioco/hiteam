@@ -14,6 +14,7 @@ import {
   Bell,
   CalendarClock,
   ChevronDown,
+  Clock,
   Eye,
   ExternalLink,
   FileText,
@@ -240,7 +241,7 @@ function NewsComposeOption({
   title,
 }: NewsComposeOptionProps) {
   return (
-    <section className="py-4 first:pt-0 last:pb-0">
+    <section className="py-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Toggle
@@ -1617,9 +1618,9 @@ export function NewsCenter({
                       "Scheduled publication",
                     )}
                   >
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),180px]">
+                    <div className="grid grid-cols-2 gap-3">
                       <DatePicker
-                        buttonClassName="h-11 w-full justify-between rounded-[16px]"
+                        buttonClassName="h-11 w-full justify-start gap-2 rounded-[16px] px-4 text-left"
                         minValue={today(getLocalTimeZone())}
                         onChange={(value) =>
                           setDraft((current) => ({
@@ -1632,16 +1633,21 @@ export function NewsCenter({
                         placeholder={localize(locale, "Выбери дату", "Choose date")}
                         value={draft.scheduledDate ? parseDate(draft.scheduledDate) : null}
                       />
-                      <Input
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            scheduledTime: event.target.value,
-                          }))
-                        }
-                        type="time"
-                        value={draft.scheduledTime}
-                      />
+                      <label className="flex h-11 min-w-0 items-center gap-2 rounded-[16px] border border-[rgba(15,23,42,0.12)] bg-white px-4 text-sm font-medium text-[color:var(--foreground)] shadow-none">
+                        <Clock className="size-4 shrink-0 text-[color:var(--muted-foreground)]" />
+                        <input
+                          aria-label={localize(locale, "Время публикации", "Publication time")}
+                          className="min-w-0 flex-1 bg-transparent text-sm font-medium tabular-nums text-[color:var(--foreground)] outline-none [color-scheme:light] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden"
+                          onChange={(event) =>
+                            setDraft((current) => ({
+                              ...current,
+                              scheduledTime: event.target.value,
+                            }))
+                          }
+                          type="time"
+                          value={draft.scheduledTime}
+                        />
+                      </label>
                     </div>
 
                     {draft.scheduledDate ? (

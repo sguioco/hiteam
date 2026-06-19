@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   Camera,
   Calendar,
-  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
   History,
   Pencil,
   Plus,
+  Search,
   XCircle,
   Users,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
 import { AdminShell } from "@/components/admin-shell";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { TimePicker } from "@/components/application/time-picker/time-picker";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -131,6 +133,7 @@ type CalendarTaskEvent = {
   groupId: string | null;
   groupName: string | null;
   id: string;
+  isCancelled: boolean;
   isDone: boolean;
   kind: "task" | "meeting";
   locationId: string | null;
@@ -146,6 +149,16 @@ type CalendarTaskEvent = {
   requiresPhoto: boolean;
   time: string;
   title: string;
+};
+
+type OverdueEmployeeRow = {
+  avatarSrc: string | null;
+  employeeId: string | null;
+  employeeName: string;
+  employeeNumber: string;
+  groupTitle: string;
+  id: string;
+  tasks: CalendarTaskEvent[];
 };
 
 type CalendarDayEntryDetail = {
@@ -325,10 +338,6 @@ function isSameMonthLocal(left: Date, right: Date) {
 
 function isTodayLocal(value: Date) {
   return isSameDayLocal(value, new Date());
-}
-
-function isBeforeTodayLocal(value: Date, referenceDate: Date) {
-  return startOfDayLocal(value).getTime() < startOfDayLocal(referenceDate).getTime();
 }
 
 function startOfDayLocal(value: Date) {
@@ -763,7 +772,11 @@ const scheduleCopy = {
     doneAt: (time: string) => `Выполнена в ${time}`,
     notDone: "Не выполнена",
     overdueTasksTitle: "Просроченные задачи",
-    overdueTasksSubtitle: "Сгруппированы по командам. В каждой строке видно исполнителя и исходный день",
+    overdueTasksSubtitle: "Сгруппированы по сотрудникам. Можно искать по имени, фамилии, задаче или номеру сотрудника.",
+    overdueButton: "Просрочки",
+    overdueSearchPlaceholder: "Поиск по сотруднику, задаче, номеру...",
+    overdueOpenOriginalDay: "Открыть день",
+    overdueEmpty: "Просроченных задач по выбранным фильтрам нет.",
     overdueSince: (date: string) => `Просрочено с ${date}`,
     overdueGroupCount: (count: number) => `${count} задач`,
     withoutGroup: "Без группы",
@@ -890,7 +903,11 @@ const scheduleCopy = {
     doneAt: (time: string) => `Done at ${time}`,
     notDone: "Not done",
     overdueTasksTitle: "Overdue tasks",
-    overdueTasksSubtitle: "Grouped by team. Each row shows the assignee and original day",
+    overdueTasksSubtitle: "Grouped by employee. Search by name, surname, task, or employee number.",
+    overdueButton: "Overdue",
+    overdueSearchPlaceholder: "Search employee, task, number...",
+    overdueOpenOriginalDay: "Open day",
+    overdueEmpty: "No overdue tasks for the selected filters.",
     overdueSince: (date: string) => `Overdue since ${date}`,
     overdueGroupCount: (count: number) => `${count} tasks`,
     withoutGroup: "Without group",
@@ -940,6 +957,9 @@ export default function Schedule({
   const [calendarEventFilter, setCalendarEventFilter] =
     useState<CalendarEventFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [overdueOpen, setOverdueOpen] = useState(false);
+  const [overdueSearch, setOverdueSearch] = useState("");
+  const [overdueEmployeeId, setOverdueEmployeeId] = useState("all");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(!initialData);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
@@ -1235,14 +1255,15 @@ export default function Schedule({
     selectedEmployeeId,
   ]);
 
-  const visibleTaskEvents = useMemo<CalendarTaskEvent[]>(() => {
-    const query = search.trim().toLowerCase();
-
+  const calendarTaskEvents = useMemo<CalendarTaskEvent[]>(() => {
     return (taskBoard?.tasks ?? [])
       .filter((task) => task.dueAt)
       .map((task) => {
         const meta = parseTaskMeta(task.description);
         const dueAt = parseIsoDate(task.dueAt as string);
+        const employeeMeta = task.assigneeEmployeeId
+          ? employeeById.get(task.assigneeEmployeeId)
+          : undefined;
         const assigneeName = task.assigneeEmployee
           ? buildEmployeeName(task.assigneeEmployee)
           : task.group?.name ?? "—";
@@ -1256,15 +1277,15 @@ export default function Schedule({
             : null;
         const location = task.assigneeEmployee?.primaryLocation?.name ?? "—";
         const department = task.assigneeEmployee?.department?.name ?? ui.noDepartment;
-        const role = "position" in (task.assigneeEmployee ?? {})
-          ? ((task.assigneeEmployee as unknown as { position?: { name?: string } | null }).position?.name ?? ui.noRole)
-          : ui.noRole;
+        const role =
+          employeeMeta?.roleName ??
+          ("position" in (task.assigneeEmployee ?? {})
+            ? ((task.assigneeEmployee as unknown as { position?: { name?: string } | null }).position?.name ?? ui.noRole)
+            : ui.noRole);
         const isMeeting = Boolean(meta.meeting) || /^(встреча|meeting):/i.test(task.title);
         const kind: CalendarTaskEvent["kind"] = isMeeting ? "meeting" : "task";
         const avatarSrc =
-          (task.assigneeEmployeeId
-            ? employeeById.get(task.assigneeEmployeeId)?.avatarSrc
-            : null) ??
+          employeeMeta?.avatarSrc ??
           task.assigneeEmployee?.avatarUrl ??
           null;
 
@@ -1272,6 +1293,7 @@ export default function Schedule({
           id: task.id,
           authorName,
           avatarSrc,
+          isCancelled: task.status === "CANCELLED",
           isDone: task.status === "DONE",
           kind,
           title: isMeeting
@@ -1295,53 +1317,15 @@ export default function Schedule({
             url: proof.url,
           })),
           requiresPhoto: task.requiresPhoto,
-          roleId: null,
+          roleId: employeeMeta?.roleId ?? null,
           roleName: role,
         };
       })
-      .filter((event) => {
-        if (selectedEmployeeId !== "all" && event.employeeId !== selectedEmployeeId) {
-          return false;
-        }
-        if (locationFilter !== "all" && event.locationId !== locationFilter) {
-          return false;
-        }
-        if (departmentFilter !== "all" && event.departmentId !== departmentFilter) {
-          return false;
-        }
-        if (roleFilter !== "all" && event.roleId !== roleFilter) {
-          return false;
-        }
-        if (calendarEventFilter === "tasks" && event.kind !== "task") {
-          return false;
-        }
-        if (calendarEventFilter === "meetings" && event.kind !== "meeting") {
-          return false;
-        }
-        if (!query) {
-          return true;
-        }
-
-        return [
-          event.title,
-          event.description,
-          event.assigneeName,
-          event.employeeNumber,
-          event.locationName,
-          event.departmentName,
-          event.roleName,
-        ].some((value) => (value ?? "").toLowerCase().includes(query));
-      });
+      .filter((event) => !event.isCancelled);
   }, [
-    calendarEventFilter,
-    departmentFilter,
     employeeById,
     employeeGroupByEmployeeId,
     localeTag,
-    locationFilter,
-    roleFilter,
-    search,
-    selectedEmployeeId,
     getTaskBody,
     getTaskTitle,
     taskBoard?.tasks,
@@ -1349,49 +1333,144 @@ export default function Schedule({
     ui.noRole,
   ]);
 
-  const overdueTaskGroups = useMemo(() => {
-    const groupMap = new Map<
-      string,
-      {
-        id: string;
-        title: string;
-        tasks: CalendarTaskEvent[];
+  const visibleTaskEvents = useMemo<CalendarTaskEvent[]>(() => {
+    const query = search.trim().toLowerCase();
+
+    return calendarTaskEvents.filter((event) => {
+      if (selectedEmployeeId !== "all" && event.employeeId !== selectedEmployeeId) {
+        return false;
       }
-    >();
-
-    visibleTaskEvents.forEach((event) => {
-      const visuallyDone = event.isDone || event.photoProofs.length > 0;
-
-      if (event.kind !== "task" || visuallyDone || !isBeforeTodayLocal(event.date, today)) {
-        return;
+      if (locationFilter !== "all" && event.locationId !== locationFilter) {
+        return false;
+      }
+      if (departmentFilter !== "all" && event.departmentId !== departmentFilter) {
+        return false;
+      }
+      if (roleFilter !== "all" && event.roleId !== roleFilter) {
+        return false;
+      }
+      if (calendarEventFilter === "tasks" && event.kind !== "task") {
+        return false;
+      }
+      if (calendarEventFilter === "meetings" && event.kind !== "meeting") {
+        return false;
+      }
+      if (!query) {
+        return true;
       }
 
-      const groupId = event.groupId ?? "without-group";
-      const group = groupMap.get(groupId) ?? {
-        id: groupId,
-        title: event.groupName ?? ui.withoutGroup,
+      return [
+        event.title,
+        event.description,
+        event.assigneeName,
+        event.employeeNumber,
+        event.locationName,
+        event.departmentName,
+        event.roleName,
+      ].some((value) => (value ?? "").toLowerCase().includes(query));
+    });
+  }, [
+    calendarEventFilter,
+    calendarTaskEvents,
+    departmentFilter,
+    locationFilter,
+    roleFilter,
+    search,
+    selectedEmployeeId,
+  ]);
+
+  const overdueTaskEvents = useMemo(
+    () =>
+      calendarTaskEvents
+        .filter((event) => {
+          const visuallyDone = event.isDone || event.photoProofs.length > 0;
+
+          return (
+            event.kind === "task" &&
+            !event.isCancelled &&
+            !visuallyDone &&
+            startOfDayLocal(event.date).getTime() < startOfDayLocal(today).getTime()
+          );
+        })
+        .sort(
+          (left, right) =>
+            left.date.getTime() - right.date.getTime() ||
+            left.title.localeCompare(right.title, localeTag),
+        ),
+    [calendarTaskEvents, localeTag, today],
+  );
+
+  const filteredOverdueTaskEvents = useMemo(() => {
+    const query = overdueSearch.trim().toLowerCase();
+
+    return overdueTaskEvents.filter((event) => {
+      if (overdueEmployeeId !== "all" && event.employeeId !== overdueEmployeeId) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return [
+        event.title,
+        event.description,
+        event.assigneeName,
+        event.employeeNumber,
+        event.groupName,
+        event.locationName,
+        event.departmentName,
+        event.roleName,
+      ].some((value) => (value ?? "").toLowerCase().includes(query));
+    });
+  }, [overdueEmployeeId, overdueSearch, overdueTaskEvents]);
+
+  const overdueEmployeeRows = useMemo<OverdueEmployeeRow[]>(() => {
+    const rowMap = new Map<string, OverdueEmployeeRow>();
+
+    filteredOverdueTaskEvents.forEach((event) => {
+      const rowId = event.employeeId
+        ? `employee:${event.employeeId}`
+        : event.groupId
+          ? `group:${event.groupId}`
+          : "without-assignee";
+      const row = rowMap.get(rowId) ?? {
+        avatarSrc: event.avatarSrc,
+        employeeId: event.employeeId,
+        employeeName:
+          event.assigneeName && event.assigneeName !== "—"
+            ? event.assigneeName
+            : event.groupName ?? ui.groupTask,
+        employeeNumber: event.employeeNumber,
+        groupTitle:
+          event.groupName ??
+          (event.locationName !== "—" ? event.locationName : ui.withoutGroup),
+        id: rowId,
         tasks: [],
       };
 
-      group.tasks.push(event);
-      groupMap.set(groupId, group);
+      row.tasks.push(event);
+      rowMap.set(rowId, row);
     });
 
-    return Array.from(groupMap.values())
-      .map((group) => ({
-        ...group,
-        tasks: group.tasks.sort(
+    return Array.from(rowMap.values())
+      .map((row) => ({
+        ...row,
+        tasks: row.tasks.sort(
           (left, right) =>
             left.date.getTime() - right.date.getTime() ||
             left.title.localeCompare(right.title, localeTag),
         ),
       }))
       .sort((left, right) => {
-        if (left.id === "without-group") return 1;
-        if (right.id === "without-group") return -1;
-        return left.title.localeCompare(right.title, localeTag);
+        if (left.id === "without-assignee") return 1;
+        if (right.id === "without-assignee") return -1;
+        if (left.tasks.length !== right.tasks.length) {
+          return right.tasks.length - left.tasks.length;
+        }
+        return left.employeeName.localeCompare(right.employeeName, localeTag);
       });
-  }, [localeTag, today, ui.withoutGroup, visibleTaskEvents]);
+  }, [filteredOverdueTaskEvents, localeTag, ui.groupTask, ui.withoutGroup]);
 
   const attendanceHistoryByEmployeeDay = useMemo(() => {
     const map = new Map<string, AttendanceHistoryRow[]>();
@@ -1993,6 +2072,13 @@ export default function Schedule({
       }
       return next;
     });
+  }
+
+  function openOverdueTaskDay(event: CalendarTaskEvent) {
+    setOverdueOpen(false);
+    setActiveTab("schedules");
+    setCurrentDate(new Date(event.date.getFullYear(), event.date.getMonth(), 1));
+    setSelectedDay(event.date);
   }
 
   function resetCreateShiftDraft(nextDate = selectedDay ?? today) {
@@ -2666,6 +2752,22 @@ export default function Schedule({
                       </span>
                     </div>
                   </div>
+                  {!isEmployeeMode ? (
+                    <Button
+                      className="h-8 rounded-xl border-[rgba(220,38,38,0.22)] px-3 text-xs font-heading text-[color:var(--danger)] hover:bg-[rgba(220,38,38,0.06)]"
+                      onClick={() => setOverdueOpen(true)}
+                      type="button"
+                      variant="outline"
+                    >
+                      <AlertTriangle className="size-3.5" />
+                      {ui.overdueButton}
+                      {overdueTaskEvents.length ? (
+                        <span className="ml-1 rounded-full bg-[rgba(220,38,38,0.10)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[color:var(--danger)]">
+                          {overdueTaskEvents.length}
+                        </span>
+                      ) : null}
+                    </Button>
+                  ) : null}
                   <Button
                     className={`h-8 rounded-xl px-3 text-xs font-heading ${
                       showFilters ? "bg-foreground text-background hover:bg-foreground/90" : ""
@@ -2682,9 +2784,9 @@ export default function Schedule({
             </div>
 
             {showFilters ? (
-              <section className="dashboard-card mb-5 animate-fade-in">
-                <div className="overflow-x-auto scrollbar-hide">
-                  <div className="flex min-w-max flex-nowrap gap-3">
+              <section className="dashboard-card relative z-20 mb-5 overflow-visible animate-fade-in">
+                <div className="overflow-visible">
+                  <div className="flex flex-wrap gap-3">
                     {!isEmployeeMode ? (
                     <div className="w-[250px]">
                       <label className="mb-1 block text-[10px] font-heading font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -2846,155 +2948,6 @@ export default function Schedule({
               </section>
             ) : null}
           </>
-        ) : null}
-
-        {activeTab === "schedules" && !isEmployeeMode && overdueTaskGroups.length ? (
-          <section className="mb-5 overflow-hidden rounded-[30px] border border-[rgba(193,68,68,0.16)] bg-[linear-gradient(135deg,rgba(255,244,236,0.92),rgba(255,255,255,0.82)_44%,rgba(255,255,255,0.72))] shadow-[0_18px_48px_rgba(193,68,68,0.08)]">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(193,68,68,0.12)] px-5 py-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex size-9 items-center justify-center rounded-2xl bg-[rgba(193,68,68,0.10)] text-[color:var(--danger)]">
-                    <FileText className="size-4" />
-                  </span>
-                  <h2 className="font-heading text-xl font-bold tracking-[-0.04em] text-foreground">
-                    {ui.overdueTasksTitle}
-                  </h2>
-                </div>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  {ui.overdueTasksSubtitle}
-                </p>
-              </div>
-              <span className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--danger)] shadow-sm">
-                {ui.overdueGroupCount(
-                  overdueTaskGroups.reduce(
-                    (sum, group) => sum + group.tasks.length,
-                    0,
-                  ),
-                )}
-              </span>
-            </div>
-
-            <div className="grid max-h-[420px] gap-3 overflow-y-auto p-4 lg:grid-cols-2">
-              {overdueTaskGroups.map((group) => (
-                <div
-                  className="overflow-hidden rounded-[24px] border border-[rgba(193,68,68,0.12)] bg-white/86"
-                  key={group.id}
-                >
-                  <div className="flex items-center justify-between gap-3 bg-[rgba(255,248,244,0.82)] px-4 py-3">
-                    <h3 className="min-w-0 truncate font-heading text-sm font-bold uppercase tracking-[0.12em] text-foreground">
-                      {group.title}
-                    </h3>
-                    <span className="shrink-0 rounded-full bg-[rgba(193,68,68,0.08)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--danger)]">
-                      {group.tasks.length}
-                    </span>
-                  </div>
-
-                  <div>
-                    {group.tasks.map((event, index) => {
-                      const dueLabel = formatDateTime(event.date, {
-                        day: "numeric",
-                        month: "long",
-                      }, localeTag);
-                      const assigneeLabel =
-                        event.assigneeName && event.assigneeName !== "—"
-                          ? event.assigneeName
-                          : ui.groupTask;
-
-                      return (
-                        <div
-                          className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[rgba(193,68,68,0.04)] ${
-                            index < group.tasks.length - 1
-                              ? "border-b border-[rgba(193,68,68,0.10)]"
-                              : ""
-                          }`}
-                          key={event.id}
-                          onClick={() => {
-                            setCurrentDate(
-                              new Date(
-                                event.date.getFullYear(),
-                                event.date.getMonth(),
-                                1,
-                              ),
-                            );
-                            setSelectedDay(event.date);
-                          }}
-                          onKeyDown={(keyboardEvent) => {
-                            if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
-                              return;
-                            }
-
-                            keyboardEvent.preventDefault();
-                            setCurrentDate(
-                              new Date(
-                                event.date.getFullYear(),
-                                event.date.getMonth(),
-                                1,
-                              ),
-                            );
-                            setSelectedDay(event.date);
-                          }}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          {renderScheduleAvatar(
-                            event.avatarSrc,
-                            assigneeLabel,
-                            "mt-0.5 size-10 rounded-2xl object-cover",
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start gap-2">
-                              <p className="min-w-0 flex-1 font-heading text-[15px] font-semibold leading-5 text-foreground">
-                                {event.title}
-                              </p>
-                              {event.photoProofs.length ? (
-                                <Button
-                                  className="h-7 rounded-xl px-2 text-[11px]"
-                                  onClick={(clickEvent) => {
-                                    clickEvent.stopPropagation();
-                                    setPhotoProofDialogTask({
-                                      title: event.title,
-                                      proofs: event.photoProofs,
-                                    });
-                                  }}
-                                  onKeyDown={(keyboardEvent) => {
-                                    keyboardEvent.stopPropagation();
-                                  }}
-                                  size="xs"
-                                  type="button"
-                                  variant="outline"
-                                >
-                                  <Camera className="size-3" />
-                                  {event.photoProofs.length}
-                                </Button>
-                              ) : null}
-                            </div>
-                            {event.description ? (
-                              <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground">
-                                {event.description}
-                              </p>
-                            ) : null}
-                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium">
-                              <span className="text-foreground/80">
-                                {assigneeLabel}
-                              </span>
-                              {event.employeeNumber ? (
-                                <span className="text-muted-foreground">
-                                  {event.employeeNumber}
-                                </span>
-                              ) : null}
-                              <span className="text-[color:var(--danger)]">
-                                {ui.overdueSince(dueLabel)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
         ) : null}
 
         {activeTab === "schedules" ? (
@@ -3251,6 +3204,159 @@ export default function Schedule({
         ) : null}
       </main>
 
+      <Dialog onOpenChange={setOverdueOpen} open={overdueOpen}>
+        <DialogContent className="flex h-[85vh] max-h-[85vh] w-[min(960px,calc(100vw-2rem))] max-w-none flex-col overflow-visible rounded-[28px]">
+          <DialogHeader className="gap-2 pr-10">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="flex items-center gap-2 font-heading text-2xl">
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl bg-[rgba(220,38,38,0.10)] text-[color:var(--danger)]">
+                    <AlertTriangle className="size-4" />
+                  </span>
+                  {ui.overdueTasksTitle}
+                </DialogTitle>
+                <DialogDescription className="mt-1">
+                  {ui.overdueTasksSubtitle}
+                </DialogDescription>
+              </div>
+              <span className="rounded-full bg-[rgba(220,38,38,0.08)] px-3 py-1.5 text-xs font-bold tabular-nums text-[color:var(--danger)]">
+                {ui.overdueGroupCount(filteredOverdueTaskEvents.length)}
+              </span>
+            </div>
+          </DialogHeader>
+
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-11 rounded-[16px] pl-9"
+                onChange={(event) => setOverdueSearch(event.target.value)}
+                placeholder={ui.overdueSearchPlaceholder}
+                value={overdueSearch}
+              />
+            </label>
+            <EmployeeDropdown
+              allEmployeesLabel={ui.allEmployees}
+              allOptionBehavior="empty"
+              buttonClassName="h-11 rounded-[16px]"
+              employeeLabel={ui.employee}
+              employees={employees}
+              loadingLabel={ui.loading}
+              mode="single"
+              noEmployeesLabel={ui.noEligibleEmployees}
+              onSelectedEmployeeIdsChange={(employeeIds) =>
+                setOverdueEmployeeId(employeeIds[0] ?? "all")
+              }
+              placeholder={ui.allEmployees}
+              searchPlaceholder={ui.search}
+              selectedEmployeeIds={
+                overdueEmployeeId === "all" ? [] : [overdueEmployeeId]
+              }
+              selectedEmployeesLabel={(count) => ui.selectedEmployees(count)}
+            />
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {overdueEmployeeRows.length ? (
+              <div className="space-y-3">
+                {overdueEmployeeRows.map((row) => (
+                  <article
+                    className="overflow-hidden rounded-[24px] border border-[rgba(220,38,38,0.14)] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.06)]"
+                    key={row.id}
+                  >
+                    <div className="flex items-center gap-3 bg-[rgba(255,247,247,0.86)] px-4 py-3">
+                      {renderScheduleAvatar(
+                        row.avatarSrc,
+                        row.employeeName,
+                        "size-11 rounded-2xl object-cover",
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-heading text-[15px] font-bold text-foreground">
+                          {row.employeeName}
+                        </h3>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {[row.groupTitle, row.employeeNumber].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[rgba(220,38,38,0.10)] px-2.5 py-1 text-xs font-bold tabular-nums text-[color:var(--danger)]">
+                        {row.tasks.length}
+                      </span>
+                    </div>
+
+                    <div>
+                      {row.tasks.map((event, index) => {
+                        const dueLabel = `${formatDateTime(
+                          event.date,
+                          {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          },
+                          localeTag,
+                        )} · ${event.time}`;
+
+                        return (
+                          <div
+                            className={`grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto] ${
+                              index < row.tasks.length - 1
+                                ? "border-b border-[rgba(220,38,38,0.10)]"
+                                : ""
+                            }`}
+                            key={event.id}
+                          >
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-2xl bg-[rgba(220,38,38,0.08)] text-[color:var(--danger)]">
+                                <AlertTriangle className="size-4" />
+                              </span>
+                              <div className="min-w-0">
+                                <h4 className="font-heading text-sm font-semibold leading-5 text-foreground">
+                                  {event.title}
+                                </h4>
+                                {event.description ? (
+                                  <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground">
+                                    {event.description}
+                                  </p>
+                                ) : null}
+                                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[12px] font-medium">
+                                  <span className="text-[color:var(--danger)]">
+                                    {ui.overdueSince(dueLabel)}
+                                  </span>
+                                  {event.locationName !== "—" ? (
+                                    <span className="text-muted-foreground">
+                                      {event.locationName}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end">
+                              <Button
+                                className="h-8 rounded-xl px-3 text-xs font-heading"
+                                onClick={() => openOverdueTaskDay(event)}
+                                type="button"
+                                variant="outline"
+                              >
+                                {ui.overdueOpenOriginalDay}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-[rgba(15,23,42,0.14)] bg-white/70 px-5 py-10 text-center">
+                <p className="font-heading text-sm font-semibold text-foreground">
+                  {ui.overdueEmpty}
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         onOpenChange={(open) => {
           setCreateShiftOpen(open);
@@ -3416,7 +3522,7 @@ export default function Schedule({
                 {ui.fixedBreak}
               </label>
 
-              {createShiftDraft.fixedBreakEnabled ? (
+              <AnimatedDisclosure show={createShiftDraft.fixedBreakEnabled}>
                 <div className="flex flex-wrap items-end gap-3">
                   <label className="w-36 max-w-full space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground">
@@ -3452,7 +3558,7 @@ export default function Schedule({
                     />
                   </label>
                 </div>
-              ) : null}
+              </AnimatedDisclosure>
             </div>
 
             <div className="schedule-shift-dialog-actions">
@@ -3598,7 +3704,7 @@ export default function Schedule({
                   {ui.fixedBreak}
                 </label>
 
-                {templateDraft.fixedBreakEnabled ? (
+                <AnimatedDisclosure show={templateDraft.fixedBreakEnabled}>
                   <div className="mt-4 grid gap-3">
                     <label className="space-y-1.5">
                       <span className="text-xs font-medium text-muted-foreground">
@@ -3633,7 +3739,7 @@ export default function Schedule({
                       />
                     </label>
                   </div>
-                ) : null}
+                </AnimatedDisclosure>
               </div>
 
               <div className="space-y-2">
@@ -3648,7 +3754,7 @@ export default function Schedule({
 
                     return (
                       <button
-                        className={`flex aspect-square min-w-0 items-center justify-center rounded-full border p-0 text-center text-[11px] font-semibold leading-none transition-colors ${
+                        className={`flex aspect-square min-w-0 items-center justify-center rounded-full border p-0 text-center text-[9px] font-semibold leading-none transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"

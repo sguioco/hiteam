@@ -21,7 +21,10 @@ KOMMO_ENABLED=true
 KOMMO_SUBDOMAIN=your-subdomain
 KOMMO_LONG_LIVED_TOKEN=...
 
-WEB_ADMIN_BASE_URL=https://admin.example.com
+WEB_ADMIN_BASE_URL=https://hiteam.net
+
+# Optional: overrides the public admin URL only for Kommo quick links.
+KOMMO_WEB_ADMIN_BASE_URL=https://hiteam.net
 
 # Optional
 KOMMO_TRIAL_PIPELINE_NAME=HiTeam - Trial to Payment

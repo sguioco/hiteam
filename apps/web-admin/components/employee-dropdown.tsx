@@ -168,11 +168,14 @@ export function EmployeeDropdown({
   }, [open]);
 
   function selectAllEmployees() {
-    onSelectedEmployeeIdsChange(
+    const nextEmployeeIds =
       allOptionBehavior === "empty"
         ? []
-        : employees.map((employee) => employee.id),
-    );
+        : allSelected
+          ? []
+          : employees.map((employee) => employee.id);
+
+    onSelectedEmployeeIdsChange(nextEmployeeIds);
     if (mode === "single") {
       setOpen(false);
     }

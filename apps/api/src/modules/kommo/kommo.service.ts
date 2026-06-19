@@ -114,6 +114,8 @@ type KommoConfig = {
 
 type KommoApiObject = Record<string, unknown>;
 
+const DEFAULT_KOMMO_WEB_ADMIN_BASE_URL = 'https://hiteam.net';
+
 class KommoRequestError extends Error {
   constructor(
     message: string,
@@ -2391,14 +2393,44 @@ export class KommoService {
   }
 
   private buildWebUrl(path: string) {
-    const baseUrl = (
-      this.configService.get<string>('WEB_ADMIN_BASE_URL') ??
-      this.configService.get<string>('FRONTEND_URL') ??
-      this.configService.get<string>('APP_BASE_URL') ??
-      'http://localhost:3000'
-    ).replace(/\/$/, '');
+    const baseUrl = this.resolveKommoWebBaseUrl();
 
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  private resolveKommoWebBaseUrl() {
+    const explicitKommoBaseUrl = this.normalizeWebBaseUrl(
+      this.configService.get<string>('KOMMO_WEB_ADMIN_BASE_URL'),
+    );
+    if (explicitKommoBaseUrl) {
+      return explicitKommoBaseUrl;
+    }
+
+    const configuredBaseUrl = this.normalizeWebBaseUrl(
+      this.configService.get<string>('WEB_ADMIN_BASE_URL') ??
+        this.configService.get<string>('FRONTEND_URL') ??
+        this.configService.get<string>('APP_BASE_URL'),
+    );
+
+    if (!configuredBaseUrl || this.isTemporaryPublicHost(configuredBaseUrl)) {
+      return DEFAULT_KOMMO_WEB_ADMIN_BASE_URL;
+    }
+
+    return configuredBaseUrl;
+  }
+
+  private normalizeWebBaseUrl(value: string | undefined | null) {
+    const trimmed = value?.trim().replace(/\/+$/, '');
+    return trimmed || null;
+  }
+
+  private isTemporaryPublicHost(value: string) {
+    try {
+      const hostname = new URL(value).hostname.toLowerCase();
+      return hostname === 'nip.io' || hostname.endsWith('.nip.io');
+    } catch {
+      return /\.nip\.io(?::\d+)?(?:\/|$)/i.test(value);
+    }
   }
 
   private resolvePricePerEmployee(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {

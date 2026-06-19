@@ -51,6 +51,7 @@ import type { SortDescriptor } from "react-aria-components";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
@@ -5428,7 +5429,7 @@ const Employees = ({
                   locale,
                 )}
               </label>
-              {templateDraft.fixedBreakEnabled ? (
+              <AnimatedDisclosure show={templateDraft.fixedBreakEnabled}>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
@@ -5459,7 +5460,7 @@ const Employees = ({
                     />
                   </label>
                 </div>
-              ) : null}
+              </AnimatedDisclosure>
             </div>
 
             <div className="space-y-2">
@@ -6279,7 +6280,7 @@ const Employees = ({
                   triggerClassName="h-11 rounded-xl bg-secondary/30"
                 />
               </label>
-              {!taskDraft.isRecurring ? (
+              <AnimatedDisclosure show={!taskDraft.isRecurring}>
                 <div className="grid gap-2 text-sm font-heading">
                   <div className="grid gap-2">
                     <label className="inline-flex min-h-5 cursor-pointer items-center gap-3 justify-self-start">
@@ -6332,7 +6333,7 @@ const Employees = ({
                     </span>
                   ) : null}
                 </div>
-              ) : null}
+              </AnimatedDisclosure>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <label className="inline-flex cursor-pointer items-center gap-3 justify-self-start">
@@ -6374,7 +6375,7 @@ const Employees = ({
                 </span>
               </label>
             </div>
-            {taskDraft.isRecurring ? (
+            <AnimatedDisclosure show={taskDraft.isRecurring}>
               <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
                 <label className="grid gap-2 text-sm font-heading">
                   <span>
@@ -6459,7 +6460,7 @@ const Employees = ({
                   </div>
                 </div>
               </div>
-            ) : null}
+            </AnimatedDisclosure>
             {taskError ? <div className="error-box">{taskError}</div> : null}
             <div className="flex justify-end gap-2">
               <Button
@@ -6818,7 +6819,7 @@ const Employees = ({
                   locale,
                 )}
               </label>
-              {assignShiftDraft.fixedBreakEnabled ? (
+              <AnimatedDisclosure show={assignShiftDraft.fixedBreakEnabled}>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-xs font-heading text-muted-foreground">
                     {runtimeLocalize("Начало", "Start", locale)}
@@ -6849,7 +6850,7 @@ const Employees = ({
                     />
                   </label>
                 </div>
-              ) : null}
+              </AnimatedDisclosure>
             </div>
             {assignShiftError ? (
               <div className="error-box">{assignShiftError}</div>

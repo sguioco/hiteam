@@ -3,6 +3,7 @@
 import type { EmployeeApiRecord, TaskItem } from "@smart/types";
 import { useEffect, useMemo, useState } from "react";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -393,9 +394,9 @@ export function HeaderTaskCreateDialog({
               />
             </label>
 
-            {!draft.isRecurring ? (
+            <AnimatedDisclosure show={!draft.isRecurring}>
               <div className="grid gap-2 text-sm font-heading">
-                <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-secondary/20 px-3 py-2">
+                <label className="inline-flex min-h-5 cursor-pointer items-center gap-3 justify-self-start">
                   <Checkbox
                     checked={draft.hasDueTime}
                     onCheckedChange={(checked) =>
@@ -418,7 +419,7 @@ export function HeaderTaskCreateDialog({
                   value={draft.dueAt}
                 />
               </div>
-            ) : null}
+            </AnimatedDisclosure>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -451,7 +452,7 @@ export function HeaderTaskCreateDialog({
             </label>
           </div>
 
-          {draft.isRecurring ? (
+          <AnimatedDisclosure show={draft.isRecurring}>
             <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
               <label className="grid gap-2 text-sm font-heading">
                 <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
@@ -518,7 +519,7 @@ export function HeaderTaskCreateDialog({
                 </div>
               </div>
             </div>
-          ) : null}
+          </AnimatedDisclosure>
 
           {error ? <div className="error-box">{error}</div> : null}
 
