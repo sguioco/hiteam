@@ -18,7 +18,7 @@ export type EmployeeDropdownOption = {
   name?: string;
   position?: { name?: string | null } | string | null;
   roleLabel?: string | null;
-  user?: { email?: string | null } | null;
+  user?: { email?: string | null; id?: string } | null;
 };
 
 type EmployeeDropdownProps = {
