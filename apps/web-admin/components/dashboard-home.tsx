@@ -89,7 +89,6 @@ import { getDemoDashboardBootstrap } from "@/lib/demo-api";
 import { DEMO_ADMIN_EMAIL, isDemoAccessToken } from "@/lib/demo-mode";
 import {
   buildEmployeeWorkdayLookup,
-  formatWorkdayDateLabel,
   getEmployeeWorkdayStatus,
   type EmployeeScheduleShift,
 } from "@/lib/employee-workdays";
@@ -2339,40 +2338,6 @@ export default function DashboardHome({
                             </div>
                           </AnimatedDisclosure>
                         </>
-                      ) : null}
-                      {canCheckWorkdays &&
-                      activeTaskDueAt &&
-                      selectedAssigneeDayStatuses.length ? (
-                        <div className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--panel)] p-4">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                          <strong className="font-heading text-sm text-[color:var(--foreground)]">
-                            {localize(locale, "Рабочий день сотрудников", "Employees' workday")}
-                          </strong>
-                          <span className="text-xs font-heading text-[color:var(--muted-foreground)]">
-                            {formatWorkdayDateLabel(
-                              selectedAssigneeDayStatuses[0].dayKey,
-                              locale,
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedAssigneeDayStatuses.map((item) => (
-                            <span
-                              className={`rounded-full px-3 py-1.5 text-xs font-heading ${
-                                item.isWorkday
-                                  ? "bg-[color:var(--soft-success)] text-[color:var(--success)]"
-                                  : "bg-[color:var(--soft-warning)] text-[color:var(--warning)]"
-                              }`}
-                              key={item.employeeId}
-                            >
-                              {item.name}:{" "}
-                              {item.isWorkday
-                                ? localize(locale, "рабочий день", "workday")
-                                : localize(locale, "выходной день", "day off")}
-                            </span>
-                          ))}
-                        </div>
-                        </div>
                       ) : null}
                       {taskDraft.mode === "meeting" ? (
                         <>
