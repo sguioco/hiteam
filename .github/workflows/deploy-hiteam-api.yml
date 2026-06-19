@@ -51,7 +51,15 @@ jobs:
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            docker compose -p hiteam -f docker-compose.prod.yml run --rm prisma
+            compose() {
+              if docker compose version >/dev/null 2>&1; then
+                docker compose "$@"
+              else
+                docker-compose "$@"
+              fi
+            }
+
+            compose -p hiteam -f docker-compose.prod.yml run --rm prisma
 
       - name: Build API image on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -69,7 +77,15 @@ jobs:
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            docker compose -p hiteam -f docker-compose.prod.yml build api
+            compose() {
+              if docker compose version >/dev/null 2>&1; then
+                docker compose "$@"
+              else
+                docker-compose "$@"
+              fi
+            }
+
+            compose -p hiteam -f docker-compose.prod.yml build api
 
       - name: Build Web Admin image on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -87,7 +103,15 @@ jobs:
             export DOCKER_BUILDKIT=1
             export BUILDKIT_PROGRESS=plain
 
-            docker compose -p hiteam -f docker-compose.prod.yml build web-admin
+            compose() {
+              if docker compose version >/dev/null 2>&1; then
+                docker compose "$@"
+              else
+                docker-compose "$@"
+              fi
+            }
+
+            compose -p hiteam -f docker-compose.prod.yml build web-admin
 
       - name: Restart services on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -101,4 +125,12 @@ jobs:
             set -euo pipefail
 
             cd /root/hiteam
-            docker compose -p hiteam -f docker-compose.prod.yml up -d api web-admin
+            compose() {
+              if docker compose version >/dev/null 2>&1; then
+                docker compose "$@"
+              else
+                docker-compose "$@"
+              fi
+            }
+
+            compose -p hiteam -f docker-compose.prod.yml up -d api web-admin
