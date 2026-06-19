@@ -124,3 +124,4 @@ The old SSH/docker-compose workflow is still in the repo as a manual fallback:
 - [`.github/workflows/deploy-hiteam-api.yml`](../.github/workflows/deploy-hiteam-api.yml)
 
 It is no longer the primary deployment path.
+If `/root/hiteam/.env` is absent on the VPS, the workflow skips compose steps and leaves deployment to ArgoCD.

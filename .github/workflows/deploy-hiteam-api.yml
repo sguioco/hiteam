@@ -95,8 +95,8 @@ jobs:
             elif [ -f .env.local ]; then
               export HITEAM_ENV_FILE=.env.local
             else
-              echo "Missing /root/hiteam/.env for legacy VPS deploy" >&2
-              exit 1
+              echo "Missing /root/hiteam/.env; skipping legacy VPS compose deploy because ArgoCD is the primary deployment path."
+              exit 0
             fi
 
             exec "${compose[@]}" --env-file "$HITEAM_ENV_FILE" -p hiteam -f docker-compose.prod.yml "$@"
