@@ -6090,6 +6090,8 @@ const Employees = ({
                   )}
                   employeeLabel={runtimeLocalize("Сотрудник", "Employee", locale)}
                   employees={taskEmployeeOptions}
+                  groupBy="group"
+                  groupFallbackLabel={runtimeLocalize("Без группы", "Without group", locale)}
                   loadingLabel={runtimeLocalize(
                     "Загружаем сотрудников",
                     "Loading employees",
@@ -6282,7 +6284,7 @@ const Employees = ({
             </div>
             <AnimatedDisclosure show={taskDraft.isRecurring}>
               <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
-                <label className="grid gap-2 text-sm font-heading">
+                <div className="grid gap-2 text-sm font-heading">
                   <span>
                     {runtimeLocalize("Дни повтора", "Recurring days", locale)}
                   </span>
@@ -6315,7 +6317,7 @@ const Employees = ({
                       );
                     })}
                   </div>
-                </label>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
                   <label className="grid gap-2 text-sm font-heading">
                     <span>

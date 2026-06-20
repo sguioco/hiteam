@@ -1,10 +1,16 @@
 "use client";
 
-import type { EmployeeApiRecord, ScheduleShiftTemplateRecord } from "@smart/types";
+import type {
+  EmployeeApiRecord,
+  EmployeesBootstrapResponse,
+  ScheduleShiftTemplateRecord,
+  WorkGroupItem,
+} from "@smart/types";
 import { CalendarRange } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { TimePicker } from "@/components/application/time-picker/time-picker";
+import { TaskDatePicker } from "@/components/task-schedule-pickers";
 import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import {
@@ -95,10 +101,28 @@ export function HeaderShiftCreateDialog({
   const { locale } = useI18n();
   const [draft, setDraft] = useState<HeaderShiftDraft>(() => getInitialDraft());
   const [employees, setEmployees] = useState<EmployeeApiRecord[]>([]);
+  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
   const [templates, setTemplates] = useState<ScheduleShiftTemplateRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const employeeGroupByEmployeeId = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+
+    groups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (!map.has(membership.employeeId)) {
+          map.set(membership.employeeId, {
+            id: group.id,
+            name: group.name,
+          });
+        }
+      });
+    });
+
+    return map;
+  }, [groups]);
 
   const employeeOptions = useMemo(() => {
     return employees
@@ -109,9 +133,10 @@ export function HeaderShiftCreateDialog({
           employee.user?.email ||
           employee.email ||
           employee.id,
+        group: employeeGroupByEmployeeId.get(employee.id) ?? null,
       }))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, locale));
-  }, [employees, locale]);
+  }, [employeeGroupByEmployeeId, employees, locale]);
 
   const selectedTemplate = templates.find((template) => template.id === draft.templateId);
 
@@ -131,7 +156,7 @@ export function HeaderShiftCreateDialog({
     setLoading(true);
 
     void Promise.all([
-      apiRequest<EmployeeApiRecord[]>("/employees", {
+      apiRequest<EmployeesBootstrapResponse>("/bootstrap/employees", {
         token: session.accessToken,
         skipClientCache: true,
       }),
@@ -140,16 +165,17 @@ export function HeaderShiftCreateDialog({
         skipClientCache: true,
       }),
     ])
-      .then(([employeeItems, templateItems]) => {
+      .then(([employeeSnapshot, templateItems]) => {
         if (cancelled) {
           return;
         }
 
         setEmployees(
-          employeeItems.filter(
+          employeeSnapshot.employeeRecords.filter(
             (employee) => !["DISMISSED", "dismissed"].includes(employee.status ?? ""),
           ),
         );
+        setGroups(employeeSnapshot.groups ?? employeeSnapshot.overview?.groups ?? []);
         setTemplates(templateItems);
       })
       .catch((requestError) => {
@@ -304,7 +330,7 @@ export function HeaderShiftCreateDialog({
               employeeLabel={localize(locale, "Сотрудник", "Employee")}
               employees={employeeOptions}
               groupBy="group"
-              groupFallbackLabel={localize(locale, "Без бригады", "Without group")}
+              groupFallbackLabel={localize(locale, "Без группы", "Without group")}
               isLoading={loading}
               loadingLabel={localize(locale, "Загружаем", "Loading")}
               mode="multiple"
@@ -381,12 +407,12 @@ export function HeaderShiftCreateDialog({
             <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               {localize(locale, "Дата", "Date")}
             </label>
-            <Input
-              min={formatDateInput(new Date())}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, shiftDate: event.target.value }))
+            <TaskDatePicker
+              locale={locale}
+              minToday
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, shiftDate: value }))
               }
-              type="date"
               value={draft.shiftDate}
             />
           </div>

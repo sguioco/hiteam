@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Clock } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { cx } from "@/lib/utils/cx";
@@ -19,6 +20,13 @@ type TimePickerProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   value: string;
+};
+
+type TimePickerMetrics = {
+  left: number;
+  listMaxHeight: number;
+  top: number;
+  width: number;
 };
 
 function readTime(value: string) {
@@ -46,20 +54,73 @@ export function TimePicker({
   value,
 }: TimePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [pickerMetrics, setPickerMetrics] = useState<TimePickerMetrics | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedTime = readTime(value);
   const formattedTime = value || placeholder;
   const selectedHourRef = useRef<HTMLButtonElement | null>(null);
   const selectedMinuteRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
+  function updatePickerMetrics() {
+    const trigger = rootRef.current;
+
+    if (!trigger || typeof window === "undefined") {
+      return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 12;
+    const gap = 8;
+    const preferredHeight = 322;
+    const footerHeight = 58;
+    const menuWidth = Math.min(190, window.innerWidth - viewportPadding * 2);
+    const maxRight = window.innerWidth - viewportPadding;
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left),
+      maxRight - menuWidth,
+    );
+    const spaceBelow = window.innerHeight - rect.bottom - gap - viewportPadding;
+    const spaceAbove = rect.top - gap - viewportPadding;
+    const shouldOpenAbove = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+    const availableHeight = shouldOpenAbove ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(180, Math.min(preferredHeight, availableHeight));
+
+    setPickerMetrics({
+      left,
+      listMaxHeight: Math.max(120, maxHeight - footerHeight),
+      top: shouldOpenAbove
+        ? Math.max(viewportPadding, rect.top - maxHeight - gap)
+        : rect.bottom + gap,
+      width: menuWidth,
+    });
+  }
+
+  useLayoutEffect(() => {
     if (!isOpen) {
+      setPickerMetrics(null);
+      return;
+    }
+
+    updatePickerMetrics();
+
+    window.addEventListener("resize", updatePickerMetrics);
+    window.addEventListener("scroll", updatePickerMetrics, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePickerMetrics);
+      window.removeEventListener("scroll", updatePickerMetrics, true);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !pickerMetrics) {
       return;
     }
 
     selectedHourRef.current?.scrollIntoView({ block: "center" });
     selectedMinuteRef.current?.scrollIntoView({ block: "center" });
-  }, [isOpen, selectedTime.hour, selectedTime.minute]);
+  }, [isOpen, pickerMetrics, selectedTime.hour, selectedTime.minute]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -69,7 +130,10 @@ export function TimePicker({
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
 
-      if (target instanceof Node && rootRef.current?.contains(target)) {
+      if (
+        target instanceof Node &&
+        (rootRef.current?.contains(target) || menuRef.current?.contains(target))
+      ) {
         return;
       }
 
@@ -95,6 +159,95 @@ export function TimePicker({
     onChange(`${hour}:${minute}`);
   }
 
+  const menuContent =
+    isOpen && pickerMetrics && typeof document !== "undefined" ? (
+      <div
+        className="pointer-events-auto fixed z-[1000] overflow-hidden rounded-2xl border border-[rgba(15,23,42,0.12)] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        ref={menuRef}
+        role="dialog"
+        style={{
+          left: pickerMetrics.left,
+          top: pickerMetrics.top,
+          width: pickerMetrics.width,
+        }}
+      >
+        <div className="grid grid-cols-2 gap-2 p-2">
+          <div
+            className="overflow-y-auto pr-1"
+            style={{ maxHeight: pickerMetrics.listMaxHeight }}
+          >
+            <div className="grid gap-1">
+              {HOURS.map((hour) => {
+                const isSelected = hour === selectedTime.hour;
+
+                return (
+                  <button
+                    aria-label={`Hour ${hour}`}
+                    aria-pressed={isSelected}
+                    className={cx(
+                      "flex h-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+                      isSelected
+                        ? "bg-[color:var(--accent)] text-white"
+                        : "text-[color:var(--foreground)] hover:bg-[rgba(15,23,42,0.05)]",
+                    )}
+                    key={hour}
+                    onClick={() => updateTime({ hour })}
+                    ref={isSelected ? selectedHourRef : undefined}
+                    type="button"
+                  >
+                    {hour}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            className="overflow-y-auto pl-1"
+            style={{ maxHeight: pickerMetrics.listMaxHeight }}
+          >
+            <div className="grid gap-1">
+              {MINUTES.map((minute) => {
+                const isSelected = minute === selectedTime.minute;
+
+                return (
+                  <button
+                    aria-label={`Minute ${minute}`}
+                    aria-pressed={isSelected}
+                    className={cx(
+                      "flex h-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+                      isSelected
+                        ? "bg-[color:var(--accent)] text-white"
+                        : "text-[color:var(--foreground)] hover:bg-[rgba(15,23,42,0.05)]",
+                    )}
+                    key={minute}
+                    onClick={() => updateTime({ minute })}
+                    ref={isSelected ? selectedMinuteRef : undefined}
+                    type="button"
+                  >
+                    {minute}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-[rgba(15,23,42,0.08)] bg-white p-2">
+          <Button
+            className="w-full border-transparent bg-[color:var(--accent)] text-white shadow-none ring-0 hover:bg-[color:var(--accent)] hover:text-white"
+            color="primary"
+            onClick={() => setIsOpen(false)}
+            size="sm"
+            type="button"
+          >
+            {doneLabel}
+          </Button>
+        </div>
+      </div>
+    ) : null;
+
   return (
     <div className="relative w-full" ref={rootRef}>
       <Button
@@ -114,79 +267,7 @@ export function TimePicker({
         <span className="tabular-nums">{formattedTime}</span>
       </Button>
 
-      {isOpen ? (
-        <div
-          className="absolute left-0 top-[calc(100%+0.5rem)] z-[130] overflow-hidden rounded-2xl border border-[rgba(15,23,42,0.12)] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
-          role="dialog"
-        >
-          <div className="grid w-[190px] grid-cols-2 gap-2 p-2">
-            <div className="max-h-[240px] overflow-y-auto pr-1">
-              <div className="grid gap-1">
-                {HOURS.map((hour) => {
-                  const isSelected = hour === selectedTime.hour;
-
-                  return (
-                    <button
-                      aria-label={`Hour ${hour}`}
-                      aria-pressed={isSelected}
-                      className={cx(
-                        "flex h-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
-                        isSelected
-                          ? "bg-[color:var(--accent)] text-white"
-                          : "text-[color:var(--foreground)] hover:bg-[rgba(15,23,42,0.05)]",
-                      )}
-                      key={hour}
-                      onClick={() => updateTime({ hour })}
-                      ref={isSelected ? selectedHourRef : undefined}
-                      type="button"
-                    >
-                      {hour}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="max-h-[240px] overflow-y-auto pl-1">
-              <div className="grid gap-1">
-                {MINUTES.map((minute) => {
-                  const isSelected = minute === selectedTime.minute;
-
-                  return (
-                    <button
-                      aria-label={`Minute ${minute}`}
-                      aria-pressed={isSelected}
-                      className={cx(
-                        "flex h-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
-                        isSelected
-                          ? "bg-[color:var(--accent)] text-white"
-                          : "text-[color:var(--foreground)] hover:bg-[rgba(15,23,42,0.05)]",
-                      )}
-                      key={minute}
-                      onClick={() => updateTime({ minute })}
-                      ref={isSelected ? selectedMinuteRef : undefined}
-                      type="button"
-                    >
-                      {minute}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-[rgba(15,23,42,0.08)] bg-white p-2">
-            <Button
-              className="w-full border-transparent bg-[color:var(--accent)] text-white shadow-none ring-0 hover:bg-[color:var(--accent)] hover:text-white"
-              color="primary"
-              onClick={() => setIsOpen(false)}
-              size="sm"
-              type="button"
-            >
-              {doneLabel}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      {menuContent ? createPortal(menuContent, document.body) : null}
     </div>
   );
 }

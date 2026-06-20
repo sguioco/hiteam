@@ -35,6 +35,7 @@ import {
 import { AdminShell } from "@/components/admin-shell";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { TimePicker } from "@/components/application/time-picker/time-picker";
+import { TaskDatePicker } from "@/components/task-schedule-pickers";
 import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import {
@@ -2811,7 +2812,9 @@ export default function Schedule({
                         allOptionBehavior="empty"
                         buttonClassName="min-h-8 h-8 rounded-xl border-border bg-white px-3 text-xs shadow-none"
                         employeeLabel={ui.employee}
-                        employees={employees}
+                        employees={createShiftEmployeeOptions}
+                        groupBy="group"
+                        groupFallbackLabel={ui.withoutGroup}
                         loadingLabel={ui.loading}
                         mode="single"
                         noEmployeesLabel={ui.noEligibleEmployees}
@@ -3254,7 +3257,9 @@ export default function Schedule({
               allOptionBehavior="empty"
               buttonClassName="h-11 rounded-[16px]"
               employeeLabel={ui.employee}
-              employees={employees}
+              employees={createShiftEmployeeOptions}
+              groupBy="group"
+              groupFallbackLabel={ui.withoutGroup}
               loadingLabel={ui.loading}
               mode="single"
               noEmployeesLabel={ui.noEligibleEmployees}
@@ -3509,15 +3514,15 @@ export default function Schedule({
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {ui.date}
               </label>
-              <Input
-                min={formatDateInput(today)}
-                onChange={(event) =>
+              <TaskDatePicker
+                locale={locale}
+                minToday
+                onChange={(value) =>
                   setCreateShiftDraft((current) => ({
                     ...current,
-                    shiftDate: event.target.value,
+                    shiftDate: value,
                   }))
                 }
-                type="date"
                 value={createShiftDraft.shiftDate}
               />
             </div>
@@ -3681,26 +3686,26 @@ export default function Schedule({
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <Input
-                  className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
-                  onChange={(event) =>
+                <TimePicker
+                  buttonClassName="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
+                  doneLabel={locale === "ru" ? "Готово" : "Done"}
+                  onChange={(value) =>
                     setTemplateDraft((current) => ({
                       ...current,
-                      startsAtLocal: event.target.value,
+                      startsAtLocal: value,
                     }))
                   }
-                  type="time"
                   value={templateDraft.startsAtLocal}
                 />
-                <Input
-                  className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
-                  onChange={(event) =>
+                <TimePicker
+                  buttonClassName="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
+                  doneLabel={locale === "ru" ? "Готово" : "Done"}
+                  onChange={(value) =>
                     setTemplateDraft((current) => ({
                       ...current,
-                      endsAtLocal: event.target.value,
+                      endsAtLocal: value,
                     }))
                   }
-                  type="time"
                   value={templateDraft.endsAtLocal}
                 />
               </div>
@@ -3727,15 +3732,15 @@ export default function Schedule({
                       <span className="text-xs font-medium text-muted-foreground">
                         {ui.fixedBreakStart}
                       </span>
-                      <Input
-                        className="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
-                        onChange={(event) =>
+                      <TimePicker
+                        buttonClassName="h-11 rounded-[14px] px-2 text-center font-medium tabular-nums"
+                        doneLabel={locale === "ru" ? "Готово" : "Done"}
+                        onChange={(value) =>
                           setTemplateDraft((current) => ({
                             ...current,
-                            fixedBreakStartsAtLocal: event.target.value,
+                            fixedBreakStartsAtLocal: value,
                           }))
                         }
-                        type="time"
                         value={templateDraft.fixedBreakStartsAtLocal}
                       />
                     </label>
@@ -3951,24 +3956,24 @@ export default function Schedule({
               </SelectContent>
             </Select>
 
-            <Input
-              onChange={(event) =>
+            <TaskDatePicker
+              locale={locale}
+              onChange={(value) =>
                 setMassAssignDraft((current) => ({
                   ...current,
-                  dateFrom: event.target.value,
+                  dateFrom: value,
                 }))
               }
-              type="date"
               value={massAssignDraft.dateFrom}
             />
-            <Input
-              onChange={(event) =>
+            <TaskDatePicker
+              locale={locale}
+              onChange={(value) =>
                 setMassAssignDraft((current) => ({
                   ...current,
-                  dateTo: event.target.value,
+                  dateTo: value,
                 }))
               }
-              type="date"
               value={massAssignDraft.dateTo}
             />
           </div>

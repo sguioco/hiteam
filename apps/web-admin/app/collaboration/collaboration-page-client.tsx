@@ -19,6 +19,10 @@ import {
   WorkGroupItem,
 } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
+import {
+  TaskDatePicker,
+  TaskTimePicker,
+} from '../../components/task-schedule-pickers';
 import { AppSelectField } from '../../components/ui/select';
 import { getSession } from '../../lib/auth';
 import { apiRequest } from '../../lib/api';
@@ -1488,15 +1492,14 @@ export default function CollaborationPageClient({
                   value={templateDraft.dayOfMonth}
                 />
               ) : null}
-              <input
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, startDate: event.target.value }))}
-                required
-                type="date"
+              <TaskDatePicker
+                locale={locale}
+                onChange={(value) => setTemplateDraft((current) => ({ ...current, startDate: value }))}
                 value={templateDraft.startDate}
               />
-              <input
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, endDate: event.target.value }))}
-                type="date"
+              <TaskDatePicker
+                locale={locale}
+                onChange={(value) => setTemplateDraft((current) => ({ ...current, endDate: value }))}
                 value={templateDraft.endDate}
               />
               <input
@@ -1506,10 +1509,10 @@ export default function CollaborationPageClient({
                 type="number"
                 value={templateDraft.dueAfterDays}
               />
-              <input
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, dueTimeLocal: event.target.value }))}
+              <TaskTimePicker
+                locale={locale}
+                onChange={(value) => setTemplateDraft((current) => ({ ...current, dueTimeLocal: value }))}
                 placeholder={t('collaboration.dueTimeLocal')}
-                type="time"
                 value={templateDraft.dueTimeLocal}
               />
               <div className="section-stack compact-stack">
@@ -1826,27 +1829,26 @@ export default function CollaborationPageClient({
                   value={announcementTemplateDraft.dayOfMonth}
                 />
               ) : null}
-              <input
-                onChange={(event) =>
-                  setAnnouncementTemplateDraft((current) => ({ ...current, startDate: event.target.value }))
+              <TaskDatePicker
+                locale={locale}
+                onChange={(value) =>
+                  setAnnouncementTemplateDraft((current) => ({ ...current, startDate: value }))
                 }
-                required
-                type="date"
                 value={announcementTemplateDraft.startDate}
               />
-              <input
-                onChange={(event) =>
-                  setAnnouncementTemplateDraft((current) => ({ ...current, endDate: event.target.value }))
+              <TaskDatePicker
+                locale={locale}
+                onChange={(value) =>
+                  setAnnouncementTemplateDraft((current) => ({ ...current, endDate: value }))
                 }
-                type="date"
                 value={announcementTemplateDraft.endDate}
               />
-              <input
-                onChange={(event) =>
-                  setAnnouncementTemplateDraft((current) => ({ ...current, publishTimeLocal: event.target.value }))
+              <TaskTimePicker
+                locale={locale}
+                onChange={(value) =>
+                  setAnnouncementTemplateDraft((current) => ({ ...current, publishTimeLocal: value }))
                 }
                 placeholder={t('collaboration.publishTimeLocal')}
-                type="time"
                 value={announcementTemplateDraft.publishTimeLocal}
               />
               <label className="action-row">

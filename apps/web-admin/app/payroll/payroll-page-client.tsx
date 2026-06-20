@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AdminShell } from '@/components/admin-shell';
 import { Table } from '@/components/application/table/table';
+import { TaskDatePicker } from '@/components/task-schedule-pickers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { WorkspaceLoading } from '@/components/workspace-loading';
@@ -48,6 +49,9 @@ function formatDateTime(value: string, locale: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function formatDateInput(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 }
 function getJobStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'default' {
   switch (status) {
@@ -78,6 +82,7 @@ export default function PayrollPageClient({
   const [notice, setNotice] = useState<NoticeState>(null);
   const [isLoading, setIsLoading] = useState(!initialData);
   const [isExporting, setIsExporting] = useState(false);
+  const [holidayDate, setHolidayDate] = useState(() => formatDateInput(new Date()));
   const [activeTab, setActiveTab] = useState<'summary' | 'policy' | 'holidays' | 'exports'>('summary');
   const didUseInitialData = useRef(Boolean(initialData));
 
@@ -174,6 +179,7 @@ export default function PayrollPageClient({
         body: JSON.stringify({ name: fd.get('name'), date: fd.get('date'), isPaid: fd.get('isPaid') === 'on' }),
       });
       event.currentTarget.reset();
+      setHolidayDate(formatDateInput(new Date()));
       setNotice({ text: t('payroll.holidaySaved'), tone: 'success' });
       await loadData();
     } catch (error) {
@@ -406,7 +412,15 @@ export default function PayrollPageClient({
           <CardContent>
             <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void handleHolidaySubmit(e)}>
               <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-medium text-muted-foreground">{t('payroll.holidayName')}</span><Input name="name" required /></label>
-              <label className="space-y-1.5"><span className="text-xs font-medium text-muted-foreground">{t('payroll.holidayDate')}</span><Input name="date" required type="date" /></label>
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-muted-foreground">{t('payroll.holidayDate')}</span>
+                <TaskDatePicker
+                  locale={locale}
+                  onChange={setHolidayDate}
+                  value={holidayDate}
+                />
+                <input name="date" type="hidden" value={holidayDate} />
+              </div>
               <label className="flex items-center gap-2.5 pt-6 text-sm"><input className="h-4 w-4 rounded border accent-primary" defaultChecked name="isPaid" type="checkbox" />{t('payroll.holidayPaid')}</label>
               <div className="flex justify-end sm:col-span-2"><Button type="submit">{t('payroll.addHoliday')}</Button></div>
             </form>

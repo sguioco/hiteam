@@ -9,12 +9,10 @@ import {
   AnnouncementItem,
   AnnouncementReadReceipt,
 } from "@smart/types";
-import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import {
   Bell,
   CalendarClock,
   ChevronDown,
-  Clock,
   Eye,
   ExternalLink,
   FileText,
@@ -43,10 +41,13 @@ import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/base/toggle/toggle";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DatePicker } from "@/components/application/date-picker/date-picker";
 import { ImageAdjustField } from "@/components/image-adjust-field";
 import { LocationMapPicker } from "@/components/location-map-picker";
 import { Input } from "@/components/ui/input";
+import {
+  TaskDatePicker,
+  TaskTimePicker,
+} from "@/components/task-schedule-pickers";
 import { Separator } from "@/components/ui/separator";
 import { AppSelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -1619,35 +1620,31 @@ export function NewsCenter({
                     )}
                   >
                     <div className="grid grid-cols-2 gap-3">
-                      <DatePicker
-                        buttonClassName="h-11 w-full justify-start gap-2 rounded-[16px] px-4 text-left"
-                        minValue={today(getLocalTimeZone())}
+                      <TaskDatePicker
+                        buttonClassName="h-11 rounded-[16px] px-4"
+                        locale={locale}
+                        minToday
                         onChange={(value) =>
                           setDraft((current) => ({
                             ...current,
-                            scheduledDate: value
-                              ? formatDateInput(value.toDate(getLocalTimeZone()))
-                              : "",
+                            scheduledDate: value,
                           }))
                         }
                         placeholder={localize(locale, "Выбери дату", "Choose date")}
-                        value={draft.scheduledDate ? parseDate(draft.scheduledDate) : null}
+                        value={draft.scheduledDate}
                       />
-                      <label className="flex h-11 min-w-0 items-center gap-2 rounded-[16px] border border-[rgba(15,23,42,0.12)] bg-white px-4 text-sm font-medium text-[color:var(--foreground)] shadow-none">
-                        <Clock className="size-4 shrink-0 text-[color:var(--muted-foreground)]" />
-                        <input
-                          aria-label={localize(locale, "Время публикации", "Publication time")}
-                          className="min-w-0 flex-1 bg-transparent text-sm font-medium tabular-nums text-[color:var(--foreground)] outline-none [color-scheme:light] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden"
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              scheduledTime: event.target.value,
-                            }))
-                          }
-                          type="time"
-                          value={draft.scheduledTime}
-                        />
-                      </label>
+                      <TaskTimePicker
+                        buttonClassName="h-11 rounded-[16px] px-4"
+                        locale={locale}
+                        onChange={(value) =>
+                          setDraft((current) => ({
+                            ...current,
+                            scheduledTime: value,
+                          }))
+                        }
+                        placeholder={localize(locale, "Выбери время", "Choose time")}
+                        value={draft.scheduledTime}
+                      />
                     </div>
 
                     {draft.scheduledDate ? (

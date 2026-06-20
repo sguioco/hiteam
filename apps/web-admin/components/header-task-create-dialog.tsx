@@ -1,6 +1,11 @@
 "use client";
 
-import type { EmployeeApiRecord, TaskItem } from "@smart/types";
+import type {
+  EmployeeApiRecord,
+  EmployeesBootstrapResponse,
+  TaskItem,
+  WorkGroupItem,
+} from "@smart/types";
 import { useEffect, useMemo, useState } from "react";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
@@ -123,20 +128,39 @@ export function HeaderTaskCreateDialog({
 }: HeaderTaskCreateDialogProps) {
   const { locale } = useI18n();
   const [employees, setEmployees] = useState<EmployeeApiRecord[]>([]);
+  const [groups, setGroups] = useState<WorkGroupItem[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<HeaderTaskDraft>(() => getInitialTaskDraft());
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const employeeGroupByEmployeeId = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+
+    groups.forEach((group) => {
+      group.memberships.forEach((membership) => {
+        if (!map.has(membership.employeeId)) {
+          map.set(membership.employeeId, {
+            id: group.id,
+            name: group.name,
+          });
+        }
+      });
+    });
+
+    return map;
+  }, [groups]);
+
   const employeeOptions = useMemo(() => {
     return employees
       .map((employee) => ({
         ...employee,
         displayName: buildEmployeeName(employee) || employee.user?.email || employee.id,
+        group: employeeGroupByEmployeeId.get(employee.id) ?? null,
       }))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, locale));
-  }, [employees, locale]);
+  }, [employeeGroupByEmployeeId, employees, locale]);
 
   const selectedEmployeeSummary =
     selectedEmployeeIds.length === employeeOptions.length && employeeOptions.length > 0
@@ -177,18 +201,20 @@ export function HeaderTaskCreateDialog({
     let cancelled = false;
     setLoadingEmployees(true);
 
-    void apiRequest<EmployeeApiRecord[]>("/employees", {
+    void apiRequest<EmployeesBootstrapResponse>("/bootstrap/employees", {
       token: session.accessToken,
+      skipClientCache: true,
     })
-      .then((items) => {
+      .then((snapshot) => {
         if (cancelled) {
           return;
         }
 
-        const activeItems = items.filter(
+        const activeItems = snapshot.employeeRecords.filter(
           (employee) => !["DISMISSED", "dismissed"].includes(employee.status ?? ""),
         );
         setEmployees(activeItems);
+        setGroups(snapshot.groups ?? snapshot.overview?.groups ?? []);
         setSelectedEmployeeIds((current) =>
           current.length > 0 ? current : activeItems[0]?.id ? [activeItems[0].id] : [],
         );
@@ -337,6 +363,8 @@ export function HeaderTaskCreateDialog({
               allEmployeesLabel={localize(locale, "Все сотрудники", "All employees")}
               employeeLabel={localize(locale, "Сотрудник", "Employee")}
               employees={employeeOptions}
+              groupBy="group"
+              groupFallbackLabel={localize(locale, "Без группы", "Without group")}
               isLoading={loadingEmployees}
               loadingLabel={localize(locale, "Загружаем сотрудников", "Loading employees")}
               mode="multiple"
@@ -454,7 +482,7 @@ export function HeaderTaskCreateDialog({
 
           <AnimatedDisclosure show={draft.isRecurring}>
             <div className="grid gap-4 rounded-2xl border border-dashed border-border bg-secondary/10 p-4">
-              <label className="grid gap-2 text-sm font-heading">
+              <div className="grid gap-2 text-sm font-heading">
                 <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
                 <div className="grid grid-cols-7 justify-items-center gap-1.5 sm:gap-2">
                   {TASK_WEEKDAY_VALUES.map((day) => {
@@ -483,7 +511,7 @@ export function HeaderTaskCreateDialog({
                     );
                   })}
                 </div>
-              </label>
+              </div>
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,220px)]">
                 <label className="grid gap-2 text-sm font-heading">
                   <span>{localize(locale, "Начало", "Start date")}</span>

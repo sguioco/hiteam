@@ -2246,11 +2246,9 @@ export default function DashboardHome({
                             "All employees",
                           )}
                           employeeLabel={localize(locale, "Сотрудник", "Employee")}
-                          employees={employees.map((employee) => ({
-                            ...employee,
-                            displayName: `${employee.firstName} ${employee.lastName}`.trim(),
-                            position: employee.department?.name ?? null,
-                          }))}
+                          employees={createShiftEmployeeOptions}
+                          groupBy="group"
+                          groupFallbackLabel={localize(locale, "Без группы", "Without group")}
                           loadingLabel={localize(
                             locale,
                             "Загружаем сотрудников",
@@ -2487,7 +2485,7 @@ export default function DashboardHome({
                           </div>
                           <AnimatedDisclosure show={taskDraft.isRecurring}>
                             <div className="manager-recurring-panel">
-                            <label className="grid gap-2 text-sm font-heading">
+                            <div className="grid gap-2 text-sm font-heading">
                               <span>{localize(locale, "Дни повтора", "Recurring days")}</span>
                               <div className="manager-recurring-days">
                                 {TASK_WEEKDAY_VALUES.map((day) => {
@@ -2517,7 +2515,7 @@ export default function DashboardHome({
                                   );
                                 })}
                               </div>
-                            </label>
+                            </div>
                             <div className="manager-recurring-schedule-grid">
                               <label className="grid gap-2 text-sm font-heading">
                                 <span>{localize(locale, "Начало", "Start date")}</span>
@@ -2796,15 +2794,15 @@ export default function DashboardHome({
                   <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {localize(locale, "Дата", "Date")}
                   </label>
-                  <Input
-                    min={formatDateKey(new Date())}
-                    onChange={(event) =>
+                  <TaskDatePicker
+                    locale={locale}
+                    minToday
+                    onChange={(value) =>
                       setCreateShiftDraft((current) => ({
                         ...current,
-                        shiftDate: event.target.value,
+                        shiftDate: value,
                       }))
                     }
-                    type="date"
                     value={createShiftDraft.shiftDate}
                   />
                 </div>
@@ -2831,15 +2829,15 @@ export default function DashboardHome({
                         <span className="text-xs font-medium text-muted-foreground">
                           {localize(locale, "Начало перерыва", "Break start")}
                         </span>
-                        <Input
-                          className="h-11 rounded-[14px]"
-                          onChange={(event) =>
+                        <TaskTimePicker
+                          buttonClassName="h-11 rounded-[14px]"
+                          locale={locale}
+                          onChange={(value) =>
                             setCreateShiftDraft((current) => ({
                               ...current,
-                              fixedBreakStartsAtLocal: event.target.value,
+                              fixedBreakStartsAtLocal: value,
                             }))
                           }
-                          type="time"
                           value={createShiftDraft.fixedBreakStartsAtLocal}
                         />
                       </label>
