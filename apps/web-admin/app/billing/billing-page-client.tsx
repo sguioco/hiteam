@@ -804,11 +804,11 @@ export default function BillingPageClient({
                     <div className="min-w-[112px] text-center font-heading text-white">
                       <p className="text-xl font-semibold leading-6">
                         <AnimatedBillingValue
-                          animate={seatControlTouched}
-                          valueKey={purchasePreview?.amountDue ?? summary.amountDue}
+                          animate={false}
+                          valueKey={summary.amountDue}
                         >
                           {formatMoney(
-                            purchasePreview?.amountDue ?? summary.amountDue,
+                            summary.amountDue,
                             summary.price.currency,
                             locale,
                           )}
@@ -1190,24 +1190,6 @@ export default function BillingPageClient({
                         : "Disconnect Stripe"}
                   </button>
                 ) : null}
-              </article>
-            </section>
-
-            <section>
-              <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
-                <div className="flex items-center justify-between gap-4">
-                  <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
-                    {locale === "ru" ? "История биллинга" : "Billing history"}
-                  </h2>
-                  <button
-                    className="font-heading text-sm font-medium text-[color:var(--accent)]"
-                    onClick={() => setActiveTab("history")}
-                    type="button"
-                  >
-                    {locale === "ru" ? "Все счета" : "View all invoices"}
-                  </button>
-                </div>
-                <BillingHistoryList invoiceRows={invoiceRows} locale={locale} />
               </article>
             </section>
 

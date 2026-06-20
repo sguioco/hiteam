@@ -43,6 +43,9 @@ import { getAvatarInitials } from "../lib/avatar-placeholder";
 import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
+import { HeaderEmployeeCreateDialog } from "./header-employee-create-dialog";
+import { HeaderNewsCreateDialog } from "./header-news-create-dialog";
+import { HeaderShiftCreateDialog } from "./header-shift-create-dialog";
 import { HeaderTaskCreateDialog } from "./header-task-create-dialog";
 import { buildUserDisplayName } from "../lib/profile-display";
 import { localizePersonName } from "../lib/transliteration";
@@ -339,6 +342,9 @@ export function AdminShell({
   );
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
+  const [newsCreateOpen, setNewsCreateOpen] = useState(false);
+  const [shiftCreateOpen, setShiftCreateOpen] = useState(false);
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
@@ -1307,10 +1313,30 @@ export function AdminShell({
     <div className="admin-frame">
       <CreateDialog
         actions={createDialogActions}
-        onCreateShift={onCreateShift}
+        onCreateEmployee={() => setEmployeeCreateOpen(true)}
+        onCreateNews={() => setNewsCreateOpen(true)}
+        onCreateShift={onCreateShift ?? (() => setShiftCreateOpen(true))}
         onCreateTask={() => setTaskCreateOpen(true)}
         onOpenChange={setCreateOpen}
         open={createOpen}
+      />
+      <HeaderEmployeeCreateDialog
+        onCreated={() => router.refresh()}
+        onOpenChange={setEmployeeCreateOpen}
+        open={employeeCreateOpen}
+        session={session}
+      />
+      <HeaderShiftCreateDialog
+        onCreated={() => router.refresh()}
+        onOpenChange={setShiftCreateOpen}
+        open={shiftCreateOpen}
+        session={session}
+      />
+      <HeaderNewsCreateDialog
+        onCreated={() => router.refresh()}
+        onOpenChange={setNewsCreateOpen}
+        open={newsCreateOpen}
+        session={session}
       />
       <HeaderTaskCreateDialog
         onCreated={() => router.refresh()}

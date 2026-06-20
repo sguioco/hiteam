@@ -115,7 +115,6 @@ import {
 } from "@/lib/task-priority";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { navigateWithClickSupport } from "@/lib/navigation";
-import { toAdminHref } from "@/lib/admin-routes";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
 type EmployeeDirectoryItem = {
@@ -1424,12 +1423,11 @@ export default function DashboardHome({
           },
           {
             id: "employee",
-            href: toAdminHref("/employees"),
             title: localize(locale, "Сотрудник", "Employee"),
             description: localize(
               locale,
-              "Открыть кадровый раздел и добавить нового сотрудника",
-              "Open the people section and add a new employee",
+              "Открыть окно добавления сотрудника",
+              "Open the add employee dialog",
             ),
             icon: UsersRound,
           },
@@ -1446,12 +1444,11 @@ export default function DashboardHome({
           },
           {
             id: "news",
-            href: toAdminHref("/news?create=1"),
             title: localize(locale, "Добавить новость", "Add news"),
             description: localize(
               locale,
-              "Открыть новости и добавить публикацию",
-              "Open news and add a post",
+              "Открыть окно создания новости",
+              "Open the create news dialog",
             ),
             icon: Newspaper,
           },

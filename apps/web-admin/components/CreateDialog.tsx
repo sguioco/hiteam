@@ -28,6 +28,8 @@ export type CreateDialogAction = {
 
 type CreateDialogProps = {
   actions?: CreateDialogAction[];
+  onCreateEmployee?: () => void;
+  onCreateNews?: () => void;
   onCreateShift?: () => void;
   onCreateTask?: () => void;
   open: boolean;
@@ -36,6 +38,8 @@ type CreateDialogProps = {
 
 export const CreateDialog = ({
   actions,
+  onCreateEmployee,
+  onCreateNews,
   onCreateShift,
   onCreateTask,
   open,
@@ -56,13 +60,14 @@ export const CreateDialog = ({
     },
     {
       id: "employee",
-      href: toAdminHref("/employees"),
       title: locale === "ru" ? "Сотрудник" : "Employee",
       description:
         locale === "ru"
-          ? "Открыть кадровый раздел и добавить нового сотрудника"
-          : "Open the people section and add a new employee",
+          ? "Открыть окно добавления сотрудника"
+          : "Open the add employee dialog",
       icon: UsersRound,
+      onSelect: onCreateEmployee,
+      href: onCreateEmployee ? undefined : toAdminHref("/employees"),
     },
     {
       id: "shift",
@@ -81,16 +86,33 @@ export const CreateDialog = ({
     },
     {
       id: "news",
-      href: toAdminHref("/news?create=1"),
       title: locale === "ru" ? "Добавить новость" : "Add news",
       description:
         locale === "ru"
-          ? "Открыть новости и добавить публикацию"
-          : "Open news and add a post",
+          ? "Открыть окно создания новости"
+          : "Open the create news dialog",
       icon: Newspaper,
+      onSelect: onCreateNews,
+      href: onCreateNews ? undefined : toAdminHref("/news?create=1"),
     },
   ];
-  const items = actions ?? defaultActions;
+  const actionHandlers: Record<string, (() => void) | undefined> = {
+    employee: onCreateEmployee,
+    news: onCreateNews,
+    shift: onCreateShift,
+    task: onCreateTask,
+  };
+  const items = (actions ?? defaultActions).map((action) => {
+    const onSelect = action.onSelect ?? actionHandlers[action.id];
+
+    return onSelect
+      ? {
+          ...action,
+          href: undefined,
+          onSelect,
+        }
+      : action;
+  });
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
