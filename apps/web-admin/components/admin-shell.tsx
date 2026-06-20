@@ -283,6 +283,7 @@ export function AdminShell({
   children,
   initialSession = null,
   onCreateAction,
+  onCreateShift,
   showTopbar = true,
   mode = "admin",
 }: {
@@ -290,6 +291,7 @@ export function AdminShell({
   children: ReactNode;
   initialSession?: AuthSession | null;
   onCreateAction?: () => void;
+  onCreateShift?: () => void;
   showTopbar?: boolean;
   mode?: "admin" | "employee";
 }) {
@@ -1305,6 +1307,7 @@ export function AdminShell({
     <div className="admin-frame">
       <CreateDialog
         actions={createDialogActions}
+        onCreateShift={onCreateShift}
         onCreateTask={() => setTaskCreateOpen(true)}
         onOpenChange={setCreateOpen}
         open={createOpen}

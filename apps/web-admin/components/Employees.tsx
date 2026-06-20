@@ -73,11 +73,6 @@ import {
   TaskTimePicker,
 } from "@/components/task-schedule-pickers";
 import {
-  PhoneCountryInput,
-  buildPhoneWithCountryCode,
-  getDefaultPhoneCountryCode,
-} from "@/components/phone-country-input";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -140,7 +135,6 @@ type EmployeeStatus =
   | "inactive"
   | "dismissed";
 type ViewMode = "employees" | "groups";
-type InviteContactMethod = "email" | "phone";
 type EmployeeWorkMode = "STATIONARY" | "FIELD";
 type InvitationDialogMode = "setup" | "review";
 type EmployeeSortKey = "name" | "status" | "group" | "activeTasks";
@@ -925,8 +919,6 @@ const Employees = ({
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteStep, setInviteStep] = useState<1 | 2>(1);
-  const [inviteContactMethod, setInviteContactMethod] =
-    useState<InviteContactMethod>("email");
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
   const [invitePositionTitle, setInvitePositionTitle] = useState("");
@@ -939,10 +931,6 @@ const Employees = ({
   const [inviteTeamCreating, setInviteTeamCreating] = useState(false);
   const [inviteTeamError, setInviteTeamError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [invitePhone, setInvitePhone] = useState("");
-  const [invitePhoneCountryCode, setInvitePhoneCountryCode] = useState(
-    getDefaultPhoneCountryCode(locale),
-  );
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [mobileLinkCopied, setMobileLinkCopied] = useState(false);
@@ -1945,23 +1933,11 @@ const Employees = ({
     setInviteTeamEmoji("🍳");
     setInviteTeamError(null);
     setInviteEmail("");
-    setInvitePhone("");
-    setInvitePhoneCountryCode(getDefaultPhoneCountryCode(locale));
   }
 
   function getInviteContactValue() {
-    const contactValue =
-      inviteContactMethod === "email"
-        ? inviteEmail.trim().toLowerCase()
-        : invitePhone.trim();
-    const phoneValue =
-      inviteContactMethod === "phone"
-        ? buildPhoneWithCountryCode(invitePhoneCountryCode, contactValue)
-        : "";
-
     return {
-      contactValue,
-      phoneValue,
+      contactValue: inviteEmail.trim().toLowerCase(),
     };
   }
 
@@ -1985,17 +1961,11 @@ const Employees = ({
     }
 
     if (!contactValue) {
-      return inviteContactMethod === "email"
-        ? runtimeLocalize(
-            "Введите email сотрудника.",
-            "Enter the employee email.",
-            locale,
-          )
-        : runtimeLocalize(
-            "Введите телефон сотрудника.",
-            "Enter the employee phone.",
-            locale,
-          );
+      return runtimeLocalize(
+        "Введите email сотрудника.",
+        "Enter the employee email.",
+        locale,
+      );
     }
 
     return null;
@@ -2056,8 +2026,7 @@ const Employees = ({
   async function handleInviteSubmit() {
     const session = getSession();
     if (!session) return;
-    const { contactValue, phoneValue: invitePhoneValue } =
-      getInviteContactValue();
+    const { contactValue } = getInviteContactValue();
 
     const stepOneError = validateInviteStepOne();
     if (stepOneError) {
@@ -2090,25 +2059,14 @@ const Employees = ({
       await apiRequest<InvitationRecord>("/employees/invitations", {
         method: "POST",
         token: session.accessToken,
-        body: JSON.stringify(
-          inviteContactMethod === "email"
-            ? {
-                email: contactValue,
-                firstName: inviteFirstName.trim(),
-                lastName: inviteLastName.trim(),
-                positionTitle: invitePositionTitle.trim(),
-                role: inviteRole,
-                teamId: shouldSendTeam ? selectedTeamId : undefined,
-              }
-            : {
-                phone: invitePhoneValue,
-                firstName: inviteFirstName.trim(),
-                lastName: inviteLastName.trim(),
-                positionTitle: invitePositionTitle.trim(),
-                role: inviteRole,
-                teamId: shouldSendTeam ? selectedTeamId : undefined,
-              },
-        ),
+        body: JSON.stringify({
+          email: contactValue,
+          firstName: inviteFirstName.trim(),
+          lastName: inviteLastName.trim(),
+          positionTitle: invitePositionTitle.trim(),
+          role: inviteRole,
+          teamId: shouldSendTeam ? selectedTeamId : undefined,
+        }),
       });
       setInviteDialogOpen(false);
       resetInviteDraft();
@@ -4004,71 +3962,16 @@ const Employees = ({
                     value={invitePositionTitle}
                   />
                 </label>
-                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-secondary/20 p-1">
-                  <button
-                    className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
-                      inviteContactMethod === "email"
-                        ? "bg-accent text-accent-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => {
-                      setInviteContactMethod("email");
-                      setInviteError(null);
-                    }}
-                    type="button"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Email
-                  </button>
-                  <button
-                    className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-heading transition ${
-                      inviteContactMethod === "phone"
-                        ? "bg-accent text-accent-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => {
-                      setInviteContactMethod("phone");
-                      setInviteError(null);
-                    }}
-                    type="button"
-                  >
-                    <Phone className="h-4 w-4" />
-                    {runtimeLocalize("Телефон", "Phone", locale)}
-                  </button>
-                </div>
                 <label className="grid gap-2 text-sm font-heading">
                   <span>
-                    {inviteContactMethod === "email"
-                      ? runtimeLocalize("Рабочий email", "Work email", locale)
-                      : runtimeLocalize("Телефон", "Phone", locale)}
+                    {runtimeLocalize("Рабочий email", "Work email", locale)}
                   </span>
-                  {inviteContactMethod === "email" ? (
-                    <Input
-                      onChange={(event) => setInviteEmail(event.target.value)}
-                      placeholder="employee@company.ru"
-                      type="email"
-                      value={inviteEmail}
-                    />
-                  ) : (
-                    <PhoneCountryInput
-                      countryCode={invitePhoneCountryCode}
-                      countryCodeLabel={runtimeLocalize(
-                        "Телефонный код страны",
-                        "Country dial code",
-                        locale,
-                      )}
-                      id="invite-employee-phone"
-                      locale={locale}
-                      nationalNumber={invitePhone}
-                      onCountryCodeChange={setInvitePhoneCountryCode}
-                      onNationalNumberChange={setInvitePhone}
-                      phoneLabel={runtimeLocalize(
-                        "Телефон сотрудника",
-                        "Employee phone",
-                        locale,
-                      )}
-                    />
-                  )}
+                  <Input
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    placeholder="employee@company.ru"
+                    type="email"
+                    value={inviteEmail}
+                  />
                 </label>
                 <div className="grid gap-2 text-sm font-heading">
                   <span>{runtimeLocalize("Роль", "Role", locale)}</span>
@@ -4387,9 +4290,11 @@ const Employees = ({
                     ? inviteRole === "owner"
                       ? runtimeLocalize("Отправить", "Send", locale)
                       : runtimeLocalize("Далее", "Next", locale)
-                    : inviteContactMethod === "email"
-                      ? runtimeLocalize("Отправить email", "Send email", locale)
-                      : runtimeLocalize("Отправить SMS", "Send SMS", locale)}
+                    : runtimeLocalize(
+                        "Отправить приглашение",
+                        "Send invite",
+                        locale,
+                      )}
               </Button>
             </div>
           </div>

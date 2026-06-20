@@ -1217,7 +1217,12 @@ export class KommoService {
       EmployeeInvitationStatus.PENDING_APPROVAL,
       EmployeeInvitationStatus.APPROVED,
     ]);
-    const paidSeats = tenant.billingSubscription?.paidSeats ?? 0;
+    const paidThrough = tenant.billingSubscription?.stripeCurrentPeriodEnd ?? null;
+    const paidAccessActive = Boolean(
+      (paidThrough && paidThrough > new Date()) ||
+        (!paidThrough && tenant.billingSubscription?.firstPaidAt),
+    );
+    const paidSeats = paidAccessActive ? tenant.billingSubscription?.paidSeats ?? 0 : 0;
     const usedSeats =
       activeEmployees.length +
       tenant.employeeInvitations.filter((invitation) => seatHoldingInvitationStatuses.has(invitation.status)).length;
@@ -1231,7 +1236,10 @@ export class KommoService {
     const subscriptionCancelled =
       ['CANCELED', 'CANCELLED'].includes(normalizedSubscriptionStatus) ||
       Boolean(tenant.billingSubscription?.stripeCancelAtPeriodEnd);
-    const serviceActive = Boolean(tenant.billingSubscription?.firstPaidAt) && paidSeats >= usedSeats && !this.isBlockingSubscriptionStatus(tenant.billingSubscription?.status);
+    const serviceActive =
+      paidAccessActive &&
+      paidSeats >= usedSeats &&
+      !this.isBlockingSubscriptionStatus(tenant.billingSubscription?.status);
     const paymentStatus = serviceActive
       ? 'PAID'
       : tenant.billingSubscription?.status && this.isBlockingSubscriptionStatus(tenant.billingSubscription.status)

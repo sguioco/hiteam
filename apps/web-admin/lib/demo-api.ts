@@ -115,6 +115,7 @@ type DemoState = {
   billingPaidSeats: number;
   billingRequiredSeats: number;
   billingFirstPaidAt: string | null;
+  billingPaidThrough: string | null;
   shifts: any[];
   templates: any[];
   payrollPolicy: any;
@@ -183,34 +184,29 @@ function addUtcMonths(anchor: Date, monthOffset: number) {
   );
 }
 
-function getBillingPeriodFromFirstPayment(firstPaidAt?: string | null) {
+function createDemoBillingPaidThrough(firstPaidAt?: string | null, accessMonths = 1) {
   if (!firstPaidAt) {
     return null;
   }
 
   const anchor = new Date(firstPaidAt);
-  const referenceDate = new Date();
-
   if (Number.isNaN(anchor.getTime())) {
     return null;
   }
 
-  let monthOffset =
-    (referenceDate.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
-    (referenceDate.getUTCMonth() - anchor.getUTCMonth());
-  let start = addUtcMonths(anchor, monthOffset);
+  return addUtcMonths(anchor, accessMonths).toISOString();
+}
 
-  if (start > referenceDate) {
-    monthOffset -= 1;
-    start = addUtcMonths(anchor, monthOffset);
+function getDemoBillingPeriod(firstPaidAt?: string | null, paidThrough?: string | null) {
+  if (!firstPaidAt || !paidThrough) {
+    return null;
   }
 
-  let end = addUtcMonths(anchor, monthOffset + 1);
+  const start = new Date(firstPaidAt);
+  const end = new Date(paidThrough);
 
-  if (referenceDate >= end) {
-    monthOffset += 1;
-    start = end;
-    end = addUtcMonths(anchor, monthOffset + 1);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= new Date()) {
+    return null;
   }
 
   return { start, end };
@@ -1501,6 +1497,7 @@ function createInitialState(): DemoState {
   });
 
   const todayDemoShifts = buildTodayDemoShifts(employees);
+  const billingFirstPaidAt = createDemoBillingFirstPaidAt();
 
   return {
     organization: {
@@ -1529,7 +1526,8 @@ function createInitialState(): DemoState {
     invitations,
     billingPaidSeats: 18,
     billingRequiredSeats: 18,
-    billingFirstPaidAt: createDemoBillingFirstPaidAt(),
+    billingFirstPaidAt,
+    billingPaidThrough: createDemoBillingPaidThrough(billingFirstPaidAt),
     shifts: [
       ...scheduleData.shifts.filter((shift) => shift.shiftDate !== dateKey()),
       ...todayDemoShifts,
@@ -1584,6 +1582,16 @@ function loadState(): DemoState {
         normalized.billingPaidSeats >= normalized.billingRequiredSeats
           ? seedState.billingFirstPaidAt
           : null;
+      changed = true;
+    }
+
+    if (
+      typeof normalized.billingPaidThrough !== "string" &&
+      normalized.billingPaidThrough !== null
+    ) {
+      normalized.billingPaidThrough = createDemoBillingPaidThrough(
+        normalized.billingFirstPaidAt,
+      );
       changed = true;
     }
 
@@ -5045,29 +5053,23 @@ export async function demoApiRequest<T>(
   if (pathname === "/billing/summary" && method === "GET") {
     const usedSeats =
       currentState.employees.length + currentState.invitations.length;
-    const requiredSeats = Math.max(
-      currentState.billingPaidSeats,
-      currentState.billingRequiredSeats,
-      usedSeats,
-    );
-    const missingSeats = Math.max(
-      0,
-      requiredSeats - currentState.billingPaidSeats,
-    );
-    const billingPeriod = getBillingPeriodFromFirstPayment(
+    const billingPeriod = getDemoBillingPeriod(
       currentState.billingFirstPaidAt,
+      currentState.billingPaidThrough,
     );
-    const serviceActive =
-      Boolean(currentState.billingFirstPaidAt) && missingSeats === 0;
+    const paidSeats = billingPeriod ? currentState.billingPaidSeats : 0;
+    const requiredSeats = Math.max(paidSeats, usedSeats);
+    const missingSeats = Math.max(0, requiredSeats - paidSeats);
+    const serviceActive = Boolean(billingPeriod) && missingSeats === 0;
     const unitAmount = 3;
     const currency = "USD";
     return {
       status: serviceActive ? "ACTIVE" : "PAYMENT_REQUIRED",
-      paidSeats: currentState.billingPaidSeats,
+      paidSeats,
       requiredSeats,
       usedSeats,
-      billableSeats: requiredSeats,
-      availableSeats: Math.max(0, currentState.billingPaidSeats - usedSeats),
+      billableSeats: usedSeats,
+      availableSeats: Math.max(0, paidSeats - usedSeats),
       missingSeats,
       activeEmployeeCount: currentState.employees.length,
       pendingInvitationCount: currentState.invitations.length,
@@ -5079,7 +5081,7 @@ export async function demoApiRequest<T>(
       nextBillingAt: billingPeriod?.end.toISOString() ?? null,
       serviceActive,
       stripeConnected: Boolean(currentState.billingFirstPaidAt),
-      stripeSubscriptionId: currentState.billingFirstPaidAt ? "sub_demo" : null,
+      stripeSubscriptionId: null,
       stripeSubscriptionStatus: serviceActive ? "ACTIVE" : "PAYMENT_REQUIRED",
       stripeCancelAtPeriodEnd: false,
       stripeCurrentPeriodStart: billingPeriod?.start.toISOString() ?? null,
@@ -5103,12 +5105,49 @@ export async function demoApiRequest<T>(
     } as T;
   }
 
-  if (
-    (pathname === "/billing/checkout" || pathname === "/billing/portal") &&
-    method === "POST"
-  ) {
+  if (pathname === "/billing/checkout" && method === "POST") {
+    const payload = parseBody<{ seats?: number; planMonths?: number }>(
+      options?.body,
+    );
+    const paidMonths =
+      payload.planMonths === 12 ? 12 : payload.planMonths === 6 ? 6 : 1;
+    const accessMonths = paidMonths === 12 ? 14 : paidMonths === 6 ? 7 : 1;
+    updateState((state) => {
+      const usedSeats = state.employees.length + state.invitations.length;
+      const currentPeriod = getDemoBillingPeriod(
+        state.billingFirstPaidAt,
+        state.billingPaidThrough,
+      );
+      const requestedSeats = Number(payload.seats);
+      const targetSeats = Math.max(
+        1,
+        currentPeriod ? state.billingPaidSeats : 0,
+        usedSeats,
+        Number.isFinite(requestedSeats) ? Math.floor(requestedSeats) : 0,
+      );
+      const now = new Date();
+      const extensionStart = currentPeriod?.end ?? now;
+
+      state.billingPaidSeats = targetSeats;
+      state.billingRequiredSeats = Math.max(targetSeats, usedSeats);
+      state.billingFirstPaidAt = currentPeriod
+        ? state.billingFirstPaidAt
+        : now.toISOString();
+      state.billingPaidThrough = addUtcMonths(
+        extensionStart,
+        accessMonths,
+      ).toISOString();
+    });
+
     return {
-      mode: pathname === "/billing/portal" ? "portal" : "checkout",
+      mode: "checkout",
+      url: null,
+    } as T;
+  }
+
+  if (pathname === "/billing/portal" && method === "POST") {
+    return {
+      mode: "portal",
       url: "/billing?stripe=demo",
     } as T;
   }
@@ -5117,10 +5156,11 @@ export async function demoApiRequest<T>(
     const nextState = updateState((state) => {
       state.billingPaidSeats = 0;
       state.billingFirstPaidAt = null;
+      state.billingPaidThrough = null;
     });
 
     const usedSeats = nextState.employees.length + nextState.invitations.length;
-    const requiredSeats = Math.max(nextState.billingRequiredSeats, usedSeats);
+    const requiredSeats = usedSeats;
     const unitAmount = 3;
 
     return {
@@ -5128,7 +5168,7 @@ export async function demoApiRequest<T>(
       paidSeats: 0,
       requiredSeats,
       usedSeats,
-      billableSeats: requiredSeats,
+      billableSeats: usedSeats,
       availableSeats: 0,
       missingSeats: requiredSeats,
       activeEmployeeCount: nextState.employees.length,

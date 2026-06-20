@@ -5,6 +5,9 @@ import {
   CalendarDays,
   CreditCard,
   ExternalLink,
+  Minus,
+  Plus,
+  ReceiptText,
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
@@ -62,6 +65,29 @@ type BillingRedirectResponse = {
 };
 
 export type BillingPageInitialData = BillingSummary;
+
+type BillingPurchasePlanId = "monthly" | "semi_annual" | "annual";
+
+const BILLING_PURCHASE_PLANS: Array<{
+  id: BillingPurchasePlanId;
+  paidMonths: 1 | 6 | 12;
+  accessMonths: number;
+  bonusMonths: number;
+}> = [
+  { id: "monthly", paidMonths: 1, accessMonths: 1, bonusMonths: 0 },
+  { id: "semi_annual", paidMonths: 6, accessMonths: 7, bonusMonths: 1 },
+  { id: "annual", paidMonths: 12, accessMonths: 14, bonusMonths: 2 },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getInitialSeatCount(summary?: BillingSummary | null) {
+  if (!summary) {
+    return 1;
+  }
+
+  return Math.max(1, summary.requiredSeats, summary.usedSeats, summary.billableSeats);
+}
 
 function formatMoney(value: number, currency: BillingCurrency, locale: "en" | "ru") {
   return new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", {
@@ -196,12 +222,63 @@ export default function BillingPageClient({
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
   const [billingActionLoading, setBillingActionLoading] = useState(false);
   const [billingDisconnectLoading, setBillingDisconnectLoading] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] =
+    useState<BillingPurchasePlanId>("semi_annual");
+  const [selectedSeatCount, setSelectedSeatCount] = useState(() =>
+    getInitialSeatCount(initialData),
+  );
 
   const usagePercent = useMemo(() => {
     if (!summary?.requiredSeats) return 0;
     const coveredSeats = summary.trialActive ? summary.requiredSeats : summary.paidSeats;
     return Math.min(100, Math.round((coveredSeats / summary.requiredSeats) * 100));
   }, [summary]);
+  const minimumSeatCount = useMemo(() => getInitialSeatCount(summary), [summary]);
+  const selectedPlan = useMemo(
+    () =>
+      BILLING_PURCHASE_PLANS.find((plan) => plan.id === selectedPlanId) ??
+      BILLING_PURCHASE_PLANS[0],
+    [selectedPlanId],
+  );
+  const purchasePreview = useMemo(() => {
+    if (!summary) {
+      return null;
+    }
+
+    const now = new Date();
+    const currentPeriodEnd = summary.currentPeriodEnd ?? summary.stripeCurrentPeriodEnd;
+    const currentPaidThrough = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+    const activePaidThrough =
+      currentPaidThrough &&
+      !Number.isNaN(currentPaidThrough.getTime()) &&
+      currentPaidThrough > now
+        ? currentPaidThrough
+        : null;
+    const targetSeats = Math.max(minimumSeatCount, selectedSeatCount);
+    const additionalSeats = activePaidThrough
+      ? Math.max(0, targetSeats - summary.paidSeats)
+      : 0;
+    const remainingDays = activePaidThrough
+      ? Math.max(0, (activePaidThrough.getTime() - now.getTime()) / DAY_MS)
+      : 0;
+    const proratedAmount =
+      additionalSeats > 0
+        ? Math.ceil(additionalSeats * summary.price.unitAmount * (remainingDays / 30))
+        : 0;
+    const renewalAmount =
+      targetSeats * summary.price.unitAmount * selectedPlan.paidMonths;
+    const extensionStart = activePaidThrough ?? now;
+    const accessEndsAt = addUtcMonths(extensionStart, selectedPlan.accessMonths);
+
+    return {
+      accessEndsAt,
+      additionalSeats,
+      amountDue: proratedAmount + renewalAmount,
+      proratedAmount,
+      renewalAmount,
+      targetSeats,
+    };
+  }, [minimumSeatCount, selectedPlan, selectedSeatCount, summary]);
   const nextBillingDate = summary
     ? formatBillingDate(
         summary.nextBillingAt ??
@@ -309,11 +386,11 @@ export default function BillingPageClient({
 
   async function openBillingFlow() {
     const session = getSession();
-    if (!session) {
+    if (!session || !summary || !purchasePreview) {
       setError(
         locale === "ru"
-          ? "Сессия истекла. Войди заново"
-          : "Session expired. Sign in again",
+          ? "Сессия истекла или биллинг еще не загружен"
+          : "Session expired or billing is not loaded yet",
       );
       return;
     }
@@ -326,8 +403,11 @@ export default function BillingPageClient({
     try {
       setBillingActionLoading(true);
       setError(null);
-      const path = summary?.stripeConnected ? "/billing/portal" : "/billing/checkout";
-      const redirect = await apiRequest<BillingRedirectResponse>(path, {
+      const redirect = await apiRequest<BillingRedirectResponse>("/billing/checkout", {
+        body: JSON.stringify({
+          planMonths: selectedPlan.paidMonths,
+          seats: purchasePreview.targetSeats,
+        }),
         method: "POST",
         token: session.accessToken,
         skipClientCache: true,
@@ -352,6 +432,59 @@ export default function BillingPageClient({
           : locale === "ru"
             ? "Не удалось открыть оплату"
             : "Failed to open billing",
+      );
+    } finally {
+      setBillingActionLoading(false);
+    }
+  }
+
+  async function openStripePortal() {
+    if (!summary?.stripeConnected) {
+      return;
+    }
+
+    const session = getSession();
+    if (!session) {
+      setError(
+        locale === "ru"
+          ? "Сессия истекла. Войди заново"
+          : "Session expired. Sign in again",
+      );
+      return;
+    }
+
+    const stripeWindow = window.open("", "_blank");
+    if (stripeWindow) {
+      stripeWindow.opener = null;
+    }
+
+    try {
+      setBillingActionLoading(true);
+      setError(null);
+      const redirect = await apiRequest<BillingRedirectResponse>("/billing/portal", {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+
+      if (redirect.url) {
+        if (stripeWindow) {
+          stripeWindow.location.href = redirect.url;
+        } else {
+          window.open(redirect.url, "_blank", "noopener,noreferrer");
+        }
+        return;
+      }
+
+      stripeWindow?.close();
+    } catch (requestError) {
+      stripeWindow?.close();
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось открыть Stripe"
+            : "Failed to open Stripe",
       );
     } finally {
       setBillingActionLoading(false);
@@ -414,6 +547,10 @@ export default function BillingPageClient({
       void loadBilling();
     }
   }, []);
+
+  useEffect(() => {
+    setSelectedSeatCount((current) => Math.max(current, minimumSeatCount));
+  }, [minimumSeatCount]);
 
   return (
     <AdminShell showTopbar={false}>
@@ -484,7 +621,7 @@ export default function BillingPageClient({
             ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
-              <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
+              <article className="flex flex-col rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
                 <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
                   {locale === "ru" ? "Места и тариф" : "Seats & Plan"}
                 </h2>
@@ -559,14 +696,14 @@ export default function BillingPageClient({
                         {formatMoney(summary.price.unitAmount, summary.price.currency, locale)}
                       </p>
                       <p className="mt-1 font-heading text-sm text-muted-foreground">
-                        {locale === "ru" ? "за сотрудника / месяц" : "per employee / month"}
+                        {locale === "ru" ? "за место / месяц" : "per seat / month"}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <div
-                  className={`mt-7 flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4 ${
+                  className={`mt-auto flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4 ${
                     summary.missingSeats > 0 ? "bg-red-500" : "bg-blue-50"
                   }`}
                 >
@@ -605,20 +742,24 @@ export default function BillingPageClient({
                         {locale === "ru"
                           ? summary.trialActive
                             ? "Сотрудники могут пользоваться сервисом без оплаты до конца trial"
-                            : "Инвайты добавляют места сразу, увольнения остаются в расчете до конца месяца"
+                            : "Активные сотрудники и pending-инвайты занимают оплаченные места"
                           : summary.trialActive
                             ? "Employees can use the service without payment until the trial ends"
-                            : "Invites reserve seats immediately; dismissals stay billable until month end"}
+                            : "Active employees and pending invites use paid seats"}
                       </p>
                     </div>
                   </div>
                   {summary.missingSeats > 0 ? (
                     <div className="min-w-[112px] text-center font-heading text-white">
                       <p className="text-xl font-semibold leading-6">
-                        {formatMoney(summary.amountDue, summary.price.currency, locale)}
+                        {formatMoney(
+                          purchasePreview?.amountDue ?? summary.amountDue,
+                          summary.price.currency,
+                          locale,
+                        )}
                       </p>
                       <p className="mt-1 text-xs font-medium text-white/86">
-                        {locale === "ru" ? "К оплате" : "Amount due"}
+                        {locale === "ru" ? "К оплате сегодня" : "Due today"}
                       </p>
                     </div>
                   ) : null}
@@ -653,7 +794,7 @@ export default function BillingPageClient({
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-muted-foreground">
-                      {locale === "ru" ? "Цена за сотрудника" : "Price per employee"}
+                      {locale === "ru" ? "Цена за место" : "Price per seat"}
                     </dt>
                     <dd className="font-semibold text-foreground">
                       {formatMoney(summary.price.unitAmount, summary.price.currency, locale)}
@@ -673,7 +814,7 @@ export default function BillingPageClient({
 
                 <div className="font-heading">
                   <p className="text-sm font-medium text-muted-foreground">
-                    {locale === "ru" ? "Итого в месяц" : "Monthly total"}
+                    {locale === "ru" ? "Стоимость всех мест в месяц" : "All seats per month"}
                   </p>
                   <p className="mt-4 text-4xl font-semibold tracking-[-0.06em] text-foreground">
                     {formatMoney(summary.monthlyTotal, summary.price.currency, locale)}
@@ -686,8 +827,8 @@ export default function BillingPageClient({
                           ? "Trial до"
                           : "Trial ends"
                         : locale === "ru"
-                          ? "Следующее списание"
-                          : "Next billing date"}
+                          ? "Оплачено до"
+                          : "Paid through"}
                     </span>
                     <span className="font-semibold">{nextBillingDate}</span>
                   </div>
@@ -695,7 +836,209 @@ export default function BillingPageClient({
               </article>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+            <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+              <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
+                      {locale === "ru" ? "Купить места" : "Buy seats"}
+                    </h2>
+                    <p className="mt-1 max-w-xl font-heading text-sm text-muted-foreground">
+                      {locale === "ru"
+                        ? "Одно место активирует одного сотрудника. Новые места внутри текущего периода считаются пропорционально оставшимся дням."
+                        : "One seat activates one employee. New seats inside the current period are prorated by remaining days."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 font-heading text-sm font-semibold text-[#284bff]">
+                    <ReceiptText className="size-4" />
+                    {formatMoney(summary.price.unitAmount, summary.price.currency, locale)}
+                    <span className="font-medium text-[#284bff]/70">
+                      {locale === "ru" ? "/ место / мес." : "/ seat / mo"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  {BILLING_PURCHASE_PLANS.map((plan) => {
+                    const isSelected = selectedPlan.id === plan.id;
+                    const planName =
+                      plan.id === "monthly"
+                        ? "Monthly"
+                        : plan.id === "semi_annual"
+                          ? "Semi Annual"
+                          : "Annual";
+
+                    return (
+                      <button
+                        aria-pressed={isSelected}
+                        className={`min-h-[104px] rounded-xl border px-4 py-3 text-left font-heading transition-[border-color,background-color,transform] active:scale-[0.98] ${
+                          isSelected
+                            ? "border-[#284bff] bg-blue-50"
+                            : "border-[rgba(15,23,42,0.12)] bg-white hover:border-[#284bff]/45"
+                        }`}
+                        key={plan.id}
+                        onClick={() => setSelectedPlanId(plan.id)}
+                        type="button"
+                      >
+                        <span className="text-sm font-semibold text-foreground">
+                          {planName}
+                        </span>
+                        <span className="mt-3 block text-sm text-muted-foreground">
+                          {locale === "ru"
+                            ? `Оплата ${plan.paidMonths} мес.`
+                            : `Pay ${plan.paidMonths} mo`}
+                        </span>
+                        <span className="mt-1 block text-sm font-semibold text-[#284bff]">
+                          {locale === "ru"
+                            ? `Доступ ${plan.accessMonths} мес.`
+                            : `${plan.accessMonths} mo access`}
+                        </span>
+                        {plan.bonusMonths > 0 ? (
+                          <span className="mt-3 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            {locale === "ru"
+                              ? `+${plan.bonusMonths} мес. бесплатно`
+                              : `+${plan.bonusMonths} mo free`}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-y border-[rgba(15,23,42,0.1)] py-5">
+                  <div className="font-heading">
+                    <p className="text-sm font-semibold text-foreground">
+                      {locale === "ru" ? "Количество мест" : "Seats"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {locale === "ru"
+                        ? `Минимум сейчас: ${minimumSeatCount}`
+                        : `Current minimum: ${minimumSeatCount}`}
+                    </p>
+                  </div>
+                  <div className="flex h-11 items-center overflow-hidden rounded-xl border border-[rgba(15,23,42,0.14)] bg-white">
+                    <button
+                      aria-label={locale === "ru" ? "Уменьшить места" : "Decrease seats"}
+                      className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-blue-50 hover:text-[#284bff] disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={selectedSeatCount <= minimumSeatCount}
+                      onClick={() =>
+                        setSelectedSeatCount((current) =>
+                          Math.max(minimumSeatCount, current - 1),
+                        )
+                      }
+                      type="button"
+                    >
+                      <Minus className="size-4" />
+                    </button>
+                    <input
+                      className="h-full w-20 border-x border-[rgba(15,23,42,0.1)] text-center font-heading text-base font-semibold tabular-nums outline-none"
+                      min={minimumSeatCount}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value);
+                        setSelectedSeatCount(
+                          Number.isFinite(value)
+                            ? Math.max(minimumSeatCount, Math.floor(value))
+                            : minimumSeatCount,
+                        );
+                      }}
+                      type="number"
+                      value={selectedSeatCount}
+                    />
+                    <button
+                      aria-label={locale === "ru" ? "Добавить места" : "Increase seats"}
+                      className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-blue-50 hover:text-[#284bff]"
+                      onClick={() => setSelectedSeatCount((current) => current + 1)}
+                      type="button"
+                    >
+                      <Plus className="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {purchasePreview ? (
+                  <dl className="mt-5 grid gap-3 font-heading text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Места после оплаты" : "Seats after payment"}
+                      </dt>
+                      <dd className="font-semibold text-foreground tabular-nums">
+                        {purchasePreview.targetSeats}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Пакет на выбранный срок" : "Selected period package"}
+                      </dt>
+                      <dd className="font-semibold text-foreground">
+                        {formatMoney(
+                          purchasePreview.renewalAmount,
+                          summary.price.currency,
+                          locale,
+                        )}
+                      </dd>
+                    </div>
+                    {purchasePreview.additionalSeats > 0 ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <dt className="text-muted-foreground">
+                          {locale === "ru"
+                            ? `Доп. места до ${formatBillingDate(
+                                summary.currentPeriodEnd ?? summary.stripeCurrentPeriodEnd,
+                                locale,
+                              )}`
+                            : `Extra seats until ${formatBillingDate(
+                                summary.currentPeriodEnd ?? summary.stripeCurrentPeriodEnd,
+                                locale,
+                              )}`}
+                        </dt>
+                        <dd className="font-semibold text-foreground">
+                          {formatMoney(
+                            purchasePreview.proratedAmount,
+                            summary.price.currency,
+                            locale,
+                          )}
+                        </dd>
+                      </div>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">
+                        {locale === "ru" ? "Доступ до" : "Access until"}
+                      </dt>
+                      <dd className="font-semibold text-foreground">
+                        {formatBillingDate(purchasePreview.accessEndsAt, locale)}
+                      </dd>
+                    </div>
+                    <div className="mt-2 flex items-end justify-between gap-4 border-t border-[rgba(15,23,42,0.1)] pt-4">
+                      <dt className="text-sm font-semibold text-foreground">
+                        {locale === "ru" ? "К оплате сегодня" : "Due today"}
+                      </dt>
+                      <dd className="text-3xl font-semibold tracking-[-0.05em] text-foreground">
+                        {formatMoney(
+                          purchasePreview.amountDue,
+                          summary.price.currency,
+                          locale,
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : null}
+
+                <button
+                  className="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-[#284bff] font-heading text-sm font-semibold text-white transition-[background-color,transform] hover:bg-[#1f3bd8] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+                  disabled={billingActionLoading || !purchasePreview}
+                  onClick={openBillingFlow}
+                  type="button"
+                >
+                  <CreditCard className="size-4" />
+                  {billingActionLoading
+                    ? locale === "ru"
+                      ? "Открываем оплату..."
+                      : "Opening checkout..."
+                    : locale === "ru"
+                      ? `Оплатить ${formatMoney(purchasePreview?.amountDue ?? 0, summary.price.currency, locale)}`
+                      : `Pay ${formatMoney(purchasePreview?.amountDue ?? 0, summary.price.currency, locale)}`}
+                </button>
+              </article>
+
               <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
                 <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
                   {locale === "ru" ? "Способ оплаты" : "Payment method"}
@@ -718,8 +1061,8 @@ export default function BillingPageClient({
                       <p className="mt-1 text-sm text-muted-foreground">
                         {summary.stripeConnected
                           ? locale === "ru"
-                            ? "Карта, счета и подписка управляются в Stripe"
-                            : "Cards, invoices and subscription details are managed in Stripe"
+                            ? "Карта и счета управляются в Stripe"
+                            : "Cards and invoices are managed in Stripe"
                           : locale === "ru"
                             ? "После подключения платежи закроют недостающие места"
                             : "Once connected, payments will cover missing seats"}
@@ -743,12 +1086,12 @@ export default function BillingPageClient({
                   </span>
                 </div>
                 <button
-                  className="mt-5 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(15,23,42,0.16)] font-heading text-sm font-medium text-foreground transition-[background-color,transform] hover:bg-blue-50 active:scale-[0.96] disabled:cursor-wait disabled:opacity-60"
-                  disabled={billingActionLoading}
-                  onClick={openBillingFlow}
+                  className="mt-5 flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(15,23,42,0.16)] font-heading text-sm font-medium text-foreground transition-[background-color,transform] hover:bg-blue-50 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={billingActionLoading || !summary.stripeConnected}
+                  onClick={openStripePortal}
                   type="button"
                 >
-                  {summary.stripeConnected ? <ExternalLink className="size-4" /> : <CreditCard className="size-4" />}
+                  <ExternalLink className="size-4" />
                   {billingActionLoading
                     ? locale === "ru"
                       ? "Открываем Stripe..."
@@ -757,13 +1100,9 @@ export default function BillingPageClient({
                       ? locale === "ru"
                         ? "Управлять оплатой в Stripe"
                         : "Manage billing in Stripe"
-                      : summary.missingSeats > 0
-                        ? locale === "ru"
-                          ? "Оплатить места в Stripe"
-                          : "Pay seats in Stripe"
-                        : locale === "ru"
-                          ? "Подключить оплату Stripe"
-                          : "Connect Stripe billing"}
+                      : locale === "ru"
+                        ? "Stripe появится после оплаты"
+                        : "Stripe appears after payment"}
                 </button>
                 {summary.stripeConnected ? (
                   <button
@@ -783,7 +1122,9 @@ export default function BillingPageClient({
                   </button>
                 ) : null}
               </article>
+            </section>
 
+            <section>
               <article className="rounded-2xl bg-white p-6 shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
                 <div className="flex items-center justify-between gap-4">
                   <h2 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">

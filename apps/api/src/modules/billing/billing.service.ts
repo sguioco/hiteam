@@ -7,6 +7,12 @@ import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type BillingCurrency = 'AED' | 'USD' | 'EUR';
+type BillingPlanMonths = 1 | 6 | 12;
+
+export type BillingCheckoutRequest = {
+  seats?: number;
+  planMonths?: BillingPlanMonths;
+};
 
 type BillingPriceRule = {
   code: string;
@@ -149,6 +155,18 @@ const FALLBACK_PRICE_RULE: BillingPriceRule = {
   matchers: [],
 };
 
+const BILLING_SEAT_PLANS: Array<{
+  paidMonths: BillingPlanMonths;
+  accessMonths: number;
+  label: string;
+}> = [
+  { paidMonths: 1, accessMonths: 1, label: 'Monthly' },
+  { paidMonths: 6, accessMonths: 7, label: 'Semi Annual' },
+  { paidMonths: 12, accessMonths: 14, label: 'Annual' },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
@@ -162,14 +180,11 @@ export class BillingService {
 
   async getSummary(tenantId: string) {
     const subscription = await this.ensureSubscription(tenantId);
-    const candidateFirstPaidAt =
-      subscription.firstPaidAt ?? (subscription.paidSeats > 0 ? subscription.updatedAt : null);
-    const billingPeriod = this.getBillingPeriod(candidateFirstPaidAt);
-    const usagePeriod = billingPeriod ?? this.getCalendarMonthPeriod();
+    const activePaidPeriod = this.getActivePaidPeriod(subscription);
     const [{ activeEmployeeCount, pendingInvitationCount, usedSeats, billableSeats }, pricing] =
-      await Promise.all([this.countSeatUsage(tenantId, usagePeriod), this.resolvePricing(tenantId)]);
+      await Promise.all([this.countSeatUsage(tenantId), this.resolvePricing(tenantId)]);
 
-    const paidSeats = subscription.paidSeats;
+    const paidSeats = activePaidPeriod ? subscription.paidSeats : 0;
     const requiredSeats = Math.max(paidSeats, billableSeats);
     const rawMissingSeats = Math.max(0, requiredSeats - paidSeats);
     const trialActive = this.isTrialActive(subscription);
@@ -179,16 +194,18 @@ export class BillingService {
         : null;
     const missingSeats = trialActive ? 0 : rawMissingSeats;
     const firstPaidAt = await this.ensureFirstPaidAt(subscription, rawMissingSeats);
-    const activeBillingPeriod = this.getBillingPeriod(firstPaidAt);
-    const stripeConnected = Boolean(subscription.stripeSubscriptionId || subscription.stripeSubscriptionItemId);
+    const stripeConnected = Boolean(
+      (subscription.stripeCustomerId && firstPaidAt) ||
+        subscription.stripeSubscriptionId ||
+        subscription.stripeSubscriptionItemId,
+    );
     const nextBillingAt =
-      subscription.stripeCurrentPeriodEnd ??
-      activeBillingPeriod?.end ??
+      activePaidPeriod?.end ??
       futureTrialEndsAt ??
       null;
     const serviceActive =
       trialActive ||
-      (Boolean(firstPaidAt) &&
+      (Boolean(activePaidPeriod) &&
         rawMissingSeats === 0 &&
         !this.isStripeBlockingStatus(subscription.status));
     const status = trialActive ? 'TRIALING' : serviceActive ? subscription.status : 'PAYMENT_REQUIRED';
@@ -209,8 +226,8 @@ export class BillingService {
       monthlyTotal: requiredSeats * pricing.unitAmount,
       amountDue: missingSeats * pricing.unitAmount,
       billingStartedAt: firstPaidAt?.toISOString() ?? null,
-      currentPeriodStart: activeBillingPeriod?.start.toISOString() ?? null,
-      currentPeriodEnd: activeBillingPeriod?.end.toISOString() ?? null,
+      currentPeriodStart: activePaidPeriod?.start.toISOString() ?? null,
+      currentPeriodEnd: activePaidPeriod?.end.toISOString() ?? null,
       nextBillingAt: nextBillingAt?.toISOString() ?? null,
       serviceActive,
       stripeConnected,
@@ -231,6 +248,11 @@ export class BillingService {
 
   async assertCanAddSeatOccupant(tenantId: string) {
     const summary = await this.getSummary(tenantId);
+
+    if (!summary.trialActive && summary.usedSeats + 1 > summary.paidSeats) {
+      throw this.buildPaymentRequiredException();
+    }
+
     return summary;
   }
 
@@ -248,27 +270,51 @@ export class BillingService {
     );
   }
 
-  async createCheckoutSession(tenantId: string, userId: string) {
+  async createCheckoutSession(
+    tenantId: string,
+    userId: string,
+    request: BillingCheckoutRequest = {},
+  ) {
     const subscription = await this.ensureSubscription(tenantId);
     const summary = await this.getSummary(tenantId);
     const customerId = await this.ensureStripeCustomer(tenantId, userId);
-
-    if (subscription.stripeSubscriptionId && subscription.stripeSubscriptionItemId) {
-      await this.syncStripeSeatQuantity(tenantId);
-      return this.createPortalSession(tenantId);
-    }
+    const plan = this.resolveSeatPlan(request.planMonths);
+    const requestedSeats = this.normalizeSeatCount(request.seats);
+    const targetSeats = Math.max(
+      1,
+      summary.requiredSeats,
+      summary.usedSeats,
+      summary.billableSeats,
+      requestedSeats ?? summary.requiredSeats,
+    );
+    const purchase = this.calculateSeatPurchase({
+      currentPaidSeats: summary.paidSeats,
+      currentPeriodEnd: summary.currentPeriodEnd,
+      plan,
+      targetSeats,
+      unitAmount: summary.price.unitAmount,
+    });
 
     const stripe = this.getStripe();
-    const price = await this.getStripePriceByLookupKey(summary.price.stripeLookupKey);
-    const quantity = Math.max(1, summary.requiredSeats);
     const urlBase = this.getWebBaseUrl();
     const checkoutSession = await stripe.checkout.sessions.create({
-      mode: 'subscription',
+      mode: 'payment',
       customer: customerId,
       line_items: [
         {
-          price: price.id,
-          quantity,
+          price_data: {
+            currency: summary.price.currency.toLowerCase(),
+            product_data: {
+              name: `HiTeam ${targetSeats} seats - ${plan.label}`,
+              metadata: {
+                tenantId,
+                planMonths: String(plan.paidMonths),
+                accessMonths: String(plan.accessMonths),
+              },
+            },
+            unit_amount: purchase.amountDue * 100,
+          },
+          quantity: 1,
         },
       ],
       allow_promotion_codes: false,
@@ -280,13 +326,28 @@ export class BillingService {
         name: 'auto',
       },
       metadata: {
+        billingMode: 'seat_purchase',
         tenantId,
+        targetSeats: String(targetSeats),
+        planMonths: String(plan.paidMonths),
+        accessMonths: String(plan.accessMonths),
+        periodStart: purchase.periodStart.toISOString(),
+        paidThrough: purchase.paidThrough.toISOString(),
+        amountDue: String(purchase.amountDue),
+        proratedAmount: String(purchase.proratedAmount),
+        renewalAmount: String(purchase.renewalAmount),
+        currency: summary.price.currency,
         regionCode: summary.price.regionCode,
         priceLookupKey: summary.price.stripeLookupKey,
       },
-      subscription_data: {
+      payment_intent_data: {
         metadata: {
+          billingMode: 'seat_purchase',
           tenantId,
+          targetSeats: String(targetSeats),
+          planMonths: String(plan.paidMonths),
+          accessMonths: String(plan.accessMonths),
+          paidThrough: purchase.paidThrough.toISOString(),
           regionCode: summary.price.regionCode,
           priceLookupKey: summary.price.stripeLookupKey,
         },
@@ -299,9 +360,8 @@ export class BillingService {
       where: { id: subscription.id },
       data: {
         stripeCustomerId: customerId,
-        stripePriceId: price.id,
         stripePriceLookupKey: summary.price.stripeLookupKey,
-        stripeCurrency: price.currency.toUpperCase(),
+        stripeCurrency: summary.price.currency,
       },
     });
     this.kommoService.recordBillingUpdated(tenantId, 'checkout_session_created');
@@ -315,7 +375,7 @@ export class BillingService {
   async createPortalSession(tenantId: string) {
     const subscription = await this.ensureSubscription(tenantId);
 
-    if (!subscription.stripeCustomerId || !subscription.stripeSubscriptionId) {
+    if (!subscription.stripeCustomerId) {
       throw new HttpException(
         { message: 'Stripe customer is not connected yet.' },
         HttpStatus.PRECONDITION_REQUIRED,
@@ -381,12 +441,8 @@ export class BillingService {
       return null;
     }
 
-    const candidateFirstPaidAt =
-      subscription.firstPaidAt ?? (subscription.paidSeats > 0 ? subscription.updatedAt : null);
-    const billingPeriod = this.getBillingPeriod(candidateFirstPaidAt);
-    const usagePeriod = billingPeriod ?? this.getCalendarMonthPeriod();
     const [{ billableSeats }, pricing] = await Promise.all([
-      this.countSeatUsage(tenantId, usagePeriod),
+      this.countSeatUsage(tenantId),
       this.resolvePricing(tenantId),
     ]);
     const quantity = Math.max(1, billableSeats);
@@ -449,6 +505,7 @@ export class BillingService {
 
     switch (event.type) {
       case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
         await this.handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
         break;
       case 'customer.subscription.created':
@@ -615,7 +672,175 @@ export class BillingService {
     ].includes(this.normalizeStripeStatus(status));
   }
 
+  private getActivePaidPeriod(
+    subscription: {
+      firstPaidAt: Date | null;
+      paidSeats: number;
+      stripeCurrentPeriodStart: Date | null;
+      stripeCurrentPeriodEnd: Date | null;
+      updatedAt: Date;
+    },
+    referenceDate = new Date(),
+  ) {
+    if (subscription.paidSeats <= 0) {
+      return null;
+    }
+
+    if (
+      subscription.stripeCurrentPeriodStart &&
+      subscription.stripeCurrentPeriodEnd &&
+      subscription.stripeCurrentPeriodEnd > referenceDate
+    ) {
+      return {
+        start: subscription.stripeCurrentPeriodStart,
+        end: subscription.stripeCurrentPeriodEnd,
+      };
+    }
+
+    if (subscription.stripeCurrentPeriodEnd) {
+      return null;
+    }
+
+    const candidateFirstPaidAt =
+      subscription.firstPaidAt ?? (subscription.paidSeats > 0 ? subscription.updatedAt : null);
+    const legacyPeriod = this.getBillingPeriod(candidateFirstPaidAt, referenceDate);
+
+    return legacyPeriod?.end && legacyPeriod.end > referenceDate ? legacyPeriod : null;
+  }
+
+  private resolveSeatPlan(planMonths: unknown) {
+    const normalizedPlanMonths = Number(planMonths);
+    return (
+      BILLING_SEAT_PLANS.find((plan) => plan.paidMonths === normalizedPlanMonths) ??
+      BILLING_SEAT_PLANS[0]
+    );
+  }
+
+  private normalizeSeatCount(value: unknown) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+
+    return Math.max(1, Math.floor(numeric));
+  }
+
+  private calculateSeatPurchase(args: {
+    currentPaidSeats: number;
+    currentPeriodEnd: string | null;
+    plan: (typeof BILLING_SEAT_PLANS)[number];
+    targetSeats: number;
+    unitAmount: number;
+  }) {
+    const now = new Date();
+    const currentPeriodEnd = args.currentPeriodEnd ? new Date(args.currentPeriodEnd) : null;
+    const currentPaidThrough =
+      currentPeriodEnd && !Number.isNaN(currentPeriodEnd.getTime()) && currentPeriodEnd > now
+        ? currentPeriodEnd
+        : null;
+    const remainingDays = currentPaidThrough
+      ? Math.max(0, (currentPaidThrough.getTime() - now.getTime()) / DAY_MS)
+      : 0;
+    const additionalSeats = currentPaidThrough
+      ? Math.max(0, args.targetSeats - args.currentPaidSeats)
+      : 0;
+    const proratedAmount =
+      additionalSeats > 0
+        ? Math.ceil(additionalSeats * args.unitAmount * (remainingDays / 30))
+        : 0;
+    const renewalAmount = args.targetSeats * args.unitAmount * args.plan.paidMonths;
+    const extensionStart = currentPaidThrough ?? now;
+    const paidThrough = this.addUtcMonths(extensionStart, args.plan.accessMonths);
+
+    return {
+      additionalSeats,
+      amountDue: Math.max(1, proratedAmount + renewalAmount),
+      paidThrough,
+      periodStart: now,
+      proratedAmount,
+      renewalAmount,
+    };
+  }
+
+  private readMetadataDate(value: string | null | undefined) {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private async applySeatPurchaseCheckout(session: Stripe.Checkout.Session) {
+    if (
+      session.payment_status &&
+      !['paid', 'no_payment_required'].includes(session.payment_status)
+    ) {
+      return;
+    }
+
+    const metadata = session.metadata ?? {};
+    const tenantId = session.client_reference_id ?? metadata.tenantId;
+    const targetSeats = this.normalizeSeatCount(metadata.targetSeats);
+    const periodStart = this.readMetadataDate(metadata.periodStart) ?? new Date();
+    const paidThrough = this.readMetadataDate(metadata.paidThrough);
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id ?? null;
+
+    if (!tenantId || !targetSeats || !paidThrough) {
+      this.logger.warn(`Unable to apply Stripe seat purchase checkout ${session.id}.`);
+      return;
+    }
+
+    const current = await this.prisma.billingSubscription.findUnique({
+      where: { tenantId },
+      select: { firstPaidAt: true },
+    });
+    const paidAt = session.created ? new Date(session.created * 1000) : new Date();
+
+    await this.prisma.billingSubscription.upsert({
+      where: { tenantId },
+      update: {
+        paidSeats: targetSeats,
+        status: 'ACTIVE',
+        firstPaidAt: current?.firstPaidAt ?? paidAt,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: null,
+        stripeSubscriptionItemId: null,
+        stripePriceId: null,
+        stripePriceLookupKey: metadata.priceLookupKey ?? `seat_purchase_${metadata.planMonths ?? '1'}m`,
+        stripeCurrency: session.currency?.toUpperCase() ?? metadata.currency ?? null,
+        stripeCurrentPeriodStart: periodStart,
+        stripeCurrentPeriodEnd: paidThrough,
+        stripeCancelAtPeriodEnd: false,
+      },
+      create: {
+        tenantId,
+        paidSeats: targetSeats,
+        status: 'ACTIVE',
+        firstPaidAt: paidAt,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: null,
+        stripeSubscriptionItemId: null,
+        stripePriceId: null,
+        stripePriceLookupKey: metadata.priceLookupKey ?? `seat_purchase_${metadata.planMonths ?? '1'}m`,
+        stripeCurrency: session.currency?.toUpperCase() ?? metadata.currency ?? null,
+        stripeCurrentPeriodStart: periodStart,
+        stripeCurrentPeriodEnd: paidThrough,
+        stripeCancelAtPeriodEnd: false,
+      },
+    });
+    this.kommoService.recordBillingUpdated(tenantId, 'seat_purchase_paid');
+  }
+
   private async handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+    if (session.metadata?.billingMode === 'seat_purchase') {
+      await this.applySeatPurchaseCheckout(session);
+      return;
+    }
+
     const subscriptionId =
       typeof session.subscription === 'string'
         ? session.subscription
@@ -840,31 +1065,16 @@ export class BillingService {
     return billingSubscription?.tenantId ?? null;
   }
 
-  private async countSeatUsage(
-    tenantId: string,
-    period: { start: Date; end: Date },
-  ) {
+  private async countSeatUsage(tenantId: string) {
     const [
       activeEmployeeCount,
-      recentlyTerminatedEmployeeCount,
       pendingInvitationCount,
-      recentStandaloneInvitationCount,
     ] = await Promise.all([
       this.prisma.employee.count({
         where: {
           tenantId,
           status: {
             not: EmployeeStatus.TERMINATED,
-          },
-        },
-      }),
-      this.prisma.employee.count({
-        where: {
-          tenantId,
-          status: EmployeeStatus.TERMINATED,
-          updatedAt: {
-            gte: period.start,
-            lt: period.end,
           },
         },
       }),
@@ -877,37 +1087,14 @@ export class BillingService {
           },
         },
       }),
-      this.prisma.employeeInvitation.count({
-        where: {
-          tenantId,
-          userId: null,
-          employeeId: null,
-          invitedAt: {
-            gte: period.start,
-            lt: period.end,
-          },
-        },
-      }),
     ]);
-    const billableInvitationCount = Math.max(
-      pendingInvitationCount,
-      recentStandaloneInvitationCount,
-    );
 
     return {
       activeEmployeeCount,
       pendingInvitationCount,
       usedSeats: activeEmployeeCount + pendingInvitationCount,
-      billableSeats:
-        activeEmployeeCount + recentlyTerminatedEmployeeCount + billableInvitationCount,
+      billableSeats: activeEmployeeCount + pendingInvitationCount,
     };
-  }
-
-  private getCalendarMonthPeriod(referenceDate = new Date()) {
-    const start = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1));
-    const end = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1));
-
-    return { start, end };
   }
 
   private getBillingPeriod(firstPaidAt: Date | null, referenceDate = new Date()) {

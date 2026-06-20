@@ -1175,6 +1175,15 @@ export default function Schedule({
     return map;
   }, [groups]);
 
+  const createShiftEmployeeOptions = useMemo(
+    () =>
+      employees.map((employee) => ({
+        ...employee,
+        group: employeeGroupByEmployeeId.get(employee.id) ?? null,
+      })),
+    [employeeGroupByEmployeeId, employees],
+  );
+
   const enrichedShifts = useMemo<EnrichedShift[]>(
     () =>
       shifts
@@ -2609,7 +2618,12 @@ export default function Schedule({
   }
 
   return (
-    <AdminShell mode={mode}>
+    <AdminShell
+      mode={mode}
+      onCreateShift={
+        !isEmployeeMode ? () => openCreateShiftForDay(today) : undefined
+      }
+    >
       <main className="page-shell section-stack min-h-0 overflow-y-auto scrollbar-hide">
           <section className="mb-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -3388,7 +3402,9 @@ export default function Schedule({
               <EmployeeDropdown
                 allEmployeesLabel={ui.allEmployees}
                 employeeLabel={ui.employee}
-                employees={employees}
+                employees={createShiftEmployeeOptions}
+                groupBy="group"
+                groupFallbackLabel={ui.withoutGroup}
                 loadingLabel={ui.loading}
                 mode={editingShiftId ? "single" : "multiple"}
                 noEmployeesLabel={ui.noEligibleEmployees}
@@ -3401,6 +3417,7 @@ export default function Schedule({
                   }))
                 }
                 placeholder={ui.selectEmployee}
+                portal={false}
                 searchPlaceholder={ui.search}
                 selectedEmployeeIds={createShiftDraft.employeeIds}
                 selectedEmployeesLabel={(count) => ui.selectedEmployees(count)}

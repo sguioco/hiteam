@@ -28,6 +28,7 @@ export type CreateDialogAction = {
 
 type CreateDialogProps = {
   actions?: CreateDialogAction[];
+  onCreateShift?: () => void;
   onCreateTask?: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,6 +36,7 @@ type CreateDialogProps = {
 
 export const CreateDialog = ({
   actions,
+  onCreateShift,
   onCreateTask,
   open,
   onOpenChange,
@@ -64,13 +66,18 @@ export const CreateDialog = ({
     },
     {
       id: "shift",
-      href: toAdminHref("/schedule"),
+      href: onCreateShift ? undefined : toAdminHref("/schedule"),
       title: locale === "ru" ? "Смена" : "Shift",
       description:
-        locale === "ru"
-          ? "Перейти в расписание для создания смены или шаблона"
-          : "Open schedule to create a shift or template",
+        onCreateShift
+          ? locale === "ru"
+            ? "Открыть окно создания смены"
+            : "Open the create shift dialog"
+          : locale === "ru"
+            ? "Перейти в расписание для создания смены или шаблона"
+            : "Open schedule to create a shift or template",
       icon: CalendarRange,
+      onSelect: onCreateShift,
     },
     {
       id: "news",
@@ -105,22 +112,22 @@ export const CreateDialog = ({
 
             if (action.href) {
               return (
-              <Link
-                className="grid gap-3 rounded-[24px] border border-[color:var(--border)] bg-[rgba(246,248,252,0.84)] p-4 transition duration-150 hover:-translate-y-0.5 hover:border-[rgba(40,75,255,0.18)] hover:bg-white"
-                href={action.href}
-                key={action.id}
-                onClick={() => onOpenChange(false)}
-              >
-                <Icon className="size-5 text-[color:var(--accent)]" />
-                <span className="grid gap-1">
-                  <strong className="text-base text-[color:var(--foreground)]">
-                    {action.title}
-                  </strong>
-                  <span className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {action.description}
+                <Link
+                  className="grid gap-3 rounded-[24px] border border-[color:var(--border)] bg-[rgba(246,248,252,0.84)] p-4 transition duration-150 hover:-translate-y-0.5 hover:border-[rgba(40,75,255,0.18)] hover:bg-white"
+                  href={action.href}
+                  key={action.id}
+                  onClick={() => onOpenChange(false)}
+                >
+                  <Icon className="size-5 text-[color:var(--accent)]" />
+                  <span className="grid gap-1">
+                    <strong className="text-base text-[color:var(--foreground)]">
+                      {action.title}
+                    </strong>
+                    <span className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {action.description}
+                    </span>
                   </span>
-                </span>
-              </Link>
+                </Link>
               );
             }
 

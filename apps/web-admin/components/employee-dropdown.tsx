@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search, Users } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Search, Users } from "lucide-react";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { SelectOptionAvatar } from "@/components/ui/select";
 import { SelectableOptionButton } from "@/components/ui/selectable-listbox";
@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 
 export type EmployeeDropdownOption = {
   avatarUrl?: string | null;
+  department?: { id?: string | null; name?: string | null } | string | null;
   displayName?: string;
   employeeNumber?: string | null;
   firstName?: string | null;
+  group?: { id?: string | null; name?: string | null } | string | null;
   id: string;
   lastName?: string | null;
   middleName?: string | null;
@@ -30,12 +32,15 @@ type EmployeeDropdownProps = {
   disabled?: boolean;
   employeeLabel: string;
   employees: EmployeeDropdownOption[];
+  groupBy?: "department" | "group" | "none";
+  groupFallbackLabel?: string;
   isLoading?: boolean;
   loadingLabel: string;
   mode: "single" | "multiple";
   noEmployeesLabel: string;
   onSelectedEmployeeIdsChange: (employeeIds: string[]) => void;
   placeholder: string;
+  portal?: boolean;
   searchPlaceholder: string;
   selectedEmployeeIds: string[];
   selectedEmployeesLabel: (count: number) => string;
@@ -47,6 +52,12 @@ type DropdownMetrics = {
   maxHeight: number;
   top: number;
   width: number;
+};
+
+type EmployeeGroupSection = {
+  employees: EmployeeDropdownOption[];
+  id: string;
+  label: string;
 };
 
 function getEmployeeName(employee: EmployeeDropdownOption) {
@@ -77,6 +88,24 @@ function getEmployeeSubtitle(
   return secondary ? `${primary} · ${secondary}` : primary;
 }
 
+function resolveEntityName(
+  value: { id?: string | null; name?: string | null } | string | null | undefined,
+) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized ? { id: normalized, name: normalized } : null;
+  }
+
+  const name = value.name?.trim();
+  const id = value.id?.trim() || name;
+
+  return name && id ? { id, name } : null;
+}
+
 export function EmployeeDropdown({
   allEmployeesLabel,
   allOptionBehavior = "select-all",
@@ -85,12 +114,15 @@ export function EmployeeDropdown({
   disabled = false,
   employeeLabel,
   employees,
+  groupBy = "none",
+  groupFallbackLabel,
   isLoading = false,
   loadingLabel,
   mode,
   noEmployeesLabel,
   onSelectedEmployeeIdsChange,
   placeholder,
+  portal = true,
   searchPlaceholder,
   selectedEmployeeIds,
   selectedEmployeesLabel,
@@ -98,6 +130,9 @@ export function EmployeeDropdown({
 }: EmployeeDropdownProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [dropdownMetrics, setDropdownMetrics] = useState<DropdownMetrics | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -133,6 +168,42 @@ export function EmployeeDropdown({
         return `${name} ${subtitle}`.toLowerCase().includes(normalizedQuery);
       })
     : employees;
+  const groupedEmployees = useMemo<EmployeeGroupSection[]>(() => {
+    if (groupBy === "none") {
+      return [
+        {
+          id: "__all_employees__",
+          label: "",
+          employees: filteredEmployees,
+        },
+      ];
+    }
+
+    const sections = new Map<string, EmployeeGroupSection>();
+    const fallbackLabel = groupFallbackLabel ?? employeeLabel;
+
+    filteredEmployees.forEach((employee) => {
+      const entity = resolveEntityName(
+        groupBy === "group" ? employee.group : employee.department,
+      );
+      const id = entity?.id ?? "__without_group__";
+      const label = entity?.name ?? fallbackLabel;
+
+      if (!sections.has(id)) {
+        sections.set(id, { id, label, employees: [] });
+      }
+
+      sections.get(id)!.employees.push(employee);
+    });
+
+    return Array.from(sections.values()).sort((left, right) => {
+      if (left.id === "__without_group__") return 1;
+      if (right.id === "__without_group__") return -1;
+      return left.label.localeCompare(right.label);
+    });
+  }, [employeeLabel, filteredEmployees, groupBy, groupFallbackLabel]);
+  const shouldRenderGroups =
+    groupBy !== "none" && groupedEmployees.some((group) => group.label);
 
   function updateDropdownMetrics() {
     const trigger = containerRef.current;
@@ -172,7 +243,7 @@ export function EmployeeDropdown({
   }
 
   useLayoutEffect(() => {
-    if (!open) {
+    if (!open || !portal) {
       setDropdownMetrics(null);
       return;
     }
@@ -186,7 +257,7 @@ export function EmployeeDropdown({
       window.removeEventListener("resize", updateDropdownMetrics);
       window.removeEventListener("scroll", updateDropdownMetrics, true);
     };
-  }, [filteredEmployees.length, open]);
+  }, [filteredEmployees.length, open, portal]);
 
   useEffect(() => {
     if (!open) {
@@ -269,127 +340,243 @@ export function EmployeeDropdown({
     onSelectedEmployeeIdsChange([...selectedEmployeeIds, employeeId]);
   }
 
-  const dropdownMenu =
-    open && dropdownMetrics && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            aria-multiselectable={mode === "multiple"}
-            className="fixed z-[1000] overflow-y-auto rounded-[26px] border border-[rgba(24,24,27,0.12)] bg-white/98 p-2 shadow-[0_22px_54px_rgba(15,23,42,0.16)] backdrop-blur-sm"
-            ref={menuRef}
-            role="listbox"
-            style={{
+  function toggleGroupCollapsed(groupId: string) {
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+
+      return next;
+    });
+  }
+
+  function selectEmployeeGroup(employeeIds: string[]) {
+    if (mode === "single") {
+      return;
+    }
+
+    const allGroupSelected = employeeIds.every((employeeId) =>
+      selectedIds.has(employeeId),
+    );
+
+    if (allGroupSelected) {
+      onSelectedEmployeeIdsChange(
+        selectedEmployeeIds.filter((employeeId) => !employeeIds.includes(employeeId)),
+      );
+      return;
+    }
+
+    onSelectedEmployeeIdsChange(
+      Array.from(new Set([...selectedEmployeeIds, ...employeeIds])),
+    );
+  }
+
+  function renderEmployeeOption(employee: EmployeeDropdownOption) {
+    const label = getEmployeeName(employee);
+    const isSelected = selectedIds.has(employee.id);
+
+    return (
+      <SelectableOptionButton
+        closeOnSelected={false}
+        key={employee.id}
+        onClose={() => setOpen(false)}
+        onSelect={() => selectEmployee(employee.id)}
+        selected={isSelected}
+      >
+        <SelectOptionAvatar
+          alt={label}
+          seed={label || employee.id}
+          src={employee.avatarUrl ?? null}
+        />
+        <span className="grid min-w-0 gap-0.5">
+          <span className="truncate text-sm font-semibold leading-[1.2] text-current">
+            {label}
+          </span>
+          <span
+            className={cn(
+              "truncate text-xs leading-[1.25]",
+              isSelected ? "text-white/75" : "text-[rgba(72,84,104,0.72)]",
+            )}
+          >
+            {getEmployeeSubtitle(employee, employeeLabel)}
+          </span>
+        </span>
+        {isSelected ? (
+          <Check className="absolute right-3 size-4 text-white" />
+        ) : null}
+      </SelectableOptionButton>
+    );
+  }
+
+  const menuContent = (
+    <div
+      aria-multiselectable={mode === "multiple"}
+      className={cn(
+        "pointer-events-auto overflow-y-auto rounded-[26px] border border-[rgba(24,24,27,0.12)] bg-white/98 p-2 shadow-[0_22px_54px_rgba(15,23,42,0.16)] backdrop-blur-sm",
+        portal
+          ? "fixed z-[1000]"
+          : "absolute left-0 top-[calc(100%+0.375rem)] z-[80] w-full",
+      )}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      ref={menuRef}
+      role="listbox"
+      style={
+        portal && dropdownMetrics
+          ? {
               left: dropdownMetrics.left,
               maxHeight: dropdownMetrics.maxHeight,
               top: dropdownMetrics.top,
               width: dropdownMetrics.width,
-            }}
-          >
-            <div className="sticky top-0 z-10 mb-2 bg-white/98 pb-2">
-              <label className="flex min-h-10 items-center gap-2 rounded-[18px] border border-[rgba(24,24,27,0.1)] bg-[rgba(246,247,251,0.92)] px-3">
-                <Search className="size-4 shrink-0 text-[rgba(72,84,104,0.58)]" />
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  value={query}
-                />
-              </label>
-            </div>
+            }
+          : {
+              maxHeight: "min(384px, calc(100dvh - 8rem))",
+            }
+      }
+    >
+      <div className="sticky top-0 z-10 mb-2 bg-white/98 pb-2">
+        <label className="flex min-h-10 items-center gap-2 rounded-[18px] border border-[rgba(24,24,27,0.1)] bg-[rgba(246,247,251,0.92)] px-3">
+          <Search className="size-4 shrink-0 text-[rgba(72,84,104,0.58)]" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+            value={query}
+          />
+        </label>
+      </div>
 
-            {isLoading ? (
-              <WorkspaceLoading
-                className="min-h-[124px]"
-                iconClassName="size-8"
-                label={loadingLabel}
-              />
-            ) : employees.length ? (
-              <>
-                {showAllEmployeesOption ? (
-                  <>
-                    <SelectableOptionButton
-                      closeOnSelected={false}
-                      onClose={() => setOpen(false)}
-                      onSelect={selectAllEmployees}
-                      selected={allOptionSelected}
-                    >
-                      <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-[rgba(72,84,104,0.72)]">
-                        <Users className="size-4" />
-                      </span>
-                      <span className="grid min-w-0 gap-0.5">
-                        <span className="truncate text-sm font-semibold leading-[1.2] text-current">
-                          {allEmployeesLabel}
-                        </span>
-                        <span
-                          className={cn(
-                            "truncate text-xs leading-[1.25]",
-                            allOptionSelected ? "text-white/75" : "text-[rgba(72,84,104,0.72)]",
-                          )}
-                        >
-                          {selectedEmployeesLabel(employees.length)}
-                        </span>
-                      </span>
-                      {allOptionSelected ? (
-                        <Check className="absolute right-3 size-4 text-white" />
-                      ) : null}
-                    </SelectableOptionButton>
-
-                    <div className="my-2 h-px bg-[rgba(15,23,42,0.08)]" />
-                  </>
+      {isLoading ? (
+        <WorkspaceLoading
+          className="min-h-[124px]"
+          iconClassName="size-8"
+          label={loadingLabel}
+        />
+      ) : employees.length ? (
+        <>
+          {showAllEmployeesOption ? (
+            <>
+              <SelectableOptionButton
+                closeOnSelected={false}
+                onClose={() => setOpen(false)}
+                onSelect={selectAllEmployees}
+                selected={allOptionSelected}
+              >
+                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-[rgba(72,84,104,0.72)]">
+                  <Users className="size-4" />
+                </span>
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="truncate text-sm font-semibold leading-[1.2] text-current">
+                    {allEmployeesLabel}
+                  </span>
+                  <span
+                    className={cn(
+                      "truncate text-xs leading-[1.25]",
+                      allOptionSelected
+                        ? "text-white/75"
+                        : "text-[rgba(72,84,104,0.72)]",
+                    )}
+                  >
+                    {selectedEmployeesLabel(employees.length)}
+                  </span>
+                </span>
+                {allOptionSelected ? (
+                  <Check className="absolute right-3 size-4 text-white" />
                 ) : null}
+              </SelectableOptionButton>
 
-                {filteredEmployees.length ? (
-                  filteredEmployees.map((employee) => {
-                    const label = getEmployeeName(employee);
-                    const isSelected = selectedIds.has(employee.id);
+              <div className="my-2 h-px bg-[rgba(15,23,42,0.08)]" />
+            </>
+          ) : null}
 
-                    return (
-                      <SelectableOptionButton
-                        closeOnSelected={false}
-                        key={employee.id}
-                        onClose={() => setOpen(false)}
-                        onSelect={() => selectEmployee(employee.id)}
-                        selected={isSelected}
+          {filteredEmployees.length ? (
+            shouldRenderGroups ? (
+              groupedEmployees.map((section) => {
+                const isCollapsed = collapsedGroupIds.has(section.id);
+                const employeeIds = section.employees.map((employee) => employee.id);
+                const selectedInGroupCount = employeeIds.filter((employeeId) =>
+                  selectedIds.has(employeeId),
+                ).length;
+                const allGroupSelected =
+                  employeeIds.length > 0 &&
+                  selectedInGroupCount === employeeIds.length;
+                const someGroupSelected =
+                  selectedInGroupCount > 0 && !allGroupSelected;
+
+                return (
+                  <div className="mt-2 first:mt-0" key={section.id}>
+                    <div className="flex min-h-10 items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-1 pt-2 first:border-t-0 first:pt-0">
+                      <button
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition-[background-color] duration-150 hover:bg-[rgba(15,23,42,0.04)]"
+                        onClick={() => toggleGroupCollapsed(section.id)}
+                        type="button"
                       >
-                        <SelectOptionAvatar
-                          alt={label}
-                          seed={label || employee.id}
-                          src={employee.avatarUrl ?? null}
-                        />
-                        <span className="grid min-w-0 gap-0.5">
-                          <span className="truncate text-sm font-semibold leading-[1.2] text-current">
-                            {label}
-                          </span>
-                          <span
-                            className={cn(
-                              "truncate text-xs leading-[1.25]",
-                              isSelected
-                                ? "text-white/75"
-                                : "text-[rgba(72,84,104,0.72)]",
-                            )}
-                          >
-                            {getEmployeeSubtitle(employee, employeeLabel)}
-                          </span>
+                        {isCollapsed ? (
+                          <ChevronRight className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
+                        ) : (
+                          <ChevronDown className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
+                        )}
+                        <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgba(72,84,104,0.72)]">
+                          {section.label}
                         </span>
-                        {isSelected ? (
-                          <Check className="absolute right-3 size-4 text-white" />
-                        ) : null}
-                      </SelectableOptionButton>
-                    );
-                  })
-                ) : (
-                  <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
-                    {noEmployeesLabel}
+                      </button>
+
+                      {mode === "multiple" ? (
+                        <button
+                          aria-label={`${section.label}: ${selectedInGroupCount}/${employeeIds.length}`}
+                          className={cn(
+                            "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+                            allGroupSelected
+                              ? "bg-[color:var(--accent)] text-white"
+                              : someGroupSelected
+                                ? "bg-[rgba(40,75,255,0.12)] text-[color:var(--accent)]"
+                                : "bg-[rgba(15,23,42,0.05)] text-[rgba(72,84,104,0.78)] hover:bg-[rgba(15,23,42,0.08)]",
+                          )}
+                          onClick={() => selectEmployeeGroup(employeeIds)}
+                          type="button"
+                        >
+                          {allGroupSelected ? <Check className="size-3.5" /> : null}
+                          <span>
+                            {selectedInGroupCount}/{employeeIds.length}
+                          </span>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {isCollapsed
+                      ? null
+                      : section.employees.map((employee) =>
+                          renderEmployeeOption(employee),
+                        )}
                   </div>
-                )}
-              </>
+                );
+              })
             ) : (
-              <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
-                {noEmployeesLabel}
-              </div>
-            )}
-          </div>,
-          document.body,
-        )
+              filteredEmployees.map((employee) => renderEmployeeOption(employee))
+            )
+          ) : (
+            <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
+              {noEmployeesLabel}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
+          {noEmployeesLabel}
+        </div>
+      )}
+    </div>
+  );
+
+  const dropdownMenu =
+    open && portal && dropdownMetrics && typeof document !== "undefined"
+      ? createPortal(menuContent, document.body)
+      : open && !portal
+        ? menuContent
       : null;
 
   return (
@@ -422,8 +609,9 @@ export function EmployeeDropdown({
             )}
           />
         </button>
+        {!portal ? dropdownMenu : null}
       </div>
-      {dropdownMenu}
+      {portal ? dropdownMenu : null}
     </>
   );
 }

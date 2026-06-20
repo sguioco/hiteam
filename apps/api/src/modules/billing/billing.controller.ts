@@ -1,10 +1,10 @@
-import { Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { BillingService } from './billing.service';
+import { BillingService, type BillingCheckoutRequest } from './billing.service';
 
 @Controller('billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,8 +18,8 @@ export class BillingController {
   }
 
   @Post('checkout')
-  checkout(@CurrentUser() user: JwtUser) {
-    return this.billingService.createCheckoutSession(user.tenantId, user.sub);
+  checkout(@CurrentUser() user: JwtUser, @Body() body: BillingCheckoutRequest = {}) {
+    return this.billingService.createCheckoutSession(user.tenantId, user.sub, body);
   }
 
   @Post('portal')
