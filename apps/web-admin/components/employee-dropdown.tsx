@@ -510,6 +510,26 @@ export function EmployeeDropdown({
                 return (
                   <div className="mt-2 first:mt-0" key={section.id}>
                     <div className="flex min-h-10 items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-1 pt-2 first:border-t-0 first:pt-0">
+                      {mode === "multiple" ? (
+                        <button
+                          aria-label={`${section.label}: ${selectedInGroupCount}/${employeeIds.length}`}
+                          className={cn(
+                            "inline-flex size-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96]",
+                            allGroupSelected
+                              ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
+                              : someGroupSelected
+                                ? "border-[color:var(--accent)] bg-white text-[color:var(--accent)]"
+                                : "border-[rgba(72,84,104,0.28)] bg-white text-transparent hover:border-[color:var(--accent)]",
+                          )}
+                          onClick={() => selectEmployeeGroup(employeeIds)}
+                          type="button"
+                        >
+                          {allGroupSelected || someGroupSelected ? (
+                            <Check className="size-3.5" />
+                          ) : null}
+                        </button>
+                      ) : null}
+
                       <button
                         className="flex min-w-0 flex-1 items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition-[background-color] duration-150 hover:bg-[rgba(15,23,42,0.04)]"
                         onClick={() => toggleGroupCollapsed(section.id)}
@@ -523,28 +543,10 @@ export function EmployeeDropdown({
                         <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgba(72,84,104,0.72)]">
                           {section.label}
                         </span>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-[rgba(72,84,104,0.58)]">
+                          {selectedInGroupCount}/{employeeIds.length}
+                        </span>
                       </button>
-
-                      {mode === "multiple" ? (
-                        <button
-                          aria-label={`${section.label}: ${selectedInGroupCount}/${employeeIds.length}`}
-                          className={cn(
-                            "inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
-                            allGroupSelected
-                              ? "bg-[color:var(--accent)] text-white"
-                              : someGroupSelected
-                                ? "bg-[rgba(40,75,255,0.12)] text-[color:var(--accent)]"
-                                : "bg-[rgba(15,23,42,0.05)] text-[rgba(72,84,104,0.78)] hover:bg-[rgba(15,23,42,0.08)]",
-                          )}
-                          onClick={() => selectEmployeeGroup(employeeIds)}
-                          type="button"
-                        >
-                          {allGroupSelected ? <Check className="size-3.5" /> : null}
-                          <span>
-                            {selectedInGroupCount}/{employeeIds.length}
-                          </span>
-                        </button>
-                      ) : null}
                     </div>
 
                     {isCollapsed

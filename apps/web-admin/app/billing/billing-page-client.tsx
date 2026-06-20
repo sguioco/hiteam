@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   CreditCard,
@@ -166,6 +166,27 @@ type BillingInvoiceRow = {
   tone: "due" | "paid";
 };
 
+function AnimatedBillingValue({
+  animate = true,
+  children,
+  className = "",
+  valueKey,
+}: {
+  animate?: boolean;
+  children: ReactNode;
+  className?: string;
+  valueKey: string | number;
+}) {
+  return (
+    <span
+      className={`${animate ? "billing-value-pop " : ""}inline-block tabular-nums ${className}`}
+      key={valueKey}
+    >
+      {children}
+    </span>
+  );
+}
+
 function BillingHistoryList({
   invoiceRows,
   locale,
@@ -227,6 +248,7 @@ export default function BillingPageClient({
   const [selectedSeatCount, setSelectedSeatCount] = useState(() =>
     getInitialSeatCount(initialData),
   );
+  const [seatControlTouched, setSeatControlTouched] = useState(false);
 
   const usagePercent = useMemo(() => {
     if (!summary?.requiredSeats) return 0;
@@ -438,6 +460,11 @@ export default function BillingPageClient({
     }
   }
 
+  function adjustSelectedSeatCount(delta: number) {
+    setSeatControlTouched(true);
+    setSelectedSeatCount((current) => Math.max(minimumSeatCount, current + delta));
+  }
+
   async function openStripePortal() {
     if (!summary?.stripeConnected) {
       return;
@@ -554,6 +581,30 @@ export default function BillingPageClient({
 
   return (
     <AdminShell showTopbar={false}>
+      <style>{`
+        @keyframes billing-value-pop {
+          from {
+            opacity: 0.35;
+            transform: translateY(4px);
+            filter: blur(2px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+
+        .billing-value-pop {
+          animation: billing-value-pop 180ms cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .billing-value-pop {
+            animation: none;
+          }
+        }
+      `}</style>
       <main className="mx-auto flex w-full max-w-[1460px] flex-col gap-5 px-6 py-6 md:px-8">
         <header className="space-y-2">
           <h1 className="font-heading text-[2rem] font-semibold leading-none tracking-[-0.04em] text-foreground">
@@ -752,14 +803,19 @@ export default function BillingPageClient({
                   {summary.missingSeats > 0 ? (
                     <div className="min-w-[112px] text-center font-heading text-white">
                       <p className="text-xl font-semibold leading-6">
-                        {formatMoney(
-                          purchasePreview?.amountDue ?? summary.amountDue,
-                          summary.price.currency,
-                          locale,
-                        )}
+                        <AnimatedBillingValue
+                          animate={seatControlTouched}
+                          valueKey={purchasePreview?.amountDue ?? summary.amountDue}
+                        >
+                          {formatMoney(
+                            purchasePreview?.amountDue ?? summary.amountDue,
+                            summary.price.currency,
+                            locale,
+                          )}
+                        </AnimatedBillingValue>
                       </p>
                       <p className="mt-1 text-xs font-medium text-white/86">
-                        {locale === "ru" ? "К оплате сегодня" : "Due today"}
+                        {locale === "ru" ? "Итого" : "Total"}
                       </p>
                     </div>
                   ) : null}
@@ -871,7 +927,7 @@ export default function BillingPageClient({
                     return (
                       <button
                         aria-pressed={isSelected}
-                        className={`min-h-[104px] rounded-xl border px-4 py-3 text-left font-heading transition-[border-color,background-color,transform] active:scale-[0.98] ${
+                        className={`relative min-h-[86px] rounded-xl border px-4 py-3 pr-24 text-left font-heading transition-[border-color,background-color,transform] active:scale-[0.98] ${
                           isSelected
                             ? "border-[#284bff] bg-blue-50"
                             : "border-[rgba(15,23,42,0.12)] bg-white hover:border-[#284bff]/45"
@@ -883,7 +939,7 @@ export default function BillingPageClient({
                         <span className="text-sm font-semibold text-foreground">
                           {planName}
                         </span>
-                        <span className="mt-3 block text-sm text-muted-foreground">
+                        <span className="mt-2 block text-sm text-muted-foreground">
                           {locale === "ru"
                             ? `Оплата ${plan.paidMonths} мес.`
                             : `Pay ${plan.paidMonths} mo`}
@@ -894,7 +950,7 @@ export default function BillingPageClient({
                             : `${plan.accessMonths} mo access`}
                         </span>
                         {plan.bonusMonths > 0 ? (
-                          <span className="mt-3 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                          <span className="absolute right-4 top-3 whitespace-nowrap text-xs font-semibold text-emerald-700">
                             {locale === "ru"
                               ? `+${plan.bonusMonths} мес. бесплатно`
                               : `+${plan.bonusMonths} mo free`}
@@ -921,33 +977,26 @@ export default function BillingPageClient({
                       aria-label={locale === "ru" ? "Уменьшить места" : "Decrease seats"}
                       className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-blue-50 hover:text-[#284bff] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={selectedSeatCount <= minimumSeatCount}
-                      onClick={() =>
-                        setSelectedSeatCount((current) =>
-                          Math.max(minimumSeatCount, current - 1),
-                        )
-                      }
+                      onClick={() => adjustSelectedSeatCount(-1)}
                       type="button"
                     >
                       <Minus className="size-4" />
                     </button>
-                    <input
-                      className="h-full w-20 border-x border-[rgba(15,23,42,0.1)] text-center font-heading text-base font-semibold tabular-nums outline-none"
-                      min={minimumSeatCount}
-                      onChange={(event) => {
-                        const value = Number(event.currentTarget.value);
-                        setSelectedSeatCount(
-                          Number.isFinite(value)
-                            ? Math.max(minimumSeatCount, Math.floor(value))
-                            : minimumSeatCount,
-                        );
-                      }}
-                      type="number"
-                      value={selectedSeatCount}
-                    />
+                    <div
+                      aria-live="polite"
+                      className="flex h-full w-20 items-center justify-center border-x border-[rgba(15,23,42,0.1)] text-center font-heading text-base font-semibold tabular-nums"
+                    >
+                      <AnimatedBillingValue
+                        animate={seatControlTouched}
+                        valueKey={selectedSeatCount}
+                      >
+                        {selectedSeatCount}
+                      </AnimatedBillingValue>
+                    </div>
                     <button
                       aria-label={locale === "ru" ? "Добавить места" : "Increase seats"}
                       className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-blue-50 hover:text-[#284bff]"
-                      onClick={() => setSelectedSeatCount((current) => current + 1)}
+                      onClick={() => adjustSelectedSeatCount(1)}
                       type="button"
                     >
                       <Plus className="size-4" />
@@ -962,7 +1011,12 @@ export default function BillingPageClient({
                         {locale === "ru" ? "Места после оплаты" : "Seats after payment"}
                       </dt>
                       <dd className="font-semibold text-foreground tabular-nums">
-                        {purchasePreview.targetSeats}
+                        <AnimatedBillingValue
+                          animate={seatControlTouched}
+                          valueKey={`target-${purchasePreview.targetSeats}`}
+                        >
+                          {purchasePreview.targetSeats}
+                        </AnimatedBillingValue>
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-4">
@@ -970,11 +1024,16 @@ export default function BillingPageClient({
                         {locale === "ru" ? "Пакет на выбранный срок" : "Selected period package"}
                       </dt>
                       <dd className="font-semibold text-foreground">
-                        {formatMoney(
-                          purchasePreview.renewalAmount,
-                          summary.price.currency,
-                          locale,
-                        )}
+                        <AnimatedBillingValue
+                          animate={seatControlTouched}
+                          valueKey={`renewal-${purchasePreview.renewalAmount}`}
+                        >
+                          {formatMoney(
+                            purchasePreview.renewalAmount,
+                            summary.price.currency,
+                            locale,
+                          )}
+                        </AnimatedBillingValue>
                       </dd>
                     </div>
                     {purchasePreview.additionalSeats > 0 ? (
@@ -991,11 +1050,16 @@ export default function BillingPageClient({
                               )}`}
                         </dt>
                         <dd className="font-semibold text-foreground">
-                          {formatMoney(
-                            purchasePreview.proratedAmount,
-                            summary.price.currency,
-                            locale,
-                          )}
+                          <AnimatedBillingValue
+                            animate={seatControlTouched}
+                            valueKey={`prorated-${purchasePreview.proratedAmount}`}
+                          >
+                            {formatMoney(
+                              purchasePreview.proratedAmount,
+                              summary.price.currency,
+                              locale,
+                            )}
+                          </AnimatedBillingValue>
                         </dd>
                       </div>
                     ) : null}
@@ -1009,14 +1073,19 @@ export default function BillingPageClient({
                     </div>
                     <div className="mt-2 flex items-end justify-between gap-4 border-t border-[rgba(15,23,42,0.1)] pt-4">
                       <dt className="text-sm font-semibold text-foreground">
-                        {locale === "ru" ? "К оплате сегодня" : "Due today"}
+                        {locale === "ru" ? "Итого" : "Total"}
                       </dt>
                       <dd className="text-3xl font-semibold tracking-[-0.05em] text-foreground">
-                        {formatMoney(
-                          purchasePreview.amountDue,
-                          summary.price.currency,
-                          locale,
-                        )}
+                        <AnimatedBillingValue
+                          animate={seatControlTouched}
+                          valueKey={`total-${purchasePreview.amountDue}`}
+                        >
+                          {formatMoney(
+                            purchasePreview.amountDue,
+                            summary.price.currency,
+                            locale,
+                          )}
+                        </AnimatedBillingValue>
                       </dd>
                     </div>
                   </dl>
