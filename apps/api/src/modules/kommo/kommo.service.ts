@@ -714,18 +714,22 @@ export class KommoService {
       return;
     }
 
-    let lifecycleEmailResult: LifecycleEmailSendResult | undefined;
-    if (lifecycleEmailsEnabled) {
-      lifecycleEmailResult = await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
-        this.logger.warn(
-          `Lifecycle email ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
-        );
-        return undefined;
-      });
+    const lifecycleEmailResult = await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
+      this.logger.warn(
+        `Lifecycle email ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
+      );
+      return undefined;
+    });
 
-      if (!lifecycleEmailResult || lifecycleEmailResult.status === 'failed') {
-        this.logger.warn(`Lifecycle event ${event} for tenant ${tenantId} continues with failed email delivery status.`);
-      }
+    if (
+      !lifecycleEmailResult ||
+      lifecycleEmailResult.status === 'failed' ||
+      lifecycleEmailResult.status === 'disabled' ||
+      lifecycleEmailResult.status === 'no_recipient'
+    ) {
+      this.logger.warn(
+        `Lifecycle event ${event} for tenant ${tenantId} continues with email delivery status ${lifecycleEmailResult?.status ?? 'unknown'}.`,
+      );
     }
 
     if (!kommoEnabled) {
