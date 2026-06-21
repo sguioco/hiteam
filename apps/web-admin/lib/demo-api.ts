@@ -212,6 +212,50 @@ function getDemoBillingPeriod(firstPaidAt?: string | null, paidThrough?: string 
   return { start, end };
 }
 
+function getUtcMonthDistance(start: Date, end: Date) {
+  const monthDistance =
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    end.getUTCMonth() -
+    start.getUTCMonth();
+  return Math.max(1, monthDistance);
+}
+
+function buildDemoBillingHistory(args: {
+  firstPaidAt: string | null;
+  paidThrough: string | null;
+  paidSeats: number;
+  unitAmount: number;
+  currency: string;
+}) {
+  const billingPeriod = getDemoBillingPeriod(args.firstPaidAt, args.paidThrough);
+  if (!billingPeriod || args.paidSeats <= 0) {
+    return [];
+  }
+
+  const accessMonths = getUtcMonthDistance(billingPeriod.start, billingPeriod.end);
+  const planMonths = accessMonths >= 14 ? 12 : accessMonths >= 7 ? 6 : 1;
+
+  return [
+    {
+      id: "demo-payment-current",
+      stripeCheckoutSessionId: "demo-checkout-current",
+      stripeInvoiceId: null,
+      amountMinor: args.paidSeats * args.unitAmount * planMonths * 100,
+      currency: args.currency,
+      status: "PAID",
+      paidAt: args.firstPaidAt,
+      periodStart: billingPeriod.start.toISOString(),
+      periodEnd: billingPeriod.end.toISOString(),
+      planMonths,
+      accessMonths,
+      targetSeats: args.paidSeats,
+      paidSeats: args.paidSeats,
+      billingMode: "seat_purchase",
+      priceLookupKey: "hiteam_seat_standard_monthly",
+    },
+  ];
+}
+
 function buildTaskId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -5092,6 +5136,13 @@ export async function demoApiRequest<T>(
       trialDaysRemaining: 0,
       trialSource: null,
       promoCode: null,
+      history: buildDemoBillingHistory({
+        firstPaidAt: currentState.billingFirstPaidAt,
+        paidThrough: currentState.billingPaidThrough,
+        paidSeats,
+        unitAmount,
+        currency,
+      }),
       price: {
         regionCode: "standard",
         regionLabel: "Standard",
@@ -5192,6 +5243,7 @@ export async function demoApiRequest<T>(
       trialDaysRemaining: 0,
       trialSource: null,
       promoCode: null,
+      history: [],
       price: {
         regionCode: "standard",
         regionLabel: "Standard",

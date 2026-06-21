@@ -10,7 +10,7 @@
     "build": "expo export --platform web",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node -e \"console.log('mobile tests are not configured yet')\""
+    "test": "node tests/mobile-launch-flow.test.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",
