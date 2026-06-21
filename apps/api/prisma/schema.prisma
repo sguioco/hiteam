@@ -303,6 +303,7 @@ model Tenant {
   taskAutomationPolicy         TaskAutomationPolicy?
   diagnosticsSnapshots         DiagnosticsSnapshot[]
   billingSubscription          BillingSubscription?
+  billingPayments              BillingPayment[]
   trialPromoRedemptions        TrialPromoRedemption[]
   kommoEntityLinks             KommoEntityLink[]
   kommoAutomationLogs          KommoAutomationLog[]
@@ -331,6 +332,37 @@ model BillingSubscription {
   updatedAt                DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model BillingPayment {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  source                  String
+  status                  String
+  reason                  String
+  billingMode             String?
+  amountMinor             Int?
+  currency                String?
+  planMonths              Int?
+  accessMonths            Int?
+  targetSeats             Int?
+  paidSeatsBefore         Int?
+  paidSeatsAfter          Int?
+  periodStart             DateTime?
+  periodEnd               DateTime?
+  paidAt                  DateTime  @default(now())
+  stripeCheckoutSessionId String?   @unique
+  stripePaymentIntentId   String?   @unique
+  stripeInvoiceId         String?   @unique
+  stripeSubscriptionId    String?
+  stripeCustomerId        String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, paidAt])
+  @@index([tenantId, status, paidAt])
 }
 
 model TrialPromoCode {

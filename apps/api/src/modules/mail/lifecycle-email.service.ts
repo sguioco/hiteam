@@ -25,6 +25,8 @@ type LifecycleEmailContext = {
   employeesUrl: string;
   trialEndDate: string | null;
   renewalDate: string | null;
+  paymentSummary: string | null;
+  subscriptionPlan: string | null;
 };
 
 type LifecycleEmailTemplate = {
@@ -306,6 +308,21 @@ export class LifecycleEmailService {
           select: {
             trialEndsAt: true,
             stripeCurrentPeriodEnd: true,
+            stripePriceLookupKey: true,
+            stripeCurrency: true,
+          },
+        },
+        billingPayments: {
+          orderBy: { paidAt: 'desc' },
+          take: 1,
+          select: {
+            amountMinor: true,
+            currency: true,
+            planMonths: true,
+            accessMonths: true,
+            targetSeats: true,
+            periodEnd: true,
+            paidAt: true,
           },
         },
       },
@@ -382,6 +399,7 @@ export class LifecycleEmailService {
       'http://localhost:3000'
     ).replace(/\/$/, '');
     const tenantQuery = snapshot.slug ? `?tenant=${encodeURIComponent(snapshot.slug)}` : '';
+    const latestPayment = snapshot.billingPayments[0] ?? null;
 
     return {
       locale,
@@ -392,7 +410,70 @@ export class LifecycleEmailService {
       employeesUrl: `${baseUrl}/employees${tenantQuery}`,
       trialEndDate: this.formatDate(snapshot.billingSubscription?.trialEndsAt ?? null, locale),
       renewalDate: this.formatDate(snapshot.billingSubscription?.stripeCurrentPeriodEnd ?? null, locale),
+      paymentSummary: latestPayment ? this.formatPaymentSummary(latestPayment, snapshot, locale) : null,
+      subscriptionPlan: this.formatSubscriptionPlan(latestPayment, snapshot),
     };
+  }
+
+  private formatPaymentSummary(
+    payment: NonNullable<
+      NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>['billingPayments'][number]
+    >,
+    snapshot: NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>,
+    locale: EmailLocale,
+  ) {
+    const amount =
+      payment.amountMinor !== null && payment.amountMinor !== undefined
+        ? this.formatMoney(payment.amountMinor, payment.currency ?? snapshot.billingSubscription?.stripeCurrency ?? null, locale)
+        : null;
+    const plan = this.formatSubscriptionPlan(payment, snapshot);
+    const paidUntil = this.formatDate(payment.periodEnd ?? snapshot.billingSubscription?.stripeCurrentPeriodEnd ?? null, locale);
+    const seats = payment.targetSeats
+      ? locale === 'ru'
+        ? `${payment.targetSeats} мест`
+        : `${payment.targetSeats} seats`
+      : null;
+
+    return [amount, plan, seats, paidUntil ? `${locale === 'ru' ? 'доступ до' : 'access until'} ${paidUntil}` : null]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  private formatSubscriptionPlan(
+    payment:
+      | NonNullable<
+          NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>['billingPayments'][number]
+        >
+      | null,
+    snapshot: NonNullable<Awaited<ReturnType<LifecycleEmailService['loadEmailSnapshot']>>>,
+  ) {
+    if (payment?.planMonths) {
+      const label =
+        payment.planMonths === 12
+          ? 'Annual'
+          : payment.planMonths === 6
+            ? 'Semi Annual'
+            : 'Monthly';
+      return payment.accessMonths
+        ? `${label}: pay ${payment.planMonths} mo, access ${payment.accessMonths} mo`
+        : `${label}: pay ${payment.planMonths} mo`;
+    }
+
+    return snapshot.billingSubscription?.stripePriceLookupKey ?? null;
+  }
+
+  private formatMoney(amountMinor: number, currency: string | null, locale: EmailLocale) {
+    const normalizedCurrency = currency?.trim().toUpperCase();
+    if (!normalizedCurrency) {
+      return (amountMinor / 100).toFixed(2).replace(/\.00$/, '');
+    }
+
+    return new Intl.NumberFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
+      currency: normalizedCurrency,
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      style: 'currency',
+    }).format(amountMinor / 100);
   }
 
   private buildTemplate(event: LifecycleEmailEvent, context: LifecycleEmailContext): LifecycleEmailTemplate {
@@ -451,6 +532,8 @@ export class LifecycleEmailService {
           preview: 'Подписка активна',
           paragraphs: [
             'Спасибо, оплата получена',
+            ...(context.paymentSummary ? [`Платёж: ${context.paymentSummary}`] : []),
+            ...(context.subscriptionPlan ? [`Тариф: ${context.subscriptionPlan}`] : []),
             'Подписка HiTeam активна, команда может продолжать работу без ограничений',
           ],
           ctaLabel: 'Открыть кабинет',
@@ -578,6 +661,8 @@ export class LifecycleEmailService {
           preview: 'Your subscription is active',
           paragraphs: [
             'Thank you, the payment was received',
+            ...(context.paymentSummary ? [`Payment: ${context.paymentSummary}`] : []),
+            ...(context.subscriptionPlan ? [`Plan: ${context.subscriptionPlan}`] : []),
             'Your HiTeam subscription is active and the team can continue working without limits',
           ],
           ctaLabel: 'Open workspace',

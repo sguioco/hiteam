@@ -18,6 +18,7 @@ import {
   UserStatus,
 } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import { KommoService } from "../kommo/kommo.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -102,6 +103,7 @@ export class CollaborationService {
     private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly storageService: StorageService,
     private readonly translationService: TranslationService,
+    private readonly kommoService: KommoService,
   ) {}
 
   private async getWorkGroupActor(userId: string) {
@@ -2624,6 +2626,10 @@ export class CollaborationService {
       },
     });
 
+    for (const task of tasks) {
+      this.kommoService.recordTaskCreated(manager.tenantId, task.id);
+    }
+
     this.queueTranslationPrewarm(
       this.collectTaskTranslationTexts({
         title: dto.title,
@@ -4073,6 +4079,7 @@ export class CollaborationService {
         status: dto.status,
       },
     });
+    this.kommoService.recordTaskUpdated(employee.tenantId, task.id, `task_status_${dto.status.toLowerCase()}`);
 
     await this.emitWorkspaceRefreshForTasks([updated], "task.status_updated");
 
@@ -4171,6 +4178,7 @@ export class CollaborationService {
         to: nextDueAt.toISOString(),
       },
     });
+    this.kommoService.recordTaskUpdated(employee.tenantId, task.id, "task_rescheduled");
 
     await this.emitWorkspaceRefreshForTasks([updated], "task.rescheduled");
 
@@ -4314,6 +4322,7 @@ export class CollaborationService {
         body: dto.body,
       },
     });
+    this.kommoService.recordTaskUpdated(employee.tenantId, task.id, "task_comment_added");
 
     return this.serializeTaskWithPhotoProofUrls(
       await this.prisma.task.findUniqueOrThrow({

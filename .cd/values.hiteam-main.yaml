@@ -33,7 +33,7 @@ api:
     COMPRE_FACE_BASE_URL: ""
     COMPRE_FACE_API_KEY: ""
     COMPRE_FACE_TIMEOUT_MS: "10000"
-    KOMMO_ENABLED: "false"
+    KOMMO_ENABLED: ""
     KOMMO_SUBDOMAIN: ""
     KOMMO_LONG_LIVED_TOKEN: ""
     KOMMO_PIPELINE_NAME: "HiTeam"
@@ -55,7 +55,7 @@ webAdmin:
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
 
 migrations:
-  enabled: false
+  enabled: true
   waitFor:
     host: ""
     port: 5432

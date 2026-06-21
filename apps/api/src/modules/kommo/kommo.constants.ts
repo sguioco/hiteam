@@ -197,6 +197,11 @@ export const KOMMO_FIELD_SPECS: KommoFieldSpec[] = [
   { key: 'invoiceAttached', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Invoice Attached', type: 'checkbox', sort: 100 },
   { key: 'seatsUsed', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Seats Used', type: 'numeric', sort: 110 },
   { key: 'seatsPaid', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Seats Paid', type: 'numeric', sort: 120 },
+  { key: 'lastPaymentAmount', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Last Payment Amount', type: 'numeric', sort: 130 },
+  { key: 'lastPaymentCurrency', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Last Payment Currency', type: 'text', sort: 140 },
+  { key: 'lastPaymentPlan', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Last Payment Plan', type: 'text', sort: 150 },
+  { key: 'lastPaymentPeriod', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Last Payment Period', type: 'text', sort: 160 },
+  { key: 'lastPaymentSeats', entityType: 'leads', groupName: 'HiTeam - Payment', name: 'Last Payment Seats', type: 'numeric', sort: 170 },
 
   { key: 'lastLoginDate', entityType: 'leads', groupName: 'HiTeam - Activity', name: 'Last Login Date', type: 'date_time', sort: 10 },
   { key: 'lastAdminActivityDate', entityType: 'leads', groupName: 'HiTeam - Activity', name: 'Last Admin Activity Date', type: 'date_time', sort: 20 },

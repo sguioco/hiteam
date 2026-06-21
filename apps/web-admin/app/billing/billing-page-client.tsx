@@ -18,6 +18,23 @@ import { useI18n } from "@/lib/i18n";
 
 type BillingCurrency = "AED" | "USD" | "EUR";
 
+type BillingPaymentHistoryItem = {
+  id: string;
+  source: string;
+  status: string;
+  reason: string;
+  amountMinor: number | null;
+  currency: string | null;
+  planMonths: number | null;
+  accessMonths: number | null;
+  targetSeats: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string;
+  stripeCheckoutSessionId: string | null;
+  stripeInvoiceId: string | null;
+};
+
 export type BillingSummary = {
   status: string;
   paidSeats: number;
@@ -57,6 +74,7 @@ export type BillingSummary = {
     stripeLookupKey: string;
     locationConfigured: boolean;
   };
+  history?: BillingPaymentHistoryItem[];
 };
 
 type BillingRedirectResponse = {
@@ -96,6 +114,45 @@ function formatMoney(value: number, currency: BillingCurrency, locale: "en" | "r
     minimumFractionDigits: 0,
     style: "currency",
   }).format(value);
+}
+
+function formatMoneyFromMinor(
+  value: number | null,
+  currency: string | null,
+  fallbackCurrency: BillingCurrency,
+  locale: "en" | "ru",
+) {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+
+  return formatMoney(value / 100, (currency ?? fallbackCurrency) as BillingCurrency, locale);
+}
+
+function formatPaymentPlan(payment: BillingPaymentHistoryItem, locale: "en" | "ru") {
+  if (!payment.planMonths) {
+    return locale === "ru" ? "Тариф не указан" : "Plan not specified";
+  }
+
+  const plan =
+    payment.planMonths === 12
+      ? locale === "ru"
+        ? "Годовой"
+        : "Annual"
+      : payment.planMonths === 6
+        ? locale === "ru"
+          ? "Полугодовой"
+          : "Semi Annual"
+        : locale === "ru"
+          ? "Месячный"
+          : "Monthly";
+  const access = payment.accessMonths
+    ? locale === "ru"
+      ? `доступ ${payment.accessMonths} мес.`
+      : `${payment.accessMonths} mo access`
+    : null;
+
+  return [plan, access].filter(Boolean).join(" · ");
 }
 
 function pluralSeats(count: number, locale: "en" | "ru") {
@@ -164,6 +221,7 @@ type BillingInvoiceRow = {
   amount: string;
   status: string;
   tone: "due" | "paid";
+  meta: string;
 };
 
 function AnimatedBillingValue({
@@ -208,16 +266,21 @@ function BillingHistoryList({
     <div className="mt-5 overflow-hidden rounded-xl border border-[rgba(15,23,42,0.08)]">
       {invoiceRows.map((invoice) => (
         <div
-          className="grid grid-cols-[1fr_1.35fr_auto_auto] items-center gap-4 px-4 py-3 font-heading text-sm text-foreground [&+&]:border-t [&+&]:border-[rgba(15,23,42,0.08)]"
+          className="grid gap-2 px-4 py-3 font-heading text-sm text-foreground sm:grid-cols-[0.9fr_1.4fr_auto_auto] sm:items-center sm:gap-4 [&+&]:border-t [&+&]:border-[rgba(15,23,42,0.08)]"
           key={invoice.id}
         >
           <span className="text-muted-foreground">{invoice.date}</span>
-          <span>
-            {locale === "ru" ? `Счет #${invoice.id}` : `Invoice #${invoice.id}`}
+          <span className="min-w-0">
+            <span className="block truncate">
+              {locale === "ru" ? `Платеж #${invoice.id}` : `Payment #${invoice.id}`}
+            </span>
+            <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+              {invoice.meta}
+            </span>
           </span>
           <span className="font-medium">{invoice.amount}</span>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
               invoice.tone === "paid"
                 ? "bg-emerald-50 text-emerald-700"
                 : "bg-red-50 text-red-700"
@@ -311,56 +374,84 @@ export default function BillingPageClient({
       )
     : "—";
   const invoiceRows = useMemo<BillingInvoiceRow[]>(() => {
-    const sourcePeriodStart = summary?.currentPeriodStart ?? summary?.stripeCurrentPeriodStart;
-    if (!summary || !sourcePeriodStart) {
+    if (!summary) {
       return [];
     }
 
-    const currentSummary = summary;
-    const periodStart = new Date(sourcePeriodStart);
-    const billingStartedAt = currentSummary.billingStartedAt
-      ? new Date(currentSummary.billingStartedAt)
-      : null;
-    const baseDate = Number.isNaN(periodStart.getTime()) ? new Date() : periodStart;
-    const rows: BillingInvoiceRow[] = [];
+    const history = summary.history ?? [];
+    if (history.length > 0) {
+      return history.map((payment) => {
+        const paid = payment.status.toUpperCase() === "PAID";
+        const plan = formatPaymentPlan(payment, locale);
+        const seats = payment.targetSeats
+          ? locale === "ru"
+            ? `${payment.targetSeats} ${pluralSeats(payment.targetSeats, locale)}`
+            : `${payment.targetSeats} ${pluralSeats(payment.targetSeats, locale)}`
+          : null;
+        const period =
+          payment.periodEnd || payment.accessMonths
+            ? [
+                payment.periodEnd
+                  ? `${locale === "ru" ? "до" : "until"} ${formatBillingDate(payment.periodEnd, locale)}`
+                  : null,
+                payment.accessMonths
+                  ? locale === "ru"
+                    ? `${payment.accessMonths} мес. доступа`
+                    : `${payment.accessMonths} mo access`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : null;
 
-    [0, 1, 2].forEach((offset) => {
-      const date = addUtcMonths(baseDate, -offset);
-      if (
-        billingStartedAt &&
-        !Number.isNaN(billingStartedAt.getTime()) &&
-        date < billingStartedAt
-      ) {
-        return;
-      }
-
-      const invoiceMonth = String(date.getUTCMonth() + 1).padStart(2, "0");
-      const invoiceYear = date.getUTCFullYear();
-      const isCurrent = offset === 0;
-
-      rows.push({
-        id: `INV-${invoiceYear}-${invoiceMonth}`,
-        date: formatBillingDate(date, locale),
-        amount: formatMoney(
-          isCurrent && currentSummary.missingSeats > 0
-            ? currentSummary.amountDue
-            : currentSummary.monthlyTotal,
-          currentSummary.price.currency,
-          locale,
-        ),
-        status:
-          isCurrent && currentSummary.missingSeats > 0
+        return {
+          id:
+            payment.stripeInvoiceId ??
+            payment.stripeCheckoutSessionId ??
+            payment.id.slice(0, 8),
+          date: formatBillingDate(payment.paidAt, locale),
+          amount: formatMoneyFromMinor(
+            payment.amountMinor,
+            payment.currency,
+            summary.price.currency,
+            locale,
+          ),
+          status: paid
             ? locale === "ru"
-              ? "К оплате"
-              : "Due"
-            : locale === "ru"
               ? "Оплачено"
-              : "Paid",
-        tone: isCurrent && currentSummary.missingSeats > 0 ? "due" : "paid",
+              : "Paid"
+            : locale === "ru"
+              ? "Ошибка"
+              : "Failed",
+          tone: paid ? "paid" : "due",
+          meta: [plan, seats, period].filter(Boolean).join(" · "),
+        };
       });
-    });
+    }
 
-    return rows;
+    if (!summary.billingStartedAt) {
+      return [];
+    }
+
+    return [
+      {
+        id: "LEGACY-CURRENT",
+        date: formatBillingDate(summary.billingStartedAt, locale),
+        amount: formatMoney(summary.monthlyTotal, summary.price.currency, locale),
+        status: summary.serviceActive
+          ? locale === "ru"
+            ? "Активно"
+            : "Active"
+          : locale === "ru"
+            ? "Нужна оплата"
+            : "Payment required",
+        tone: summary.serviceActive ? "paid" : "due",
+        meta:
+          locale === "ru"
+            ? `Текущий период · ${summary.paidSeats}/${summary.requiredSeats} мест`
+            : `Current period · ${summary.paidSeats}/${summary.requiredSeats} seats`,
+      },
+    ];
   }, [locale, summary]);
   const billingTabs: Array<{ id: "overview" | "history"; label: string }> = [
     {
@@ -606,15 +697,34 @@ export default function BillingPageClient({
         }
       `}</style>
       <main className="mx-auto flex w-full max-w-[1460px] flex-col gap-5 px-6 py-6 md:px-8">
-        <header className="space-y-2">
-          <h1 className="font-heading text-[2rem] font-semibold leading-none tracking-[-0.04em] text-foreground">
-            Billing
-          </h1>
-          <p className="max-w-2xl font-heading text-sm text-muted-foreground">
-            {locale === "ru"
-              ? "Управляйте местами, тарифом и платежными деталями"
-              : "Manage your seats, plan and billing details"}
-          </p>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <h1 className="font-heading text-[2rem] font-semibold leading-none tracking-[-0.04em] text-foreground">
+              Billing
+            </h1>
+            <p className="max-w-2xl font-heading text-sm text-muted-foreground">
+              {locale === "ru"
+                ? "Управляйте местами, тарифом и платежными деталями"
+                : "Manage your seats, plan and billing details"}
+            </p>
+          </div>
+          {summary && purchasePreview ? (
+            <button
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#284bff] px-4 font-heading text-sm font-semibold text-white transition-[background-color,transform] hover:bg-[#1f3bd8] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+              disabled={billingActionLoading}
+              onClick={openBillingFlow}
+              type="button"
+            >
+              <Plus className="size-4" />
+              {billingActionLoading
+                ? locale === "ru"
+                  ? "Открываем оплату..."
+                  : "Opening checkout..."
+                : locale === "ru"
+                  ? "Докупить места"
+                  : "Buy seats"}
+            </button>
+          ) : null}
         </header>
 
         <nav
