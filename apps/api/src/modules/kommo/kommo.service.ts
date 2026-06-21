@@ -630,21 +630,39 @@ export class KommoService {
 
   private async enqueuePaymentSuccessful(tenantId: string) {
     try {
-      const previousPaymentEvent = await this.prisma.kommoAutomationLog.findFirst({
-        where: {
-          tenantId,
-          key: { startsWith: 'lifecycle:payment_successful:' },
-        },
-        select: { id: true },
-      });
+      const [previousPaymentEvent, latestPayment] = await Promise.all([
+        this.prisma.kommoAutomationLog.findFirst({
+          where: {
+            tenantId,
+            key: { startsWith: 'lifecycle:payment_successful:' },
+          },
+          select: { id: true },
+        }),
+        this.prisma.billingPayment.findFirst({
+          where: { tenantId, status: 'PAID' },
+          orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            stripeCheckoutSessionId: true,
+            stripeInvoiceId: true,
+            stripePaymentIntentId: true,
+          },
+        }),
+      ]);
       const renewed = Boolean(previousPaymentEvent);
+      const paymentKey =
+        latestPayment?.stripeCheckoutSessionId ??
+        latestPayment?.stripeInvoiceId ??
+        latestPayment?.stripePaymentIntentId ??
+        latestPayment?.id ??
+        this.toDateKey(new Date());
 
       await this.syncLifecycleEvent(tenantId, 'payment_successful', {
         stageName: renewed ? 'Renewed' : 'New Customer',
         note: renewed
           ? 'Subscription payment received successfully. Customer renewed.'
           : 'First payment received successfully. Customer moved to paid onboarding.',
-        key: `lifecycle:payment_successful:${this.toDateKey(new Date())}`,
+        key: `lifecycle:payment_successful:${paymentKey}`,
         syncAllContacts: true,
       });
     } catch (error) {
