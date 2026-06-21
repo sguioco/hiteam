@@ -3,6 +3,13 @@ import { KommoService } from './kommo.service';
 
 function createKommoService(options: {
   config?: Record<string, string | null | undefined>;
+  previousPaymentEvent?: { id: string } | null;
+  latestPaidBillingPayment?: {
+    id: string;
+    stripeCheckoutSessionId?: string | null;
+    stripeInvoiceId?: string | null;
+    stripePaymentIntentId?: string | null;
+  } | null;
   lifecycleEmailService?: {
     isEnabled: () => boolean;
     sendLifecycleEmail?: (params: { tenantId: string; event: string }) => Promise<unknown>;
@@ -10,8 +17,17 @@ function createKommoService(options: {
 } = {}) {
   const prisma = {
     kommoAutomationLog: {
-      findFirst: async () => null,
+      findFirst: async (args?: { where?: { key?: { startsWith?: string } | string } }) => {
+        const key = args?.where?.key;
+        if (typeof key === 'object' && key?.startsWith === 'lifecycle:payment_successful:') {
+          return options.previousPaymentEvent ?? null;
+        }
+        return null;
+      },
       create: async () => ({ id: 'automation-log-1' }),
+    },
+    billingPayment: {
+      findFirst: async () => options.latestPaidBillingPayment ?? null,
     },
   };
   const configService = {
@@ -48,11 +64,20 @@ async function testSeatPurchaseReasonRoutesToPaymentLifecycle() {
 }
 
 async function testPaymentSuccessSyncsAllContacts() {
-  const service = createKommoService();
+  const service = createKommoService({
+    latestPaidBillingPayment: {
+      id: 'payment-1',
+      stripeCheckoutSessionId: 'cs_paid_first',
+      stripeInvoiceId: null,
+      stripePaymentIntentId: 'pi_paid_first',
+    },
+  });
   let captured:
     | {
         tenantId: string;
         event: string;
+        key?: string;
+        stageName?: string;
         syncAllContacts?: boolean;
       }
     | null = null;
@@ -61,12 +86,14 @@ async function testPaymentSuccessSyncsAllContacts() {
     syncLifecycleEvent: (
       tenantId: string,
       event: string,
-      options: { syncAllContacts?: boolean },
+      options: { key?: string; stageName?: string; syncAllContacts?: boolean },
     ) => Promise<void>;
   }).syncLifecycleEvent = async (tenantId, event, options) => {
     captured = {
       tenantId,
       event,
+      key: options.key,
+      stageName: options.stageName,
       syncAllContacts: options.syncAllContacts,
     };
   };
@@ -78,6 +105,54 @@ async function testPaymentSuccessSyncsAllContacts() {
   assert.deepEqual(captured, {
     tenantId: 'tenant-1',
     event: 'payment_successful',
+    key: 'lifecycle:payment_successful:cs_paid_first',
+    stageName: 'New Customer',
+    syncAllContacts: true,
+  });
+}
+
+async function testRenewedPaymentUsesLatestPaymentKey() {
+  const service = createKommoService({
+    previousPaymentEvent: { id: 'automation-log-existing' },
+    latestPaidBillingPayment: {
+      id: 'payment-2',
+      stripeCheckoutSessionId: 'cs_paid_second_same_day',
+      stripeInvoiceId: null,
+      stripePaymentIntentId: 'pi_paid_second_same_day',
+    },
+  });
+  let captured:
+    | {
+        event: string;
+        key?: string;
+        stageName?: string;
+        syncAllContacts?: boolean;
+      }
+    | null = null;
+
+  (service as unknown as {
+    syncLifecycleEvent: (
+      tenantId: string,
+      event: string,
+      options: { key?: string; stageName?: string; syncAllContacts?: boolean },
+    ) => Promise<void>;
+  }).syncLifecycleEvent = async (_tenantId, event, options) => {
+    captured = {
+      event,
+      key: options.key,
+      stageName: options.stageName,
+      syncAllContacts: options.syncAllContacts,
+    };
+  };
+
+  await (service as unknown as {
+    enqueuePaymentSuccessful: (tenantId: string) => Promise<void>;
+  }).enqueuePaymentSuccessful('tenant-1');
+
+  assert.deepEqual(captured, {
+    event: 'payment_successful',
+    key: 'lifecycle:payment_successful:cs_paid_second_same_day',
+    stageName: 'Renewed',
     syncAllContacts: true,
   });
 }
@@ -213,6 +288,7 @@ async function testFailedLifecycleEmailDoesNotBlockKommoSync() {
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
+  await testRenewedPaymentUsesLatestPaymentKey();
   await testSystemBackfillSyncsAllTenantContacts();
   await testFailedLifecycleEmailDoesNotBlockKommoSync();
   console.log('kommo flow tests passed');
