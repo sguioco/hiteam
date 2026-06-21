@@ -10,8 +10,11 @@ class FakeConfigService {
   }
 }
 
-function buildLifecycleEmailService(config: Record<string, string | undefined>) {
-  return new LifecycleEmailService({} as never, new FakeConfigService(config) as never);
+function buildLifecycleEmailService(
+  config: Record<string, string | undefined>,
+  prisma: unknown = {},
+) {
+  return new LifecycleEmailService(prisma as never, new FakeConfigService(config) as never);
 }
 
 async function testResendEnablesTransactionalEmail() {
@@ -110,6 +113,94 @@ async function testGraphFallsBackToResend() {
   }
 }
 
+async function testPaymentSuccessfulLifecycleEmailIncludesBillingDetails() {
+  const originalFetch = globalThis.fetch;
+  const bodies: Array<{
+    to: string[];
+    subject: string;
+    html: string;
+    text: string;
+  }> = [];
+  const prisma = {
+    tenant: {
+      findUnique: async () => ({
+        id: 'tenant-1',
+        name: 'Mary FY',
+        slug: 'mary-fy',
+        locale: 'en',
+        users: [
+          {
+            email: 'Owner@Example.com',
+            preferredLocale: 'en',
+            createdAt: new Date('2026-06-20T10:00:00.000Z'),
+            roles: [{ role: { code: 'tenant_owner' } }],
+          },
+        ],
+        companies: [{ name: 'Mary FY LLC' }],
+        employeeInvitations: [],
+        billingSubscription: {
+          trialEndsAt: null,
+          stripeCurrentPeriodEnd: new Date('2027-01-21T12:00:00.000Z'),
+          stripePriceLookupKey: 'hiteam_seat_middle_east_monthly',
+          stripeCurrency: 'AED',
+        },
+        billingPayments: [
+          {
+            amountMinor: 7700,
+            currency: 'AED',
+            planMonths: 6,
+            accessMonths: 7,
+            targetSeats: 3,
+            periodEnd: new Date('2027-01-21T12:00:00.000Z'),
+            paidAt: new Date('2026-06-21T12:00:00.000Z'),
+          },
+        ],
+      }),
+    },
+  };
+
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+
+    return {
+      ok: true,
+      text: async () => '',
+      json: async () => ({}),
+    } as Response;
+  }) as typeof fetch;
+
+  try {
+    const service = buildLifecycleEmailService(
+      {
+        RESEND_API_KEY: 'resend-key',
+        EMAIL_FROM: 'HiTeam <mail@example.com>',
+        WEB_ADMIN_BASE_URL: 'https://hiteam.net',
+      },
+      prisma,
+    );
+
+    const result = await service.sendLifecycleEmail({
+      tenantId: 'tenant-1',
+      event: 'payment_successful',
+    });
+
+    assert.equal(result.status, 'accepted');
+    assert.equal(result.provider, 'resend');
+    assert.deepEqual(result.recipients, ['owner@example.com']);
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].subject, 'HiTeam payment successful');
+
+    const text = bodies[0].text.replace(/\u00a0/g, ' ');
+    assert.match(text, /Payment: AED\s*77/);
+    assert.match(text, /Semi Annual: pay 6 mo, access 7 mo/);
+    assert.match(text, /3 seats/);
+    assert.match(text, /access until/);
+    assert.match(text, /Open workspace: https:\/\/hiteam\.net\/app\?tenant=mary-fy/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
   const createdTokens: Array<{ data: { tokenHash: string; userId: string } }> = [];
   const mailCalls: Array<{ email: string; resetToken: string }> = [];
@@ -178,6 +269,7 @@ async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
 async function main() {
   await testResendEnablesTransactionalEmail();
   await testGraphFallsBackToResend();
+  await testPaymentSuccessfulLifecycleEmailIncludesBillingDetails();
   await testPasswordResetCreatesHashedTokenAndSendsEmail();
   console.log('email flow tests passed');
 }

@@ -1,16 +1,23 @@
 import { strict as assert } from 'node:assert';
 import { KommoService } from './kommo.service';
 
-function createKommoService() {
+function createKommoService(options: {
+  config?: Record<string, string | null | undefined>;
+  lifecycleEmailService?: {
+    isEnabled: () => boolean;
+    sendLifecycleEmail?: (params: { tenantId: string; event: string }) => Promise<unknown>;
+  };
+} = {}) {
   const prisma = {
     kommoAutomationLog: {
       findFirst: async () => null,
+      create: async () => ({ id: 'automation-log-1' }),
     },
   };
   const configService = {
-    get: () => null,
+    get: (key: string) => options.config?.[key] ?? null,
   };
-  const lifecycleEmailService = {
+  const lifecycleEmailService = options.lifecycleEmailService ?? {
     isEnabled: () => false,
   };
 
@@ -127,10 +134,87 @@ async function testSystemBackfillSyncsAllTenantContacts() {
   assert.equal(result.items[1].status, 'error');
 }
 
+async function testFailedLifecycleEmailDoesNotBlockKommoSync() {
+  const failedEmailResult = {
+    event: 'payment_successful',
+    status: 'failed',
+    provider: 'resend',
+    sender: 'info@hiteam.net',
+    replyTo: 'info@hiteam.net',
+    recipients: ['owner@example.com'],
+    recipientCount: 1,
+    recordedAt: '2026-06-21T12:00:00.000Z',
+    subject: 'Payment received',
+    preview: 'Payment failed to send',
+    errorMessage: 'Resend rejected request',
+  };
+  const service = createKommoService({
+    config: {
+      KOMMO_ENABLED: 'true',
+    },
+    lifecycleEmailService: {
+      isEnabled: () => true,
+      sendLifecycleEmail: async (params) => {
+        assert.deepEqual(params, {
+          tenantId: 'tenant-1',
+          event: 'payment_successful',
+        });
+        return failedEmailResult;
+      },
+    },
+  });
+  let captured:
+    | {
+        tenantId: string;
+        reason?: string;
+        stageName?: string;
+        lifecycleEmailResult?: unknown;
+      }
+    | null = null;
+
+  (service as unknown as {
+    syncTenant: (
+      tenantId: string,
+      options: {
+        reason?: string;
+        stageName?: string;
+        lifecycleEmailResult?: unknown;
+      },
+    ) => Promise<{ leadId?: number }>;
+  }).syncTenant = async (tenantId, options) => {
+    captured = {
+      tenantId,
+      reason: options.reason,
+      stageName: options.stageName,
+      lifecycleEmailResult: options.lifecycleEmailResult,
+    };
+    return { leadId: 101 };
+  };
+
+  await (service as unknown as {
+    syncLifecycleEvent: (
+      tenantId: string,
+      event: string,
+      options: { stageName: string; note: string },
+    ) => Promise<void>;
+  }).syncLifecycleEvent('tenant-1', 'payment_successful', {
+    stageName: 'New Customer',
+    note: 'First payment received.',
+  });
+
+  assert.deepEqual(captured, {
+    tenantId: 'tenant-1',
+    reason: 'payment_successful',
+    stageName: 'New Customer',
+    lifecycleEmailResult: failedEmailResult,
+  });
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
   await testSystemBackfillSyncsAllTenantContacts();
+  await testFailedLifecycleEmailDoesNotBlockKommoSync();
   console.log('kommo flow tests passed');
 }
 
