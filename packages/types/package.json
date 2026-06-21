@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node -e \"console.log('types tests are not configured yet')\""
+    "test": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

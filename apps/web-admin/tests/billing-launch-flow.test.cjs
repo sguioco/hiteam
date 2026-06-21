@@ -1,0 +1,89 @@
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const { join } = require("node:path");
+
+const root = join(__dirname, "..");
+
+function read(relativePath) {
+  return readFileSync(join(root, relativePath), "utf8");
+}
+
+function assertContains(source, needle, message) {
+  assert.ok(source.includes(needle), message);
+}
+
+function testBillingPageShowsBackendHistoryAndSeatCheckout() {
+  const source = read("app/billing/billing-page-client.tsx");
+
+  assertContains(
+    source,
+    "history?: BillingPaymentHistoryItem[];",
+    "Billing summary must keep backend payment history in the client contract.",
+  );
+  assertContains(
+    source,
+    "const history = summary.history ?? [];",
+    "Billing invoice rows must prefer backend payment history.",
+  );
+  assertContains(
+    source,
+    "<BillingHistoryList invoiceRows={invoiceRows} locale={locale} />",
+    "Billing history tab must render the computed invoice rows.",
+  );
+  assert.match(
+    source,
+    /apiRequest<BillingRedirectResponse>\("\/billing\/checkout",\s*\{[\s\S]*body:\s*JSON\.stringify\(\{[\s\S]*planMonths:\s*selectedPlan\.paidMonths,[\s\S]*seats:\s*purchasePreview\.targetSeats,[\s\S]*\}\),[\s\S]*method:\s*"POST"/,
+    "Billing checkout must send selected plan and target seat count to the backend.",
+  );
+  assertContains(
+    source,
+    ': "Buy seats"',
+    "Billing page must expose the seat purchase button.",
+  );
+}
+
+function testSeatLimitDialogLinksEmployeesToBilling() {
+  const source = read("components/Employees.tsx");
+
+  assertContains(
+    source,
+    "Add a seat in Billing before inviting another employee.",
+    "Seat-limit copy must tell the user how to resolve missing paid seats.",
+  );
+  assertContains(
+    source,
+    'router.push(toAdminHref("/billing"));',
+    "Seat-limit dialog must navigate directly to Billing.",
+  );
+  assertContains(
+    source,
+    '"Open Billing"',
+    "Seat-limit dialog must expose an Open Billing action.",
+  );
+}
+
+function testDemoBillingMatchesProductionContracts() {
+  const source = read("lib/demo-api.ts");
+
+  assertContains(
+    source,
+    'pathname === "/billing/summary" && method === "GET"',
+    "Demo API must keep the billing summary endpoint available.",
+  );
+  assertContains(
+    source,
+    'pathname === "/billing/checkout" && method === "POST"',
+    "Demo API must keep the billing checkout endpoint available.",
+  );
+  assertContains(
+    source,
+    "history: buildDemoBillingHistory({",
+    "Demo billing summary must include payment history rows.",
+  );
+}
+
+testBillingPageShowsBackendHistoryAndSeatCheckout();
+testSeatLimitDialogLinksEmployeesToBilling();
+testDemoBillingMatchesProductionContracts();
+
+console.log("web-admin billing launch flow tests passed");
