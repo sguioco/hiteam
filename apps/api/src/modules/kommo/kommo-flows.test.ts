@@ -354,6 +354,69 @@ async function testDisabledLifecycleEmailIsVisibleInKommoSync() {
   });
 }
 
+async function testLeadLinksMissingCompanyAndEmployeeContacts() {
+  const service = createKommoService();
+  const calls: Array<{
+    method: string;
+    path: string;
+    body?: unknown;
+  }> = [];
+
+  (service as unknown as {
+    request: (method: string, path: string, body?: unknown) => Promise<unknown>;
+  }).request = async (method, path, body) => {
+    calls.push({ method, path, body });
+    if (method === 'GET' && path === '/api/v4/leads/555/links') {
+      return {
+        _embedded: {
+          links: [
+            {
+              to_entity_id: 201,
+              to_entity_type: 'contacts',
+            },
+          ],
+        },
+      };
+    }
+
+    return {};
+  };
+
+  await (service as unknown as {
+    ensureLeadEntityLinks: (
+      leadId: number,
+      companyId: number,
+      contactIds: number[],
+    ) => Promise<void>;
+  }).ensureLeadEntityLinks(555, 101, [201, 202, 202, 203]);
+
+  assert.deepEqual(calls, [
+    {
+      method: 'GET',
+      path: '/api/v4/leads/555/links',
+      body: undefined,
+    },
+    {
+      method: 'POST',
+      path: '/api/v4/leads/555/link',
+      body: [
+        {
+          to_entity_id: 101,
+          to_entity_type: 'companies',
+        },
+        {
+          to_entity_id: 202,
+          to_entity_type: 'contacts',
+        },
+        {
+          to_entity_id: 203,
+          to_entity_type: 'contacts',
+        },
+      ],
+    },
+  ]);
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
@@ -361,6 +424,7 @@ async function main() {
   await testSystemBackfillSyncsAllTenantContacts();
   await testFailedLifecycleEmailDoesNotBlockKommoSync();
   await testDisabledLifecycleEmailIsVisibleInKommoSync();
+  await testLeadLinksMissingCompanyAndEmployeeContacts();
   console.log('kommo flow tests passed');
 }
 
