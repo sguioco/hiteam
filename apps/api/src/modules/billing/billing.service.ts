@@ -8,10 +8,28 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type BillingCurrency = 'AED' | 'USD' | 'EUR';
 type BillingPlanMonths = 1 | 6 | 12;
+type BillingPaymentStatus = 'PAID' | 'FAILED';
 
 export type BillingCheckoutRequest = {
   seats?: number;
   planMonths?: BillingPlanMonths;
+};
+
+export type BillingPaymentHistoryItem = {
+  id: string;
+  source: string;
+  status: string;
+  reason: string;
+  amountMinor: number | null;
+  currency: string | null;
+  planMonths: number | null;
+  accessMonths: number | null;
+  targetSeats: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string;
+  stripeCheckoutSessionId: string | null;
+  stripeInvoiceId: string | null;
 };
 
 type BillingPriceRule = {
@@ -212,6 +230,7 @@ export class BillingService {
     const trialDaysRemaining = trialActive && subscription.trialEndsAt
       ? Math.max(0, Math.ceil((subscription.trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
       : 0;
+    const history = await this.listPaymentHistory(tenantId, pricing.currency);
 
     return {
       status,
@@ -243,6 +262,7 @@ export class BillingService {
       trialSource: subscription.trialSource,
       promoCode: subscription.promoCode,
       price: pricing,
+      history,
     };
   }
 
@@ -570,6 +590,34 @@ export class BillingService {
     return updated.firstPaidAt;
   }
 
+  private async listPaymentHistory(
+    tenantId: string,
+    fallbackCurrency: BillingCurrency,
+  ): Promise<BillingPaymentHistoryItem[]> {
+    const payments = await this.prisma.billingPayment.findMany({
+      where: { tenantId },
+      orderBy: { paidAt: 'desc' },
+      take: 24,
+    });
+
+    return payments.map((payment) => ({
+      id: payment.id,
+      source: payment.source,
+      status: payment.status,
+      reason: payment.reason,
+      amountMinor: payment.amountMinor,
+      currency: payment.currency ?? fallbackCurrency,
+      planMonths: payment.planMonths,
+      accessMonths: payment.accessMonths,
+      targetSeats: payment.targetSeats,
+      periodStart: payment.periodStart?.toISOString() ?? null,
+      periodEnd: payment.periodEnd?.toISOString() ?? null,
+      paidAt: payment.paidAt.toISOString(),
+      stripeCheckoutSessionId: payment.stripeCheckoutSessionId,
+      stripeInvoiceId: payment.stripeInvoiceId,
+    }));
+  }
+
   private isTrialActive(subscription: {
     trialEndsAt: Date | null;
     firstPaidAt: Date | null;
@@ -771,6 +819,142 @@ export class BillingService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  private readMetadataInteger(value: string | null | undefined) {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? Math.floor(numberValue) : null;
+  }
+
+  private readStripeObjectId(value: unknown) {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (value && typeof value === 'object' && 'id' in value) {
+      const id = (value as { id?: unknown }).id;
+      return typeof id === 'string' ? id : null;
+    }
+
+    return null;
+  }
+
+  private normalizeCurrency(value: string | null | undefined) {
+    return value?.trim().toUpperCase() || null;
+  }
+
+  private async recordBillingPayment(args: {
+    tenantId: string;
+    source: string;
+    status: BillingPaymentStatus;
+    reason: string;
+    billingMode?: string | null;
+    amountMinor?: number | null;
+    currency?: string | null;
+    planMonths?: number | null;
+    accessMonths?: number | null;
+    targetSeats?: number | null;
+    paidSeatsBefore?: number | null;
+    paidSeatsAfter?: number | null;
+    periodStart?: Date | null;
+    periodEnd?: Date | null;
+    paidAt?: Date | null;
+    stripeCheckoutSessionId?: string | null;
+    stripePaymentIntentId?: string | null;
+    stripeInvoiceId?: string | null;
+    stripeSubscriptionId?: string | null;
+    stripeCustomerId?: string | null;
+  }) {
+    const data = {
+      tenantId: args.tenantId,
+      source: args.source,
+      status: args.status,
+      reason: args.reason,
+      billingMode: args.billingMode ?? null,
+      amountMinor: args.amountMinor ?? null,
+      currency: this.normalizeCurrency(args.currency),
+      planMonths: args.planMonths ?? null,
+      accessMonths: args.accessMonths ?? null,
+      targetSeats: args.targetSeats ?? null,
+      paidSeatsBefore: args.paidSeatsBefore ?? null,
+      paidSeatsAfter: args.paidSeatsAfter ?? null,
+      periodStart: args.periodStart ?? null,
+      periodEnd: args.periodEnd ?? null,
+      paidAt: args.paidAt ?? new Date(),
+      stripeCheckoutSessionId: args.stripeCheckoutSessionId ?? null,
+      stripePaymentIntentId: args.stripePaymentIntentId ?? null,
+      stripeInvoiceId: args.stripeInvoiceId ?? null,
+      stripeSubscriptionId: args.stripeSubscriptionId ?? null,
+      stripeCustomerId: args.stripeCustomerId ?? null,
+    };
+
+    if (args.stripeCheckoutSessionId) {
+      await this.prisma.billingPayment.upsert({
+        where: { stripeCheckoutSessionId: args.stripeCheckoutSessionId },
+        update: data,
+        create: data,
+      });
+      return;
+    }
+
+    if (args.stripeInvoiceId) {
+      await this.prisma.billingPayment.upsert({
+        where: { stripeInvoiceId: args.stripeInvoiceId },
+        update: data,
+        create: data,
+      });
+      return;
+    }
+
+    await this.prisma.billingPayment.create({ data });
+  }
+
+  private async recordInvoicePayment(
+    tenantId: string,
+    invoice: Stripe.Invoice,
+    status: BillingPaymentStatus,
+    reason: string,
+  ) {
+    const invoiceValue = invoice as Stripe.Invoice & {
+      amount_due?: number | null;
+      amount_paid?: number | null;
+      amount_remaining?: number | null;
+      created?: number | null;
+      lines?: {
+        data?: Array<{
+          period?: {
+            start?: number | null;
+            end?: number | null;
+          } | null;
+        }>;
+      };
+    };
+    const firstLinePeriod = invoiceValue.lines?.data?.[0]?.period;
+    const paidAt =
+      status === 'PAID' && invoice.status_transitions?.paid_at
+        ? new Date(invoice.status_transitions.paid_at * 1000)
+        : invoiceValue.created
+          ? new Date(invoiceValue.created * 1000)
+          : new Date();
+    const amountMinor =
+      status === 'PAID'
+        ? invoiceValue.amount_paid ?? null
+        : invoiceValue.amount_due ?? invoiceValue.amount_remaining ?? null;
+
+    await this.recordBillingPayment({
+      tenantId,
+      source: 'stripe_invoice',
+      status,
+      reason,
+      amountMinor,
+      currency: invoice.currency,
+      periodStart: firstLinePeriod?.start ? new Date(firstLinePeriod.start * 1000) : null,
+      periodEnd: firstLinePeriod?.end ? new Date(firstLinePeriod.end * 1000) : null,
+      paidAt,
+      stripeInvoiceId: invoice.id,
+      stripeSubscriptionId: this.getSubscriptionIdFromInvoice(invoice),
+      stripeCustomerId: this.getCustomerIdFromInvoice(invoice),
+    });
+  }
+
   private async applySeatPurchaseCheckout(session: Stripe.Checkout.Session) {
     if (
       session.payment_status &&
@@ -784,6 +968,9 @@ export class BillingService {
     const targetSeats = this.normalizeSeatCount(metadata.targetSeats);
     const periodStart = this.readMetadataDate(metadata.periodStart) ?? new Date();
     const paidThrough = this.readMetadataDate(metadata.paidThrough);
+    const planMonths = this.readMetadataInteger(metadata.planMonths);
+    const accessMonths = this.readMetadataInteger(metadata.accessMonths);
+    const amountDue = this.readMetadataInteger(metadata.amountDue);
     const customerId =
       typeof session.customer === 'string'
         ? session.customer
@@ -796,9 +983,15 @@ export class BillingService {
 
     const current = await this.prisma.billingSubscription.findUnique({
       where: { tenantId },
-      select: { firstPaidAt: true },
+      select: { firstPaidAt: true, paidSeats: true },
     });
     const paidAt = session.created ? new Date(session.created * 1000) : new Date();
+    const amountMinor =
+      typeof session.amount_total === 'number'
+        ? session.amount_total
+        : amountDue !== null
+          ? amountDue * 100
+          : null;
 
     await this.prisma.billingSubscription.upsert({
       where: { tenantId },
@@ -831,6 +1024,26 @@ export class BillingService {
         stripeCurrentPeriodEnd: paidThrough,
         stripeCancelAtPeriodEnd: false,
       },
+    });
+    await this.recordBillingPayment({
+      tenantId,
+      source: 'stripe_checkout',
+      status: 'PAID',
+      reason: 'seat_purchase_paid',
+      billingMode: metadata.billingMode ?? 'seat_purchase',
+      amountMinor,
+      currency: session.currency ?? metadata.currency ?? null,
+      planMonths,
+      accessMonths,
+      targetSeats,
+      paidSeatsBefore: current?.paidSeats ?? 0,
+      paidSeatsAfter: targetSeats,
+      periodStart,
+      periodEnd: paidThrough,
+      paidAt,
+      stripeCheckoutSessionId: session.id,
+      stripePaymentIntentId: this.readStripeObjectId(session.payment_intent),
+      stripeCustomerId: customerId,
     });
     this.kommoService.recordBillingUpdated(tenantId, 'seat_purchase_paid');
   }
@@ -921,6 +1134,7 @@ export class BillingService {
             : new Date()),
       },
     });
+    await this.recordInvoicePayment(tenantId, invoice, 'PAID', 'invoice_paid');
     this.kommoService.recordBillingUpdated(tenantId, 'invoice_paid');
   }
 
@@ -941,6 +1155,7 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'PAYMENT_FAILED' },
     });
+    await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_payment_failed');
     this.kommoService.recordBillingUpdated(tenantId, 'invoice_payment_failed');
   }
 
@@ -958,6 +1173,7 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'INVOICE_FINALIZATION_FAILED' },
     });
+    await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_finalization_failed');
     this.kommoService.recordBillingUpdated(tenantId, 'invoice_finalization_failed');
   }
 

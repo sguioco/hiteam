@@ -97,6 +97,27 @@ type KommoWebhookLeadEvent = {
   raw: unknown;
 };
 
+type KommoTaskNotePerson = {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  user: { email: string } | null;
+};
+
+type KommoTaskNote = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  dueAt: Date | null;
+  assigneeEmployeeId: string | null;
+  managerEmployeeId: string;
+  group: { name: string } | null;
+  assigneeEmployee: KommoTaskNotePerson | null;
+  managerEmployee: KommoTaskNotePerson;
+};
+
 type KommoConfig = {
   enabled: boolean;
   baseUrl: string | null;
@@ -257,8 +278,17 @@ export class KommoService {
     });
   }
 
+  recordTaskCreated(tenantId: string, taskId: string) {
+    this.enqueueTaskSync(tenantId, taskId, 'task_created');
+  }
+
+  recordTaskUpdated(tenantId: string, taskId: string, reason = 'task_updated') {
+    this.enqueueTaskSync(tenantId, taskId, reason);
+  }
+
   recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
     switch (reason) {
+      case 'seat_purchase_paid':
       case 'invoice_paid':
         void this.enqueuePaymentSuccessful(tenantId);
         return;
@@ -491,6 +521,56 @@ export class KommoService {
     });
   }
 
+  private enqueueTaskSync(tenantId: string, taskId: string, reason: string) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void this.prisma.task.findFirst({
+      where: { id: taskId, tenantId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueAt: true,
+        assigneeEmployeeId: true,
+        managerEmployeeId: true,
+        group: { select: { name: true } },
+        assigneeEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+        managerEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
+    }).then((task) => {
+      if (!task) {
+        return;
+      }
+
+      this.enqueueSync(tenantId, {
+        reason,
+        note: this.buildTaskEventNote(task, reason),
+        employeeId: task.assigneeEmployeeId ?? task.managerEmployeeId ?? undefined,
+        syncAllContacts: false,
+      });
+    }).catch((error) => {
+      this.logger.warn(`Unable to enqueue Kommo task sync for ${taskId}: ${this.getErrorMessage(error)}`);
+    });
+  }
+
   private enqueueLifecycleEvent(
     tenantId: string,
     event: KommoLifecycleEvent,
@@ -520,6 +600,7 @@ export class KommoService {
           ? 'Subscription payment received successfully. Customer renewed.'
           : 'First payment received successfully. Customer moved to paid onboarding.',
         key: `lifecycle:payment_successful:${this.toDateKey(new Date())}`,
+        syncAllContacts: true,
       });
     } catch (error) {
       this.logger.warn(
@@ -1104,6 +1185,7 @@ export class KommoService {
       latestCheckInsByEmployee,
       latestCheckOutsByEmployee,
       diagnosticsSnapshot,
+      latestBillingPayment,
     ] = await Promise.all([
       this.prisma.attendanceEvent.findFirst({
         where: { tenantId, eventType: AttendanceEventType.CHECK_IN, result: AttendanceResult.ACCEPTED },
@@ -1206,6 +1288,25 @@ export class KommoService {
         orderBy: { capturedAt: 'desc' },
         select: { criticalAlerts: true, warningAlerts: true },
       }),
+      this.prisma.billingPayment.findFirst({
+        where: { tenantId },
+        orderBy: { paidAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          reason: true,
+          amountMinor: true,
+          currency: true,
+          planMonths: true,
+          accessMonths: true,
+          targetSeats: true,
+          periodStart: true,
+          periodEnd: true,
+          paidAt: true,
+          stripeCheckoutSessionId: true,
+          stripeInvoiceId: true,
+        },
+      }),
     ]);
 
     const activeEmployees = tenant.employees.filter((employee) => employee.status === EmployeeStatus.ACTIVE);
@@ -1286,6 +1387,7 @@ export class KommoService {
       latestLoginByUserId,
       latestCheckInByEmployeeId,
       latestCheckOutByEmployeeId,
+      latestBillingPayment,
       metrics: {
         totalEmployees: tenant.employees.length,
         activeEmployees: activeEmployees.length,
@@ -1568,8 +1670,15 @@ export class KommoService {
     const totalMonthlyPayment = this.resolveTotalMonthlyPayment(snapshot);
     const unitPrice = this.resolvePricePerEmployee(snapshot);
     const paidUntil = snapshot.tenant.billingSubscription?.stripeCurrentPeriodEnd ?? null;
-    const lastPaymentDate = snapshot.tenant.billingSubscription?.firstPaidAt ?? null;
-    const plan = snapshot.tenant.billingSubscription?.stripePriceLookupKey ?? 'trial';
+    const latestPayment = snapshot.latestBillingPayment;
+    const lastPaymentDate = latestPayment?.paidAt ?? snapshot.tenant.billingSubscription?.firstPaidAt ?? null;
+    const plan = this.resolveBillingPlanLabel(snapshot);
+    const billingCycle = this.resolveBillingCycle(snapshot);
+    const lastPaymentAmount =
+      latestPayment?.amountMinor !== null && latestPayment?.amountMinor !== undefined
+        ? latestPayment.amountMinor / 100
+        : null;
+    const lastPaymentPeriod = this.formatLatestPaymentPeriod(snapshot);
     const paymentLink = this.buildWebUrl('/billing');
     const dashboardLink = this.buildWebUrl('/app');
 
@@ -1639,15 +1748,24 @@ export class KommoService {
       subscriptionType: plan,
       pricePerEmployee: unitPrice,
       totalMonthlyPayment,
-      billingCycle: 'MONTHLY',
+      billingCycle,
       nextPaymentDate: paidUntil,
       lastPaymentDate,
       paymentMethod: snapshot.tenant.billingSubscription?.stripeCustomerId ? 'Stripe' : null,
       autoRenewal: !snapshot.tenant.billingSubscription?.stripeCancelAtPeriodEnd,
       paymentLink,
-      invoiceAttached: Boolean(snapshot.tenant.billingSubscription?.stripeSubscriptionId),
+      invoiceAttached: Boolean(
+        snapshot.tenant.billingSubscription?.stripeSubscriptionId ||
+          latestPayment?.stripeInvoiceId ||
+          latestPayment?.stripeCheckoutSessionId,
+      ),
       seatsUsed: snapshot.metrics.usedSeats,
       seatsPaid: snapshot.metrics.paidSeats,
+      lastPaymentAmount,
+      lastPaymentCurrency: latestPayment?.currency ?? snapshot.tenant.billingSubscription?.stripeCurrency ?? null,
+      lastPaymentPlan: latestPayment ? plan : null,
+      lastPaymentPeriod,
+      lastPaymentSeats: latestPayment?.targetSeats ?? null,
       lastLoginDate: snapshot.metrics.lastLoginDate,
       lastAdminActivityDate: snapshot.metrics.lastAdminActivityDate,
       lastEmployeeActivityDate: snapshot.metrics.lastEmployeeActivityDate,
@@ -2157,6 +2275,29 @@ export class KommoService {
     return rows.join('\n').slice(0, 6000);
   }
 
+  private buildTaskEventNote(task: KommoTaskNote, reason: string) {
+    return [
+      `HiTeam task updated: ${reason}.`,
+      `Task: ${task.title}`,
+      `Task ID: ${task.id}`,
+      `Status: ${task.status}`,
+      `Priority: ${task.priority}`,
+      `Due: ${task.dueAt?.toISOString() ?? 'not scheduled'}`,
+      `Assignee: ${this.formatTaskNotePerson(task.assigneeEmployee)}`,
+      `Manager: ${this.formatTaskNotePerson(task.managerEmployee)}`,
+      `Group: ${task.group?.name ?? 'direct task'}`,
+      task.description ? `Description: ${task.description.slice(0, 500)}` : null,
+    ].filter((line): line is string => Boolean(line)).join('\n');
+  }
+
+  private formatTaskNotePerson(person: KommoTaskNotePerson | null) {
+    if (!person) {
+      return 'unassigned';
+    }
+
+    return `${person.firstName} ${person.lastName} (${person.employeeNumber}, ${person.user?.email ?? 'no email'})`;
+  }
+
   private buildEventNote(
     snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>,
     note: string,
@@ -2169,6 +2310,10 @@ export class KommoService {
       `Organization ID: ${snapshot.tenant.businessId}`,
       `Employees: ${snapshot.metrics.activeEmployees}/${snapshot.metrics.totalEmployees} active`,
       `Payment: ${snapshot.metrics.paymentStatus}`,
+      `Tariff: ${this.resolveBillingPlanLabel(snapshot)}`,
+      `Last payment amount: ${this.formatLatestPaymentAmount(snapshot)}`,
+      `Last payment period: ${this.formatLatestPaymentPeriod(snapshot) ?? 'n/a'}`,
+      `Seats paid/used: ${snapshot.metrics.paidSeats}/${snapshot.metrics.usedSeats}`,
       `Weekly usage score: ${snapshot.metrics.weeklyUsageScore}`,
       `Dashboard: ${this.buildWebUrl('/app')}`,
     ].join('\n');
@@ -2450,6 +2595,74 @@ export class KommoService {
     if (lookupKey.includes('uzbekistan') || lookupKey.includes('kyrgyzstan')) return 1;
     if (lookupKey.includes('armenia')) return 2;
     return null;
+  }
+
+  private resolveBillingPlanLabel(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const payment = snapshot.latestBillingPayment;
+    const lookupKey = snapshot.tenant.billingSubscription?.stripePriceLookupKey ?? '';
+    const region = lookupKey
+      .replace(/^hiteam_seat_/, '')
+      .replace(/_monthly$/, '')
+      .replace(/_/g, ' ')
+      .trim();
+
+    if (!payment?.planMonths) {
+      return lookupKey || 'trial';
+    }
+
+    const term =
+      payment.planMonths === 12
+        ? 'Annual'
+        : payment.planMonths === 6
+          ? 'Semi Annual'
+          : 'Monthly';
+    const access = payment.accessMonths
+      ? `, access ${payment.accessMonths} months`
+      : '';
+
+    return `${term}${region ? ` (${region})` : ''} - paid ${payment.planMonths} months${access}`;
+  }
+
+  private resolveBillingCycle(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const planMonths = snapshot.latestBillingPayment?.planMonths;
+    if (planMonths === 12) {
+      return 'ANNUAL';
+    }
+
+    if (planMonths && planMonths !== 1) {
+      return 'CUSTOM';
+    }
+
+    return 'MONTHLY';
+  }
+
+  private formatLatestPaymentPeriod(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const payment = snapshot.latestBillingPayment;
+    if (!payment) {
+      return null;
+    }
+
+    const start = payment.periodStart ? this.toDateKey(payment.periodStart) : null;
+    const end = payment.periodEnd ? this.toDateKey(payment.periodEnd) : null;
+    const term = [
+      payment.planMonths ? `paid ${payment.planMonths} months` : null,
+      payment.accessMonths ? `access ${payment.accessMonths} months` : null,
+    ].filter(Boolean).join(', ');
+
+    return [
+      term || null,
+      start && end ? `${start} - ${end}` : end ? `until ${end}` : null,
+    ].filter(Boolean).join(' | ') || null;
+  }
+
+  private formatLatestPaymentAmount(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
+    const payment = snapshot.latestBillingPayment;
+    if (!payment || payment.amountMinor === null || payment.amountMinor === undefined) {
+      return 'n/a';
+    }
+
+    const amount = (payment.amountMinor / 100).toFixed(2).replace(/\.00$/, '');
+    return `${amount} ${payment.currency ?? snapshot.tenant.billingSubscription?.stripeCurrency ?? ''}`.trim();
   }
 
   private resolveTotalMonthlyPayment(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {
