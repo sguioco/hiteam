@@ -706,8 +706,7 @@ export class KommoService {
       });
 
       if (!lifecycleEmailResult || lifecycleEmailResult.status === 'failed') {
-        this.logger.warn(`Lifecycle event ${event} for tenant ${tenantId} will be retried because email delivery failed.`);
-        return;
+        this.logger.warn(`Lifecycle event ${event} for tenant ${tenantId} continues with failed email delivery status.`);
       }
     }
 
