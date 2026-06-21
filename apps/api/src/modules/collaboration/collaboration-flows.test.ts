@@ -26,8 +26,33 @@ function testRealTaskCreatesAreSyncedToKommo() {
   }
 }
 
+function testFallbackEmployeeCreatesAreSyncedToKommo() {
+  const sourcePath = resolve(__dirname, 'collaboration.service.ts');
+  const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/);
+  const employeeCreateLineIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.includes('tx.employee.create({'))
+    .map(({ index }) => index);
+
+  assert.equal(
+    employeeCreateLineIndexes.length,
+    1,
+    'Update this invariant when collaboration employee fallback creation paths change.',
+  );
+
+  for (const index of employeeCreateLineIndexes) {
+    const nearbySource = lines.slice(index, index + 80).join('\n');
+    assert.match(
+      nearbySource,
+      /kommoService\.recordEmployeeCreated\(/,
+      `Employee created near line ${index + 1} must be synced to Kommo.`,
+    );
+  }
+}
+
 async function main() {
   testRealTaskCreatesAreSyncedToKommo();
+  testFallbackEmployeeCreatesAreSyncedToKommo();
   console.log('collaboration flow tests passed');
 }
 
