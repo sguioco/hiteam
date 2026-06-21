@@ -162,7 +162,8 @@ export class CollaborationService {
     email: string;
   }) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      let created = false;
+      const employee = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.employee.findUnique({
           where: { userId: user.id },
         });
@@ -187,6 +188,7 @@ export class CollaborationService {
         );
         const displayName = this.resolveActorDisplayName(user.email);
 
+        created = true;
         return tx.employee.create({
           data: {
             tenantId: user.tenantId,
@@ -206,6 +208,12 @@ export class CollaborationService {
           },
         });
       });
+
+      if (created) {
+        this.kommoService.recordEmployeeCreated(user.tenantId, employee.id);
+      }
+
+      return employee;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
