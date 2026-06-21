@@ -88,6 +88,12 @@ type KommoSyncResult = {
   syncedEmployeeContacts?: number;
 };
 
+type KommoTenantBackfillResult = KommoSyncResult & {
+  tenantId: string;
+  status: 'synced' | 'skipped' | 'error';
+  errorMessage?: string;
+};
+
 type KommoWebhookLeadEvent = {
   action: string;
   id: number;
@@ -337,6 +343,45 @@ export class KommoService {
       note: 'Manual HiTeam sync completed.',
       syncAllContacts: true,
     });
+  }
+
+  async syncAllTenants(options: { tenantId?: string; limit?: number } = {}) {
+    const tenants = await this.prisma.tenant.findMany({
+      where: options.tenantId ? { id: options.tenantId } : undefined,
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: options.limit ?? 500,
+    });
+    const items: KommoTenantBackfillResult[] = [];
+
+    for (const tenant of tenants) {
+      try {
+        const result = await this.syncTenant(tenant.id, {
+          reason: 'system_backfill',
+          note: 'System Kommo backfill completed.',
+          syncAllContacts: true,
+        });
+        items.push({
+          tenantId: tenant.id,
+          status: result.skipped ? 'skipped' : 'synced',
+          ...result,
+        });
+      } catch (error) {
+        items.push({
+          tenantId: tenant.id,
+          status: 'error',
+          errorMessage: this.getErrorMessage(error),
+        });
+      }
+    }
+
+    return {
+      total: items.length,
+      synced: items.filter((item) => item.status === 'synced').length,
+      skipped: items.filter((item) => item.status === 'skipped').length,
+      errors: items.filter((item) => item.status === 'error').length,
+      items,
+    };
   }
 
   isWebhookSecretValid(secret?: string | null) {

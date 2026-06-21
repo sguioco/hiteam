@@ -75,9 +75,62 @@ async function testPaymentSuccessSyncsAllContacts() {
   });
 }
 
+async function testSystemBackfillSyncsAllTenantContacts() {
+  const service = createKommoService();
+  const calls: Array<{
+    tenantId: string;
+    syncAllContacts?: boolean;
+    reason?: string;
+  }> = [];
+
+  (service as unknown as {
+    prisma: {
+      tenant: {
+        findMany: () => Promise<Array<{ id: string }>>;
+      };
+    };
+  }).prisma.tenant = {
+    findMany: async () => [{ id: 'tenant-1' }, { id: 'tenant-2' }, { id: 'tenant-3' }],
+  };
+
+  (service as unknown as {
+    syncTenant: (
+      tenantId: string,
+      options: { reason?: string; syncAllContacts?: boolean },
+    ) => Promise<{ skipped?: boolean; leadId?: number; syncedEmployeeContacts?: number }>;
+  }).syncTenant = async (tenantId, options) => {
+    calls.push({
+      tenantId,
+      reason: options.reason,
+      syncAllContacts: options.syncAllContacts,
+    });
+    if (tenantId === 'tenant-2') {
+      throw new Error('Kommo unavailable');
+    }
+
+    return {
+      leadId: tenantId === 'tenant-1' ? 101 : 103,
+      syncedEmployeeContacts: tenantId === 'tenant-1' ? 4 : 2,
+    };
+  };
+
+  const result = await service.syncAllTenants({ limit: 10 });
+
+  assert.deepEqual(calls, [
+    { tenantId: 'tenant-1', reason: 'system_backfill', syncAllContacts: true },
+    { tenantId: 'tenant-2', reason: 'system_backfill', syncAllContacts: true },
+    { tenantId: 'tenant-3', reason: 'system_backfill', syncAllContacts: true },
+  ]);
+  assert.equal(result.total, 3);
+  assert.equal(result.synced, 2);
+  assert.equal(result.errors, 1);
+  assert.equal(result.items[1].status, 'error');
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
+  await testSystemBackfillSyncsAllTenantContacts();
   console.log('kommo flow tests passed');
 }
 

@@ -7,6 +7,8 @@ import { AuthService } from '../auth/auth.service';
 import { EmployeeInvitationsMailerService } from '../employees/employee-invitations.mailer';
 import { RegisterOrganizationDto } from '../auth/dto/register-organization.dto';
 import { GenerateTrialPromoCodesDto } from './dto/generate-trial-promo-codes.dto';
+import { SyncKommoTenantsDto } from './dto/sync-kommo-tenants.dto';
+import { KommoService } from '../kommo/kommo.service';
 
 const DEFAULT_ORGANIZATION_TRIAL_DAYS = 7;
 
@@ -18,6 +20,7 @@ export class SystemService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly employeeInvitationsMailer: EmployeeInvitationsMailerService,
+    private readonly kommoService: KommoService,
   ) {}
 
   async createTenant(dto: CreateTenantDto) {
@@ -162,6 +165,13 @@ export class SystemService {
     }
 
     return { items };
+  }
+
+  async syncKommoTenants(dto: SyncKommoTenantsDto = {}) {
+    return this.kommoService.syncAllTenants({
+      tenantId: dto.tenantId,
+      limit: dto.limit,
+    });
   }
 
   private normalizePromoPrefix(value: string) {

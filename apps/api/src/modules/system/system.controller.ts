@@ -3,6 +3,7 @@ import { SystemService } from './system.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { GenerateTrialPromoCodesDto } from './dto/generate-trial-promo-codes.dto';
 import { RegisterOrganizationDto } from '../auth/dto/register-organization.dto';
+import { SyncKommoTenantsDto } from './dto/sync-kommo-tenants.dto';
 
 @Controller('system')
 export class SystemController {
@@ -13,9 +14,7 @@ export class SystemController {
     @Headers('x-system-secret') secret: string,
     @Body() dto: CreateTenantDto,
   ) {
-    if (!process.env.SYSTEM_SECRET || secret !== process.env.SYSTEM_SECRET) {
-      throw new UnauthorizedException('Invalid system secret');
-    }
+    this.assertSystemSecret(secret);
     return this.systemService.createTenant(dto);
   }
 
@@ -24,9 +23,7 @@ export class SystemController {
     @Headers('x-system-secret') secret: string,
     @Body() dto: RegisterOrganizationDto,
   ) {
-    if (!process.env.SYSTEM_SECRET || secret !== process.env.SYSTEM_SECRET) {
-      throw new UnauthorizedException('Invalid system secret');
-    }
+    this.assertSystemSecret(secret);
 
     return this.systemService.createOrganization(dto);
   }
@@ -36,10 +33,24 @@ export class SystemController {
     @Headers('x-system-secret') secret: string,
     @Body() dto: GenerateTrialPromoCodesDto,
   ) {
+    this.assertSystemSecret(secret);
+
+    return this.systemService.generateTrialPromoCodes(dto);
+  }
+
+  @Post('kommo/sync-all')
+  async syncKommoTenants(
+    @Headers('x-system-secret') secret: string,
+    @Body() dto: SyncKommoTenantsDto = {},
+  ) {
+    this.assertSystemSecret(secret);
+
+    return this.systemService.syncKommoTenants(dto);
+  }
+
+  private assertSystemSecret(secret: string) {
     if (!process.env.SYSTEM_SECRET || secret !== process.env.SYSTEM_SECRET) {
       throw new UnauthorizedException('Invalid system secret');
     }
-
-    return this.systemService.generateTrialPromoCodes(dto);
   }
 }
