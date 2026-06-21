@@ -1699,6 +1699,7 @@ export class KommoService {
           : { tags: args.tags.map((tag) => ({ name: tag })) }),
       },
     });
+    await this.ensureLeadEntityLinks(leadId, args.companyId, uniqueContactIds);
 
     const metadata = this.mergeMetadata(
       link?.metadataJson,
@@ -1977,6 +1978,38 @@ export class KommoService {
         params: { text },
       },
     ]);
+  }
+
+  private async ensureLeadEntityLinks(leadId: number, companyId: number, contactIds: number[]) {
+    const uniqueContactIds = Array.from(new Set(contactIds)).filter((id) => Number.isFinite(id));
+    const desiredLinks = [
+      { to_entity_id: companyId, to_entity_type: 'companies' },
+      ...uniqueContactIds.map((id) => ({ to_entity_id: id, to_entity_type: 'contacts' })),
+    ].filter((link) => Number.isFinite(link.to_entity_id));
+
+    if (desiredLinks.length === 0) {
+      return;
+    }
+
+    const existingResponse = await this.request<KommoApiObject>('GET', `/api/v4/leads/${leadId}/links`);
+    const existingLinks = new Set(
+      this.extractEmbedded(existingResponse, 'links')
+        .map((link) => {
+          const type = this.readString(link.to_entity_type);
+          const id = Number(link.to_entity_id);
+          return type && Number.isFinite(id) ? `${type}:${id}` : null;
+        })
+        .filter((value): value is string => Boolean(value)),
+    );
+    const missingLinks = desiredLinks.filter(
+      (link) => !existingLinks.has(`${link.to_entity_type}:${link.to_entity_id}`),
+    );
+
+    if (missingLinks.length === 0) {
+      return;
+    }
+
+    await this.request('POST', `/api/v4/leads/${leadId}/link`, missingLinks);
   }
 
   private async createAutomationLogOnce(tenantId: string, key: string) {
