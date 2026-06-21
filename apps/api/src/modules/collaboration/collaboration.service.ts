@@ -5895,6 +5895,10 @@ export class CollaborationService {
     );
 
     for (const task of tasks) {
+      this.kommoService.recordTaskCreated(manager.tenantId, task.id);
+    }
+
+    for (const task of tasks) {
       if (task.assigneeEmployee?.userId) {
         await this.notificationsService.createForUser({
           tenantId: manager.tenantId,
@@ -6958,6 +6962,8 @@ export class CollaborationService {
         toDueAt: nextDueAt.toISOString(),
       },
     });
+
+    this.kommoService.recordTaskCreated(employee.tenantId, movedTask.id);
 
     await this.emitWorkspaceRefreshForTasks(
       [movedTask],
