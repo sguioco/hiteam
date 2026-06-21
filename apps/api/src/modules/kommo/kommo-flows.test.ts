@@ -417,6 +417,133 @@ async function testLeadLinksMissingCompanyAndEmployeeContacts() {
   ]);
 }
 
+async function testRecurringTaskUpdateBuildsKommoNote() {
+  const service = createKommoService({
+    config: {
+      KOMMO_ENABLED: 'true',
+    },
+  });
+  const serviceInternals = service as unknown as {
+    prisma: {
+      taskTemplate: {
+        findFirst: (args: unknown) => Promise<unknown>;
+      };
+      employee: {
+        findFirst: (args: unknown) => Promise<unknown>;
+      };
+      taskCompletion: {
+        findUnique: (args: unknown) => Promise<unknown>;
+      };
+    };
+    enqueueSync: (
+      tenantId: string,
+      options: {
+        reason: string;
+        note?: string;
+        employeeId?: string;
+        syncAllContacts?: boolean;
+      },
+    ) => void;
+  };
+
+  serviceInternals.prisma.taskTemplate = {
+    findFirst: async (args) => {
+      assert.deepEqual(args, {
+        where: {
+          id: 'template-1',
+          tenantId: 'tenant-1',
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          priority: true,
+          dueTimeLocal: true,
+          requiresPhoto: true,
+          group: { select: { name: true } },
+          managerEmployee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      });
+      return {
+        id: 'template-1',
+        title: 'Open the cafe',
+        description: 'Morning setup checklist.',
+        priority: 'HIGH',
+        dueTimeLocal: '09:00',
+        requiresPhoto: true,
+        group: { name: 'Operations' },
+        managerEmployee: {
+          firstName: 'Mary',
+          lastName: 'Manager',
+          employeeNumber: 'M-001',
+          user: { email: 'manager@example.com' },
+        },
+      };
+    },
+  };
+  serviceInternals.prisma.employee = {
+    findFirst: async () => ({
+      firstName: 'Ivan',
+      lastName: 'Worker',
+      employeeNumber: 'E-001',
+      user: { email: 'ivan@example.com' },
+    }),
+  };
+  serviceInternals.prisma.taskCompletion = {
+    findUnique: async () => ({
+      status: 'DONE',
+      completedAt: new Date('2026-06-21T12:30:00.000Z'),
+    }),
+  };
+
+  const captures: Array<{
+    tenantId: string;
+    reason: string;
+    note?: string;
+    employeeId?: string;
+    syncAllContacts?: boolean;
+  }> = [];
+  const called = new Promise<void>((resolve) => {
+    serviceInternals.enqueueSync = (tenantId, options) => {
+      captures.push({
+        tenantId,
+        ...options,
+      });
+      resolve();
+    };
+  });
+
+  service.recordRecurringTaskUpdated('tenant-1', {
+    taskTemplateId: 'template-1',
+    assigneeEmployeeId: 'employee-1',
+    occurrenceDate: new Date('2026-06-21T00:00:00.000Z'),
+    reason: 'task_completion_status_done',
+    status: 'DONE',
+  });
+
+  await called;
+
+  const captured = captures[0];
+  assert.ok(captured);
+  assert.equal(captured.tenantId, 'tenant-1');
+  assert.equal(captured.reason, 'task_completion_status_done');
+  assert.equal(captured.employeeId, 'employee-1');
+  assert.equal(captured.syncAllContacts, false);
+  assert.match(captured.note ?? '', /HiTeam recurring task updated: task_completion_status_done\./);
+  assert.match(captured.note ?? '', /Task: Open the cafe/);
+  assert.match(captured.note ?? '', /Occurrence: 2026-06-21/);
+  assert.match(captured.note ?? '', /Status: DONE/);
+  assert.match(captured.note ?? '', /Assignee: Ivan Worker \(E-001, ivan@example\.com\)/);
+  assert.match(captured.note ?? '', /Manager: Mary Manager \(M-001, manager@example\.com\)/);
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
@@ -425,6 +552,7 @@ async function main() {
   await testFailedLifecycleEmailDoesNotBlockKommoSync();
   await testDisabledLifecycleEmailIsVisibleInKommoSync();
   await testLeadLinksMissingCompanyAndEmployeeContacts();
+  await testRecurringTaskUpdateBuildsKommoNote();
   console.log('kommo flow tests passed');
 }
 
