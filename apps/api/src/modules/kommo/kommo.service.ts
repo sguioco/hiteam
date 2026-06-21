@@ -124,6 +124,27 @@ type KommoTaskNote = {
   managerEmployee: KommoTaskNotePerson;
 };
 
+type KommoRecurringTaskNote = {
+  template: {
+    id: string;
+    title: string;
+    description: string | null;
+    priority: string;
+    dueTimeLocal: string | null;
+    requiresPhoto: boolean;
+    group: { name: string } | null;
+    managerEmployee: KommoTaskNotePerson;
+  };
+  assigneeEmployee: KommoTaskNotePerson;
+  completion: {
+    status: string;
+    completedAt: Date | null;
+  } | null;
+  occurrenceDate: Date;
+  reason: string;
+  status?: string | null;
+};
+
 type KommoConfig = {
   enabled: boolean;
   baseUrl: string | null;
@@ -290,6 +311,19 @@ export class KommoService {
 
   recordTaskUpdated(tenantId: string, taskId: string, reason = 'task_updated') {
     this.enqueueTaskSync(tenantId, taskId, reason);
+  }
+
+  recordRecurringTaskUpdated(
+    tenantId: string,
+    params: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      occurrenceDate: Date;
+      reason: string;
+      status?: string | null;
+    },
+  ) {
+    this.enqueueRecurringTaskSync(tenantId, params);
   }
 
   recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
@@ -613,6 +647,94 @@ export class KommoService {
       });
     }).catch((error) => {
       this.logger.warn(`Unable to enqueue Kommo task sync for ${taskId}: ${this.getErrorMessage(error)}`);
+    });
+  }
+
+  private enqueueRecurringTaskSync(
+    tenantId: string,
+    params: {
+      taskTemplateId: string;
+      assigneeEmployeeId: string;
+      occurrenceDate: Date;
+      reason: string;
+      status?: string | null;
+    },
+  ) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void Promise.all([
+      this.prisma.taskTemplate.findFirst({
+        where: {
+          id: params.taskTemplateId,
+          tenantId,
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          priority: true,
+          dueTimeLocal: true,
+          requiresPhoto: true,
+          group: { select: { name: true } },
+          managerEmployee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.employee.findFirst({
+        where: {
+          id: params.assigneeEmployeeId,
+          tenantId,
+        },
+        select: {
+          firstName: true,
+          lastName: true,
+          employeeNumber: true,
+          user: { select: { email: true } },
+        },
+      }),
+      this.prisma.taskCompletion.findUnique({
+        where: {
+          taskTemplateId_assigneeEmployeeId_occurrenceDate: {
+            taskTemplateId: params.taskTemplateId,
+            assigneeEmployeeId: params.assigneeEmployeeId,
+            occurrenceDate: params.occurrenceDate,
+          },
+        },
+        select: {
+          status: true,
+          completedAt: true,
+        },
+      }),
+    ]).then(([template, assigneeEmployee, completion]) => {
+      if (!template || !assigneeEmployee) {
+        return;
+      }
+
+      this.enqueueSync(tenantId, {
+        reason: params.reason,
+        note: this.buildRecurringTaskEventNote({
+          template,
+          assigneeEmployee,
+          completion,
+          occurrenceDate: params.occurrenceDate,
+          reason: params.reason,
+          status: params.status,
+        }),
+        employeeId: params.assigneeEmployeeId,
+        syncAllContacts: false,
+      });
+    }).catch((error) => {
+      this.logger.warn(
+        `Unable to enqueue Kommo recurring task sync for ${params.taskTemplateId}: ${this.getErrorMessage(error)}`,
+      );
     });
   }
 
@@ -2386,6 +2508,24 @@ export class KommoService {
       `Manager: ${this.formatTaskNotePerson(task.managerEmployee)}`,
       `Group: ${task.group?.name ?? 'direct task'}`,
       task.description ? `Description: ${task.description.slice(0, 500)}` : null,
+    ].filter((line): line is string => Boolean(line)).join('\n');
+  }
+
+  private buildRecurringTaskEventNote(task: KommoRecurringTaskNote) {
+    return [
+      `HiTeam recurring task updated: ${task.reason}.`,
+      `Task: ${task.template.title}`,
+      `Template ID: ${task.template.id}`,
+      `Occurrence: ${this.toDateKey(task.occurrenceDate)}`,
+      `Status: ${task.status ?? task.completion?.status ?? 'unknown'}`,
+      `Completed at: ${task.completion?.completedAt?.toISOString() ?? 'not completed'}`,
+      `Priority: ${task.template.priority}`,
+      `Due time: ${task.template.dueTimeLocal ?? 'not scheduled'}`,
+      `Requires photo: ${task.template.requiresPhoto ? 'yes' : 'no'}`,
+      `Assignee: ${this.formatTaskNotePerson(task.assigneeEmployee)}`,
+      `Manager: ${this.formatTaskNotePerson(task.template.managerEmployee)}`,
+      `Group: ${task.template.group?.name ?? 'direct task'}`,
+      task.template.description ? `Description: ${task.template.description.slice(0, 500)}` : null,
     ].filter((line): line is string => Boolean(line)).join('\n');
   }
 

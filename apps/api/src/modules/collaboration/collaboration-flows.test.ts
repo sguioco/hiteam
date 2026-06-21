@@ -2,6 +2,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+function assertNearbySource(
+  lines: string[],
+  marker: string,
+  pattern: RegExp,
+  message: string,
+  windowSize = 180,
+) {
+  const index = lines.findIndex((line) => line.includes(marker));
+  assert.notEqual(index, -1, `Marker "${marker}" must exist.`);
+  const nearbySource = lines.slice(index, index + windowSize).join('\n');
+  assert.match(nearbySource, pattern, message);
+}
+
 function testRealTaskCreatesAreSyncedToKommo() {
   const sourcePath = resolve(__dirname, 'collaboration.service.ts');
   const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/);
@@ -22,6 +35,42 @@ function testRealTaskCreatesAreSyncedToKommo() {
       nearbySource,
       /kommoService\.recordTaskCreated\(/,
       `Task created near line ${index + 1} must be synced to Kommo.`,
+    );
+  }
+}
+
+function testTaskActivityUpdatesAreSyncedToKommo() {
+  const sourcePath = resolve(__dirname, 'collaboration.service.ts');
+  const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/);
+
+  for (const marker of [
+    'async setTaskStatus',
+    'async rescheduleTask',
+    'async toggleChecklistItem',
+    'async addTaskComment',
+    'async addTaskPhotoProof',
+    'async deleteTaskPhotoProof',
+  ]) {
+    assertNearbySource(
+      lines,
+      marker,
+      /kommoService\.recordTaskUpdated\(/,
+      `${marker} must sync task activity to Kommo.`,
+      260,
+    );
+  }
+
+  for (const marker of [
+    'private async setRecurringTaskStatus',
+    'private async addRecurringTaskPhotoProof',
+    'private async deleteRecurringTaskPhotoProof',
+  ]) {
+    assertNearbySource(
+      lines,
+      marker,
+      /kommoService\.recordRecurringTaskUpdated\(/,
+      `${marker} must sync recurring task activity to Kommo.`,
+      260,
     );
   }
 }
@@ -52,6 +101,7 @@ function testFallbackEmployeeCreatesAreSyncedToKommo() {
 
 async function main() {
   testRealTaskCreatesAreSyncedToKommo();
+  testTaskActivityUpdatesAreSyncedToKommo();
   testFallbackEmployeeCreatesAreSyncedToKommo();
   console.log('collaboration flow tests passed');
 }

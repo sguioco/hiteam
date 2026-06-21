@@ -4257,6 +4257,11 @@ export class CollaborationService {
       where: { id: taskId },
       include: this.taskInclude(),
     });
+    this.kommoService.recordTaskUpdated(
+      employee.tenantId,
+      taskId,
+      item.isCompleted ? "task_checklist_unchecked" : "task_checklist_completed",
+    );
 
     await this.emitWorkspaceRefreshForTasks(
       [updated],
@@ -4455,6 +4460,11 @@ export class CollaborationService {
         targetProofId: targetProof?.id ?? null,
       },
     });
+    this.kommoService.recordTaskUpdated(
+      employee.tenantId,
+      task.id,
+      dto.action === "replace" ? "task_photo_proof_replaced" : "task_photo_proof_added",
+    );
 
     await this.emitWorkspaceRefreshForTasks(
       [updated],
@@ -4569,6 +4579,7 @@ export class CollaborationService {
         proofId,
       },
     });
+    this.kommoService.recordTaskUpdated(employee.tenantId, task.id, "task_photo_proof_deleted");
 
     await this.emitWorkspaceRefreshForTasks(
       [updated],
@@ -6819,6 +6830,13 @@ export class CollaborationService {
         status: dto.status,
       },
     });
+    this.kommoService.recordRecurringTaskUpdated(employee.tenantId, {
+      taskTemplateId: template.id,
+      assigneeEmployeeId: employee.id,
+      occurrenceDate,
+      reason: `task_completion_status_${dto.status.toLowerCase()}`,
+      status: dto.status,
+    });
 
     await this.emitWorkspaceRefreshForAudience({
       tenantId: employee.tenantId,
@@ -7598,6 +7616,16 @@ export class CollaborationService {
         targetProofId: targetProof?.id ?? null,
       },
     });
+    this.kommoService.recordRecurringTaskUpdated(employee.tenantId, {
+      taskTemplateId: template.id,
+      assigneeEmployeeId: employee.id,
+      occurrenceDate,
+      reason:
+        dto.action === "replace"
+          ? "task_completion_photo_proof_replaced"
+          : "task_completion_photo_proof_added",
+      status: updatedCompletion.status,
+    });
 
     await this.emitWorkspaceRefreshForAudience({
       tenantId: employee.tenantId,
@@ -7760,6 +7788,13 @@ export class CollaborationService {
         occurrenceDate: occurrenceDate.toISOString(),
         proofId,
       },
+    });
+    this.kommoService.recordRecurringTaskUpdated(employee.tenantId, {
+      taskTemplateId: template.id,
+      assigneeEmployeeId: employee.id,
+      occurrenceDate,
+      reason: "task_completion_photo_proof_deleted",
+      status: updatedCompletion.status,
     });
 
     await this.emitWorkspaceRefreshForAudience({
