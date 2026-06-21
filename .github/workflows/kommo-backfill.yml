@@ -1,0 +1,143 @@
+name: Kommo Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_id:
+        description: Optional tenant ID to sync only one tenant.
+        required: false
+        default: ""
+      limit:
+        description: Maximum tenants to sync.
+        required: false
+        default: "500"
+      namespace:
+        description: Kubernetes namespace.
+        required: false
+        default: "hiteam-main"
+
+concurrency:
+  group: hiteam-kommo-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKFILL_TENANT_ID: ${{ inputs.tenant_id }}
+      BACKFILL_LIMIT: ${{ inputs.limit }}
+      BACKFILL_NAMESPACE: ${{ inputs.namespace }}
+      BACKFILL_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Run Kommo backfill in Kubernetes
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
+          command_timeout: 20m
+          envs: BACKFILL_TENANT_ID,BACKFILL_LIMIT,BACKFILL_NAMESPACE,BACKFILL_RUN_ID
+          script: |
+            set -eu
+
+            namespace="${BACKFILL_NAMESPACE:-hiteam-main}"
+            tenant_id="${BACKFILL_TENANT_ID:-}"
+            limit="${BACKFILL_LIMIT:-500}"
+            run_id="${BACKFILL_RUN_ID:-manual}"
+
+            if ! printf '%s' "$namespace" | grep -Eq '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'; then
+              echo "Invalid namespace."
+              exit 64
+            fi
+
+            if ! printf '%s' "$limit" | grep -Eq '^[0-9]+$' || [ "$limit" -lt 1 ] || [ "$limit" -gt 1000 ]; then
+              echo "Invalid limit. Use 1..1000."
+              exit 64
+            fi
+
+            if [ -n "$tenant_id" ] && ! printf '%s' "$tenant_id" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+              echo "Invalid tenant_id."
+              exit 64
+            fi
+
+            job_name="hiteam-kommo-backfill-${run_id}"
+            api_url="http://hiteam-svc-api/api/v1/system/kommo/sync-all"
+
+            kubectl -n "$namespace" delete job "$job_name" --ignore-not-found=true
+
+            kubectl -n "$namespace" apply -f - <<EOF
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: ${job_name}
+              labels:
+                app: hiteam-kommo-backfill
+            spec:
+              backoffLimit: 0
+              ttlSecondsAfterFinished: 300
+              template:
+                metadata:
+                  labels:
+                    app: hiteam-kommo-backfill
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: backfill
+                      image: curlimages/curl:8.10.1
+                      envFrom:
+                        - secretRef:
+                            name: envs-api
+                            optional: true
+                        - secretRef:
+                            name: hiteam-main-runtime
+                            optional: true
+                      env:
+                        - name: BACKFILL_TENANT_ID
+                          value: "${tenant_id}"
+                        - name: BACKFILL_LIMIT
+                          value: "${limit}"
+                        - name: BACKFILL_API_URL
+                          value: "${api_url}"
+                      command:
+                        - /bin/sh
+                        - -c
+                      args:
+                        - |
+                          set -eu
+
+                          if [ -z "\${SYSTEM_SECRET:-}" ]; then
+                            echo "SYSTEM_SECRET is not configured."
+                            exit 2
+                          fi
+
+                          body="{\"limit\":\${BACKFILL_LIMIT}}"
+                          if [ -n "\${BACKFILL_TENANT_ID:-}" ]; then
+                            body="{\"tenantId\":\"\${BACKFILL_TENANT_ID}\",\"limit\":\${BACKFILL_LIMIT}}"
+                          fi
+
+                          http_code="\$(curl -sS -o /tmp/response.json -w "%{http_code}" \
+                            -X POST \
+                            -H "Content-Type: application/json" \
+                            -H "x-system-secret: \${SYSTEM_SECRET}" \
+                            --data "\${body}" \
+                            "\${BACKFILL_API_URL}")"
+
+                          echo "http_code=\${http_code}"
+                          cat /tmp/response.json
+                          echo
+
+                          if [ "\${http_code}" -lt 200 ] || [ "\${http_code}" -gt 299 ]; then
+                            exit 1
+                          fi
+            EOF
+
+            if ! kubectl -n "$namespace" wait --for=condition=complete "job/${job_name}" --timeout=15m; then
+              kubectl -n "$namespace" logs "job/${job_name}" || true
+              kubectl -n "$namespace" describe "job/${job_name}" || true
+              exit 1
+            fi
+
+            kubectl -n "$namespace" logs "job/${job_name}"
+            kubectl -n "$namespace" delete job "$job_name" --ignore-not-found=true
