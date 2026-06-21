@@ -285,12 +285,82 @@ async function testFailedLifecycleEmailDoesNotBlockKommoSync() {
   });
 }
 
+async function testDisabledLifecycleEmailIsVisibleInKommoSync() {
+  const disabledEmailResult = {
+    event: 'payment_successful',
+    status: 'disabled',
+    provider: 'disabled',
+    sender: 'info@hiteam.net',
+    replyTo: 'info@hiteam.net',
+    recipients: [],
+    recipientCount: 0,
+    recordedAt: '2026-06-21T12:00:00.000Z',
+  };
+  const service = createKommoService({
+    config: {
+      KOMMO_ENABLED: 'true',
+    },
+    lifecycleEmailService: {
+      isEnabled: () => false,
+      sendLifecycleEmail: async (params) => {
+        assert.deepEqual(params, {
+          tenantId: 'tenant-1',
+          event: 'payment_successful',
+        });
+        return disabledEmailResult;
+      },
+    },
+  });
+  let captured:
+    | {
+        tenantId: string;
+        reason?: string;
+        lifecycleEmailResult?: unknown;
+      }
+    | null = null;
+
+  (service as unknown as {
+    syncTenant: (
+      tenantId: string,
+      options: {
+        reason?: string;
+        lifecycleEmailResult?: unknown;
+      },
+    ) => Promise<{ leadId?: number }>;
+  }).syncTenant = async (tenantId, options) => {
+    captured = {
+      tenantId,
+      reason: options.reason,
+      lifecycleEmailResult: options.lifecycleEmailResult,
+    };
+    return { leadId: 101 };
+  };
+
+  await (service as unknown as {
+    syncLifecycleEvent: (
+      tenantId: string,
+      event: string,
+      options: { stageName: string; note: string },
+    ) => Promise<void>;
+  }).syncLifecycleEvent('tenant-1', 'payment_successful', {
+    stageName: 'New Customer',
+    note: 'First payment received.',
+  });
+
+  assert.deepEqual(captured, {
+    tenantId: 'tenant-1',
+    reason: 'payment_successful',
+    lifecycleEmailResult: disabledEmailResult,
+  });
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testPaymentSuccessSyncsAllContacts();
   await testRenewedPaymentUsesLatestPaymentKey();
   await testSystemBackfillSyncsAllTenantContacts();
   await testFailedLifecycleEmailDoesNotBlockKommoSync();
+  await testDisabledLifecycleEmailIsVisibleInKommoSync();
   console.log('kommo flow tests passed');
 }
 
