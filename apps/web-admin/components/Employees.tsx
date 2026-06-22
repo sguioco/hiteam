@@ -5057,11 +5057,15 @@ const Employees = ({
                   )}
                   onChange={handleReviewAvatar}
                   onError={setReviewError}
+                  outputQuality={0.92}
+                  outputSize={512}
                   previewAlt={runtimeLocalize(
                     "Аватар сотрудника",
                     "Employee avatar",
                     locale,
                   )}
+                  sourceMaxSide={1024}
+                  sourceQuality={0.92}
                   renderTrigger={({
                     chooseFile,
                     hasValue,

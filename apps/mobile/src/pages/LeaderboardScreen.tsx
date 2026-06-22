@@ -16,6 +16,7 @@ import type { LeaderboardOverviewResponse } from "@smart/types";
 import { Text } from "../../components/ui/text";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomNav from "../components/BottomNav";
+import { EmployeeAvatarImage } from "../components/employee-avatar-image";
 import { loadLeaderboardOverview, updateLeaderboardSettings } from "../../lib/api";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
@@ -482,10 +483,8 @@ export default function LeaderboardScreen({
             </Text>
           </View>
           {meEntry ? (
-            <Image
-              accessibilityIgnoresInvertColors
+            <EmployeeAvatarImage
               className="h-11 w-11 rounded-full border-2 border-white"
-              resizeMode="cover"
               source={resolveEmployeeAvatarSource({
                 avatarUrl: meEntry.employee.avatarUrl,
                 employeeNumber: meEntry.employee.employeeNumber,
@@ -651,10 +650,8 @@ export default function LeaderboardScreen({
                         <Ionicons color="#9aa5b5" name="shield-checkmark-outline" size={18} />
                       </View>
                     ) : (
-                      <Image
-                        accessibilityIgnoresInvertColors
+                      <EmployeeAvatarImage
                         className="h-9 w-9 rounded-full"
-                        resizeMode="cover"
                         source={resolveEmployeeAvatarSource({
                           avatarUrl: entry.employee.avatarUrl,
                           employeeNumber: entry.employee.employeeNumber,

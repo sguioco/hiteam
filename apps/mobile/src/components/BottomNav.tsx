@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-  Image,
   Pressable,
   StyleSheet,
   View,
@@ -19,6 +18,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n } from "../../lib/i18n";
 import { hapticSelection } from "../../lib/haptics";
+import { EmployeeAvatarImage } from "./employee-avatar-image";
 
 interface BottomNavProps {
   active: "calendar" | "today" | "manage" | "leaderboard" | "news" | "profile";
@@ -92,11 +92,9 @@ const BottomNav = ({
                 isActive ? "border-2 border-primary" : "border border-[#d8deea]"
               }`}
             >
-              <Image
-                accessibilityIgnoresInvertColors
+              <EmployeeAvatarImage
                 className="h-full w-full rounded-full"
                 onError={() => setAvatarFailed(true)}
-                resizeMode="cover"
                 source={profileAvatarSource}
               />
             </View>

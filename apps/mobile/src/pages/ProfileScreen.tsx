@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +22,7 @@ import {
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
   getBottomSheetActionBottomOffset,
 } from "../components/bottom-sheet-actions";
+import { EmployeeAvatarImage } from "../components/employee-avatar-image";
 
 type ProfileScreenProps = {
   active?: boolean;
@@ -306,10 +307,9 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
               className="items-center"
             >
               {profileAvatar ? (
-                <Image
+                <EmployeeAvatarImage
                   className="mb-3 h-20 w-20 rounded-full"
                   onError={() => setAvatarLoadFailed(true)}
-                  resizeMode="cover"
                   source={
                     avatarLoadFailed && profileAvatarFallback
                       ? profileAvatarFallback

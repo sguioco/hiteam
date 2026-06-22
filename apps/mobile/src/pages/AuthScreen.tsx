@@ -32,6 +32,7 @@ import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { BrandWordmark } from '../components/brand-wordmark';
+import { EmployeeAvatarImage } from '../components/employee-avatar-image';
 import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
 type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
@@ -825,14 +826,16 @@ const AuthScreen = () => {
       const result =
         source === 'camera'
           ? await ImagePicker.launchCameraAsync({
-            allowsEditing: false,
+            allowsEditing: true,
+            aspect: [1, 1],
             base64: true,
-            quality: 0.72,
+            quality: 0.92,
           })
           : await ImagePicker.launchImageLibraryAsync({
-            allowsEditing: false,
+            allowsEditing: true,
+            aspect: [1, 1],
             base64: true,
-            quality: 0.72,
+            quality: 0.92,
             selectionLimit: 1,
           });
 
@@ -1442,9 +1445,8 @@ const AuthScreen = () => {
                                     haptic="selection"
                                     onPress={openJoinProfilePhotoChooser}
                                   >
-                                    <Image
+                                    <EmployeeAvatarImage
                                       className="h-32 w-32 rounded-[26px]"
-                                      resizeMode="cover"
                                       source={{ uri: joinProfileForm.avatarPreviewUri }}
                                     />
                                   </PressableScale>

@@ -1,6 +1,7 @@
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import { resolveEmployeeAvatarSource } from '../../lib/employee-avatar';
+import { EmployeeAvatarImage } from './employee-avatar-image';
 
 export type ParticipantAvatarItem = {
   avatar?: any;
@@ -37,10 +38,9 @@ export function ParticipantAvatarStrip({
           className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#eef2ff]"
           style={{ marginLeft: index === 0 ? 0 : -10 }}
         >
-          <Image
+          <EmployeeAvatarImage
             source={resolveEmployeeAvatarSource(participant)}
             className="h-9 w-9 rounded-full"
-            resizeMode="cover"
           />
         </View>
       ))}

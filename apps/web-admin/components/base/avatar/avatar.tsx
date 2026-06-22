@@ -102,7 +102,16 @@ export const Avatar = ({
 
     const renderMainContent = () => {
         if (canShowImage) {
-            return <img data-avatar-img className="size-full object-cover" src={src} alt={alt} onError={() => setIsFailed(true)} />;
+            return (
+                <img
+                    data-avatar-img
+                    className="block size-full max-w-none rounded-[inherit] object-cover object-center"
+                    src={src}
+                    alt={alt}
+                    decoding="async"
+                    onError={() => setIsFailed(true)}
+                />
+            );
         }
 
         if (fallbackInitials) {
@@ -140,7 +149,7 @@ export const Avatar = ({
         <div
             data-avatar
             className={cx(
-                "relative inline-flex shrink-0 rounded-[7px]",
+                "relative inline-flex aspect-square shrink-0 rounded-[7px]",
                 rounded && "rounded-full",
                 // Focus styles
                 focusable && "outline-transparent group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-focus-ring",

@@ -8,7 +8,6 @@ import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -31,6 +30,7 @@ import { signInLocally } from '../../../lib/auth-flow';
 import { hapticError, hapticSelection, hapticSuccess } from '../../../lib/haptics';
 import { getDirectionalIconStyle, getTextDirectionStyle, useI18n } from '../../../lib/i18n';
 import { BrandWordmark } from '../../../src/components/brand-wordmark';
+import { EmployeeAvatarImage } from '../../../src/components/employee-avatar-image';
 
 type InvitationPayload = Awaited<ReturnType<typeof loadPublicInvitation>>;
 
@@ -281,14 +281,16 @@ export default function RegisterInvitationScreen() {
       const result =
         source === 'camera'
           ? await ImagePicker.launchCameraAsync({
-              allowsEditing: false,
+              allowsEditing: true,
+              aspect: [1, 1],
               base64: true,
-              quality: 0.72,
+              quality: 0.92,
             })
           : await ImagePicker.launchImageLibraryAsync({
-              allowsEditing: false,
+              allowsEditing: true,
+              aspect: [1, 1],
               base64: true,
-              quality: 0.72,
+              quality: 0.92,
               selectionLimit: 1,
             });
 
@@ -730,9 +732,8 @@ export default function RegisterInvitationScreen() {
                 onPress={openPhotoChooser}
               >
                 {form.avatarPreviewUri ? (
-                  <Image
+                  <EmployeeAvatarImage
                     className="h-20 w-20 rounded-[22px]"
-                    resizeMode="cover"
                     source={{ uri: form.avatarPreviewUri }}
                   />
                 ) : (

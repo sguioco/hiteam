@@ -57,6 +57,7 @@ import {
   type NewsImageDraft,
   type NewsImageSource,
 } from '../components/news-image-cropper-modal';
+import { EmployeeAvatarImage } from '../components/employee-avatar-image';
 import { ParticipantAvatarStrip } from '../components/participant-avatar-strip';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import {
@@ -572,7 +573,7 @@ export default function CreateNewsScreen() {
           <View className={`h-6 w-6 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
             {isSelected ? <Ionicons color="#ffffff" name="checkmark" size={14} /> : null}
           </View>
-          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
+          <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">
               {employee.firstName} {employee.lastName}
@@ -1681,7 +1682,7 @@ export default function CreateNewsScreen() {
                   ))}
                   {individuallySelectedEmployees.map((employee) => (
                     <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
-                      <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
+                      <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
                       <View className="flex-1">
                         <Text className="text-[14px] font-semibold text-foreground">
                           {employee.firstName} {employee.lastName}

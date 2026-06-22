@@ -22,6 +22,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomSheetModal from "../components/BottomSheetModal";
+import { EmployeeAvatarImage } from "../components/employee-avatar-image";
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
@@ -1028,11 +1029,10 @@ export default function ManagerScreen({
                             />
                           </View>
                           {showAvatar ? (
-                            <Image
+                            <EmployeeAvatarImage
                               source={item.employee.avatar}
                               className="h-14 w-14 rounded-2xl"
                               onError={() => markAvatarFailed(item.employee.id)}
-                              resizeMode="cover"
                             />
                           ) : (
                             <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -28,6 +28,7 @@ import {
 import { SmartMeetingMeta, appendTaskMeta } from '../../lib/task-meta';
 import { TimeWheelPicker, type TimeValue } from '../../src/components/TimeWheelPicker';
 import BottomSheetModal from '../../src/components/BottomSheetModal';
+import { EmployeeAvatarImage } from '../../src/components/employee-avatar-image';
 import { ParticipantAvatarStrip } from '../../src/components/participant-avatar-strip';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -277,7 +278,7 @@ export default function CreateMeetingScreen() {
           <View className={`h-6 w-6 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary' : 'border-border bg-white'}`}>
             {isSelected ? <Ionicons color="#ffffff" name="checkmark" size={14} /> : null}
           </View>
-          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
+          <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">{employeeSubtitle}</Text>
@@ -622,7 +623,7 @@ export default function CreateMeetingScreen() {
                       ))}
                       {individuallyInvitedEmployees.map((employee) => (
                         <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
-                          <Image source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full bg-[#eef2ff]" resizeMode="cover" />
+                          <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
                           <View className="flex-1">
                             <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
                             <Text className="text-[12px] text-muted-foreground">
@@ -686,7 +687,7 @@ export default function CreateMeetingScreen() {
                     <View className="flex-row gap-2 pr-1">
                       {invitedEmployees.map((employee) => (
                         <View key={employee.id} className="w-[68px] items-center gap-2">
-                          <Image source={getEmployeeAvatarSource(employee)} className="h-14 w-14 rounded-full bg-[#eef2ff]" resizeMode="cover" />
+                          <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-14 w-14 rounded-full" />
                           <Text className="text-center text-[12px] font-semibold text-foreground" numberOfLines={2}>{employee.firstName}</Text>
                         </View>
                       ))}

@@ -31,6 +31,7 @@ import type {
   WorkGroupItem,
 } from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
+import { EmployeeAvatarImage } from "../components/employee-avatar-image";
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_ROW_CLASS,
@@ -2756,22 +2757,19 @@ export default function CalendarScreen({
                     key={row.id}
                   >
                     {showAvatar ? (
-                      <Image
+                      <EmployeeAvatarImage
                         className="h-11 w-11 rounded-2xl"
                         onError={() => markAvatarFailed(avatarKey)}
-                        resizeMode="cover"
                         source={avatarSource}
                       />
                     ) : row.employee ? (
-                      <Image
-                        className="h-11 w-11 rounded-2xl bg-[#eef2ff]"
-                        resizeMode="cover"
+                      <EmployeeAvatarImage
+                        className="h-11 w-11 rounded-2xl"
                         source={resolveEmployeeAvatarSource(row.employee)}
                       />
                     ) : (
-                      <Image
-                        className="h-11 w-11 rounded-2xl bg-[#eef2ff]"
-                        resizeMode="cover"
+                      <EmployeeAvatarImage
+                        className="h-11 w-11 rounded-2xl"
                         source={resolveEmployeeAvatarSource({
                           firstName: row.firstName,
                           id: row.id,
@@ -2853,16 +2851,14 @@ export default function CalendarScreen({
                         />
                       </View>
                       {showAvatar ? (
-                        <Image
+                        <EmployeeAvatarImage
                           className="h-12 w-12 rounded-2xl"
                           onError={() => markAvatarFailed(row.employee.id)}
-                          resizeMode="cover"
                           source={row.employee.avatar}
                         />
                       ) : (
-                        <Image
-                          className="h-12 w-12 rounded-2xl bg-[#eef2ff]"
-                          resizeMode="cover"
+                        <EmployeeAvatarImage
+                          className="h-12 w-12 rounded-2xl"
                           source={resolveEmployeeAvatarSource(row.employee)}
                         />
                       )}
@@ -3008,22 +3004,19 @@ export default function CalendarScreen({
                       />
                     </View>
                     {showAvatar ? (
-                      <Image
+                      <EmployeeAvatarImage
                         className="h-14 w-14 rounded-2xl"
                         onError={() => markAvatarFailed(avatarKey)}
-                        resizeMode="cover"
                         source={avatarSource}
                       />
                     ) : row.employee ? (
-                      <Image
-                        className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
-                        resizeMode="cover"
+                      <EmployeeAvatarImage
+                        className="h-14 w-14 rounded-2xl"
                         source={resolveEmployeeAvatarSource(row.employee)}
                       />
                     ) : row.firstName || row.lastName ? (
-                      <Image
-                        className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
-                        resizeMode="cover"
+                      <EmployeeAvatarImage
+                        className="h-14 w-14 rounded-2xl"
                         source={resolveEmployeeAvatarSource({
                           firstName: row.firstName,
                           id: row.id,
@@ -3537,16 +3530,14 @@ export default function CalendarScreen({
 
                                 <View className="mt-2 flex-row items-center gap-2">
                                   {showAvatar ? (
-                                    <Image
+                                    <EmployeeAvatarImage
                                       className="h-7 w-7 rounded-full"
                                       onError={() => markAvatarFailed(employeeId)}
-                                      resizeMode="cover"
                                       source={avatarSource}
                                     />
                                   ) : (
-                                    <Image
-                                      className="h-7 w-7 rounded-full bg-[#eef2ff]"
-                                      resizeMode="cover"
+                                    <EmployeeAvatarImage
+                                      className="h-7 w-7 rounded-full"
                                       source={resolveEmployeeAvatarSource({
                                         firstName: result.firstName,
                                         id: employeeId,
@@ -3707,16 +3698,14 @@ export default function CalendarScreen({
                                 />
                               </View>
                               {showAvatar ? (
-                                <Image
+                                <EmployeeAvatarImage
                                   className="h-14 w-14 rounded-2xl"
                                   onError={() => markAvatarFailed(row.employee.id)}
-                                  resizeMode="cover"
                                   source={row.employee.avatar}
                                 />
                               ) : (
-                                <Image
-                                  className="h-14 w-14 rounded-2xl bg-[#eef2ff]"
-                                  resizeMode="cover"
+                                <EmployeeAvatarImage
+                                  className="h-14 w-14 rounded-2xl"
                                   source={resolveEmployeeAvatarSource(row.employee)}
                                 />
                               )}
@@ -4423,16 +4412,14 @@ export default function CalendarScreen({
                                       ) : null}
                                     </View>
                                     {showAvatar ? (
-                                      <Image
+                                      <EmployeeAvatarImage
                                         className="h-10 w-10 rounded-full"
                                         onError={() => markAvatarFailed(employee.id)}
-                                        resizeMode="cover"
                                         source={employee.avatar}
                                       />
                                     ) : (
-                                      <Image
-                                        className="h-10 w-10 rounded-full bg-[#eef2ff]"
-                                        resizeMode="cover"
+                                      <EmployeeAvatarImage
+                                        className="h-10 w-10 rounded-full"
                                         source={resolveEmployeeAvatarSource(employee)}
                                       />
                                     )}
@@ -4499,16 +4486,14 @@ export default function CalendarScreen({
                               ) : null}
                             </View>
                             {showAvatar ? (
-                              <Image
+                              <EmployeeAvatarImage
                                 className="h-10 w-10 rounded-full"
                                 onError={() => markAvatarFailed(employee.id)}
-                                resizeMode="cover"
                                 source={employee.avatar}
                               />
                             ) : (
-                              <Image
-                                className="h-10 w-10 rounded-full bg-[#eef2ff]"
-                                resizeMode="cover"
+                              <EmployeeAvatarImage
+                                className="h-10 w-10 rounded-full"
                                 source={resolveEmployeeAvatarSource(employee)}
                               />
                             )}
@@ -4628,16 +4613,14 @@ export default function CalendarScreen({
                               ) : null}
                             </View>
                             {showAvatar ? (
-                              <Image
+                              <EmployeeAvatarImage
                                 className="h-10 w-10 rounded-full"
                                 onError={() => markAvatarFailed(employee.id)}
-                                resizeMode="cover"
                                 source={employee.avatar}
                               />
                             ) : (
-                              <Image
-                                className="h-10 w-10 rounded-full bg-[#eef2ff]"
-                                resizeMode="cover"
+                              <EmployeeAvatarImage
+                                className="h-10 w-10 rounded-full"
                                 source={resolveEmployeeAvatarSource(employee)}
                               />
                             )}
@@ -5090,16 +5073,14 @@ export default function CalendarScreen({
                           >
                             <View className="flex-row items-start gap-3">
                               {showAvatar ? (
-                                <Image
+                                <EmployeeAvatarImage
                                   className="mt-0.5 h-11 w-11 rounded-2xl"
                                   onError={() => markAvatarFailed(avatarKey)}
-                                  resizeMode="cover"
                                   source={item.avatarSource}
                                 />
                               ) : item.employeeId ? (
-                                <Image
-                                  className="mt-0.5 h-11 w-11 rounded-2xl bg-[#eef2ff]"
-                                  resizeMode="cover"
+                                <EmployeeAvatarImage
+                                  className="mt-0.5 h-11 w-11 rounded-2xl"
                                   source={resolveEmployeeAvatarSource({
                                     firstName: item.firstName,
                                     id: item.employeeId,

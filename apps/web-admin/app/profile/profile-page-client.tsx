@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Languages, KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
+import { KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
 import type { DashboardBootstrapResponse } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
@@ -11,7 +11,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '../../components/ui/select';
 import {
   Dialog,
@@ -155,6 +154,20 @@ export default function ProfilePageClient({
   const roleLabel = user.roleCodes.map((code) => roleLabels[code] ?? code).join(', ');
   const fullName = buildUserDisplayName(employee?.firstName, employee?.lastName);
   const displayName = fullName || user.email;
+  const languageOptions = [
+    {
+      icon: '/en.png',
+      label: locale === 'ru' ? 'Английский' : 'English',
+      value: 'en',
+    },
+    {
+      icon: '/ru.png',
+      label: locale === 'ru' ? 'Русский' : 'Russian',
+      value: 'ru',
+    },
+  ] as const;
+  const selectedLanguage =
+    languageOptions.find((option) => option.value === locale) ?? languageOptions[0];
 
   return (
     <AdminShell mode={employeeMode ? "employee" : "admin"}>
@@ -170,17 +183,27 @@ export default function ProfilePageClient({
               className="min-h-10 w-full rounded-full px-3 py-1.5 sm:w-[176px]"
             >
               <span className="flex min-w-0 items-center gap-2">
-                <Languages className="size-4 shrink-0 text-muted-foreground" />
-                <SelectValue />
+                <img
+                  alt=""
+                  className="h-4 w-5 shrink-0 rounded-[3px] object-cover shadow-[0_0_0_1px_rgba(15,23,42,0.12)]"
+                  src={selectedLanguage.icon}
+                />
+                <span className="truncate">{selectedLanguage.label}</span>
               </span>
             </SelectTrigger>
             <SelectContent align="end">
-              <SelectItem value="en">
-                {locale === 'ru' ? 'Английский' : 'English'}
-              </SelectItem>
-              <SelectItem value="ru">
-                {locale === 'ru' ? 'Русский' : 'Russian'}
-              </SelectItem>
+              {languageOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <img
+                      alt=""
+                      className="h-4 w-5 shrink-0 rounded-[3px] object-cover shadow-[0_0_0_1px_rgba(15,23,42,0.12)]"
+                      src={option.icon}
+                    />
+                    <span className="truncate">{option.label}</span>
+                  </span>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -202,7 +225,11 @@ export default function ProfilePageClient({
               dialogTitle={locale === 'ru' ? 'Редактировать фото профиля' : 'Edit profile photo'}
               onChange={handleAvatarChange}
               onError={setAvatarError}
+              outputQuality={0.92}
+              outputSize={512}
               previewAlt={displayName}
+              sourceMaxSide={1024}
+              sourceQuality={0.92}
               renderTrigger={({ chooseFile, openEditor, previewSrc }) => (
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
                   <div className="flex shrink-0 flex-col items-start gap-3">

@@ -21,6 +21,49 @@ type JoinInvitationPageClientProps = {
   token: string;
 };
 
+async function prepareSquareAvatarDataUrl(file: File, locale: "ru" | "en") {
+  const sourceDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () =>
+      reject(new Error(locale === "ru" ? "Не удалось прочитать файл." : "Failed to read the file."));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const nextImage = new Image();
+    nextImage.onload = () => resolve(nextImage);
+    nextImage.onerror = () =>
+      reject(new Error(locale === "ru" ? "Не удалось обработать фото." : "Failed to process the photo."));
+    nextImage.src = sourceDataUrl;
+  });
+
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error(locale === "ru" ? "Не удалось подготовить фото." : "Failed to prepare the photo.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, size, size);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  const scale = Math.max(size / image.width, size / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const drawX = (size - drawWidth) / 2;
+  const drawY = (size - drawHeight) / 2;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
 export default function JoinInvitationPageClient({
   initialError = null,
   initialInvitation,
@@ -59,14 +102,18 @@ export default function JoinInvitationPageClient({
       return;
     }
 
-    const nextDataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error(locale === "ru" ? "Не удалось прочитать файл." : "Failed to read the file."));
-      reader.readAsDataURL(file);
-    });
-
-    setAvatarDataUrl(nextDataUrl);
+    try {
+      setAvatarDataUrl(await prepareSquareAvatarDataUrl(file, locale));
+      setError(null);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : locale === "ru"
+            ? "Не удалось подготовить фото."
+            : "Failed to prepare the photo.",
+      );
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
