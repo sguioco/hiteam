@@ -402,24 +402,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid password.');
     }
 
-    const requestedLocale = dto.locale
-      ? this.normalizePreferredLocale(dto.locale)
-      : null;
-
-    if (requestedLocale && this.normalizePreferredLocale(user.preferredLocale) !== requestedLocale) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { preferredLocale: requestedLocale },
-        include: {
-          roles: {
-            include: {
-              role: true,
-            },
-          },
-        },
-      });
-    }
-
     const {
       accessToken,
       refreshToken,

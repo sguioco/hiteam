@@ -447,7 +447,7 @@ export function HeaderEmployeeCreateDialog({
 
           {error ? <div className="error-box">{error}</div> : null}
 
-          <div className="flex flex-wrap justify-between gap-2">
+          <div className="flex flex-wrap justify-end gap-3">
             <Button
               className="rounded-xl font-heading"
               onClick={() => {

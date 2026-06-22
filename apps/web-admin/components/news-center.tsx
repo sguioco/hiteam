@@ -1797,8 +1797,8 @@ export function NewsCenter({
               </div>
             </div>
 
-            <DialogFooter className="shrink-0 bg-[color:var(--panel-strong)] px-6 py-4 sm:justify-between">
-              <Button onClick={() => setCreateOpen(false)} type="button" variant="ghost">
+            <DialogFooter className="shrink-0 bg-[color:var(--panel-strong)] px-6 py-4 sm:justify-end">
+              <Button onClick={() => setCreateOpen(false)} type="button" variant="outline">
                 {localize(locale, "Отмена", "Cancel")}
               </Button>
               <Button disabled={submitting} onClick={() => void handleCreate()} type="button">

@@ -505,7 +505,6 @@ export default function ManagerJoinPageClient({
             tenantSlug: invitation.tenantSlug,
             email: invitationEmail,
             password: form.password,
-            locale,
           }),
         });
       } catch {

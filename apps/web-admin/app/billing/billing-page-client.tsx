@@ -98,13 +98,20 @@ const BILLING_PURCHASE_PLANS: Array<{
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MINIMUM_SEAT_PURCHASE_COUNT = 1;
 
-function getInitialSeatCount(summary?: BillingSummary | null) {
+function getCurrentSeatBase(summary?: BillingSummary | null) {
   if (!summary) {
-    return 1;
+    return 0;
   }
 
-  return Math.max(1, summary.requiredSeats, summary.usedSeats, summary.billableSeats);
+  return Math.max(
+    0,
+    summary.paidSeats,
+    summary.requiredSeats,
+    summary.usedSeats,
+    summary.billableSeats,
+  );
 }
 
 function formatMoney(value: number, currency: BillingCurrency, locale: "en" | "ru") {
@@ -309,7 +316,7 @@ export default function BillingPageClient({
   const [selectedPlanId, setSelectedPlanId] =
     useState<BillingPurchasePlanId>("semi_annual");
   const [selectedSeatCount, setSelectedSeatCount] = useState(() =>
-    getInitialSeatCount(initialData),
+    MINIMUM_SEAT_PURCHASE_COUNT,
   );
   const [seatControlTouched, setSeatControlTouched] = useState(false);
 
@@ -318,7 +325,8 @@ export default function BillingPageClient({
     const coveredSeats = summary.trialActive ? summary.requiredSeats : summary.paidSeats;
     return Math.min(100, Math.round((coveredSeats / summary.requiredSeats) * 100));
   }, [summary]);
-  const minimumSeatCount = useMemo(() => getInitialSeatCount(summary), [summary]);
+  const currentSeatBase = useMemo(() => getCurrentSeatBase(summary), [summary]);
+  const minimumSeatCount = MINIMUM_SEAT_PURCHASE_COUNT;
   const selectedPlan = useMemo(
     () =>
       BILLING_PURCHASE_PLANS.find((plan) => plan.id === selectedPlanId) ??
@@ -339,7 +347,8 @@ export default function BillingPageClient({
       currentPaidThrough > now
         ? currentPaidThrough
         : null;
-    const targetSeats = Math.max(minimumSeatCount, selectedSeatCount);
+    const seatsToBuy = Math.max(minimumSeatCount, selectedSeatCount);
+    const targetSeats = currentSeatBase + seatsToBuy;
     const additionalSeats = activePaidThrough
       ? Math.max(0, targetSeats - summary.paidSeats)
       : 0;
@@ -363,7 +372,7 @@ export default function BillingPageClient({
       renewalAmount,
       targetSeats,
     };
-  }, [minimumSeatCount, selectedPlan, selectedSeatCount, summary]);
+  }, [currentSeatBase, minimumSeatCount, selectedPlan, selectedSeatCount, summary]);
   const nextBillingDate = summary
     ? formatBillingDate(
         summary.nextBillingAt ??
@@ -708,23 +717,6 @@ export default function BillingPageClient({
                 : "Manage your seats, plan and billing details"}
             </p>
           </div>
-          {summary && purchasePreview ? (
-            <button
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#284bff] px-4 font-heading text-sm font-semibold text-white transition-[background-color,transform] hover:bg-[#1f3bd8] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 sm:w-auto"
-              disabled={billingActionLoading}
-              onClick={openBillingFlow}
-              type="button"
-            >
-              <Plus className="size-4" />
-              {billingActionLoading
-                ? locale === "ru"
-                  ? "Открываем оплату..."
-                  : "Opening checkout..."
-                : locale === "ru"
-                  ? "Докупить места"
-                  : "Buy seats"}
-            </button>
-          ) : null}
         </header>
 
         <nav
@@ -1074,12 +1066,12 @@ export default function BillingPageClient({
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-y border-[rgba(15,23,42,0.1)] py-5">
                   <div className="font-heading">
                     <p className="text-sm font-semibold text-foreground">
-                      {locale === "ru" ? "Количество мест" : "Seats"}
+                      {locale === "ru" ? "Мест докупить" : "Seats to buy"}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {locale === "ru"
-                        ? `Минимум сейчас: ${minimumSeatCount}`
-                        : `Current minimum: ${minimumSeatCount}`}
+                        ? `Минимум: ${minimumSeatCount}`
+                        : `Minimum: ${minimumSeatCount}`}
                     </p>
                   </div>
                   <div className="flex h-11 items-center overflow-hidden rounded-xl border border-[rgba(15,23,42,0.14)] bg-white">

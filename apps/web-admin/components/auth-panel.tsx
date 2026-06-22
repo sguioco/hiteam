@@ -608,7 +608,6 @@ export function AuthPanel() {
             : companyLookupResult?.tenantSlug
             ? { tenantSlug: companyLookupResult.tenantSlug }
             : {}),
-          locale: toBackendLocale(lang),
         }),
       });
 
@@ -701,7 +700,6 @@ export function AuthPanel() {
           identifier: normalizedEmail,
           password: ownerPassword,
           tenantSlug: registration.tenantSlug,
-          locale: toBackendLocale(lang),
         }),
       });
 
@@ -761,7 +759,6 @@ export function AuthPanel() {
           identifier: DEMO_ADMIN_EMAIL,
           password: DEMO_ADMIN_PASSWORD,
           tenantSlug: 'demo',
-          locale: toBackendLocale(lang),
         }),
       });
       disableDemoMode();

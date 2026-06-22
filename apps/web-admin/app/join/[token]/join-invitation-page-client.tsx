@@ -113,7 +113,6 @@ export default function JoinInvitationPageClient({
           tenantSlug: invitation?.tenantSlug,
           email: normalizedEmail,
           password: form.password,
-          locale,
         }),
       });
 

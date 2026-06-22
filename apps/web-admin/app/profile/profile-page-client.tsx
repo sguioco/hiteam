@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
+import { Languages, KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
 import type { DashboardBootstrapResponse } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
 import { Button } from '../../components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +40,7 @@ export default function ProfilePageClient({
   initialEmployee?: ProfileEmployee | null;
   initialSession: AuthSession;
 }) {
-  const { locale } = useI18n();
+  const { locale, setLocale } = useI18n();
   const [employeeMode, setEmployeeMode] = useState(
     isEmployeeOnlyRole(initialSession.user.roleCodes),
   );
@@ -130,6 +137,12 @@ export default function ProfilePageClient({
     writeStoredProfileAvatar(nextAvatarDataUrl, avatarScope);
   }
 
+  function handleLanguageChange(nextLocale: string) {
+    if (nextLocale === 'ru' || nextLocale === 'en') {
+      setLocale(nextLocale);
+    }
+  }
+
   const user = session.user;
   const roleLabels: Record<string, string> = {
     tenant_owner: locale === 'ru' ? 'Владелец' : 'Owner',
@@ -146,9 +159,31 @@ export default function ProfilePageClient({
   return (
     <AdminShell mode={employeeMode ? "employee" : "admin"}>
       <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-        <h1 className="mb-6 font-heading text-2xl font-bold">
-          {locale === 'ru' ? 'Профиль' : 'Profile'}
-        </h1>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="font-heading text-2xl font-bold">
+            {locale === 'ru' ? 'Профиль' : 'Profile'}
+          </h1>
+
+          <Select value={locale} onValueChange={handleLanguageChange}>
+            <SelectTrigger
+              aria-label={locale === 'ru' ? 'Язык интерфейса' : 'Interface language'}
+              className="min-h-10 w-full rounded-full px-3 py-1.5 sm:w-[176px]"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Languages className="size-4 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </span>
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="en">
+                {locale === 'ru' ? 'Английский' : 'English'}
+              </SelectItem>
+              <SelectItem value="ru">
+                {locale === 'ru' ? 'Русский' : 'Russian'}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="space-y-4">
           {avatarError ? (

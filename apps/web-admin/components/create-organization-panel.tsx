@@ -312,7 +312,6 @@ export function CreateOrganizationPanel() {
           identifier: normalizedEmail,
           password,
           tenantSlug: registration.tenantSlug,
-          locale: toBackendLocale(lang),
         }),
       });
 

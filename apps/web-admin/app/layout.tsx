@@ -104,6 +104,7 @@ function resolveInitialLocale(
   acceptLanguageHeader: string | null,
   localeCookie: string | undefined,
   isPublicRoute: boolean,
+  sessionPreferredLocale?: string | null,
 ): "en" | "ru" {
   const browserLocale = parsePreferredLocaleFromAcceptLanguage(acceptLanguageHeader);
 
@@ -119,6 +120,10 @@ function resolveInitialLocale(
     return "en";
   }
 
+  if (sessionPreferredLocale === "ru" || sessionPreferredLocale === "en") {
+    return sessionPreferredLocale;
+  }
+
   if (localeCookie === "ru" || localeCookie === "en") {
     return localeCookie;
   }
@@ -132,12 +137,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const isPublicRoute = requestHeaders.get("x-smart-public-route") === "1";
   const pathname = requestHeaders.get("x-smart-pathname");
   const shouldRenderWidget = pathname !== "/mobile";
+  const initialSession = isPublicRoute ? null : await getServerSessionSnapshot();
   const initialLocale = resolveInitialLocale(
     requestHeaders.get("accept-language"),
     cookieStore.get("smart-admin-locale")?.value,
     isPublicRoute,
+    initialSession?.user.preferredLocale,
   );
-  const initialSession = isPublicRoute ? null : await getServerSessionSnapshot();
   const sessionBootstrapScript = `window.__SMART_INITIAL_SESSION__ = ${JSON.stringify(initialSession).replace(/</g, "\\u003c")}; window.__SMART_INITIAL_SHELL__ = null;`;
 
   return (

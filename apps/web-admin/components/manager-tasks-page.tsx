@@ -78,6 +78,7 @@ export type EmployeeDirectoryItem = {
 };
 
 type DatePreset = "yesterday" | "today" | "tomorrow" | "custom";
+type FilterSelectKey = "group" | "status" | "presence" | "count";
 
 type EmployeeTaskStats = {
   total: number;
@@ -739,6 +740,8 @@ export function ManagerTasksPage({
   const [taskCountFilter, setTaskCountFilter] = useState("0");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [openFilterSelect, setOpenFilterSelect] =
+    useState<FilterSelectKey | null>(null);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: "tasks",
@@ -1526,6 +1529,10 @@ export function ManagerTasksPage({
         return false;
       }
 
+      if (taskPresenceFilter === "overdue" && row.entry.stats.overdue <= 0) {
+        return false;
+      }
+
       if (row.entry.stats.total < minTasks) {
         return false;
       }
@@ -1677,6 +1684,11 @@ export function ManagerTasksPage({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        if (openFilterSelect) {
+          setOpenFilterSelect(null);
+          return;
+        }
+
         setShowFilters(false);
       }
     }
@@ -1690,7 +1702,26 @@ export function ManagerTasksPage({
       document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
+  }, [openFilterSelect, showFilters]);
+
+  useEffect(() => {
+    if (!showFilters) {
+      setOpenFilterSelect(null);
+    }
   }, [showFilters]);
+
+  function handleFilterSelectOpenChange(
+    selectKey: FilterSelectKey,
+    open: boolean,
+  ) {
+    setOpenFilterSelect((current) => {
+      if (open) {
+        return selectKey;
+      }
+
+      return current === selectKey ? null : current;
+    });
+  }
 
   function toggleExpandedEmployee(employeeId: string) {
     setExpandedEmployeeIds((current) =>
@@ -2070,7 +2101,11 @@ export function ManagerTasksPage({
                       <AppSelectField
                         className="team-tasks-filter-select"
                         emptyLabel={localize(locale, "Все команды", "All teams")}
+                        onOpenChange={(open) =>
+                          handleFilterSelectOpenChange("group", open)
+                        }
                         onValueChange={setGroupFilter}
+                        open={openFilterSelect === "group"}
                         options={groupOptions}
                         placeholder={localize(locale, "Команда", "Team")}
                         value={groupFilter}
@@ -2079,7 +2114,11 @@ export function ManagerTasksPage({
                     <div className="team-tasks-filter-field">
                       <AppSelectField
                         className="team-tasks-filter-select"
+                        onOpenChange={(open) =>
+                          handleFilterSelectOpenChange("status", open)
+                        }
                         onValueChange={setStatusFilter}
+                        open={openFilterSelect === "status"}
                         options={statusFilterOptions}
                         value={statusFilter}
                       />
@@ -2087,11 +2126,21 @@ export function ManagerTasksPage({
                     <div className="team-tasks-filter-field">
                       <AppSelectField
                         className="team-tasks-filter-select"
+                        onOpenChange={(open) =>
+                          handleFilterSelectOpenChange("presence", open)
+                        }
                         onValueChange={setTaskPresenceFilter}
+                        open={openFilterSelect === "presence"}
                         options={[
                           { value: "all", label: localize(locale, "Любые задачи", "Any task state") },
                           { value: "with_tasks", label: localize(locale, "Есть задачи", "Has tasks") },
                           { value: "without_tasks", label: localize(locale, "Без задач", "No tasks") },
+                          {
+                            value: "overdue",
+                            label: localize(locale, "Просроченные", "Overdue"),
+                            className:
+                              "text-red-600 focus:text-red-700 data-[state=checked]:bg-red-600 data-[state=checked]:text-white",
+                          },
                         ]}
                         value={taskPresenceFilter}
                       />
@@ -2099,7 +2148,11 @@ export function ManagerTasksPage({
                     <div className="team-tasks-filter-field">
                       <AppSelectField
                         className="team-tasks-filter-select"
+                        onOpenChange={(open) =>
+                          handleFilterSelectOpenChange("count", open)
+                        }
                         onValueChange={setTaskCountFilter}
+                        open={openFilterSelect === "count"}
                         options={[
                           { value: "0", label: localize(locale, "Любое кол-во задач", "Any task count") },
                           { value: "1", label: localize(locale, "От 1 задачи", "From 1 task") },
@@ -2322,11 +2375,16 @@ export function ManagerTasksPage({
                             ? rowSearchMatchedTasks
                             : item.row.entry.tasks;
                         const detailTasks =
-                          hasRowTaskSearchMatches
+                          (hasRowTaskSearchMatches
                             ? detailSourceTasks.filter((task) =>
                                 taskSearchMatchIds.has(task.id),
                               )
-                            : detailSourceTasks;
+                            : detailSourceTasks
+                          ).filter((task) =>
+                            taskPresenceFilter === "overdue"
+                              ? isTaskOverdue(task, today)
+                              : true,
+                          );
                         return (
                           <Table.Row
                             className={`team-tasks-detail-row ${

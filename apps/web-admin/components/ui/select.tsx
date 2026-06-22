@@ -321,6 +321,7 @@ const SelectSeparator = React.forwardRef<
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
 type AppSelectOption = {
+  className?: string;
   label: React.ReactNode;
   value: string;
 };
@@ -330,7 +331,9 @@ type AppSelectFieldProps = {
   contentClassName?: string;
   emptyLabel?: React.ReactNode;
   emptyOptionsLabel?: React.ReactNode;
+  onOpenChange?: (open: boolean) => void;
   onValueChange: (value: string) => void;
+  open?: boolean;
   options: AppSelectOption[];
   placeholder?: string;
   triggerClassName?: string;
@@ -348,7 +351,9 @@ function AppSelectField({
   contentClassName,
   emptyLabel,
   emptyOptionsLabel,
+  onOpenChange,
   onValueChange,
+  open,
   options,
   placeholder,
   triggerClassName,
@@ -368,6 +373,8 @@ function AppSelectField({
 
   return (
     <Select
+      onOpenChange={onOpenChange}
+      open={open}
       value={normalizedValue}
       onValueChange={(nextValue) =>
         onValueChange(nextValue === APP_SELECT_EMPTY_VALUE ? "" : nextValue)
@@ -385,7 +392,11 @@ function AppSelectField({
         ) : null}
         {options.length > 0 ? (
           options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
+            <SelectItem
+              className={option.className}
+              key={option.value}
+              value={option.value}
+            >
               {option.label}
             </SelectItem>
           ))

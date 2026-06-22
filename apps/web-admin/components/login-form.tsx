@@ -30,10 +30,6 @@ const langs: { code: SupportedLang; label: string }[] = [
   { code: 'ar', label: 'العربية' },
 ];
 
-function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
-  return lang === 'ru' ? 'ru' : 'en';
-}
-
 const texts = {
   en: {
     welcome: 'Welcome back',
@@ -191,7 +187,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
         body: JSON.stringify({
           identifier,
           password,
-          locale: toBackendLocale(lang),
         }),
       });
       const nextRoute = resolvePostLoginRoute(session);
