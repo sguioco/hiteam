@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 type StoredObject = {
   buffer: Buffer;
@@ -123,6 +123,20 @@ export class StorageService {
     this.setCachedObject(key, object);
 
     return object;
+  }
+
+  async deleteObject(key: string) {
+    if (!this.isConfigured()) {
+      return;
+    }
+
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+    this.deleteCachedObject(key);
   }
 
   getObjectUrl(key: string) {

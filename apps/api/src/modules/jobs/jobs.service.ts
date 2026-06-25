@@ -4,6 +4,7 @@ import {
   AttendanceEventType,
   AttendanceResult,
   AttendanceSessionStatus,
+  BiometricEnrollmentStatus,
   NotificationType,
   RequestStatus,
   ShiftStatus,
@@ -14,6 +15,15 @@ import { DiagnosticsService } from '../diagnostics/diagnostics.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { StorageService } from '../storage/storage.service';
+
+const PRIVACY_RETENTION_BATCH_SIZE = 100;
+const GEOLOCATION_AUDIT_FIELDS = [
+  'latitude',
+  'longitude',
+  'accuracyMeters',
+  'distanceMeters',
+] as const;
 
 @Injectable()
 export class JobsService {
@@ -25,6 +35,7 @@ export class JobsService {
     private readonly diagnosticsService: DiagnosticsService,
     private readonly notificationsService: NotificationsService,
     private readonly pushService: PushService,
+    private readonly storageService: StorageService,
   ) {}
 
   @Cron('*/15 * * * *')
@@ -247,6 +258,50 @@ export class JobsService {
 
     if (result.checked > 0) {
       this.logger.log(`Reconciled ${result.checked} Expo push receipt batches.`);
+    }
+  }
+
+  @Cron('30 3 * * *')
+  async enforcePrivacyRetention() {
+    const cutoff = this.getPrivacyRetentionCutoff();
+    const [
+      biometricProfiles,
+      biometricArtifacts,
+      biometricVerifications,
+      biometricJobs,
+      taskPhotoProofs,
+      attendanceEvents,
+      auditLogs,
+    ] = await Promise.all([
+      this.purgeExpiredBiometricProfiles(cutoff),
+      this.purgeExpiredBiometricArtifacts(cutoff),
+      this.purgeExpiredBiometricVerifications(cutoff),
+      this.purgeExpiredBiometricJobs(cutoff),
+      this.purgeExpiredTaskPhotoProofs(cutoff),
+      this.scrubExpiredAttendanceGeolocation(cutoff),
+      this.scrubExpiredGeolocationAuditLogs(cutoff),
+    ]);
+
+    const touched =
+      biometricProfiles.updated +
+      biometricArtifacts.deleted +
+      biometricVerifications.deleted +
+      biometricJobs.deleted +
+      taskPhotoProofs.deleted +
+      attendanceEvents.updated +
+      auditLogs.updated;
+
+    if (touched > 0) {
+      this.logger.log(
+        `Privacy retention cleanup completed for cutoff ${cutoff.toISOString()}: ` +
+          `biometricProfiles=${biometricProfiles.updated}, ` +
+          `biometricArtifacts=${biometricArtifacts.deleted}, ` +
+          `biometricVerifications=${biometricVerifications.deleted}, ` +
+          `biometricJobs=${biometricJobs.deleted}, ` +
+          `taskPhotoProofs=${taskPhotoProofs.deleted}, ` +
+          `attendanceEvents=${attendanceEvents.updated}, ` +
+          `auditLogs=${auditLogs.updated}.`,
+      );
     }
   }
 
@@ -557,6 +612,267 @@ export class JobsService {
     });
 
     return Boolean(notification);
+  }
+
+  private getPrivacyRetentionCutoff(now = new Date()) {
+    const cutoff = new Date(now);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - 6);
+    return cutoff;
+  }
+
+  private async purgeExpiredBiometricProfiles(cutoff: Date) {
+    let updated = 0;
+
+    while (true) {
+      const profiles = await this.prisma.biometricProfile.findMany({
+        where: {
+          enrollmentStatus: BiometricEnrollmentStatus.ENROLLED,
+          enrolledAt: { lt: cutoff },
+        },
+        select: {
+          id: true,
+          templateRef: true,
+        },
+        take: PRIVACY_RETENTION_BATCH_SIZE,
+      });
+
+      if (profiles.length === 0) {
+        break;
+      }
+
+      const deletedKeys = await this.deleteStoredObjects(profiles.map((profile) => profile.templateRef));
+      const resettableIds = profiles
+        .filter((profile) => !this.isStoredObjectKey(profile.templateRef) || deletedKeys.has(profile.templateRef))
+        .map((profile) => profile.id);
+
+      if (resettableIds.length === 0) {
+        this.logger.warn('Privacy retention stopped biometric profile cleanup because storage deletion failed.');
+        break;
+      }
+
+      const result = await this.prisma.biometricProfile.updateMany({
+        where: { id: { in: resettableIds } },
+        data: {
+          enrollmentStatus: BiometricEnrollmentStatus.NOT_STARTED,
+          templateRef: null,
+          enrolledAt: null,
+          lastVerifiedAt: null,
+        },
+      });
+      updated += result.count;
+    }
+
+    return { updated };
+  }
+
+  private async purgeExpiredBiometricArtifacts(cutoff: Date) {
+    let deleted = 0;
+
+    while (true) {
+      const artifacts = await this.prisma.biometricArtifact.findMany({
+        where: { createdAt: { lt: cutoff } },
+        select: {
+          id: true,
+          storageKey: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: PRIVACY_RETENTION_BATCH_SIZE,
+      });
+
+      if (artifacts.length === 0) {
+        break;
+      }
+
+      const deletedKeys = await this.deleteStoredObjects(artifacts.map((artifact) => artifact.storageKey));
+      const removableIds = artifacts
+        .filter((artifact) => !this.isStoredObjectKey(artifact.storageKey) || deletedKeys.has(artifact.storageKey))
+        .map((artifact) => artifact.id);
+
+      if (removableIds.length === 0) {
+        this.logger.warn('Privacy retention stopped biometric artifact cleanup because storage deletion failed.');
+        break;
+      }
+
+      const result = await this.prisma.biometricArtifact.deleteMany({
+        where: { id: { in: removableIds } },
+      });
+      deleted += result.count;
+    }
+
+    return { deleted };
+  }
+
+  private async purgeExpiredBiometricVerifications(cutoff: Date) {
+    const result = await this.prisma.biometricVerification.deleteMany({
+      where: { capturedAt: { lt: cutoff } },
+    });
+
+    return { deleted: result.count };
+  }
+
+  private async purgeExpiredBiometricJobs(cutoff: Date) {
+    const result = await this.prisma.biometricJob.deleteMany({
+      where: { createdAt: { lt: cutoff } },
+    });
+
+    return { deleted: result.count };
+  }
+
+  private async purgeExpiredTaskPhotoProofs(cutoff: Date) {
+    let deleted = 0;
+
+    while (true) {
+      const proofs = await this.prisma.taskPhotoProof.findMany({
+        where: { createdAt: { lt: cutoff } },
+        select: {
+          id: true,
+          storageKey: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: PRIVACY_RETENTION_BATCH_SIZE,
+      });
+
+      if (proofs.length === 0) {
+        break;
+      }
+
+      const deletedKeys = await this.deleteStoredObjects(proofs.map((proof) => proof.storageKey));
+      const removableIds = proofs
+        .filter((proof) => !this.isStoredObjectKey(proof.storageKey) || deletedKeys.has(proof.storageKey))
+        .map((proof) => proof.id);
+
+      if (removableIds.length === 0) {
+        this.logger.warn('Privacy retention stopped task photo cleanup because storage deletion failed.');
+        break;
+      }
+
+      const result = await this.prisma.taskPhotoProof.deleteMany({
+        where: { id: { in: removableIds } },
+      });
+      deleted += result.count;
+    }
+
+    return { deleted };
+  }
+
+  private async scrubExpiredAttendanceGeolocation(cutoff: Date) {
+    const result = await this.prisma.attendanceEvent.updateMany({
+      where: {
+        occurredAt: { lt: cutoff },
+        OR: [
+          { latitude: { not: 0 } },
+          { longitude: { not: 0 } },
+          { accuracyMeters: { not: 0 } },
+          { distanceMeters: { not: 0 } },
+        ],
+      },
+      data: {
+        latitude: 0,
+        longitude: 0,
+        accuracyMeters: 0,
+        distanceMeters: 0,
+      },
+    });
+
+    return { updated: result.count };
+  }
+
+  private async scrubExpiredGeolocationAuditLogs(cutoff: Date) {
+    let updated = 0;
+
+    while (true) {
+      const logs = await this.prisma.auditLog.findMany({
+        where: {
+          action: 'attendance.rejected_attempt',
+          createdAt: { lt: cutoff },
+          metadataJson: { contains: '"latitude"' },
+        },
+        select: {
+          id: true,
+          metadataJson: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: PRIVACY_RETENTION_BATCH_SIZE,
+      });
+
+      if (logs.length === 0) {
+        break;
+      }
+
+      let batchUpdated = 0;
+
+      for (const log of logs) {
+        const metadata = this.parseAuditMetadata(log.metadataJson);
+        if (!metadata) {
+          continue;
+        }
+
+        let changed = false;
+        for (const field of GEOLOCATION_AUDIT_FIELDS) {
+          if (Object.prototype.hasOwnProperty.call(metadata, field)) {
+            delete metadata[field];
+            changed = true;
+          }
+        }
+
+        if (!changed) {
+          continue;
+        }
+
+        await this.prisma.auditLog.update({
+          where: { id: log.id },
+          data: { metadataJson: JSON.stringify(metadata) },
+        });
+        batchUpdated += 1;
+      }
+
+      updated += batchUpdated;
+
+      if (batchUpdated === 0) {
+        break;
+      }
+    }
+
+    return { updated };
+  }
+
+  private parseAuditMetadata(value: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async deleteStoredObjects(keys: Array<string | null | undefined>) {
+    const successfulKeys = new Set<string>();
+    const uniqueKeys = Array.from(new Set(keys.filter((key): key is string => this.isStoredObjectKey(key))));
+
+    for (const key of uniqueKeys) {
+      try {
+        await this.storageService.deleteObject(key);
+        successfulKeys.add(key);
+      } catch (error) {
+        this.logger.warn(
+          `Privacy retention failed to delete stored object ${key}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    return successfulKeys;
+  }
+
+  private isStoredObjectKey(value: string | null | undefined): value is string {
+    return Boolean(value && !/^data:/i.test(value) && !/^https?:\/\//i.test(value));
   }
 
   @Cron('5,20,35,50 * * * *')
