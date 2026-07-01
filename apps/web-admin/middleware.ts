@@ -13,6 +13,7 @@ const PUBLIC_EXACT_PATHS = new Set([
   "/privacy",
   "/privacy-en",
   "/signup",
+  "/support",
   "/terms",
   "/terms-en",
 ]);
