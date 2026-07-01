@@ -3,12 +3,36 @@
     "name": "HiTeam",
     "slug": "smart",
     "scheme": "hiteam",
+    "description": "HiTeam helps companies manage shifts, tasks, attendance, news, and employee performance in one mobile workspace.",
     "version": "5.0.0",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "net.hiteam.app",
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1", "3B52.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1", "1C8F.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": []
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Smart uses the front camera to verify your identity before you can enter the workspace.",
         "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift.",
@@ -75,6 +99,7 @@
     },
     "extra": {
       "supportsRTL": true,
+      "privacyPolicyUrl": "https://hiteam.net/privacy",
       "router": {},
       "eas": {
         "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"
