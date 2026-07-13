@@ -40,7 +40,7 @@
       }
     },
     "android": {
-      "package": "net.hiteam.app",
+      "package": "com.HiTeam",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
