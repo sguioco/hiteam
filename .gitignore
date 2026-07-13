@@ -26,4 +26,5 @@ apps/web-admin/.next-dev
 !.aidesigner/.gitkeep
 AGENTS.md
 Apple/
+Android/
 credentials.json

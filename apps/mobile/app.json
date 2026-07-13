@@ -40,7 +40,7 @@
       }
     },
     "android": {
-      "package": "com.smart.mobile",
+      "package": "net.hiteam.app",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
