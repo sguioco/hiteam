@@ -249,6 +249,29 @@ export class EmployeesService {
     }
   }
 
+  private async sendInvitationEmailSafely(params: {
+    email: string;
+    companyName: string;
+    tenantName: string;
+    token: string;
+    locale?: string | null;
+  }): Promise<EmployeeEmailDeliveryResult> {
+    try {
+      return await this.invitationsMailer.sendInvitationEmail(params);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to send invitation email to ${params.email}: ${errorMessage}`);
+
+      return {
+        status: 'failed',
+        provider: 'none',
+        recipients: [params.email],
+        recordedAt: new Date().toISOString(),
+        errorMessage,
+      };
+    }
+  }
+
   private emitWorkspaceRefreshForUser(userId: string, reason: string) {
     void this.collaborationRealtimeService
       .fanoutWorkspaceRefresh(userId, {
@@ -1107,8 +1130,15 @@ export class EmployeesService {
           },
         });
 
+    let emailDeliveryResult: EmployeeEmailDeliveryResult = {
+      status: 'no_recipient',
+      provider: 'none',
+      recipients: [],
+      recordedAt: new Date().toISOString(),
+    };
+
     if (email) {
-      await this.invitationsMailer.sendInvitationEmail({
+      emailDeliveryResult = await this.sendInvitationEmailSafely({
         email,
         companyName: tenant.companies[0]?.name ?? tenant.name,
         tenantName: tenant.name,
@@ -1137,10 +1167,13 @@ export class EmployeesService {
         workMode,
         role: this.toClientAccessRole(approvedRole),
         teamId: approvedGroupId,
+        emailDeliveryStatus: emailDeliveryResult.status,
+        emailDeliveryProvider: emailDeliveryResult.provider,
+        emailDeliveryError: emailDeliveryResult.errorMessage ?? null,
       },
     });
     this.syncBillingSeatsInBackground(tenantId);
-    this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
+    this.kommoService.recordEmployeeInvited(tenantId, invitation.id, emailDeliveryResult);
 
     return {
       id: invitation.id,
@@ -1160,6 +1193,8 @@ export class EmployeesService {
       workMode: invitation.workMode,
       companyName: tenant.companies[0]?.name ?? tenant.name,
       tenantName: tenant.name,
+      emailDeliveryStatus: emailDeliveryResult.status,
+      emailDeliveryProvider: emailDeliveryResult.provider,
     };
   }
 
@@ -1398,8 +1433,15 @@ export class EmployeesService {
       },
     });
 
+    let emailDeliveryResult: EmployeeEmailDeliveryResult = {
+      status: 'no_recipient',
+      provider: 'none',
+      recipients: [],
+      recordedAt: new Date().toISOString(),
+    };
+
     if (updated.email) {
-      await this.invitationsMailer.sendInvitationEmail({
+      emailDeliveryResult = await this.sendInvitationEmailSafely({
         email: updated.email,
         companyName: invitation.tenant.companies[0]?.name ?? invitation.tenant.name,
         tenantName: invitation.tenant.name,
@@ -1425,14 +1467,20 @@ export class EmployeesService {
         email: invitation.email,
         phone: invitation.phone,
         resentCount: updated.resentCount,
+        emailDeliveryStatus: emailDeliveryResult.status,
+        emailDeliveryProvider: emailDeliveryResult.provider,
+        emailDeliveryError: emailDeliveryResult.errorMessage ?? null,
       },
     });
+    this.kommoService.recordEmployeeInvited(tenantId, invitation.id, emailDeliveryResult);
 
     return {
       id: updated.id,
       status: updated.status,
       expiresAt: updated.expiresAt.toISOString(),
       resentCount: updated.resentCount,
+      emailDeliveryStatus: emailDeliveryResult.status,
+      emailDeliveryProvider: emailDeliveryResult.provider,
     };
   }
 
@@ -1726,9 +1774,14 @@ export class EmployeesService {
     });
 
     if (result.invitation.employeeId) {
-      this.kommoService.recordEmployeeUpdated(invitation.tenantId, result.invitation.employeeId, 'profile_submitted');
+      this.kommoService.recordEmployeeUpdated(
+        invitation.tenantId,
+        result.invitation.employeeId,
+        'profile_submitted',
+        statusEmailResult,
+      );
     } else {
-      this.kommoService.recordEmployeeInvited(invitation.tenantId, invitation.id);
+      this.kommoService.recordEmployeeInvited(invitation.tenantId, invitation.id, statusEmailResult);
     }
 
     return {
@@ -1920,11 +1973,6 @@ export class EmployeesService {
         metadata: { reason: rejected.rejectedReason ?? null },
       });
       this.syncBillingSeatsInBackground(tenantId);
-      if (invitation.employeeId) {
-        this.kommoService.recordEmployeeUpdated(tenantId, invitation.employeeId, 'review_rejected');
-      } else {
-        this.kommoService.recordEmployeeInvited(tenantId, invitation.id);
-      }
       const statusEmailResult = invitationEmail
         ? await this.sendInvitationStatusEmailSafely({
             email: invitationEmail,
@@ -1935,6 +1983,11 @@ export class EmployeesService {
             locale: invitation.user?.preferredLocale ?? invitation.locale,
           })
         : null;
+      if (invitation.employeeId) {
+        this.kommoService.recordEmployeeUpdated(tenantId, invitation.employeeId, 'review_rejected', statusEmailResult);
+      } else {
+        this.kommoService.recordEmployeeInvited(tenantId, invitation.id, statusEmailResult);
+      }
 
       return {
         id: rejected.id,
@@ -2049,9 +2102,6 @@ export class EmployeesService {
         },
       });
       this.syncBillingSeatsInBackground(tenantId);
-      if (approved.employeeId) {
-        this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
-      }
       const credentialsEmailResult = await this.sendGeneratedCredentialsEmailSafely({
         email: invitationEmail,
         companyName: reviewCompanyName,
@@ -2059,6 +2109,9 @@ export class EmployeesService {
         password: generatedPassword,
         locale: invitation.locale,
       });
+      if (approved.employeeId) {
+        this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved', credentialsEmailResult);
+      }
 
       return {
         id: approved.id,
@@ -2180,9 +2233,6 @@ export class EmployeesService {
       },
     });
     this.syncBillingSeatsInBackground(tenantId);
-    if (approved.employeeId) {
-      this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved');
-    }
     const statusEmailResult = invitationEmail
       ? await this.sendInvitationStatusEmailSafely({
           email: invitationEmail,
@@ -2192,6 +2242,9 @@ export class EmployeesService {
           locale: invitation.user?.preferredLocale ?? invitation.locale,
         })
       : null;
+    if (approved.employeeId) {
+      this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved', statusEmailResult);
+    }
 
     return {
       id: approved.id,

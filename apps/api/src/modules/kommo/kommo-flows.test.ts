@@ -63,6 +63,63 @@ async function testSeatPurchaseReasonRoutesToPaymentLifecycle() {
   assert.equal(resolved, true);
 }
 
+async function testOrganizationRegistrationIncludesManagerEmailDeliveryInKommoNote() {
+  const service = createKommoService();
+  const calls: Array<{
+    tenantId: string;
+    event: string;
+    options: {
+      note?: string;
+      stageName?: string;
+      syncAllContacts?: boolean;
+    };
+  }> = [];
+  const called = new Promise<void>((resolve) => {
+    (service as unknown as {
+      syncLifecycleEvent: (
+        tenantId: string,
+        event: string,
+        options: {
+          note?: string;
+          stageName?: string;
+          syncAllContacts?: boolean;
+        },
+      ) => Promise<void>;
+    }).syncLifecycleEvent = async (tenantId, event, options) => {
+      calls.push({ tenantId, event, options });
+      if (calls.length === 2) {
+        resolve();
+      }
+    };
+  });
+
+  service.recordOrganizationRegistered('tenant-1', {
+    status: 'failed',
+    provider: 'none',
+    recipients: ['manager@example.com'],
+    recordedAt: '2026-06-21T12:00:00.000Z',
+    actionUrl: 'https://hiteam.net/join/manager/token',
+    errorMessage: 'Email provider is disabled.',
+  });
+
+  await called;
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].tenantId, 'tenant-1');
+  assert.equal(calls[0].event, 'user_registered');
+  assert.equal(calls[0].options.stageName, 'New Registration');
+  assert.equal(calls[0].options.syncAllContacts, true);
+  assert.match(calls[0].options.note ?? '', /Client registered in HiTeam\./);
+  assert.match(calls[0].options.note ?? '', /\[HiTeam Employee Email\] FAILED/);
+  assert.match(calls[0].options.note ?? '', /Action: manager_setup_email/);
+  assert.match(calls[0].options.note ?? '', /Provider: none/);
+  assert.match(calls[0].options.note ?? '', /Recipients: manager@example\.com/);
+  assert.match(calls[0].options.note ?? '', /Action URL: https:\/\/hiteam\.net\/join\/manager\/token/);
+  assert.match(calls[0].options.note ?? '', /Error: Email provider is disabled\./);
+  assert.equal(calls[1].event, 'trial_started');
+  assert.doesNotMatch(calls[1].options.note ?? '', /manager_setup_email/);
+}
+
 async function testPaymentSuccessSyncsAllContacts() {
   const service = createKommoService({
     latestPaidBillingPayment: {
@@ -544,8 +601,270 @@ async function testRecurringTaskUpdateBuildsKommoNote() {
   assert.match(captured.note ?? '', /Manager: Mary Manager \(M-001, manager@example\.com\)/);
 }
 
+async function testTaskTemplateCreateBuildsKommoNote() {
+  const service = createKommoService({
+    config: {
+      KOMMO_ENABLED: 'true',
+    },
+  });
+  const serviceInternals = service as unknown as {
+    prisma: {
+      taskTemplate: {
+        findFirst: (args: unknown) => Promise<unknown>;
+      };
+    };
+    enqueueSync: (
+      tenantId: string,
+      options: {
+        reason: string;
+        note?: string;
+        employeeId?: string;
+        syncAllContacts?: boolean;
+      },
+    ) => void;
+  };
+
+  serviceInternals.prisma.taskTemplate = {
+    findFirst: async (args) => {
+      assert.deepEqual(args, {
+        where: { id: 'template-1', tenantId: 'tenant-1' },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          priority: true,
+          assigneeEmployeeId: true,
+          managerEmployeeId: true,
+          requiresPhoto: true,
+          expandOnDemand: true,
+          frequency: true,
+          weekDaysJson: true,
+          dayOfMonth: true,
+          startDate: true,
+          endDate: true,
+          dueAfterDays: true,
+          dueTimeLocal: true,
+          isActive: true,
+          group: { select: { name: true } },
+          department: { select: { name: true } },
+          location: { select: { name: true } },
+          assigneeEmployee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              user: { select: { email: true } },
+            },
+          },
+          managerEmployee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      });
+      return {
+        id: 'template-1',
+        title: 'Open the cafe',
+        description: 'Morning setup checklist.',
+        priority: 'HIGH',
+        assigneeEmployeeId: 'employee-1',
+        managerEmployeeId: 'manager-1',
+        requiresPhoto: true,
+        expandOnDemand: false,
+        frequency: 'WEEKLY',
+        weekDaysJson: '["MONDAY","WEDNESDAY"]',
+        dayOfMonth: null,
+        startDate: new Date('2026-06-21T00:00:00.000Z'),
+        endDate: new Date('2026-08-21T00:00:00.000Z'),
+        dueAfterDays: 1,
+        dueTimeLocal: '09:00',
+        isActive: true,
+        group: { name: 'Operations' },
+        department: { name: 'Kitchen' },
+        location: { name: 'Downtown' },
+        assigneeEmployee: {
+          firstName: 'Ivan',
+          lastName: 'Worker',
+          employeeNumber: 'E-001',
+          user: { email: 'ivan@example.com' },
+        },
+        managerEmployee: {
+          firstName: 'Mary',
+          lastName: 'Manager',
+          employeeNumber: 'M-001',
+          user: { email: 'manager@example.com' },
+        },
+      };
+    },
+  };
+
+  const captures: Array<{
+    tenantId: string;
+    reason: string;
+    note?: string;
+    employeeId?: string;
+    syncAllContacts?: boolean;
+  }> = [];
+  const called = new Promise<void>((resolve) => {
+    serviceInternals.enqueueSync = (tenantId, options) => {
+      captures.push({
+        tenantId,
+        ...options,
+      });
+      resolve();
+    };
+  });
+
+  service.recordTaskTemplateCreated('tenant-1', 'template-1');
+
+  await called;
+
+  const captured = captures[0];
+  assert.ok(captured);
+  assert.equal(captured.tenantId, 'tenant-1');
+  assert.equal(captured.reason, 'task_template_created');
+  assert.equal(captured.employeeId, 'employee-1');
+  assert.equal(captured.syncAllContacts, false);
+  assert.match(captured.note ?? '', /HiTeam recurring task template created: task_template_created\./);
+  assert.match(captured.note ?? '', /Task: Open the cafe/);
+  assert.match(captured.note ?? '', /Template ID: template-1/);
+  assert.match(captured.note ?? '', /Frequency: WEEKLY/);
+  assert.match(captured.note ?? '', /Week days: MONDAY, WEDNESDAY/);
+  assert.match(captured.note ?? '', /Start: 2026-06-21/);
+  assert.match(captured.note ?? '', /End: 2026-08-21/);
+  assert.match(captured.note ?? '', /Assignee: Ivan Worker \(E-001, ivan@example\.com\)/);
+  assert.match(captured.note ?? '', /Manager: Mary Manager \(M-001, manager@example\.com\)/);
+  assert.match(captured.note ?? '', /Group: Operations/);
+  assert.match(captured.note ?? '', /Department: Kitchen/);
+  assert.match(captured.note ?? '', /Location: Downtown/);
+}
+
+async function testTaskTemplateDeleteBuildsKommoNote() {
+  const service = createKommoService();
+  let captured:
+    | {
+        tenantId: string;
+        reason?: string;
+        note?: string;
+        employeeId?: string;
+        syncAllContacts?: boolean;
+      }
+    | null = null;
+
+  (service as unknown as {
+    enqueueSync: (
+      tenantId: string,
+      options: {
+        reason?: string;
+        note?: string;
+        employeeId?: string;
+        syncAllContacts?: boolean;
+      },
+    ) => void;
+  }).enqueueSync = (tenantId, options) => {
+    captured = {
+      tenantId,
+      ...options,
+    };
+  };
+
+  service.recordTaskTemplateDeleted('tenant-1', {
+    id: 'template-1',
+    title: 'Open the cafe',
+    assigneeEmployeeId: null,
+    managerEmployeeId: 'manager-1',
+    group: { name: 'Operations' },
+    department: null,
+    location: { name: 'Downtown' },
+    assigneeEmployee: null,
+    managerEmployee: {
+      firstName: 'Mary',
+      lastName: 'Manager',
+      employeeNumber: 'M-001',
+      user: { email: 'manager@example.com' },
+    },
+  });
+
+  assert.deepEqual(captured, {
+    tenantId: 'tenant-1',
+    reason: 'task_template_deleted',
+    employeeId: undefined,
+    syncAllContacts: false,
+    note: [
+      'HiTeam recurring task template deleted: task_template_deleted.',
+      'Task: Open the cafe',
+      'Template ID: template-1',
+      'Assignee: unassigned',
+      'Manager: Mary Manager (M-001, manager@example.com)',
+      'Group: Operations',
+      'Department: n/a',
+      'Location: Downtown',
+    ].join('\n'),
+  });
+}
+
+async function testEmployeeEmailDeliveryIsVisibleInKommoNote() {
+  const service = createKommoService();
+  let captured:
+    | {
+        tenantId: string;
+        reason?: string;
+        note?: string;
+        invitationId?: string;
+        syncAllContacts?: boolean;
+      }
+    | null = null;
+
+  (service as unknown as {
+    enqueueSync: (
+      tenantId: string,
+      options: {
+        reason?: string;
+        note?: string;
+        invitationId?: string;
+        syncAllContacts?: boolean;
+      },
+    ) => void;
+  }).enqueueSync = (tenantId, options) => {
+    captured = {
+      tenantId,
+      ...options,
+    };
+  };
+
+  service.recordEmployeeInvited('tenant-1', 'invitation-1', {
+    status: 'failed',
+    provider: 'none',
+    recipients: ['worker@example.com'],
+    recordedAt: '2026-06-21T12:00:00.000Z',
+    actionUrl: 'https://hiteam.net/join/token',
+    errorMessage: 'Email provider is disabled.',
+  });
+
+  assert.deepEqual(captured, {
+    tenantId: 'tenant-1',
+    reason: 'employee_invited',
+    invitationId: 'invitation-1',
+    syncAllContacts: true,
+    note: [
+      '[HiTeam Employee Email] FAILED',
+      'Action: employee_invited',
+      'Provider: none',
+      'Recipients: worker@example.com',
+      'Action URL: https://hiteam.net/join/token',
+      'Recorded at: 2026-06-21T12:00:00.000Z',
+      'Error: Email provider is disabled.',
+    ].join('\n'),
+  });
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
+  await testOrganizationRegistrationIncludesManagerEmailDeliveryInKommoNote();
   await testPaymentSuccessSyncsAllContacts();
   await testRenewedPaymentUsesLatestPaymentKey();
   await testSystemBackfillSyncsAllTenantContacts();
@@ -553,6 +872,9 @@ async function main() {
   await testDisabledLifecycleEmailIsVisibleInKommoSync();
   await testLeadLinksMissingCompanyAndEmployeeContacts();
   await testRecurringTaskUpdateBuildsKommoNote();
+  await testTaskTemplateCreateBuildsKommoNote();
+  await testTaskTemplateDeleteBuildsKommoNote();
+  await testEmployeeEmailDeliveryIsVisibleInKommoNote();
   console.log('kommo flow tests passed');
 }
 

@@ -59,7 +59,39 @@ function testMobileScreensUseSharedTaskApi() {
   );
 }
 
+function testMobileOwnerRegistrationUsesSharedBackend() {
+  const api = read("lib/api.ts");
+  const authScreen = read("src/pages/AuthScreen.tsx");
+
+  assertContains(
+    api,
+    "export async function registerOrganizationOwner(",
+    "Mobile owner registration must expose a dedicated API helper.",
+  );
+  assertContains(
+    api,
+    'fetchWithTimeout("/api/v1/auth/register-owner"',
+    "Mobile owner registration must call the shared backend registration endpoint.",
+  );
+  assertContains(
+    api,
+    'employeeNumber: "OWNER-0001"',
+    "Mobile owner registration must provide the backend-only owner employee number.",
+  );
+  assertContains(
+    authScreen,
+    "registerOrganizationOwner(",
+    "The mobile sign-up form must submit through the shared backend helper.",
+  );
+  assert.match(
+    authScreen,
+    /mode === ['"]signup['"]/,
+    "The mobile auth screen must include the sign-up mode.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
+testMobileOwnerRegistrationUsesSharedBackend();
 
 console.log("mobile launch flow tests passed");

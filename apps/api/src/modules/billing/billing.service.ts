@@ -9,6 +9,13 @@ import { PrismaService } from '../prisma/prisma.service';
 type BillingCurrency = 'AED' | 'USD' | 'EUR';
 type BillingPlanMonths = 1 | 6 | 12;
 type BillingPaymentStatus = 'PAID' | 'FAILED';
+type BillingPaymentRecordResult = {
+  isNew: boolean;
+  status: BillingPaymentStatus;
+  reason: string;
+  previousStatus?: string | null;
+  previousReason?: string | null;
+};
 
 export type BillingCheckoutRequest = {
   seats?: number;
@@ -862,7 +869,7 @@ export class BillingService {
     stripeInvoiceId?: string | null;
     stripeSubscriptionId?: string | null;
     stripeCustomerId?: string | null;
-  }) {
+  }): Promise<BillingPaymentRecordResult> {
     const data = {
       tenantId: args.tenantId,
       source: args.source,
@@ -887,24 +894,59 @@ export class BillingService {
     };
 
     if (args.stripeCheckoutSessionId) {
+      const existing = await this.prisma.billingPayment.findUnique({
+        where: { stripeCheckoutSessionId: args.stripeCheckoutSessionId },
+        select: { id: true, status: true, reason: true },
+      });
+
       await this.prisma.billingPayment.upsert({
         where: { stripeCheckoutSessionId: args.stripeCheckoutSessionId },
         update: data,
         create: data,
       });
-      return;
+      return {
+        isNew: !existing,
+        status: args.status,
+        reason: args.reason,
+        previousStatus: existing?.status ?? null,
+        previousReason: existing?.reason ?? null,
+      };
     }
 
     if (args.stripeInvoiceId) {
+      const existing = await this.prisma.billingPayment.findUnique({
+        where: { stripeInvoiceId: args.stripeInvoiceId },
+        select: { id: true, status: true, reason: true },
+      });
+
       await this.prisma.billingPayment.upsert({
         where: { stripeInvoiceId: args.stripeInvoiceId },
         update: data,
         create: data,
       });
-      return;
+      return {
+        isNew: !existing,
+        status: args.status,
+        reason: args.reason,
+        previousStatus: existing?.status ?? null,
+        previousReason: existing?.reason ?? null,
+      };
     }
 
     await this.prisma.billingPayment.create({ data });
+    return {
+      isNew: true,
+      status: args.status,
+      reason: args.reason,
+    };
+  }
+
+  private shouldNotifyBillingPaymentEvent(result: BillingPaymentRecordResult) {
+    return (
+      result.isNew ||
+      result.previousStatus !== result.status ||
+      result.previousReason !== result.reason
+    );
   }
 
   private async recordInvoicePayment(
@@ -912,7 +954,7 @@ export class BillingService {
     invoice: Stripe.Invoice,
     status: BillingPaymentStatus,
     reason: string,
-  ) {
+  ): Promise<BillingPaymentRecordResult> {
     const invoiceValue = invoice as Stripe.Invoice & {
       amount_due?: number | null;
       amount_paid?: number | null;
@@ -939,7 +981,7 @@ export class BillingService {
         ? invoiceValue.amount_paid ?? null
         : invoiceValue.amount_due ?? invoiceValue.amount_remaining ?? null;
 
-    await this.recordBillingPayment({
+    return this.recordBillingPayment({
       tenantId,
       source: 'stripe_invoice',
       status,
@@ -1025,7 +1067,7 @@ export class BillingService {
         stripeCancelAtPeriodEnd: false,
       },
     });
-    await this.recordBillingPayment({
+    const paymentRecord = await this.recordBillingPayment({
       tenantId,
       source: 'stripe_checkout',
       status: 'PAID',
@@ -1045,7 +1087,9 @@ export class BillingService {
       stripePaymentIntentId: this.readStripeObjectId(session.payment_intent),
       stripeCustomerId: customerId,
     });
-    this.kommoService.recordBillingUpdated(tenantId, 'seat_purchase_paid');
+    if (this.shouldNotifyBillingPaymentEvent(paymentRecord)) {
+      this.kommoService.recordBillingUpdated(tenantId, 'seat_purchase_paid');
+    }
   }
 
   private async handleCheckoutCompleted(session: Stripe.Checkout.Session) {
@@ -1134,8 +1178,10 @@ export class BillingService {
             : new Date()),
       },
     });
-    await this.recordInvoicePayment(tenantId, invoice, 'PAID', 'invoice_paid');
-    this.kommoService.recordBillingUpdated(tenantId, 'invoice_paid');
+    const paymentRecord = await this.recordInvoicePayment(tenantId, invoice, 'PAID', 'invoice_paid');
+    if (this.shouldNotifyBillingPaymentEvent(paymentRecord)) {
+      this.kommoService.recordBillingUpdated(tenantId, 'invoice_paid');
+    }
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
@@ -1155,8 +1201,10 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'PAYMENT_FAILED' },
     });
-    await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_payment_failed');
-    this.kommoService.recordBillingUpdated(tenantId, 'invoice_payment_failed');
+    const paymentRecord = await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_payment_failed');
+    if (this.shouldNotifyBillingPaymentEvent(paymentRecord)) {
+      this.kommoService.recordBillingUpdated(tenantId, 'invoice_payment_failed');
+    }
   }
 
   private async handleInvoiceFinalizationFailed(invoice: Stripe.Invoice) {
@@ -1173,8 +1221,10 @@ export class BillingService {
       where: { tenantId },
       data: { status: 'INVOICE_FINALIZATION_FAILED' },
     });
-    await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_finalization_failed');
-    this.kommoService.recordBillingUpdated(tenantId, 'invoice_finalization_failed');
+    const paymentRecord = await this.recordInvoicePayment(tenantId, invoice, 'FAILED', 'invoice_finalization_failed');
+    if (this.shouldNotifyBillingPaymentEvent(paymentRecord)) {
+      this.kommoService.recordBillingUpdated(tenantId, 'invoice_finalization_failed');
+    }
   }
 
   private async applyStripeSubscription(

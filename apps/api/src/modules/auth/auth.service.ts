@@ -12,7 +12,10 @@ import { SignOptions } from 'jsonwebtoken';
 import { randomBytes, createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { KommoService } from '../kommo/kommo.service';
-import { EmployeeInvitationsMailerService } from '../employees/employee-invitations.mailer';
+import {
+  EmployeeInvitationsMailerService,
+  type EmployeeEmailDeliveryResult,
+} from '../employees/employee-invitations.mailer';
 import { AuthMailerService } from './auth-mailer.service';
 
 const DEMO_OWNER_EMAIL = 'owner@demo.smart';
@@ -927,35 +930,32 @@ export class AuthService {
 
     const webBaseUrl = (process.env.WEB_ADMIN_BASE_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     const managerSetupUrl = `${webBaseUrl}/join/manager/${token}`;
-    let managerEmailDelivery: {
-      status: string;
-      provider: string;
-      errorMessage?: string;
-    } = {
+    let managerEmailDelivery: EmployeeEmailDeliveryResult = {
       status: 'failed',
       provider: 'none',
+      recipients: [managerEmail],
+      recordedAt: new Date().toISOString(),
+      actionUrl: managerSetupUrl,
       errorMessage: 'Email delivery was not attempted.',
     };
 
     try {
-      const delivery = await this.employeeInvitationsMailer.sendManagerSetupEmail({
+      managerEmailDelivery = await this.employeeInvitationsMailer.sendManagerSetupEmail({
         email: managerEmail,
         companyName: organizationName,
         tenantName: organizationName,
         setupUrl: managerSetupUrl,
         locale: preferredLocale,
       });
-      managerEmailDelivery = {
-        status: delivery.status,
-        provider: delivery.provider,
-        errorMessage: delivery.errorMessage,
-      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Unable to send manager setup email to ${managerEmail}: ${errorMessage}`);
       managerEmailDelivery = {
         status: 'failed',
         provider: 'none',
+        recipients: [managerEmail],
+        recordedAt: new Date().toISOString(),
+        actionUrl: managerSetupUrl,
         errorMessage,
       };
     }
@@ -975,7 +975,7 @@ export class AuthService {
         promoCode: this.normalizePromoCode(dto.promoCode),
       },
     });
-    this.kommoService.recordOrganizationRegistered(result.tenantId);
+    this.kommoService.recordOrganizationRegistered(result.tenantId, managerEmailDelivery);
 
     return {
       tenantId: result.tenantId,

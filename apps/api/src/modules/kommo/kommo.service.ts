@@ -56,6 +56,15 @@ type KommoSyncOptions = {
   lifecycleEmailResult?: LifecycleEmailSendResult;
 };
 
+type KommoEmployeeEmailDeliveryResult = {
+  status: string;
+  provider: string;
+  recipients?: string[];
+  recordedAt?: string;
+  actionUrl?: string;
+  errorMessage?: string;
+};
+
 type KommoLifecycleEvent =
   | 'user_registered'
   | 'trial_started'
@@ -145,6 +154,42 @@ type KommoRecurringTaskNote = {
   status?: string | null;
 };
 
+type KommoTaskTemplateNote = {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  assigneeEmployeeId: string | null;
+  managerEmployeeId: string;
+  requiresPhoto: boolean;
+  expandOnDemand: boolean;
+  frequency: string;
+  weekDaysJson: string | null;
+  dayOfMonth: number | null;
+  startDate: Date;
+  endDate: Date | null;
+  dueAfterDays: number;
+  dueTimeLocal: string | null;
+  isActive: boolean;
+  group: { name: string } | null;
+  department: { name: string } | null;
+  location: { name: string } | null;
+  assigneeEmployee: KommoTaskNotePerson | null;
+  managerEmployee: KommoTaskNotePerson;
+};
+
+type KommoDeletedTaskTemplateNote = {
+  id: string;
+  title: string;
+  assigneeEmployeeId: string | null;
+  managerEmployeeId: string;
+  group: { name: string } | null;
+  department: { name: string } | null;
+  location: { name: string } | null;
+  assigneeEmployee: KommoTaskNotePerson | null;
+  managerEmployee: KommoTaskNotePerson;
+};
+
 type KommoConfig = {
   enabled: boolean;
   baseUrl: string | null;
@@ -227,11 +272,20 @@ export class KommoService {
     };
   }
 
-  recordOrganizationRegistered(tenantId: string) {
+  recordOrganizationRegistered(
+    tenantId: string,
+    managerSetupEmailResult?: KommoEmployeeEmailDeliveryResult | null,
+  ) {
     void (async () => {
       await this.syncLifecycleEvent(tenantId, 'user_registered', {
         stageName: 'New Registration',
-        note: 'Client registered in HiTeam.',
+        note: managerSetupEmailResult
+          ? [
+              'Client registered in HiTeam.',
+              '',
+              this.buildEmployeeEmailDeliveryNote('manager_setup_email', managerSetupEmailResult),
+            ].join('\n')
+          : 'Client registered in HiTeam.',
         syncAllContacts: true,
       });
       await this.syncLifecycleEvent(tenantId, 'trial_started', {
@@ -280,19 +334,36 @@ export class KommoService {
     });
   }
 
-  recordEmployeeInvited(tenantId: string, invitationId: string) {
+  recordEmployeeInvited(
+    tenantId: string,
+    invitationId: string,
+    emailDeliveryResult?: KommoEmployeeEmailDeliveryResult | null,
+  ) {
     this.enqueueSync(tenantId, {
       reason: 'employee_invited',
-      note: 'HiTeam employee invitation sent.',
+      note: emailDeliveryResult
+        ? this.buildEmployeeEmailDeliveryNote('employee_invited', emailDeliveryResult)
+        : 'HiTeam employee invitation sent.',
       invitationId,
       syncAllContacts: true,
     });
   }
 
-  recordEmployeeUpdated(tenantId: string, employeeId: string, reason = 'employee_updated') {
+  recordEmployeeUpdated(
+    tenantId: string,
+    employeeId: string,
+    reason = 'employee_updated',
+    emailDeliveryResult?: KommoEmployeeEmailDeliveryResult | null,
+  ) {
     this.enqueueSync(tenantId, {
       reason,
-      note: `HiTeam employee updated: ${reason}.`,
+      note: emailDeliveryResult
+        ? [
+            `HiTeam employee updated: ${reason}.`,
+            '',
+            this.buildEmployeeEmailDeliveryNote(reason, emailDeliveryResult),
+          ].join('\n')
+        : `HiTeam employee updated: ${reason}.`,
       employeeId,
     });
   }
@@ -324,6 +395,23 @@ export class KommoService {
     },
   ) {
     this.enqueueRecurringTaskSync(tenantId, params);
+  }
+
+  recordTaskTemplateCreated(tenantId: string, taskTemplateId: string) {
+    this.enqueueTaskTemplateSync(tenantId, taskTemplateId, 'task_template_created');
+  }
+
+  recordTaskTemplateUpdated(tenantId: string, taskTemplateId: string, reason = 'task_template_updated') {
+    this.enqueueTaskTemplateSync(tenantId, taskTemplateId, reason);
+  }
+
+  recordTaskTemplateDeleted(tenantId: string, template: KommoDeletedTaskTemplateNote) {
+    this.enqueueSync(tenantId, {
+      reason: 'task_template_deleted',
+      note: this.buildDeletedTaskTemplateEventNote(template),
+      employeeId: template.assigneeEmployeeId ?? undefined,
+      syncAllContacts: false,
+    });
   }
 
   recordBillingUpdated(tenantId: string, reason = 'billing_updated') {
@@ -734,6 +822,68 @@ export class KommoService {
     }).catch((error) => {
       this.logger.warn(
         `Unable to enqueue Kommo recurring task sync for ${params.taskTemplateId}: ${this.getErrorMessage(error)}`,
+      );
+    });
+  }
+
+  private enqueueTaskTemplateSync(tenantId: string, taskTemplateId: string, reason: string) {
+    if (!this.getConfig().enabled) {
+      return;
+    }
+
+    void this.prisma.taskTemplate.findFirst({
+      where: { id: taskTemplateId, tenantId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        priority: true,
+        assigneeEmployeeId: true,
+        managerEmployeeId: true,
+        requiresPhoto: true,
+        expandOnDemand: true,
+        frequency: true,
+        weekDaysJson: true,
+        dayOfMonth: true,
+        startDate: true,
+        endDate: true,
+        dueAfterDays: true,
+        dueTimeLocal: true,
+        isActive: true,
+        group: { select: { name: true } },
+        department: { select: { name: true } },
+        location: { select: { name: true } },
+        assigneeEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+        managerEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
+    }).then((template) => {
+      if (!template) {
+        return;
+      }
+
+      this.enqueueSync(tenantId, {
+        reason,
+        note: this.buildTaskTemplateEventNote(template, reason),
+        employeeId: template.assigneeEmployeeId ?? undefined,
+        syncAllContacts: false,
+      });
+    }).catch((error) => {
+      this.logger.warn(
+        `Unable to enqueue Kommo task template sync for ${taskTemplateId}: ${this.getErrorMessage(error)}`,
       );
     });
   }
@@ -2529,12 +2679,65 @@ export class KommoService {
     ].filter((line): line is string => Boolean(line)).join('\n');
   }
 
+  private buildTaskTemplateEventNote(template: KommoTaskTemplateNote, reason: string) {
+    const action = reason === 'task_template_created' ? 'created' : 'updated';
+
+    return [
+      `HiTeam recurring task template ${action}: ${reason}.`,
+      `Task: ${template.title}`,
+      `Template ID: ${template.id}`,
+      `Frequency: ${template.frequency}`,
+      `Week days: ${this.formatTaskTemplateWeekDays(template.weekDaysJson)}`,
+      `Day of month: ${template.dayOfMonth ?? 'n/a'}`,
+      `Start: ${this.toDateKey(template.startDate)}`,
+      `End: ${template.endDate ? this.toDateKey(template.endDate) : 'no end date'}`,
+      `Due after days: ${template.dueAfterDays}`,
+      `Due time: ${template.dueTimeLocal ?? 'not scheduled'}`,
+      `Priority: ${template.priority}`,
+      `Requires photo: ${template.requiresPhoto ? 'yes' : 'no'}`,
+      `Expand on demand: ${template.expandOnDemand ? 'yes' : 'no'}`,
+      `Active: ${template.isActive ? 'yes' : 'no'}`,
+      `Assignee: ${this.formatTaskNotePerson(template.assigneeEmployee)}`,
+      `Manager: ${this.formatTaskNotePerson(template.managerEmployee)}`,
+      `Group: ${template.group?.name ?? 'direct task'}`,
+      `Department: ${template.department?.name ?? 'n/a'}`,
+      `Location: ${template.location?.name ?? 'n/a'}`,
+      template.description ? `Description: ${template.description.slice(0, 500)}` : null,
+    ].filter((line): line is string => Boolean(line)).join('\n');
+  }
+
+  private buildDeletedTaskTemplateEventNote(template: KommoDeletedTaskTemplateNote) {
+    return [
+      'HiTeam recurring task template deleted: task_template_deleted.',
+      `Task: ${template.title}`,
+      `Template ID: ${template.id}`,
+      `Assignee: ${this.formatTaskNotePerson(template.assigneeEmployee)}`,
+      `Manager: ${this.formatTaskNotePerson(template.managerEmployee)}`,
+      `Group: ${template.group?.name ?? 'direct task'}`,
+      `Department: ${template.department?.name ?? 'n/a'}`,
+      `Location: ${template.location?.name ?? 'n/a'}`,
+    ].join('\n');
+  }
+
   private formatTaskNotePerson(person: KommoTaskNotePerson | null) {
     if (!person) {
       return 'unassigned';
     }
 
     return `${person.firstName} ${person.lastName} (${person.employeeNumber}, ${person.user?.email ?? 'no email'})`;
+  }
+
+  private formatTaskTemplateWeekDays(weekDaysJson: string | null) {
+    if (!weekDaysJson) {
+      return 'n/a';
+    }
+
+    try {
+      const value = JSON.parse(weekDaysJson);
+      return Array.isArray(value) && value.length > 0 ? value.join(', ') : 'n/a';
+    } catch {
+      return weekDaysJson;
+    }
   }
 
   private buildEventNote(
@@ -2573,6 +2776,24 @@ export class KommoService {
       `Billing: ${result.billingUrl ?? 'n/a'}`,
       `Employees: ${result.employeesUrl ?? 'n/a'}`,
       `Recorded at: ${result.recordedAt}`,
+    ];
+
+    if (result.errorMessage) {
+      lines.push(`Error: ${result.errorMessage}`);
+    }
+
+    return lines.join('\n').slice(0, 6000);
+  }
+
+  private buildEmployeeEmailDeliveryNote(action: string, result: KommoEmployeeEmailDeliveryResult) {
+    const recipients = result.recipients?.length ? result.recipients.join(', ') : 'No recipients';
+    const lines = [
+      `[HiTeam Employee Email] ${String(result.status).toUpperCase()}`,
+      `Action: ${action}`,
+      `Provider: ${result.provider}`,
+      `Recipients: ${recipients}`,
+      `Action URL: ${result.actionUrl ?? 'n/a'}`,
+      `Recorded at: ${result.recordedAt ?? new Date().toISOString()}`,
     ];
 
     if (result.errorMessage) {

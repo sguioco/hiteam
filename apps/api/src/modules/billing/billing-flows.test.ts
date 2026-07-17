@@ -138,6 +138,18 @@ function buildService() {
       },
     },
     billingPayment: {
+      findUnique: async (args: {
+        where: { stripeCheckoutSessionId?: string; stripeInvoiceId?: string };
+        select?: Record<string, boolean>;
+      }) => {
+        const existing = state.payments.find((payment) =>
+          args.where.stripeCheckoutSessionId
+            ? payment.stripeCheckoutSessionId === args.where.stripeCheckoutSessionId
+            : payment.stripeInvoiceId === args.where.stripeInvoiceId,
+        );
+
+        return pickSelect(existing as unknown as Record<string, unknown> | null, args.select);
+      },
       upsert: async (args: {
         where: { stripeCheckoutSessionId?: string; stripeInvoiceId?: string };
         update: Omit<FakeBillingPayment, 'id'>;
@@ -245,10 +257,7 @@ async function testSeatPurchasePersistsHistoryAndKommoReason() {
   assert.equal(state.payments[0].planMonths, 6);
   assert.equal(state.payments[0].accessMonths, 7);
   assert.equal(state.payments[0].targetSeats, 3);
-  assert.deepEqual(state.kommoCalls, [
-    { tenantId: 'tenant-1', reason: 'seat_purchase_paid' },
-    { tenantId: 'tenant-1', reason: 'seat_purchase_paid' },
-  ]);
+  assert.deepEqual(state.kommoCalls, [{ tenantId: 'tenant-1', reason: 'seat_purchase_paid' }]);
 }
 
 async function testSummaryReturnsPaymentHistory() {

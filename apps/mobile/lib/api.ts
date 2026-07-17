@@ -76,6 +76,16 @@ type AppSession = {
   };
 };
 
+export type RegisterOrganizationOwnerInput = {
+  organizationName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  timezone: string;
+  promoCode?: string;
+};
+
 let cachedSession: AppSession | null = null;
 const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ""}smart-auth-session.json`;
 let unauthorizedHandler: (() => void) | null = null;
@@ -621,6 +631,56 @@ export async function signInWithEmail(
     tenantSlug,
     email,
     password,
+    language,
+  });
+}
+
+export async function registerOrganizationOwner(
+  payload: RegisterOrganizationOwnerInput,
+  language?: AppLanguage,
+) {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+  const normalizedEmail = payload.email.trim().toLowerCase();
+  const organizationName = payload.organizationName.trim();
+  const response = await fetchWithTimeout("/api/v1/auth/register-owner", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tenantName: organizationName,
+      companyName: organizationName,
+      firstName: payload.firstName.trim(),
+      lastName: payload.lastName.trim(),
+      email: normalizedEmail,
+      password: payload.password,
+      employeeNumber: "OWNER-0001",
+      hireDate: localDate,
+      timezone: payload.timezone.trim() || "UTC",
+      locale: toBackendLocale(language),
+      ...(payload.promoCode?.trim()
+        ? { promoCode: payload.promoCode.trim() }
+        : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, "Unable to create organization."),
+    );
+  }
+
+  const registration = (await response.json()) as {
+    tenantSlug: string;
+  };
+
+  return authenticateSession({
+    tenantSlug: registration.tenantSlug,
+    email: normalizedEmail,
+    password: payload.password,
     language,
   });
 }

@@ -2765,6 +2765,8 @@ export class CollaborationService {
       }),
     );
 
+    this.kommoService.recordTaskTemplateCreated(manager.tenantId, template.id);
+
     return template;
   }
 
@@ -2849,6 +2851,12 @@ export class CollaborationService {
       }),
     );
 
+    this.kommoService.recordTaskTemplateUpdated(
+      manager.tenantId,
+      updated.id,
+      "task_template_updated",
+    );
+
     return updated;
   }
 
@@ -2893,6 +2901,12 @@ export class CollaborationService {
       action: dto.isActive ? "task_template.activated" : "task_template.paused",
     });
 
+    this.kommoService.recordTaskTemplateUpdated(
+      manager.tenantId,
+      updated.id,
+      dto.isActive ? "task_template_activated" : "task_template_paused",
+    );
+
     return updated;
   }
 
@@ -2918,6 +2932,27 @@ export class CollaborationService {
         tenantId: manager.tenantId,
         managerEmployeeId: manager.id,
       },
+      include: {
+        group: { select: { name: true } },
+        department: { select: { name: true } },
+        location: { select: { name: true } },
+        assigneeEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+        managerEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
     });
 
     if (!template) {
@@ -2935,6 +2970,8 @@ export class CollaborationService {
       entityId: template.id,
       action: "task_template.deleted",
     });
+
+    this.kommoService.recordTaskTemplateDeleted(manager.tenantId, template);
 
     return { success: true };
   }

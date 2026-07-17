@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AuthService } from '../auth/auth.service';
 import { LifecycleEmailService } from './lifecycle-email.service';
 
@@ -266,11 +268,31 @@ async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
   assert.equal(createdTokens[0].data.tokenHash.length, 64);
 }
 
+function testManagerSetupEmailStatusIsSyncedToKommo() {
+  const source = readFileSync(join(__dirname, '../auth/auth.service.ts'), 'utf8');
+  const start = source.indexOf('async registerOrganization(');
+  assert.notEqual(start, -1, 'registerOrganization must exist.');
+  const nextMethod = source.indexOf('\n  async ', start + 1);
+  const registerOrganization = source.slice(start, nextMethod === -1 ? source.length : nextMethod);
+
+  assert.match(
+    registerOrganization,
+    /let managerEmailDelivery: EmployeeEmailDeliveryResult/,
+    'Manager setup email delivery result must keep full delivery metadata.',
+  );
+  assert.match(
+    registerOrganization,
+    /recordOrganizationRegistered\(result\.tenantId, managerEmailDelivery\)/,
+    'Organization registration must sync manager setup email delivery status to Kommo.',
+  );
+}
+
 async function main() {
   await testResendEnablesTransactionalEmail();
   await testGraphFallsBackToResend();
   await testPaymentSuccessfulLifecycleEmailIncludesBillingDetails();
   await testPasswordResetCreatesHashedTokenAndSendsEmail();
+  testManagerSetupEmailStatusIsSyncedToKommo();
   console.log('email flow tests passed');
 }
 

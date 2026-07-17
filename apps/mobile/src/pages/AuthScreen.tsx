@@ -22,6 +22,7 @@ import {
   bootstrapPushNotifications,
   lookupInvitationByEmail,
   lookupInvitationByPhone,
+  registerOrganizationOwner,
   requestPasswordReset,
   signInWithEmail,
 } from '../../lib/api';
@@ -35,8 +36,17 @@ import { BrandWordmark } from '../components/brand-wordmark';
 import { EmployeeAvatarImage } from '../components/employee-avatar-image';
 import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
-type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin';
+type AuthMode = 'join' | 'joinProfile' | 'landing' | 'signin' | 'signup';
 type JoinMethod = 'email' | 'phone';
+type SignupForm = {
+  organizationName: string;
+  timezone: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  promoCode: string;
+  password: string;
+};
 type JoinCompanyPayload = {
   companyName: string;
   tenantName: string;
@@ -225,6 +235,72 @@ const INITIAL_JOIN_PROFILE_FORM: JoinProfileForm = {
   avatarDataUrl: '',
   avatarPreviewUri: '',
 };
+const SIGNUP_TIME_ZONES = [
+  'UTC',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Europe/Moscow',
+  'Asia/Dubai',
+  'Asia/Riyadh',
+  'Asia/Tashkent',
+  'Asia/Almaty',
+  'Asia/Bangkok',
+  'Asia/Novosibirsk',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+] as const;
+
+function getDeviceTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function getTimeZoneOffsetLabel(timeZone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'shortOffset',
+    });
+    const zoneName = formatter.formatToParts(new Date()).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+    const normalized = zoneName.replace('GMT', 'UTC');
+
+    if (normalized === 'UTC') {
+      return 'UTC+00:00';
+    }
+
+    const match = normalized.match(/^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/);
+    if (!match) {
+      return normalized;
+    }
+
+    const [, sign, hours, minutes] = match;
+    return `UTC${sign}${hours.padStart(2, '0')}:${(minutes ?? '00').padStart(2, '0')}`;
+  } catch {
+    return 'UTC+00:00';
+  }
+}
+
+function createInitialSignupForm(): SignupForm {
+  return {
+    organizationName: '',
+    timezone: getDeviceTimeZone(),
+    firstName: '',
+    lastName: '',
+    email: '',
+    promoCode: '',
+    password: '',
+  };
+}
 const AUTH_TRANSITION_TIMING = {
   duration: 210,
   easing: Easing.out(Easing.cubic),
@@ -296,6 +372,9 @@ const AuthScreen = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [signupForm, setSignupForm] = useState<SignupForm>(createInitialSignupForm);
+  const [signupPasswordVisible, setSignupPasswordVisible] = useState(false);
+  const [signupTimeZonePickerVisible, setSignupTimeZonePickerVisible] = useState(false);
   const [joinCompany, setJoinCompany] = useState<JoinCompanyPayload | null>(null);
   const [joinProfileForm, setJoinProfileForm] = useState<JoinProfileForm>(INITIAL_JOIN_PROFILE_FORM);
   const [joinProfileCountryCode, setJoinProfileCountryCode] = useState('+7');
@@ -326,6 +405,7 @@ const AuthScreen = () => {
   const compactJoinHeroHeight = compactAuthHeroHeight;
   const compactJoinProfileHeroHeight = Math.min(Math.max(screenHeight * 0.2, 280), 280);
   const compactJoinProfileSuccessHeroHeight = 480;
+  const compactSignupHeroHeight = compactJoinProfileHeroHeight;
   const compactSignInHeroHeight = compactAuthHeroHeight;
   const compactJoinProfileTitleOffset = 135;
   const compactJoinProfileSuccessTitleOffset = 240;
@@ -334,7 +414,9 @@ const AuthScreen = () => {
   const compactAuthHeroTitleRestOffset = 150;
   const compactAuthHeroTitleKeyboardOffset = 92;
   const compactHeroHeight =
-    mode === 'joinProfile'
+    mode === 'signup'
+      ? compactSignupHeroHeight
+      : mode === 'joinProfile'
       ? joinProfileSubmitted
         ? compactJoinProfileSuccessHeroHeight
         : compactJoinProfileHeroHeight
@@ -342,13 +424,15 @@ const AuthScreen = () => {
         ? compactJoinHeroHeight
         : compactSignInHeroHeight;
   const compactHeroTitleOffset =
-    mode === 'joinProfile'
+    mode === 'signup'
+      ? compactJoinProfileTitleOffset
+      : mode === 'joinProfile'
       ? joinProfileSubmitted
         ? compactJoinProfileSuccessTitleOffset
         : compactJoinProfileTitleOffset
       : compactAuthHeroTitleKeyboardOffset;
   const compactFormTop =
-    mode === 'joinProfile' ? compactHeroHeight - 8 : compactHeroHeight + 12;
+    mode === 'joinProfile' || mode === 'signup' ? compactHeroHeight - 8 : compactHeroHeight + 12;
   const joinProfileCopy = useMemo(
     () => ({
       company: t('joinProfile.company'),
@@ -417,6 +501,57 @@ const AuthScreen = () => {
             existing: 'Your account is already created. Open sign-in and use your password.',
           },
     [language, t],
+  );
+  const signupUi = useMemo(
+    () =>
+      language === 'ru'
+        ? {
+            entry: 'Регистрация',
+            title: 'Создать организацию',
+            organizationName: 'Название организации',
+            timezone: 'Часовой пояс',
+            firstName: 'Ваше имя',
+            lastName: 'Ваша фамилия',
+            email: 'Email',
+            promoCode: 'Промокод (необязательно)',
+            password: 'Пароль',
+            submit: 'Создать организацию',
+            submitting: 'Создаём организацию...',
+            requiredFields: 'Заполните все обязательные поля.',
+            invalidEmail: 'Введите корректный email.',
+            shortPassword: 'Пароль должен содержать не менее 8 символов.',
+            alreadyHaveAccount: 'Уже есть аккаунт?',
+            signIn: 'Войти',
+            pickerTitle: 'Выберите часовой пояс',
+          }
+        : {
+            entry: 'Sign up',
+            title: 'Create organization',
+            organizationName: 'Organization name',
+            timezone: 'Time zone',
+            firstName: 'First name',
+            lastName: 'Last name',
+            email: 'Email',
+            promoCode: 'Promo code (optional)',
+            password: 'Password',
+            submit: 'Create organization',
+            submitting: 'Creating organization...',
+            requiredFields: 'Complete all required fields.',
+            invalidEmail: 'Enter a valid email.',
+            shortPassword: 'Password must be at least 8 characters.',
+            alreadyHaveAccount: 'Already have an account?',
+            signIn: 'Sign in',
+            pickerTitle: 'Choose time zone',
+          },
+    [language],
+  );
+  const signupTimeZoneOptions = useMemo(
+    () =>
+      Array.from(new Set([signupForm.timezone, ...SIGNUP_TIME_ZONES])).map((timeZone) => ({
+        label: `${getTimeZoneOffsetLabel(timeZone)} · ${timeZone.replace(/_/g, ' ')}`,
+        timeZone,
+      })),
+    [signupForm.timezone],
   );
   const filteredCountryCodeOptions = useMemo(() => {
     const normalizedQuery = normalizeCountryCodeSearchValue(countryCodeSearchQuery);
@@ -535,7 +670,7 @@ const AuthScreen = () => {
     const restsAtCompactLayout = mode === 'signin' || mode === 'join';
     const restingHeroHeight = restsAtCompactLayout ? compactHeroHeight : collapsedHeroHeight;
     const compactTargetHeight =
-      mode === 'joinProfile'
+      mode === 'joinProfile' || mode === 'signup'
         ? interpolate(keyboardProgress.value, [0, 1], [compactHeroHeight, 0], Extrapolation.CLAMP)
         : interpolate(
           keyboardProgress.value,
@@ -563,7 +698,7 @@ const AuthScreen = () => {
 
   const heroContentStyle = useAnimatedStyle(() => {
     const compactMarginTop =
-      mode === 'joinProfile'
+      mode === 'joinProfile' || mode === 'signup'
         ? interpolate(keyboardProgress.value, [0, 1], [compactHeroTitleOffset, 0], Extrapolation.CLAMP)
         : interpolate(
           keyboardProgress.value,
@@ -582,7 +717,7 @@ const AuthScreen = () => {
         ],
         Extrapolation.CLAMP,
       ),
-      opacity: mode === 'joinProfile' ? interpolate(keyboardProgress.value, [0, 1], [1, 0], Extrapolation.CLAMP) : 1,
+      opacity: mode === 'joinProfile' || mode === 'signup' ? interpolate(keyboardProgress.value, [0, 1], [1, 0], Extrapolation.CLAMP) : 1,
       transform: [
         {
           translateY: interpolate(transition.value, [0, 1], [0, -18], Extrapolation.CLAMP),
@@ -604,7 +739,7 @@ const AuthScreen = () => {
     const restsAtCompactLayout = mode === 'signin' || mode === 'join';
     const restingFormTop = restsAtCompactLayout ? compactFormTop : collapsedHeroHeight - 40;
     const compactPaddingTop =
-      mode === 'joinProfile'
+      mode === 'joinProfile' || mode === 'signup'
         ? interpolate(keyboardProgress.value, [0, 1], [compactFormTop, 8], Extrapolation.CLAMP)
         : interpolate(
           keyboardProgress.value,
@@ -633,6 +768,7 @@ const AuthScreen = () => {
     }
 
     Keyboard.dismiss();
+    setSignupTimeZonePickerVisible(false);
 
     if (!options?.skipHaptic) {
       hapticSelection();
@@ -657,6 +793,14 @@ const AuthScreen = () => {
 
       setMode(nextMode);
     });
+  }
+
+  function updateSignupForm<Field extends keyof SignupForm>(field: Field, value: SignupForm[Field]) {
+    setSignupForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setMessage(null);
   }
 
   function openCountryCodePicker() {
@@ -740,6 +884,9 @@ const AuthScreen = () => {
       setJoinPhone('');
       setIdentifier('');
       setPassword('');
+      setSignupForm(createInitialSignupForm());
+      setSignupPasswordVisible(false);
+      setSignupTimeZonePickerVisible(false);
       setJoinCompany(null);
       setJoinProfileForm(INITIAL_JOIN_PROFILE_FORM);
       setJoinProfileSubmitted(false);
@@ -958,6 +1105,79 @@ const AuthScreen = () => {
     ? t('login.hidePassword')
     : t('login.showPassword');
 
+  async function completeAuthenticatedEntry(session: Awaited<ReturnType<typeof signInWithEmail>>) {
+    if (!session.user.workspaceAccessAllowed) {
+      signInLocally({ workspaceSetupStep: null });
+      return;
+    }
+
+    void bootstrapDemoDevice().catch(() => undefined);
+    void bootstrapPushNotifications().catch(() => undefined);
+    const workspaceSetupStep = await resolveWorkspaceSetupStep();
+
+    signInLocally({ workspaceSetupStep });
+
+    if (workspaceSetupStep) {
+      router.replace(getWorkspaceSetupHref(workspaceSetupStep) as never);
+      return;
+    }
+
+    void warmWorkspaceCachesWithinBudget(session.user.roleCodes, 2200, {
+      language,
+    }).catch(() => undefined);
+  }
+
+  async function handleSignup() {
+    const organizationName = signupForm.organizationName.trim();
+    const firstName = signupForm.firstName.trim();
+    const lastName = signupForm.lastName.trim();
+    const email = signupForm.email.trim().toLowerCase();
+
+    if (!organizationName || !firstName || !lastName || !email || !signupForm.password) {
+      hapticError();
+      setMessage(signupUi.requiredFields);
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      hapticError();
+      setMessage(signupUi.invalidEmail);
+      return;
+    }
+
+    if (signupForm.password.length < 8) {
+      hapticError();
+      setMessage(signupUi.shortPassword);
+      return;
+    }
+
+    Keyboard.dismiss();
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      const session = await registerOrganizationOwner(
+        {
+          organizationName,
+          timezone: signupForm.timezone,
+          firstName,
+          lastName,
+          email,
+          promoCode: signupForm.promoCode.trim() || undefined,
+          password: signupForm.password,
+        },
+        language,
+      );
+      hapticSuccess();
+      await completeAuthenticatedEntry(session);
+    } catch (error) {
+      hapticError();
+      setMessage(error instanceof Error ? error.message : signupUi.requiredFields);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSignIn() {
     const trimmedIdentifier = identifier.trim();
     const trimmedPassword = password.trim();
@@ -983,26 +1203,7 @@ const AuthScreen = () => {
         language,
       );
       hapticSuccess();
-
-      if (!session.user.workspaceAccessAllowed) {
-        signInLocally({ workspaceSetupStep: null });
-        return;
-      }
-
-      void bootstrapDemoDevice().catch(() => undefined);
-      void bootstrapPushNotifications().catch(() => undefined);
-      const workspaceSetupStep = await resolveWorkspaceSetupStep();
-
-      signInLocally({ workspaceSetupStep });
-
-      if (workspaceSetupStep) {
-        router.replace(getWorkspaceSetupHref(workspaceSetupStep) as never);
-        return;
-      }
-
-      void warmWorkspaceCachesWithinBudget(session.user.roleCodes, 2200, {
-        language,
-      }).catch(() => undefined);
+      await completeAuthenticatedEntry(session);
     } catch (error) {
       hapticError();
       setMessage(error instanceof Error ? error.message : t('login.signInErrorEmpty'));
@@ -1074,6 +1275,14 @@ const AuthScreen = () => {
         <Text style={styles.signInTitle}>
           {t('login.joinTeam')}
         </Text>
+      </View>
+    );
+  }
+
+  function renderSignupTitle() {
+    return (
+      <View pointerEvents="none" style={styles.signInTitleSlot}>
+        <Text style={[styles.signInTitle, styles.signupTitle]}>{signupUi.title}</Text>
       </View>
     );
   }
@@ -1225,9 +1434,17 @@ const AuthScreen = () => {
                 <PressableScale
                   className="min-h-[58px] items-center justify-center rounded-[20px] bg-[#f6f1e7]"
                   haptic="medium"
+                  onPress={() => switchMode('signup', { skipHaptic: true })}
+                >
+                  <Text className="text-[18px] font-semibold text-[#0f2530]">{signupUi.entry}</Text>
+                </PressableScale>
+
+                <PressableScale
+                  className="mt-3 min-h-[58px] items-center justify-center rounded-[20px] border border-white/35 bg-white/8"
+                  haptic="selection"
                   onPress={() => switchMode('join', { skipHaptic: true })}
                 >
-                  <Text className="text-[18px] font-semibold text-[#0f2530]">{t('login.joinTeam')}</Text>
+                  <Text className="text-[18px] font-semibold text-white">{t('login.joinTeam')}</Text>
                 </PressableScale>
 
                 <PressableScale
@@ -1248,7 +1465,7 @@ const AuthScreen = () => {
               style={[
                 formAreaStyle,
                 {
-                  paddingBottom: mode === 'joinProfile'
+                  paddingBottom: mode === 'joinProfile' || mode === 'signup'
                     ? insets.bottom + (keyboardVisible ? 8 : 20)
                     : 0,
                 },
@@ -1258,26 +1475,28 @@ const AuthScreen = () => {
                 <Animated.View className="flex-1">
                   <View className="flex-1">
                     <View
-                      className={
+                      className={`${mode === 'signup' ? 'flex-1 ' : ''}${
                         keyboardVisible
-                          ? mode === 'joinProfile'
+                          ? mode === 'joinProfile' || mode === 'signup'
                             ? 'pb-4 pt-3'
                             : mode === 'join'
                               ? 'pb-8 pt-10'
                               : 'pb-6 pt-6'
-                          : mode === 'joinProfile'
+                          : mode === 'joinProfile' || mode === 'signup'
                             ? 'pb-6 pt-6'
                             : mode === 'join'
                               ? compactJoinContentPaddingClass
                               : compactSignInContentPaddingClass
-                      }
+                      }`}
                     >
                       {mode === 'joinProfile' && joinProfileSubmitted ? null : (
                         <View
                           className="mb-7 items-center"
-                          style={mode === 'signin' || mode === 'join' ? styles.signInTitleWrapper : undefined}
+                          style={mode === 'signin' || mode === 'join' || mode === 'signup' ? styles.signInTitleWrapper : undefined}
                         >
-                          {mode === 'joinProfile'
+                          {mode === 'signup'
+                            ? renderSignupTitle()
+                            : mode === 'joinProfile'
                             ? renderJoinProfileTitle()
                             : mode === 'join'
                               ? renderJoinTeamTitle()
@@ -1285,7 +1504,162 @@ const AuthScreen = () => {
                         </View>
                       )}
 
-                      {mode === 'joinProfile' ? (
+                      {mode === 'signup' ? (
+                        <ScrollView
+                          className="flex-1"
+                          contentContainerStyle={{ paddingBottom: 24 }}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator={false}
+                        >
+                          <View className="gap-3">
+                            <TextInput
+                              autoCapitalize="words"
+                              autoCorrect={false}
+                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                              editable={!submitting}
+                              onChangeText={(value) => updateSignupForm('organizationName', value)}
+                              placeholder={`${signupUi.organizationName}*`}
+                              placeholderTextColor="#7f8da1"
+                              returnKeyType="next"
+                              selectionColor="#26334a"
+                              style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                              value={signupForm.organizationName}
+                            />
+
+                            <PressableScale
+                              className="min-h-[58px] flex-row items-center justify-between rounded-[18px] border border-[#ddd5c7] bg-white px-4"
+                              disabled={submitting}
+                              haptic="selection"
+                              onPress={() => {
+                                Keyboard.dismiss();
+                                setSignupTimeZonePickerVisible(true);
+                              }}
+                            >
+                              <View className="w-6" />
+                              <View className="flex-1 items-center px-2">
+                                <Text numberOfLines={1} style={joinProfileInputStyle}>
+                                  {getTimeZoneOffsetLabel(signupForm.timezone)} · {signupForm.timezone.replace(/_/g, ' ')}
+                                </Text>
+                              </View>
+                              <Ionicons color="#7f8da1" name="chevron-down" size={20} />
+                            </PressableScale>
+
+                            <TextInput
+                              autoCapitalize="words"
+                              autoCorrect={false}
+                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                              editable={!submitting}
+                              onChangeText={(value) => updateSignupForm('firstName', value)}
+                              placeholder={`${signupUi.firstName}*`}
+                              placeholderTextColor="#7f8da1"
+                              returnKeyType="next"
+                              selectionColor="#26334a"
+                              style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                              value={signupForm.firstName}
+                            />
+
+                            <TextInput
+                              autoCapitalize="words"
+                              autoCorrect={false}
+                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                              editable={!submitting}
+                              onChangeText={(value) => updateSignupForm('lastName', value)}
+                              placeholder={`${signupUi.lastName}*`}
+                              placeholderTextColor="#7f8da1"
+                              returnKeyType="next"
+                              selectionColor="#26334a"
+                              style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                              value={signupForm.lastName}
+                            />
+
+                            <TextInput
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                              editable={!submitting}
+                              keyboardType="email-address"
+                              onChangeText={(value) => updateSignupForm('email', value)}
+                              placeholder={`${signupUi.email}*`}
+                              placeholderTextColor="#7f8da1"
+                              returnKeyType="next"
+                              selectionColor="#26334a"
+                              style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                              value={signupForm.email}
+                            />
+
+                            <TextInput
+                              autoCapitalize="characters"
+                              autoCorrect={false}
+                              className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-4 text-center text-[17px] text-[#0f2530]"
+                              editable={!submitting}
+                              onChangeText={(value) => updateSignupForm('promoCode', value)}
+                              placeholder={signupUi.promoCode}
+                              placeholderTextColor="#7f8da1"
+                              returnKeyType="next"
+                              selectionColor="#26334a"
+                              style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                              value={signupForm.promoCode}
+                            />
+
+                            <View className="relative justify-center">
+                              <View className="absolute left-0 top-0 h-[58px] w-14" pointerEvents="none" />
+                              <TextInput
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                className="min-h-[58px] rounded-[18px] border border-[#ddd5c7] bg-white px-14 text-center text-[17px] text-[#0f2530]"
+                                editable={!submitting}
+                                onChangeText={(value) => updateSignupForm('password', value)}
+                                onSubmitEditing={() => void handleSignup()}
+                                placeholder={`${signupUi.password}*`}
+                                placeholderTextColor="#7f8da1"
+                                returnKeyType="go"
+                                secureTextEntry={!signupPasswordVisible}
+                                selectionColor="#26334a"
+                                style={[centeredInputDirectionStyle, joinProfileInputStyle]}
+                                value={signupForm.password}
+                              />
+                              <Pressable
+                                accessibilityLabel={signupPasswordVisible ? t('login.hidePassword') : t('login.showPassword')}
+                                accessibilityRole="button"
+                                className="absolute right-0 top-0 h-[58px] w-14 items-center justify-center"
+                                disabled={submitting}
+                                hitSlop={10}
+                                onPress={() => setSignupPasswordVisible((current) => !current)}
+                              >
+                                <Ionicons color="#6f7892" name={signupPasswordVisible ? 'eye-off-outline' : 'eye-outline'} size={22} />
+                              </Pressable>
+                            </View>
+
+                            <View className="min-h-[32px] items-center justify-center px-2">
+                              {message ? <Text style={joinProfileErrorStyle}>{message}</Text> : null}
+                            </View>
+
+                            <PressableScale
+                              className="mb-1 min-h-[24px] items-center justify-center"
+                              disabled={submitting}
+                              haptic="selection"
+                              onPress={() => switchMode('signin', { skipHaptic: true })}
+                            >
+                              <Text style={signInPromptStyle}>
+                                <Text style={signInPromptStyle}>{signupUi.alreadyHaveAccount} </Text>
+                                <Text style={signInLinkStyle}>{signupUi.signIn}</Text>
+                              </Text>
+                            </PressableScale>
+
+                            <PressableScale
+                              className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${submitting ? 'opacity-70' : ''}`}
+                              disabled={submitting}
+                              haptic="medium"
+                              onPress={() => void handleSignup()}
+                            >
+                              <View className="flex-row items-center justify-center gap-3">
+                                {submitting ? <ActivityIndicator color="#f7f1e6" size="small" /> : null}
+                                <Text style={actionLabelStyle}>{submitting ? signupUi.submitting : signupUi.submit}</Text>
+                              </View>
+                            </PressableScale>
+                          </View>
+                        </ScrollView>
+                      ) : mode === 'joinProfile' ? (
                         <Animated.View className="gap-3">
                           {joinProfileSubmitted ? (
                             <View className="items-center gap-4 pt-16">
@@ -1647,7 +2021,7 @@ const AuthScreen = () => {
                         </View>
                       )}
 
-                      {mode !== 'joinProfile' ? (
+                      {mode !== 'joinProfile' && mode !== 'signup' ? (
                         <View className="mt-4 min-h-[40px] items-center justify-center px-2">
                           {message ? (
                             <Text className="text-center text-[14px] leading-[20px] text-[#9e3541]">
@@ -1658,7 +2032,7 @@ const AuthScreen = () => {
                       ) : null}
                     </View>
 
-                    {mode !== 'joinProfile' ? (
+                    {mode !== 'joinProfile' && mode !== 'signup' ? (
                       <View
                         className={
                           keyboardVisible
@@ -1733,6 +2107,35 @@ const AuthScreen = () => {
             </Animated.View>
           </View>
         </TouchableWithoutFeedback>
+        <BottomSheetModal
+          backdropOpacity={0.64}
+          onClose={() => setSignupTimeZonePickerVisible(false)}
+          sheetClassName="rounded-t-[28px] bg-white px-5 pt-5"
+          solidBackground
+          visible={signupTimeZonePickerVisible}
+        >
+          <View style={{ height: screenHeight * 0.68 }}>
+            <Text style={styles.modalTitle}>{signupUi.pickerTitle}</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              {signupTimeZoneOptions.map((option) => (
+                <PressableScale
+                  className="min-h-[62px] flex-row items-center justify-between rounded-[18px] px-4 py-3"
+                  haptic="selection"
+                  key={option.timeZone}
+                  onPress={() => {
+                    updateSignupForm('timezone', option.timeZone);
+                    setSignupTimeZonePickerVisible(false);
+                  }}
+                >
+                  <View className="flex-1 pr-4">
+                    <Text style={styles.timeZoneValue}>{option.label}</Text>
+                  </View>
+                  {signupForm.timezone === option.timeZone ? <Ionicons color="#546cf2" name="checkmark" size={22} /> : null}
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </View>
+        </BottomSheetModal>
         <BottomSheetModal
           backdropOpacity={0.64}
           onClose={closeCountryCodePicker}
@@ -1860,6 +2263,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     includeFontPadding: Platform.OS === 'android',
   },
+  signupTitle: {
+    top: 0,
+    fontSize: 28,
+    lineHeight: 36,
+  },
   signInTitleAccent: {
     fontFamily: 'Manrope_500Medium',
     fontStyle: 'italic',
@@ -1875,6 +2283,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_500Medium',
     fontSize: 24,
     includeFontPadding: false,
+  },
+  timeZoneValue: {
+    color: '#26334a',
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 16,
+    includeFontPadding: false,
+    lineHeight: 22,
   },
   countryCodeValue: {
     color: '#26334a',

@@ -75,6 +75,43 @@ function testTaskActivityUpdatesAreSyncedToKommo() {
   }
 }
 
+function testTaskTemplateLifecycleIsSyncedToKommo() {
+  const sourcePath = resolve(__dirname, 'collaboration.service.ts');
+  const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/);
+
+  assertNearbySource(
+    lines,
+    'async createTaskTemplate',
+    /kommoService\.recordTaskTemplateCreated\(/,
+    'Recurring task template creation must be synced to Kommo.',
+    140,
+  );
+
+  assertNearbySource(
+    lines,
+    'async updateTaskTemplate',
+    /kommoService\.recordTaskTemplateUpdated\(/,
+    'Recurring task template updates must be synced to Kommo.',
+    180,
+  );
+
+  assertNearbySource(
+    lines,
+    'async toggleTaskTemplate',
+    /kommoService\.recordTaskTemplateUpdated\(/,
+    'Recurring task template pause/activation must be synced to Kommo.',
+    120,
+  );
+
+  assertNearbySource(
+    lines,
+    'async deleteTaskTemplate',
+    /kommoService\.recordTaskTemplateDeleted\(/,
+    'Recurring task template deletion must be synced to Kommo.',
+    180,
+  );
+}
+
 function testFallbackEmployeeCreatesAreSyncedToKommo() {
   const sourcePath = resolve(__dirname, 'collaboration.service.ts');
   const lines = readFileSync(sourcePath, 'utf8').split(/\r?\n/);
@@ -102,6 +139,7 @@ function testFallbackEmployeeCreatesAreSyncedToKommo() {
 async function main() {
   testRealTaskCreatesAreSyncedToKommo();
   testTaskActivityUpdatesAreSyncedToKommo();
+  testTaskTemplateLifecycleIsSyncedToKommo();
   testFallbackEmployeeCreatesAreSyncedToKommo();
   console.log('collaboration flow tests passed');
 }
