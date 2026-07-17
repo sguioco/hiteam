@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getCalendars } from 'expo-localization';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -259,6 +260,15 @@ const SIGNUP_TIME_ZONES = [
 
 function getDeviceTimeZone() {
   try {
+    const nativeTimeZone = getCalendars()[0]?.timeZone;
+    if (nativeTimeZone) {
+      return nativeTimeZone;
+    }
+  } catch {
+    // Fall back to Intl when native localization data is unavailable.
+  }
+
+  try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
     return 'UTC';
@@ -506,7 +516,7 @@ const AuthScreen = () => {
     () =>
       language === 'ru'
         ? {
-            entry: 'Регистрация',
+            entry: 'Создать организацию',
             title: 'Создать организацию',
             organizationName: 'Название организации',
             timezone: 'Часовой пояс',
@@ -525,7 +535,7 @@ const AuthScreen = () => {
             pickerTitle: 'Выберите часовой пояс',
           }
         : {
-            entry: 'Sign up',
+            entry: 'Create organization',
             title: 'Create organization',
             organizationName: 'Organization name',
             timezone: 'Time zone',
@@ -1465,7 +1475,7 @@ const AuthScreen = () => {
               style={[
                 formAreaStyle,
                 {
-                  paddingBottom: mode === 'joinProfile' || mode === 'signup'
+                  paddingBottom: mode === 'joinProfile'
                     ? insets.bottom + (keyboardVisible ? 8 : 20)
                     : 0,
                 },
@@ -1505,13 +1515,14 @@ const AuthScreen = () => {
                       )}
 
                       {mode === 'signup' ? (
-                        <ScrollView
-                          className="flex-1"
-                          contentContainerStyle={{ paddingBottom: 24 }}
-                          keyboardShouldPersistTaps="handled"
-                          showsVerticalScrollIndicator={false}
-                        >
-                          <View className="gap-3">
+                        <View className="flex-1">
+                          <ScrollView
+                            className="flex-1"
+                            contentContainerStyle={{ paddingBottom: 104 }}
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator={false}
+                          >
+                            <View className="gap-3">
                             <TextInput
                               autoCapitalize="words"
                               autoCorrect={false}
@@ -1635,7 +1646,7 @@ const AuthScreen = () => {
                             </View>
 
                             <PressableScale
-                              className="mb-1 min-h-[24px] items-center justify-center"
+                              className="min-h-[24px] items-center justify-center"
                               disabled={submitting}
                               haptic="selection"
                               onPress={() => switchMode('signin', { skipHaptic: true })}
@@ -1645,20 +1656,9 @@ const AuthScreen = () => {
                                 <Text style={signInLinkStyle}>{signupUi.signIn}</Text>
                               </Text>
                             </PressableScale>
-
-                            <PressableScale
-                              className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${submitting ? 'opacity-70' : ''}`}
-                              disabled={submitting}
-                              haptic="medium"
-                              onPress={() => void handleSignup()}
-                            >
-                              <View className="flex-row items-center justify-center gap-3">
-                                {submitting ? <ActivityIndicator color="#f7f1e6" size="small" /> : null}
-                                <Text style={actionLabelStyle}>{submitting ? signupUi.submitting : signupUi.submit}</Text>
-                              </View>
-                            </PressableScale>
-                          </View>
-                        </ScrollView>
+                            </View>
+                          </ScrollView>
+                        </View>
                       ) : mode === 'joinProfile' ? (
                         <Animated.View className="gap-3">
                           {joinProfileSubmitted ? (
@@ -2032,7 +2032,7 @@ const AuthScreen = () => {
                       ) : null}
                     </View>
 
-                    {mode !== 'joinProfile' && mode !== 'signup' ? (
+                    {mode !== 'joinProfile' ? (
                       <View
                         className={
                           keyboardVisible
@@ -2058,7 +2058,7 @@ const AuthScreen = () => {
                               <Text style={joinLinkStyle}>{t('login.logIn')}</Text>
                             </Text>
                           </PressableScale>
-                        ) : (
+                        ) : mode === 'signup' ? null : (
                           <PressableScale
                             className={`${keyboardVisible ? 'mb-3' : 'mb-6'} min-h-[24px] items-center justify-center`}
                             haptic="selection"
@@ -2077,7 +2077,7 @@ const AuthScreen = () => {
                           disabled={submitting}
                           haptic="medium"
                           onPress={() =>
-                            void (mode === 'join' ? handleJoinTeam() : handleSignIn())
+                            void (mode === 'join' ? handleJoinTeam() : mode === 'signup' ? handleSignup() : handleSignIn())
                           }
                         >
                           {mode === 'join' ? (
@@ -2088,6 +2088,15 @@ const AuthScreen = () => {
                                   : joinUi.checkingEmail
                                 : joinUi.button}
                             </Text>
+                          ) : mode === 'signup' ? (
+                            <View className="flex-row items-center justify-center gap-3">
+                              {submitting ? (
+                                <ActivityIndicator color="#f7f1e6" size="small" />
+                              ) : null}
+                              <Text style={actionLabelStyle}>
+                                {submitting ? signupUi.submitting : signupUi.submit}
+                              </Text>
+                            </View>
                           ) : (
                             <View className="flex-row items-center justify-center gap-3">
                               {submitting ? (

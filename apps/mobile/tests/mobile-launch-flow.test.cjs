@@ -90,8 +90,46 @@ function testMobileOwnerRegistrationUsesSharedBackend() {
   );
 }
 
+function testMobileOrganizationSetupUsesSharedBackend() {
+  const api = read("lib/api.ts");
+  const setupFlow = read("lib/workspace-setup.ts");
+  const organization = read("app/onboarding/organization.tsx");
+
+  assertContains(
+    api,
+    'authRequest<MobileOrganizationSetup>("/org/setup")',
+    "Mobile organization onboarding must load setup state from the shared backend.",
+  );
+  assertContains(
+    api,
+    'authRequest<MobileOrganizationSetup>("/org/setup", {',
+    "Mobile organization onboarding must save workplace settings to the shared backend.",
+  );
+  assertContains(
+    organization,
+    "createManagerTeam({",
+    "Mobile organization onboarding must create the first team through the shared backend.",
+  );
+  assertContains(
+    organization,
+    "createManagerShiftTemplate({",
+    "Mobile organization onboarding must create a reusable shift template.",
+  );
+  assertContains(
+    setupFlow,
+    "return 'organization';",
+    "Incomplete organization setup must route owners to mobile organization onboarding.",
+  );
+  assertContains(
+    setupFlow,
+    "organizationSetup?.attendanceTrackingEnabled === false",
+    "Tasks-only organizations must skip biometric and location onboarding.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
+testMobileOrganizationSetupUsesSharedBackend();
 
 console.log("mobile launch flow tests passed");

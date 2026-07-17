@@ -3,7 +3,7 @@ import { getCachedDemoSession, hasCachedDemoSession, resetDemoSession } from './
 import type { AppLanguage } from './i18n';
 
 export type AuthMethod = 'phone' | 'email';
-export type WorkspaceSetupStep = 'biometric' | 'location' | null;
+export type WorkspaceSetupStep = 'organization' | 'biometric' | 'location' | null;
 
 export type CountryOption = {
   isoCode: string;

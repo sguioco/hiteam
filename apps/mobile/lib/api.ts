@@ -86,6 +86,41 @@ export type RegisterOrganizationOwnerInput = {
   promoCode?: string;
 };
 
+export type MobileOrganizationSetup = {
+  attendanceTrackingEnabled: boolean;
+  company: {
+    id: string;
+    googlePlaceId?: string | null;
+    logoUrl?: string | null;
+    name: string;
+  } | null;
+  configured: boolean;
+  defaultGeofenceRadiusMeters: number;
+  location: {
+    address: string;
+    country?: string | null;
+    geofenceRadiusMeters?: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    timezone: string;
+  } | null;
+  organizationId?: string | null;
+};
+
+export type SaveMobileOrganizationSetupInput = {
+  address: string;
+  attendanceTrackingEnabled: boolean;
+  companyLogoUrl?: string;
+  companyName: string;
+  country?: string;
+  geofenceRadiusMeters: number;
+  googlePlaceId?: string;
+  latitude: number;
+  longitude: number;
+  mode: "create" | "update";
+  timezone: string;
+};
+
 let cachedSession: AppSession | null = null;
 const SESSION_STORAGE_PATH = `${FileSystem.documentDirectory ?? ""}smart-auth-session.json`;
 let unauthorizedHandler: (() => void) | null = null;
@@ -682,6 +717,30 @@ export async function registerOrganizationOwner(
     email: normalizedEmail,
     password: payload.password,
     language,
+  });
+}
+
+export async function loadMobileOrganizationSetup() {
+  return authRequest<MobileOrganizationSetup>("/org/setup");
+}
+
+export async function saveMobileOrganizationSetup(
+  payload: SaveMobileOrganizationSetupInput,
+) {
+  return authRequest<MobileOrganizationSetup>("/org/setup", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createManagerTeam(payload: {
+  avatarEmoji?: string;
+  description?: string;
+  name: string;
+}) {
+  return authRequest<WorkGroupItem>("/collaboration/teams", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

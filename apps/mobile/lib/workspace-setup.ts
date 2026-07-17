@@ -1,12 +1,25 @@
 import type { WorkspaceSetupStep } from './auth-flow';
-import { loadBiometricPolicy } from './api';
+import { loadBiometricPolicy, loadMobileOrganizationSetup } from './api';
 import { getPreciseLocationAccessStatus } from './location';
 import { hasCompletedLocationOnboarding } from './onboarding';
 
 export async function resolveWorkspaceSetupStep(): Promise<WorkspaceSetupStep> {
+  const organizationSetup = await loadMobileOrganizationSetup().catch(() => null);
+
+  if (organizationSetup && !organizationSetup.configured) {
+    return 'organization';
+  }
+
+  if (organizationSetup?.attendanceTrackingEnabled === false) {
+    return null;
+  }
+
   const biometricPolicy = await loadBiometricPolicy().catch(() => null);
 
-  if (biometricPolicy && biometricPolicy.enrollmentStatus !== 'ENROLLED') {
+  if (
+    biometricPolicy?.rules.enrollmentRequired &&
+    biometricPolicy.enrollmentStatus !== 'ENROLLED'
+  ) {
     return 'biometric';
   }
 
@@ -26,16 +39,22 @@ export async function resolveWorkspaceSetupStep(): Promise<WorkspaceSetupStep> {
 }
 
 export function isWorkspaceSetupRoute(pathname: string) {
-  return pathname.startsWith('/biometric') || pathname.startsWith('/onboarding/workspace-ready');
+  return pathname.startsWith('/biometric') || pathname.startsWith('/onboarding/organization') || pathname.startsWith('/onboarding/workspace-ready');
 }
 
 export function matchesWorkspaceSetupStep(pathname: string, step: Exclude<WorkspaceSetupStep, null>) {
-  return step === 'biometric'
-    ? pathname.startsWith('/biometric')
-    : pathname.startsWith('/onboarding/workspace-ready');
+  if (step === 'organization') {
+    return pathname.startsWith('/onboarding/organization');
+  }
+
+  return step === 'biometric' ? pathname.startsWith('/biometric') : pathname.startsWith('/onboarding/workspace-ready');
 }
 
 export function getWorkspaceSetupHref(step: Exclude<WorkspaceSetupStep, null>) {
+  if (step === 'organization') {
+    return '/onboarding/organization' as const;
+  }
+
   if (step === 'biometric') {
     return {
       pathname: '/biometric' as const,
