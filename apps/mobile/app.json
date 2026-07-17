@@ -4,7 +4,7 @@
     "slug": "smart",
     "scheme": "hiteam",
     "description": "HiTeam helps companies manage shifts, tasks, attendance, news, and employee performance in one mobile workspace.",
-    "version": "5.0.0",
+    "version": "5.0.1",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -105,7 +105,7 @@
         "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"
       }
     },
-    "runtimeVersion": "5.0.0",
+    "runtimeVersion": "5.0.1",
     "updates": {
       "url": "https://u.expo.dev/35bb3b6c-af5d-410a-b463-0d3da3c0de78"
     }
