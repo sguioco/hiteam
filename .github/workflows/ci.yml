@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '.cd/values.hiteam-main.yaml'
+      - ".cd/values.hiteam-main.yaml"
   pull_request:
 
 jobs:
@@ -22,5 +22,6 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile=false
+      - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build
