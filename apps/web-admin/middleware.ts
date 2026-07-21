@@ -5,6 +5,7 @@ import { decodeSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 
 const PUBLIC_EXACT_PATHS = new Set([
   "/",
+  "/account-deletion",
   "/cookies",
   "/create",
   "/dpa",
@@ -114,6 +115,7 @@ export function middleware(request: NextRequest) {
   if (
     isPhoneRequest(request) &&
     pathname !== "/" &&
+    pathname !== "/account-deletion" &&
     pathname !== MOBILE_BLOCK_PATH
   ) {
     const mobileUrl = getPublicRequestUrl(request, MOBILE_BLOCK_PATH);
