@@ -2,12 +2,10 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { AppStoreButton, GooglePlayButton } from "@/components/landing-page";
-
-const IOS_APP_URL =
-  process.env.NEXT_PUBLIC_IOS_APP_URL ?? "https://apps.apple.com/";
-const ANDROID_APP_URL =
-  process.env.NEXT_PUBLIC_ANDROID_APP_URL ??
-  "https://play.google.com/store/apps";
+import {
+  GOOGLE_PLAY_STORE_URL,
+  IOS_APP_STORE_URL,
+} from "@/lib/mobile-app-links";
 const LANDING_LOCALE_COOKIE_NAME = "hiteam-landing-locale";
 const ADMIN_LOCALE_COOKIE_NAME = "smart-admin-locale";
 
@@ -134,7 +132,7 @@ export default async function MobileDownloadPage({
             <GooglePlayButton
               aria-label="Google Play"
               className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.24)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-              href={ANDROID_APP_URL}
+              href={GOOGLE_PLAY_STORE_URL}
               rel="noreferrer"
               size="md"
               target="_blank"
@@ -142,7 +140,7 @@ export default async function MobileDownloadPage({
             <AppStoreButton
               aria-label="iOS"
               className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.24)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-              href={IOS_APP_URL}
+              href={IOS_APP_STORE_URL}
               rel="noreferrer"
               size="md"
               target="_blank"

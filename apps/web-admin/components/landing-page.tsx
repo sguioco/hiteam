@@ -34,6 +34,10 @@ import { AuroraText } from "@/components/ui/aurora-text";
 import { LineShadowText } from "@/components/ui/line-shadow-text";
 import { useI18n } from "@/lib/i18n";
 import {
+  GOOGLE_PLAY_STORE_URL,
+  IOS_APP_STORE_URL,
+} from "@/lib/mobile-app-links";
+import {
   LANDING_GLOBE_GEO_SRC,
   LANDING_GLOBE_ROOM_SRC,
   LANDING_GLOBE_VERIFIED_AVATAR_SRC,
@@ -820,7 +824,9 @@ export const GooglePlayButton = ({
   return (
     <a
       aria-label="Get it on Google Play"
-      href="#"
+      href={GOOGLE_PLAY_STORE_URL}
+      rel="noreferrer"
+      target="_blank"
       {...props}
       className={cx(
         size === "xl"
@@ -954,7 +960,9 @@ export const AppStoreButton = ({
   return (
     <a
       aria-label="Download on the App Store"
-      href="#"
+      href={IOS_APP_STORE_URL}
+      rel="noreferrer"
+      target="_blank"
       {...props}
       className={cx(
         size === "xl"

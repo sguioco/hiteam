@@ -38,16 +38,15 @@ import {
 } from "@/lib/browser-storage";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useI18n } from "@/lib/i18n";
+import {
+  GOOGLE_PLAY_STORE_URL,
+  IOS_APP_STORE_URL,
+} from "@/lib/mobile-app-links";
 import { cx } from "@/lib/utils/cx";
 
 type LandingLocale = "en" | "ru" | "es" | "ar";
 type PricingDurationKey = "monthly" | "six" | "year";
 const LANDING_LOCALE_OPTIONS = ["en", "ru", "es", "ar"] as const;
-const IOS_APP_URL =
-  process.env.NEXT_PUBLIC_IOS_APP_URL ?? "https://apps.apple.com/";
-const ANDROID_APP_URL =
-  process.env.NEXT_PUBLIC_ANDROID_APP_URL ??
-  "https://play.google.com/store/apps";
 const LANGUAGE_NAMES: Record<LandingLocale, string> = {
   en: "English",
   ru: "Русский",
@@ -4017,14 +4016,14 @@ export function SalesLandingPage() {
             <div className="flex flex-wrap gap-3">
               <AppStoreButton
                 className="shrink-0 shadow-[0_14px_34px_rgba(15,23,42,0.22)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                href={IOS_APP_URL}
+                href={IOS_APP_STORE_URL}
                 rel="noreferrer"
                 size="md"
                 target="_blank"
               />
               <GooglePlayButton
                 className="shrink-0 shadow-[0_14px_34px_rgba(15,23,42,0.22)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                href={ANDROID_APP_URL}
+                href={GOOGLE_PLAY_STORE_URL}
                 rel="noreferrer"
                 size="md"
                 target="_blank"
@@ -4522,14 +4521,14 @@ export function SalesLandingPage() {
               <div className="mt-9 flex flex-wrap gap-3">
                 <AppStoreButton
                   className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.16)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                  href={IOS_APP_URL}
+                  href={IOS_APP_STORE_URL}
                   rel="noreferrer"
                   size="md"
                   target="_blank"
                 />
                 <GooglePlayButton
                   className="shrink-0 shadow-[0_16px_40px_rgba(15,23,42,0.16)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 active:scale-[0.96]"
-                  href={ANDROID_APP_URL}
+                  href={GOOGLE_PLAY_STORE_URL}
                   rel="noreferrer"
                   size="md"
                   target="_blank"
