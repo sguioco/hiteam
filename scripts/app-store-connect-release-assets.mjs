@@ -51,7 +51,7 @@ const metadata = {
   supportUrl: "https://hiteam.net/support",
   marketingUrl: "https://hiteam.net",
   whatsNew:
-    "Initial App Store release with employee attendance, tasks, checklists, company updates, GPS check-ins, and team management tools.",
+    "Create your organization directly in the app with automatic time zone setup and a streamlined mobile onboarding flow. This update also includes performance and stability improvements.",
 };
 
 const ageRatingAttributes = {
