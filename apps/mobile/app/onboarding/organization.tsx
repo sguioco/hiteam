@@ -38,7 +38,7 @@ type TimeField = 'start' | 'end' | null;
 
 const STEP_ORDER: SetupStep[] = ['workplace', 'team', 'schedule'];
 const DEFAULT_RADIUS_METERS = 100;
-const MIN_RADIUS_METERS = 100;
+const MIN_RADIUS_METERS = 50;
 const MAX_RADIUS_METERS = 1000;
 const RADIUS_STEP_METERS = 25;
 const DEFAULT_MAP_COORDINATE = { latitude: 25.2048, longitude: 55.2708 };

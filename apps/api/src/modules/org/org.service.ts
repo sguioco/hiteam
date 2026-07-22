@@ -4,8 +4,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { KommoService } from "../kommo/kommo.service";
 import { CreateLocationDto } from "./dto/create-location.dto";
 import { UpsertOrgSetupDto } from "./dto/upsert-org-setup.dto";
+import {
+  DEFAULT_GEOFENCE_RADIUS_METERS,
+  normalizeGeofenceRadius,
+} from "./geofence-radius";
 
-const DEFAULT_GEOFENCE_RADIUS_METERS = 100;
 const SEEDED_PLACEHOLDER_COMPANY_NAME = 'Beauty Life';
 const SEEDED_PLACEHOLDER_ADDRESS = 'Demo address';
 
@@ -32,14 +35,6 @@ const TENANT_SETUP_SELECT = {
   businessId: true,
   attendanceTrackingEnabled: true,
 } as const;
-
-function normalizeGeofenceRadius(value?: number | null) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return DEFAULT_GEOFENCE_RADIUS_METERS;
-  }
-
-  return Math.max(DEFAULT_GEOFENCE_RADIUS_METERS, value);
-}
 
 function buildInternalCode(value: string, fallback: string): string {
   const normalized = value

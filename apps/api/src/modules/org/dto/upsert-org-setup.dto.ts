@@ -1,4 +1,5 @@
 import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { MIN_GEOFENCE_RADIUS_METERS } from "../geofence-radius";
 
 export class UpsertOrgSetupDto {
   @IsOptional()
@@ -31,7 +32,7 @@ export class UpsertOrgSetupDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(100)
+  @Min(MIN_GEOFENCE_RADIUS_METERS)
   geofenceRadiusMeters?: number;
 
   @IsString()

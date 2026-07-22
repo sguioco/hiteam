@@ -1,4 +1,5 @@
 import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { MIN_GEOFENCE_RADIUS_METERS } from '../geofence-radius';
 
 export class CreateLocationDto {
   @IsString()
@@ -19,7 +20,7 @@ export class CreateLocationDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(100)
+  @Min(MIN_GEOFENCE_RADIUS_METERS)
   geofenceRadiusMeters?: number;
 
   @IsString()

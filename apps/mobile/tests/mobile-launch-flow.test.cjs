@@ -125,6 +125,16 @@ function testMobileOrganizationSetupUsesSharedBackend() {
     "organizationSetup?.attendanceTrackingEnabled === false",
     "Tasks-only organizations must skip biometric and location onboarding.",
   );
+  assertContains(
+    organization,
+    "const MIN_RADIUS_METERS = 50;",
+    "Mobile organization onboarding must allow a 50 meter geofence radius.",
+  );
+  assertContains(
+    organization,
+    "const DEFAULT_RADIUS_METERS = 100;",
+    "Mobile organization onboarding must keep the default radius at 100 meters.",
+  );
 }
 
 testMobileTaskApiUsesSharedBackend();

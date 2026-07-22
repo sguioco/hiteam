@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/billing-launch-flow.test.cjs && node tests/mobile-app-links.test.cjs"
+    "test": "node tests/billing-launch-flow.test.cjs && node tests/mobile-app-links.test.cjs && node tests/geofence-radius.test.cjs"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.1",
