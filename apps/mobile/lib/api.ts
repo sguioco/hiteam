@@ -736,6 +736,7 @@ export async function saveMobileOrganizationSetup(
 export async function createManagerTeam(payload: {
   avatarEmoji?: string;
   description?: string;
+  memberEmployeeIds?: string[];
   name: string;
 }) {
   return authRequest<WorkGroupItem>("/collaboration/teams", {

@@ -65,6 +65,14 @@ type KommoEmployeeEmailDeliveryResult = {
   errorMessage?: string;
 };
 
+type KommoDeletedEmployeeInvitationNote = {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  userId: string | null;
+  employeeId: string | null;
+};
+
 type KommoLifecycleEvent =
   | 'user_registered'
   | 'trial_started'
@@ -345,6 +353,21 @@ export class KommoService {
         ? this.buildEmployeeEmailDeliveryNote('employee_invited', emailDeliveryResult)
         : 'HiTeam employee invitation sent.',
       invitationId,
+      syncAllContacts: true,
+    });
+  }
+
+  recordEmployeeInvitationDeleted(tenantId: string, invitation: KommoDeletedEmployeeInvitationNote) {
+    this.enqueueSync(tenantId, {
+      reason: 'employee_invitation_deleted',
+      note: [
+        'HiTeam employee invitation deleted.',
+        `Invitation ID: ${invitation.id}`,
+        `Employee ID: ${invitation.employeeId ?? 'n/a'}`,
+        `User ID: ${invitation.userId ?? 'n/a'}`,
+        `Email: ${invitation.email ?? 'n/a'}`,
+        `Phone: ${invitation.phone ?? 'n/a'}`,
+      ].join('\n'),
       syncAllContacts: true,
     });
   }

@@ -135,11 +135,44 @@ function testMobileOrganizationSetupUsesSharedBackend() {
     "const DEFAULT_RADIUS_METERS = 100;",
     "Mobile organization onboarding must keep the default radius at 100 meters.",
   );
+  assert.match(
+    organization,
+    /WEEK_DAYS\.map[\s\S]*containerClassName="flex-1"[\s\S]*setTimeField\('start'\)[\s\S]*containerClassName="flex-1"[\s\S]*setTimeField\('end'\)/,
+    "Organization schedule controls must apply flex sizing to the outer PressableScale container.",
+  );
+}
+
+function testMobileManagerCanCreateTeamsAfterOnboarding() {
+  const api = read("lib/api.ts");
+  const manager = read("src/pages/ManagerScreen.tsx");
+  const createTeam = read("app/manager/create-team.tsx");
+
+  assertContains(
+    manager,
+    '"/manager/create-team"',
+    "The mobile manager create menu must expose team creation after onboarding.",
+  );
+  assertContains(
+    createTeam,
+    "createManagerTeam({",
+    "The mobile create-team screen must use the shared backend API helper.",
+  );
+  assertContains(
+    createTeam,
+    "memberEmployeeIds: selectedMemberIds",
+    "The mobile create-team screen must submit the selected employees.",
+  );
+  assert.match(
+    api,
+    /export async function createManagerTeam[\s\S]*memberEmployeeIds\?: string\[\][\s\S]*authRequest<WorkGroupItem>\("\/collaboration\/teams"/,
+    "Mobile team creation must submit members to the shared collaboration endpoint.",
+  );
 }
 
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
 testMobileOrganizationSetupUsesSharedBackend();
+testMobileManagerCanCreateTeamsAfterOnboarding();
 
 console.log("mobile launch flow tests passed");

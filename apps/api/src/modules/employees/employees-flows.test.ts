@@ -74,7 +74,18 @@ function testReviewEmailsAreSyncedToKommo() {
   );
 }
 
+function testInvitationDeletionIsSyncedToKommo() {
+  const deleteInvitationAndEmployee = methodBody('deleteInvitationAndEmployee');
+
+  assert.match(
+    deleteInvitationAndEmployee,
+    /recordEmployeeInvitationDeleted\(tenantId, invitation\)/,
+    'Deleting a pending invitation or pre-created employee must sync the roster change to Kommo.',
+  );
+}
+
 testInvitationEmailFailureDoesNotBlockKommoSync();
 testReviewEmailsAreSyncedToKommo();
+testInvitationDeletionIsSyncedToKommo();
 
 console.log('employees flow tests passed');

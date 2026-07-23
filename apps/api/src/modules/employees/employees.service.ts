@@ -1381,6 +1381,7 @@ export class EmployeesService {
       },
     });
     this.syncBillingSeatsInBackground(tenantId);
+    this.kommoService.recordEmployeeInvitationDeleted(tenantId, invitation);
 
     return {
       deleted: true,

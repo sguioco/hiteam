@@ -635,7 +635,13 @@ export default function OrganizationOnboardingScreen() {
                       {WEEK_DAYS.map((day) => {
                         const selected = weekDays.includes(day.value);
                         return (
-                          <PressableScale className={`h-11 flex-1 items-center justify-center rounded-[14px] ${selected ? 'bg-[#536cf5]' : 'bg-[#eef1f6]'}`} haptic="selection" key={day.value} onPress={() => toggleWeekDay(day.value)}>
+                          <PressableScale
+                            className={`h-11 w-full items-center justify-center rounded-[14px] ${selected ? 'bg-[#536cf5]' : 'bg-[#eef1f6]'}`}
+                            containerClassName="flex-1"
+                            haptic="selection"
+                            key={day.value}
+                            onPress={() => toggleWeekDay(day.value)}
+                          >
                             <Text className={`text-[13px] font-semibold ${selected ? 'text-white' : 'text-[#6f7892]'}`}>{isRussian ? day.ru : day.en}</Text>
                           </PressableScale>
                         );
@@ -643,11 +649,21 @@ export default function OrganizationOnboardingScreen() {
                     </View>
                   </View>
                   <View className="flex-row gap-3">
-                    <PressableScale className="min-h-[68px] flex-1 justify-center rounded-[18px] border border-[#d9deea] px-4" haptic="selection" onPress={() => setTimeField('start')}>
+                    <PressableScale
+                      className="min-h-[68px] w-full justify-center rounded-[18px] border border-[#d9deea] px-4"
+                      containerClassName="flex-1"
+                      haptic="selection"
+                      onPress={() => setTimeField('start')}
+                    >
                       <Text className="text-[12px] font-semibold uppercase text-[#7b8498]">{copy.startsAt}</Text>
                       <Text className="mt-1 text-[22px] font-semibold text-[#26334a]">{formatTime(startsAt)}</Text>
                     </PressableScale>
-                    <PressableScale className="min-h-[68px] flex-1 justify-center rounded-[18px] border border-[#d9deea] px-4" haptic="selection" onPress={() => setTimeField('end')}>
+                    <PressableScale
+                      className="min-h-[68px] w-full justify-center rounded-[18px] border border-[#d9deea] px-4"
+                      containerClassName="flex-1"
+                      haptic="selection"
+                      onPress={() => setTimeField('end')}
+                    >
                       <Text className="text-[12px] font-semibold uppercase text-[#7b8498]">{copy.endsAt}</Text>
                       <Text className="mt-1 text-[22px] font-semibold text-[#26334a]">{formatTime(endsAt)}</Text>
                     </PressableScale>

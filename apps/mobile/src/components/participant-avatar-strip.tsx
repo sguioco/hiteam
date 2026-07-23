@@ -38,10 +38,16 @@ export function ParticipantAvatarStrip({
           className="h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#eef2ff]"
           style={{ marginLeft: index === 0 ? 0 : -10 }}
         >
-          <EmployeeAvatarImage
-            source={resolveEmployeeAvatarSource(participant)}
-            className="h-9 w-9 rounded-full"
-          />
+          {resolveEmployeeAvatarSource(participant) ? (
+            <EmployeeAvatarImage
+              source={resolveEmployeeAvatarSource(participant)}
+              className="h-9 w-9 rounded-full"
+            />
+          ) : (
+            <Text className="text-[10px] font-extrabold text-[#566df6]">
+              {`${participant.firstName.charAt(0)}${participant.lastName.charAt(0)}`.toUpperCase()}
+            </Text>
+          )}
         </View>
       ))}
 

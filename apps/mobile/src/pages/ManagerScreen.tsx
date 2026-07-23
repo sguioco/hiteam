@@ -779,6 +779,7 @@ export default function ManagerScreen({
     path:
       | "/manager/create-task"
       | "/manager/create-meeting"
+      | "/manager/create-team"
       | "/manager/create-news",
   ) {
     return path as never;
@@ -788,6 +789,7 @@ export default function ManagerScreen({
     path:
       | "/manager/create-task"
       | "/manager/create-meeting"
+      | "/manager/create-team"
       | "/manager/create-news",
   ) {
     setActionMenuOpen(false);
@@ -1345,6 +1347,32 @@ export default function ManagerScreen({
                 </Text>
                 <Text className="mt-1 font-body text-sm text-muted-foreground">
                   {t("manager.addTaskHint")}
+                </Text>
+              </View>
+            </View>
+          </PressableScale>
+
+          <View className="h-px bg-[#dce4f2]" />
+
+          <PressableScale
+            className="min-h-[72px] justify-center px-1 py-3"
+            haptic="selection"
+            onPress={() => openCreateScreen("/manager/create-team")}
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
+                <Ionicons
+                  color="#4f6df5"
+                  name="people-circle-outline"
+                  size={23}
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="font-display text-[17px] font-semibold text-foreground">
+                  {t("manager.addTeam")}
+                </Text>
+                <Text className="mt-1 font-body text-sm text-muted-foreground">
+                  {t("manager.addTeamHint")}
                 </Text>
               </View>
             </View>
