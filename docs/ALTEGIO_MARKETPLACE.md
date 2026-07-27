@@ -75,8 +75,9 @@ lifecycle-события (`event: uninstall|freeze`) в marketplace-обрабо
    или `404` от `GET /marketplace/salon/{id}/application/{app}` тоже приводят к
    unbind.
 
-Отключение со стороны HiTeam (`POST /api/v1/billing/altegio/disconnect`)
-дополнительно вызывает `POST /marketplace/salon/{id}/application/{app}/uninstall`,
+Отключение со стороны HiTeam (`POST /api/v1/billing/altegio/disconnect`, кнопка
+**Отключить** на Billing) дополнительно вызывает
+`POST /marketplace/salon/{id}/application/{app}/uninstall`,
 чтобы маркетплейс не считал приложение установленным. Ошибка этого вызова
 логируется и не блокирует локальный unbind.
 

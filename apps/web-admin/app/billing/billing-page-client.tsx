@@ -11,7 +11,9 @@ import {
   Minus,
   Plus,
   ReceiptText,
+  Unlink,
   Users,
+  X,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { BrandWordmark } from "@/components/brand-wordmark";
@@ -342,7 +344,11 @@ export default function BillingPageClient({
   );
   const [seatControlTouched, setSeatControlTouched] = useState(false);
   const [altegioConnecting, setAltegioConnecting] = useState(false);
+  const [altegioDisconnecting, setAltegioDisconnecting] = useState(false);
   const [altegioDialogOpen, setAltegioDialogOpen] = useState(false);
+  const [altegioDialogMode, setAltegioDialogMode] = useState<"success" | "disconnect">(
+    "success",
+  );
   const [altegioMessage, setAltegioMessage] = useState<string | null>(null);
   const altegioConnectAttempted = useRef(false);
 
@@ -709,6 +715,7 @@ export default function BillingPageClient({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected") === "1" || peekAltegioMarketplaceParams()?.locationId) {
+      setAltegioDialogMode("success");
       setAltegioDialogOpen(true);
     }
   }, []);
@@ -724,6 +731,7 @@ export default function BillingPageClient({
       return;
     }
 
+    setAltegioDialogMode("success");
     setAltegioDialogOpen(true);
 
     if (summary.altegio?.connected && summary.altegio.locationId === pending.locationId) {
@@ -804,6 +812,7 @@ export default function BillingPageClient({
   function openAltegioMarketplace() {
     const url = buildAltegioMarketplaceConnectUrl(summary?.altegio?.applicationId);
     if (!url) {
+      setAltegioDialogMode("success");
       setAltegioDialogOpen(true);
       setAltegioMessage(
         locale === "ru"
@@ -817,16 +826,56 @@ export default function BillingPageClient({
 
   function handleAltegioAction() {
     if (summary?.altegio?.connected) {
-      setAltegioMessage(
-        locale === "ru"
-          ? "Altegio подключён. Подписка и данные синхронизируются автоматически."
-          : "Altegio is connected. Subscription and workspace data sync automatically.",
-      );
+      setAltegioDialogMode("disconnect");
+      setAltegioMessage(null);
       setAltegioDialogOpen(true);
       return;
     }
     openAltegioMarketplace();
   }
+
+  async function confirmAltegioDisconnect() {
+    const session = getSession();
+    if (!session) return;
+    try {
+      setAltegioDisconnecting(true);
+      setAltegioMessage(
+        locale === "ru"
+          ? "Отключаем Altegio и синхронизируем статус…"
+          : "Disconnecting Altegio and syncing status…",
+      );
+      const nextSummary = await apiRequest<BillingSummary>("/billing/altegio/disconnect", {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+      setSummary(nextSummary);
+      clearAltegioMarketplaceParams();
+      setAltegioDialogOpen(false);
+      setAltegioDialogMode("success");
+      setAltegioMessage(null);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("connected");
+        url.searchParams.delete("salon_id");
+        url.searchParams.delete("app_id");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch (requestError) {
+      setAltegioMessage(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось отключить Altegio"
+            : "Failed to disconnect Altegio",
+      );
+    } finally {
+      setAltegioDisconnecting(false);
+    }
+  }
+
+  const altegioBusy = altegioConnecting || altegioDisconnecting;
+  const isDisconnectDialog = altegioDialogMode === "disconnect";
 
   return (
     <AdminShell showTopbar={false}>
@@ -910,19 +959,23 @@ export default function BillingPageClient({
               </div>
             </div>
             <button
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#20242a] px-4 text-sm font-semibold text-white transition hover:bg-[#111418]"
+              className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
+                summary.altegio?.connected
+                  ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
+                  : "bg-[#20242a] text-white hover:bg-[#111418]"
+              }`}
               onClick={handleAltegioAction}
               type="button"
             >
               {summary.altegio?.connected ? (
-                <Link2 className="h-4 w-4" />
+                <Unlink className="h-4 w-4" />
               ) : (
                 <ExternalLink className="h-4 w-4" />
               )}
               {summary.altegio?.connected
                 ? locale === "ru"
-                  ? "Подключено"
-                  : "Connected"
+                  ? "Отключить"
+                  : "Disconnect"
                 : locale === "ru"
                   ? "Подключить"
                   : "Connect"}
@@ -933,22 +986,46 @@ export default function BillingPageClient({
         <Dialog
           open={altegioDialogOpen}
           onOpenChange={(open) => {
-            if (!altegioConnecting) setAltegioDialogOpen(open);
+            if (!altegioBusy) setAltegioDialogOpen(open);
           }}
         >
           <DialogContent className="w-[min(640px,calc(100vw-2rem))] overflow-hidden border-0 bg-white p-0 shadow-[0_36px_110px_rgba(18,24,38,0.25)]">
-            <div className="relative overflow-hidden bg-[linear-gradient(135deg,#f4f7ff_0%,#fffdf4_54%,#fff5b8_100%)] px-7 pb-7 pt-8 sm:px-9">
-              <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#ffe85d]/30 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-[#8bb5ff]/25 blur-3xl" />
+            <div
+              className={`relative overflow-hidden px-7 pb-7 pt-8 sm:px-9 ${
+                isDisconnectDialog
+                  ? "bg-[linear-gradient(135deg,#fff7f5_0%,#ffffff_55%,#f4f7ff_100%)]"
+                  : "bg-[linear-gradient(135deg,#f4f7ff_0%,#fffdf4_54%,#fff5b8_100%)]"
+              }`}
+            >
+              <div
+                className={`pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full blur-3xl ${
+                  isDisconnectDialog ? "bg-[#ffb4a8]/25" : "bg-[#ffe85d]/30"
+                }`}
+              />
+              <div
+                className={`pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full blur-3xl ${
+                  isDisconnectDialog ? "bg-[#8bb5ff]/20" : "bg-[#8bb5ff]/25"
+                }`}
+              />
 
               <DialogHeader className="relative z-10 text-center">
                 <DialogTitle className="sr-only">
-                  {locale === "ru" ? "Подключение Altegio" : "Altegio connection"}
+                  {isDisconnectDialog
+                    ? locale === "ru"
+                      ? "Отключение Altegio"
+                      : "Disconnect Altegio"
+                    : locale === "ru"
+                      ? "Подключение Altegio"
+                      : "Altegio connection"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                  {locale === "ru"
-                    ? "Синхронизация Altegio и HiTeam"
-                    : "Synchronize Altegio and HiTeam"}
+                  {isDisconnectDialog
+                    ? locale === "ru"
+                      ? "Подтверждение отключения интеграции Altegio"
+                      : "Confirm Altegio integration disconnect"
+                    : locale === "ru"
+                      ? "Синхронизация Altegio и HiTeam"
+                      : "Synchronize Altegio and HiTeam"}
                 </DialogDescription>
               </DialogHeader>
 
@@ -971,17 +1048,33 @@ export default function BillingPageClient({
                 </div>
 
                 <div className="relative flex w-14 items-center justify-center">
-                  <div className="absolute h-px w-16 bg-gradient-to-r from-[#f2cc23] via-[#839ef2] to-[#527ce8]" />
+                  <div
+                    className={`absolute h-px w-16 ${
+                      isDisconnectDialog
+                        ? "bg-gradient-to-r from-[#f2cc23] via-[#d0d5dd] to-[#527ce8] opacity-40"
+                        : "bg-gradient-to-r from-[#f2cc23] via-[#839ef2] to-[#527ce8]"
+                    }`}
+                  />
                   <div
                     className={`relative flex h-9 w-9 items-center justify-center rounded-full border-4 border-white shadow-md ${
-                      summary?.altegio?.connected
-                        ? "bg-emerald-500 text-white"
-                        : altegioConnecting
-                          ? "bg-[#5577e8] text-white"
-                          : "bg-white text-[#5577e8]"
+                      isDisconnectDialog
+                        ? altegioDisconnecting
+                          ? "bg-[#d97757] text-white"
+                          : "bg-white text-[#d97757]"
+                        : summary?.altegio?.connected
+                          ? "bg-emerald-500 text-white"
+                          : altegioConnecting
+                            ? "bg-[#5577e8] text-white"
+                            : "bg-white text-[#5577e8]"
                     }`}
                   >
-                    {summary?.altegio?.connected ? (
+                    {isDisconnectDialog ? (
+                      altegioDisconnecting ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Unlink className="h-4 w-4" />
+                      )
+                    ) : summary?.altegio?.connected ? (
                       <Check className="h-4 w-4 stroke-[3]" />
                     ) : altegioConnecting ? (
                       <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1001,45 +1094,80 @@ export default function BillingPageClient({
 
               <div className="relative z-10 mt-7 text-center">
                 <h2 className="font-heading text-[1.65rem] font-semibold tracking-[-0.04em] text-[#1c2026]">
-                  {summary?.altegio?.connected
+                  {isDisconnectDialog
                     ? locale === "ru"
-                      ? "Altegio подключён"
-                      : "Altegio is connected"
-                    : altegioConnecting
+                      ? "Отключить Altegio?"
+                      : "Disconnect Altegio?"
+                    : summary?.altegio?.connected
                       ? locale === "ru"
-                        ? "Подключаем ваш салон"
-                        : "Connecting your location"
-                      : locale === "ru"
-                        ? "Подключите Altegio к HiTeam"
-                        : "Connect Altegio to HiTeam"}
+                        ? "Altegio подключён"
+                        : "Altegio is connected"
+                      : altegioConnecting
+                        ? locale === "ru"
+                          ? "Подключаем ваш салон"
+                          : "Connecting your location"
+                        : locale === "ru"
+                          ? "Подключите Altegio к HiTeam"
+                          : "Connect Altegio to HiTeam"}
                 </h2>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#667085]">
-                  {summary?.altegio?.connected
+                  {isDisconnectDialog
                     ? locale === "ru"
-                      ? "Подписка, сотрудники и расписание синхронизируются автоматически."
-                      : "Subscription, staff and schedules sync automatically."
-                    : altegioConnecting
+                      ? "Интеграция будет отключена в HiTeam и в Altegio Marketplace. Синхронизация сотрудников и расписания остановится."
+                      : "The integration will be removed in HiTeam and Altegio Marketplace. Staff and schedule sync will stop."
+                    : summary?.altegio?.connected
                       ? locale === "ru"
-                        ? "Завершаем подключение и импортируем данные из Altegio…"
-                        : "Finishing the connection and importing data from Altegio…"
-                      : locale === "ru"
-                        ? "Подтвердите доступ в Marketplace — после возврата подключение завершится само."
-                        : "Approve access in Marketplace — connection finishes automatically when you return."}
+                        ? "Подписка, сотрудники и расписание синхронизируются автоматически."
+                        : "Subscription, staff and schedules sync automatically."
+                      : altegioConnecting
+                        ? locale === "ru"
+                          ? "Завершаем подключение и импортируем данные из Altegio…"
+                          : "Finishing the connection and importing data from Altegio…"
+                        : locale === "ru"
+                          ? "Подтвердите доступ в Marketplace — после возврата подключение завершится само."
+                          : "Approve access in Marketplace — connection finishes automatically when you return."}
                 </p>
               </div>
             </div>
 
             <div className="space-y-4 px-7 pb-7 pt-5 sm:px-9">
-              {altegioMessage && !summary?.altegio?.connected ? (
-                <p className="text-center text-sm text-[#40557f]">{altegioMessage}</p>
+              {altegioMessage ? (
+                <p
+                  className={`text-center text-sm ${
+                    isDisconnectDialog && !altegioDisconnecting
+                      ? "text-red-700"
+                      : "text-[#40557f]"
+                  }`}
+                >
+                  {altegioMessage}
+                </p>
               ) : null}
 
-              {altegioConnecting ? (
+              {altegioBusy ? (
                 <div className="flex items-center justify-center gap-3 py-2 text-sm text-muted-foreground">
                   <LoaderCircle className="h-5 w-5 animate-spin text-[#5577e8]" />
                   {locale === "ru"
                     ? "Это обычно занимает несколько секунд…"
                     : "This usually takes a few seconds…"}
+                </div>
+              ) : isDisconnectDialog ? (
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    onClick={() => setAltegioDialogOpen(false)}
+                    type="button"
+                  >
+                    <X className="h-4 w-4" />
+                    {locale === "ru" ? "Отмена" : "Cancel"}
+                  </button>
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
+                    onClick={() => void confirmAltegioDisconnect()}
+                    type="button"
+                  >
+                    <Unlink className="h-4 w-4" />
+                    {locale === "ru" ? "Отключить" : "Disconnect"}
+                  </button>
                 </div>
               ) : (
                 <div className="flex justify-center">

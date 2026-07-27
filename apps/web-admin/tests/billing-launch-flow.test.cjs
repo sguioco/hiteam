@@ -60,10 +60,20 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
     "buildAltegioMarketplaceConnectUrl",
     "Altegio connection must use the published marketplace short-link.",
   );
-  assert.doesNotMatch(
+  assertContains(
     source,
-    /Sync subscription|Sync workspace data/,
-    "Connected Altegio modal must not expose manual sync actions.",
+    "confirmAltegioDisconnect",
+    "Connected workspaces must be able to disconnect Altegio.",
+  );
+  assertContains(
+    source,
+    '/billing/altegio/disconnect',
+    "Disconnect must call the Altegio disconnect API.",
+  );
+  assertContains(
+    source,
+    ': "Disconnect"',
+    "Connected Altegio card must expose a Disconnect action.",
   );
 }
 
