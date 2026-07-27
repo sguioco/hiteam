@@ -42,7 +42,7 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
   );
   assertContains(
     source,
-    "Continue in Altegio Marketplace",
+    "openAltegioMarketplace",
     "Unconnected workspaces must be able to start Altegio Marketplace consent.",
   );
   assertContains(
@@ -57,8 +57,13 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
   );
   assertContains(
     source,
-    "buildAltegioMarketplaceAppUrl",
-    "Altegio connection must use the marketplace application URL.",
+    "buildAltegioMarketplaceConnectUrl",
+    "Altegio connection must use the published marketplace short-link.",
+  );
+  assert.doesNotMatch(
+    source,
+    /Sync subscription|Sync workspace data/,
+    "Connected Altegio modal must not expose manual sync actions.",
   );
 }
 
@@ -136,12 +141,12 @@ function testAltegioRegistrationPrefillsOrganization() {
   );
   assertContains(
     marketplaceSource,
-    "/appstore/${salon}/applications/${application}/info",
-    "Existing accounts must return to the Altegio app card for consent.",
+    "buildAltegioMarketplaceConnectUrl",
+    "Existing accounts must open the published Altegio short-link for consent.",
   );
   assertContains(
     organizationSource,
-    "https://app.alteg.io/appstore/759658/applications/2147/info?utm_source=short_link",
+    "buildAltegioMarketplaceConnectUrl",
     "Organization setup must link directly to the published Altegio application.",
   );
   assertContains(

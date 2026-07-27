@@ -24,6 +24,7 @@ import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
 import {
+  buildAltegioMarketplaceConnectUrl,
   peekAltegioMarketplaceParams,
 } from "../../lib/altegio-marketplace";
 import { writeBrowserStorageItem } from "../../lib/browser-storage";
@@ -103,8 +104,6 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
-const ALTEGIO_MARKETPLACE_APP_URL =
-  "https://app.alteg.io/appstore/759658/applications/2147/info?utm_source=short_link";
 
 const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
   "UTC-08:00": { address: "Downtown Anchorage, Alaska, United States", latitude: "61.217381", longitude: "-149.863129" },
@@ -598,7 +597,7 @@ export default function OrganizationPageClient({
                     </div>
                     <a
                       className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-5 text-sm font-semibold text-white transition hover:bg-[#111418]"
-                      href={ALTEGIO_MARKETPLACE_APP_URL}
+                      href={buildAltegioMarketplaceConnectUrl() || "#"}
                     >
                       {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
                       <ExternalLink className="h-4 w-4" />

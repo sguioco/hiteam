@@ -316,23 +316,15 @@ export class BillingService {
       locationId: args.locationId,
       applicationId: args.applicationId,
     });
-    await this.altegioStaffScheduleSync?.syncOrganization(tenantId).catch((error) => {
+    try {
+      await this.altegioStaffScheduleSync?.syncAll(tenantId);
+    } catch (error) {
       this.logger.warn(
-        `Altegio organization sync after connect failed tenantId=${tenantId}: ${
+        `Altegio workspace sync after connect failed tenantId=${tenantId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-    });
-    void this.altegioStaffScheduleSync
-      ?.syncEmployees(tenantId)
-      .then(() => this.altegioStaffScheduleSync?.syncSchedule(tenantId))
-      .catch((error) => {
-        this.logger.warn(
-          `Altegio staff/schedule sync after connect failed tenantId=${tenantId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      });
+    }
     return this.getSummary(tenantId, { syncMarketplace: true });
   }
 

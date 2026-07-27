@@ -160,6 +160,15 @@ export function buildAltegioMarketplaceAppUrl(locationId: string, applicationId:
   return `https://app.alteg.io/appstore/${salon}/applications/${application}/info?${query.toString()}`;
 }
 
+/** Published marketplace short-link entry; Altegio resolves the salon from the signed-in user. */
+export function buildAltegioMarketplaceConnectUrl(applicationId?: string | null) {
+  const application = String(applicationId || "").trim() || "2147";
+  if (!/^\d+$/.test(application)) {
+    return null;
+  }
+  return `https://app.alteg.io/appstore/759658/applications/${application}/info?utm_source=short_link`;
+}
+
 export function extractAltegioSalonId(value: string) {
   const normalized = value.trim();
   if (/^\d+$/.test(normalized)) {
