@@ -714,9 +714,11 @@ export default function BillingPageClient({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "1" || peekAltegioMarketplaceParams()?.locationId) {
-      setAltegioDialogMode("success");
-      setAltegioDialogOpen(true);
+    // Legacy bookmark/redirect: strip connected=1 so refresh doesn't reopen the modal.
+    if (params.get("connected") === "1" && !peekAltegioMarketplaceParams()?.locationId) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connected");
+      window.history.replaceState({}, "", url.toString());
     }
   }, []);
 
@@ -736,15 +738,10 @@ export default function BillingPageClient({
 
     if (summary.altegio?.connected && summary.altegio.locationId === pending.locationId) {
       clearAltegioMarketplaceParams();
-      setAltegioMessage(
-        locale === "ru"
-          ? "Altegio уже подключён. Подписка и данные синхронизируются автоматически."
-          : "Altegio is already connected. Subscription and workspace data sync automatically.",
-      );
+      setAltegioMessage(null);
       if (typeof window !== "undefined") {
         const url = new URL(window.location.href);
-        url.searchParams.set("from", "altegio");
-        url.searchParams.set("connected", "1");
+        url.searchParams.delete("connected");
         url.searchParams.delete("salon_id");
         url.searchParams.delete("app_id");
         window.history.replaceState({}, "", url.toString());
@@ -765,11 +762,7 @@ export default function BillingPageClient({
     void (async () => {
       try {
         setAltegioConnecting(true);
-        setAltegioMessage(
-          locale === "ru"
-            ? "Подключаем Altegio и синхронизируем данные…"
-            : "Connecting Altegio and syncing workspace data…",
-        );
+        setAltegioMessage(null);
         const nextSummary = await apiRequest<BillingSummary>("/billing/altegio/connect", {
           method: "POST",
           token: session.accessToken,
@@ -781,15 +774,10 @@ export default function BillingPageClient({
         });
         setSummary(nextSummary);
         clearAltegioMarketplaceParams();
-        setAltegioMessage(
-          locale === "ru"
-            ? "Altegio подключён. Сотрудники и расписание уже синхронизируются."
-            : "Altegio is connected. Staff and schedules are syncing automatically.",
-        );
+        setAltegioMessage(null);
         if (typeof window !== "undefined") {
           const url = new URL(window.location.href);
-          url.searchParams.set("from", "altegio");
-          url.searchParams.set("connected", "1");
+          url.searchParams.delete("connected");
           url.searchParams.delete("salon_id");
           url.searchParams.delete("app_id");
           window.history.replaceState({}, "", url.toString());
@@ -1127,60 +1115,61 @@ export default function BillingPageClient({
                           ? "Подтвердите доступ в Marketplace — после возврата подключение завершится само."
                           : "Approve access in Marketplace — connection finishes automatically when you return."}
                 </p>
+                {!isDisconnectDialog && altegioBusy ? (
+                  <div className="mt-5 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin text-[#5577e8]" />
+                    {locale === "ru"
+                      ? "Это обычно занимает несколько секунд…"
+                      : "This usually takes a few seconds…"}
+                  </div>
+                ) : null}
+                {!isDisconnectDialog && altegioMessage ? (
+                  <p className="mx-auto mt-4 max-w-md text-sm text-red-700">{altegioMessage}</p>
+                ) : null}
               </div>
             </div>
 
-            <div className="space-y-4 px-7 pb-7 pt-5 sm:px-9">
-              {altegioMessage ? (
-                <p
-                  className={`text-center text-sm ${
-                    isDisconnectDialog && !altegioDisconnecting
-                      ? "text-red-700"
-                      : "text-[#40557f]"
-                  }`}
-                >
-                  {altegioMessage}
-                </p>
-              ) : null}
+            {isDisconnectDialog ? (
+              <div className="space-y-4 px-7 pb-7 pt-5 sm:px-9">
+                {altegioMessage ? (
+                  <p
+                    className={`text-center text-sm ${
+                      altegioDisconnecting ? "text-[#40557f]" : "text-red-700"
+                    }`}
+                  >
+                    {altegioMessage}
+                  </p>
+                ) : null}
 
-              {altegioBusy ? (
-                <div className="flex items-center justify-center gap-3 py-2 text-sm text-muted-foreground">
-                  <LoaderCircle className="h-5 w-5 animate-spin text-[#5577e8]" />
-                  {locale === "ru"
-                    ? "Это обычно занимает несколько секунд…"
-                    : "This usually takes a few seconds…"}
-                </div>
-              ) : isDisconnectDialog ? (
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
-                  <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    onClick={() => setAltegioDialogOpen(false)}
-                    type="button"
-                  >
-                    <X className="h-4 w-4" />
-                    {locale === "ru" ? "Отмена" : "Cancel"}
-                  </button>
-                  <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
-                    onClick={() => void confirmAltegioDisconnect()}
-                    type="button"
-                  >
-                    <Unlink className="h-4 w-4" />
-                    {locale === "ru" ? "Отключить" : "Disconnect"}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex justify-center">
-                  <button
-                    className="inline-flex h-10 items-center justify-center rounded-lg bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
-                    onClick={() => setAltegioDialogOpen(false)}
-                    type="button"
-                  >
-                    {locale === "ru" ? "Готово" : "Done"}
-                  </button>
-                </div>
-              )}
-            </div>
+                {altegioBusy ? (
+                  <div className="flex items-center justify-center gap-3 py-2 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-[#5577e8]" />
+                    {locale === "ru"
+                      ? "Это обычно занимает несколько секунд…"
+                      : "This usually takes a few seconds…"}
+                  </div>
+                ) : (
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      onClick={() => setAltegioDialogOpen(false)}
+                      type="button"
+                    >
+                      <X className="h-4 w-4" />
+                      {locale === "ru" ? "Отмена" : "Cancel"}
+                    </button>
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
+                      onClick={() => void confirmAltegioDisconnect()}
+                      type="button"
+                    >
+                      <Unlink className="h-4 w-4" />
+                      {locale === "ru" ? "Отключить" : "Disconnect"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
 
