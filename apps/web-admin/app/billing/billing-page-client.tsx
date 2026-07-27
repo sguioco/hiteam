@@ -1086,46 +1086,51 @@ export default function BillingPageClient({
             <div className="space-y-5 px-7 pb-7 pt-6 sm:px-9">
               {altegioMessage ? (
                 <div
-                  className={`rounded-2xl px-4 py-3 text-sm ${
+                  className={`flex items-center gap-2 text-sm ${
                     summary?.altegio?.connected
-                      ? "border border-emerald-100 bg-emerald-50 text-emerald-800"
-                      : "border border-[#dce5ff] bg-[#f5f8ff] text-[#40557f]"
+                      ? "text-emerald-700"
+                      : "text-[#40557f]"
                   }`}
                 >
+                  {summary?.altegio?.connected ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : null}
                   {altegioMessage}
                 </div>
               ) : null}
 
               {summary?.altegio?.connected ? (
                 <>
-                  <div className="grid gap-3 rounded-2xl border border-[#e8ebf2] bg-[#fafbfc] p-4 text-sm sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === "ru" ? "Статус" : "Status"}
-                      </p>
-                      <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {locale === "ru" ? "Активно" : "Active"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Salon ID</p>
-                      <p className="mt-1 font-semibold text-foreground">
-                        {summary.altegio.locationId}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === "ru" ? "Подключено" : "Connected"}
-                      </p>
-                      <p className="mt-1 font-semibold text-foreground">
-                        {formatBillingDate(summary.altegio.activatedAt, locale)}
-                      </p>
-                    </div>
+                  <div className="border-y border-border py-4">
+                    <dl className="grid gap-4 text-sm sm:grid-cols-3 sm:gap-6">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">
+                          {locale === "ru" ? "Статус" : "Status"}
+                        </dt>
+                        <dd className="mt-1 flex items-center gap-1.5 font-medium text-foreground">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          {locale === "ru" ? "Подключено" : "Connected"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Salon ID</dt>
+                        <dd className="mt-1 font-medium text-foreground">
+                          {summary.altegio.locationId}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">
+                          {locale === "ru" ? "Дата подключения" : "Connected on"}
+                        </dt>
+                        <dd className="mt-1 font-medium text-foreground">
+                          {formatBillingDate(summary.altegio.activatedAt, locale)}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-4 text-sm font-semibold text-[#313844] transition hover:bg-[#f7f9fc] disabled:opacity-60"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-60"
                       disabled={altegioSyncAction !== null}
                       onClick={() => void syncAltegioSubscription()}
                       type="button"
@@ -1138,7 +1143,7 @@ export default function BillingPageClient({
                       {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
                     </button>
                     <button
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2f65df] px-4 text-sm font-semibold text-white transition hover:bg-[#2558ca] disabled:opacity-60"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-60"
                       disabled={altegioSyncAction !== null}
                       onClick={() => void syncAltegioWorkspace()}
                       type="button"
