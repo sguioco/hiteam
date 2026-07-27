@@ -124,6 +124,54 @@ export function parseMarketplaceSubscriptionSnapshot(
   };
 }
 
+export type MarketplaceLifecycleEvent = 'connect' | 'uninstall' | 'freeze' | 'unknown';
+
+const MARKETPLACE_CONNECT_EVENTS = new Set([
+  'active',
+  'connected',
+  'connect',
+  'installed',
+  'install',
+  'enabled',
+  'enable',
+]);
+
+const MARKETPLACE_UNINSTALL_EVENTS = new Set([
+  'uninstalled',
+  'uninstall',
+  'disconnected',
+  'disconnect',
+  'disabled',
+  'disable',
+  'deleted',
+  'delete',
+]);
+
+const MARKETPLACE_FREEZE_EVENTS = new Set([
+  'freeze',
+  'freezed',
+  'frozen',
+  'inactive',
+  'canceled',
+  'cancelled',
+]);
+
+export function classifyMarketplaceLifecycleEvent(value: unknown): MarketplaceLifecycleEvent {
+  const status = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (MARKETPLACE_CONNECT_EVENTS.has(status)) {
+    return 'connect';
+  }
+  if (MARKETPLACE_UNINSTALL_EVENTS.has(status)) {
+    return 'uninstall';
+  }
+  if (MARKETPLACE_FREEZE_EVENTS.has(status)) {
+    return 'freeze';
+  }
+  return 'unknown';
+}
+
 export function shouldPushLocalPeriodToAltegio(args: {
   localEnd: Date;
   altegioEnd: Date | null;

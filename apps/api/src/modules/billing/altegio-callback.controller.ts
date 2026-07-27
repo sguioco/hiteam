@@ -14,6 +14,7 @@ import { AltegioB2bClient } from '../altegio-sync/altegio-b2b.client';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
 import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.service';
 import { AltegioMarketplaceClient } from './altegio-marketplace.client';
+import { classifyMarketplaceLifecycleEvent } from './altegio-marketplace.helpers';
 
 @Controller('altegio')
 export class AltegioCallbackController {
@@ -71,8 +72,8 @@ export class AltegioCallbackController {
     @Query() query: Record<string, string>,
     @Headers('x-altegio-callback-token') headerToken?: string,
   ) {
-    this.assertCallbackToken(headerToken, query);
     const payload = this.mergePayload(request, query);
+    this.assertCallbackToken(headerToken, payload);
     return this.altegioMarketplaceBilling.handleExternalCallback(payload);
   }
 
@@ -82,20 +83,40 @@ export class AltegioCallbackController {
     @Query() query: Record<string, string>,
     @Headers('x-altegio-callback-token') headerToken?: string,
   ) {
-    this.assertCallbackToken(headerToken, query);
     const payload = this.mergePayload(request, query);
+    this.assertCallbackToken(headerToken, payload);
+    // Altegio allows a single webhook URL per application, so marketplace
+    // lifecycle events can arrive on the entity webhook endpoint as well.
+    if (this.isMarketplaceLifecycleEvent(payload)) {
+      return this.altegioMarketplaceBilling.handleExternalCallback(payload);
+    }
     if (!this.altegioStaffScheduleSync) {
       return { ok: true, ignored: 'sync_service_unavailable' };
     }
     return this.altegioStaffScheduleSync.handleWebhookEvent(payload);
   }
 
-  private assertCallbackToken(headerToken: string | undefined, query: Record<string, string>) {
+  private isMarketplaceLifecycleEvent(payload: Record<string, unknown>) {
+    const event = classifyMarketplaceLifecycleEvent(payload.event);
+    return event === 'uninstall' || event === 'freeze';
+  }
+
+  private assertCallbackToken(headerToken: string | undefined, payload: Record<string, unknown>) {
+    // Marketplace lifecycle webhooks authenticate with the developer partner token in the body.
+    const partnerToken = this.altegioMarketplaceClient.partnerToken();
+    const partnerCandidate = String(payload.partner_token ?? '').trim();
+    if (partnerCandidate) {
+      if (partnerToken && partnerCandidate === partnerToken) {
+        return;
+      }
+      throw new HttpException({ message: 'invalid_partner_token' }, HttpStatus.UNAUTHORIZED);
+    }
+
     const expected = (process.env.ALTEGIO_CALLBACK_TOKEN || '').trim();
     if (!expected) {
       return;
     }
-    const got = String(headerToken || query.token || '').trim();
+    const got = String(headerToken || payload.token || '').trim();
     if (got !== expected) {
       throw new HttpException({ message: 'invalid_callback_token' }, HttpStatus.UNAUTHORIZED);
     }

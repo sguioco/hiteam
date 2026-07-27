@@ -67,6 +67,19 @@ export class AltegioMarketplaceClient {
     );
   }
 
+  async uninstallIntegration(args: { locationId: string; applicationId: string }) {
+    const salonId = this.toInt(args.locationId);
+    const applicationIdInt = this.toInt(args.applicationId);
+    if (salonId === null || applicationIdInt === null) {
+      throw new AltegioMarketplaceError('marketplace_uninstall_input_missing', 400);
+    }
+
+    return this.request(
+      'POST',
+      `https://app.alteg.io/marketplace/salon/${salonId}/application/${applicationIdInt}/uninstall`,
+    );
+  }
+
   async notifyPayment(args: {
     locationId: string;
     applicationId: string;

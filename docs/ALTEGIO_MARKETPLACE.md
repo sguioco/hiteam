@@ -10,8 +10,9 @@
 | `ALTEGIO_PARTNER_TOKEN` | yes | BearerPartner для Marketplace и B2B API |
 | `ALTEGIO_MARKETPLACE_PARTNER_KEY` | optional | Signing key для проверки `user_data_sign`, не API token |
 | `ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN` | yes for staff/schedule | User token для B2B staff/schedule API |
-| `ALTEGIO_CALLBACK_TOKEN` | optional | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks` |
+| `ALTEGIO_CALLBACK_TOKEN` | optional | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks` для вызовов без `partner_token` |
 | `ALTEGIO_MARKETPLACE_PAYMENT_CURRENCY` | optional | Fallback currency для notify (default `USD`) |
+| `ALTEGIO_WEBHOOK_URL` | optional | Регистрируется в Altegio при connect, обычно `https://api.hiteam.net/api/v1/altegio/webhooks` |
 
 ## URLs в кабинете разработчика Altegio
 
@@ -19,7 +20,12 @@
 - `/signup?...` сохраняет query и редиректит на `/create?...`
 - После login/signup пользователь попадает на `/billing?from=altegio&salon_id=...`
 - Callback disconnect/connect: `https://api.hiteam.net/api/v1/altegio/callback`
+- Marketplace lifecycle webhook (`uninstall` / `freeze`): `https://api.hiteam.net/api/v1/altegio/callback`
 - Staff/schedule webhooks: `https://api.hiteam.net/api/v1/altegio/webhooks`
+
+Оба входящих эндпоинта принимают оба типа событий: `/webhooks` перенаправляет
+lifecycle-события (`event: uninstall|freeze`) в marketplace-обработчик, поэтому в
+кабинете Altegio можно указать один URL.
 
 `salon_id` Altegio обычно дописывает в redirect сама.
 
@@ -49,6 +55,32 @@
 - `period_to` = локальный `stripeCurrentPeriodEnd` (или trial end)
 - `payment_sum` = фактическая сумма Stripe или региональный `monthlyTotal`
 - `currency_iso` = валюта региона HiTeam / Stripe
+
+## Отключение и согласованность состояния
+
+Аутентификация входящих вызовов: если в теле есть `partner_token`, он сверяется с
+`ALTEGIO_PARTNER_TOKEN` (так приходят lifecycle-webhooks Altegio). Иначе
+используется `ALTEGIO_CALLBACK_TOKEN` из заголовка `x-altegio-callback-token`
+или query `token`.
+
+Три источника события «интеграция выключена»:
+
+1. **Webhook Altegio** `event=uninstall` → полный unbind: `altegioLocationId`,
+   `altegioApplicationId`, `altegioMarketplaceActivatedAt` и метки sync очищаются.
+2. **Webhook Altegio** `event=freeze` → связь сохраняется (приложение в Altegio
+   осталось установленным), запускается pull статуса: `freezed` обрезает
+   локальный период и переводит подписку в `CANCELED`.
+3. **Pull при синхронизации** (`/billing` summary, manual sync, Stripe webhook) —
+   страховка на случай пропущенного webhook: `connection_status: uninstalled`
+   или `404` от `GET /marketplace/salon/{id}/application/{app}` тоже приводят к
+   unbind.
+
+Отключение со стороны HiTeam (`POST /api/v1/billing/altegio/disconnect`)
+дополнительно вызывает `POST /marketplace/salon/{id}/application/{app}/uninstall`,
+чтобы маркетплейс не считал приложение установленным. Ошибка этого вызова
+логируется и не блокирует локальный unbind.
+
+Trial-claim (`AltegioMarketplaceTrialClaim`) при disconnect не удаляется.
 
 ## Staff & schedule sync
 

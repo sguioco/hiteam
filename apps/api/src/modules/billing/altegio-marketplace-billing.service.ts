@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AltegioMarketplaceClient, AltegioMarketplaceError } from './altegio-marketplace.client';
 import {
+  classifyMarketplaceLifecycleEvent,
   formatAltegioMarketplaceDatetime,
   parseMarketplaceSubscriptionSnapshot,
   resolveMarketplaceTrialGrant,
@@ -101,6 +102,7 @@ export class AltegioMarketplaceBillingService {
       await this.altegioClient.activateIntegration({
         locationId,
         applicationId,
+        webhookUrl: this.configService.get<string>('ALTEGIO_WEBHOOK_URL')?.trim(),
       });
     } catch (error) {
       if (error instanceof AltegioMarketplaceError && error.statusCode === 409) {
@@ -146,15 +148,45 @@ export class AltegioMarketplaceBillingService {
     return this.getMarketplaceSummary(args.tenantId);
   }
 
-  async disconnectMarketplace(tenantId: string) {
+  async disconnectMarketplace(
+    tenantId: string,
+    options?: { reason?: string; notifyAltegio?: boolean },
+  ) {
+    const subscription = await this.prisma.billingSubscription.findUnique({
+      where: { tenantId },
+      select: { altegioLocationId: true, altegioApplicationId: true },
+    });
+    const locationId = (subscription?.altegioLocationId || '').trim();
+    const applicationId = (subscription?.altegioApplicationId || '').trim();
+
+    if (options?.notifyAltegio && locationId && applicationId) {
+      try {
+        await this.altegioClient.uninstallIntegration({ locationId, applicationId });
+      } catch (error) {
+        this.logger.warn(
+          `marketplace remote uninstall failed tenantId=${tenantId} locationId=${locationId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
     await this.prisma.billingSubscription.updateMany({
       where: { tenantId },
       data: {
         altegioLocationId: null,
         altegioApplicationId: null,
         altegioMarketplaceActivatedAt: null,
+        altegioStaffLastSyncedAt: null,
+        altegioScheduleLastSyncedAt: null,
+        altegioSyncLastError: null,
       },
     });
+    this.logger.log(
+      `marketplace disconnected tenantId=${tenantId} locationId=${locationId || 'none'} reason=${
+        options?.reason || 'manual'
+      }`,
+    );
     return { disconnected: true };
   }
 
@@ -189,32 +221,9 @@ export class AltegioMarketplaceBillingService {
       subscription.altegioApplicationId ||
       '';
 
-    const connectStatuses = new Set([
-      'active',
-      'connected',
-      'connect',
-      'installed',
-      'install',
-      'enabled',
-      'enable',
-    ]);
-    const disconnectStatuses = new Set([
-      'uninstalled',
-      'uninstall',
-      'disconnected',
-      'disconnect',
-      'disabled',
-      'disable',
-      'deleted',
-      'delete',
-      'freezed',
-      'frozen',
-      'inactive',
-      'canceled',
-      'cancelled',
-    ]);
+    const lifecycle = classifyMarketplaceLifecycleEvent(status);
 
-    if (connectStatuses.has(status)) {
+    if (lifecycle === 'connect') {
       const configuredAppId = this.altegioClient.applicationId();
       const nextAppId = (applicationId || configuredAppId).trim();
       await this.prisma.billingSubscription.update({
@@ -228,14 +237,24 @@ export class AltegioMarketplaceBillingService {
       return { ok: true, updated: true, status: 'connected' };
     }
 
-    if (disconnectStatuses.has(status)) {
+    if (lifecycle === 'uninstall' || lifecycle === 'freeze') {
       const currentApp = (subscription.altegioApplicationId || '').trim();
       const callbackApp = (applicationId || '').trim();
       if (currentApp && callbackApp && currentApp !== callbackApp) {
         return { ok: true, updated: false, ignored: 'stale_disconnect' };
       }
-      await this.disconnectMarketplace(subscription.tenantId);
-      return { ok: true, updated: true, status: 'disconnected' };
+
+      if (lifecycle === 'uninstall') {
+        await this.disconnectMarketplace(subscription.tenantId, {
+          reason: 'altegio_callback_uninstall',
+        });
+        return { ok: true, updated: true, status: 'disconnected' };
+      }
+
+      // Freeze keeps the install in Altegio, so the binding stays and the pulled
+      // snapshot decides how the local period is cut.
+      await this.syncWithMarketplace(subscription.tenantId, { source: 'altegio_callback_freeze' });
+      return { ok: true, updated: true, status: 'frozen' };
     }
 
     return { ok: true, updated: false, ignored: 'unknown_status' };
@@ -275,11 +294,16 @@ export class AltegioMarketplaceBillingService {
       where: { tenantId },
     });
     if (!subscription || !this.isMarketplaceBilled(subscription)) {
-      return { pulled: false, pushed: false };
+      return { pulled: false, pushed: false, disconnected: false };
     }
 
     const source = args?.source || 'sync';
-    const snapshot = await this.fetchSnapshot(subscription);
+    const { snapshot, uninstalled } = await this.fetchSnapshot(subscription);
+    if (uninstalled || classifyMarketplaceLifecycleEvent(snapshot?.connectionStatus) === 'uninstall') {
+      await this.disconnectMarketplace(tenantId, { reason: `${source}_remote_uninstall` });
+      return { pulled: true, pushed: false, disconnected: true };
+    }
+
     let pulled = false;
     if (snapshot) {
       pulled = await this.applySnapshot(subscription, snapshot, source);
@@ -296,7 +320,7 @@ export class AltegioMarketplaceBillingService {
       paymentDate: args?.paymentDate,
     });
 
-    return { pulled, pushed };
+    return { pulled, pushed, disconnected: false };
   }
 
   async notifyPaymentAfterStripe(args: {
@@ -318,15 +342,17 @@ export class AltegioMarketplaceBillingService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return { pulled: false, pushed: false };
+      return { pulled: false, pushed: false, disconnected: false };
     }
   }
 
-  private async fetchSnapshot(subscription: BillingSubscriptionRow) {
+  private async fetchSnapshot(
+    subscription: BillingSubscriptionRow,
+  ): Promise<{ snapshot: MarketplaceSubscriptionSnapshot | null; uninstalled: boolean }> {
     const locationId = (subscription.altegioLocationId || '').trim();
     const applicationId = (subscription.altegioApplicationId || '').trim();
     if (!locationId || !applicationId) {
-      return null;
+      return { snapshot: null, uninstalled: false };
     }
 
     try {
@@ -334,14 +360,18 @@ export class AltegioMarketplaceBillingService {
         locationId,
         applicationId,
       });
-      return parseMarketplaceSubscriptionSnapshot(payload);
+      return { snapshot: parseMarketplaceSubscriptionSnapshot(payload), uninstalled: false };
     } catch (error) {
+      // Altegio drops the salon/application pair once the app is uninstalled there.
+      if (error instanceof AltegioMarketplaceError && error.statusCode === 404) {
+        return { snapshot: null, uninstalled: true };
+      }
       this.logger.warn(
         `Altegio marketplace status fetch failed locationId=${locationId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return null;
+      return { snapshot: null, uninstalled: false };
     }
   }
 

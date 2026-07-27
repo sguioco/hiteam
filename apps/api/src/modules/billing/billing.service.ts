@@ -337,7 +337,10 @@ export class BillingService {
   }
 
   async disconnectAltegioMarketplace(tenantId: string) {
-    await this.altegioMarketplaceBilling.disconnectMarketplace(tenantId);
+    await this.altegioMarketplaceBilling.disconnectMarketplace(tenantId, {
+      reason: 'hiteam_user',
+      notifyAltegio: true,
+    });
     return this.getSummary(tenantId);
   }
 

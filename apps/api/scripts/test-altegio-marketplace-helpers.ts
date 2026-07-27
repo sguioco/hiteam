@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  classifyMarketplaceLifecycleEvent,
   formatAltegioMarketplaceDatetime,
   parseAltegioMarketplaceDatetime,
   parseMarketplaceSubscriptionSnapshot,
   resolveMarketplaceStatusFromSnapshot,
   shouldPushLocalPeriodToAltegio,
-} from '../src/modules/billing/altegio-marketplace.helpers.ts';
+} from '../src/modules/billing/altegio-marketplace.helpers';
 
 function testParseSnapshotTrial() {
   const snapshot = parseMarketplaceSubscriptionSnapshot({
@@ -105,6 +106,16 @@ function testResolveStatus() {
   );
 }
 
+function testClassifyLifecycleEvent() {
+  assert.equal(classifyMarketplaceLifecycleEvent('uninstall'), 'uninstall');
+  assert.equal(classifyMarketplaceLifecycleEvent('uninstalled'), 'uninstall');
+  assert.equal(classifyMarketplaceLifecycleEvent('freeze'), 'freeze');
+  assert.equal(classifyMarketplaceLifecycleEvent('freezed'), 'freeze');
+  assert.equal(classifyMarketplaceLifecycleEvent('Active'), 'connect');
+  assert.equal(classifyMarketplaceLifecycleEvent('pending'), 'unknown');
+  assert.equal(classifyMarketplaceLifecycleEvent(undefined), 'unknown');
+}
+
 function testFormatDatetime() {
   const formatted = formatAltegioMarketplaceDatetime(new Date('2026-07-27T10:15:30.000Z'));
   assert.equal(formatted, '2026-07-27 10:15:30');
@@ -114,5 +125,6 @@ testParseSnapshotTrial();
 testParseSnapshotPicksLatestPayment();
 testShouldPushLocalPeriod();
 testResolveStatus();
+testClassifyLifecycleEvent();
 testFormatDatetime();
 console.log('altegio marketplace helpers: ok');
