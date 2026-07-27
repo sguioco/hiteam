@@ -499,21 +499,46 @@ export function TaskTimePicker({
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const hourListRef = useRef<HTMLDivElement | null>(null);
+  const minuteListRef = useRef<HTMLDivElement | null>(null);
   const selectedHourRef = useRef<HTMLButtonElement | null>(null);
   const selectedMinuteRef = useRef<HTMLButtonElement | null>(null);
+  const didCenterSelectionRef = useRef(false);
   const metrics = useFloatingPickerMetrics(isOpen, rootRef, 206, 322);
   const selectedTime = readTime(value);
   const displayValue = value || placeholder || copy.timePlaceholder;
   const listMaxHeight = metrics ? Math.max(120, metrics.maxHeight - 58) : 120;
 
-  useEffect(() => {
-    if (!isOpen || !metrics) {
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      didCenterSelectionRef.current = false;
       return;
     }
 
-    selectedHourRef.current?.scrollIntoView({ block: "center" });
-    selectedMinuteRef.current?.scrollIntoView({ block: "center" });
-  }, [isOpen, metrics, selectedTime.hour, selectedTime.minute]);
+    if (!metrics || didCenterSelectionRef.current) {
+      return;
+    }
+
+    didCenterSelectionRef.current = true;
+
+    const centerSelection = (
+      list: HTMLDivElement | null,
+      selectedOption: HTMLButtonElement | null,
+    ) => {
+      if (!list || !selectedOption) {
+        return;
+      }
+
+      list.scrollTop = Math.max(
+        0,
+        selectedOption.offsetTop -
+          (list.clientHeight - selectedOption.offsetHeight) / 2,
+      );
+    };
+
+    centerSelection(hourListRef.current, selectedHourRef.current);
+    centerSelection(minuteListRef.current, selectedMinuteRef.current);
+  }, [isOpen, metrics]);
 
   useEffect(() => {
     if (isDisabled) {
@@ -545,7 +570,11 @@ export function TaskTimePicker({
         }}
       >
         <div className="grid grid-cols-2 gap-2 p-2">
-          <div className="overflow-y-auto pr-1" style={{ maxHeight: listMaxHeight }}>
+          <div
+            className="overscroll-y-contain overflow-y-auto pr-1"
+            ref={hourListRef}
+            style={{ maxHeight: listMaxHeight }}
+          >
             <div className="grid gap-1">
               {HOURS.map((hour) => {
                 const isSelected = hour === selectedTime.hour;
@@ -572,7 +601,11 @@ export function TaskTimePicker({
             </div>
           </div>
 
-          <div className="overflow-y-auto pl-1" style={{ maxHeight: listMaxHeight }}>
+          <div
+            className="overscroll-y-contain overflow-y-auto pl-1"
+            ref={minuteListRef}
+            style={{ maxHeight: listMaxHeight }}
+          >
             <div className="grid gap-1">
               {MINUTES.map((minute) => {
                 const isSelected = minute === selectedTime.minute;

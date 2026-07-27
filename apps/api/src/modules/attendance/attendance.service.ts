@@ -27,6 +27,10 @@ import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { BiometricService } from '../biometric/biometric.service';
 import { KommoService } from '../kommo/kommo.service';
+import {
+  isAcceptableAttendanceLocationAccuracy,
+  MAX_ATTENDANCE_LOCATION_ACCURACY_METERS,
+} from './location-accuracy';
 
 @Injectable()
 export class AttendanceService {
@@ -1981,6 +1985,21 @@ export class AttendanceService {
         resolvedDevice: device,
       });
       throw new ForbiddenException('Current device is not the employee primary device.');
+    }
+
+    if (!isAcceptableAttendanceLocationAccuracy(dto.accuracyMeters)) {
+      await this.recordRejectedAttendanceAttempt({
+        actorUserId,
+        dto,
+        employee,
+        reason: `Location accuracy exceeds ${MAX_ATTENDANCE_LOCATION_ACCURACY_METERS} meters.`,
+        eventType: context.eventType,
+        location: context.location,
+        resolvedDevice: device,
+      });
+      throw new BadRequestException(
+        `Location accuracy must be ${MAX_ATTENDANCE_LOCATION_ACCURACY_METERS} meters or better.`,
+      );
     }
 
     const distanceMeters = this.distanceMeters(

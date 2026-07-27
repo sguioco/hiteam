@@ -23,6 +23,7 @@ export type LocationAddressDetails = {
 };
 
 export type LocationSelection = {
+  accuracyMeters?: number;
   address?: string;
   details?: LocationAddressDetails;
   googlePlaceId?: string;
@@ -39,17 +40,116 @@ type LocationMapPickerProps = {
   locale?: "ru" | "en";
   mode?: "preview" | "setup";
   longitude: string;
+  onConfirmationRequiredChange?: (required: boolean) => void;
   onSelect: (next: LocationSelection) => void;
   searchLabel?: string;
   searchPlaceholder?: string;
   showCopy?: boolean;
 };
 
+type BrowserLocationSample = {
+  accuracyMeters: number;
+  latitude: number;
+  longitude: number;
+};
+
+type PendingLocationConfirmation = {
+  selection: LocationSelection;
+};
+
 const DEFAULT_LATITUDE = 20;
 const DEFAULT_LONGITUDE = 0;
 const DEFAULT_MAP_ZOOM = 2;
-const SELECTED_LOCATION_ZOOM = 16;
+const FALLBACK_SELECTED_LOCATION_ZOOM = 15;
+const LOCATION_COLLECTION_DURATION_MS = 12_000;
+const MAX_SETUP_LOCATION_ACCURACY_METERS = 100;
+const PLUS_CODE_PATTERN =
+  /\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/i;
 const SCRIPT_ID = "smart-google-maps-api";
+
+function collectBestBrowserLocation(
+  onProgress: (sample: BrowserLocationSample, sampleCount: number) => void,
+  signal: AbortSignal,
+) {
+  return new Promise<BrowserLocationSample>((resolve, reject) => {
+    let bestSample: BrowserLocationSample | null = null;
+    let sampleCount = 0;
+    let watchId: number | null = null;
+    let timer: number | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      signal.removeEventListener("abort", handleAbort);
+    };
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+
+      if (bestSample) {
+        resolve(bestSample);
+      } else {
+        reject(new Error("LOCATION_CAPTURE_FAILED"));
+      }
+    };
+
+    const fail = (error: GeolocationPositionError | Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    function handleAbort() {
+      fail(new Error("LOCATION_CAPTURE_CANCELLED"));
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const accuracyMeters = Math.round(position.coords.accuracy);
+        if (!Number.isFinite(accuracyMeters)) {
+          return;
+        }
+
+        sampleCount += 1;
+        const sample = {
+          accuracyMeters,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        if (!bestSample || sample.accuracyMeters < bestSample.accuracyMeters) {
+          bestSample = sample;
+        }
+
+        onProgress(bestSample, sampleCount);
+      },
+      (error) => {
+        if (bestSample && error.code !== 1) {
+          finish();
+          return;
+        }
+        fail(error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: LOCATION_COLLECTION_DURATION_MS,
+      },
+    );
+    timer = window.setTimeout(finish, LOCATION_COLLECTION_DURATION_MS);
+  });
+}
 
 function parseCoordinate(value: string, fallback: number) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -61,7 +161,11 @@ function parseCoordinate(value: string, fallback: number) {
 }
 
 function hasCoordinateValue(value: string) {
-  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
+  return (
+    typeof value === "string" &&
+    value.trim() !== "" &&
+    Number.isFinite(Number(value))
+  );
 }
 
 function getAddressComponent(result: any, type: string) {
@@ -90,6 +194,33 @@ function getAddressDetails(result: any): LocationAddressDetails {
       getAddressComponent(result, "administrative_area_level_1") || undefined,
     streetAddress: [streetNumber, route].filter(Boolean).join(" ") || undefined,
   };
+}
+
+function requiresManualAddressConfirmation(result: any) {
+  const formattedAddress = String(result?.formatted_address ?? "");
+  const resultTypes = Array.isArray(result?.types) ? result.types : [];
+  const hasStreetLevelComponent = Boolean(
+    getAddressComponent(result, "route") ||
+    getAddressComponent(result, "street_number") ||
+    getAddressComponent(result, "premise") ||
+    getAddressComponent(result, "subpremise"),
+  );
+  const hasPlaceLevelType = resultTypes.some((type: string) =>
+    [
+      "establishment",
+      "point_of_interest",
+      "premise",
+      "street_address",
+    ].includes(type),
+  );
+
+  return (
+    !result ||
+    Boolean(result.plus_code) ||
+    resultTypes.includes("plus_code") ||
+    PLUS_CODE_PATTERN.test(formattedAddress) ||
+    (!hasStreetLevelComponent && !hasPlaceLevelType)
+  );
 }
 
 export function loadGoogleMaps(apiKey: string) {
@@ -190,6 +321,7 @@ export function LocationMapPicker({
   locale = "ru",
   longitude,
   mode = "setup",
+  onConfirmationRequiredChange,
   onSelect,
   searchLabel = "Адрес организации",
   searchPlaceholder = "Например, Новосибирск, Красный проспект 25",
@@ -202,6 +334,8 @@ export function LocationMapPicker({
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const onSelectRef = useRef(onSelect);
+  const geofenceRadiusRef = useRef(geofenceRadiusMeters);
+  const locationAbortControllerRef = useRef<AbortController | null>(null);
   const searchTimerRef = useRef<number | null>(null);
   const skipAutocompleteRef = useRef(false);
   const lastResolvedCoordsRef = useRef<string | null>(null);
@@ -215,9 +349,17 @@ export function LocationMapPicker({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isLocating, setIsLocating] = useState(false);
-  const [locationAccessMessage, setLocationAccessMessage] = useState<string | null>(
-    null,
-  );
+  const [locationAccuracyMeters, setLocationAccuracyMeters] = useState<
+    number | null
+  >(null);
+  const [locationMessageTone, setLocationMessageTone] = useState<
+    "error" | "info" | "success"
+  >("info");
+  const [locationAccessMessage, setLocationAccessMessage] = useState<
+    string | null
+  >(null);
+  const [pendingLocationConfirmation, setPendingLocationConfirmation] =
+    useState<PendingLocationConfirmation | null>(null);
   const isSetupMode = mode === "setup";
   const copy =
     locale === "ru"
@@ -226,7 +368,17 @@ export function LocationMapPicker({
           copyBody:
             "Начни вводить город или адрес. Можно выбрать подсказку Google или поставить точку прямо на карте.",
           currentLocation: "Моё местоположение",
-          locating: "Определяем...",
+          locating: `Уточняем ${LOCATION_COLLECTION_DURATION_MS / 1000} секунд…`,
+          accuracyProgress: (accuracy: number, samples: number) =>
+            `Лучшая точность ±${accuracy} м · замеров: ${samples}`,
+          accuracyAccepted: (accuracy: number) => `Точность ±${accuracy} м`,
+          accuracyRejected: (accuracy: number) =>
+            `Точность ±${accuracy} м недостаточна. Требуется не хуже ±${MAX_SETUP_LOCATION_ACCURACY_METERS} м.`,
+          confirmLocationTitle: "Подтвердите точку",
+          confirmLocationBody:
+            "Для этой координаты Google не нашёл обычный адрес. Проверьте метку на карте перед сохранением.",
+          confirmLocation: "Точка верная",
+          chooseAnotherLocation: "Выбрать другую",
           locationUnsupported:
             "Браузер не поддерживает определение текущего местоположения.",
           locationPermission:
@@ -246,7 +398,17 @@ export function LocationMapPicker({
           copyBody:
             "Start typing a city or address. You can pick a Google suggestion or place the point directly on the map.",
           currentLocation: "My location",
-          locating: "Locating...",
+          locating: `Refining for ${LOCATION_COLLECTION_DURATION_MS / 1000} seconds…`,
+          accuracyProgress: (accuracy: number, samples: number) =>
+            `Best accuracy ±${accuracy} m · readings: ${samples}`,
+          accuracyAccepted: (accuracy: number) => `Accuracy ±${accuracy} m`,
+          accuracyRejected: (accuracy: number) =>
+            `Accuracy ±${accuracy} m is too low. ±${MAX_SETUP_LOCATION_ACCURACY_METERS} m or better is required.`,
+          confirmLocationTitle: "Confirm this point",
+          confirmLocationBody:
+            "Google did not find a regular street address for these coordinates. Check the marker before saving.",
+          confirmLocation: "Use this point",
+          chooseAnotherLocation: "Choose another",
           locationUnsupported:
             "This browser does not support current location detection.",
           locationPermission:
@@ -262,27 +424,31 @@ export function LocationMapPicker({
             "Google Maps did not initialize. This usually means Places API (New), Maps JavaScript API, or localhost key restrictions are not configured.",
         };
 
-  function syncGeofenceCircle() {
+  function syncGeofenceCircle(centerOverride?: { lat: number; lng: number }) {
     if (!mapRef.current || !window.google?.maps) return;
 
-    const lat = parseCoordinate(latitude, DEFAULT_LATITUDE);
-    const lng = parseCoordinate(longitude, DEFAULT_LONGITUDE);
-    const hasCoords = hasCoordinateValue(latitude) && hasCoordinateValue(longitude);
-    const radius = geofenceRadiusMeters;
+    const lat =
+      centerOverride?.lat ?? parseCoordinate(latitude, DEFAULT_LATITUDE);
+    const lng =
+      centerOverride?.lng ?? parseCoordinate(longitude, DEFAULT_LONGITUDE);
+    const hasCoords =
+      Boolean(centerOverride) ||
+      (hasCoordinateValue(latitude) && hasCoordinateValue(longitude));
+    const radius = geofenceRadiusRef.current;
 
     if (!hasCoords || !radius || radius <= 0) {
       if (circleRef.current) {
         circleRef.current.setMap(null);
         circleRef.current = null;
       }
-      return;
+      return null;
     }
 
     if (circleRef.current) {
       circleRef.current.setCenter({ lat, lng });
       circleRef.current.setRadius(radius);
       circleRef.current.setMap(mapRef.current);
-      return;
+      return circleRef.current;
     }
 
     circleRef.current = new window.google.maps.Circle({
@@ -290,17 +456,140 @@ export function LocationMapPicker({
       center: { lat, lng },
       radius,
       fillColor: "#7c3aed",
-      fillOpacity: 0.10,
+      fillOpacity: 0.1,
       strokeColor: "#7c3aed",
       strokeOpacity: 0.5,
       strokeWeight: 2,
       clickable: false,
     });
+    return circleRef.current;
+  }
+
+  function focusMapOnGeofence(center: { lat: number; lng: number }) {
+    window.setTimeout(() => {
+      if (!mapRef.current) return;
+
+      window.google?.maps?.event?.trigger?.(mapRef.current, "resize");
+      markerRef.current?.setVisible(true);
+      markerRef.current?.setPosition(center);
+      const circle = syncGeofenceCircle(center);
+      const bounds = circle?.getBounds?.();
+
+      if (bounds) {
+        mapRef.current.fitBounds(bounds, 44);
+        return;
+      }
+
+      mapRef.current.setCenter(center);
+      mapRef.current.setZoom(FALLBACK_SELECTED_LOCATION_ZOOM);
+    }, 80);
+  }
+
+  function applyLocationSelection(selection: LocationSelection) {
+    const lat = Number(selection.latitude);
+    const lng = Number(selection.longitude);
+
+    setPendingLocationConfirmation(null);
+    lastResolvedCoordsRef.current = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    onSelectRef.current(selection);
+  }
+
+  function stageOrApplyLocation(
+    result: any | null,
+    lat: number,
+    lng: number,
+    options?: {
+      accuracyMeters?: number;
+      fallbackAddress?: string;
+      googlePlaceId?: string;
+      suggestedCompanyName?: string;
+    },
+  ) {
+    const details = result ? getAddressDetails(result) : undefined;
+    const addressValue =
+      result?.formatted_address?.trim() ||
+      options?.fallbackAddress?.trim() ||
+      `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const selection: LocationSelection = {
+      address: addressValue,
+      details,
+      googlePlaceId: options?.googlePlaceId,
+      latitude: lat.toFixed(6),
+      longitude: lng.toFixed(6),
+      suggestedCompanyName: options?.suggestedCompanyName,
+    };
+
+    if (typeof options?.accuracyMeters === "number") {
+      selection.accuracyMeters = options.accuracyMeters;
+    }
+
+    setAddressDetails(details ?? null);
+    skipAutocompleteRef.current = true;
+    setSearchValue(addressValue);
+    setSuggestions([]);
+    focusMapOnGeofence({ lat, lng });
+
+    if (requiresManualAddressConfirmation(result)) {
+      setPendingLocationConfirmation({ selection });
+      return false;
+    }
+
+    applyLocationSelection(selection);
+    return true;
+  }
+
+  function reverseGeocodeLocation(lat: number, lng: number) {
+    return new Promise<any | null>((resolve) => {
+      if (!geocoderRef.current) {
+        resolve(null);
+        return;
+      }
+
+      geocoderRef.current.geocode(
+        { location: { lat, lng } },
+        (results: any[], geocodeStatus: string) => {
+          resolve(geocodeStatus === "OK" && results?.[0] ? results[0] : null);
+        },
+      );
+    });
+  }
+
+  function dismissPendingLocation() {
+    setPendingLocationConfirmation(null);
+    setLocationAccuracyMeters(null);
+    setLocationAccessMessage(null);
+    skipAutocompleteRef.current = true;
+    setSearchValue(address);
+
+    if (hasCoordinateValue(latitude) && hasCoordinateValue(longitude)) {
+      focusMapOnGeofence({
+        lat: Number(latitude),
+        lng: Number(longitude),
+      });
+      return;
+    }
+
+    markerRef.current?.setVisible(false);
+    syncGeofenceCircle();
   }
 
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
+
+  useEffect(() => {
+    onConfirmationRequiredChange?.(pendingLocationConfirmation !== null);
+  }, [onConfirmationRequiredChange, pendingLocationConfirmation]);
+
+  useEffect(() => {
+    geofenceRadiusRef.current = geofenceRadiusMeters;
+  }, [geofenceRadiusMeters]);
+
+  useEffect(() => {
+    return () => {
+      locationAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     skipAutocompleteRef.current = true;
@@ -346,7 +635,9 @@ export function LocationMapPicker({
         if (!mapRef.current) {
           mapRef.current = new maps.Map(mapNodeRef.current, {
             center,
-            zoom: hasCoordinates ? SELECTED_LOCATION_ZOOM : DEFAULT_MAP_ZOOM,
+            zoom: hasCoordinates
+              ? FALLBACK_SELECTED_LOCATION_ZOOM
+              : DEFAULT_MAP_ZOOM,
             disableDefaultUI: true,
             gestureHandling: "greedy",
             clickableIcons: false,
@@ -369,14 +660,11 @@ export function LocationMapPicker({
               const lng = event.latLng?.lng?.();
               if (typeof lat !== "number" || typeof lng !== "number") return;
 
-              markerRef.current?.setVisible(true);
-              markerRef.current?.setPosition({ lat, lng });
-              onSelectRef.current({
-                address: searchValue || address,
-                latitude: lat.toFixed(6),
-                longitude: lng.toFixed(6),
+              void reverseGeocodeLocation(lat, lng).then((result) => {
+                stageOrApplyLocation(result, lat, lng, {
+                  fallbackAddress: searchValue || address,
+                });
               });
-              reverseGeocode(lat, lng);
             });
 
             markerRef.current.addListener("dragend", (event: any) => {
@@ -384,88 +672,30 @@ export function LocationMapPicker({
               const lng = event.latLng?.lng?.();
               if (typeof lat !== "number" || typeof lng !== "number") return;
 
-              markerRef.current?.setVisible(true);
-              onSelectRef.current({
-                address: searchValue || address,
-                latitude: lat.toFixed(6),
-                longitude: lng.toFixed(6),
+              void reverseGeocodeLocation(lat, lng).then((result) => {
+                stageOrApplyLocation(result, lat, lng, {
+                  fallbackAddress: searchValue || address,
+                });
               });
-              reverseGeocode(lat, lng);
             });
           }
         }
-
-        const focusMap = (nextCenter: { lat: number; lng: number }, zoom: number) => {
-          window.setTimeout(() => {
-            if (cancelled || !mapRef.current) return;
-            maps.event?.trigger?.(mapRef.current, "resize");
-            mapRef.current.setCenter(nextCenter);
-            mapRef.current.setZoom(zoom);
-          }, 120);
-        };
 
         markerRef.current?.setDraggable(isSetupMode);
         markerRef.current?.setVisible(hasCoordinates);
         markerRef.current?.setPosition(center);
         mapRef.current?.setCenter(center);
         syncGeofenceCircle();
-        focusMap(center, hasCoordinates ? SELECTED_LOCATION_ZOOM : DEFAULT_MAP_ZOOM);
-        setStatus("ready");
-
-        if (geocoderRef.current && hasCoordinates) {
-          reverseGeocode(Number(latitude), Number(longitude));
+        if (hasCoordinates) {
+          focusMapOnGeofence(center);
         }
+        setStatus("ready");
       } catch {
         if (!cancelled) {
           setStatusMessage(copy.mapsInitFailed);
           setStatus("error");
         }
       }
-    }
-
-    function applyGeocodeResult(
-      result: any,
-      lat: number,
-      lng: number,
-      options?: { googlePlaceId?: string; suggestedCompanyName?: string },
-    ) {
-      const details = getAddressDetails(result);
-      const nextLatitude = lat.toFixed(6);
-      const nextLongitude = lng.toFixed(6);
-
-      setAddressDetails(details);
-      skipAutocompleteRef.current = true;
-      setSearchValue(result.formatted_address ?? "");
-      setSuggestions([]);
-
-      onSelectRef.current({
-        address: result.formatted_address,
-        details,
-        googlePlaceId: options?.googlePlaceId,
-        latitude: nextLatitude,
-        longitude: nextLongitude,
-        suggestedCompanyName: options?.suggestedCompanyName,
-      });
-    }
-
-    function reverseGeocode(lat: number, lng: number) {
-      geocoderRef.current?.geocode(
-        { location: { lat, lng } },
-        (results: any[], geocodeStatus: string) => {
-          if (cancelled) return;
-          const topResult = results?.[0];
-
-          if (geocodeStatus === "OK" && topResult) {
-            applyGeocodeResult(topResult, lat, lng);
-            return;
-          }
-
-          onSelectRef.current({
-            latitude: lat.toFixed(6),
-            longitude: lng.toFixed(6),
-          });
-        },
-      );
     }
 
     void initMap();
@@ -521,20 +751,15 @@ export function LocationMapPicker({
 
   useEffect(() => {
     if (!mapRef.current || !markerRef.current) return;
+    if (!hasCoordinateValue(latitude) || !hasCoordinateValue(longitude)) return;
 
     const center = {
       lat: parseCoordinate(latitude, DEFAULT_LATITUDE),
       lng: parseCoordinate(longitude, DEFAULT_LONGITUDE),
     };
 
-    markerRef.current.setPosition(center);
-    mapRef.current.setCenter(center);
-    mapRef.current.setZoom(16);
-    window.setTimeout(() => {
-      window.google?.maps?.event?.trigger?.(mapRef.current, "resize");
-      mapRef.current?.setCenter(center);
-    }, 80);
-  }, [latitude, longitude]);
+    focusMapOnGeofence(center);
+  }, [latitude, longitude, geofenceRadiusMeters]);
 
   useEffect(() => {
     if (!geocoderRef.current) return;
@@ -559,20 +784,8 @@ export function LocationMapPicker({
           return;
         }
 
-        markerRef.current?.setPosition({ lat, lng });
-        mapRef.current?.setCenter({ lat, lng });
-        mapRef.current?.setZoom(16);
-
-        const details = getAddressDetails(topResult);
-        setAddressDetails(details);
-        skipAutocompleteRef.current = true;
-        setSearchValue(topResult.formatted_address ?? address);
-
-        onSelectRef.current({
-          address: topResult.formatted_address,
-          details,
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6),
+        stageOrApplyLocation(topResult, lat, lng, {
+          fallbackAddress: address,
         });
       },
     );
@@ -603,17 +816,7 @@ export function LocationMapPicker({
           return;
         }
 
-        const details = getAddressDetails(topResult);
-        skipAutocompleteRef.current = true;
-        setAddressDetails(details);
-        setSearchValue(topResult.formatted_address ?? "");
-
-        onSelectRef.current({
-          address: topResult.formatted_address,
-          details,
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6),
-        });
+        stageOrApplyLocation(topResult, lat, lng);
       },
     );
   }, [isSetupMode, latitude, longitude, status]);
@@ -641,92 +844,77 @@ export function LocationMapPicker({
           ? prediction.structured_formatting?.main_text
           : undefined;
 
-        markerRef.current?.setPosition({ lat, lng });
-        mapRef.current?.setCenter({ lat, lng });
-
-        const details = getAddressDetails(topResult);
-        setAddressDetails(details);
-        skipAutocompleteRef.current = true;
-        setSearchValue(
-          topResult.formatted_address ?? prediction.description ?? "",
-        );
-        setSuggestions([]);
-
-        onSelectRef.current({
-          address: topResult.formatted_address,
-          details,
+        stageOrApplyLocation(topResult, lat, lng, {
+          fallbackAddress: prediction.description,
           googlePlaceId: prediction.place_id,
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6),
           suggestedCompanyName,
         });
       },
     );
   }
 
-  function handleUseCurrentLocation() {
+  async function handleUseCurrentLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationMessageTone("error");
       setLocationAccessMessage(copy.locationUnsupported);
       return;
     }
 
+    locationAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    locationAbortControllerRef.current = abortController;
     setIsLocating(true);
+    setPendingLocationConfirmation(null);
+    setLocationAccuracyMeters(null);
+    setLocationMessageTone("info");
     setLocationAccessMessage(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const nextPosition = { lat, lng };
+    try {
+      const sample = await collectBestBrowserLocation(
+        (bestSample, sampleCount) => {
+          setLocationAccuracyMeters(bestSample.accuracyMeters);
+          setLocationAccessMessage(
+            copy.accuracyProgress(bestSample.accuracyMeters, sampleCount),
+          );
+        },
+        abortController.signal,
+      );
 
-        markerRef.current?.setPosition(nextPosition);
-        mapRef.current?.setCenter(nextPosition);
-        mapRef.current?.setZoom(16);
+      if (sample.accuracyMeters > MAX_SETUP_LOCATION_ACCURACY_METERS) {
+        setLocationMessageTone("error");
+        setLocationAccessMessage(copy.accuracyRejected(sample.accuracyMeters));
+        return;
+      }
 
-        geocoderRef.current?.geocode(
-          { location: nextPosition },
-          (results: any[], geocodeStatus: string) => {
-            setIsLocating(false);
+      setLocationMessageTone("success");
+      setLocationAccuracyMeters(sample.accuracyMeters);
+      setLocationAccessMessage(copy.accuracyAccepted(sample.accuracyMeters));
+      const result = await reverseGeocodeLocation(
+        sample.latitude,
+        sample.longitude,
+      );
+      stageOrApplyLocation(result, sample.latitude, sample.longitude, {
+        accuracyMeters: sample.accuracyMeters,
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        return;
+      }
 
-            const topResult = results?.[0];
-            if (geocodeStatus === "OK" && topResult) {
-              const details = getAddressDetails(topResult);
-
-              setAddressDetails(details);
-              skipAutocompleteRef.current = true;
-              setSearchValue(topResult.formatted_address ?? "");
-              setSuggestions([]);
-
-              onSelectRef.current({
-                address: topResult.formatted_address,
-                details,
-                latitude: lat.toFixed(6),
-                longitude: lng.toFixed(6),
-              });
-              return;
-            }
-
-            onSelectRef.current({
-              latitude: lat.toFixed(6),
-              longitude: lng.toFixed(6),
-            });
-          },
-        );
-      },
-      (error) => {
-        setIsLocating(false);
-        setLocationAccessMessage(
-          error.code === error.PERMISSION_DENIED
-            ? copy.locationPermission
-            : copy.locationFailed,
-        );
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000,
-      },
-    );
+      setLocationMessageTone("error");
+      const errorCode =
+        typeof error === "object" && error && "code" in error
+          ? Number(error.code)
+          : null;
+      setLocationAccessMessage(
+        errorCode === 1 ? copy.locationPermission : copy.locationFailed,
+      );
+    } finally {
+      if (locationAbortControllerRef.current === abortController) {
+        locationAbortControllerRef.current = null;
+      }
+      setIsLocating(false);
+    }
   }
 
   return (
@@ -752,7 +940,12 @@ export function LocationMapPicker({
             <span>{searchLabel}</span>
             <Input
               id={searchInputId}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) => {
+                setSearchValue(event.target.value);
+                setPendingLocationConfirmation(null);
+                setLocationAccuracyMeters(null);
+                setLocationAccessMessage(null);
+              }}
               placeholder={searchPlaceholder}
               value={searchValue}
             />
@@ -761,7 +954,7 @@ export function LocationMapPicker({
           <div className="org-map-location-actions">
             <Button
               disabled={isLocating || status !== "ready"}
-              onClick={handleUseCurrentLocation}
+              onClick={() => void handleUseCurrentLocation()}
               size="sm"
               type="button"
               variant="outline"
@@ -770,11 +963,58 @@ export function LocationMapPicker({
               {isLocating ? copy.locating : copy.currentLocation}
             </Button>
             {locationAccessMessage ? (
-              <span className="org-map-location-message">
+              <span
+                className="org-map-location-message tabular-nums"
+                data-tone={locationMessageTone}
+              >
                 {locationAccessMessage}
               </span>
             ) : null}
           </div>
+
+          {pendingLocationConfirmation ? (
+            <div className="org-map-confirmation" role="alert">
+              <div className="org-map-confirmation-copy">
+                <strong>{copy.confirmLocationTitle}</strong>
+                <p>{copy.confirmLocationBody}</p>
+                <span className="tabular-nums">
+                  {pendingLocationConfirmation.selection.address}
+                  {typeof pendingLocationConfirmation.selection
+                    .accuracyMeters === "number"
+                    ? ` · ${copy.accuracyAccepted(
+                        pendingLocationConfirmation.selection.accuracyMeters,
+                      )}`
+                    : ""}
+                </span>
+              </div>
+              <div className="org-map-confirmation-actions">
+                <Button
+                  onClick={() => {
+                    const { selection } = pendingLocationConfirmation;
+                    applyLocationSelection(selection);
+                    if (typeof selection.accuracyMeters === "number") {
+                      setLocationMessageTone("success");
+                      setLocationAccessMessage(
+                        copy.accuracyAccepted(selection.accuracyMeters),
+                      );
+                    }
+                  }}
+                  size="sm"
+                  type="button"
+                >
+                  {copy.confirmLocation}
+                </Button>
+                <Button
+                  onClick={dismissPendingLocation}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {copy.chooseAnotherLocation}
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           {suggestions.length ? (
             <div className="org-map-suggestions">

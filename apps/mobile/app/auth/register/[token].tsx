@@ -119,6 +119,7 @@ export default function RegisterInvitationScreen() {
             changePhoto: 'Изменить фото',
             pickPhoto: 'Выбрать фото',
             takePhoto: 'Сделать фото',
+            photoFailed: 'Не удалось добавить фото. Обновите приложение и попробуйте снова.',
             cancel: 'Отмена',
             male: 'Мужской',
             female: 'Женский',
@@ -154,6 +155,7 @@ export default function RegisterInvitationScreen() {
             changePhoto: 'Change photo',
             pickPhoto: 'Choose photo',
             takePhoto: 'Take photo',
+            photoFailed: 'Unable to add the photo. Update the app and try again.',
             cancel: 'Cancel',
             male: 'Male',
             female: 'Female',
@@ -306,9 +308,9 @@ export default function RegisterInvitationScreen() {
       }));
       setError(null);
       hapticSuccess();
-    } catch (nextError) {
+    } catch {
       hapticError();
-      setError(nextError instanceof Error ? nextError.message : copy.addPhoto);
+      setError(copy.photoFailed);
     }
   }
 
@@ -667,7 +669,7 @@ export default function RegisterInvitationScreen() {
               {birthDatePickerVisible ? (
                 <View className="rounded-[22px] border border-[#e7dfd3] bg-[#fbfaf7] px-2 py-3">
                   <DateTimePicker
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     maximumDate={new Date()}
                     mode="date"
                     onChange={handleBirthDateChange}

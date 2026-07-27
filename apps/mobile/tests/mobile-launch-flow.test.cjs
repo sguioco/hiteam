@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const root = join(__dirname, "..");
@@ -169,10 +169,155 @@ function testMobileManagerCanCreateTeamsAfterOnboarding() {
   );
 }
 
+function testExpoImagePickerMatchesExpoSdk() {
+  const packageJson = JSON.parse(read("package.json"));
+
+  assert.equal(
+    packageJson.dependencies["expo-image-picker"],
+    "~17.0.11",
+    "Expo SDK 54 must use the compatible expo-image-picker 17 native module.",
+  );
+}
+
+function testExpoNativeDependenciesMatchSdk54() {
+  const packageJson = JSON.parse(read("package.json"));
+  const expectedDependencies = {
+    expo: "~54.0.36",
+    "expo-file-system": "~19.0.23",
+    "expo-font": "~14.0.12",
+    "expo-image-picker": "~17.0.11",
+    "expo-linking": "~8.0.12",
+    "expo-localization": "~17.0.9",
+    "expo-notifications": "~0.32.17",
+    "expo-router": "~6.0.24",
+    "expo-updates": "~29.0.19",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-svg": "15.12.1",
+  };
+
+  for (const [dependency, expectedVersion] of Object.entries(
+    expectedDependencies,
+  )) {
+    assert.equal(
+      packageJson.dependencies[dependency],
+      expectedVersion,
+      `${dependency} must stay compatible with Expo SDK 54.`,
+    );
+  }
+  assert.equal(
+    packageJson.devDependencies["@types/react"],
+    "~19.1.10",
+    "@types/react must stay compatible with Expo SDK 54.",
+  );
+}
+
+function testExpoConfigHasOneSourceOfTruth() {
+  const appConfig = read("app.config.js");
+  const baseConfig = JSON.parse(read("app.base.json"));
+
+  assert.equal(
+    existsSync(join(root, "app.json")),
+    false,
+    "Expo must not load competing app.json and app.config.js files.",
+  );
+  assertContains(
+    appConfig,
+    "require('./app.base.json').expo",
+    "The dynamic Expo config must load the shared base config.",
+  );
+  assert.equal(baseConfig.expo.userInterfaceStyle, "light");
+}
+
+function testAllPhotoFlowsUseSharedSdkCompatibleImagePicker() {
+  const photoFlowFiles = [
+    "app/auth/register/[token].tsx",
+    "app/onboarding/organization.tsx",
+    "src/components/TaskList.tsx",
+    "src/pages/AuthScreen.tsx",
+    "src/pages/CreateNewsScreen.tsx",
+  ];
+
+  for (const file of photoFlowFiles) {
+    assertContains(
+      read(file),
+      "expo-image-picker",
+      `${file} must use the shared SDK-compatible expo-image-picker dependency.`,
+    );
+  }
+}
+
+function testAndroidBirthDateUsesSpinnerPicker() {
+  const invitedEmployeeRegistration = read("app/auth/register/[token].tsx");
+  const authScreen = read("src/pages/AuthScreen.tsx");
+
+  assert.match(
+    invitedEmployeeRegistration,
+    /birthDatePickerVisible[\s\S]*<DateTimePicker[\s\S]*display="spinner"[\s\S]*mode="date"/,
+    "Invited employee registration must use the spinner birth date picker on Android.",
+  );
+  assert.match(
+    authScreen,
+    /Platform\.OS === ['"]ios['"][\s\S]*display="spinner"[\s\S]*joinProfileDatePickerVisible[\s\S]*<DateTimePicker[\s\S]*display="spinner"/,
+    "The join profile flow must use the spinner birth date picker on both iOS and Android.",
+  );
+}
+
+function testMobileLocationQualityControls() {
+  const location = read("lib/location.ts");
+  const organization = read("app/onboarding/organization.tsx");
+
+  assertContains(
+    location,
+    "export const SETUP_LOCATION_COLLECTION_DURATION_MS = 12_000;",
+    "Organization setup must collect location samples for 12 seconds.",
+  );
+  assertContains(
+    location,
+    "export const MAX_SETUP_LOCATION_ACCURACY_METERS = 100;",
+    "Organization setup must reject GPS accuracy worse than 100 meters.",
+  );
+  assertContains(
+    location,
+    "Location.watchPositionAsync(",
+    "Mobile location capture must collect multiple GPS samples.",
+  );
+  assertContains(
+    location,
+    "durationMs: ATTENDANCE_LOCATION_COLLECTION_DURATION_MS",
+    "Attendance capture must use the multi-sample location helper.",
+  );
+  assertContains(
+    organization,
+    "captureBestLocationOverTime({",
+    "Organization setup must choose the best collected GPS sample.",
+  );
+  assertContains(
+    organization,
+    "mapRef.current?.fitToCoordinates(",
+    "Organization setup map must fit the geofence boundary.",
+  );
+  assertContains(
+    organization,
+    "pendingLocation",
+    "Organization setup must require confirmation for ambiguous addresses.",
+  );
+  assertContains(
+    organization,
+    "PLUS_CODE_PATTERN",
+    "Organization setup must detect Plus Code addresses.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
 testMobileOrganizationSetupUsesSharedBackend();
 testMobileManagerCanCreateTeamsAfterOnboarding();
+testExpoImagePickerMatchesExpoSdk();
+testExpoNativeDependenciesMatchSdk54();
+testExpoConfigHasOneSourceOfTruth();
+testAllPhotoFlowsUseSharedSdkCompatibleImagePicker();
+testAndroidBirthDateUsesSpinnerPicker();
+testMobileLocationQualityControls();
 
 console.log("mobile launch flow tests passed");

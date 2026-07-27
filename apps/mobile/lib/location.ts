@@ -10,7 +10,21 @@ export type AttendanceLocationSnapshot = {
 };
 
 const RECENT_ATTENDANCE_LOCATION_MAX_AGE_MS = 30_000;
+const ATTENDANCE_LOCATION_COLLECTION_DURATION_MS = 10_000;
+export const SETUP_LOCATION_COLLECTION_DURATION_MS = 12_000;
+export const MAX_SETUP_LOCATION_ACCURACY_METERS = 100;
 let lastAttendanceLocationSnapshot: AttendanceLocationSnapshot | null = null;
+
+export type BestLocationCaptureProgress = {
+  bestAccuracyMeters: number | null;
+  sampleCount: number;
+};
+
+type BestLocationCaptureOptions = {
+  accuracy?: Location.LocationOptions["accuracy"];
+  durationMs: number;
+  onProgress?: (progress: BestLocationCaptureProgress) => void;
+};
 
 export type PreciseLocationAccessStatus = {
   status: "missing" | "imprecise" | "ready";
@@ -33,6 +47,94 @@ export function isPreciseLocationError(
   error: unknown,
 ): error is PreciseLocationError {
   return error instanceof PreciseLocationError;
+}
+
+export async function captureBestLocationOverTime({
+  accuracy = Location.Accuracy.Highest,
+  durationMs,
+  onProgress,
+}: BestLocationCaptureOptions): Promise<Location.LocationObject> {
+  return await new Promise((resolve, reject) => {
+    let bestLocation: Location.LocationObject | null = null;
+    let bestAccuracy = Number.POSITIVE_INFINITY;
+    let sampleCount = 0;
+    let subscription: Location.LocationSubscription | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      subscription?.remove();
+      subscription = null;
+    };
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+
+      if (bestLocation) {
+        resolve(bestLocation);
+        return;
+      }
+
+      reject(new Error("LOCATION_CAPTURE_FAILED"));
+    };
+
+    void Location.watchPositionAsync(
+      {
+        accuracy,
+        distanceInterval: 0,
+        mayShowUserSettingsDialog: true,
+        timeInterval: 1_000,
+      },
+      (location) => {
+        if (settled) {
+          return;
+        }
+
+        sampleCount += 1;
+        const nextAccuracy =
+          location.coords.accuracy ?? Number.POSITIVE_INFINITY;
+
+        if (!bestLocation || nextAccuracy < bestAccuracy) {
+          bestLocation = location;
+          bestAccuracy = nextAccuracy;
+        }
+
+        onProgress?.({
+          bestAccuracyMeters: Number.isFinite(bestAccuracy)
+            ? Math.round(bestAccuracy)
+            : null,
+          sampleCount,
+        });
+      },
+    )
+      .then((nextSubscription) => {
+        if (settled) {
+          nextSubscription.remove();
+          return;
+        }
+
+        subscription = nextSubscription;
+        timer = setTimeout(finish, durationMs);
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        reject(error);
+      });
+  });
 }
 
 export async function getPreciseLocationAccessStatus(options?: {
@@ -176,9 +278,9 @@ export async function capturePreciseAttendanceLocation(
       }
     }
 
-    location = await Location.getCurrentPositionAsync({
+    location = await captureBestLocationOverTime({
       accuracy: Location.Accuracy.Highest,
-      mayShowUserSettingsDialog: true,
+      durationMs: ATTENDANCE_LOCATION_COLLECTION_DURATION_MS,
     });
   } catch {
     throw new PreciseLocationError("LOCATION_CAPTURE_FAILED");

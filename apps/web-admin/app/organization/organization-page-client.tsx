@@ -237,6 +237,8 @@ export default function OrganizationPageClient({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [locationConfirmationPending, setLocationConfirmationPending] =
+    useState(false);
   const [setupMode, setSetupMode] = useState<SetupMode>(
     initialData?.setup.configured ? "update" : "create",
   );
@@ -408,6 +410,14 @@ export default function OrganizationPageClient({
     }
     if (!draft.companyName.trim()) {
       setError(locale === "ru" ? "Укажи название организации." : "Enter the organization name.");
+      return;
+    }
+    if (locationConfirmationPending) {
+      setError(
+        locale === "ru"
+          ? "Подтверди выбранную точку на карте перед сохранением."
+          : "Confirm the selected map point before saving.",
+      );
       return;
     }
     if (!draft.address.trim()) {
@@ -717,6 +727,7 @@ export default function OrganizationPageClient({
                     locale={locale}
                     longitude={draft.longitude}
                     mode="setup"
+                    onConfirmationRequiredChange={setLocationConfirmationPending}
                     searchLabel=""
                     searchPlaceholder={locale === "ru"
                       ? "Красный проспект, 24, Новосибирск"

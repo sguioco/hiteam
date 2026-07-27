@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class AttendanceActionDto {
   @IsNumber()
@@ -7,7 +7,8 @@ export class AttendanceActionDto {
   @IsNumber()
   longitude!: number;
 
-  @IsNumber()
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
   accuracyMeters!: number;
 
   @IsString()

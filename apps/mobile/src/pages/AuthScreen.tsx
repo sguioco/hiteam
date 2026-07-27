@@ -457,6 +457,10 @@ const AuthScreen = () => {
       photoTitle: t('joinProfile.photoTitle'),
       pickPhoto: t('joinProfile.pickPhoto'),
       takePhoto: t('joinProfile.takePhoto'),
+      photoFailed:
+        language === 'ru'
+          ? 'Не удалось добавить фото. Обновите приложение и попробуйте снова.'
+          : 'Unable to add the photo. Update the app and try again.',
       cancel: t('joinProfile.cancel'),
       photoRequired: t('joinProfile.photoRequired'),
       submit: t('joinProfile.submit'),
@@ -471,7 +475,7 @@ const AuthScreen = () => {
       successBodyLineTwo: t('joinProfile.successBodyLineTwo'),
       done: t('joinProfile.done'),
     }),
-    [t],
+    [language, t],
   );
   const joinUi = useMemo(
     () =>
@@ -1009,9 +1013,9 @@ const AuthScreen = () => {
         avatarPreviewUri: asset.uri,
       }));
       hapticSuccess();
-    } catch (error) {
+    } catch {
       hapticError();
-      setMessage(error instanceof Error ? error.message : joinProfileCopy.photoRequired);
+      setMessage(joinProfileCopy.photoFailed);
     }
   }
 
@@ -2231,7 +2235,7 @@ const AuthScreen = () => {
         ) : (
           joinProfileDatePickerVisible && (
             <DateTimePicker
-              display="default"
+              display="spinner"
               maximumDate={new Date()}
               mode="date"
               onChange={handleJoinProfileBirthDateChange}

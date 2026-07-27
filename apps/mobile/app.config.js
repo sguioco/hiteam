@@ -1,15 +1,15 @@
-const appJson = require('./app.json');
+const staticExpoConfig = require('./app.base.json').expo;
 
 process.env.EXPO_PUBLIC_API_URL ??= 'https://api.hiteam.net';
 
 module.exports = () => {
-  const config = JSON.parse(JSON.stringify(appJson));
+  const resolvedConfig = JSON.parse(JSON.stringify(staticExpoConfig));
   const isLocalDev = process.env.SMART_LOCAL_DEV === '1';
 
   if (isLocalDev) {
-    delete config.expo.runtimeVersion;
-    delete config.expo.updates;
+    delete resolvedConfig.runtimeVersion;
+    delete resolvedConfig.updates;
   }
 
-  return config;
+  return resolvedConfig;
 };

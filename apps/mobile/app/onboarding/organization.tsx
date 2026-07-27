@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { getCalendars } from 'expo-localization';
@@ -7,34 +7,26 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import MapView, { Circle, Marker, type MapPressEvent } from 'react-native-maps';
-import {
-  ActivityIndicator,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Switch,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../components/ui/text';
 import { PressableScale } from '../../components/ui/pressable-scale';
-import {
-  createManagerShiftTemplate,
-  createManagerTeam,
-  loadMobileOrganizationSetup,
-  saveMobileOrganizationSetup,
-  type MobileOrganizationSetup,
-} from '../../lib/api';
+import { createManagerShiftTemplate, createManagerTeam, loadMobileOrganizationSetup, saveMobileOrganizationSetup, type MobileOrganizationSetup } from '../../lib/api';
 import { updateAuthFlowState } from '../../lib/auth-flow';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { useI18n } from '../../lib/i18n';
+import { captureBestLocationOverTime, MAX_SETUP_LOCATION_ACCURACY_METERS, SETUP_LOCATION_COLLECTION_DURATION_MS } from '../../lib/location';
 import { getWorkspaceSetupHref, resolveWorkspaceSetupStep } from '../../lib/workspace-setup';
 
 type SetupStep = 'workplace' | 'team' | 'schedule';
 type TimeField = 'start' | 'end' | null;
+type PendingWorkplaceLocation = {
+  accuracyMeters: number | null;
+  address: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+};
 
 const STEP_ORDER: SetupStep[] = ['workplace', 'team', 'schedule'];
 const DEFAULT_RADIUS_METERS = 100;
@@ -42,6 +34,7 @@ const MIN_RADIUS_METERS = 50;
 const MAX_RADIUS_METERS = 1000;
 const RADIUS_STEP_METERS = 25;
 const DEFAULT_MAP_COORDINATE = { latitude: 25.2048, longitude: 55.2708 };
+const PLUS_CODE_PATTERN = /\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/i;
 const WEEK_DAYS = [
   { value: 1, en: 'Mon', ru: 'Пн' },
   { value: 2, en: 'Tue', ru: 'Вт' },
@@ -75,14 +68,38 @@ function formatAddress(geo: Location.LocationGeocodedAddress | undefined, fallba
     return fallback;
   }
 
-  return Array.from(
-    new Set([geo.name, geo.street, geo.city, geo.district, geo.region, geo.country].filter(Boolean)),
-  ).join(', ') || fallback;
+  return Array.from(new Set([geo.name, geo.street, geo.city, geo.district, geo.region, geo.country].filter(Boolean))).join(', ') || fallback;
+}
+
+function hasNormalAddress(geo: Location.LocationGeocodedAddress | undefined, formattedAddress: string) {
+  if (!geo || PLUS_CODE_PATTERN.test(formattedAddress)) {
+    return false;
+  }
+
+  return Boolean(geo.street || (geo.name && !PLUS_CODE_PATTERN.test(geo.name) && (geo.city || geo.district)));
+}
+
+function getGeofenceBoundaryCoordinates(center: { latitude: number; longitude: number }, radiusMeters: number) {
+  const latitudeOffset = radiusMeters / 111_320;
+  const longitudeScale = Math.max(0.1, Math.cos((center.latitude * Math.PI) / 180));
+  const longitudeOffset = radiusMeters / (111_320 * longitudeScale);
+
+  return [
+    {
+      latitude: center.latitude + latitudeOffset,
+      longitude: center.longitude + longitudeOffset,
+    },
+    {
+      latitude: center.latitude - latitudeOffset,
+      longitude: center.longitude - longitudeOffset,
+    },
+  ];
 }
 
 export default function OrganizationOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const mapRef = useRef<MapView | null>(null);
   const { language } = useI18n();
   const isRussian = language === 'ru';
   const copy = useMemo(
@@ -99,6 +116,14 @@ export default function OrganizationOnboardingScreen() {
             address: 'Адрес организации',
             searchAddress: 'Найти',
             currentLocation: 'Моя геолокация',
+            locating: `Уточняем геолокацию ${SETUP_LOCATION_COLLECTION_DURATION_MS / 1000} секунд…`,
+            locationAccuracy: (accuracy: number) => `Точность ±${accuracy} м`,
+            locationAccuracyProgress: (accuracy: number | null, samples: number) => (accuracy === null ? 'Ожидаем первый точный замер…' : `Лучшая точность ±${accuracy} м · замеров: ${samples}`),
+            locationAccuracyTooLow: (accuracy: number) => `Точность ±${accuracy} м недостаточна. Требуется не хуже ±${MAX_SETUP_LOCATION_ACCURACY_METERS} м.`,
+            confirmLocationTitle: 'Подтвердите точку',
+            confirmLocationBody: 'Для этой координаты не найден обычный адрес. Проверьте метку на карте перед сохранением.',
+            confirmLocation: 'Точка верная',
+            chooseAnotherLocation: 'Выбрать другую',
             radius: 'Радиус геозоны',
             timeZone: 'Часовой пояс',
             attendance: 'Учёт посещаемости',
@@ -143,6 +168,15 @@ export default function OrganizationOnboardingScreen() {
             address: 'Organization address',
             searchAddress: 'Find',
             currentLocation: 'Use my location',
+            locating: `Refining location for ${SETUP_LOCATION_COLLECTION_DURATION_MS / 1000} seconds…`,
+            locationAccuracy: (accuracy: number) => `Accuracy ±${accuracy} m`,
+            locationAccuracyProgress: (accuracy: number | null, samples: number) =>
+              accuracy === null ? 'Waiting for the first precise reading…' : `Best accuracy ±${accuracy} m · readings: ${samples}`,
+            locationAccuracyTooLow: (accuracy: number) => `Accuracy ±${accuracy} m is too low. ±${MAX_SETUP_LOCATION_ACCURACY_METERS} m or better is required.`,
+            confirmLocationTitle: 'Confirm this point',
+            confirmLocationBody: 'No regular street address was found for these coordinates. Check the marker before saving.',
+            confirmLocation: 'Use this point',
+            chooseAnotherLocation: 'Choose another',
             radius: 'Geofence radius',
             timeZone: 'Time zone',
             attendance: 'Attendance tracking',
@@ -183,6 +217,10 @@ export default function OrganizationOnboardingScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
+  const [locationAccuracyMeters, setLocationAccuracyMeters] = useState<number | null>(null);
+  const [locationAccuracyRejected, setLocationAccuracyRejected] = useState(false);
+  const [locationSampleCount, setLocationSampleCount] = useState(0);
+  const [pendingLocation, setPendingLocation] = useState<PendingWorkplaceLocation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [companyLogoUrl, setCompanyLogoUrl] = useState('');
@@ -203,9 +241,10 @@ export default function OrganizationOnboardingScreen() {
   const [timeField, setTimeField] = useState<TimeField>(null);
   const currentStepIndex = STEP_ORDER.indexOf(step);
   const mapCoordinate = {
-    latitude: latitude ?? DEFAULT_MAP_COORDINATE.latitude,
-    longitude: longitude ?? DEFAULT_MAP_COORDINATE.longitude,
+    latitude: pendingLocation?.latitude ?? latitude ?? DEFAULT_MAP_COORDINATE.latitude,
+    longitude: pendingLocation?.longitude ?? longitude ?? DEFAULT_MAP_COORDINATE.longitude,
   };
+  const hasMapCoordinate = pendingLocation !== null || (latitude !== null && longitude !== null);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +254,7 @@ export default function OrganizationOnboardingScreen() {
         const setup = await loadMobileOrganizationSetup();
         if (cancelled) return;
 
-        const configuredAddress = setup.location?.address === 'Not set yet' ? '' : setup.location?.address ?? '';
+        const configuredAddress = setup.location?.address === 'Not set yet' ? '' : (setup.location?.address ?? '');
         const nextLatitude = setup.location?.latitude && setup.location.latitude !== 0 ? setup.location.latitude : null;
         const nextLongitude = setup.location?.longitude && setup.location.longitude !== 0 ? setup.location.longitude : null;
 
@@ -227,9 +266,7 @@ export default function OrganizationOnboardingScreen() {
         setCountry(setup.location?.country ?? '');
         setLatitude(nextLatitude);
         setLongitude(nextLongitude);
-        setGeofenceRadiusMeters(
-          Math.max(MIN_RADIUS_METERS, setup.location?.geofenceRadiusMeters ?? setup.defaultGeofenceRadiusMeters ?? DEFAULT_RADIUS_METERS),
-        );
+        setGeofenceRadiusMeters(Math.max(MIN_RADIUS_METERS, setup.location?.geofenceRadiusMeters ?? setup.defaultGeofenceRadiusMeters ?? DEFAULT_RADIUS_METERS));
         setTimeZone(setup.location?.timezone || getDeviceTimeZone());
         setAttendanceTrackingEnabled(setup.attendanceTrackingEnabled ?? true);
       } catch (nextError) {
@@ -246,6 +283,21 @@ export default function OrganizationOnboardingScreen() {
       cancelled = true;
     };
   }, [copy.saveError]);
+
+  useEffect(() => {
+    if (!hasMapCoordinate) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(getGeofenceBoundaryCoordinates(mapCoordinate, geofenceRadiusMeters), {
+        animated: true,
+        edgePadding: { bottom: 36, left: 36, right: 36, top: 36 },
+      });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [geofenceRadiusMeters, hasMapCoordinate, mapCoordinate.latitude, mapCoordinate.longitude]);
 
   function goBack() {
     hapticSelection();
@@ -277,29 +329,75 @@ export default function OrganizationOnboardingScreen() {
     hapticSuccess();
   }
 
-  async function commitCoordinate(nextLatitude: number, nextLongitude: number, fallback: string) {
-    setLatitude(nextLatitude);
-    setLongitude(nextLongitude);
+  function applyCoordinate(next: PendingWorkplaceLocation) {
+    setAddress(next.address);
+    setCountry(next.country);
+    setLatitude(next.latitude);
+    setLongitude(next.longitude);
+    setLocationAccuracyMeters(next.accuracyMeters);
+    setLocationAccuracyRejected(false);
+    setPendingLocation(null);
+    setError(null);
+  }
 
+  async function commitCoordinate(nextLatitude: number, nextLongitude: number, fallback: string, accuracyMeters: number | null = null) {
+    let geo: Location.LocationGeocodedAddress | undefined;
     try {
-      const [geo] = await Location.reverseGeocodeAsync({ latitude: nextLatitude, longitude: nextLongitude });
-      setAddress(formatAddress(geo, fallback));
-      setCountry(geo?.country ?? '');
+      [geo] = await Location.reverseGeocodeAsync({
+        latitude: nextLatitude,
+        longitude: nextLongitude,
+      });
     } catch {
-      setAddress(fallback);
+      geo = undefined;
     }
+
+    const next = {
+      accuracyMeters,
+      address: formatAddress(geo, fallback),
+      country: geo?.country ?? '',
+      latitude: nextLatitude,
+      longitude: nextLongitude,
+    };
+
+    if (!hasNormalAddress(geo, next.address)) {
+      setPendingLocation(next);
+      setLocationAccuracyMeters(accuracyMeters);
+      setError(null);
+      return false;
+    }
+
+    applyCoordinate(next);
+    return true;
   }
 
   async function useCurrentLocation() {
     setLocationBusy(true);
     setError(null);
+    setPendingLocation(null);
+    setLocationAccuracyMeters(null);
+    setLocationAccuracyRejected(false);
+    setLocationSampleCount(0);
     try {
       let permission = await Location.getForegroundPermissionsAsync();
       if (!permission.granted) permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) throw new Error(copy.locationPermission);
 
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      await commitCoordinate(position.coords.latitude, position.coords.longitude, copy.currentLocation);
+      const position = await captureBestLocationOverTime({
+        accuracy: Location.Accuracy.Highest,
+        durationMs: SETUP_LOCATION_COLLECTION_DURATION_MS,
+        onProgress: ({ bestAccuracyMeters, sampleCount }) => {
+          setLocationAccuracyMeters(bestAccuracyMeters);
+          setLocationSampleCount(sampleCount);
+        },
+      });
+      const accuracyMeters = Math.round(position.coords.accuracy ?? Number.POSITIVE_INFINITY);
+
+      if (!Number.isFinite(accuracyMeters) || accuracyMeters > MAX_SETUP_LOCATION_ACCURACY_METERS) {
+        setLocationAccuracyRejected(true);
+        throw new Error(Number.isFinite(accuracyMeters) ? copy.locationAccuracyTooLow(accuracyMeters) : copy.locationError);
+      }
+
+      await commitCoordinate(position.coords.latitude, position.coords.longitude, copy.currentLocation, accuracyMeters);
       hapticSuccess();
     } catch (nextError) {
       hapticError();
@@ -319,6 +417,9 @@ export default function OrganizationOnboardingScreen() {
     Keyboard.dismiss();
     setLocationBusy(true);
     setError(null);
+    setPendingLocation(null);
+    setLocationAccuracyMeters(null);
+    setLocationAccuracyRejected(false);
     try {
       if (Platform.OS === 'android') {
         let permission = await Location.getForegroundPermissionsAsync();
@@ -339,11 +440,9 @@ export default function OrganizationOnboardingScreen() {
 
   function handleMapPress(event: MapPressEvent) {
     const coordinate = event.nativeEvent.coordinate;
-    void commitCoordinate(
-      coordinate.latitude,
-      coordinate.longitude,
-      `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`,
-    );
+    setLocationAccuracyMeters(null);
+    setLocationAccuracyRejected(false);
+    void commitCoordinate(coordinate.latitude, coordinate.longitude, `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`);
   }
 
   async function saveWorkplace() {
@@ -351,7 +450,7 @@ export default function OrganizationOnboardingScreen() {
       setError(copy.requiredName);
       return;
     }
-    if (!address.trim() || latitude === null || longitude === null) {
+    if (pendingLocation || !address.trim() || latitude === null || longitude === null) {
       setError(copy.requiredAddress);
       return;
     }
@@ -450,9 +549,7 @@ export default function OrganizationOnboardingScreen() {
 
   function toggleWeekDay(value: number) {
     hapticSelection();
-    setWeekDays((current) =>
-      current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort(),
-    );
+    setWeekDays((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort()));
   }
 
   if (loading) {
@@ -477,18 +574,14 @@ export default function OrganizationOnboardingScreen() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
-          <PressableScale
-            accessibilityLabel={copy.back}
-            className="h-11 w-11 items-center justify-center rounded-full bg-white"
-            disabled={step === 'workplace'}
-            haptic="selection"
-            onPress={goBack}
-          >
+          <PressableScale accessibilityLabel={copy.back} className="h-11 w-11 items-center justify-center rounded-full bg-white" disabled={step === 'workplace'} haptic="selection" onPress={goBack}>
             <Ionicons color={step === 'workplace' ? '#c8cdd8' : '#26334a'} name="chevron-back" size={23} />
           </PressableScale>
           <View className="items-center">
             <Text className="text-[13px] font-semibold uppercase text-[#7b8498]">{copy.setup}</Text>
-            <Text className="mt-1 text-[14px] font-semibold text-[#26334a]">{currentStepIndex + 1} / {STEP_ORDER.length}</Text>
+            <Text className="mt-1 text-[14px] font-semibold text-[#26334a]">
+              {currentStepIndex + 1} / {STEP_ORDER.length}
+            </Text>
           </View>
           <View className="h-11 w-11" />
         </View>
@@ -499,12 +592,7 @@ export default function OrganizationOnboardingScreen() {
           ))}
         </View>
 
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ paddingBottom: 132 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 132 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {step === 'workplace' ? (
             <View className="gap-5 px-5 pb-6">
               <View className="gap-2 px-1">
@@ -527,7 +615,10 @@ export default function OrganizationOnboardingScreen() {
                 <TextInput
                   autoCapitalize="words"
                   className="min-h-[56px] rounded-[17px] border border-[#d9deea] bg-white px-4 text-[16px] text-[#26334a]"
-                  onChangeText={(value) => { setCompanyName(value); setError(null); }}
+                  onChangeText={(value) => {
+                    setCompanyName(value);
+                    setError(null);
+                  }}
                   placeholder={copy.organizationName}
                   placeholderTextColor="#8a95a9"
                   value={companyName}
@@ -539,32 +630,90 @@ export default function OrganizationOnboardingScreen() {
                 <View className="flex-row gap-2">
                   <TextInput
                     className="min-h-[54px] flex-1 rounded-[17px] border border-[#d9deea] bg-white px-4 text-[15px] text-[#26334a]"
-                    onChangeText={(value) => { setAddress(value); setError(null); }}
+                    onChangeText={(value) => {
+                      setAddress(value);
+                      setPendingLocation(null);
+                      setLocationAccuracyMeters(null);
+                      setLocationAccuracyRejected(false);
+                      setError(null);
+                    }}
                     placeholder={copy.address}
                     placeholderTextColor="#8a95a9"
                     returnKeyType="search"
                     onSubmitEditing={() => void findAddress()}
                     value={address}
                   />
-                  <PressableScale className="h-[54px] min-w-[72px] items-center justify-center rounded-[17px] bg-[#26334a] px-3" disabled={locationBusy} haptic="selection" onPress={() => void findAddress()}>
+                  <PressableScale
+                    className="h-[54px] min-w-[72px] items-center justify-center rounded-[17px] bg-[#26334a] px-3"
+                    disabled={locationBusy}
+                    haptic="selection"
+                    onPress={() => void findAddress()}
+                  >
                     {locationBusy ? <ActivityIndicator color="white" size="small" /> : <Text className="text-[14px] font-semibold text-white">{copy.searchAddress}</Text>}
                   </PressableScale>
                 </View>
-                <PressableScale className="min-h-[46px] flex-row items-center justify-center gap-2 rounded-[16px] bg-[#edf1ff]" disabled={locationBusy} haptic="selection" onPress={() => void useCurrentLocation()}>
-                  <Ionicons color="#536cf5" name="locate-outline" size={19} />
-                  <Text className="text-[14px] font-semibold text-[#536cf5]">{copy.currentLocation}</Text>
+                <PressableScale
+                  className="min-h-[46px] flex-row items-center justify-center gap-2 rounded-[16px] bg-[#edf1ff]"
+                  disabled={locationBusy}
+                  haptic="selection"
+                  onPress={() => void useCurrentLocation()}
+                >
+                  {locationBusy ? <ActivityIndicator color="#536cf5" size="small" /> : <Ionicons color="#536cf5" name="locate-outline" size={19} />}
+                  <Text className="text-[14px] font-semibold text-[#536cf5]">{locationBusy ? copy.locating : copy.currentLocation}</Text>
                 </PressableScale>
+                {locationBusy ? (
+                  <Text className="text-center text-[13px] leading-[19px] text-[#6f7892]">{copy.locationAccuracyProgress(locationAccuracyMeters, locationSampleCount)}</Text>
+                ) : locationAccuracyMeters !== null ? (
+                  <Text className={`text-center text-[13px] font-semibold ${locationAccuracyRejected ? 'text-[#b83c4a]' : 'text-[#2f8b61]'}`}>
+                    {locationAccuracyRejected ? copy.locationAccuracyTooLow(locationAccuracyMeters) : copy.locationAccuracy(locationAccuracyMeters)}
+                  </Text>
+                ) : null}
+                {pendingLocation ? (
+                  <View className="gap-3 rounded-[18px] bg-[#fff7e8] p-4">
+                    <View className="flex-row gap-3">
+                      <Ionicons color="#b97818" name="warning-outline" size={22} />
+                      <View className="flex-1">
+                        <Text className="text-[15px] font-semibold text-[#5c421d]">{copy.confirmLocationTitle}</Text>
+                        <Text className="mt-1 text-[13px] leading-[19px] text-[#7a6040]">{copy.confirmLocationBody}</Text>
+                      </View>
+                    </View>
+                    <View className="flex-row gap-2">
+                      <PressableScale className="min-h-[44px] flex-1 items-center justify-center rounded-[14px] bg-[#26334a] px-3" haptic="selection" onPress={() => applyCoordinate(pendingLocation)}>
+                        <Text className="text-[13px] font-semibold text-white">{copy.confirmLocation}</Text>
+                      </PressableScale>
+                      <PressableScale
+                        className="min-h-[44px] flex-1 items-center justify-center rounded-[14px] bg-white px-3"
+                        haptic="selection"
+                        onPress={() => {
+                          setPendingLocation(null);
+                          setLocationAccuracyMeters(null);
+                          setLocationAccuracyRejected(false);
+                        }}
+                      >
+                        <Text className="text-[13px] font-semibold text-[#536cf5]">{copy.chooseAnotherLocation}</Text>
+                      </PressableScale>
+                    </View>
+                  </View>
+                ) : null}
                 <View className="h-[230px] overflow-hidden rounded-[20px]">
                   <MapView
-                    initialRegion={{ ...mapCoordinate, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
-                    key={`${mapCoordinate.latitude.toFixed(4)}-${mapCoordinate.longitude.toFixed(4)}`}
+                    initialRegion={{
+                      ...mapCoordinate,
+                      latitudeDelta: 0.02,
+                      longitudeDelta: 0.02,
+                    }}
                     onPress={handleMapPress}
+                    ref={mapRef}
                     style={{ flex: 1 }}
                   >
-                    {latitude !== null && longitude !== null ? (
+                    {hasMapCoordinate ? (
                       <>
-                        <Circle center={{ latitude, longitude }} fillColor="rgba(83,108,245,0.14)" radius={geofenceRadiusMeters} strokeColor="#536cf5" strokeWidth={2} />
-                        <Marker coordinate={{ latitude, longitude }} draggable onDragEnd={(event) => void commitCoordinate(event.nativeEvent.coordinate.latitude, event.nativeEvent.coordinate.longitude, address)} />
+                        <Circle center={mapCoordinate} fillColor="rgba(83,108,245,0.14)" radius={geofenceRadiusMeters} strokeColor="#536cf5" strokeWidth={2} />
+                        <Marker
+                          coordinate={mapCoordinate}
+                          draggable
+                          onDragEnd={(event) => void commitCoordinate(event.nativeEvent.coordinate.latitude, event.nativeEvent.coordinate.longitude, address)}
+                        />
                       </>
                     ) : null}
                   </MapView>
@@ -578,10 +727,18 @@ export default function OrganizationOnboardingScreen() {
                     <Text className="mt-1 text-[23px] font-semibold text-[#26334a]">{geofenceRadiusMeters} m</Text>
                   </View>
                   <View className="flex-row gap-2">
-                    <PressableScale className="h-11 w-11 items-center justify-center rounded-[14px] border border-[#d9deea]" haptic="selection" onPress={() => setGeofenceRadiusMeters((value) => Math.max(MIN_RADIUS_METERS, value - RADIUS_STEP_METERS))}>
+                    <PressableScale
+                      className="h-11 w-11 items-center justify-center rounded-[14px] border border-[#d9deea]"
+                      haptic="selection"
+                      onPress={() => setGeofenceRadiusMeters((value) => Math.max(MIN_RADIUS_METERS, value - RADIUS_STEP_METERS))}
+                    >
                       <Ionicons color="#26334a" name="remove" size={21} />
                     </PressableScale>
-                    <PressableScale className="h-11 w-11 items-center justify-center rounded-[14px] border border-[#d9deea]" haptic="selection" onPress={() => setGeofenceRadiusMeters((value) => Math.min(MAX_RADIUS_METERS, value + RADIUS_STEP_METERS))}>
+                    <PressableScale
+                      className="h-11 w-11 items-center justify-center rounded-[14px] border border-[#d9deea]"
+                      haptic="selection"
+                      onPress={() => setGeofenceRadiusMeters((value) => Math.min(MAX_RADIUS_METERS, value + RADIUS_STEP_METERS))}
+                    >
                       <Ionicons color="#26334a" name="add" size={21} />
                     </PressableScale>
                   </View>
@@ -613,8 +770,26 @@ export default function OrganizationOnboardingScreen() {
                 <View className="h-16 w-16 items-center justify-center rounded-[18px] bg-[#edf1ff]">
                   <Ionicons color="#536cf5" name="people-outline" size={28} />
                 </View>
-                <TextInput autoCapitalize="words" className="min-h-[58px] rounded-[18px] border border-[#d9deea] px-4 text-[16px] text-[#26334a]" onChangeText={(value) => { setTeamName(value); setError(null); }} placeholder={copy.teamName} placeholderTextColor="#8a95a9" value={teamName} />
-                <TextInput className="min-h-[96px] rounded-[18px] border border-[#d9deea] px-4 py-3 text-[16px] text-[#26334a]" multiline onChangeText={setTeamDescription} placeholder={copy.teamDescription} placeholderTextColor="#8a95a9" textAlignVertical="top" value={teamDescription} />
+                <TextInput
+                  autoCapitalize="words"
+                  className="min-h-[58px] rounded-[18px] border border-[#d9deea] px-4 text-[16px] text-[#26334a]"
+                  onChangeText={(value) => {
+                    setTeamName(value);
+                    setError(null);
+                  }}
+                  placeholder={copy.teamName}
+                  placeholderTextColor="#8a95a9"
+                  value={teamName}
+                />
+                <TextInput
+                  className="min-h-[96px] rounded-[18px] border border-[#d9deea] px-4 py-3 text-[16px] text-[#26334a]"
+                  multiline
+                  onChangeText={setTeamDescription}
+                  placeholder={copy.teamDescription}
+                  placeholderTextColor="#8a95a9"
+                  textAlignVertical="top"
+                  value={teamDescription}
+                />
               </View>
               <PressableScale className="min-h-[46px] items-center justify-center" disabled={saving} haptic="selection" onPress={() => void continueFromTeam(true)}>
                 <Text className="text-[15px] font-semibold text-[#536cf5]">{copy.skip}</Text>
@@ -628,7 +803,17 @@ export default function OrganizationOnboardingScreen() {
               </View>
               {attendanceTrackingEnabled ? (
                 <View className="gap-5 rounded-[24px] border border-[#e2e5ec] bg-white p-4">
-                  <TextInput autoCapitalize="words" className="min-h-[58px] rounded-[18px] border border-[#d9deea] px-4 text-[16px] text-[#26334a]" onChangeText={(value) => { setTemplateName(value); setError(null); }} placeholder={copy.templateName} placeholderTextColor="#8a95a9" value={templateName} />
+                  <TextInput
+                    autoCapitalize="words"
+                    className="min-h-[58px] rounded-[18px] border border-[#d9deea] px-4 text-[16px] text-[#26334a]"
+                    onChangeText={(value) => {
+                      setTemplateName(value);
+                      setError(null);
+                    }}
+                    placeholder={copy.templateName}
+                    placeholderTextColor="#8a95a9"
+                    value={templateName}
+                  />
                   <View>
                     <Text className="mb-3 text-[13px] font-semibold uppercase text-[#7b8498]">{copy.workDays}</Text>
                     <View className="flex-row justify-between gap-1.5">
@@ -687,7 +872,12 @@ export default function OrganizationOnboardingScreen() {
         </ScrollView>
 
         <View className="absolute bottom-0 left-0 right-0 border-t border-[#e4e7ee] bg-white px-5 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 14) }}>
-          <PressableScale className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#536cf5] ${saving ? 'opacity-70' : ''}`} disabled={saving || locationBusy} haptic="medium" onPress={handlePrimaryAction}>
+          <PressableScale
+            className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#536cf5] ${saving ? 'opacity-70' : ''}`}
+            disabled={saving || locationBusy}
+            haptic="medium"
+            onPress={handlePrimaryAction}
+          >
             <View className="flex-row items-center gap-3">
               {saving ? <ActivityIndicator color="white" size="small" /> : null}
               <Text className="text-[18px] font-semibold text-white">{saving ? copy.saving : actionLabel}</Text>
@@ -696,13 +886,7 @@ export default function OrganizationOnboardingScreen() {
         </View>
 
         {timeField ? (
-          <DateTimePicker
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            is24Hour
-            mode="time"
-            onChange={handleTimeChange}
-            value={timeField === 'start' ? startsAt : endsAt}
-          />
+          <DateTimePicker display={Platform.OS === 'ios' ? 'spinner' : 'default'} is24Hour mode="time" onChange={handleTimeChange} value={timeField === 'start' ? startsAt : endsAt} />
         ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>

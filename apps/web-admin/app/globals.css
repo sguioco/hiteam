@@ -3562,6 +3562,56 @@ textarea {
   line-height: 1.4;
 }
 
+.org-map-location-message[data-tone="success"] {
+  color: #16734c;
+}
+
+.org-map-location-message[data-tone="error"] {
+  color: #b4233d;
+}
+
+.org-map-confirmation {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid rgba(180, 120, 24, 0.24);
+  border-radius: 16px;
+  background: #fff8e9;
+}
+
+.org-map-confirmation-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.org-map-confirmation-copy strong {
+  color: #5c421d;
+  font-size: 0.9rem;
+}
+
+.org-map-confirmation-copy p,
+.org-map-confirmation-copy span {
+  margin: 0;
+  color: #765c38;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.org-map-confirmation-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .org-map-confirmation {
+    flex-direction: column;
+  }
+}
+
 .org-form-onboarding .org-map-canvas {
   min-height: 330px;
 }
