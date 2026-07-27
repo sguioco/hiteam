@@ -27,11 +27,7 @@ export class AltegioMarketplaceClient {
   }
 
   partnerToken() {
-    return (
-      this.configService.get<string>('ALTEGIO_MARKETPLACE_PARTNER_KEY')?.trim() ||
-      this.configService.get<string>('ALTEGIO_PARTNER_TOKEN')?.trim() ||
-      ''
-    );
+    return this.configService.get<string>('ALTEGIO_PARTNER_TOKEN')?.trim() || '';
   }
 
   systemUserToken() {

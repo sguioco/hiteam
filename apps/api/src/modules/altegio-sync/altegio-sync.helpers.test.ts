@@ -10,7 +10,12 @@ import {
   splitAltegioStaffName,
   syntheticAltegioEmail,
 } from './altegio-sync.helpers';
-import { parseSchedulePayload, parseTeamMembersPayload } from './altegio-b2b.client';
+import {
+  parseLocationProfilePayload,
+  parseSchedulePayload,
+  parseTeamMembersPayload,
+} from './altegio-b2b.client';
+import { resolveMarketplaceTrialGrant } from '../billing/altegio-marketplace.helpers';
 
 function testPhoneMatching() {
   assert.equal(phonesMatch('+971501234567', '971501234567'), true);
@@ -99,6 +104,27 @@ function testScheduleHelpers() {
 }
 
 function testPayloadParsers() {
+  const location = parseLocationProfilePayload(
+    {
+      data: {
+        id: 720441,
+        title: 'Beauty Lab',
+        public_title: 'Beauty Lab Downtown',
+        address: 'Dubai, UAE',
+        country: 'United Arab Emirates',
+        city: 'Dubai',
+        timezone_name: 'Asia/Dubai',
+        coordinate_lat: 25.2,
+        coordinate_lon: 55.27,
+        logo: 'https://example.com/logo.png',
+      },
+    },
+    '720441',
+  );
+  assert.equal(location.name, 'Beauty Lab');
+  assert.equal(location.timezone, 'Asia/Dubai');
+  assert.equal(location.latitude, 25.2);
+
   const members = parseTeamMembersPayload({
     data: [
       {
@@ -145,10 +171,50 @@ function testPayloadParsers() {
   assert.deepEqual(days[0].slots, [{ from: '10:00', to: '19:00' }]);
 }
 
+function testMarketplaceTrialCannotBeExtendedOrTransferred() {
+  const now = new Date('2026-07-27T12:00:00.000Z');
+  const claim = {
+    originalTenantId: 'tenant-original',
+    trialStartedAt: new Date('2026-07-20T00:00:00.000Z'),
+    trialEndsAt: new Date('2026-07-30T00:00:00.000Z'),
+  };
+
+  const reconnect = resolveMarketplaceTrialGrant({
+    tenantId: 'tenant-original',
+    snapshotPeriodStart: new Date('2026-07-27T00:00:00.000Z'),
+    snapshotPeriodEnd: new Date('2026-08-06T00:00:00.000Z'),
+    claim,
+    now,
+  });
+  assert.equal(reconnect.allowed, true);
+  assert.equal(reconnect.periodEnd?.toISOString(), '2026-07-30T00:00:00.000Z');
+
+  const recreatedTenant = resolveMarketplaceTrialGrant({
+    tenantId: 'tenant-recreated',
+    snapshotPeriodStart: new Date('2026-07-27T00:00:00.000Z'),
+    snapshotPeriodEnd: new Date('2026-08-06T00:00:00.000Z'),
+    claim,
+    now,
+  });
+  assert.equal(recreatedTenant.allowed, false);
+  assert.equal(recreatedTenant.reason, 'claimed_by_another_tenant');
+
+  const expiredReconnect = resolveMarketplaceTrialGrant({
+    tenantId: 'tenant-original',
+    snapshotPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+    snapshotPeriodEnd: new Date('2026-08-10T00:00:00.000Z'),
+    claim,
+    now: new Date('2026-08-01T00:00:00.000Z'),
+  });
+  assert.equal(expiredReconnect.allowed, false);
+  assert.equal(expiredReconnect.reason, 'trial_expired');
+}
+
 testPhoneMatching();
 testNameSplitAndSyntheticEmail();
 testEmployeeMatching();
 testScheduleHelpers();
 testPayloadParsers();
+testMarketplaceTrialCannotBeExtendedOrTransferred();
 
 console.log('altegio staff/schedule sync helpers: ok');

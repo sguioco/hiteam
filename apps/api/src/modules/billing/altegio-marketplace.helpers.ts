@@ -6,6 +6,46 @@ export type MarketplaceSubscriptionSnapshot = {
   paymentSum: number | null;
 };
 
+export type MarketplaceTrialClaimSnapshot = {
+  originalTenantId: string;
+  trialStartedAt: Date;
+  trialEndsAt: Date;
+};
+
+export function resolveMarketplaceTrialGrant(args: {
+  tenantId: string;
+  snapshotPeriodStart: Date | null;
+  snapshotPeriodEnd: Date;
+  claim: MarketplaceTrialClaimSnapshot | null;
+  now?: Date;
+}) {
+  const now = args.now ?? new Date();
+  if (!args.claim) {
+    return { allowed: false, periodStart: null, periodEnd: null, reason: 'claim_missing' } as const;
+  }
+  if (args.claim.originalTenantId !== args.tenantId) {
+    return {
+      allowed: false,
+      periodStart: null,
+      periodEnd: null,
+      reason: 'claimed_by_another_tenant',
+    } as const;
+  }
+
+  const periodEnd = new Date(
+    Math.min(args.snapshotPeriodEnd.getTime(), args.claim.trialEndsAt.getTime()),
+  );
+  if (periodEnd.getTime() <= now.getTime()) {
+    return { allowed: false, periodStart: null, periodEnd: null, reason: 'trial_expired' } as const;
+  }
+
+  const requestedStart = args.snapshotPeriodStart ?? args.claim.trialStartedAt;
+  const periodStart = new Date(
+    Math.max(requestedStart.getTime(), args.claim.trialStartedAt.getTime()),
+  );
+  return { allowed: true, periodStart, periodEnd, reason: 'original_claim' } as const;
+}
+
 export function parseAltegioMarketplaceDatetime(value: unknown): Date | null {
   const raw = String(value || '').trim();
   if (!raw) {

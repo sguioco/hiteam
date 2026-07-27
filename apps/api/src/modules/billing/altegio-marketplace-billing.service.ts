@@ -5,6 +5,7 @@ import { AltegioMarketplaceClient, AltegioMarketplaceError } from './altegio-mar
 import {
   formatAltegioMarketplaceDatetime,
   parseMarketplaceSubscriptionSnapshot,
+  resolveMarketplaceTrialGrant,
   resolveMarketplaceStatusFromSnapshot,
   shouldPushLocalPeriodToAltegio,
   type MarketplaceSubscriptionSnapshot,
@@ -41,6 +42,10 @@ export class AltegioMarketplaceBillingService {
     return Boolean(
       (subscription.altegioLocationId || '').trim() && (subscription.altegioApplicationId || '').trim(),
     );
+  }
+
+  configuredApplicationId() {
+    return this.altegioClient.applicationId() || null;
   }
 
   async connectMarketplace(args: {
@@ -348,18 +353,38 @@ export class AltegioMarketplaceBillingService {
     const now = Date.now();
     const previousEnd = subscription.stripeCurrentPeriodEnd;
     const currentStatus = String(subscription.status || '').trim().toUpperCase();
+    const hasStripeSubscription = Boolean((subscription.stripeSubscriptionId || '').trim());
+    const localTrialIsActive = Boolean(
+      !subscription.firstPaidAt &&
+        subscription.trialEndsAt &&
+        subscription.trialEndsAt.getTime() > now,
+    );
     const localPeriodIsActive = Boolean(
       previousEnd &&
         previousEnd.getTime() > now &&
+        (localTrialIsActive || Boolean(subscription.firstPaidAt) || hasStripeSubscription) &&
         (currentStatus === 'ACTIVE' || currentStatus === 'TRIALING'),
     );
-    const hasStripeSubscription = Boolean((subscription.stripeSubscriptionId || '').trim());
+    const trialClaim =
+      snapshot.isTrial && snapshot.periodEnd
+        ? await this.getOrCreateMarketplaceTrialClaim(subscription, snapshot)
+        : null;
+    const trialGrant =
+      snapshot.isTrial && snapshot.periodEnd && !subscription.firstPaidAt && !hasStripeSubscription
+        ? resolveMarketplaceTrialGrant({
+            tenantId: subscription.tenantId,
+            snapshotPeriodStart: snapshot.periodStart,
+            snapshotPeriodEnd: snapshot.periodEnd,
+            claim: trialClaim,
+          })
+        : null;
+    const acceptedMarketplaceTrial = Boolean(trialGrant?.allowed);
     const preserveLocalTrialPeriod = Boolean(
-      snapshot.isTrial &&
+      acceptedMarketplaceTrial &&
         localPeriodIsActive &&
-        snapshot.periodEnd &&
+        trialGrant?.periodEnd &&
         previousEnd &&
-        snapshot.periodEnd.getTime() < previousEnd.getTime(),
+        trialGrant.periodEnd.getTime() < previousEnd.getTime(),
     );
     const preserveStripePaidPeriod = Boolean(
       hasStripeSubscription &&
@@ -370,12 +395,18 @@ export class AltegioMarketplaceBillingService {
         snapshot.periodEnd.getTime() < previousEnd.getTime(),
     );
 
-    const nextStatus = resolveMarketplaceStatusFromSnapshot({
+    const resolvedStatus = resolveMarketplaceStatusFromSnapshot({
       snapshot,
       localStatus: subscription.status,
       localPeriodEnd: previousEnd,
       hasStripeSubscription,
     });
+    const nextStatus =
+      snapshot.isTrial && !acceptedMarketplaceTrial
+        ? localTrialIsActive
+          ? 'TRIALING'
+          : 'PAYMENT_REQUIRED'
+        : resolvedStatus;
 
     const data: {
       status?: string;
@@ -386,8 +417,9 @@ export class AltegioMarketplaceBillingService {
       trialSource?: string | null;
     } = {};
 
-    if (snapshot.periodEnd) {
-      let nextEnd: Date | null = snapshot.periodEnd;
+    if (snapshot.periodEnd && (!snapshot.isTrial || acceptedMarketplaceTrial)) {
+      let nextEnd: Date | null =
+        snapshot.isTrial && trialGrant?.periodEnd ? trialGrant.periodEnd : snapshot.periodEnd;
       if (
         preserveLocalTrialPeriod ||
         preserveStripePaidPeriod ||
@@ -398,19 +430,30 @@ export class AltegioMarketplaceBillingService {
       if (nextEnd && (!previousEnd || nextEnd.getTime() !== previousEnd.getTime())) {
         data.stripeCurrentPeriodEnd = nextEnd;
       }
+    } else if (snapshot.isTrial && !acceptedMarketplaceTrial && !subscription.firstPaidAt) {
+      data.stripeCurrentPeriodStart = null;
+      data.stripeCurrentPeriodEnd = null;
     } else if (snapshot.connectionStatus === 'freezed') {
       data.stripeCurrentPeriodEnd = new Date();
     }
 
-    if (snapshot.periodStart && !subscription.stripeCurrentPeriodStart) {
-      data.stripeCurrentPeriodStart = snapshot.periodStart;
+    if (
+      snapshot.periodStart &&
+      !subscription.stripeCurrentPeriodStart &&
+      (!snapshot.isTrial || acceptedMarketplaceTrial)
+    ) {
+      data.stripeCurrentPeriodStart =
+        snapshot.isTrial && trialGrant?.periodStart ? trialGrant.periodStart : snapshot.periodStart;
     }
 
-    // Marketplace trial can extend local HiTeam trial before first Stripe payment.
-    if (snapshot.isTrial && snapshot.periodEnd && !subscription.firstPaidAt && !hasStripeSubscription) {
-      if (!subscription.trialEndsAt || snapshot.periodEnd.getTime() > subscription.trialEndsAt.getTime()) {
-        data.trialEndsAt = snapshot.periodEnd;
-        data.trialStartedAt = snapshot.periodStart ?? subscription.trialStartedAt ?? new Date();
+    if (acceptedMarketplaceTrial && trialGrant?.periodEnd) {
+      if (
+        !subscription.trialEndsAt ||
+        trialGrant.periodEnd.getTime() > subscription.trialEndsAt.getTime()
+      ) {
+        data.trialEndsAt = trialGrant.periodEnd;
+        data.trialStartedAt =
+          trialGrant.periodStart ?? subscription.trialStartedAt ?? new Date();
         data.trialSource = 'ALTEGIO_MARKETPLACE';
       }
     }
@@ -441,6 +484,48 @@ export class AltegioMarketplaceBillingService {
     return true;
   }
 
+  private async getOrCreateMarketplaceTrialClaim(
+    subscription: BillingSubscriptionRow,
+    snapshot: MarketplaceSubscriptionSnapshot,
+  ) {
+    const applicationId = (subscription.altegioApplicationId || '').trim();
+    const locationId = (subscription.altegioLocationId || '').trim();
+    if (!applicationId || !locationId || !snapshot.periodEnd) {
+      return null;
+    }
+
+    const useExistingTrialCap =
+      subscription.trialSource === 'ALTEGIO_MARKETPLACE' && subscription.trialEndsAt;
+    const trialStartedAt =
+      (useExistingTrialCap ? subscription.trialStartedAt : null) ??
+      snapshot.periodStart ??
+      new Date();
+    const trialEndsAt =
+      (useExistingTrialCap ? subscription.trialEndsAt : null) ?? snapshot.periodEnd;
+
+    return this.prisma.altegioMarketplaceTrialClaim.upsert({
+      where: {
+        applicationId_locationId: {
+          applicationId,
+          locationId,
+        },
+      },
+      update: {},
+      create: {
+        applicationId,
+        locationId,
+        originalTenantId: subscription.tenantId,
+        trialStartedAt,
+        trialEndsAt,
+      },
+      select: {
+        originalTenantId: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+      },
+    });
+  }
+
   private async pushLocalPeriod(
     subscription: BillingSubscriptionRow,
     args: {
@@ -455,16 +540,16 @@ export class AltegioMarketplaceBillingService {
       return false;
     }
 
-    const localEnd =
-      subscription.stripeCurrentPeriodEnd ||
-      (!subscription.firstPaidAt ? subscription.trialEndsAt : null);
+    const localEnd = subscription.firstPaidAt
+      ? subscription.stripeCurrentPeriodEnd
+      : subscription.trialEndsAt;
     if (!localEnd || localEnd.getTime() <= Date.now()) {
       return false;
     }
 
     const status = String(subscription.status || '').trim().toUpperCase();
     const active = status === 'ACTIVE' || status === 'TRIALING';
-    if (!active && !subscription.trialEndsAt) {
+    if (!active) {
       return false;
     }
 

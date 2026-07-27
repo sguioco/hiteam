@@ -7,7 +7,8 @@
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `ALTEGIO_MARKETPLACE_APPLICATION_ID` | yes | ID единственного приложения |
-| `ALTEGIO_PARTNER_TOKEN` или `ALTEGIO_MARKETPLACE_PARTNER_KEY` | yes | BearerPartner |
+| `ALTEGIO_PARTNER_TOKEN` | yes | BearerPartner для Marketplace и B2B API |
+| `ALTEGIO_MARKETPLACE_PARTNER_KEY` | optional | Signing key для проверки `user_data_sign`, не API token |
 | `ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN` | yes for staff/schedule | User token для B2B staff/schedule API |
 | `ALTEGIO_CALLBACK_TOKEN` | optional | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks` |
 | `ALTEGIO_MARKETPLACE_PAYMENT_CURRENCY` | optional | Fallback currency для notify (default `USD`) |
@@ -15,6 +16,7 @@
 ## URLs в кабинете разработчика Altegio
 
 - Website / Registration Redirect: `https://hiteam.net/login?from=altegio&app_id=<APPLICATION_ID>`
+- `/signup?...` сохраняет query и редиректит на `/create?...`
 - После login/signup пользователь попадает на `/billing?from=altegio&salon_id=...`
 - Callback disconnect/connect: `https://api.hiteam.net/api/v1/altegio/callback`
 - Staff/schedule webhooks: `https://api.hiteam.net/api/v1/altegio/webhooks`
@@ -33,6 +35,7 @@
 | POST | `/api/v1/altegio/sync/employees` | JWT | Sync employees only |
 | POST | `/api/v1/altegio/sync/schedule` | JWT | Sync schedule only |
 | GET | `/api/v1/altegio/sync/status` | JWT | Staff/schedule sync status |
+| GET | `/api/v1/altegio/onboarding/preview` | public + pending consent | Preview location for signup |
 | ALL | `/api/v1/altegio/callback` | token | Connect/disconnect from Altegio |
 | ALL | `/api/v1/altegio/webhooks` | token | StaffEvent / ScheduleEvent |
 
@@ -55,11 +58,32 @@
 - **Schedule:** Altegio slots → `Shift` с `source=ALTEGIO`; HiTeam `PUBLISHED` с `source=HITEAM` → push в Altegio
 - B2B API: `GET /api/v2/.../team_members`, `GET/PUT /api/v1/company/{id}/staff/schedule`
 
+## Trial protection
+
+Marketplace trial выдаётся один раз для пары `application_id + salon_id`.
+`AltegioMarketplaceTrialClaim` хранится независимо от tenant и не удаляется при
+disconnect или удалении workspace. Повторное подключение может использовать
+только остаток первоначального периода, но не продлить его; новый tenant для того
+же салона повторный trial не получает.
+
 ## Connect flow
 
-1. Connect в маркетплейсе → redirect на HiTeam login с `salon_id` + `app_id`
-2. Login/signup сохраняет params в `sessionStorage`
-3. Redirect на `/billing`
-4. `POST /billing/altegio/connect` → `POST app.alteg.io/marketplace/partner/callback`
-5. Pull статуса Altegio и запись в DB
-6. Background sync сотрудников и расписания
+### Новый аккаунт из Altegio
+
+1. Connect в маркетплейсе → redirect на HiTeam login с `salon_id` + `app_id`.
+2. HiTeam проверяет, что интеграция в статусе `pending`, получает название,
+   адрес, timezone и координаты салона и открывает создание организации с
+   предзаполненными данными.
+3. После регистрации выполняется `POST /billing/altegio/connect` →
+   `POST app.alteg.io/marketplace/partner/callback`.
+4. Компания и основная локация HiTeam синхронизируются из Altegio, затем в фоне
+   импортируются сотрудники и расписание.
+
+### Существующий аккаунт HiTeam
+
+1. На `/billing` пользователь вводит ID салона или вставляет URL Altegio.
+2. HiTeam открывает карточку приложения:
+   `https://app.alteg.io/appstore/{salon_id}/applications/{application_id}/info`.
+3. После подтверждения доступа Altegio возвращает пользователя в HiTeam.
+4. HiTeam активирует интеграцию и запускает синхронизацию. Уже настроенные данные
+   организации не перезаписываются; сотрудники и расписание синхронизируются.

@@ -206,6 +206,7 @@ function buildService() {
   };
   const altegioMarketplaceBilling = {
     isMarketplaceBilled: () => false,
+    configuredApplicationId: () => null,
     notifyPaymentAfterStripe: async () => null,
   };
   const service = new BillingService(

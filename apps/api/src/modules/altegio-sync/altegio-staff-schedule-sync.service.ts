@@ -75,9 +75,73 @@ export class AltegioStaffScheduleSyncService {
   }
 
   async syncAll(tenantId: string) {
+    const organization = await this.syncOrganization(tenantId);
     const employees = await this.syncEmployees(tenantId);
     const schedule = await this.syncSchedule(tenantId);
-    return { employees, schedule };
+    return { organization, employees, schedule };
+  }
+
+  async syncOrganization(tenantId: string) {
+    const ctx = await this.requireConnectedContext(tenantId);
+    const local = await this.prisma.location.findFirst({
+      where: { tenantId, id: ctx.primaryLocationId },
+      select: {
+        address: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+    const unconfigured =
+      !local ||
+      !local.address ||
+      local.address === 'Not set yet' ||
+      local.address === 'Demo address' ||
+      (local.latitude === 0 && local.longitude === 0);
+    if (!unconfigured) {
+      return { synchronized: false, reason: 'organization_already_configured' };
+    }
+
+    const remote = await this.altegioB2b.getLocationProfile(ctx.locationId);
+    const address =
+      remote.address ||
+      [remote.city, remote.country].filter(Boolean).join(', ') ||
+      'Not set yet';
+
+    await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          name: remote.name,
+          timezone: remote.timezone,
+        },
+      }),
+      this.prisma.company.update({
+        where: { id: ctx.companyId },
+        data: {
+          name: remote.name,
+          logoUrl: remote.logoUrl,
+        },
+      }),
+      this.prisma.location.update({
+        where: { id: ctx.primaryLocationId },
+        data: {
+          name: remote.publicName || remote.name,
+          address,
+          country: remote.country,
+          latitude: remote.latitude,
+          longitude: remote.longitude,
+          timezone: remote.timezone,
+        },
+      }),
+    ]);
+
+    return {
+      synchronized: true,
+      locationId: remote.id,
+      companyName: remote.name,
+      address,
+      timezone: remote.timezone,
+    };
   }
 
   async syncEmployees(tenantId: string) {

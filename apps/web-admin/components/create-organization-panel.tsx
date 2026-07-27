@@ -7,6 +7,12 @@ import { cn } from '@/lib/utils';
 import { apiRequest } from '@/lib/api';
 import { AuthSession, persistSession, resolvePostLoginRoute, saveTenantSlug } from '@/lib/auth';
 import {
+  type AltegioOnboardingPreview,
+  captureAltegioMarketplaceParams,
+  resolvePostLoginRouteWithAltegio,
+  saveAltegioOnboardingPreview,
+} from '@/lib/altegio-marketplace';
+import {
   readBrowserStorageItem,
   removeBrowserStorageItem,
   writeBrowserStorageItem,
@@ -244,6 +250,7 @@ export function CreateOrganizationPanel() {
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [altegioPreview, setAltegioPreview] = useState<AltegioOnboardingPreview | null>(null);
   const t = texts[lang];
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(timezone), [timezone]);
 
@@ -254,6 +261,36 @@ export function CreateOrganizationPanel() {
     }
 
     setTimezone(getBrowserTimezone());
+
+    const pending = captureAltegioMarketplaceParams();
+    if (!pending?.locationId) {
+      return;
+    }
+
+    const query = new URLSearchParams({
+      locationId: pending.locationId,
+      ...(pending.applicationId ? { applicationId: pending.applicationId } : {}),
+    });
+    void apiRequest<AltegioOnboardingPreview>(
+      `/altegio/onboarding/preview?${query.toString()}`,
+      {
+        realBackend: true,
+        skipClientCache: true,
+      },
+    )
+      .then((preview) => {
+        setAltegioPreview(preview);
+        saveAltegioOnboardingPreview(preview);
+        setOrganizationName(preview.location.name);
+        setTimezone(preview.location.timezone || getBrowserTimezone());
+      })
+      .catch((previewError) => {
+        setError(
+          previewError instanceof Error
+            ? previewError.message
+            : 'Unable to read the Altegio location.',
+        );
+      });
   }, []);
 
   useEffect(() => {
@@ -316,7 +353,7 @@ export function CreateOrganizationPanel() {
       });
 
       saveTenantSlug(registration.tenantSlug);
-      const nextRoute = resolvePostLoginRoute(session);
+      const nextRoute = resolvePostLoginRouteWithAltegio(resolvePostLoginRoute(session));
       await persistSession(session);
       navigationStarted = true;
       window.location.replace(nextRoute);
@@ -350,6 +387,20 @@ export function CreateOrganizationPanel() {
                 {error ? (
                   <div className="rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
+                  </div>
+                ) : null}
+
+                {altegioPreview ? (
+                  <div className="rounded-[18px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                      {lang === 'ru' ? 'Найдена компания Altegio' : 'Altegio company found'}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {altegioPreview.location.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {altegioPreview.location.address || altegioPreview.location.timezone}
+                    </p>
                   </div>
                 ) : null}
 

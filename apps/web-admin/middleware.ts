@@ -165,7 +165,7 @@ export function middleware(request: NextRequest) {
     hasSession &&
     isAltegioEntry &&
     altegioLocationId &&
-    (pathname === "/login" || pathname === "/signup")
+    (pathname === "/login" || pathname === "/signup" || pathname === "/create")
   ) {
     const billingUrl = getPublicRequestUrl(request, "/billing");
     billingUrl.searchParams.set("from", "altegio");
@@ -190,7 +190,7 @@ export function middleware(request: NextRequest) {
   if (
     hasSession &&
     !forceAuthPage &&
-    (pathname === "/signup" || pathname === "/login")
+    (pathname === "/signup" || pathname === "/login" || pathname === "/create")
   ) {
     return NextResponse.redirect(getPublicRequestUrl(request, "/app"));
   }

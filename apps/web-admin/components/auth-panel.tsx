@@ -51,8 +51,10 @@ import {
   saveTenantSlug,
 } from '@/lib/auth';
 import {
+  type AltegioOnboardingPreview,
   captureAltegioMarketplaceParams,
   resolvePostLoginRouteWithAltegio,
+  saveAltegioOnboardingPreview,
 } from '@/lib/altegio-marketplace';
 import { BrandWordmark } from './brand-wordmark';
 
@@ -416,6 +418,7 @@ export function AuthPanel() {
   const [companyLookupResult, setCompanyLookupResult] = useState<CompanyLookupResult | null>(null);
   const [organizationName, setOrganizationName] = useState('');
   const [organizationTimezone, setOrganizationTimezone] = useState('UTC');
+  const [altegioPreview, setAltegioPreview] = useState<AltegioOnboardingPreview | null>(null);
   const [ownerFirstName, setOwnerFirstName] = useState('');
   const [ownerLastName, setOwnerLastName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
@@ -531,7 +534,37 @@ export function AuthPanel() {
   );
 
   useEffect(() => {
-    captureAltegioMarketplaceParams();
+    const pending = captureAltegioMarketplaceParams();
+    if (!pending?.locationId) {
+      return;
+    }
+
+    setTab('join');
+    setRegistrationMode('create');
+    const query = new URLSearchParams({
+      locationId: pending.locationId,
+      ...(pending.applicationId ? { applicationId: pending.applicationId } : {}),
+    });
+    void apiRequest<AltegioOnboardingPreview>(
+      `/altegio/onboarding/preview?${query.toString()}`,
+      {
+        realBackend: true,
+        skipClientCache: true,
+      },
+    )
+      .then((preview) => {
+        setAltegioPreview(preview);
+        saveAltegioOnboardingPreview(preview);
+        setOrganizationName(preview.location.name);
+        setOrganizationTimezone(preview.location.timezone || getBrowserTimezone());
+      })
+      .catch((error) => {
+        setCreateOrganizationError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to read the Altegio location.',
+        );
+      });
   }, []);
 
   useEffect(() => {
@@ -562,7 +595,6 @@ export function AuthPanel() {
   }, [tab]);
 
   useEffect(() => {
-    captureAltegioMarketplaceParams();
     const saved = readBrowserStorageItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
@@ -1049,6 +1081,21 @@ export function AuthPanel() {
                           {createOrganizationError ? (
                             <div className="auth-panel-field rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                               {createOrganizationError}
+                            </div>
+                          ) : null}
+
+                          {altegioPreview ? (
+                            <div className="auth-panel-field rounded-[18px] border border-[#d8e5ff] bg-[#f7faff] px-4 py-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a88a6]">
+                                {lang === 'ru' ? 'Найдена компания Altegio' : 'Altegio company found'}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-foreground">
+                                {altegioPreview.location.name}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {altegioPreview.location.address ||
+                                  altegioPreview.location.timezone}
+                              </p>
                             </div>
                           ) : null}
 

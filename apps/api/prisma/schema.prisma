@@ -342,6 +342,20 @@ model BillingSubscription {
   @@index([altegioApplicationId, altegioLocationId])
 }
 
+model AltegioMarketplaceTrialClaim {
+  id               String   @id @default(uuid())
+  applicationId    String
+  locationId       String
+  originalTenantId String
+  trialStartedAt   DateTime
+  trialEndsAt      DateTime
+  claimedAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([applicationId, locationId])
+  @@index([originalTenantId, claimedAt])
+}
+
 model BillingPayment {
   id                      String    @id @default(uuid())
   tenantId                String

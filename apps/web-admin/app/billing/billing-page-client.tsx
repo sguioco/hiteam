@@ -16,7 +16,9 @@ import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import {
+  buildAltegioMarketplaceAppUrl,
   clearAltegioMarketplaceParams,
+  extractAltegioSalonId,
   peekAltegioMarketplaceParams,
 } from "@/lib/altegio-marketplace";
 
@@ -331,6 +333,7 @@ export default function BillingPageClient({
   const [seatControlTouched, setSeatControlTouched] = useState(false);
   const [altegioConnecting, setAltegioConnecting] = useState(false);
   const [altegioMessage, setAltegioMessage] = useState<string | null>(null);
+  const [altegioSalonInput, setAltegioSalonInput] = useState("");
   const altegioConnectAttempted = useRef(false);
 
   const usagePercent = useMemo(() => {
@@ -799,7 +802,7 @@ export default function BillingPageClient({
           </div>
         </header>
 
-        {(summary?.altegio?.connected || altegioMessage) && (
+        {summary && (
           <section className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading text-sm shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
             <p className="font-semibold text-foreground">
               {locale === "ru" ? "Altegio Marketplace" : "Altegio Marketplace"}
@@ -810,7 +813,9 @@ export default function BillingPageClient({
                   ? locale === "ru"
                     ? `Подключено · salon ${summary.altegio.locationId}`
                     : `Connected · salon ${summary.altegio.locationId}`
-                  : null)}
+                : locale === "ru"
+                  ? "Подключите салон, чтобы синхронизировать сотрудников и расписание."
+                  : "Connect a location to sync staff and schedules.")}
             </p>
             {summary?.altegio?.connected ? (
               <div className="mt-3 flex flex-wrap gap-4">
@@ -872,7 +877,55 @@ export default function BillingPageClient({
                     : "Sync staff & schedule"}
                 </button>
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-4 max-w-xl space-y-3">
+                <input
+                  className="h-11 w-full rounded-xl border border-[rgba(15,23,42,0.12)] bg-white px-4 text-sm outline-none transition focus:border-[color:var(--accent)]"
+                  onChange={(event) => {
+                    setAltegioSalonInput(event.target.value);
+                    setAltegioMessage(null);
+                  }}
+                  placeholder={
+                    locale === "ru"
+                      ? "ID салона или ссылка из Altegio"
+                      : "Location ID or Altegio URL"
+                  }
+                  value={altegioSalonInput}
+                />
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={
+                    !extractAltegioSalonId(altegioSalonInput) ||
+                    !summary.altegio?.applicationId
+                  }
+                  onClick={() => {
+                    const locationId = extractAltegioSalonId(altegioSalonInput);
+                    const applicationId = summary.altegio?.applicationId || "";
+                    const url = buildAltegioMarketplaceAppUrl(locationId, applicationId);
+                    if (!url) {
+                      setAltegioMessage(
+                        locale === "ru"
+                          ? "Укажите корректный ID салона Altegio."
+                          : "Enter a valid Altegio location ID.",
+                      );
+                      return;
+                    }
+                    window.location.assign(url);
+                  }}
+                  type="button"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  {locale === "ru"
+                    ? "Подключить через Altegio Marketplace"
+                    : "Connect via Altegio Marketplace"}
+                </button>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "ru"
+                    ? "ID салона виден в URL Altegio: /appstore/123456/…"
+                    : "The location ID is visible in the Altegio URL: /appstore/123456/…"}
+                </p>
+              </div>
+            )}
           </section>
         )}
 

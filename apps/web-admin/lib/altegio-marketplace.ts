@@ -1,9 +1,30 @@
 const STORAGE_KEY = "hiteam.altegioMarketplaceConnect";
+const PREVIEW_STORAGE_KEY = "hiteam.altegioMarketplacePreview";
+const CONNECT_WINDOW_MS = 60 * 60 * 1000;
 
 export type AltegioMarketplaceConnectPayload = {
   locationId: string;
   applicationId: string | null;
   capturedAt: number;
+};
+
+export type AltegioOnboardingPreview = {
+  applicationId: string;
+  connectionStatus: string;
+  location: {
+    id: string;
+    name: string;
+    publicName: string | null;
+    address: string;
+    country: string | null;
+    city: string | null;
+    timezone: string;
+    latitude: number;
+    longitude: number;
+    logoUrl: string | null;
+    phone: string | null;
+    email: string | null;
+  };
 };
 
 const LOCATION_KEYS = [
@@ -84,7 +105,30 @@ export function peekAltegioMarketplaceParams(): AltegioMarketplaceConnectPayload
     if (!parsed?.locationId) {
       return null;
     }
+    if (!parsed.capturedAt || Date.now() - parsed.capturedAt > CONNECT_WINDOW_MS) {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
     return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAltegioOnboardingPreview(preview: AltegioOnboardingPreview) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(preview));
+  } catch {
+    // ignore
+  }
+}
+
+export function peekAltegioOnboardingPreview(): AltegioOnboardingPreview | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PREVIEW_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as AltegioOnboardingPreview) : null;
   } catch {
     return null;
   }
@@ -96,9 +140,41 @@ export function clearAltegioMarketplaceParams() {
   }
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(PREVIEW_STORAGE_KEY);
   } catch {
     // ignore
   }
+}
+
+export function buildAltegioMarketplaceAppUrl(locationId: string, applicationId: string) {
+  const salon = locationId.trim();
+  const application = applicationId.trim();
+  if (!/^\d+$/.test(salon) || !/^\d+$/.test(application)) {
+    return null;
+  }
+  const query = new URLSearchParams({
+    utm_source: "hiteam",
+    utm_medium: "integration",
+    utm_campaign: "connect_altegio",
+  });
+  return `https://app.alteg.io/appstore/${salon}/applications/${application}/info?${query.toString()}`;
+}
+
+export function extractAltegioSalonId(value: string) {
+  const normalized = value.trim();
+  if (/^\d+$/.test(normalized)) {
+    return normalized;
+  }
+  const patterns = [
+    /\/appstore\/(\d+)\/applications\//i,
+    /\/compan(?:y|ies)\/(\d+)/i,
+    /[?&#](?:salon_id|location_id|company_id)=(\d+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return "";
 }
 
 export function resolvePostLoginRouteWithAltegio(defaultRoute: string) {

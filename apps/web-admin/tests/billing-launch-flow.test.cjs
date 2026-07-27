@@ -40,6 +40,16 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
     ': "Buy seats"',
     "Billing page must expose the seat purchase button.",
   );
+  assertContains(
+    source,
+    "Connect via Altegio Marketplace",
+    "Unconnected workspaces must be able to start Altegio Marketplace consent.",
+  );
+  assertContains(
+    source,
+    "buildAltegioMarketplaceAppUrl",
+    "Altegio connection must use the marketplace application URL.",
+  );
 }
 
 function testSeatLimitDialogLinksEmployeesToBilling() {
@@ -82,8 +92,47 @@ function testDemoBillingMatchesProductionContracts() {
   );
 }
 
+function testAltegioRegistrationPrefillsOrganization() {
+  const authSource = read("components/auth-panel.tsx");
+  const createSource = read("components/create-organization-panel.tsx");
+  const signupSource = read("app/signup/page.tsx");
+  const marketplaceSource = read("lib/altegio-marketplace.ts");
+
+  assertContains(
+    authSource,
+    "/altegio/onboarding/preview",
+    "Marketplace registration must preview the selected Altegio location.",
+  );
+  assertContains(
+    authSource,
+    "setOrganizationName(preview.location.name)",
+    "Marketplace registration must prefill the organization name.",
+  );
+  assertContains(
+    createSource,
+    "/altegio/onboarding/preview",
+    "/create registration must also preview the Altegio location.",
+  );
+  assertContains(
+    createSource,
+    "resolvePostLoginRouteWithAltegio",
+    "/create must keep the Altegio connect redirect after signup.",
+  );
+  assertContains(
+    signupSource,
+    "redirect(suffix ? `/create?${suffix}` : \"/create\")",
+    "/signup must preserve Altegio query params when redirecting to /create.",
+  );
+  assertContains(
+    marketplaceSource,
+    "/appstore/${salon}/applications/${application}/info",
+    "Existing accounts must return to the Altegio app card for consent.",
+  );
+}
+
 testBillingPageShowsBackendHistoryAndSeatCheckout();
 testSeatLimitDialogLinksEmployeesToBilling();
 testDemoBillingMatchesProductionContracts();
+testAltegioRegistrationPrefillsOrganization();
 
 console.log("web-admin billing launch flow tests passed");

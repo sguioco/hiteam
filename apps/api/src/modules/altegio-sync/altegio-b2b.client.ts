@@ -35,6 +35,21 @@ export type AltegioScheduleDay = {
   slots: AltegioScheduleSlot[];
 };
 
+export type AltegioLocationProfile = {
+  id: string;
+  name: string;
+  publicName: string | null;
+  address: string;
+  country: string | null;
+  city: string | null;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+  logoUrl: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
 @Injectable()
 export class AltegioB2bClient {
   private readonly logger = new Logger(AltegioB2bClient.name);
@@ -47,15 +62,22 @@ export class AltegioB2bClient {
   }
 
   partnerToken() {
-    return (
-      this.configService.get<string>('ALTEGIO_MARKETPLACE_PARTNER_KEY')?.trim() ||
-      this.configService.get<string>('ALTEGIO_PARTNER_TOKEN')?.trim() ||
-      ''
-    );
+    return this.configService.get<string>('ALTEGIO_PARTNER_TOKEN')?.trim() || '';
   }
 
   systemUserToken() {
     return (this.configService.get<string>('ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN') ?? '').trim();
+  }
+
+  async getLocationProfile(locationId: string): Promise<AltegioLocationProfile> {
+    const payload = await this.request(
+      'GET',
+      `${this.apiBase}/api/v1/company/${encodeURIComponent(locationId)}`,
+      undefined,
+      'application/vnd.api.v2+json',
+      false,
+    );
+    return parseLocationProfilePayload(payload, locationId);
   }
 
   async listTeamMembers(locationId: string): Promise<AltegioTeamMember[]> {
@@ -170,16 +192,19 @@ export class AltegioB2bClient {
     url: string,
     json?: Record<string, unknown>,
     accept = 'application/vnd.api.v2+json',
+    includeUserToken = true,
   ) {
     const partnerToken = this.partnerToken();
     const userToken = this.systemUserToken();
-    if (!partnerToken || !userToken) {
+    if (!partnerToken || (includeUserToken && !userToken)) {
       throw new AltegioB2bError('altegio_b2b_tokens_missing', 503);
     }
 
     const headers: Record<string, string> = {
       Accept: accept,
-      Authorization: `Bearer ${partnerToken}, User ${userToken}`,
+      Authorization: includeUserToken
+        ? `Bearer ${partnerToken}, User ${userToken}`
+        : `Bearer ${partnerToken}`,
     };
     if (json) {
       headers['Content-Type'] = 'application/json';
@@ -213,6 +238,51 @@ export class AltegioB2bClient {
       unknown
     >;
   }
+}
+
+function optionalString(value: unknown) {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
+function finiteNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function parseLocationProfilePayload(
+  payload: Record<string, unknown>,
+  locationId: string,
+): AltegioLocationProfile {
+  const rows = Array.isArray(payload.data)
+    ? payload.data
+    : payload.data && typeof payload.data === 'object'
+      ? [payload.data]
+      : [];
+  const row = rows.find(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      String((item as Record<string, unknown>).id ?? '') === locationId,
+  );
+  if (!row) {
+    throw new AltegioB2bError('altegio_location_not_found', 404, payload);
+  }
+
+  return {
+    id: String(row.id),
+    name: String(row.title || row.public_title || `Altegio ${locationId}`).trim(),
+    publicName: optionalString(row.public_title),
+    address: String(row.address || '').trim(),
+    country: optionalString(row.country),
+    city: optionalString(row.city),
+    timezone: String(row.timezone_name || 'UTC').trim() || 'UTC',
+    latitude: finiteNumber(row.coordinate_lat),
+    longitude: finiteNumber(row.coordinate_lon),
+    logoUrl: optionalString(row.logo),
+    phone: optionalString(row.phone),
+    email: optionalString(row.email),
+  };
 }
 
 function digitsOnly(value?: string | null) {
