@@ -1,0 +1,23 @@
+# Altegio REST API Documentation
+
+> Official Altegio API documentation for integrating online booking, CRM, scheduling, POS, and business management features into your applications.
+
+## Table of contents
+
+ - [API Versioning Fix Design](https://developer.alteg.io/plans/2026-01-01-api-versioning-fix-design.md)
+ - [Developer Portal Restructure Design](https://developer.alteg.io/plans/2026-01-03-developer-portal-design.md)
+ - [B2B v2 Production Contract Remediation Plan](https://developer.alteg.io/plans/2026-07-15-b2b-v2-production-contract-remediation.md)
+ - [B2B v2 Coverage Expansion: Next Session Plan](https://developer.alteg.io/plans/2026-07-16-b2b-v2-coverage-expansion.md)
+ - [B2B v2 Route Inventory](https://developer.alteg.io/plans/2026-07-16-b2b-v2-route-inventory.md)
+ - [API Documentation Improvement Plan (v2)](https://developer.alteg.io/plans/api_documentation_improvement_plan.md)
+ - [Developer Portal Implementation Plan](https://developer.alteg.io/plans/2026-01-03-developer-portal-implementation.md)
+ - [API License Agreement](https://developer.alteg.io/en/api-license-agreement.md)
+ - [index.md](https://developer.alteg.io/en.md)
+ - [fintech.md](https://developer.alteg.io/en/fintech.md)
+ - [How to Get API Keys](https://developer.alteg.io/en/get-api-key.md)
+ - [partners.md](https://developer.alteg.io/en/partners.md)
+ - [Business Management](https://developer.alteg.io/en/b2b-v1/openapi.md)
+ - [Business Management](https://developer.alteg.io/en/b2b-v2/openapi.md)
+ - [Developer Tools](https://developer.alteg.io/en/developers/openapi.md)
+ - [Online Booking](https://developer.alteg.io/en/public/openapi.md)
+

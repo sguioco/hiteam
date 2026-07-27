@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AltegioSyncModule } from '../altegio-sync/altegio-sync.module';
 import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
@@ -10,7 +11,15 @@ import { EmployeeInvitationsMailerService } from './employee-invitations.mailer'
 import { EmployeesService } from './employees.service';
 
 @Module({
-  imports: [ConfigModule, AuditModule, BillingModule, CollaborationModule, MailModule, NotificationsModule],
+  imports: [
+    ConfigModule,
+    AuditModule,
+    BillingModule,
+    AltegioSyncModule,
+    CollaborationModule,
+    MailModule,
+    NotificationsModule,
+  ],
   controllers: [EmployeesController],
   providers: [EmployeesService, EmployeeInvitationsMailerService],
   exports: [EmployeesService, EmployeeInvitationsMailerService],

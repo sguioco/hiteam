@@ -1,0 +1,6052 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Developer Tools",
+    "version": "1.0.0",
+    "termsOfService": "https://alteg.io/en/info/terms/",
+    "license": {
+      "name": "Altegio API Agreement",
+      "url": "/en/api-license-agreement"
+    },
+    "description": "APIs for partners building integrations with the Altegio platform.\n**Base URL:** `https://api.alteg.io/api`\n## Available Methods\n**Marketplace** — Manage your marketplace applications: list connected locations, configure tariffs, handle billing, process installation/uninstallation callbacks.\n**Webhooks** — Configure event notifications for your integrations. Receive real-time updates when appointments, clients, or other entities change.\n**VoIP Integration** — Connect telephony systems to match incoming calls with client records and log call history.\n**Dictionaries** — Reference data for building forms and validations: countries, cities, business types."
+  },
+  "servers": [
+    {
+      "url": "https://api.alteg.io/api/v1",
+      "description": "Production"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Developers",
+      "tags": [
+        "Marketplace",
+        "Webhooks",
+        "VoIP Integration",
+        "Dictionaries"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Marketplace",
+      "description": "Marketplace application management, billing, and installation."
+    },
+    {
+      "name": "Webhooks",
+      "description": "Webhook configuration and event notifications.\n\nAltegio sends real-time HTTP POST notifications to your configured URLs when\nevents occur in subscribed locations. Each notification contains a JSON payload\nwith the event envelope (`company_id`, `resource`, `resource_id`, `status`)\nand the full resource `data`.\n\n**Delivery details:**\n- Method: POST\n- Content-Type: application/json\n- Delivery delay: ~5 seconds after the event\n- Your endpoint must respond with a 2xx status code\n\n**Configuration:** Use the [Webhook Settings](#tag/Webhooks/operation/get_event_notification_settings)\nendpoint to subscribe to specific resource types.\n\n**Retry behavior:**\n- If your endpoint returns a non-2xx status or times out, the delivery is considered failed\n- Failed deliveries are not retried automatically\n- Webhook delivery timeout: 15 seconds\n"
+    },
+    {
+      "name": "VoIP Integration",
+      "description": "Telephony integration endpoints."
+    },
+    {
+      "name": "Dictionaries",
+      "description": "Reference data (countries, cities, business types)."
+    }
+  ],
+  "paths": {
+    "/marketplace/application/{application_id}/salons": {
+      "get": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Data About Locations Connected to the Application",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "This endpoint retrieves a list of locations that have connected a specific application, along with detailed information about each.\n",
+        "operationId": "list_marketplace_app_locations",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "application_id",
+            "in": "path",
+            "description": "Application ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "Number of elements per page",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Locations array",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/companies_data_types"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No partner token given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access to application.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/application/{application_id}/tariffs": {
+      "get": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Get application tariffs",
+        "description": "Retrieves list of tariffs for the application.\n\n**Note:** For marketplace partners only.\n",
+        "operationId": "marketplace_partner_applications_tariffs_list",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/vnd.api.v2+json"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer {partner_token}"
+          },
+          {
+            "name": "application_id",
+            "in": "path",
+            "description": "Application ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 123
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tariffs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "description": "List of tariffs",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Tariff ID",
+                            "example": 89
+                          },
+                          "title": {
+                            "type": "string",
+                            "description": "Tariff name",
+                            "example": "1 month"
+                          },
+                          "options": {
+                            "type": "array",
+                            "description": "Tariff options",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "description": "Option ID",
+                                  "example": 123
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "description": "Option name",
+                                  "example": "Solo professional"
+                                },
+                                "overall_price": {
+                                  "type": "number",
+                                  "format": "float",
+                                  "description": "Total price",
+                                  "example": 500
+                                },
+                                "duration_in_months": {
+                                  "type": "integer",
+                                  "description": "Duration in months",
+                                  "example": 1
+                                },
+                                "currency_iso": {
+                                  "type": "string",
+                                  "description": "Currency ISO code",
+                                  "example": "USD"
+                                },
+                                "staff_amount": {
+                                  "type": "integer",
+                                  "description": "Maximum team members for this option",
+                                  "example": 1
+                                },
+                                "free_period_in_months": {
+                                  "type": "integer",
+                                  "description": "Free trial period in months",
+                                  "example": 0
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "array",
+                      "example": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/application/add_discount": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Set payment discount for locations",
+        "description": "Sets a payment discount for specific locations when they pay through Altegio platform.\n\n**Note:** This endpoint is intended for marketplace partners only.\nRequires marketplace partner authorization.\n",
+        "operationId": "marketplace_partner_application_add_discount",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/vnd.api.v2+json"
+            }
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/json"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer {partner_token}"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_ids",
+                  "application_id",
+                  "discount"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_ids": {
+                    "type": "array",
+                    "description": "List of location IDs to apply discount",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "example": [
+                      123,
+                      456
+                    ]
+                  },
+                  "application_id": {
+                    "type": "integer",
+                    "description": "Application ID from marketplace",
+                    "example": 123
+                  },
+                  "discount": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Discount amount (percentage or fixed amount depending on configuration)",
+                    "example": 15.54
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Discount successfully applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object"
+                    },
+                    "meta": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - partner token not provided or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - no access to application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "example": "No access to application"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application not installed in location",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "example": "Application not found"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/application/payment_link": {
+      "get": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Generate payment link",
+        "description": "Generates a payment link for application payment through Altegio platform.\n\n**Note:** For marketplace partners only.\n",
+        "operationId": "marketplace_partner_application_payment_link",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/vnd.api.v2+json"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer {partner_token}"
+          },
+          {
+            "name": "salon_id",
+            "in": "query",
+            "description": "Location ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 123
+          },
+          {
+            "name": "application_id",
+            "in": "query",
+            "description": "Application ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 456
+          },
+          {
+            "name": "discount",
+            "in": "query",
+            "description": "Discount percentage (optional)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "example": 15.55
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment link generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "description": "Payment page URL",
+                          "example": "https://alteg.io/appstore/payment/?salon_id=1111&application_id=1&discount=15.5&source=api&sign=6f9b5bc6fa787780161ed090af9429d5af963562b7a6ac8051888147370674be"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "array",
+                      "example": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application not installed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/application/update_channel": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Update notification channel availability",
+        "description": "Updates available notification channels for the application.\n\n**Note:** Only for Chat Bots and SMS Aggregators category applications.\nFor marketplace partners only.\n",
+        "operationId": "marketplace_partner_applications_update_channel",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/vnd.api.v2+json"
+            }
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/json"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer {partner_token}"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "application_id",
+                  "channel_slug",
+                  "is_available"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "integer",
+                    "description": "Location ID",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "integer",
+                    "description": "Application ID",
+                    "example": 456
+                  },
+                  "channel_slug": {
+                    "type": "string",
+                    "description": "Channel to update availability for",
+                    "enum": [
+                      "sms",
+                      "whatsapp"
+                    ],
+                    "example": "sms"
+                  },
+                  "is_available": {
+                    "type": "boolean",
+                    "description": "Channel availability flag",
+                    "example": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Channel availability updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object"
+                    },
+                    "meta": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "errors": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/salon/{location_id}/application/{application_id}": {
+      "get": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Application Status Data for Any Location",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "This endpoint is used to retrieve information about the application's installation status in a specific location.\n",
+        "operationId": "get_marketplace_integration_status",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "location_id",
+            "in": "path",
+            "description": "Location ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "application_id",
+            "in": "path",
+            "description": "Application ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Info about application location link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "$ref": "#/components/schemas/response_success_true_object"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "connection_status": {
+                          "type": "object",
+                          "description": "Installation status",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "freezed",
+                                "active"
+                              ],
+                              "description": "Application installation status in the location. Pending - waiting for activation from the partner, Freezed - frozen due to non-payment, Active - active"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "description": "Date of link creation"
+                            }
+                          }
+                        },
+                        "payments": {
+                          "type": "array",
+                          "description": "Payments list",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "payment_sum": {
+                                "type": "number",
+                                "description": "The payment amount for the period."
+                              },
+                              "id": {
+                                "type": "number",
+                                "description": "Payment ID."
+                              },
+                              "payment_date": {
+                                "type": "string",
+                                "description": "The date of payment."
+                              },
+                              "is_refunded": {
+                                "type": "boolean",
+                                "description": "Was there a refund?"
+                              },
+                              "period_from": {
+                                "type": "string",
+                                "description": "Subscription start date"
+                              },
+                              "period_to": {
+                                "type": "string",
+                                "description": "Subscription end date"
+                              }
+                            }
+                          }
+                        },
+                        "logs": {
+                          "type": "array",
+                          "description": "Application status change log in location",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "changed_at": {
+                                "type": "string",
+                                "description": "Status change date"
+                              },
+                              "status_from": {
+                                "type": "string",
+                                "description": "Previous app status in location"
+                              },
+                              "status_to": {
+                                "type": "string",
+                                "description": "New application status in the location"
+                              },
+                              "source": {
+                                "type": "string",
+                                "description": "Status Change Source"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/response_meta_empty_object"
+                    }
+                  },
+                  "example": {
+                    "success": true,
+                    "data": {
+                      "logs": [
+                        {
+                          "changed_at": "2022-06-27 12:20:02",
+                          "status_from": "uninstalled",
+                          "status_to": "pending",
+                          "source": "marketplace"
+                        },
+                        {
+                          "changed_at": "2022-06-27 12:22:02",
+                          "status_from": "pending",
+                          "status_to": "active",
+                          "source": "partner_api"
+                        }
+                      ],
+                      "payments": [
+                        {
+                          "id": 1523,
+                          "payment_sum": 1523.12,
+                          "payment_date": "2022-06-27 12:22:02",
+                          "is_refunded": false,
+                          "period_from": "2022-06-27 00:00:00",
+                          "period_to": "2022-07-27 00:00:00"
+                        }
+                      ],
+                      "connection_status": {
+                        "status": "active",
+                        "created_at": "2022-06-27 12:20:02"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No partner token given.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No application access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application isn't installed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/salon/{location_id}/application/{application_id}/uninstall": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Application Uninstall",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "This endpoint is used by the partner service to uninstall the application from a specific location.\n",
+        "operationId": "uninstall_marketplace_app",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "location_id",
+            "in": "path",
+            "description": "Location ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "application_id",
+            "in": "path",
+            "description": "Application ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successfully uninstalled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/200_success_response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No partner token given.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No application access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application isn't installed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/partner/callback": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Application Installation for a Location",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "The integration settings of the partner service must be sent to this address. Once received, the application will be configured and installed for the corresponding location.\n",
+        "operationId": "marketplace_notification_settings_callback",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "application_id"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "number",
+                    "description": "Application ID.",
+                    "example": 123
+                  },
+                  "api_key": {
+                    "type": "number",
+                    "description": "API-key for messaging module.",
+                    "example": "2f181e2a-5c22-4ae7-9d9b-07104f312c28"
+                  },
+                  "webhook_urls": {
+                    "type": "array",
+                    "description": "Webhooks array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "https://example.com/webhook"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "All parameters installed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid parameters given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/422_unprocessable_entity_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/partner/callback/redirect": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Redirect URL after user registration with the partner service",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "After completing registration, the user must be redirected to this URL in the browser, along with any required data needed by the partner service.\n",
+        "operationId": "marketplace_notification_settings_redirect_callback",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "application_id"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "number",
+                    "description": "Application ID.",
+                    "example": 123
+                  },
+                  "api_key": {
+                    "type": "number",
+                    "description": "API-key for messaging module.",
+                    "example": "2f181e2a-5c22-4ae7-9d9b-07104f312c28"
+                  },
+                  "webhook_urls": {
+                    "type": "array",
+                    "description": "Webhooks array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "https://example.com/webhook"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "301": {
+            "description": "Redirect to partner service"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid parameters given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/422_unprocessable_entity_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/partner/payment": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Notify Altegio of Successful Payment",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "A webhook notification must be sent to this address to inform Altegio of a successful payment made on the partner service’s side.\n",
+        "operationId": "marketplace_notification_payment_callback",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "currency_iso",
+                  "application_id",
+                  "payment_sum",
+                  "payment_date",
+                  "period_from",
+                  "period_to"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "number",
+                    "description": "Application ID.",
+                    "example": 123
+                  },
+                  "currency_iso": {
+                    "type": "string",
+                    "description": "Currency ISO (e.g.: USD, EUR, BYN)",
+                    "example": "EUR"
+                  },
+                  "payment_sum": {
+                    "type": "number",
+                    "description": "Payment amount.",
+                    "example": 990.99
+                  },
+                  "payment_date": {
+                    "type": "string",
+                    "description": "Date and time of payment.",
+                    "example": "2022-01-01 10:10:00"
+                  },
+                  "period_from": {
+                    "type": "string",
+                    "description": "Date from which the paid period begins (inclusive).",
+                    "example": "2022-01-01 10:10:00"
+                  },
+                  "period_to": {
+                    "type": "string",
+                    "description": "Date from which the paid period ends (inclusive).",
+                    "example": "2022-02-01 10:10:00"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "title": "Status.",
+                      "type": "boolean",
+                      "description": "Status.",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "description": "Data.",
+                      "properties": {
+                        "id": {
+                          "description": "Payment ID",
+                          "type": "number",
+                          "example": 123
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Wrong parameters given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/422_unprocessable_entity_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/partner/payment/refund/{payment_id}": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Chargeback Notice",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "Chargeback Notice\n",
+        "operationId": "marketplace_payment_refund_callback",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "payment_id",
+            "in": "path",
+            "description": "Payment ID.",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "example": 123
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refund confirmed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid parameters given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/422_unprocessable_entity_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/partner/short_names": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Notify Altegio of Available SMS Sender Names",
+        "servers": [
+          {
+            "url": "https://app.alteg.io"
+          }
+        ],
+        "description": "This endpoint is used to send the list of SMS sender names available to the user. The user will be able to choose from any of the provided sender names.\n",
+        "operationId": "set_marketplace_notification_short_names",
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "application_id",
+                  "short_names"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "number",
+                    "description": "Application ID",
+                    "example": 123
+                  },
+                  "short_names": {
+                    "type": "array",
+                    "description": "Array of SMS names",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Altegio",
+                      "AL"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid params given",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/422_unprocessable_entity_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace_webhook": {
+      "post": {
+        "tags": [
+          "Marketplace"
+        ],
+        "summary": "Webhook from Altegio About Application Events",
+        "security": [],
+        "servers": [
+          {
+            "url": "https://api.alteg.io"
+          }
+        ],
+        "description": "Note: This is not a callable endpoint.\n\nThis section describes how Altegio sends webhook notifications when specific events occur in the application-to-location lifecycle. The following event types are currently supported:\n\n* uninstall — Sent when the application is disabled on the Altegio side.\n* freeze — Sent when the integration is frozen due to service expiration.\n\nYou can configure the webhook URL for receiving these events in your Altegio Developer Account.\n",
+        "operationId": "marketplace_webhook",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "application_id",
+                  "event",
+                  "partner_token"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 123
+                  },
+                  "application_id": {
+                    "type": "number",
+                    "description": "Application ID.",
+                    "example": 123
+                  },
+                  "event": {
+                    "type": "string",
+                    "description": "Event Slug.",
+                    "enum": [
+                      "uninstall",
+                      "freeze"
+                    ],
+                    "example": "uninstall"
+                  },
+                  "partner_token": {
+                    "type": "string",
+                    "description": "Bearer token of the developer's location (to verify the origin of the webhook)",
+                    "example": "yasdfkjah2328aj"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "From the side of the partner, a response code of successful processing (200-299) is expected."
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hooks_settings/{location_id}": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "BearerPartnerUser": []
+          }
+        ],
+        "summary": "Get event notification settings",
+        "operationId": "get_event_notification_settings",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "description": "location ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token, User user_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/hooks_settings_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "urls": [
+                      "https://dev.tools.test.com/test/Hooks"
+                    ],
+                    "active": 0,
+                    "salon": 1,
+                    "service_category": 0,
+                    "service": 1,
+                    "good": 1,
+                    "master": 1,
+                    "client": 1,
+                    "record": 1,
+                    "goods_operations_sale": 1,
+                    "goods_operations_receipt": 1,
+                    "goods_operations_consumable": 1,
+                    "goods_operations_stolen": 1,
+                    "goods_operations_move": 1,
+                    "finances_operation": 1
+                  },
+                  "meta": []
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [
+          {
+            "BearerPartnerUser": []
+          }
+        ],
+        "summary": "Change Event Notification Settings",
+        "operationId": "update_event_notification_settings",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path",
+            "description": "location ID",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token, User user_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "active",
+                  "urls"
+                ],
+                "type": "object",
+                "properties": {
+                  "urls": {
+                    "type": "array",
+                    "description": "List of addresses to send notifications to"
+                  },
+                  "active": {
+                    "type": "number",
+                    "description": "1 - notifications are active, 0 - not active"
+                  },
+                  "salon": {
+                    "type": "number",
+                    "description": "1 - send events by location entity, 0 - do not send"
+                  },
+                  "service_category": {
+                    "type": "number",
+                    "description": "1 - send events by service category entity, 0 - do not send"
+                  },
+                  "service": {
+                    "type": "number",
+                    "description": "1 - send events by service entity, 0 - do not send"
+                  },
+                  "good": {
+                    "type": "number",
+                    "description": "1 - send events by product entity, 0 - don't send"
+                  },
+                  "master": {
+                    "type": "number",
+                    "description": "1 - send events by team member entity, 0 - don't send"
+                  },
+                  "client": {
+                    "type": "number",
+                    "description": "1 - send events by client entity, 0 - don't send"
+                  },
+                  "record": {
+                    "type": "number",
+                    "description": "1 - send events by appointment entity, 0 - do not send"
+                  },
+                  "goods_operations_sale": {
+                    "type": "number",
+                    "description": "1 - send events by the product sale entity, 0 - do not send"
+                  },
+                  "goods_operations_receipt": {
+                    "type": "number",
+                    "description": "1 - send events by the entity arrival of products, 0 - do not send"
+                  },
+                  "goods_operations_consumable": {
+                    "type": "number",
+                    "description": "1 - send events by the consumable write-off entity, 0 - do not send"
+                  },
+                  "goods_operations_stolen": {
+                    "type": "number",
+                    "description": "1 - send events by the product write-off entity, 0 - do not send"
+                  },
+                  "goods_operations_move": {
+                    "type": "number",
+                    "description": "1 - send events by the product movement entity, 0 - no send"
+                  },
+                  "finances_operation": {
+                    "type": "number",
+                    "description": "1 - send events by entity financial operation, 0 - no send"
+                  },
+                  "self_sending": {
+                    "type": "number",
+                    "description": "1 - The webhook creator will receive events triggered by their own actions, 0 - The webhook creator will not receive events triggered by their own actions"
+                  }
+                },
+                "example": {
+                  "urls": [
+                    "https://dev.tools.test.com/test/Hooks"
+                  ],
+                  "active": 0,
+                  "salon": 1,
+                  "service_category": 0,
+                  "service": 1,
+                  "good": 1,
+                  "master": 1,
+                  "client": 1,
+                  "record": 1,
+                  "goods_operations_sale": 1,
+                  "goods_operations_receipt": 1,
+                  "goods_operations_consumable": 1,
+                  "goods_operations_stolen": 1,
+                  "goods_operations_move": 1,
+                  "finances_operation": 1,
+                  "self_sending": 0
+                }
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/hooks_settings_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "urls": [
+                      "https://dev.tools.test.com/test/Hooks"
+                    ],
+                    "active": 0,
+                    "salon": 1,
+                    "service_category": 0,
+                    "service": 1,
+                    "master": 1,
+                    "client": 1,
+                    "record": 1,
+                    "goods_operations_sale": 1,
+                    "goods_operations_receipt": 1,
+                    "goods_operations_consumable": 1,
+                    "goods_operations_stolen": 1,
+                    "goods_operations_move": 1,
+                    "finances_operation": 1
+                  },
+                  "meta": []
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        },
+        "x-codegen-request-body-name": "body"
+      }
+    },
+    "/voip/integration": {
+      "post": {
+        "tags": [
+          "VoIP Integration"
+        ],
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "summary": "VoIP events",
+        "operationId": "handle_voip_integration_event",
+        "description": "#### Enable integration\nTo use the api and activate access to the settings in the user interface, you need to activate the integration by sending the \"Enable integration\" request. After a successful connection, access to the section with routing settings will be opened in the chain user interface.\n\n#### Disable integration\nTo disable the integration, you can use the \"Disable integration\" method. After the integration is disabled, access to the user interface settings section is closed, the requests \"Call notification\" and \"Call information saving\" are not processed.\n\n#### Call notification\nTo display notifications about an incoming call, the \"Call notification\" method is used, the call type (\"incoming\", \"outgoing\", \"internal\") is specified in the parameters, but currently notifications are displayed only for the \"incoming\" value. Notifications are displayed for users defined based on routing settings. When specifying the \"user\" and \"diversion\" parameters at the same time, \"user\" is the priority when searching for routes.\n\n#### Saving call information\nThe information about the call is automatically saved to the chain history and to the history of chain locations in accordance with the call routing settings.",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Request bodies",
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/voip_integration_enable_request_data_types"
+                  },
+                  {
+                    "$ref": "#/components/schemas/voip_integration_disable_request_data_types"
+                  },
+                  {
+                    "$ref": "#/components/schemas/voip_integration_history_request_data_types"
+                  },
+                  {
+                    "$ref": "#/components/schemas/voip_integration_notification_request_data_types"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/voip_integration_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "meta": {
+                    "message": "Accepted"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        },
+        "x-codegen-request-body-name": "body."
+      }
+    },
+    "/voip/integration/calls": {
+      "get": {
+        "tags": [
+          "VoIP Integration"
+        ],
+        "summary": "Get Location's Call List",
+        "description": "This endpoint is designed to get a list of calls in a location, taking into account filters and pagination\n",
+        "operationId": "list_voip_calls",
+        "security": [
+          {
+            "BearerPartnerUser": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "salon_id",
+                  "date_from",
+                  "date_to"
+                ],
+                "type": "object",
+                "properties": {
+                  "salon_id": {
+                    "type": "number",
+                    "description": "Location ID.",
+                    "example": 615243
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "description": "Start date.",
+                    "example": "2026-01-01"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "description": "End date.",
+                    "example": "2026-02-01"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Phone number.",
+                    "example": "+13155550175"
+                  },
+                  "types": {
+                    "type": "array",
+                    "description": "Call types list",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "incoming",
+                        "outgoing",
+                        "internal"
+                      ]
+                    },
+                    "example": [
+                      "incoming",
+                      "internal"
+                    ]
+                  },
+                  "statuses": {
+                    "type": "array",
+                    "description": "Call statuses list",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "success",
+                        "missed",
+                        "cancel",
+                        "busy",
+                        "notallowed",
+                        "notavailable",
+                        "notfound"
+                      ]
+                    },
+                    "example": [
+                      "success",
+                      "cancel"
+                    ]
+                  },
+                  "page": {
+                    "type": "number",
+                    "description": "Page number",
+                    "example": 1
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Amount of elements on page",
+                    "example": 25,
+                    "maximum": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Calls list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "$ref": "#/components/schemas/response_success_true_object"
+                    },
+                    "data": {
+                      "type": "array",
+                      "description": "Calls list",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Call ID"
+                          },
+                          "client_id": {
+                            "type": "integer",
+                            "description": "Client ID (if there is a client in Clients Base)"
+                          },
+                          "caller_phone": {
+                            "type": "string",
+                            "description": "Phone number"
+                          },
+                          "record_link": {
+                            "type": "string",
+                            "description": "Link to call recording (if available)"
+                          },
+                          "duration": {
+                            "type": "integer",
+                            "description": "Call duration in seconds"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "success",
+                              "missed",
+                              "cancel",
+                              "busy",
+                              "notallowed",
+                              "notavailable",
+                              "notfound"
+                            ],
+                            "description": "Call status"
+                          },
+                          "type": {
+                            "type": "string",
+                            "description": "Call type",
+                            "enum": [
+                              "incoming",
+                              "outgoing",
+                              "internal"
+                            ]
+                          },
+                          "call_date": {
+                            "type": "string",
+                            "description": "Date and time of call"
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/response_meta_empty_object"
+                    }
+                  },
+                  "example": {
+                    "success": true,
+                    "data": [
+                      {
+                        "id": 8923525,
+                        "client_id": 51342134,
+                        "caller_phone": "+13155550175",
+                        "record_link": "https://records.example.com/somelink.mp3",
+                        "duration": 244,
+                        "status": "success",
+                        "type": "outgoing",
+                        "call_date": "2026-01-17T23:52:21-05:00"
+                      },
+                      {
+                        "id": 66795308,
+                        "client_id": 0,
+                        "caller_phone": "+13155550175",
+                        "record_link": "",
+                        "duration": 0,
+                        "status": "missed",
+                        "type": "incoming",
+                        "call_date": "2026-01-17T12:31:12-05:00"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Partner token not passed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access (requires the right to view \"Overview - Calls\").",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/countries": {
+      "get": {
+        "tags": [
+          "Dictionaries"
+        ],
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "summary": "Get a list of countries",
+        "operationId": "get_country_list",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/countries_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": 7,
+                      "title": "USA",
+                      "full_title": "United States",
+                      "iso_code": "US",
+                      "phone_code": "1",
+                      "phone_template": "+1 xxx-xxx-xxxx",
+                      "phone_example": "+1 201-123-4567",
+                      "currency": "$",
+                      "exchange": 32.99,
+                      "lang_id": 2,
+                      "group_type": 1
+                    },
+                    {
+                      "id": 56,
+                      "title": "France",
+                      "full_title": "France",
+                      "iso_code": "FR",
+                      "phone_code": "33",
+                      "phone_template": "+33 x xx xx xx xx",
+                      "phone_example": "+33 1 23 45 67 89",
+                      "currency": "€",
+                      "exchange": 11.18,
+                      "lang_id": 8,
+                      "group_type": 1
+                    }
+                  ],
+                  "meta": []
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cities": {
+      "get": {
+        "tags": [
+          "Dictionaries"
+        ],
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "summary": "Get a list of cities",
+        "operationId": "get_city_list",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "country_id",
+            "in": "query",
+            "description": "Country ID to get cities from",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "description": "Location ID. If passed, the city of the location will also be returned, regardless of whether it belongs to the specified country or not",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cities_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": 2,
+                      "country_id": 7,
+                      "title": "New York"
+                    },
+                    {
+                      "id": 1040,
+                      "country_id": 30,
+                      "title": "Belfast"
+                    },
+                    {
+                      "id": 1201,
+                      "country_id": 38,
+                      "title": "București"
+                    },
+                    {
+                      "id": 1334,
+                      "country_id": 31,
+                      "title": "Budapest"
+                    }
+                  ],
+                  "meta": []
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/references/business_groups_with_types": {
+      "get": {
+        "tags": [
+          "Dictionaries"
+        ],
+        "security": [
+          {
+            "BearerPartner": []
+          }
+        ],
+        "summary": "Get business types by group",
+        "operationId": "get_business_types_by_group",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "e.g. application/vnd.api.v2+json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "application/vnd.api.v2+json"
+          },
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "application/json",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Bearer partner_token, User user_token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/references_business_group_response_data_types"
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": 10,
+                      "title": "Domestic services",
+                      "image": "https://app.alteg.io/images/business-groups/services.png",
+                      "types": [
+                        {
+                          "id": 31,
+                          "title": "Studio",
+                          "business_group_id": 10
+                        }
+                      ]
+                    },
+                    {
+                      "id": 1,
+                      "title": "beauty",
+                      "image": "https://app.alteg.io/images/business-groups/beauty.png",
+                      "types": [
+                        {
+                          "id": 1,
+                          "title": "Beauty Salons",
+                          "business_group_id": 1
+                        },
+                        {
+                          "id": 25,
+                          "title": "Spa",
+                          "business_group_id": 1
+                        }
+                      ]
+                    }
+                  ],
+                  "meta": {
+                    "count": 10
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/401_unauthorized_response"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/403_forbidden_response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/404_not_found_response"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerPartner": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Bearer {PartnerToken}",
+        "description": "Partner API token for accessing developer endpoints"
+      },
+      "BearerPartnerUser": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Bearer {PartnerToken}, User {UserToken}",
+        "description": "Combined partner and user tokens for authenticated user operations"
+      }
+    },
+    "schemas": {
+      "companies_data_types": {
+        "title": "Root Type for companies_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Success status (true)"
+          },
+          "data": {
+            "type": "array",
+            "description": "Array of objects",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "number",
+                  "description": "location ID"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "location name"
+                },
+                "public_title": {
+                  "type": "string",
+                  "description": "Public display name of the location"
+                },
+                "short_descr": {
+                  "type": "string",
+                  "description": "location category"
+                },
+                "logo": {
+                  "type": "string",
+                  "description": "location logo image address"
+                },
+                "active": {
+                  "type": "integer",
+                  "description": "Is the location active (1 = active, 0 = inactive)"
+                },
+                "phone": {
+                  "type": "string",
+                  "description": "location phone number"
+                },
+                "phones": {
+                  "type": "array",
+                  "description": "Array of location phone numbers",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "email": {
+                  "type": "string",
+                  "description": "Location email address"
+                },
+                "country_id": {
+                  "type": "number",
+                  "description": "Identifier of the country in which the location is located"
+                },
+                "schedule": {
+                  "type": "string",
+                  "description": "location schedule"
+                },
+                "country": {
+                  "type": "string",
+                  "description": "location country name"
+                },
+                "city_id": {
+                  "type": "number",
+                  "description": "City ID where the location is located"
+                },
+                "city": {
+                  "type": "string",
+                  "description": "location city name"
+                },
+                "timezone": {
+                  "type": "number",
+                  "description": "Timezone offset in hours"
+                },
+                "timezone_name": {
+                  "type": "string",
+                  "description": "timezone locations"
+                },
+                "address": {
+                  "type": "string",
+                  "description": "Address where the location is located"
+                },
+                "coordinate_lat": {
+                  "type": "number",
+                  "description": "Latitude",
+                  "format": "float"
+                },
+                "coordinate_lon": {
+                  "type": "number",
+                  "description": "Longitude",
+                  "format": "float"
+                },
+                "phone_confirmation": {
+                  "type": "boolean",
+                  "description": "Do I need to confirm my phone number via SMS when appointment?"
+                },
+                "active_staff_count": {
+                  "type": "number",
+                  "description": "Number of team members available for appointment"
+                },
+                "next_slot": {
+                  "type": "string",
+                  "description": "Date and time of the next free session in the location (ISO8601). The field will be present only if the GET parameter forBooking=1 is passed",
+                  "format": "date-time"
+                },
+                "app_ios": {
+                  "type": "string",
+                  "description": "Link to iOS App"
+                },
+                "app_android": {
+                  "type": "string",
+                  "description": "Link to app for Android"
+                },
+                "currency_short_title": {
+                  "type": "string",
+                  "description": "Abbreviated currency name"
+                },
+                "reminds_sms_disabled": {
+                  "type": "boolean",
+                  "description": "SMS reminders disabled"
+                },
+                "reminds_sms_default": {
+                  "type": "integer",
+                  "description": "Default SMS reminder setting"
+                },
+                "group_priority": {
+                  "type": "number",
+                  "description": "The higher the priority, the higher the location when displayed in the list of chain locations"
+                },
+                "bookform_group_priority": {
+                  "type": "number",
+                  "description": "Priority for booking form display"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Full HTML description of the location"
+                },
+                "photos": {
+                  "type": "array",
+                  "description": "Array of location photo paths",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "company_photos": {
+                  "type": "array",
+                  "description": "Array of full location photo URLs",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "booking_widget_promo": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Booking widget promo configuration"
+                }
+              }
+            }
+          },
+          "meta": {
+            "type": "array",
+            "description": "Metadata (empty array)",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "description": "Get a list of locations",
+        "example": {
+          "success": true,
+          "data": [
+            {
+              "id": 1050,
+              "title": "La Visage",
+              "public_title": "La Visage Beauty",
+              "short_descr": "Beauty saloon",
+              "logo": "https://app.alteg.io/images/no-master.png",
+              "active": 1,
+              "phone": "+13155550175",
+              "phones": [
+                "+13155550175"
+              ],
+              "email": "info@lavisage.com",
+              "country_id": 7,
+              "schedule": "",
+              "country": "United States",
+              "city_id": 181,
+              "city": "New York",
+              "timezone": -5,
+              "timezone_name": "America/New_York",
+              "address": "New York, 787 Jackson Drive",
+              "coordinate_lat": 40.73061,
+              "coordinate_lon": -73.935242,
+              "phone_confirmation": true,
+              "active_staff_count": 2,
+              "next_slot": "2026-03-23T10:10:00-05:00",
+              "app_ios": "",
+              "app_android": "",
+              "currency_short_title": "$",
+              "reminds_sms_disabled": false,
+              "reminds_sms_default": 1,
+              "group_priority": 900,
+              "bookform_group_priority": 0,
+              "description": "<p>Welcome to La Visage</p>",
+              "photos": [],
+              "booking_widget_promo": null
+            }
+          ],
+          "meta": []
+        }
+      },
+      "response_success_false_object": {
+        "title": "Unsuccessful response status",
+        "type": "boolean",
+        "description": "Response status.",
+        "example": false
+      },
+      "response_data_null_object": {
+        "title": "No data in response",
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "Response data.",
+        "example": null
+      },
+      "response_meta_error_unauthorized_object": {
+        "title": "Response error message",
+        "type": "object",
+        "description": "Additional response data.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message.",
+            "example": "Authentication needed."
+          }
+        }
+      },
+      "401_unauthorized_response": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/components/schemas/response_success_false_object"
+          },
+          "data": {
+            "$ref": "#/components/schemas/response_data_null_object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/response_meta_error_unauthorized_object"
+          }
+        }
+      },
+      "response_meta_error_forbidden_object": {
+        "title": "Response error message",
+        "type": "object",
+        "description": "Additional response data.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message.",
+            "example": "Access denied."
+          }
+        }
+      },
+      "403_forbidden_response": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/components/schemas/response_success_false_object"
+          },
+          "data": {
+            "$ref": "#/components/schemas/response_data_null_object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/response_meta_error_forbidden_object"
+          }
+        }
+      },
+      "response_success_true_object": {
+        "title": "Successful response status",
+        "type": "boolean",
+        "description": "Response status.",
+        "example": true
+      },
+      "response_meta_empty_object": {
+        "title": "Empty meta object",
+        "type": [
+          "object",
+          "array"
+        ],
+        "description": "Additional response data (empty object or empty array)",
+        "example": {}
+      },
+      "404_not_found_response": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/components/schemas/response_success_false_object"
+          },
+          "data": {
+            "$ref": "#/components/schemas/response_data_null_object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/response_meta_empty_object"
+          }
+        }
+      },
+      "200_success_response": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/components/schemas/response_success_true_object"
+          },
+          "data": {
+            "$ref": "#/components/schemas/response_data_null_object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/response_meta_empty_object"
+          }
+        }
+      },
+      "response_meta_validation_exception_object": {
+        "title": "Request validation error message",
+        "type": "object",
+        "description": "Additional response data.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message.",
+            "example": "An error has occurred."
+          },
+          "errors": {
+            "type": "array",
+            "description": "Set of a validation error messages.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "422_unprocessable_entity_response": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/components/schemas/response_success_false_object"
+          },
+          "data": {
+            "$ref": "#/components/schemas/response_data_null_object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/response_meta_validation_exception_object"
+          }
+        }
+      },
+      "hooks_settings_response_data_types": {
+        "title": "Root Type for hooks_settings_response_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Execution success status (true)"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "urls": {
+                "type": "array",
+                "description": "List of addresses to send notifications to",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "active": {
+                "type": "integer",
+                "description": "1 - notifications are active, 0 - not active",
+                "format": "int32"
+              },
+              "salon": {
+                "type": "integer",
+                "description": "1 - send events by location entity, 0 - do not send",
+                "format": "int32"
+              },
+              "service_category": {
+                "type": "integer",
+                "description": "1 - send events by service category entity, 0 - do not send",
+                "format": "int32"
+              },
+              "service": {
+                "type": "integer",
+                "description": "1 - send events by service entity, 0 - do not send",
+                "format": "int32"
+              },
+              "good": {
+                "type": "integer",
+                "description": "1 - send events by product entity, 0 - don't send",
+                "format": "int32"
+              },
+              "master": {
+                "type": "integer",
+                "description": "1 - send events by team member entity, 0 - don't send",
+                "format": "int32"
+              },
+              "client": {
+                "type": "integer",
+                "description": "1 - send events by client entity, 0 - don't send",
+                "format": "int32"
+              },
+              "record": {
+                "type": "integer",
+                "description": "1 - send events by appointment entity, 0 - do not send",
+                "format": "int32"
+              },
+              "goods_operations_sale": {
+                "type": "integer",
+                "description": "1 - send events by the product sale entity, 0 - do not send",
+                "format": "int32"
+              },
+              "goods_operations_receipt": {
+                "type": "integer",
+                "description": "1 - send events by the entity arrival of products, 0 - do not send",
+                "format": "int32"
+              },
+              "goods_operations_consumable": {
+                "type": "integer",
+                "description": "1 - send events by the consumable write-off entity, 0 - do not send",
+                "format": "int32"
+              },
+              "goods_operations_stolen": {
+                "type": "integer",
+                "description": "1 - send events by the product write-off entity, 0 - do not send",
+                "format": "int32"
+              },
+              "goods_operations_move": {
+                "type": "integer",
+                "description": "1 - send events by the product movement entity, 0 - no send",
+                "format": "int32"
+              },
+              "finances_operation": {
+                "type": "integer",
+                "description": "1 - send events by entity financial operation, 0 - no send",
+                "format": "int32"
+              }
+            },
+            "description": "Object with data"
+          },
+          "meta": {
+            "type": "array",
+            "description": "Metadata (empty array)",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "description": "Event notification settings",
+        "example": {
+          "success": true,
+          "data": {
+            "urls": [
+              "https://dev.tools.test.com/test/Hooks"
+            ],
+            "active": 0,
+            "salon": 1,
+            "service_category": 0,
+            "service": 1,
+            "good": 1,
+            "master": 1,
+            "client": 1,
+            "record": 1,
+            "goods_operations_sale": 1,
+            "goods_operations_receipt": 1,
+            "goods_operations_consumable": 1,
+            "goods_operations_stolen": 1,
+            "goods_operations_move": 1,
+            "finances_operation": 1
+          },
+          "meta": []
+        }
+      },
+      "voip_integration_enable_request_data_types": {
+        "title": "Connect Integration",
+        "required": [
+          "command",
+          "crm_token",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Operation type: 'setup'"
+          },
+          "type": {
+            "type": "string",
+            "description": "Operation type, in this case 'enable'"
+          },
+          "crm_token": {
+            "type": "string",
+            "description": "CRM-token from the VoIP Integration in the client's chain section"
+          }
+        },
+        "description": "Connect integration",
+        "example": {
+          "command": "setup",
+          "type": "enable",
+          "crm_token": "7cf262d6-1656-43f9-86ac-2826bdc125d2"
+        }
+      },
+      "voip_integration_disable_request_data_types": {
+        "title": "Disable integration",
+        "required": [
+          "command",
+          "crm_token",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Operation type: 'setup'"
+          },
+          "type": {
+            "type": "string",
+            "description": "Operation type, in this case 'disable'"
+          },
+          "crm_token": {
+            "type": "string",
+            "description": "CRM-token from the VoIP Integration in the client's chain section"
+          }
+        },
+        "description": "Disable Integration",
+        "example": {
+          "command": "setup",
+          "type": "disable",
+          "crm_token": "7cf262d6-1656-43f9-86ac-2826bdc125d2"
+        }
+      },
+      "voip_integration_history_request_data_types": {
+        "title": "Saving call information",
+        "required": [
+          "command",
+          "crm_token",
+          "diversion",
+          "phone",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Operation type: 'history'"
+          },
+          "type": {
+            "type": "string",
+            "description": "Operation type (\"incoming\", \"outgoing\", \"internal\")"
+          },
+          "crm_token": {
+            "type": "string",
+            "description": "CRM-token from the VoIP Integration in the client's chain section"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Caller number"
+          },
+          "user": {
+            "type": "string",
+            "description": "SIP subscriber ID"
+          },
+          "diversion": {
+            "type": "string",
+            "description": "The number through which the call came"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Call duration (in seconds)"
+          },
+          "link": {
+            "type": "string",
+            "description": "Call recording link"
+          },
+          "call_id": {
+            "type": "string",
+            "description": "Call ID in voip system"
+          },
+          "status": {
+            "type": "string",
+            "description": "Call status 'success'|'missed'"
+          },
+          "date": {
+            "type": "string",
+            "description": "Date and time of the call (ISO8601)",
+            "format": "date-time"
+          }
+        },
+        "description": "Save Call Information",
+        "example": {
+          "command": "history",
+          "type": "incoming",
+          "crm_token": "7cf262d6-1656-43f9-86ac-2826bdc125d2",
+          "phone": "+13155550175",
+          "user": "external_user_id",
+          "diversion": "+13155550176",
+          "duration": 90,
+          "link": "https://external.call.storage/call_record.mp3",
+          "call_id": "external_call_id",
+          "status": "success",
+          "date": "2026-09-01T14:40:28-05:00"
+        }
+      },
+      "voip_integration_notification_request_data_types": {
+        "title": "call notification",
+        "required": [
+          "command",
+          "crm_token",
+          "diversion",
+          "phone",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Operation type: 'event'"
+          },
+          "type": {
+            "type": "string",
+            "description": "Operation type, in this case \"incoming\""
+          },
+          "crm_token": {
+            "type": "string",
+            "description": "CRM-token from the VoIP Integration in the client's chain section"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Caller number"
+          },
+          "user": {
+            "type": "string",
+            "description": "SIP number"
+          },
+          "diversion": {
+            "type": "string",
+            "description": "The number through which the call came"
+          }
+        },
+        "description": "Call Notification",
+        "example": {
+          "command": "event",
+          "type": "incoming",
+          "crm_token": "7cf262d6-1656-43f9-86ac-2826bdc125d2",
+          "phone": "+13155550175",
+          "user": "external_user_id",
+          "diversion": "+13155550176"
+        }
+      },
+      "voip_integration_response_data_types": {
+        "title": "Root Type for voip_integration_setup_response_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Success status (true)"
+          },
+          "data": {
+            "type": "string",
+            "description": "Contains null"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "description": "Metadata (contain an \"Accepted\" message)"
+          }
+        },
+        "description": "Connect Integration",
+        "example": {
+          "success": true,
+          "meta": {
+            "message": "Accepted"
+          }
+        }
+      },
+      "countries_response_data_types": {
+        "title": "Root Type for countries_response_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Execution success status (true)"
+          },
+          "data": {
+            "type": "array",
+            "description": "Array of objects with data",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number",
+                  "description": "Country ID"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Short country name"
+                },
+                "full_title": {
+                  "type": "string",
+                  "description": "Full country name"
+                },
+                "iso_code": {
+                  "type": "string",
+                  "description": "ISO 3166-1 alpha-2 country code"
+                },
+                "phone_code": {
+                  "type": "string",
+                  "description": "Country phone code"
+                },
+                "phone_template": {
+                  "type": "string",
+                  "description": "Country phone number mask"
+                },
+                "phone_example": {
+                  "type": "string",
+                  "description": "Country phone number example"
+                },
+                "currency": {
+                  "type": "string",
+                  "description": "Country currency symbol"
+                },
+                "exchange": {
+                  "type": "number",
+                  "description": "Currency exchange rate"
+                },
+                "lang_id": {
+                  "type": "number",
+                  "description": "Language ID"
+                },
+                "group_type": {
+                  "type": "number",
+                  "description": "Country group type"
+                },
+                "is_eu": {
+                  "type": "boolean",
+                  "description": "Whether the country is in the European Union"
+                }
+              }
+            }
+          },
+          "meta": {
+            "type": "array",
+            "description": "Metadata (empty array)",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "description": "Get a list of countries",
+        "example": {
+          "success": true,
+          "data": [
+            {
+              "id": 7,
+              "title": "USA",
+              "full_title": "United States",
+              "iso_code": "US",
+              "phone_code": "1",
+              "phone_template": "+1 xxx-xxx-xxxx",
+              "phone_example": "+1 201-123-4567",
+              "currency": "$",
+              "exchange": 32.99,
+              "lang_id": 2,
+              "group_type": 1,
+              "is_eu": false
+            },
+            {
+              "id": 56,
+              "title": "France",
+              "full_title": "France",
+              "iso_code": "FR",
+              "phone_code": "33",
+              "phone_template": "+33 x xx xx xx xx",
+              "phone_example": "+33 1 23 45 67 89",
+              "currency": "€",
+              "exchange": 11.18,
+              "lang_id": 8,
+              "group_type": 1,
+              "is_eu": true
+            }
+          ],
+          "meta": []
+        }
+      },
+      "cities_response_data_types": {
+        "title": "Root Type for cities_response_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Execution success status (true)"
+          },
+          "data": {
+            "type": "array",
+            "description": "Array of objects with data",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number",
+                  "description": "City ID"
+                },
+                "country_id": {
+                  "type": "number",
+                  "description": "Country ID"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "City name"
+                }
+              }
+            }
+          },
+          "meta": {
+            "type": "array",
+            "description": "Metadata (empty array)",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "description": "Get a list of cities",
+        "example": {
+          "success": true,
+          "data": [
+            {
+              "id": 2,
+              "country_id": 7,
+              "title": "New York"
+            },
+            {
+              "id": 1040,
+              "country_id": 30,
+              "title": "Belfast"
+            },
+            {
+              "id": 1201,
+              "country_id": 38,
+              "title": "București"
+            },
+            {
+              "id": 1334,
+              "country_id": 31,
+              "title": "Budapest"
+            }
+          ],
+          "meta": []
+        }
+      },
+      "references_business_group_response_data_types": {
+        "title": "Root Type for references_business_group_response_data_types",
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Execution success status (true)"
+          },
+          "data": {
+            "type": "array",
+            "description": "Array of objects with data",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "number",
+                  "description": "Category ID"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "name of category"
+                },
+                "image": {
+                  "type": "string",
+                  "description": "Group image"
+                },
+                "image_small": {
+                  "type": "string",
+                  "description": "Group small image"
+                },
+                "types": {
+                  "type": "array",
+                  "description": "Related business types",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "number",
+                        "description": "Type identifier"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Type name"
+                      },
+                      "business_group_id": {
+                        "type": "number",
+                        "description": "Business group ID"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "description": "Metadata (contains the number of business types found)"
+          }
+        },
+        "description": "Getting a list of business types grouped by group",
+        "example": {
+          "success": true,
+          "data": [
+            {
+              "id": 10,
+              "title": "Domestic services",
+              "image": "https://app.alteg.io/images/business-groups/services.png",
+              "types": [
+                {
+                  "id": 31,
+                  "title": "Studio",
+                  "business_group_id": 10
+                }
+              ]
+            },
+            {
+              "id": 1,
+              "title": "beauty",
+              "image": "https://app.alteg.io/images/business-groups/beauty.png",
+              "types": [
+                {
+                  "id": 1,
+                  "title": "Beauty Salons",
+                  "business_group_id": 1
+                },
+                {
+                  "id": 25,
+                  "title": "Spa",
+                  "business_group_id": 1
+                }
+              ]
+            }
+          ],
+          "meta": {
+            "count": 10
+          }
+        }
+      },
+      "salon": {
+        "title": "Webhook Salon Data",
+        "description": "Location data sent in webhook notifications. Corresponds to the output of the location detail API. Contains comprehensive location information.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Location ID."
+          },
+          "title": {
+            "type": "string",
+            "description": "Location name."
+          },
+          "public_title": {
+            "type": "string",
+            "description": "Public display name."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Primary phone number."
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "All phone numbers."
+          },
+          "country_id": {
+            "type": "integer"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city_id": {
+            "type": "integer"
+          },
+          "city": {
+            "type": "string"
+          },
+          "active": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "1 — active, 0 — inactive."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Timezone offset (e.g. \"+3\")."
+          },
+          "timezone_name": {
+            "type": "string",
+            "description": "IANA timezone name."
+          },
+          "address": {
+            "type": "string"
+          },
+          "coordinate_lat": {
+            "type": "number"
+          },
+          "coordinate_lon": {
+            "type": "number"
+          },
+          "currency_short_title": {
+            "type": "string",
+            "description": "Currency code (e.g. \"USD\")."
+          },
+          "business_group_id": {
+            "type": "integer"
+          },
+          "business_type_id": {
+            "type": "integer"
+          },
+          "site": {
+            "type": "string",
+            "description": "Website URL."
+          },
+          "zip": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string",
+            "description": "Logo URL."
+          },
+          "short_descr": {
+            "type": "string",
+            "description": "Short description."
+          },
+          "description": {
+            "type": "string",
+            "description": "Full description (HTML)."
+          },
+          "schedule": {
+            "type": "object",
+            "description": "Working hours schedule."
+          },
+          "email": {
+            "type": "string"
+          },
+          "social": {
+            "type": "object",
+            "description": "Social media links.",
+            "properties": {
+              "facebook": {
+                "type": "string"
+              },
+              "instagram": {
+                "type": "string"
+              },
+              "telegram": {
+                "type": "string"
+              },
+              "whatsapp": {
+                "type": "string"
+              },
+              "viber": {
+                "type": "string"
+              },
+              "vk": {
+                "type": "string"
+              }
+            }
+          },
+          "main_group_id": {
+            "type": "integer"
+          },
+          "main_group": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "record_type_id": {
+            "type": "integer"
+          },
+          "booking_comment_required": {
+            "type": "boolean"
+          },
+          "booking_email_required": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "staff": {
+        "title": "Webhook Staff Data",
+        "description": "Team member data sent in webhook notifications. Matches the output of the team member detail API.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Team member ID."
+          },
+          "api_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Full name."
+          },
+          "specialization": {
+            "type": "string"
+          },
+          "position": {
+            "type": "object",
+            "description": "Position details.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "show_rating": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "rating": {
+            "type": "number"
+          },
+          "votes_count": {
+            "type": "integer"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "Avatar thumbnail URL."
+          },
+          "avatar_big": {
+            "type": "string",
+            "description": "Full-size avatar URL."
+          },
+          "comments_count": {
+            "type": "integer"
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Sort order."
+          },
+          "information": {
+            "type": "string",
+            "description": "HTML biography."
+          },
+          "hidden": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "fired": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "1 — dismissed, 0 — active."
+          },
+          "status": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "position_id": {
+            "type": "integer"
+          },
+          "schedule_till": {
+            "type": "string",
+            "description": "Schedule end date."
+          },
+          "image_group": {
+            "type": "object",
+            "description": "Image group data."
+          },
+          "prepaid": {
+            "type": "string",
+            "description": "Prepaid slug."
+          },
+          "user_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "user": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "avatar": {
+                "type": "string"
+              }
+            }
+          },
+          "has_access_timetable": {
+            "type": "boolean"
+          },
+          "is_paid_staff": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "service": {
+        "title": "Webhook Service Data",
+        "description": "Service data sent in webhook notifications. Matches the output of the service detail API.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Service ID."
+          },
+          "salon_service_id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "booking_title": {
+            "type": "string",
+            "description": "Title shown in online booking."
+          },
+          "category_id": {
+            "type": "integer"
+          },
+          "price_min": {
+            "type": "number"
+          },
+          "price_max": {
+            "type": "number"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "Duration in minutes."
+          },
+          "discount": {
+            "type": "number"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Sort order."
+          },
+          "active": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "api_id": {
+            "type": "string"
+          },
+          "staff": {
+            "type": "array",
+            "description": "Assigned team members.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "seance_length": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "image_group": {
+            "type": "object"
+          },
+          "prepaid": {
+            "type": "string"
+          },
+          "is_multi": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "is_price_managed_only_in_chain": {
+            "type": "boolean"
+          },
+          "is_comment_managed_only_in_chain": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "service_category": {
+        "title": "Webhook Service Category Data",
+        "description": "Service category data sent in webhook notifications.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Service category ID."
+          },
+          "salon_service_id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Sort order."
+          },
+          "api_id": {
+            "type": "string"
+          },
+          "staff": {
+            "type": "array",
+            "description": "Team member IDs assigned to this category.",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "is_chain": {
+            "type": "boolean"
+          }
+        }
+      },
+      "client": {
+        "title": "Webhook Client Data",
+        "description": "Client data sent in webhook notifications. Uses the full client profile with all default includes (email, card, birth_date, comment, discount, visits, sex, sms preferences, money, importance, categories, custom_fields).",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Client ID."
+          },
+          "name": {
+            "type": "string",
+            "description": "First name."
+          },
+          "surname": {
+            "type": "string"
+          },
+          "patronymic": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Formatted full name."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number (visible — webhook always has full access)."
+          },
+          "email": {
+            "type": "string"
+          },
+          "card": {
+            "type": "string",
+            "description": "Loyalty card number."
+          },
+          "birth_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Birthday in YYYY-MM-DD format."
+          },
+          "comment": {
+            "type": "string",
+            "description": "Client card comment."
+          },
+          "discount": {
+            "type": "number",
+            "description": "Personal discount percentage."
+          },
+          "visits": {
+            "type": "integer",
+            "description": "Total visit count."
+          },
+          "sex_id": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "description": "0 — unknown, 1 — male, 2 — female."
+          },
+          "sex": {
+            "type": "string"
+          },
+          "sms_check": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "sms_bot": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "sms_not": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "spent": {
+            "type": "number",
+            "description": "Total amount spent."
+          },
+          "paid": {
+            "type": "number",
+            "description": "Total amount paid."
+          },
+          "balance": {
+            "type": "number",
+            "description": "Current balance."
+          },
+          "importance_id": {
+            "type": "integer",
+            "description": "0 — normal, 1 — VIP, 2 — blacklisted."
+          },
+          "importance": {
+            "type": "string"
+          },
+          "categories": {
+            "type": "array",
+            "description": "Client category labels.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "last_change_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "custom_fields": {
+            "type": "array",
+            "description": "Custom field values configured for this location.",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "record": {
+        "title": "Webhook Record Data",
+        "description": "Appointment data sent in webhook notifications. Contains comprehensive appointment details including services, team member, client, and financial information.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Appointment ID."
+          },
+          "company_id": {
+            "type": "integer"
+          },
+          "staff_id": {
+            "type": "integer"
+          },
+          "clients_count": {
+            "type": "integer"
+          },
+          "date": {
+            "type": "string"
+          },
+          "datetime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "create_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_change_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "visit_id": {
+            "type": "integer"
+          },
+          "visit_attendance": {
+            "type": "integer"
+          },
+          "attendance": {
+            "type": "integer"
+          },
+          "confirmed": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "seance_length": {
+            "type": "integer",
+            "description": "Duration in seconds."
+          },
+          "length": {
+            "type": "integer"
+          },
+          "sms_before": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "sms_now": {
+            "type": "boolean"
+          },
+          "sms_now_text": {
+            "type": "string"
+          },
+          "email_now": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "notified": {
+            "type": "string"
+          },
+          "master_request": {
+            "type": "string"
+          },
+          "api_id": {
+            "type": "string"
+          },
+          "from_url": {
+            "type": "string"
+          },
+          "review_requested": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "created_user_id": {
+            "type": "integer"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "paid_full": {
+            "type": "boolean"
+          },
+          "prepaid": {
+            "type": "boolean"
+          },
+          "prepaid_confirmed": {
+            "type": "boolean"
+          },
+          "is_update_blocked": {
+            "type": "boolean"
+          },
+          "activity_id": {
+            "type": "integer"
+          },
+          "bookform_id": {
+            "type": "integer"
+          },
+          "record_from": {
+            "type": "string"
+          },
+          "is_mobile": {
+            "type": "boolean"
+          },
+          "services": {
+            "type": "array",
+            "description": "Booked services.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "cost": {
+                  "type": "number"
+                },
+                "cost_to_pay": {
+                  "type": "number"
+                },
+                "manual_cost": {
+                  "type": "number"
+                },
+                "cost_per_unit": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                },
+                "first_cost": {
+                  "type": "number"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "staff": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Assigned team member.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "api_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "specialization": {
+                "type": "string"
+              },
+              "position": {
+                "type": "object"
+              },
+              "avatar": {
+                "type": "string"
+              },
+              "avatar_big": {
+                "type": "string"
+              },
+              "rating": {
+                "type": "number"
+              },
+              "votes_count": {
+                "type": "integer"
+              }
+            }
+          },
+          "client": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Client details.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "surname": {
+                "type": "string"
+              },
+              "patronymic": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "card": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "string"
+              },
+              "discount": {
+                "type": "number"
+              },
+              "sex": {
+                "type": "string"
+              },
+              "birthday": {
+                "type": "string"
+              },
+              "success_visits_count": {
+                "type": "integer"
+              },
+              "fail_visits_count": {
+                "type": "integer"
+              },
+              "custom_fields": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "client_tags": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "goods_transactions": {
+            "type": "array",
+            "description": "Product operations linked to this appointment.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "custom_fields": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "custom_color": {
+            "type": "string",
+            "description": "Hex color code."
+          },
+          "custom_font_color": {
+            "type": "string"
+          },
+          "record_labels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "font_color": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "short_link": {
+            "type": "string"
+          },
+          "sms_remain_hours": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "email_remain_hours": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "comer": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "comer_person_info": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "composite": {
+            "type": [
+              "object",
+              "array"
+            ],
+            "description": "Composite appointment data if applicable."
+          }
+        },
+        "additionalProperties": true
+      },
+      "loyalty_card": {
+        "title": "Webhook Loyalty Card Data",
+        "description": "Loyalty card data sent in webhook notifications. Uses a simplified transformer with essential fields only.",
+        "type": "object",
+        "required": [
+          "id",
+          "balance",
+          "number",
+          "phone"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Loyalty card ID."
+          },
+          "balance": {
+            "type": "number",
+            "description": "Current card balance."
+          },
+          "number": {
+            "type": "string",
+            "description": "Card number."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number linked to the card."
+          }
+        }
+      },
+      "good": {
+        "title": "Webhook Good Data",
+        "description": "Product data sent in webhook notifications. Matches the output of the product detail API.",
+        "type": "object",
+        "properties": {
+          "good_id": {
+            "type": "integer",
+            "description": "Product ID."
+          },
+          "title": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string",
+            "description": "Same as title."
+          },
+          "label": {
+            "type": "string",
+            "description": "Title with article in parentheses."
+          },
+          "article": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "integer"
+          },
+          "salon_id": {
+            "type": "integer"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "unit_id": {
+            "type": "integer"
+          },
+          "unit_short_title": {
+            "type": "string"
+          },
+          "service_unit_id": {
+            "type": "integer"
+          },
+          "service_unit_short_title": {
+            "type": "string"
+          },
+          "actual_cost": {
+            "type": "number"
+          },
+          "unit_actual_cost": {
+            "type": "number"
+          },
+          "unit_actual_cost_format": {
+            "type": "string",
+            "description": "Formatted price string."
+          },
+          "unit_equals": {
+            "type": "number"
+          },
+          "barcode": {
+            "type": "string"
+          },
+          "is_chain": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "loyalty_abonement_type_id": {
+            "type": "integer"
+          },
+          "loyalty_certificate_type_id": {
+            "type": "integer"
+          },
+          "loyalty_certificate_type": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "loyalty_allow_empty_code": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "loyalty_serial_number_limited": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "actual_amounts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "critical_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "desired_amount": {
+            "type": "number"
+          },
+          "last_change_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_goods_mark_enabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "goods_operations": {
+        "title": "Webhook Goods Operation Data",
+        "description": "Product operation data sent in webhook notifications. Covers all operation types: sale, receipt, consumable write-off, product write-off, and movement.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Transaction ID."
+          },
+          "document_id": {
+            "type": "integer"
+          },
+          "type_id": {
+            "type": "integer",
+            "description": "Transaction type: 1 — sale, 2 — write-off, etc."
+          },
+          "type": {
+            "type": "string"
+          },
+          "operation_unit_type": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "create_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cost_per_unit": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "discount": {
+            "type": "number"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "integer"
+          },
+          "last_change_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "loyalty_abonement_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "loyalty_certificate_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "good": {
+            "type": "object",
+            "description": "Related product.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "unit": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              },
+              "short_title": {
+                "type": "string"
+              }
+            }
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          },
+          "master": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "service": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "finances_operation": {
+        "title": "Webhook Financial Operation Data",
+        "description": "Financial transaction data sent in webhook notifications. Includes default relations (expense, master, supplier, account, client) and webhook-specific includes (record, client.email). May optionally include payment_system_transaction_ids if the feature is enabled for the location.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Transaction ID."
+          },
+          "document_id": {
+            "type": "integer"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "last_change_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "record_id": {
+            "type": "integer"
+          },
+          "visit_id": {
+            "type": "integer"
+          },
+          "sold_item_id": {
+            "type": "integer"
+          },
+          "sold_item_type": {
+            "type": "string"
+          },
+          "expense": {
+            "type": "object",
+            "description": "Expense category.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "master": {
+            "type": "object",
+            "description": "Team member."
+          },
+          "supplier": {
+            "type": "object",
+            "description": "Supplier."
+          },
+          "account": {
+            "type": "object",
+            "description": "Payment account."
+          },
+          "client": {
+            "type": "object",
+            "description": "Client with email included.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "surname": {
+                "type": "string"
+              },
+              "patronymic": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            }
+          },
+          "record": {
+            "type": "object",
+            "description": "Linked appointment (compact)."
+          },
+          "payment_system_transaction_ids": {
+            "type": "array",
+            "description": "Payment system transaction IDs (optional, feature-flagged).",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "webhooks": {
+    "SalonEvent": {
+      "post": {
+        "summary": "Location Event",
+        "operationId": "webhook_salon",
+        "description": "Sent when a location is created, updated, or deleted.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "salon"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/salon"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "salon",
+                "resource_id": 123456,
+                "status": "update",
+                "data": {
+                  "id": 123456,
+                  "title": "Beauty Studio",
+                  "public_title": "Beauty Studio",
+                  "active": 1,
+                  "phone": "+1234567890",
+                  "city": "New York",
+                  "address": "123 Main St",
+                  "timezone_name": "America/New_York"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "StaffEvent": {
+      "post": {
+        "summary": "Team Member Event",
+        "operationId": "webhook_staff",
+        "description": "Sent when a team member is created, updated, or deleted. The `data` field matches the response from `GET /company/{company_id}/staff/{staff_id}`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "staff"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/staff"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "staff",
+                "resource_id": 101,
+                "status": "create",
+                "data": {
+                  "id": 101,
+                  "name": "John Smith",
+                  "specialization": "Hairdresser",
+                  "avatar": "https://cdn.example.com/avatar.jpg",
+                  "rating": 4.8,
+                  "fired": 0,
+                  "hidden": 0
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "ServiceEvent": {
+      "post": {
+        "summary": "Service Event",
+        "operationId": "webhook_service",
+        "description": "Sent when a service is created, updated, or deleted. The `data` field matches the response from `GET /company/{company_id}/services/{service_id}`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "service"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/service"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "service",
+                "resource_id": 201,
+                "status": "update",
+                "data": {
+                  "id": 201,
+                  "title": "Haircut",
+                  "price_min": 30,
+                  "price_max": 50,
+                  "duration": 60,
+                  "active": 1,
+                  "category_id": 10
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "ServiceCategoryEvent": {
+      "post": {
+        "summary": "Service Category Event",
+        "operationId": "webhook_service_category",
+        "description": "Sent when a service category is created, updated, or deleted. The `data` field matches the response from `GET /company/{company_id}/service/categories`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "service_category"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/service_category"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "service_category",
+                "resource_id": 301,
+                "status": "create",
+                "data": {
+                  "id": 301,
+                  "title": "Hair Services",
+                  "weight": 1,
+                  "staff": [
+                    101,
+                    102,
+                    103
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "ClientEvent": {
+      "post": {
+        "summary": "Client Event",
+        "operationId": "webhook_client",
+        "description": "Sent when a client is created, updated, or deleted. The `data` field contains the full client profile with all default includes.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "client"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/client"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "client",
+                "resource_id": 401,
+                "status": "create",
+                "data": {
+                  "id": 401,
+                  "name": "Jane",
+                  "surname": "Doe",
+                  "display_name": "Jane Doe",
+                  "phone": "+1234567890",
+                  "email": "jane@example.com",
+                  "discount": 10,
+                  "visits": 5,
+                  "sex_id": 2,
+                  "importance_id": 0
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "RecordEvent": {
+      "post": {
+        "summary": "Appointment Event",
+        "operationId": "webhook_record",
+        "description": "Sent when an appointment is created, updated, or deleted. The `data` field matches the response from `GET /record/{company_id}/{record_id}`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "record"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/record"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "record",
+                "resource_id": 501,
+                "status": "create",
+                "data": {
+                  "id": 501,
+                  "company_id": 123456,
+                  "staff_id": 101,
+                  "datetime": "2026-03-20T14:00:00+0300",
+                  "create_date": "2026-03-19T10:30:00+0300",
+                  "attendance": 0,
+                  "confirmed": 1,
+                  "online": true,
+                  "services": [
+                    {
+                      "id": 201,
+                      "title": "Haircut",
+                      "cost": 50
+                    }
+                  ],
+                  "client": {
+                    "id": 401,
+                    "name": "Jane",
+                    "surname": "Doe",
+                    "phone": "+1234567890"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "LoyaltyCardEvent": {
+      "post": {
+        "summary": "Loyalty Card Event",
+        "operationId": "webhook_loyalty_card",
+        "description": "Sent when a loyalty card is created, updated, or deleted. Uses a simplified payload with essential fields only.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "loyalty_card"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/loyalty_card"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "loyalty_card",
+                "resource_id": 601,
+                "status": "update",
+                "data": {
+                  "id": 601,
+                  "balance": 150,
+                  "number": "LC-00601",
+                  "phone": "+1234567890"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "ScheduleEvent": {
+      "post": {
+        "summary": "Schedule Event",
+        "operationId": "webhook_schedule",
+        "description": "Sent when a team member's schedule is created, updated, or deleted. The `resource_id` refers to the team member (staff) ID whose schedule changed. The `data` field is always an empty array for schedule events.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "schedule"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "type": "array",
+                    "maxItems": 0,
+                    "description": "Always empty for schedule events."
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "schedule",
+                "resource_id": 101,
+                "status": "update",
+                "data": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "GoodEvent": {
+      "post": {
+        "summary": "Product Event",
+        "operationId": "webhook_good",
+        "description": "Sent when a product is created, updated, or deleted. The `data` field matches the response from `GET /goods/{company_id}/{good_id}`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "good"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/good"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "good",
+                "resource_id": 701,
+                "status": "create",
+                "data": {
+                  "good_id": 701,
+                  "title": "Shampoo Professional",
+                  "cost": 25,
+                  "article": "SH-001",
+                  "barcode": "4607001234567",
+                  "actual_cost": 25,
+                  "category": "Hair Care"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "GoodsOperationEvent": {
+      "post": {
+        "summary": "Product Operation Event",
+        "operationId": "webhook_goods_operation",
+        "description": "Sent when a product operation occurs: sale, receipt, consumable write-off, product write-off, or product movement.\nThe `resource` field indicates the specific operation type: `goods_operations_sale`, `goods_operations_receipt`, `goods_operations_consumable`, `goods_operations_stolen`, `goods_operations_move`.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "goods_operations_sale",
+                      "goods_operations_receipt",
+                      "goods_operations_consumable",
+                      "goods_operations_stolen",
+                      "goods_operations_move"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/goods_operations"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "goods_operations_sale",
+                "resource_id": 801,
+                "status": "create",
+                "data": {
+                  "id": 801,
+                  "type_id": 1,
+                  "type": "sale",
+                  "amount": 2,
+                  "cost_per_unit": 25,
+                  "cost": 50,
+                  "good": {
+                    "id": 701,
+                    "title": "Shampoo Professional"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    },
+    "FinancesOperationEvent": {
+      "post": {
+        "summary": "Financial Operation Event",
+        "operationId": "webhook_finances_operation",
+        "description": "Sent when a financial transaction is created, updated, or deleted. May optionally include `payment_system_transaction_ids` if the feature is enabled for the location.",
+        "tags": [
+          "Webhooks"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "company_id",
+                  "resource",
+                  "resource_id",
+                  "status",
+                  "data"
+                ],
+                "properties": {
+                  "company_id": {
+                    "type": "integer",
+                    "description": "Location ID where the event occurred."
+                  },
+                  "resource": {
+                    "type": "string",
+                    "description": "Resource type.",
+                    "enum": [
+                      "finances_operation"
+                    ]
+                  },
+                  "resource_id": {
+                    "type": "integer",
+                    "description": "ID of the resource that was created, updated, or deleted."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Type of change that occurred.",
+                    "enum": [
+                      "create",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "data": {
+                    "$ref": "#/components/schemas/finances_operation"
+                  }
+                }
+              },
+              "example": {
+                "company_id": 123456,
+                "resource": "finances_operation",
+                "resource_id": 901,
+                "status": "create",
+                "data": {
+                  "id": 901,
+                  "amount": 50,
+                  "date": "2026-03-20T14:30:00+0300",
+                  "comment": "Haircut payment",
+                  "record_id": 501,
+                  "expense": {
+                    "id": 1,
+                    "title": "Services"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your server should return any 2xx status code to acknowledge receipt."
+          }
+        }
+      }
+    }
+  }
+}

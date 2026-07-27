@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { AttendanceSessionStatus, Prisma, ShiftStatus, UserStatus } from '@prisma/client';
+import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
+import { HITEAM_SHIFT_SOURCE } from '../altegio-sync/altegio-sync.helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
@@ -170,7 +172,18 @@ export class ScheduleService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly collaborationRealtimeService: CollaborationRealtimeService,
+    @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
   ) {}
+
+  private pushShiftDayToAltegioInBackground(tenantId: string, employeeId: string, shiftDate: Date) {
+    void this.altegioStaffScheduleSync?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate).catch((error) => {
+      this.logger.warn(
+        `Unable to push shift day to Altegio tenantId=${tenantId} employeeId=${employeeId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
 
   listTemplates(tenantId: string) {
     return this.prisma.shiftTemplate.findMany({
@@ -322,6 +335,7 @@ export class ScheduleService {
         fixedBreakStartsAt: fixedBreak.startsAt,
         fixedBreakDurationMinutes: fixedBreak.durationMinutes,
         fixedBreakIsPaid: fixedBreak.isPaid,
+        source: HITEAM_SHIFT_SOURCE,
       },
       select: SHIFT_SELECT,
     });
@@ -352,6 +366,8 @@ export class ScheduleService {
       [employee.id],
       'schedule.shift_created',
     );
+
+    this.pushShiftDayToAltegioInBackground(tenantId, employee.id, shiftDate);
 
     return shift;
   }
@@ -465,6 +481,8 @@ export class ScheduleService {
       'schedule.shift_updated',
     );
 
+    this.pushShiftDayToAltegioInBackground(tenantId, employee.id, shiftDate);
+
     return shift;
   }
 
@@ -474,6 +492,7 @@ export class ScheduleService {
       select: {
         id: true,
         employeeId: true,
+        shiftDate: true,
         status: true,
         attendanceSessions: {
           where: {
@@ -518,6 +537,8 @@ export class ScheduleService {
       [existingShift.employeeId],
       'schedule.shift_cancelled',
     );
+
+    this.pushShiftDayToAltegioInBackground(tenantId, existingShift.employeeId, existingShift.shiftDate);
 
     return shift;
   }

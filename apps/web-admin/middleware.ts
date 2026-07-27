@@ -30,6 +30,13 @@ const PUBLIC_PREFIXES = ["/join/", "/hi-team/create-organization"];
 const PUBLIC_FILE_PATTERN = /\/[^/]+\.[^/]+$/;
 const PHONE_USER_AGENT_PATTERN =
   /iphone|ipod|windows phone|blackberry|bb10|opera mini|iemobile|mobi/i;
+const ALTEGIO_LOCATION_QUERY_KEYS = [
+  "salon_id",
+  "salon_ids",
+  "location_id",
+  "location_ids",
+  "company_id",
+] as const;
 
 function isLandingLocale(
   value: string | null | undefined,
@@ -100,6 +107,17 @@ function isPublicPath(pathname: string) {
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+function getAltegioLocationId(searchParams: URLSearchParams) {
+  for (const key of ALTEGIO_LOCATION_QUERY_KEYS) {
+    const value = searchParams.get(key)?.trim();
+    if (value) {
+      return value.split(",")[0]?.trim() || value;
+    }
+  }
+
+  return "";
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
@@ -138,6 +156,30 @@ export function middleware(request: NextRequest) {
   );
   const hasSession = Boolean(session);
   const forceAuthPage = searchParams.get("force") === "1";
+  const altegioLocationId = getAltegioLocationId(searchParams);
+  const isAltegioEntry =
+    searchParams.get("from")?.trim().toLowerCase() === "altegio" ||
+    Boolean(altegioLocationId);
+
+  if (
+    hasSession &&
+    isAltegioEntry &&
+    altegioLocationId &&
+    (pathname === "/login" || pathname === "/signup")
+  ) {
+    const billingUrl = getPublicRequestUrl(request, "/billing");
+    billingUrl.searchParams.set("from", "altegio");
+    billingUrl.searchParams.set("salon_id", altegioLocationId);
+
+    const applicationId =
+      searchParams.get("app_id")?.trim() ||
+      searchParams.get("application_id")?.trim();
+    if (applicationId) {
+      billingUrl.searchParams.set("app_id", applicationId);
+    }
+
+    return NextResponse.redirect(billingUrl);
+  }
 
   if (!hasSession && !isPublicRoute) {
     const loginUrl = getPublicRequestUrl(request, "/login");

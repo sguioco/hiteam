@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import {
@@ -18,6 +19,7 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
+import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
@@ -174,12 +176,23 @@ export class EmployeesService {
     private readonly storageService: StorageService,
     private readonly invitationsMailer: EmployeeInvitationsMailerService,
     private readonly kommoService: KommoService,
+    @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
   ) {}
 
   private syncBillingSeatsInBackground(tenantId: string) {
     void this.billingService.syncStripeSeatQuantity(tenantId).catch((error) => {
       this.logger.warn(
         `Unable to sync Stripe seats for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
+
+  private pushEmployeeToAltegioInBackground(tenantId: string, employeeId: string) {
+    void this.altegioStaffScheduleSync?.pushEmployeeToAltegio(tenantId, employeeId).catch((error) => {
+      this.logger.warn(
+        `Unable to push employee ${employeeId} to Altegio: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     });
   }
@@ -960,6 +973,7 @@ export class EmployeesService {
     });
     this.syncBillingSeatsInBackground(tenantId);
     this.kommoService.recordEmployeeCreated(tenantId, employee.id);
+    this.pushEmployeeToAltegioInBackground(tenantId, employee.id);
 
     return employee;
   }
@@ -2245,6 +2259,7 @@ export class EmployeesService {
       : null;
     if (approved.employeeId) {
       this.kommoService.recordEmployeeUpdated(tenantId, approved.employeeId, 'review_approved', statusEmailResult);
+      this.pushEmployeeToAltegioInBackground(tenantId, approved.employeeId);
     }
 
     return {

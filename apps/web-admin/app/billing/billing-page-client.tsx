@@ -813,22 +813,65 @@ export default function BillingPageClient({
                   : null)}
             </p>
             {summary?.altegio?.connected ? (
-              <button
-                className="mt-3 text-sm font-semibold text-[color:var(--accent)]"
-                disabled={altegioConnecting}
-                onClick={() => {
-                  const session = getSession();
-                  if (!session) return;
-                  void apiRequest<BillingSummary>("/billing/altegio/sync", {
-                    method: "POST",
-                    token: session.accessToken,
-                    skipClientCache: true,
-                  }).then(setSummary);
-                }}
-                type="button"
-              >
-                {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
-              </button>
+              <div className="mt-3 flex flex-wrap gap-4">
+                <button
+                  className="text-sm font-semibold text-[color:var(--accent)]"
+                  disabled={altegioConnecting}
+                  onClick={() => {
+                    const session = getSession();
+                    if (!session) return;
+                    void apiRequest<BillingSummary>("/billing/altegio/sync", {
+                      method: "POST",
+                      token: session.accessToken,
+                      skipClientCache: true,
+                    }).then(setSummary);
+                  }}
+                  type="button"
+                >
+                  {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
+                </button>
+                <button
+                  className="text-sm font-semibold text-[color:var(--accent)]"
+                  disabled={altegioConnecting}
+                  onClick={() => {
+                    const session = getSession();
+                    if (!session) return;
+                    setAltegioConnecting(true);
+                    setAltegioMessage(
+                      locale === "ru"
+                        ? "Синхронизируем сотрудников и расписание…"
+                        : "Syncing staff and schedule…",
+                    );
+                    void apiRequest("/altegio/sync", {
+                      method: "POST",
+                      token: session.accessToken,
+                      skipClientCache: true,
+                    })
+                      .then(() => {
+                        setAltegioMessage(
+                          locale === "ru"
+                            ? "Сотрудники и расписание синхронизированы с Altegio."
+                            : "Staff and schedule synced with Altegio.",
+                        );
+                      })
+                      .catch((requestError) => {
+                        setAltegioMessage(
+                          requestError instanceof Error
+                            ? requestError.message
+                            : locale === "ru"
+                              ? "Не удалось синхронизировать сотрудников"
+                              : "Failed to sync staff",
+                        );
+                      })
+                      .finally(() => setAltegioConnecting(false));
+                  }}
+                  type="button"
+                >
+                  {locale === "ru"
+                    ? "Синхронизировать сотрудников и расписание"
+                    : "Sync staff & schedule"}
+                </button>
+              </div>
             ) : null}
           </section>
         )}

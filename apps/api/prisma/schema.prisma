@@ -331,6 +331,9 @@ model BillingSubscription {
   altegioLocationId             String?   @unique
   altegioApplicationId          String?
   altegioMarketplaceActivatedAt DateTime?
+  altegioStaffLastSyncedAt      DateTime?
+  altegioScheduleLastSyncedAt   DateTime?
+  altegioSyncLastError          String?
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
 
@@ -685,12 +688,14 @@ model Employee {
   phone             String?
   avatarStorageKey  String?
   avatarUrl         String?
-  workMode          EmployeeWorkMode @default(STATIONARY)
-  breaksEnabled     Boolean          @default(false)
-  status            EmployeeStatus   @default(ACTIVE)
-  hireDate          DateTime
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  workMode              EmployeeWorkMode @default(STATIONARY)
+  breaksEnabled         Boolean          @default(false)
+  status                EmployeeStatus   @default(ACTIVE)
+  hireDate              DateTime
+  altegioTeamMemberId   String?          @unique
+  altegioLinkedAt       DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   tenant                           Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user                             User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -895,6 +900,7 @@ model Shift {
   fixedBreakDurationMinutes Int         @default(0)
   fixedBreakIsPaid          Boolean     @default(false)
   status                    ShiftStatus @default(PUBLISHED)
+  source                    String      @default("HITEAM")
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
 
@@ -907,6 +913,7 @@ model Shift {
   attendanceSessions AttendanceSession[]
 
   @@index([tenantId, employeeId, shiftDate])
+  @@index([tenantId, employeeId, shiftDate, source])
   @@index([tenantId, createdByEmployeeId])
 }
 

@@ -1,0 +1,2090 @@
+{
+  "source": "https://developer.alteg.io",
+  "files": [
+    {
+      "url": "https://developer.alteg.io/en/api-license-agreement.md",
+      "file": "en/api-license-agreement.md",
+      "bytes": 7809
+    },
+    {
+      "url": "https://developer.alteg.io/en/fintech.md",
+      "file": "en/fintech.md",
+      "bytes": 38711
+    },
+    {
+      "url": "https://developer.alteg.io/en/get-api-key.md",
+      "file": "en/get-api-key.md",
+      "bytes": 2314
+    },
+    {
+      "url": "https://developer.alteg.io/en/partners.md",
+      "file": "en/partners.md",
+      "bytes": 13061
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/enable_team_member_tips.md",
+      "file": "en/b2b-v1/openapi/utilities/enable_team_member_tips.md",
+      "bytes": 4379
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/section/version-status.md",
+      "file": "en/b2b-v1/openapi/section/version-status.md",
+      "bytes": 238
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/section/v1-and-v2-parameter-aliases.md",
+      "file": "en/b2b-v1/openapi/section/v1-and-v2-parameter-aliases.md",
+      "bytes": 700
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/section/authentication.md",
+      "file": "en/b2b-v1/openapi/section/authentication.md",
+      "bytes": 130
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/authentication-b2b.md",
+      "file": "en/b2b-v1/openapi/authentication-b2b.md",
+      "bytes": 562
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/authentication-b2b/authorize_user.md",
+      "file": "en/b2b-v1/openapi/authentication-b2b/authorize_user.md",
+      "bytes": 2864
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations.md",
+      "file": "en/b2b-v1/openapi/locations.md",
+      "bytes": 829
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations/get_location_list.md",
+      "file": "en/b2b-v1/openapi/locations/get_location_list.md",
+      "bytes": 5718
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations/create_location.md",
+      "file": "en/b2b-v1/openapi/locations/create_location.md",
+      "bytes": 4186
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations/get_location.md",
+      "file": "en/b2b-v1/openapi/locations/get_location.md",
+      "bytes": 7103
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations/update_location.md",
+      "file": "en/b2b-v1/openapi/locations/update_location.md",
+      "bytes": 5865
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/locations/delete_location.md",
+      "file": "en/b2b-v1/openapi/locations/delete_location.md",
+      "bytes": 1230
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services.md",
+      "file": "en/b2b-v1/openapi/services.md",
+      "bytes": 4316
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/create_service_category.md",
+      "file": "en/b2b-v1/openapi/services/create_service_category.md",
+      "bytes": 2538
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/get_service_list.md",
+      "file": "en/b2b-v1/openapi/services/get_service_list.md",
+      "bytes": 2676
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/create_service.md",
+      "file": "en/b2b-v1/openapi/services/create_service.md",
+      "bytes": 5246
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/deprecated_update_service_by_id.md",
+      "file": "en/b2b-v1/openapi/services/deprecated_update_service_by_id.md",
+      "bytes": 5316
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/patch_service.md",
+      "file": "en/b2b-v1/openapi/services/patch_service.md",
+      "bytes": 8821
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/delete_service.md",
+      "file": "en/b2b-v1/openapi/services/delete_service.md",
+      "bytes": 1332
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/get_service_category.md",
+      "file": "en/b2b-v1/openapi/services/get_service_category.md",
+      "bytes": 2335
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/update_service_category.md",
+      "file": "en/b2b-v1/openapi/services/update_service_category.md",
+      "bytes": 2765
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/delete_service_category.md",
+      "file": "en/b2b-v1/openapi/services/delete_service_category.md",
+      "bytes": 1312
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/get_service_category_list.md",
+      "file": "en/b2b-v1/openapi/services/get_service_category_list.md",
+      "bytes": 3135
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/get_service.md",
+      "file": "en/b2b-v1/openapi/services/get_service.md",
+      "bytes": 3705
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/assign_service_to_team_member.md",
+      "file": "en/b2b-v1/openapi/services/assign_service_to_team_member.md",
+      "bytes": 3152
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/update_service_team_member_assignment.md",
+      "file": "en/b2b-v1/openapi/services/update_service_team_member_assignment.md",
+      "bytes": 3145
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/remove_service_from_team_member.md",
+      "file": "en/b2b-v1/openapi/services/remove_service_from_team_member.md",
+      "bytes": 1758
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/update_service_links.md",
+      "file": "en/b2b-v1/openapi/services/update_service_links.md",
+      "bytes": 2727
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/get_chain_service_category_list.md",
+      "file": "en/b2b-v1/openapi/services/get_chain_service_category_list.md",
+      "bytes": 1768
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/deprecated_get_service_category_list.md",
+      "file": "en/b2b-v1/openapi/services/deprecated_get_service_category_list.md",
+      "bytes": 2416
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/services/deprecated_get_service_list_by_id.md",
+      "file": "en/b2b-v1/openapi/services/deprecated_get_service_list_by_id.md",
+      "bytes": 3147
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members.md",
+      "file": "en/b2b-v1/openapi/team-members.md",
+      "bytes": 2533
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/get_team_member_list.md",
+      "file": "en/b2b-v1/openapi/team-members/get_team_member_list.md",
+      "bytes": 3534
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/deprecated_create_team_member.md",
+      "file": "en/b2b-v1/openapi/team-members/deprecated_create_team_member.md",
+      "bytes": 5086
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/get_team_member_by_id.md",
+      "file": "en/b2b-v1/openapi/team-members/get_team_member_by_id.md",
+      "bytes": 6477
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/update_team_member.md",
+      "file": "en/b2b-v1/openapi/team-members/update_team_member.md",
+      "bytes": 5146
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/delete_team_member.md",
+      "file": "en/b2b-v1/openapi/team-members/delete_team_member.md",
+      "bytes": 1315
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/create_team_member_quick.md",
+      "file": "en/b2b-v1/openapi/team-members/create_team_member_quick.md",
+      "bytes": 3607
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/get_team_member.md",
+      "file": "en/b2b-v1/openapi/team-members/get_team_member.md",
+      "bytes": 3929
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/get_position_list.md",
+      "file": "en/b2b-v1/openapi/team-members/get_position_list.md",
+      "bytes": 1908
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/team-members/create_position_quick.md",
+      "file": "en/b2b-v1/openapi/team-members/create_position_quick.md",
+      "bytes": 3062
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients.md",
+      "file": "en/b2b-v1/openapi/clients.md",
+      "bytes": 5237
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/create_client.md",
+      "file": "en/b2b-v1/openapi/clients/create_client.md",
+      "bytes": 2684
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/get_client_list.md",
+      "file": "en/b2b-v1/openapi/clients/get_client_list.md",
+      "bytes": 4283
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/get_client.md",
+      "file": "en/b2b-v1/openapi/clients/get_client.md",
+      "bytes": 1278
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/update_client.md",
+      "file": "en/b2b-v1/openapi/clients/update_client.md",
+      "bytes": 2722
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/delete_client.md",
+      "file": "en/b2b-v1/openapi/clients/delete_client.md",
+      "bytes": 1282
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/bulk_create_clients.md",
+      "file": "en/b2b-v1/openapi/clients/bulk_create_clients.md",
+      "bytes": 2257
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/list_client_comments.md",
+      "file": "en/b2b-v1/openapi/clients/list_client_comments.md",
+      "bytes": 3271
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/create_client_comment.md",
+      "file": "en/b2b-v1/openapi/clients/create_client_comment.md",
+      "bytes": 3300
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/delete_client_comment.md",
+      "file": "en/b2b-v1/openapi/clients/delete_client_comment.md",
+      "bytes": 1828
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/get_client_file_list.md",
+      "file": "en/b2b-v1/openapi/clients/get_client_file_list.md",
+      "bytes": 4037
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/delete_client_file.md",
+      "file": "en/b2b-v1/openapi/clients/delete_client_file.md",
+      "bytes": 1224
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/search_client_visits.md",
+      "file": "en/b2b-v1/openapi/clients/search_client_visits.md",
+      "bytes": 15181
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/clients/deprecated_get_client_list.md",
+      "file": "en/b2b-v1/openapi/clients/deprecated_get_client_list.md",
+      "bytes": 5764
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions.md",
+      "bytes": 3820
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/get_location_users.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/get_location_users.md",
+      "bytes": 2902
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/remove_user_from_location.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/remove_user_from_location.md",
+      "bytes": 1384
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/get_permission_list.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/get_permission_list.md",
+      "bytes": 66660
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/list_roles.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/list_roles.md",
+      "bytes": 6573
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/get_user_roles.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/get_user_roles.md",
+      "bytes": 6835
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/get_user_permissions.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/get_user_permissions.md",
+      "bytes": 2471
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/update_user_permissions.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/update_user_permissions.md",
+      "bytes": 3163
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/create_user_invitation.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/create_user_invitation.md",
+      "bytes": 3165
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/copy_user_permissions_to_locations.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/copy_user_permissions_to_locations.md",
+      "bytes": 2887
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/remove_user_from_locations.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/remove_user_from_locations.md",
+      "bytes": 2236
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/users-and-permissions/deprecated_get_location_users.md",
+      "file": "en/b2b-v1/openapi/users-and-permissions/deprecated_get_location_users.md",
+      "bytes": 4561
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments.md",
+      "file": "en/b2b-v1/openapi/appointments.md",
+      "bytes": 9140
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_appointment_list.md",
+      "file": "en/b2b-v1/openapi/appointments/get_appointment_list.md",
+      "bytes": 16112
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/create_appointment.md",
+      "file": "en/b2b-v1/openapi/appointments/create_appointment.md",
+      "bytes": 17495
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_appointment.md",
+      "file": "en/b2b-v1/openapi/appointments/get_appointment.md",
+      "bytes": 19678
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/update_appointment.md",
+      "file": "en/b2b-v1/openapi/appointments/update_appointment.md",
+      "bytes": 11608
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/delete_appointment.md",
+      "file": "en/b2b-v1/openapi/appointments/delete_appointment.md",
+      "bytes": 1409
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_partner_appointment_list.md",
+      "file": "en/b2b-v1/openapi/appointments/get_partner_appointment_list.md",
+      "bytes": 2449
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_visit.md",
+      "file": "en/b2b-v1/openapi/appointments/get_visit.md",
+      "bytes": 9253
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_visit_details.md",
+      "file": "en/b2b-v1/openapi/appointments/get_visit_details.md",
+      "bytes": 13012
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/update_visit.md",
+      "file": "en/b2b-v1/openapi/appointments/update_visit.md",
+      "bytes": 3807
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_visit_receipt_pdf.md",
+      "file": "en/b2b-v1/openapi/appointments/get_visit_receipt_pdf.md",
+      "bytes": 1258
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/get_comments.md",
+      "file": "en/b2b-v1/openapi/appointments/get_comments.md",
+      "bytes": 3641
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/leave_comment.md",
+      "file": "en/b2b-v1/openapi/appointments/leave_comment.md",
+      "bytes": 2802
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/create_timetable_client_schedule.md",
+      "file": "en/b2b-v1/openapi/appointments/create_timetable_client_schedule.md",
+      "bytes": 12692
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/update_timetable_client_schedule.md",
+      "file": "en/b2b-v1/openapi/appointments/update_timetable_client_schedule.md",
+      "bytes": 12582
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/appointments/delete_timetable_client_schedule.md",
+      "file": "en/b2b-v1/openapi/appointments/delete_timetable_client_schedule.md",
+      "bytes": 1827
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events.md",
+      "file": "en/b2b-v1/openapi/events.md",
+      "bytes": 4196
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/search_events.md",
+      "file": "en/b2b-v1/openapi/events/search_events.md",
+      "bytes": 6386
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/search_event_dates.md",
+      "file": "en/b2b-v1/openapi/events/search_event_dates.md",
+      "bytes": 1759
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/get_event_date_range.md",
+      "file": "en/b2b-v1/openapi/events/get_event_date_range.md",
+      "bytes": 1902
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/get_event_search_filters.md",
+      "file": "en/b2b-v1/openapi/events/get_event_search_filters.md",
+      "bytes": 2526
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/duplicate_event.md",
+      "file": "en/b2b-v1/openapi/events/duplicate_event.md",
+      "bytes": 2050
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/search_event_services.md",
+      "file": "en/b2b-v1/openapi/events/search_event_services.md",
+      "bytes": 2880
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/list_event_duplication_strategies.md",
+      "file": "en/b2b-v1/openapi/events/list_event_duplication_strategies.md",
+      "bytes": 2326
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/create_event_duplication_strategy.md",
+      "file": "en/b2b-v1/openapi/events/create_event_duplication_strategy.md",
+      "bytes": 1586
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/update_event_duplication_strategy.md",
+      "file": "en/b2b-v1/openapi/events/update_event_duplication_strategy.md",
+      "bytes": 1699
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/get_event.md",
+      "file": "en/b2b-v1/openapi/events/get_event.md",
+      "bytes": 4709
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/update_event.md",
+      "file": "en/b2b-v1/openapi/events/update_event.md",
+      "bytes": 5798
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/delete_event.md",
+      "file": "en/b2b-v1/openapi/events/delete_event.md",
+      "bytes": 1477
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/events/create_event.md",
+      "file": "en/b2b-v1/openapi/events/create_event.md",
+      "bytes": 5798
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources.md",
+      "bytes": 5588
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_team_member_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_team_member_schedule.md",
+      "bytes": 1725
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/update_team_member_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/update_team_member_schedule.md",
+      "bytes": 1686
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_dates.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_dates.md",
+      "bytes": 1744
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_sessions.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_sessions.md",
+      "bytes": 1832
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_resource_list.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_resource_list.md",
+      "bytes": 2147
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/search_timetable_event_schedules_by_event.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/search_timetable_event_schedules_by_event.md",
+      "bytes": 12786
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/create_timetable_event_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/create_timetable_event_schedule.md",
+      "bytes": 14460
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/update_timetable_event_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/update_timetable_event_schedule.md",
+      "bytes": 12769
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/delete_timetable_event_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/delete_timetable_event_schedule.md",
+      "bytes": 1702
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/create_timetable_schedule_day.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/create_timetable_schedule_day.md",
+      "bytes": 11990
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/update_timetable_schedule_day.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/update_timetable_schedule_day.md",
+      "bytes": 12023
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/delete_timetable_schedule_day.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/delete_timetable_schedule_day.md",
+      "bytes": 1778
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/list_timetable_schedule_day_events.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/list_timetable_schedule_day_events.md",
+      "bytes": 7570
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_settings.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_appointment_calendar_settings.md",
+      "bytes": 1996
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/update_appointment_calendar_settings.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/update_appointment_calendar_settings.md",
+      "bytes": 2292
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/get_team_member_schedule_list.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/get_team_member_schedule_list.md",
+      "bytes": 2844
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/set_team_member_schedule.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/set_team_member_schedule.md",
+      "bytes": 2477
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/schedule-and-resources/schedule_team_member_update_deprecated.md",
+      "file": "en/b2b-v1/openapi/schedule-and-resources/schedule_team_member_update_deprecated.md",
+      "bytes": 1437
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products.md",
+      "file": "en/b2b-v1/openapi/products.md",
+      "bytes": 7222
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/search_product.md",
+      "file": "en/b2b-v1/openapi/products/search_product.md",
+      "bytes": 4096
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/get_product.md",
+      "file": "en/b2b-v1/openapi/products/get_product.md",
+      "bytes": 5121
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/update_product.md",
+      "file": "en/b2b-v1/openapi/products/update_product.md",
+      "bytes": 7511
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/delete_product.md",
+      "file": "en/b2b-v1/openapi/products/delete_product.md",
+      "bytes": 1294
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/get_products_list.md",
+      "file": "en/b2b-v1/openapi/products/get_products_list.md",
+      "bytes": 1895
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/create_product.md",
+      "file": "en/b2b-v1/openapi/products/create_product.md",
+      "bytes": 5426
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/get_product_category_list.md",
+      "file": "en/b2b-v1/openapi/products/get_product_category_list.md",
+      "bytes": 2069
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/get_product_category_composition.md",
+      "file": "en/b2b-v1/openapi/products/get_product_category_composition.md",
+      "bytes": 6260
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/get_product_category_list_by_ids.md",
+      "file": "en/b2b-v1/openapi/products/get_product_category_list_by_ids.md",
+      "bytes": 2148
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/create_product_category.md",
+      "file": "en/b2b-v1/openapi/products/create_product_category.md",
+      "bytes": 2320
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/update_product_category.md",
+      "file": "en/b2b-v1/openapi/products/update_product_category.md",
+      "bytes": 2392
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/delete_product_category.md",
+      "file": "en/b2b-v1/openapi/products/delete_product_category.md",
+      "bytes": 1341
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/products/deprecated_get_product_category_list.md",
+      "file": "en/b2b-v1/openapi/products/deprecated_get_product_category_list.md",
+      "bytes": 2162
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory.md",
+      "file": "en/b2b-v1/openapi/inventory.md",
+      "bytes": 3950
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_location_inventories.md",
+      "file": "en/b2b-v1/openapi/inventory/get_location_inventories.md",
+      "bytes": 2515
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/search_for_product_transactions.md",
+      "file": "en/b2b-v1/openapi/inventory/search_for_product_transactions.md",
+      "bytes": 4265
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/create_inventory_operation.md",
+      "file": "en/b2b-v1/openapi/inventory/create_inventory_operation.md",
+      "bytes": 9777
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/create_document.md",
+      "file": "en/b2b-v1/openapi/inventory/create_document.md",
+      "bytes": 5916
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_document.md",
+      "file": "en/b2b-v1/openapi/inventory/get_document.md",
+      "bytes": 5577
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/update_document.md",
+      "file": "en/b2b-v1/openapi/inventory/update_document.md",
+      "bytes": 5970
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/delete_document.md",
+      "file": "en/b2b-v1/openapi/inventory/delete_document.md",
+      "bytes": 1326
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/create_transaction.md",
+      "file": "en/b2b-v1/openapi/inventory/create_transaction.md",
+      "bytes": 10248
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_transaction.md",
+      "file": "en/b2b-v1/openapi/inventory/get_transaction.md",
+      "bytes": 9139
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/update_transaction.md",
+      "file": "en/b2b-v1/openapi/inventory/update_transaction.md",
+      "bytes": 9972
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/delete_transaction.md",
+      "file": "en/b2b-v1/openapi/inventory/delete_transaction.md",
+      "bytes": 1351
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_document_product_transactions.md",
+      "file": "en/b2b-v1/openapi/inventory/get_document_product_transactions.md",
+      "bytes": 3484
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_bill_of_materials_list.md",
+      "file": "en/b2b-v1/openapi/inventory/get_bill_of_materials_list.md",
+      "bytes": 2864
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_team_member_service_bill_of_materials.md",
+      "file": "en/b2b-v1/openapi/inventory/get_team_member_service_bill_of_materials.md",
+      "bytes": 2792
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/get_appointment_consumables.md",
+      "file": "en/b2b-v1/openapi/inventory/get_appointment_consumables.md",
+      "bytes": 4061
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/update_appointment_service_consumables.md",
+      "file": "en/b2b-v1/openapi/inventory/update_appointment_service_consumables.md",
+      "bytes": 4768
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/inventory/unlink_appointment_service_association.md",
+      "file": "en/b2b-v1/openapi/inventory/unlink_appointment_service_association.md",
+      "bytes": 2305
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/sales.md",
+      "file": "en/b2b-v1/openapi/sales.md",
+      "bytes": 1104
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/sales/get_sale_transaction.md",
+      "file": "en/b2b-v1/openapi/sales/get_sale_transaction.md",
+      "bytes": 22157
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/sales/create_payment_with_loyalty_methods.md",
+      "file": "en/b2b-v1/openapi/sales/create_payment_with_loyalty_methods.md",
+      "bytes": 27108
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/sales/delete_loyalty_payment_transaction.md",
+      "file": "en/b2b-v1/openapi/sales/delete_loyalty_payment_transaction.md",
+      "bytes": 22353
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/sales/delete_location_account_payment.md",
+      "file": "en/b2b-v1/openapi/sales/delete_location_account_payment.md",
+      "bytes": 22353
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments.md",
+      "file": "en/b2b-v1/openapi/payments.md",
+      "bytes": 2393
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/get_document_financial_transactions.md",
+      "file": "en/b2b-v1/openapi/payments/get_document_financial_transactions.md",
+      "bytes": 3935
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/get_account_list.md",
+      "file": "en/b2b-v1/openapi/payments/get_account_list.md",
+      "bytes": 2243
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/get_transactions.md",
+      "file": "en/b2b-v1/openapi/payments/get_transactions.md",
+      "bytes": 4652
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/get_transactions_by_visit_or_appointment_id.md",
+      "file": "en/b2b-v1/openapi/payments/get_transactions_by_visit_or_appointment_id.md",
+      "bytes": 3534
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/create_financial_transaction.md",
+      "file": "en/b2b-v1/openapi/payments/create_financial_transaction.md",
+      "bytes": 5010
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/get_financial_transaction.md",
+      "file": "en/b2b-v1/openapi/payments/get_financial_transaction.md",
+      "bytes": 3406
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/update_financial_transaction.md",
+      "file": "en/b2b-v1/openapi/payments/update_financial_transaction.md",
+      "bytes": 3936
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/payments/delete_financial_transaction.md",
+      "file": "en/b2b-v1/openapi/payments/delete_financial_transaction.md",
+      "bytes": 1334
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications.md",
+      "file": "en/b2b-v1/openapi/notifications.md",
+      "bytes": 5198
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/send_sms_to_clients.md",
+      "file": "en/b2b-v1/openapi/notifications/send_sms_to_clients.md",
+      "bytes": 2593
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/send_sms_campaign_to_filtered_clients.md",
+      "file": "en/b2b-v1/openapi/notifications/send_sms_campaign_to_filtered_clients.md",
+      "bytes": 2670
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/send_email_newsletter_to_clients.md",
+      "file": "en/b2b-v1/openapi/notifications/send_email_newsletter_to_clients.md",
+      "bytes": 2208
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/send_email_campaign_to_filtered_clients.md",
+      "file": "en/b2b-v1/openapi/notifications/send_email_campaign_to_filtered_clients.md",
+      "bytes": 2808
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/get_message_status_list.md",
+      "file": "en/b2b-v1/openapi/notifications/get_message_status_list.md",
+      "bytes": 2009
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/get_location_notification_settings.md",
+      "file": "en/b2b-v1/openapi/notifications/get_location_notification_settings.md",
+      "bytes": 2562
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/get_user_notification_settings.md",
+      "file": "en/b2b-v1/openapi/notifications/get_user_notification_settings.md",
+      "bytes": 3155
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notifications/update_user_notification_settings.md",
+      "file": "en/b2b-v1/openapi/notifications/update_user_notification_settings.md",
+      "bytes": 4112
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings.md",
+      "bytes": 1918
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/get_online_booking_settings.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/get_online_booking_settings.md",
+      "bytes": 2029
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/update_online_booking_settings.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/update_online_booking_settings.md",
+      "bytes": 2526
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/get_timeslot_settings.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/get_timeslot_settings.md",
+      "bytes": 3561
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/get_booking_widget_list.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/get_booking_widget_list.md",
+      "bytes": 4603
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/create_booking_widget.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/create_booking_widget.md",
+      "bytes": 5623
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/get_booking_widget.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/get_booking_widget.md",
+      "bytes": 4578
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/delete_booking_widget.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/delete_booking_widget.md",
+      "bytes": 1284
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/online-booking-settings/update_booking_widget.md",
+      "file": "en/b2b-v1/openapi/online-booking-settings/update_booking_widget.md",
+      "bytes": 5841
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports.md",
+      "bytes": 2556
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_overall.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_overall.md",
+      "bytes": 5927
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_occupancy_daily.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_occupancy_daily.md",
+      "bytes": 1922
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_revenue_daily.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_revenue_daily.md",
+      "bytes": 2046
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_appointment_analytics_by_source.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_appointment_analytics_by_source.md",
+      "bytes": 1644
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_appointment_analytics_by_status.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_appointment_analytics_by_status.md",
+      "bytes": 1650
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_appointments_daily.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_location_analytics_appointments_daily.md",
+      "bytes": 1937
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_revenue_statistics.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_revenue_statistics.md",
+      "bytes": 3927
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_team_member_statistics.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_team_member_statistics.md",
+      "bytes": 2445
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_client_statistics.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_loyalty_program_client_statistics.md",
+      "bytes": 4100
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/analytics-and-reports/get_day_end_report_data.md",
+      "file": "en/b2b-v1/openapi/analytics-and-reports/get_day_end_report_data.md",
+      "bytes": 10366
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/tags.md",
+      "file": "en/b2b-v1/openapi/tags.md",
+      "bytes": 1358
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/tags/create_tag.md",
+      "file": "en/b2b-v1/openapi/tags/create_tag.md",
+      "bytes": 2357
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/tags/get_tag_list_by_entity.md",
+      "file": "en/b2b-v1/openapi/tags/get_tag_list_by_entity.md",
+      "bytes": 2805
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/tags/update_tag_by_tag_id.md",
+      "file": "en/b2b-v1/openapi/tags/update_tag_by_tag_id.md",
+      "bytes": 1716
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/tags/delete_tag_by_tag_id.md",
+      "file": "en/b2b-v1/openapi/tags/delete_tag_by_tag_id.md",
+      "bytes": 1421
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits.md",
+      "file": "en/b2b-v1/openapi/deposits.md",
+      "bytes": 1444
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits/get_client_account_list_by_location_and_client.md",
+      "file": "en/b2b-v1/openapi/deposits/get_client_account_list_by_location_and_client.md",
+      "bytes": 1197
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits/get_client_account_list_by_chain.md",
+      "file": "en/b2b-v1/openapi/deposits/get_client_account_list_by_chain.md",
+      "bytes": 1358
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits/get_client_account_by_chain_and_phone.md",
+      "file": "en/b2b-v1/openapi/deposits/get_client_account_by_chain_and_phone.md",
+      "bytes": 1201
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits/create_client_account_topup_operation.md",
+      "file": "en/b2b-v1/openapi/deposits/create_client_account_topup_operation.md",
+      "bytes": 12776
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/deposits/get_chain_client_account_history.md",
+      "file": "en/b2b-v1/openapi/deposits/get_chain_client_account_history.md",
+      "bytes": 2751
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards.md",
+      "bytes": 7174
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_list_by_client_id.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_list_by_client_id.md",
+      "bytes": 4799
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_list_by_phone.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_list_by_phone.md",
+      "bytes": 8074
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_user_loyalty_cards.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_user_loyalty_cards.md",
+      "bytes": 4666
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_type_list.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_type_list.md",
+      "bytes": 1913
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_type_list_for_client.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_loyalty_card_type_list_for_client.md",
+      "bytes": 2789
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/get_chain_loyalty_card_type_list.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/get_chain_loyalty_card_type_list.md",
+      "bytes": 1380
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/issue_loyalty_card.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/issue_loyalty_card.md",
+      "bytes": 5211
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/remove_loyalty_card.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/remove_loyalty_card.md",
+      "bytes": 1171
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/create_loyalty_card_transaction.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/create_loyalty_card_transaction.md",
+      "bytes": 2196
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-cards/create_chain_loyalty_card_transaction.md",
+      "file": "en/b2b-v1/openapi/loyalty-cards/create_chain_loyalty_card_transaction.md",
+      "bytes": 2179
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates.md",
+      "bytes": 13736
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_client_memberships.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_client_memberships.md",
+      "bytes": 10085
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_user_memberships.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_user_memberships.md",
+      "bytes": 10034
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_list.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_list.md",
+      "bytes": 967
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_type_list_by_id.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_type_list_by_id.md",
+      "bytes": 3510
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_type_list.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_membership_type_list.md",
+      "bytes": 5693
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/search_memberships_for_event.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/search_memberships_for_event.md",
+      "bytes": 2419
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/check_memberships_for_event.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/check_memberships_for_event.md",
+      "bytes": 2692
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_client_gift_cards.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_client_gift_cards.md",
+      "bytes": 7756
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_user_gift_cards.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_user_gift_cards.md",
+      "bytes": 4060
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_gift_card_type_list_by_id.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_gift_card_type_list_by_id.md",
+      "bytes": 3403
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/subscriptions-and-certificates/get_gift_card_type_list.md",
+      "file": "en/b2b-v1/openapi/subscriptions-and-certificates/get_gift_card_type_list.md",
+      "bytes": 6896
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs.md",
+      "bytes": 2434
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/get_location_loyalty_program_list.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/get_location_loyalty_program_list.md",
+      "bytes": 5366
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/get_loyalty_transactions_by_visit.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/get_loyalty_transactions_by_visit.md",
+      "bytes": 2745
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/generate_loyalty_code.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/generate_loyalty_code.md",
+      "bytes": 1720
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/apply_loyalty_card_deduction.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/apply_loyalty_card_deduction.md",
+      "bytes": 5552
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/cancel_loyalty_card_withdrawal.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/cancel_loyalty_card_withdrawal.md",
+      "bytes": 3679
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/apply_discount_promotion.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/apply_discount_promotion.md",
+      "bytes": 5465
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/cancel_discount_promotion.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/cancel_discount_promotion.md",
+      "bytes": 3781
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/loyalty-programs/apply_referral_program.md",
+      "file": "en/b2b-v1/openapi/loyalty-programs/apply_referral_program.md",
+      "bytes": 5513
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary.md",
+      "file": "en/b2b-v1/openapi/salary.md",
+      "bytes": 3626
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/search_team_member_calculation_daily_salary.md",
+      "file": "en/b2b-v1/openapi/salary/search_team_member_calculation_daily_salary.md",
+      "bytes": 3203
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/search_team_member_calculation_salary.md",
+      "file": "en/b2b-v1/openapi/salary/search_team_member_calculation_salary.md",
+      "bytes": 2938
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/get_team_member_calculation_schemes_count.md",
+      "file": "en/b2b-v1/openapi/salary/get_team_member_calculation_schemes_count.md",
+      "bytes": 1915
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/search_team_member_payroll_calculation.md",
+      "file": "en/b2b-v1/openapi/salary/search_team_member_payroll_calculation.md",
+      "bytes": 2981
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/get_team_member_payroll_calculation.md",
+      "file": "en/b2b-v1/openapi/salary/get_team_member_payroll_calculation.md",
+      "bytes": 5037
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/search_team_member_period_daily_salary.md",
+      "file": "en/b2b-v1/openapi/salary/search_team_member_period_daily_salary.md",
+      "bytes": 4050
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/search_team_member_period_salary.md",
+      "file": "en/b2b-v1/openapi/salary/search_team_member_period_salary.md",
+      "bytes": 2946
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/get_team_member_salary_calculation.md",
+      "file": "en/b2b-v1/openapi/salary/get_team_member_salary_calculation.md",
+      "bytes": 3052
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/get_team_member_salary_period.md",
+      "file": "en/b2b-v1/openapi/salary/get_team_member_salary_period.md",
+      "bytes": 3476
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/salary/get_team_member_salary_schemes.md",
+      "file": "en/b2b-v1/openapi/salary/get_team_member_salary_schemes.md",
+      "bytes": 2329
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/notification-settings.md",
+      "file": "en/b2b-v1/openapi/notification-settings.md",
+      "bytes": 76
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/custom-fields.md",
+      "file": "en/b2b-v1/openapi/custom-fields.md",
+      "bytes": 1418
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/custom-fields/get_custom_field_list.md",
+      "file": "en/b2b-v1/openapi/custom-fields/get_custom_field_list.md",
+      "bytes": 2725
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/custom-fields/create_custom_field.md",
+      "file": "en/b2b-v1/openapi/custom-fields/create_custom_field.md",
+      "bytes": 3362
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/custom-fields/update_custom_field.md",
+      "file": "en/b2b-v1/openapi/custom-fields/update_custom_field.md",
+      "bytes": 2666
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/custom-fields/delete_custom_field.md",
+      "file": "en/b2b-v1/openapi/custom-fields/delete_custom_field.md",
+      "bytes": 2241
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-management.md",
+      "file": "en/b2b-v1/openapi/chain-management.md",
+      "bytes": 889
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-management/get_chain_list.md",
+      "file": "en/b2b-v1/openapi/chain-management/get_chain_list.md",
+      "bytes": 5507
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-management/get_chain_client_by_phone_number.md",
+      "file": "en/b2b-v1/openapi/chain-management/get_chain_client_by_phone_number.md",
+      "bytes": 2112
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs.md",
+      "bytes": 9886
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_freeze.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_freeze.md",
+      "bytes": 2282
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_unfreeze.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_unfreeze.md",
+      "bytes": 1599
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_set_balance.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_set_balance.md",
+      "bytes": 2518
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_set_period.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_memberships_set_period.md",
+      "bytes": 2217
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_list.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_list.md",
+      "bytes": 8513
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_create.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_create.md",
+      "bytes": 13712
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_read.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_read.md",
+      "bytes": 8765
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_update.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_update.md",
+      "bytes": 12520
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_delete.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_delete.md",
+      "bytes": 1276
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_clone.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_clone.md",
+      "bytes": 9362
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_restore.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_restore.md",
+      "bytes": 1288
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_archive.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_membership_types_archive.md",
+      "bytes": 1444
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_list.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_list.md",
+      "bytes": 3081
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_create.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_create.md",
+      "bytes": 5008
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_get.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_get.md",
+      "bytes": 2452
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_update.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_update.md",
+      "bytes": 4675
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_delete.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/chain_loyalty_certificate_types_delete.md",
+      "bytes": 1316
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/create_chain_loyalty_program.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/create_chain_loyalty_program.md",
+      "bytes": 11006
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_program.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_program.md",
+      "bytes": 8225
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/update_chain_loyalty_program.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/update_chain_loyalty_program.md",
+      "bytes": 9625
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/delete_chain_loyalty_program.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/delete_chain_loyalty_program.md",
+      "bytes": 1298
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_transaction_list.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_transaction_list.md",
+      "bytes": 2987
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_notification_template_list.md",
+      "file": "en/b2b-v1/openapi/chain-loyalty-programs/get_chain_loyalty_notification_template_list.md",
+      "bytes": 1987
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization.md",
+      "file": "en/b2b-v1/openapi/fiscalization.md",
+      "bytes": 4979
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization/get_fiscal_transaction_list.md",
+      "file": "en/b2b-v1/openapi/fiscalization/get_fiscal_transaction_list.md",
+      "bytes": 5128
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization/print_fiscal_receipt.md",
+      "file": "en/b2b-v1/openapi/fiscalization/print_fiscal_receipt.md",
+      "bytes": 4875
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization/get_tax_system_list.md",
+      "file": "en/b2b-v1/openapi/fiscalization/get_tax_system_list.md",
+      "bytes": 3574
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization/handle_fiscalization_callback.md",
+      "file": "en/b2b-v1/openapi/fiscalization/handle_fiscalization_callback.md",
+      "bytes": 1210
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/fiscalization/fiscalize_document.md",
+      "file": "en/b2b-v1/openapi/fiscalization/fiscalize_document.md",
+      "bytes": 4379
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities.md",
+      "file": "en/b2b-v1/openapi/utilities.md",
+      "bytes": 1703
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/get_location_subscription_information.md",
+      "file": "en/b2b-v1/openapi/utilities/get_location_subscription_information.md",
+      "bytes": 2010
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/phone_number_format_check.md",
+      "file": "en/b2b-v1/openapi/utilities/phone_number_format_check.md",
+      "bytes": 1331
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/upload_image.md",
+      "file": "en/b2b-v1/openapi/utilities/upload_image.md",
+      "bytes": 2887
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/delete_image.md",
+      "file": "en/b2b-v1/openapi/utilities/delete_image.md",
+      "bytes": 1553
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/get_team_member_tip_settings.md",
+      "file": "en/b2b-v1/openapi/utilities/get_team_member_tip_settings.md",
+      "bytes": 4304
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi/utilities/disable_team_member_tips.md",
+      "file": "en/b2b-v1/openapi/utilities/disable_team_member_tips.md",
+      "bytes": 4387
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v1/openapi.md",
+      "file": "en/b2b-v1/openapi.md",
+      "bytes": 111217
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags/delete_tag.md",
+      "file": "en/b2b-v2/openapi/tags/delete_tag.md",
+      "bytes": 976
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/section/status.md",
+      "file": "en/b2b-v2/openapi/section/status.md",
+      "bytes": 154
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/section/authentication.md",
+      "file": "en/b2b-v2/openapi/section/authentication.md",
+      "bytes": 139
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/section/required-media-type.md",
+      "file": "en/b2b-v2/openapi/section/required-media-type.md",
+      "bytes": 179
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/section/url-patterns.md",
+      "file": "en/b2b-v2/openapi/section/url-patterns.md",
+      "bytes": 347
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services.md",
+      "file": "en/b2b-v2/openapi/services.md",
+      "bytes": 2545
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/list_services.md",
+      "file": "en/b2b-v2/openapi/services/list_services.md",
+      "bytes": 2697
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/get_service.md",
+      "file": "en/b2b-v2/openapi/services/get_service.md",
+      "bytes": 2507
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/list_service_categories.md",
+      "file": "en/b2b-v2/openapi/services/list_service_categories.md",
+      "bytes": 1444
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/list_attendance_services.md",
+      "file": "en/b2b-v2/openapi/services/list_attendance_services.md",
+      "bytes": 3525
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/list_composite_service_attendance_services.md",
+      "file": "en/b2b-v2/openapi/services/list_composite_service_attendance_services.md",
+      "bytes": 2527
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/services/list_attendance_service_suggestions.md",
+      "file": "en/b2b-v2/openapi/services/list_attendance_service_suggestions.md",
+      "bytes": 4247
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products.md",
+      "file": "en/b2b-v2/openapi/products.md",
+      "bytes": 3229
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/list_product_units.md",
+      "file": "en/b2b-v2/openapi/products/list_product_units.md",
+      "bytes": 1514
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/list_products.md",
+      "file": "en/b2b-v2/openapi/products/list_products.md",
+      "bytes": 4256
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/autocomplete_products.md",
+      "file": "en/b2b-v2/openapi/products/autocomplete_products.md",
+      "bytes": 3763
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/get_product.md",
+      "file": "en/b2b-v2/openapi/products/get_product.md",
+      "bytes": 3485
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/list_product_storage_amounts.md",
+      "file": "en/b2b-v2/openapi/products/list_product_storage_amounts.md",
+      "bytes": 2204
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/list_product_categories.md",
+      "file": "en/b2b-v2/openapi/products/list_product_categories.md",
+      "bytes": 2478
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/get_product_category.md",
+      "file": "en/b2b-v2/openapi/products/get_product_category.md",
+      "bytes": 2356
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/products/get_attendance_product_item.md",
+      "file": "en/b2b-v2/openapi/products/get_attendance_product_item.md",
+      "bytes": 3968
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members.md",
+      "file": "en/b2b-v2/openapi/team-members.md",
+      "bytes": 1942
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/list_team_members.md",
+      "file": "en/b2b-v2/openapi/team-members/list_team_members.md",
+      "bytes": 5241
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/list_positions.md",
+      "file": "en/b2b-v2/openapi/team-members/list_positions.md",
+      "bytes": 1859
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/create_position.md",
+      "file": "en/b2b-v2/openapi/team-members/create_position.md",
+      "bytes": 1948
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/get_position.md",
+      "file": "en/b2b-v2/openapi/team-members/get_position.md",
+      "bytes": 1803
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/update_position.md",
+      "file": "en/b2b-v2/openapi/team-members/update_position.md",
+      "bytes": 1090
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/team-members/delete_position.md",
+      "file": "en/b2b-v2/openapi/team-members/delete_position.md",
+      "bytes": 856
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments.md",
+      "file": "en/b2b-v2/openapi/appointments.md",
+      "bytes": 2931
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments/list_attendance_appointments.md",
+      "file": "en/b2b-v2/openapi/appointments/list_attendance_appointments.md",
+      "bytes": 7607
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments/list_appointments.md",
+      "file": "en/b2b-v2/openapi/appointments/list_appointments.md",
+      "bytes": 8167
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments/delete_appointment.md",
+      "file": "en/b2b-v2/openapi/appointments/delete_appointment.md",
+      "bytes": 999
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments/delete_timetable_appointment.md",
+      "file": "en/b2b-v2/openapi/appointments/delete_timetable_appointment.md",
+      "bytes": 7232
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/appointments/list_resource_occupations.md",
+      "file": "en/b2b-v2/openapi/appointments/list_resource_occupations.md",
+      "bytes": 2488
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events.md",
+      "file": "en/b2b-v2/openapi/events.md",
+      "bytes": 2134
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/list_events.md",
+      "file": "en/b2b-v2/openapi/events/list_events.md",
+      "bytes": 4687
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/create_event.md",
+      "file": "en/b2b-v2/openapi/events/create_event.md",
+      "bytes": 5015
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/get_event.md",
+      "file": "en/b2b-v2/openapi/events/get_event.md",
+      "bytes": 4128
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/update_event.md",
+      "file": "en/b2b-v2/openapi/events/update_event.md",
+      "bytes": 5110
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/delete_event.md",
+      "file": "en/b2b-v2/openapi/events/delete_event.md",
+      "bytes": 920
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/create_event_appointment.md",
+      "file": "en/b2b-v2/openapi/events/create_event_appointment.md",
+      "bytes": 8771
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/update_event_appointment.md",
+      "file": "en/b2b-v2/openapi/events/update_event_appointment.md",
+      "bytes": 8899
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/events/reschedule_event_appointment.md",
+      "file": "en/b2b-v2/openapi/events/reschedule_event_appointment.md",
+      "bytes": 7549
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/booking-users.md",
+      "file": "en/b2b-v2/openapi/booking-users.md",
+      "bytes": 1713
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/booking-users/get_attendance_booking_user.md",
+      "file": "en/b2b-v2/openapi/booking-users/get_attendance_booking_user.md",
+      "bytes": 4038
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/booking-users/get_booking_user_location_attendance_statistics.md",
+      "file": "en/b2b-v2/openapi/booking-users/get_booking_user_location_attendance_statistics.md",
+      "bytes": 3000
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/booking-users/get_booking_user_chain_attendance_statistics.md",
+      "file": "en/b2b-v2/openapi/booking-users/get_booking_user_chain_attendance_statistics.md",
+      "bytes": 3173
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/custom-fields.md",
+      "file": "en/b2b-v2/openapi/custom-fields.md",
+      "bytes": 560
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/custom-fields/list_custom_fields.md",
+      "file": "en/b2b-v2/openapi/custom-fields/list_custom_fields.md",
+      "bytes": 4526
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags.md",
+      "file": "en/b2b-v2/openapi/tags.md",
+      "bytes": 1339
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags/list_tags.md",
+      "file": "en/b2b-v2/openapi/tags/list_tags.md",
+      "bytes": 3387
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags/create_tag.md",
+      "file": "en/b2b-v2/openapi/tags/create_tag.md",
+      "bytes": 3302
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags/get_tag.md",
+      "file": "en/b2b-v2/openapi/tags/get_tag.md",
+      "bytes": 2759
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi/tags/update_tag.md",
+      "file": "en/b2b-v2/openapi/tags/update_tag.md",
+      "bytes": 1550
+    },
+    {
+      "url": "https://developer.alteg.io/en/b2b-v2/openapi.md",
+      "file": "en/b2b-v2/openapi.md",
+      "bytes": 17740
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/dictionaries/get_business_types_by_group.md",
+      "file": "en/developers/openapi/dictionaries/get_business_types_by_group.md",
+      "bytes": 2269
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/section/available-methods.md",
+      "file": "en/developers/openapi/section/available-methods.md",
+      "bytes": 561
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace.md",
+      "file": "en/developers/openapi/marketplace.md",
+      "bytes": 4667
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/list_marketplace_app_locations.md",
+      "file": "en/developers/openapi/marketplace/list_marketplace_app_locations.md",
+      "bytes": 4556
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_partner_applications_tariffs_list.md",
+      "file": "en/developers/openapi/marketplace/marketplace_partner_applications_tariffs_list.md",
+      "bytes": 1675
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_partner_application_add_discount.md",
+      "file": "en/developers/openapi/marketplace/marketplace_partner_application_add_discount.md",
+      "bytes": 1445
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_partner_application_payment_link.md",
+      "file": "en/developers/openapi/marketplace/marketplace_partner_application_payment_link.md",
+      "bytes": 1296
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_partner_applications_update_channel.md",
+      "file": "en/developers/openapi/marketplace/marketplace_partner_applications_update_channel.md",
+      "bytes": 1356
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/get_marketplace_integration_status.md",
+      "file": "en/developers/openapi/marketplace/get_marketplace_integration_status.md",
+      "bytes": 3689
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/uninstall_marketplace_app.md",
+      "file": "en/developers/openapi/marketplace/uninstall_marketplace_app.md",
+      "bytes": 1503
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_notification_settings_callback.md",
+      "file": "en/developers/openapi/marketplace/marketplace_notification_settings_callback.md",
+      "bytes": 1726
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_notification_settings_redirect_callback.md",
+      "file": "en/developers/openapi/marketplace/marketplace_notification_settings_redirect_callback.md",
+      "bytes": 1817
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_notification_payment_callback.md",
+      "file": "en/developers/openapi/marketplace/marketplace_notification_payment_callback.md",
+      "bytes": 2174
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_payment_refund_callback.md",
+      "file": "en/developers/openapi/marketplace/marketplace_payment_refund_callback.md",
+      "bytes": 1270
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/set_marketplace_notification_short_names.md",
+      "file": "en/developers/openapi/marketplace/set_marketplace_notification_short_names.md",
+      "bytes": 1600
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/marketplace/marketplace_webhook.md",
+      "file": "en/developers/openapi/marketplace/marketplace_webhook.md",
+      "bytes": 1911
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks.md",
+      "file": "en/developers/openapi/webhooks.md",
+      "bytes": 4281
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/get_event_notification_settings.md",
+      "file": "en/developers/openapi/webhooks/get_event_notification_settings.md",
+      "bytes": 3456
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/update_event_notification_settings.md",
+      "file": "en/developers/openapi/webhooks/update_event_notification_settings.md",
+      "bytes": 5288
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_salon.md",
+      "file": "en/developers/openapi/webhooks/webhook_salon.md",
+      "bytes": 2391
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_staff.md",
+      "file": "en/developers/openapi/webhooks/webhook_staff.md",
+      "bytes": 2153
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_service.md",
+      "file": "en/developers/openapi/webhooks/webhook_service.md",
+      "bytes": 1617
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_service_category.md",
+      "file": "en/developers/openapi/webhooks/webhook_service_category.md",
+      "bytes": 1042
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_client.md",
+      "file": "en/developers/openapi/webhooks/webhook_client.md",
+      "bytes": 2351
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_record.md",
+      "file": "en/developers/openapi/webhooks/webhook_record.md",
+      "bytes": 4365
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_loyalty_card.md",
+      "file": "en/developers/openapi/webhooks/webhook_loyalty_card.md",
+      "bytes": 1004
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_schedule.md",
+      "file": "en/developers/openapi/webhooks/webhook_schedule.md",
+      "bytes": 763
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_good.md",
+      "file": "en/developers/openapi/webhooks/webhook_good.md",
+      "bytes": 2006
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_goods_operation.md",
+      "file": "en/developers/openapi/webhooks/webhook_goods_operation.md",
+      "bytes": 2445
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/webhooks/webhook_finances_operation.md",
+      "file": "en/developers/openapi/webhooks/webhook_finances_operation.md",
+      "bytes": 2048
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/voip-integration.md",
+      "file": "en/developers/openapi/voip-integration.md",
+      "bytes": 1683
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/voip-integration/handle_voip_integration_event.md",
+      "file": "en/developers/openapi/voip-integration/handle_voip_integration_event.md",
+      "bytes": 5533
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/voip-integration/list_voip_calls.md",
+      "file": "en/developers/openapi/voip-integration/list_voip_calls.md",
+      "bytes": 2717
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/dictionaries.md",
+      "file": "en/developers/openapi/dictionaries.md",
+      "bytes": 499
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/dictionaries/get_country_list.md",
+      "file": "en/developers/openapi/dictionaries/get_country_list.md",
+      "bytes": 2510
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi/dictionaries/get_city_list.md",
+      "file": "en/developers/openapi/dictionaries/get_city_list.md",
+      "bytes": 1917
+    },
+    {
+      "url": "https://developer.alteg.io/en/developers/openapi.md",
+      "file": "en/developers/openapi.md",
+      "bytes": 12398
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/submit_feedback_form.md",
+      "file": "en/public/openapi/client-personal-cabinet/submit_feedback_form.md",
+      "bytes": 1571
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/section/authentication.md",
+      "file": "en/public/openapi/section/authentication.md",
+      "bytes": 248
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/section/rate-limits.md",
+      "file": "en/public/openapi/section/rate-limits.md",
+      "bytes": 95
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/authentication.md",
+      "file": "en/public/openapi/authentication.md",
+      "bytes": 595
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/authentication/authorize_online_booking_user.md",
+      "file": "en/public/openapi/authentication/authorize_online_booking_user.md",
+      "bytes": 2260
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking.md",
+      "file": "en/public/openapi/online-booking.md",
+      "bytes": 19574
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_booking_form_config.md",
+      "file": "en/public/openapi/online-booking/get_booking_form_config.md",
+      "bytes": 16070
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_i18n_options.md",
+      "file": "en/public/openapi/online-booking/get_i18n_options.md",
+      "bytes": 1468
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_services_available_for_booking.md",
+      "file": "en/public/openapi/online-booking/get_services_available_for_booking.md",
+      "bytes": 7279
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_team_members_available_for_booking.md",
+      "file": "en/public/openapi/online-booking/get_team_members_available_for_booking.md",
+      "bytes": 5603
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_nearest_time_slots.md",
+      "file": "en/public/openapi/online-booking/get_nearest_time_slots.md",
+      "bytes": 3252
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_dates_available_for_booking.md",
+      "file": "en/public/openapi/online-booking/get_dates_available_for_booking.md",
+      "bytes": 4389
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_time_slots_for_booking.md",
+      "file": "en/public/openapi/online-booking/get_time_slots_for_booking.md",
+      "bytes": 3020
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/validate_booking_params.md",
+      "file": "en/public/openapi/online-booking/validate_booking_params.md",
+      "bytes": 4656
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/create_online_booking.md",
+      "file": "en/public/openapi/online-booking/create_online_booking.md",
+      "bytes": 8544
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_online_booking_details.md",
+      "file": "en/public/openapi/online-booking/get_online_booking_details.md",
+      "bytes": 7226
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/update_online_booking_datetime.md",
+      "file": "en/public/openapi/online-booking/update_online_booking_datetime.md",
+      "bytes": 6217
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/book_event.md",
+      "file": "en/public/openapi/online-booking/book_event.md",
+      "bytes": 3040
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/online-booking/get_location_privacy_policy.md",
+      "file": "en/public/openapi/online-booking/get_location_privacy_policy.md",
+      "bytes": 1826
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet.md",
+      "file": "en/public/openapi/client-personal-cabinet.md",
+      "bytes": 6313
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/update_booking_user.md",
+      "file": "en/public/openapi/client-personal-cabinet/update_booking_user.md",
+      "bytes": 1827
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/get_booking_user.md",
+      "file": "en/public/openapi/client-personal-cabinet/get_booking_user.md",
+      "bytes": 1776
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/update_booking_user_password.md",
+      "file": "en/public/openapi/client-personal-cabinet/update_booking_user_password.md",
+      "bytes": 1793
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/send_phone_update_verification_code.md",
+      "file": "en/public/openapi/client-personal-cabinet/send_phone_update_verification_code.md",
+      "bytes": 1391
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/get_user_appointment_list.md",
+      "file": "en/public/openapi/client-personal-cabinet/get_user_appointment_list.md",
+      "bytes": 12702
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/delete_user_appointment.md",
+      "file": "en/public/openapi/client-personal-cabinet/delete_user_appointment.md",
+      "bytes": 1505
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi/client-personal-cabinet/get_feedback_form_status.md",
+      "file": "en/public/openapi/client-personal-cabinet/get_feedback_form_status.md",
+      "bytes": 6288
+    },
+    {
+      "url": "https://developer.alteg.io/en/public/openapi.md",
+      "file": "en/public/openapi.md",
+      "bytes": 28215
+    },
+    {
+      "url": "https://developer.alteg.io/en.md",
+      "file": "en.md",
+      "bytes": 12791
+    }
+  ]
+}

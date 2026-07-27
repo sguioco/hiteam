@@ -204,10 +204,15 @@ function buildService() {
       state.kommoCalls.push({ tenantId: callTenantId, reason });
     },
   };
+  const altegioMarketplaceBilling = {
+    isMarketplaceBilled: () => false,
+    notifyPaymentAfterStripe: async () => null,
+  };
   const service = new BillingService(
     prisma as never,
     new FakeConfigService({}) as never,
     kommoService as never,
+    altegioMarketplaceBilling as never,
   );
 
   return { service, state, tenantId };

@@ -25,6 +25,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { BootstrapModule } from './modules/bootstrap/bootstrap.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { AltegioSyncModule } from './modules/altegio-sync/altegio-sync.module';
 import { DiagnosticsModule } from './modules/diagnostics/diagnostics.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
@@ -56,6 +57,7 @@ import { AppExceptionFilter } from './common/filters/app-exception.filter';
     StorageModule,
     BootstrapModule,
     BillingModule,
+    AltegioSyncModule,
     ExportsModule,
     DiagnosticsModule,
     ObservabilityModule,

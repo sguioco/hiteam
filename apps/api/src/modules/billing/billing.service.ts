@@ -1,8 +1,9 @@
-import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmployeeInvitationStatus, EmployeeStatus } from '@prisma/client';
 import StripeClient from 'stripe';
 import type { Stripe } from 'stripe/cjs/stripe.core';
+import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
 import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.service';
@@ -203,6 +204,7 @@ export class BillingService {
     private readonly configService: ConfigService,
     private readonly kommoService: KommoService,
     private readonly altegioMarketplaceBilling: AltegioMarketplaceBillingService,
+    @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
   ) {}
 
   async getSummary(tenantId: string, options?: { syncMarketplace?: boolean }) {
@@ -311,6 +313,13 @@ export class BillingService {
       tenantId,
       locationId: args.locationId,
       applicationId: args.applicationId,
+    });
+    void this.altegioStaffScheduleSync?.syncAll(tenantId).catch((error) => {
+      this.logger.warn(
+        `Altegio staff/schedule sync after connect failed tenantId=${tenantId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     });
     return this.getSummary(tenantId, { syncMarketplace: true });
   }

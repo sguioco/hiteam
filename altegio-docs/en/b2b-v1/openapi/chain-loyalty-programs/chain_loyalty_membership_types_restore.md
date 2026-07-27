@@ -1,0 +1,71 @@
+# Restore deleted membership type
+
+Restores a previously deleted membership type.
+
+Note: Requires chain-level permissions.
+
+Endpoint: POST /chain/{chain_id}/loyalty/abonement_types/{loyalty_membership_type_id}/restore
+Version: 1.0.0
+Security: BearerPartnerUser
+
+## Header parameters:
+
+  - `Accept` (string, required)
+
+  - `Content-Type` (string, required)
+
+  - `Authorization` (string, required)
+    Bearer {partner_token}, User {user_token}
+
+## Path parameters:
+
+  - `chain_id` (integer, required)
+    Chain ID
+    Example: 1
+
+  - `loyalty_membership_type_id` (integer, required)
+    Membership type ID to restore
+    Example: 489159
+
+## Request fields (application/json):
+
+  - `restore_in_title` (string, required)
+    New title for the restored membership type
+    Example: "Fitness Membership"
+
+## Response 401 fields (application/json):
+
+  - `success` (boolean)
+
+  - `data` (null)
+
+  - `meta` (object)
+
+## Response 403 fields (application/json):
+
+  - `success` (boolean)
+
+  - `data` (null)
+
+  - `meta` (object)
+
+## Response 404 fields (application/json):
+
+  - `success` (boolean)
+
+  - `data` (null)
+
+  - `meta` (object)
+
+## Response 422 fields (application/json):
+
+  - `success` (boolean)
+
+  - `data` (null)
+
+  - `meta` (object)
+
+  - `meta.message` (string)
+
+
+## Response 204 fields

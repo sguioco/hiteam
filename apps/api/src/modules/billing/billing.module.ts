@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { AltegioSyncModule } from '../altegio-sync/altegio-sync.module';
 import { AltegioCallbackController } from './altegio-callback.controller';
 import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.service';
 import { AltegioMarketplaceClient } from './altegio-marketplace.client';
@@ -7,6 +8,7 @@ import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 
 @Module({
+  imports: [forwardRef(() => AltegioSyncModule)],
   controllers: [BillingController, BillingWebhookController, AltegioCallbackController],
   providers: [BillingService, AltegioMarketplaceClient, AltegioMarketplaceBillingService],
   exports: [BillingService, AltegioMarketplaceBillingService],
