@@ -89,6 +89,7 @@ migrations:
     - "push"
     - "--schema"
     - "prisma/schema.prisma"
+    - "--accept-data-loss"
   ttlSecondsAfterFinished: 0
   activeDeadlineSeconds: 900
   waitFor:

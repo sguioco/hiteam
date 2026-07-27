@@ -120,7 +120,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
-          command_timeout: 20m
+          command_timeout: 25m
           script: |
             set -euo pipefail
 
@@ -139,7 +139,7 @@ jobs:
 
             kubectl -n argocd annotate application hiteam-main argocd.argoproj.io/refresh=hard --overwrite
 
-            for attempt in $(seq 1 120); do
+            for attempt in $(seq 1 240); do
               sync_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.sync.status}')"
               health_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.health.status}')"
               operation_phase="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.operationState.phase}')"
@@ -147,6 +147,8 @@ jobs:
               echo "[argocd] attempt=${attempt} sync=${sync_status:-unknown} health=${health_status:-unknown} operation=${operation_phase:-none}"
 
               if [ "${operation_phase:-}" = "Failed" ] || [ "${operation_phase:-}" = "Error" ]; then
+                kubectl -n hiteam-main logs job/hiteam-migrations --all-containers=true || true
+                kubectl -n hiteam-main describe job hiteam-migrations || true
                 kubectl -n argocd get application hiteam-main -o yaml
                 exit 1
               fi
@@ -159,5 +161,7 @@ jobs:
             done
 
             echo "[argocd] deployment did not become Synced/Healthy in time"
+            kubectl -n hiteam-main logs job/hiteam-migrations --all-containers=true || true
+            kubectl -n hiteam-main describe job hiteam-migrations || true
             kubectl -n argocd get application hiteam-main -o yaml
             exit 1
