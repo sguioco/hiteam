@@ -164,21 +164,32 @@ export function middleware(request: NextRequest) {
   if (
     hasSession &&
     isAltegioEntry &&
-    altegioLocationId &&
-    (pathname === "/login" || pathname === "/signup" || pathname === "/create")
+    altegioLocationId
   ) {
-    const billingUrl = getPublicRequestUrl(request, "/billing");
-    billingUrl.searchParams.set("from", "altegio");
-    billingUrl.searchParams.set("salon_id", altegioLocationId);
+    // Marketplace return must land on Billing connect, not org setup / home.
+    const alreadyOnBilling = pathname === "/billing";
+    if (
+      !alreadyOnBilling &&
+      (pathname === "/login" ||
+        pathname === "/signup" ||
+        pathname === "/create" ||
+        pathname === "/app" ||
+        pathname === "/organization" ||
+        pathname === "/")
+    ) {
+      const billingUrl = getPublicRequestUrl(request, "/billing");
+      billingUrl.searchParams.set("from", "altegio");
+      billingUrl.searchParams.set("salon_id", altegioLocationId);
 
-    const applicationId =
-      searchParams.get("app_id")?.trim() ||
-      searchParams.get("application_id")?.trim();
-    if (applicationId) {
-      billingUrl.searchParams.set("app_id", applicationId);
+      const applicationId =
+        searchParams.get("app_id")?.trim() ||
+        searchParams.get("application_id")?.trim();
+      if (applicationId) {
+        billingUrl.searchParams.set("app_id", applicationId);
+      }
+
+      return NextResponse.redirect(billingUrl);
     }
-
-    return NextResponse.redirect(billingUrl);
   }
 
   if (!hasSession && !isPublicRoute) {

@@ -739,6 +739,15 @@ export default function BillingPageClient({
             ? "Салон Altegio подключён. Цена считается по региону HiTeam."
             : "Altegio salon connected. Pricing follows your HiTeam region.",
         );
+        // Keep the user on Billing so the connection result is visible.
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.set("from", "altegio");
+          url.searchParams.set("connected", "1");
+          url.searchParams.delete("salon_id");
+          url.searchParams.delete("app_id");
+          window.history.replaceState({}, "", url.toString());
+        }
       } catch (requestError) {
         if (cancelled) {
           return;
@@ -876,6 +885,12 @@ export default function BillingPageClient({
                     ? "Синхронизировать сотрудников и расписание"
                     : "Sync staff & schedule"}
                 </button>
+                <a
+                  className="text-sm font-semibold text-[color:var(--accent)]"
+                  href="/organization"
+                >
+                  {locale === "ru" ? "Открыть организацию" : "Open organization"}
+                </a>
               </div>
             ) : (
               <div className="mt-4 max-w-xl space-y-3">

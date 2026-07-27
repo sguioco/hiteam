@@ -381,7 +381,9 @@ export function AdminShell({
       !ready ||
       !session ||
       organization?.configured !== false ||
-      pathname === toAdminHref("/organization")
+      pathname === toAdminHref("/organization") ||
+      // Marketplace connect must finish on Billing before org setup.
+      pathname === toAdminHref("/billing")
     ) {
       return;
     }

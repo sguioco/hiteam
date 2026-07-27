@@ -23,6 +23,9 @@ import {
 import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
+import {
+  peekAltegioMarketplaceParams,
+} from "../../lib/altegio-marketplace";
 import { writeBrowserStorageItem } from "../../lib/browser-storage";
 import { useI18n } from "../../lib/i18n";
 
@@ -237,6 +240,8 @@ export default function OrganizationPageClient({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [altegioConnectedLocationId, setAltegioConnectedLocationId] = useState<string | null>(null);
+  const [altegioConnectionLoaded, setAltegioConnectionLoaded] = useState(false);
   const [locationConfirmationPending, setLocationConfirmationPending] =
     useState(false);
   const [setupMode, setSetupMode] = useState<SetupMode>(
@@ -299,6 +304,40 @@ export default function OrganizationPageClient({
 
     void loadData();
   }, []);
+
+  useEffect(() => {
+    const pending = peekAltegioMarketplaceParams();
+    if (pending?.locationId) {
+      const params = new URLSearchParams({
+        from: "altegio",
+        salon_id: pending.locationId,
+      });
+      if (pending.applicationId) {
+        params.set("app_id", pending.applicationId);
+      }
+      router.replace(toAdminHref(`/billing?${params.toString()}`));
+      return;
+    }
+
+    const session = getSession();
+    if (!session) return;
+    void apiRequest<{
+      altegio?: { connected?: boolean; locationId?: string | null };
+    }>("/billing/summary", {
+      token: session.accessToken,
+      skipClientCache: true,
+    })
+      .then((summary) => {
+        if (summary.altegio?.connected && summary.altegio.locationId) {
+          setAltegioConnectedLocationId(summary.altegio.locationId);
+        }
+        setAltegioConnectionLoaded(true);
+      })
+      .catch(() => {
+        setAltegioConnectionLoaded(true);
+        // ignore — org page still works without billing banner
+      });
+  }, [router]);
 
   useEffect(() => {
     if (!saveSuccess) {
@@ -495,6 +534,42 @@ export default function OrganizationPageClient({
             {error ? (
               <div className="organization-studio-feedback organization-studio-feedback--error">
                 {error}
+              </div>
+            ) : null}
+
+            {altegioConnectionLoaded ? (
+              <div className="mb-5 rounded-2xl border border-[#d8e5ff] bg-[#f7faff] px-4 py-3 text-sm">
+                <p className="font-semibold text-foreground">
+                  {altegioConnectedLocationId
+                    ? locale === "ru"
+                      ? `Altegio подключён · salon ${altegioConnectedLocationId}`
+                      : `Altegio connected · salon ${altegioConnectedLocationId}`
+                    : locale === "ru"
+                      ? "Подключить Altegio"
+                      : "Connect Altegio"}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {altegioConnectedLocationId
+                    ? locale === "ru"
+                      ? "Управление интеграцией и синхронизацией — в Billing."
+                      : "Manage the integration and sync from Billing."
+                    : locale === "ru"
+                      ? "Подключите салон для синхронизации сотрудников и расписания."
+                      : "Connect a location to sync staff and schedules."}
+                </p>
+                <button
+                  className="mt-2 text-sm font-semibold text-[color:var(--accent)]"
+                  onClick={() => router.push(toAdminHref("/billing"))}
+                  type="button"
+                >
+                  {altegioConnectedLocationId
+                    ? locale === "ru"
+                      ? "Открыть Billing"
+                      : "Open Billing"
+                    : locale === "ru"
+                      ? "Подключить через Altegio Marketplace"
+                      : "Connect via Altegio Marketplace"}
+                </button>
               </div>
             ) : null}
 
