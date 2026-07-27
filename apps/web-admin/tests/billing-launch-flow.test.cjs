@@ -52,7 +52,7 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
   );
   assertContains(
     source,
-    "/altegio-mark.svg",
+    "/altegio-logo.png",
     "Altegio connection dialog must display the Altegio logo.",
   );
   assertContains(
@@ -146,7 +146,7 @@ function testAltegioRegistrationPrefillsOrganization() {
   );
   assertContains(
     organizationSource,
-    "/altegio-mark.svg",
+    "/altegio-logo.png",
     "Organization setup must show the Altegio logo.",
   );
 }

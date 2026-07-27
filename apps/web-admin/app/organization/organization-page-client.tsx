@@ -543,8 +543,8 @@ export default function OrganizationPageClient({
               altegioConnectedLocationId ? (
                 <div className="mb-6 flex flex-col gap-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(135deg,#f4fff9_0%,#ffffff_100%)] px-5 py-4 shadow-[0_12px_36px_rgba(16,185,129,0.08)] sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3.5">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] bg-[#ffe35b] shadow-[0_8px_20px_rgba(236,193,23,0.22)]">
-                      <img alt="Altegio" className="h-9 w-9" src="/altegio-mark.svg" />
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[15px] shadow-[0_8px_20px_rgba(236,193,23,0.22)]">
+                      <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
                     </div>
                     <div>
                       <p className="font-semibold text-foreground">
@@ -572,8 +572,8 @@ export default function OrganizationPageClient({
                   <div className="pointer-events-none absolute -right-14 -top-20 h-48 w-48 rounded-full bg-[#ffe35b]/45 blur-3xl" />
                   <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-[#ffe35b] shadow-[0_12px_28px_rgba(224,180,11,0.25)]">
-                        <img alt="Altegio" className="h-12 w-12" src="/altegio-mark.svg" />
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[20px] shadow-[0_12px_28px_rgba(224,180,11,0.25)]">
+                        <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">

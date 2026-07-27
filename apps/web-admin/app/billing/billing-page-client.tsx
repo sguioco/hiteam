@@ -930,8 +930,8 @@ export default function BillingPageClient({
           <section className="flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3.5">
               <div className="flex -space-x-2">
-                <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#fff3a8] shadow-sm">
-                  <img alt="Altegio" className="h-7 w-7" src="/altegio-mark.svg" />
+                <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
+                  <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
                 </div>
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
                   <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
@@ -1009,7 +1009,12 @@ export default function BillingPageClient({
               <div className="relative z-10 mx-auto flex max-w-md items-center justify-center gap-4 sm:gap-7">
                 <div className="flex h-24 w-36 flex-col items-center justify-center gap-2 rounded-[24px] border border-white/90 bg-white/85 shadow-[0_16px_45px_rgba(30,41,59,0.10)] backdrop-blur">
                   <div className="flex items-center gap-2">
-                    <img alt="" aria-hidden="true" className="h-8 w-8" src="/altegio-mark.svg" />
+                    <img
+                      alt=""
+                      aria-hidden="true"
+                      className="h-9 w-9 rounded-xl object-cover"
+                      src="/altegio-logo.png"
+                    />
                     <span className="text-xl font-semibold tracking-[-0.04em] text-[#22262c]">
                       altegio
                     </span>
