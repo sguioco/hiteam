@@ -696,12 +696,37 @@ export default function BillingPageClient({
   }, [minimumSeatCount]);
 
   useEffect(() => {
-    const pending = peekAltegioMarketplaceParams();
-    if (!pending?.locationId || altegioConnectAttempted.current) {
+    // Wait for billing summary so React re-renders don't cancel an in-flight connect.
+    if (!summary) {
       return;
     }
-    if (summary?.altegio?.connected && summary.altegio.locationId === pending.locationId) {
+
+    const pending = peekAltegioMarketplaceParams();
+    if (!pending?.locationId) {
+      return;
+    }
+
+    setAltegioSalonInput((current) => current || pending.locationId);
+
+    if (summary.altegio?.connected && summary.altegio.locationId === pending.locationId) {
       clearAltegioMarketplaceParams();
+      setAltegioMessage(
+        locale === "ru"
+          ? `Салон Altegio уже подключён · ${pending.locationId}`
+          : `Altegio salon already connected · ${pending.locationId}`,
+      );
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("from", "altegio");
+        url.searchParams.set("connected", "1");
+        url.searchParams.delete("salon_id");
+        url.searchParams.delete("app_id");
+        window.history.replaceState({}, "", url.toString());
+      }
+      return;
+    }
+
+    if (altegioConnectAttempted.current) {
       return;
     }
 
@@ -711,14 +736,13 @@ export default function BillingPageClient({
     }
 
     altegioConnectAttempted.current = true;
-    let cancelled = false;
     void (async () => {
       try {
         setAltegioConnecting(true);
         setAltegioMessage(
           locale === "ru"
-            ? "Подключаем салон Altegio…"
-            : "Connecting Altegio salon…",
+            ? `Подключаем салон Altegio ${pending.locationId}…`
+            : `Connecting Altegio salon ${pending.locationId}…`,
         );
         const nextSummary = await apiRequest<BillingSummary>("/billing/altegio/connect", {
           method: "POST",
@@ -729,9 +753,6 @@ export default function BillingPageClient({
           }),
           skipClientCache: true,
         });
-        if (cancelled) {
-          return;
-        }
         setSummary(nextSummary);
         clearAltegioMarketplaceParams();
         setAltegioMessage(
@@ -739,7 +760,6 @@ export default function BillingPageClient({
             ? "Салон Altegio подключён. Цена считается по региону HiTeam."
             : "Altegio salon connected. Pricing follows your HiTeam region.",
         );
-        // Keep the user on Billing so the connection result is visible.
         if (typeof window !== "undefined") {
           const url = new URL(window.location.href);
           url.searchParams.set("from", "altegio");
@@ -749,9 +769,7 @@ export default function BillingPageClient({
           window.history.replaceState({}, "", url.toString());
         }
       } catch (requestError) {
-        if (cancelled) {
-          return;
-        }
+        altegioConnectAttempted.current = false;
         setAltegioMessage(
           requestError instanceof Error
             ? requestError.message
@@ -760,16 +778,10 @@ export default function BillingPageClient({
               : "Failed to connect Altegio",
         );
       } finally {
-        if (!cancelled) {
-          setAltegioConnecting(false);
-        }
+        setAltegioConnecting(false);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [locale, summary?.altegio?.connected, summary?.altegio?.locationId]);
+  }, [locale, summary]);
 
   return (
     <AdminShell showTopbar={false}>
@@ -892,6 +904,12 @@ export default function BillingPageClient({
                   {locale === "ru" ? "Открыть организацию" : "Open organization"}
                 </a>
               </div>
+            ) : altegioConnecting ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {locale === "ru"
+                  ? `Обнаружен salon ${altegioSalonInput || "…"} — подключаем…`
+                  : `Detected salon ${altegioSalonInput || "…"} — connecting…`}
+              </p>
             ) : (
               <div className="mt-4 max-w-xl space-y-3">
                 <input
@@ -911,7 +929,8 @@ export default function BillingPageClient({
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={
                     !extractAltegioSalonId(altegioSalonInput) ||
-                    !summary.altegio?.applicationId
+                    !summary.altegio?.applicationId ||
+                    altegioConnecting
                   }
                   onClick={() => {
                     const locationId = extractAltegioSalonId(altegioSalonInput);
