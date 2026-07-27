@@ -3,14 +3,26 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
+  Check,
+  CheckCircle2,
   CreditCard,
   ExternalLink,
+  Link2,
+  LoaderCircle,
   Minus,
   Plus,
   ReceiptText,
   Users,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { BrandWordmark } from "@/components/brand-wordmark";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
@@ -332,6 +344,10 @@ export default function BillingPageClient({
   );
   const [seatControlTouched, setSeatControlTouched] = useState(false);
   const [altegioConnecting, setAltegioConnecting] = useState(false);
+  const [altegioDialogOpen, setAltegioDialogOpen] = useState(false);
+  const [altegioSyncAction, setAltegioSyncAction] = useState<
+    "subscription" | "workspace" | null
+  >(null);
   const [altegioMessage, setAltegioMessage] = useState<string | null>(null);
   const [altegioSalonInput, setAltegioSalonInput] = useState("");
   const altegioConnectAttempted = useRef(false);
@@ -696,6 +712,14 @@ export default function BillingPageClient({
   }, [minimumSeatCount]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("connected") === "1" || peekAltegioMarketplaceParams()?.locationId) {
+      setAltegioDialogOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
     // Wait for billing summary so React re-renders don't cancel an in-flight connect.
     if (!summary) {
       return;
@@ -706,6 +730,7 @@ export default function BillingPageClient({
       return;
     }
 
+    setAltegioDialogOpen(true);
     setAltegioSalonInput((current) => current || pending.locationId);
 
     if (summary.altegio?.connected && summary.altegio.locationId === pending.locationId) {
@@ -783,6 +808,84 @@ export default function BillingPageClient({
     })();
   }, [locale, summary]);
 
+  function openAltegioMarketplace() {
+    const locationId = extractAltegioSalonId(altegioSalonInput);
+    const applicationId = summary?.altegio?.applicationId || "";
+    const url = buildAltegioMarketplaceAppUrl(locationId, applicationId);
+    if (!url) {
+      setAltegioMessage(
+        locale === "ru"
+          ? "Укажите корректный ID салона Altegio."
+          : "Enter a valid Altegio location ID.",
+      );
+      return;
+    }
+    window.location.assign(url);
+  }
+
+  async function syncAltegioSubscription() {
+    const session = getSession();
+    if (!session) return;
+    try {
+      setAltegioSyncAction("subscription");
+      setAltegioMessage(
+        locale === "ru" ? "Синхронизируем подписку…" : "Syncing subscription…",
+      );
+      const nextSummary = await apiRequest<BillingSummary>("/billing/altegio/sync", {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+      setSummary(nextSummary);
+      setAltegioMessage(
+        locale === "ru" ? "Подписка синхронизирована." : "Subscription synced.",
+      );
+    } catch (requestError) {
+      setAltegioMessage(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось синхронизировать подписку"
+            : "Failed to sync subscription",
+      );
+    } finally {
+      setAltegioSyncAction(null);
+    }
+  }
+
+  async function syncAltegioWorkspace() {
+    const session = getSession();
+    if (!session) return;
+    try {
+      setAltegioSyncAction("workspace");
+      setAltegioMessage(
+        locale === "ru"
+          ? "Синхронизируем сотрудников и расписание…"
+          : "Syncing staff and schedule…",
+      );
+      await apiRequest("/altegio/sync", {
+        method: "POST",
+        token: session.accessToken,
+        skipClientCache: true,
+      });
+      setAltegioMessage(
+        locale === "ru"
+          ? "Сотрудники и расписание синхронизированы."
+          : "Staff and schedule synced.",
+      );
+    } catch (requestError) {
+      setAltegioMessage(
+        requestError instanceof Error
+          ? requestError.message
+          : locale === "ru"
+            ? "Не удалось синхронизировать сотрудников"
+            : "Failed to sync staff",
+      );
+    } finally {
+      setAltegioSyncAction(null);
+    }
+  }
+
   return (
     <AdminShell showTopbar={false}>
       <style>{`
@@ -824,144 +927,285 @@ export default function BillingPageClient({
         </header>
 
         {summary && (
-          <section className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading text-sm shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
-            <p className="font-semibold text-foreground">
-              {locale === "ru" ? "Altegio Marketplace" : "Altegio Marketplace"}
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              {altegioMessage ||
-                (summary?.altegio?.connected
-                  ? locale === "ru"
-                    ? `Подключено · salon ${summary.altegio.locationId}`
-                    : `Connected · salon ${summary.altegio.locationId}`
-                : locale === "ru"
-                  ? "Подключите салон, чтобы синхронизировать сотрудников и расписание."
-                  : "Connect a location to sync staff and schedules.")}
-            </p>
-            {summary?.altegio?.connected ? (
-              <div className="mt-3 flex flex-wrap gap-4">
-                <button
-                  className="text-sm font-semibold text-[color:var(--accent)]"
-                  disabled={altegioConnecting}
-                  onClick={() => {
-                    const session = getSession();
-                    if (!session) return;
-                    void apiRequest<BillingSummary>("/billing/altegio/sync", {
-                      method: "POST",
-                      token: session.accessToken,
-                      skipClientCache: true,
-                    }).then(setSummary);
-                  }}
-                  type="button"
-                >
-                  {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
-                </button>
-                <button
-                  className="text-sm font-semibold text-[color:var(--accent)]"
-                  disabled={altegioConnecting}
-                  onClick={() => {
-                    const session = getSession();
-                    if (!session) return;
-                    setAltegioConnecting(true);
-                    setAltegioMessage(
-                      locale === "ru"
-                        ? "Синхронизируем сотрудников и расписание…"
-                        : "Syncing staff and schedule…",
-                    );
-                    void apiRequest("/altegio/sync", {
-                      method: "POST",
-                      token: session.accessToken,
-                      skipClientCache: true,
-                    })
-                      .then(() => {
-                        setAltegioMessage(
-                          locale === "ru"
-                            ? "Сотрудники и расписание синхронизированы с Altegio."
-                            : "Staff and schedule synced with Altegio.",
-                        );
-                      })
-                      .catch((requestError) => {
-                        setAltegioMessage(
-                          requestError instanceof Error
-                            ? requestError.message
-                            : locale === "ru"
-                              ? "Не удалось синхронизировать сотрудников"
-                              : "Failed to sync staff",
-                        );
-                      })
-                      .finally(() => setAltegioConnecting(false));
-                  }}
-                  type="button"
-                >
-                  {locale === "ru"
-                    ? "Синхронизировать сотрудников и расписание"
-                    : "Sync staff & schedule"}
-                </button>
-                <a
-                  className="text-sm font-semibold text-[color:var(--accent)]"
-                  href="/organization"
-                >
-                  {locale === "ru" ? "Открыть организацию" : "Open organization"}
-                </a>
+          <section className="flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <div className="flex -space-x-2">
+                <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#fff3a8] shadow-sm">
+                  <img alt="Altegio" className="h-7 w-7" src="/altegio-mark.svg" />
+                </div>
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
+                  <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
+                </div>
               </div>
-            ) : altegioConnecting ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                {locale === "ru"
-                  ? `Обнаружен salon ${altegioSalonInput || "…"} — подключаем…`
-                  : `Detected salon ${altegioSalonInput || "…"} — connecting…`}
-              </p>
-            ) : (
-              <div className="mt-4 max-w-xl space-y-3">
-                <input
-                  className="h-11 w-full rounded-xl border border-[rgba(15,23,42,0.12)] bg-white px-4 text-sm outline-none transition focus:border-[color:var(--accent)]"
-                  onChange={(event) => {
-                    setAltegioSalonInput(event.target.value);
-                    setAltegioMessage(null);
-                  }}
-                  placeholder={
-                    locale === "ru"
-                      ? "ID салона или ссылка из Altegio"
-                      : "Location ID or Altegio URL"
-                  }
-                  value={altegioSalonInput}
-                />
-                <button
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={
-                    !extractAltegioSalonId(altegioSalonInput) ||
-                    !summary.altegio?.applicationId ||
-                    altegioConnecting
-                  }
-                  onClick={() => {
-                    const locationId = extractAltegioSalonId(altegioSalonInput);
-                    const applicationId = summary.altegio?.applicationId || "";
-                    const url = buildAltegioMarketplaceAppUrl(locationId, applicationId);
-                    if (!url) {
-                      setAltegioMessage(
-                        locale === "ru"
-                          ? "Укажите корректный ID салона Altegio."
-                          : "Enter a valid Altegio location ID.",
-                      );
-                      return;
-                    }
-                    window.location.assign(url);
-                  }}
-                  type="button"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  {locale === "ru"
-                    ? "Подключить через Altegio Marketplace"
-                    : "Connect via Altegio Marketplace"}
-                </button>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "ru"
-                    ? "ID салона виден в URL Altegio: /appstore/123456/…"
-                    : "The location ID is visible in the Altegio URL: /appstore/123456/…"}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-foreground">Altegio</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      summary.altegio?.connected
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {summary.altegio?.connected
+                      ? locale === "ru"
+                        ? "Подключено"
+                        : "Connected"
+                      : locale === "ru"
+                        ? "Не подключено"
+                        : "Not connected"}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                  {summary.altegio?.connected
+                    ? locale === "ru"
+                      ? `Сотрудники и расписание · salon ${summary.altegio.locationId}`
+                      : `Staff and schedule · salon ${summary.altegio.locationId}`
+                    : locale === "ru"
+                      ? "Синхронизация HiTeam с вашим салоном"
+                      : "Sync HiTeam with your location"}
                 </p>
               </div>
-            )}
+            </div>
+            <button
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#20242a] px-4 text-sm font-semibold text-white transition hover:bg-[#111418]"
+              onClick={() => setAltegioDialogOpen(true)}
+              type="button"
+            >
+              <Link2 className="h-4 w-4" />
+              {summary.altegio?.connected
+                ? locale === "ru"
+                  ? "Управлять"
+                  : "Manage connection"
+                : locale === "ru"
+                  ? "Подключить"
+                  : "Connect"}
+            </button>
           </section>
         )}
+
+        <Dialog
+          open={altegioDialogOpen}
+          onOpenChange={(open) => {
+            if (!altegioConnecting) setAltegioDialogOpen(open);
+          }}
+        >
+          <DialogContent className="w-[min(640px,calc(100vw-2rem))] overflow-hidden border-0 bg-white p-0 shadow-[0_36px_110px_rgba(18,24,38,0.25)]">
+            <div className="relative overflow-hidden bg-[linear-gradient(135deg,#f4f7ff_0%,#fffdf4_54%,#fff5b8_100%)] px-7 pb-7 pt-8 sm:px-9">
+              <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#ffe85d]/30 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-[#8bb5ff]/25 blur-3xl" />
+
+              <DialogHeader className="relative z-10 text-center">
+                <DialogTitle className="sr-only">
+                  {locale === "ru" ? "Подключение Altegio" : "Altegio connection"}
+                </DialogTitle>
+                <DialogDescription className="sr-only">
+                  {locale === "ru"
+                    ? "Синхронизация Altegio и HiTeam"
+                    : "Synchronize Altegio and HiTeam"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="relative z-10 mx-auto flex max-w-md items-center justify-center gap-4 sm:gap-7">
+                <div className="flex h-24 w-36 flex-col items-center justify-center gap-2 rounded-[24px] border border-white/90 bg-white/85 shadow-[0_16px_45px_rgba(30,41,59,0.10)] backdrop-blur">
+                  <div className="flex items-center gap-2">
+                    <img alt="" aria-hidden="true" className="h-8 w-8" src="/altegio-mark.svg" />
+                    <span className="text-xl font-semibold tracking-[-0.04em] text-[#22262c]">
+                      altegio
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#818896]">
+                    Marketplace
+                  </span>
+                </div>
+
+                <div className="relative flex w-14 items-center justify-center">
+                  <div className="absolute h-px w-16 bg-gradient-to-r from-[#f2cc23] via-[#839ef2] to-[#527ce8]" />
+                  <div
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-full border-4 border-white shadow-md ${
+                      summary?.altegio?.connected
+                        ? "bg-emerald-500 text-white"
+                        : altegioConnecting
+                          ? "bg-[#5577e8] text-white"
+                          : "bg-white text-[#5577e8]"
+                    }`}
+                  >
+                    {summary?.altegio?.connected ? (
+                      <Check className="h-4 w-4 stroke-[3]" />
+                    ) : altegioConnecting ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex h-24 w-36 flex-col items-center justify-center gap-2 rounded-[24px] border border-white/90 bg-white/85 shadow-[0_16px_45px_rgba(30,41,59,0.10)] backdrop-blur">
+                  <BrandWordmark className="text-[1.35rem]" />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#818896]">
+                    Workspace
+                  </span>
+                </div>
+              </div>
+
+              <div className="relative z-10 mt-7 text-center">
+                <h2 className="font-heading text-[1.65rem] font-semibold tracking-[-0.04em] text-[#1c2026]">
+                  {summary?.altegio?.connected
+                    ? locale === "ru"
+                      ? "Altegio подключён"
+                      : "Altegio is connected"
+                    : altegioConnecting
+                      ? locale === "ru"
+                        ? "Подключаем ваш салон"
+                        : "Connecting your location"
+                      : locale === "ru"
+                        ? "Подключите Altegio к HiTeam"
+                        : "Connect Altegio to HiTeam"}
+                </h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#667085]">
+                  {summary?.altegio?.connected
+                    ? locale === "ru"
+                      ? "Сотрудники, рабочие часы и расписание могут синхронизироваться между системами."
+                      : "Staff, working hours and schedules can now sync between both systems."
+                    : altegioConnecting
+                      ? locale === "ru"
+                        ? `Мы обнаружили salon ${altegioSalonInput || "…"} и завершаем безопасное подключение.`
+                        : `We detected salon ${altegioSalonInput || "…"} and are completing the secure connection.`
+                      : locale === "ru"
+                        ? "Подтвердите доступ в Marketplace — HiTeam автоматически обнаружит салон и импортирует данные."
+                        : "Approve access in Marketplace — HiTeam will detect your location and import its data."}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-5 px-7 pb-7 pt-6 sm:px-9">
+              {altegioMessage ? (
+                <div
+                  className={`rounded-2xl px-4 py-3 text-sm ${
+                    summary?.altegio?.connected
+                      ? "border border-emerald-100 bg-emerald-50 text-emerald-800"
+                      : "border border-[#dce5ff] bg-[#f5f8ff] text-[#40557f]"
+                  }`}
+                >
+                  {altegioMessage}
+                </div>
+              ) : null}
+
+              {summary?.altegio?.connected ? (
+                <>
+                  <div className="grid gap-3 rounded-2xl border border-[#e8ebf2] bg-[#fafbfc] p-4 text-sm sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === "ru" ? "Статус" : "Status"}
+                      </p>
+                      <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-4 w-4" />
+                        {locale === "ru" ? "Активно" : "Active"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Salon ID</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {summary.altegio.locationId}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === "ru" ? "Подключено" : "Connected"}
+                      </p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {formatBillingDate(summary.altegio.activatedAt, locale)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-4 text-sm font-semibold text-[#313844] transition hover:bg-[#f7f9fc] disabled:opacity-60"
+                      disabled={altegioSyncAction !== null}
+                      onClick={() => void syncAltegioSubscription()}
+                      type="button"
+                    >
+                      {altegioSyncAction === "subscription" ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Link2 className="h-4 w-4" />
+                      )}
+                      {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
+                    </button>
+                    <button
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2f65df] px-4 text-sm font-semibold text-white transition hover:bg-[#2558ca] disabled:opacity-60"
+                      disabled={altegioSyncAction !== null}
+                      onClick={() => void syncAltegioWorkspace()}
+                      type="button"
+                    >
+                      {altegioSyncAction === "workspace" ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Users className="h-4 w-4" />
+                      )}
+                      {locale === "ru" ? "Синхронизировать данные" : "Sync workspace data"}
+                    </button>
+                  </div>
+                </>
+              ) : altegioConnecting ? (
+                <div className="flex items-center justify-center gap-3 rounded-2xl border border-[#dce5ff] bg-[#f6f8ff] px-4 py-5 text-sm text-[#40557f]">
+                  <LoaderCircle className="h-5 w-5 animate-spin text-[#5577e8]" />
+                  {locale === "ru"
+                    ? "Это обычно занимает несколько секунд…"
+                    : "This usually takes a few seconds…"}
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label
+                      className="mb-2 block text-sm font-semibold text-foreground"
+                      htmlFor="altegio-location"
+                    >
+                      {locale === "ru" ? "Ваш салон Altegio" : "Your Altegio location"}
+                    </label>
+                    <input
+                      className="h-12 w-full rounded-xl border border-[#dce2ee] bg-white px-4 text-sm outline-none transition placeholder:text-[#a3aab7] focus:border-[#5577e8] focus:ring-4 focus:ring-[#5577e8]/10"
+                      id="altegio-location"
+                      onChange={(event) => {
+                        setAltegioSalonInput(event.target.value);
+                        setAltegioMessage(null);
+                      }}
+                      placeholder={
+                        locale === "ru"
+                          ? "ID салона или ссылка из Altegio"
+                          : "Location ID or Altegio URL"
+                      }
+                      value={altegioSalonInput}
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {locale === "ru"
+                        ? "ID виден в адресе Altegio: /appstore/123456/…"
+                        : "Find the ID in your Altegio URL: /appstore/123456/…"}
+                    </p>
+                  </div>
+                  <button
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#20242a] px-5 text-sm font-semibold text-white transition hover:bg-[#111418] disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={
+                      !extractAltegioSalonId(altegioSalonInput) ||
+                      !summary?.altegio?.applicationId
+                    }
+                    onClick={openAltegioMarketplace}
+                    type="button"
+                  >
+                    {locale === "ru" ? "Продолжить в Altegio Marketplace" : "Continue in Altegio Marketplace"}
+                    <ExternalLink className="h-4 w-4" />
+                  </button>
+                  <div className="flex items-start gap-3 rounded-2xl bg-[#f7f8fa] px-4 py-3 text-xs leading-5 text-muted-foreground">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    {locale === "ru"
+                      ? "После подтверждения Altegio вернёт вас сюда. Салон определится автоматически."
+                      : "After approval, Altegio returns you here and detects the location automatically."}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <nav
           aria-label={locale === "ru" ? "Разделы биллинга" : "Billing sections"}

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
-import { Check, Copy, ImagePlus, Pencil, Users, Save } from "lucide-react";
+import { Check, Copy, ExternalLink, ImagePlus, Pencil, Users, Save } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
@@ -103,6 +103,8 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
+const ALTEGIO_MARKETPLACE_APP_URL =
+  "https://app.alteg.io/appstore/759658/applications/2147/info?utm_source=short_link";
 
 const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
   "UTC-08:00": { address: "Downtown Anchorage, Alaska, United States", latitude: "61.217381", longitude: "-149.863129" },
@@ -538,39 +540,72 @@ export default function OrganizationPageClient({
             ) : null}
 
             {altegioConnectionLoaded ? (
-              <div className="mb-5 rounded-2xl border border-[#d8e5ff] bg-[#f7faff] px-4 py-3 text-sm">
-                <p className="font-semibold text-foreground">
-                  {altegioConnectedLocationId
-                    ? locale === "ru"
-                      ? `Altegio подключён · salon ${altegioConnectedLocationId}`
-                      : `Altegio connected · salon ${altegioConnectedLocationId}`
-                    : locale === "ru"
-                      ? "Подключить Altegio"
-                      : "Connect Altegio"}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  {altegioConnectedLocationId
-                    ? locale === "ru"
-                      ? "Управление интеграцией и синхронизацией — в Billing."
-                      : "Manage the integration and sync from Billing."
-                    : locale === "ru"
-                      ? "Подключите салон для синхронизации сотрудников и расписания."
-                      : "Connect a location to sync staff and schedules."}
-                </p>
-                <button
-                  className="mt-2 text-sm font-semibold text-[color:var(--accent)]"
-                  onClick={() => router.push(toAdminHref("/billing"))}
-                  type="button"
-                >
-                  {altegioConnectedLocationId
-                    ? locale === "ru"
-                      ? "Открыть Billing"
-                      : "Open Billing"
-                    : locale === "ru"
-                      ? "Подключить через Altegio Marketplace"
-                      : "Connect via Altegio Marketplace"}
-                </button>
-              </div>
+              altegioConnectedLocationId ? (
+                <div className="mb-6 flex flex-col gap-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(135deg,#f4fff9_0%,#ffffff_100%)] px-5 py-4 shadow-[0_12px_36px_rgba(16,185,129,0.08)] sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] bg-[#ffe35b] shadow-[0_8px_20px_rgba(236,193,23,0.22)]">
+                      <img alt="Altegio" className="h-9 w-9" src="/altegio-mark.svg" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {locale === "ru"
+                          ? `Altegio подключён · salon ${altegioConnectedLocationId}`
+                          : `Altegio connected · salon ${altegioConnectedLocationId}`}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {locale === "ru"
+                          ? "Сотрудники и расписание синхронизируются с HiTeam."
+                          : "Staff and schedules are connected to HiTeam."}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    className="shrink-0 text-sm font-semibold text-[color:var(--accent)]"
+                    onClick={() => router.push(toAdminHref("/billing"))}
+                    type="button"
+                  >
+                    {locale === "ru" ? "Управлять интеграцией" : "Manage integration"}
+                  </button>
+                </div>
+              ) : (
+                <div className="relative mb-7 overflow-hidden rounded-[26px] border border-[#eadf9a] bg-[linear-gradient(120deg,#fffdf4_0%,#ffffff_55%,#fff4a8_100%)] px-5 py-5 shadow-[0_18px_48px_rgba(119,94,12,0.10)] sm:px-6">
+                  <div className="pointer-events-none absolute -right-14 -top-20 h-48 w-48 rounded-full bg-[#ffe35b]/45 blur-3xl" />
+                  <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-[#ffe35b] shadow-[0_12px_28px_rgba(224,180,11,0.25)]">
+                        <img alt="Altegio" className="h-12 w-12" src="/altegio-mark.svg" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl font-semibold tracking-[-0.04em] text-[#22262c]">
+                            altegio
+                          </span>
+                          <span className="rounded-full bg-[#22262c] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
+                            Marketplace
+                          </span>
+                        </div>
+                        <p className="mt-1.5 font-semibold text-foreground">
+                          {locale === "ru"
+                            ? "Подключите ваш салон к HiTeam"
+                            : "Connect your location to HiTeam"}
+                        </p>
+                        <p className="mt-1 max-w-lg text-sm leading-5 text-muted-foreground">
+                          {locale === "ru"
+                            ? "Импортируйте сотрудников и синхронизируйте рабочее расписание."
+                            : "Import staff and keep working schedules synchronized."}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-5 text-sm font-semibold text-white transition hover:bg-[#111418]"
+                      href={ALTEGIO_MARKETPLACE_APP_URL}
+                    >
+                      {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              )
             ) : null}
 
             <div className="organization-studio-identity">

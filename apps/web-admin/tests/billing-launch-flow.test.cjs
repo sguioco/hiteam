@@ -42,8 +42,18 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
   );
   assertContains(
     source,
-    "Connect via Altegio Marketplace",
+    "Continue in Altegio Marketplace",
     "Unconnected workspaces must be able to start Altegio Marketplace consent.",
+  );
+  assertContains(
+    source,
+    "altegioDialogOpen",
+    "Altegio connection must use a dedicated dialog.",
+  );
+  assertContains(
+    source,
+    "/altegio-mark.svg",
+    "Altegio connection dialog must display the Altegio logo.",
   );
   assertContains(
     source,
@@ -95,6 +105,7 @@ function testDemoBillingMatchesProductionContracts() {
 function testAltegioRegistrationPrefillsOrganization() {
   const authSource = read("components/auth-panel.tsx");
   const createSource = read("components/create-organization-panel.tsx");
+  const organizationSource = read("app/organization/organization-page-client.tsx");
   const signupSource = read("app/signup/page.tsx");
   const marketplaceSource = read("lib/altegio-marketplace.ts");
 
@@ -127,6 +138,16 @@ function testAltegioRegistrationPrefillsOrganization() {
     marketplaceSource,
     "/appstore/${salon}/applications/${application}/info",
     "Existing accounts must return to the Altegio app card for consent.",
+  );
+  assertContains(
+    organizationSource,
+    "https://app.alteg.io/appstore/759658/applications/2147/info?utm_source=short_link",
+    "Organization setup must link directly to the published Altegio application.",
+  );
+  assertContains(
+    organizationSource,
+    "/altegio-mark.svg",
+    "Organization setup must show the Altegio logo.",
   );
 }
 
