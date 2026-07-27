@@ -310,28 +310,33 @@ model Tenant {
 }
 
 model BillingSubscription {
-  id                       String    @id @default(uuid())
-  tenantId                 String    @unique
-  paidSeats                Int       @default(0)
-  status                   String    @default("ACTIVE")
-  firstPaidAt              DateTime?
-  stripeCustomerId         String?   @unique
-  stripeSubscriptionId     String?   @unique
-  stripeSubscriptionItemId String?
-  stripePriceId            String?
-  stripePriceLookupKey     String?
-  stripeCurrency           String?
-  stripeCurrentPeriodStart DateTime?
-  stripeCurrentPeriodEnd   DateTime?
-  stripeCancelAtPeriodEnd  Boolean   @default(false)
-  trialStartedAt           DateTime?
-  trialEndsAt              DateTime?
-  trialSource              String?
-  promoCode                String?
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  id                            String    @id @default(uuid())
+  tenantId                      String    @unique
+  paidSeats                     Int       @default(0)
+  status                        String    @default("ACTIVE")
+  firstPaidAt                   DateTime?
+  stripeCustomerId              String?   @unique
+  stripeSubscriptionId          String?   @unique
+  stripeSubscriptionItemId      String?
+  stripePriceId                 String?
+  stripePriceLookupKey          String?
+  stripeCurrency                String?
+  stripeCurrentPeriodStart      DateTime?
+  stripeCurrentPeriodEnd        DateTime?
+  stripeCancelAtPeriodEnd       Boolean   @default(false)
+  trialStartedAt                DateTime?
+  trialEndsAt                   DateTime?
+  trialSource                   String?
+  promoCode                     String?
+  altegioLocationId             String?   @unique
+  altegioApplicationId          String?
+  altegioMarketplaceActivatedAt DateTime?
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([altegioApplicationId, altegioLocationId])
 }
 
 model BillingPayment {

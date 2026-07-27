@@ -1,0 +1,10 @@
+---
+description: Prefer grep in project command examples
+alwaysApply: true
+---
+
+# Search Command Preference
+
+- In project-facing command examples and docs, prefer `grep` over `rg` for text search commands.
+- If a runtime or tool-specific instruction explicitly requires another search tool, follow that higher-priority instruction.
+- When sharing commands with teammates for log inspection, default to `grep -E` for regex patterns.

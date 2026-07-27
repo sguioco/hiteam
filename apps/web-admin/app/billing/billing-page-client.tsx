@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   CreditCard,
@@ -15,6 +15,10 @@ import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import {
+  clearAltegioMarketplaceParams,
+  peekAltegioMarketplaceParams,
+} from "@/lib/altegio-marketplace";
 
 type BillingCurrency = "AED" | "USD" | "EUR";
 
@@ -75,6 +79,12 @@ export type BillingSummary = {
     locationConfigured: boolean;
   };
   history?: BillingPaymentHistoryItem[];
+  altegio?: {
+    connected: boolean;
+    locationId: string | null;
+    applicationId: string | null;
+    activatedAt: string | null;
+  };
 };
 
 type BillingRedirectResponse = {
@@ -319,6 +329,9 @@ export default function BillingPageClient({
     MINIMUM_SEAT_PURCHASE_COUNT,
   );
   const [seatControlTouched, setSeatControlTouched] = useState(false);
+  const [altegioConnecting, setAltegioConnecting] = useState(false);
+  const [altegioMessage, setAltegioMessage] = useState<string | null>(null);
+  const altegioConnectAttempted = useRef(false);
 
   const usagePercent = useMemo(() => {
     if (!summary?.requiredSeats) return 0;
@@ -679,6 +692,73 @@ export default function BillingPageClient({
     setSelectedSeatCount((current) => Math.max(current, minimumSeatCount));
   }, [minimumSeatCount]);
 
+  useEffect(() => {
+    const pending = peekAltegioMarketplaceParams();
+    if (!pending?.locationId || altegioConnectAttempted.current) {
+      return;
+    }
+    if (summary?.altegio?.connected && summary.altegio.locationId === pending.locationId) {
+      clearAltegioMarketplaceParams();
+      return;
+    }
+
+    const session = getSession();
+    if (!session) {
+      return;
+    }
+
+    altegioConnectAttempted.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        setAltegioConnecting(true);
+        setAltegioMessage(
+          locale === "ru"
+            ? "Подключаем салон Altegio…"
+            : "Connecting Altegio salon…",
+        );
+        const nextSummary = await apiRequest<BillingSummary>("/billing/altegio/connect", {
+          method: "POST",
+          token: session.accessToken,
+          body: JSON.stringify({
+            locationId: pending.locationId,
+            ...(pending.applicationId ? { applicationId: pending.applicationId } : {}),
+          }),
+          skipClientCache: true,
+        });
+        if (cancelled) {
+          return;
+        }
+        setSummary(nextSummary);
+        clearAltegioMarketplaceParams();
+        setAltegioMessage(
+          locale === "ru"
+            ? "Салон Altegio подключён. Цена считается по региону HiTeam."
+            : "Altegio salon connected. Pricing follows your HiTeam region.",
+        );
+      } catch (requestError) {
+        if (cancelled) {
+          return;
+        }
+        setAltegioMessage(
+          requestError instanceof Error
+            ? requestError.message
+            : locale === "ru"
+              ? "Не удалось подключить Altegio"
+              : "Failed to connect Altegio",
+        );
+      } finally {
+        if (!cancelled) {
+          setAltegioConnecting(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, summary?.altegio?.connected, summary?.altegio?.locationId]);
+
   return (
     <AdminShell showTopbar={false}>
       <style>{`
@@ -718,6 +798,40 @@ export default function BillingPageClient({
             </p>
           </div>
         </header>
+
+        {(summary?.altegio?.connected || altegioMessage) && (
+          <section className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading text-sm shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
+            <p className="font-semibold text-foreground">
+              {locale === "ru" ? "Altegio Marketplace" : "Altegio Marketplace"}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              {altegioMessage ||
+                (summary?.altegio?.connected
+                  ? locale === "ru"
+                    ? `Подключено · salon ${summary.altegio.locationId}`
+                    : `Connected · salon ${summary.altegio.locationId}`
+                  : null)}
+            </p>
+            {summary?.altegio?.connected ? (
+              <button
+                className="mt-3 text-sm font-semibold text-[color:var(--accent)]"
+                disabled={altegioConnecting}
+                onClick={() => {
+                  const session = getSession();
+                  if (!session) return;
+                  void apiRequest<BillingSummary>("/billing/altegio/sync", {
+                    method: "POST",
+                    token: session.accessToken,
+                    skipClientCache: true,
+                  }).then(setSummary);
+                }}
+                type="button"
+              >
+                {locale === "ru" ? "Синхронизировать подписку" : "Sync subscription"}
+              </button>
+            ) : null}
+          </section>
+        )}
 
         <nav
           aria-label={locale === "ru" ? "Разделы биллинга" : "Billing sections"}

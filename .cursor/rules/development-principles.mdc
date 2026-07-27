@@ -1,0 +1,36 @@
+---
+description: Read docs, fix root causes, run tests after changes
+alwaysApply: true
+---
+
+# Development Principles
+
+## Before non-trivial work
+
+Check repo root for orientation docs when they exist: `AGENTS.md`, `README.md`, `DEVELOPMENT.md`, `ARCHITECTURE.md`, `OPS.md`, `ENV.md`.
+
+## Scope and style
+
+- Change only what the task requires; do not refactor unrelated code.
+- Read surrounding code first; match naming, types, abstractions, and import style.
+- Reuse existing functions and modules; do not duplicate logic.
+- Comments only for non-obvious business logic or external constraints.
+
+## Bug fixes — no hacks or silent fallbacks
+
+Fix **root cause** architecturally. Do not add:
+
+- silent `try/except: pass` or defaults that hide errors;
+- duplicate code paths «just in case»;
+- retries/timeouts without understanding the race;
+- tenant/environment-specific hardcodes in production code.
+
+If a full fix is large, do not ship a prod fallback without an explicit TODO and agreed scope.
+
+## After code changes
+
+Run the repo's test command when one exists (`make test`, `make test-backend`, `pytest`, `npm test`, etc.) before considering backend or frontend logic changes done.
+
+## Documentation
+
+Update related docs when behavior, configuration, API contracts, env vars, or run/deploy steps change.

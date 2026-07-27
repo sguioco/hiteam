@@ -14,6 +14,10 @@ import {
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
 import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
+import {
+  captureAltegioMarketplaceParams,
+  resolvePostLoginRouteWithAltegio,
+} from '@/lib/altegio-marketplace';
 import { Globe, Hand } from 'lucide-react';
 import { Swirling } from '@/components/ui/swirling';
 import { BrandWordmark } from './brand-wordmark';
@@ -129,6 +133,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
   const t = texts[lang];
 
   useEffect(() => {
+    captureAltegioMarketplaceParams();
     const saved = readBrowserStorageItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
@@ -164,7 +169,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
           locale: toBackendLocale(lang),
         }),
       });
-      const nextRoute = resolvePostLoginRoute(session);
+      const nextRoute = resolvePostLoginRouteWithAltegio(resolvePostLoginRoute(session));
       await persistSession(session);
       navigationStarted = true;
       window.location.replace(nextRoute);

@@ -5,6 +5,7 @@ import StripeClient from 'stripe';
 import type { Stripe } from 'stripe/cjs/stripe.core';
 import { KommoService } from '../kommo/kommo.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.service';
 
 type BillingCurrency = 'AED' | 'USD' | 'EUR';
 type BillingPlanMonths = 1 | 6 | 12;
@@ -201,9 +202,32 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly kommoService: KommoService,
+    private readonly altegioMarketplaceBilling: AltegioMarketplaceBillingService,
   ) {}
 
-  async getSummary(tenantId: string) {
+  async getSummary(tenantId: string, options?: { syncMarketplace?: boolean }) {
+    if (options?.syncMarketplace) {
+      const preliminary = await this.buildSummary(tenantId);
+      if (preliminary.altegio.connected) {
+        try {
+          await this.altegioMarketplaceBilling.syncWithMarketplace(tenantId, {
+            source: 'billing_summary',
+            paymentSum: preliminary.trialActive ? 0 : preliminary.monthlyTotal,
+            currencyIso: preliminary.price.currency,
+          });
+        } catch (error) {
+          this.logger.warn(
+            `Altegio marketplace sync skipped tenantId=${tenantId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+    }
+    return this.buildSummary(tenantId);
+  }
+
+  private async buildSummary(tenantId: string) {
     const subscription = await this.ensureSubscription(tenantId);
     const activePaidPeriod = this.getActivePaidPeriod(subscription);
     const [{ activeEmployeeCount, pendingInvitationCount, usedSeats, billableSeats }, pricing] =
@@ -270,7 +294,41 @@ export class BillingService {
       promoCode: subscription.promoCode,
       price: pricing,
       history,
+      altegio: {
+        connected: this.altegioMarketplaceBilling.isMarketplaceBilled(subscription),
+        locationId: subscription.altegioLocationId,
+        applicationId: subscription.altegioApplicationId,
+        activatedAt: subscription.altegioMarketplaceActivatedAt?.toISOString() ?? null,
+      },
     };
+  }
+
+  async connectAltegioMarketplace(
+    tenantId: string,
+    args: { locationId: string; applicationId?: string },
+  ) {
+    await this.altegioMarketplaceBilling.connectMarketplace({
+      tenantId,
+      locationId: args.locationId,
+      applicationId: args.applicationId,
+    });
+    return this.getSummary(tenantId, { syncMarketplace: true });
+  }
+
+  async disconnectAltegioMarketplace(tenantId: string) {
+    await this.altegioMarketplaceBilling.disconnectMarketplace(tenantId);
+    return this.getSummary(tenantId);
+  }
+
+  async syncAltegioMarketplace(tenantId: string) {
+    const summary = await this.getSummary(tenantId);
+    const paymentSum = summary.trialActive ? 0 : summary.monthlyTotal;
+    await this.altegioMarketplaceBilling.syncWithMarketplace(tenantId, {
+      source: 'manual_sync',
+      paymentSum,
+      currencyIso: summary.price.currency,
+    });
+    return this.getSummary(tenantId, { syncMarketplace: true });
   }
 
   async assertCanAddSeatOccupant(tenantId: string) {
@@ -366,6 +424,8 @@ export class BillingService {
         currency: summary.price.currency,
         regionCode: summary.price.regionCode,
         priceLookupKey: summary.price.stripeLookupKey,
+        altegioLocationId: subscription.altegioLocationId ?? '',
+        altegioApplicationId: subscription.altegioApplicationId ?? '',
       },
       payment_intent_data: {
         metadata: {
@@ -377,6 +437,8 @@ export class BillingService {
           paidThrough: purchase.paidThrough.toISOString(),
           regionCode: summary.price.regionCode,
           priceLookupKey: summary.price.stripeLookupKey,
+          altegioLocationId: subscription.altegioLocationId ?? '',
+          altegioApplicationId: subscription.altegioApplicationId ?? '',
         },
       },
       success_url: `${urlBase}/billing?stripe=success`,
@@ -1115,6 +1177,17 @@ export class BillingService {
       stripeSubscription,
       session.client_reference_id ?? session.metadata?.tenantId ?? undefined,
     );
+
+    const tenantId = session.client_reference_id ?? session.metadata?.tenantId ?? null;
+    if (tenantId) {
+      const amountTotal =
+        typeof session.amount_total === 'number' ? session.amount_total / 100 : null;
+      await this.notifyAltegioAfterStripePayment({
+        tenantId,
+        paymentSum: amountTotal,
+        currencyIso: session.currency?.toUpperCase() ?? null,
+      });
+    }
   }
 
   private getSubscriptionIdFromInvoice(invoice: Stripe.Invoice) {
@@ -1182,6 +1255,14 @@ export class BillingService {
     if (this.shouldNotifyBillingPaymentEvent(paymentRecord)) {
       this.kommoService.recordBillingUpdated(tenantId, 'invoice_paid');
     }
+    await this.notifyAltegioAfterStripePayment({
+      tenantId,
+      paymentSum: typeof invoice.amount_paid === 'number' ? invoice.amount_paid / 100 : null,
+      currencyIso: invoice.currency?.toUpperCase() ?? null,
+      paymentDate: invoice.status_transitions?.paid_at
+        ? new Date(invoice.status_transitions.paid_at * 1000)
+        : new Date(),
+    });
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
@@ -1416,6 +1497,23 @@ export class BillingService {
         anchor.getUTCMilliseconds(),
       ),
     );
+  }
+
+  private async notifyAltegioAfterStripePayment(args: {
+    tenantId: string;
+    paymentSum?: number | null;
+    currencyIso?: string | null;
+    paymentDate?: Date | null;
+  }) {
+    const summary = await this.buildSummary(args.tenantId);
+    const paymentSum =
+      args.paymentSum != null && args.paymentSum > 0 ? args.paymentSum : summary.monthlyTotal;
+    await this.altegioMarketplaceBilling.notifyPaymentAfterStripe({
+      tenantId: args.tenantId,
+      paymentSum: summary.trialActive ? 0 : paymentSum,
+      currencyIso: args.currencyIso || summary.price.currency,
+      paymentDate: args.paymentDate,
+    });
   }
 
   private async resolvePricing(tenantId: string) {

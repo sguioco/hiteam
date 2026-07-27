@@ -50,6 +50,10 @@ import {
   resolvePostLoginRoute,
   saveTenantSlug,
 } from '@/lib/auth';
+import {
+  captureAltegioMarketplaceParams,
+  resolvePostLoginRouteWithAltegio,
+} from '@/lib/altegio-marketplace';
 import { BrandWordmark } from './brand-wordmark';
 
 gsap.registerPlugin(useGSAP);
@@ -527,6 +531,10 @@ export function AuthPanel() {
   );
 
   useEffect(() => {
+    captureAltegioMarketplaceParams();
+  }, []);
+
+  useEffect(() => {
     const switcherTrack = switcherTrackRef.current;
     const switcherIndicator = switcherIndicatorRef.current;
 
@@ -554,6 +562,7 @@ export function AuthPanel() {
   }, [tab]);
 
   useEffect(() => {
+    captureAltegioMarketplaceParams();
     const saved = readBrowserStorageItem('smart-admin-locale');
     if (saved === 'ru' || saved === 'ar') {
       setLang(saved);
@@ -612,7 +621,7 @@ export function AuthPanel() {
       });
 
       disableDemoMode();
-      const nextRoute = resolvePostLoginRoute(session);
+      const nextRoute = resolvePostLoginRouteWithAltegio(resolvePostLoginRoute(session));
       await persistSession(session);
       navigationStarted = true;
       window.location.replace(nextRoute);
@@ -704,7 +713,7 @@ export function AuthPanel() {
       });
 
       saveTenantSlug(registration.tenantSlug);
-      const nextRoute = resolvePostLoginRoute(session);
+      const nextRoute = resolvePostLoginRouteWithAltegio(resolvePostLoginRoute(session));
       await persistSession(session);
       navigationStarted = true;
       window.location.replace(nextRoute);
@@ -762,7 +771,7 @@ export function AuthPanel() {
         }),
       });
       disableDemoMode();
-      const nextRoute = resolvePostLoginRoute(session);
+      const nextRoute = resolvePostLoginRouteWithAltegio(resolvePostLoginRoute(session));
       await persistSession(session);
       window.location.replace(nextRoute);
     } catch (error) {

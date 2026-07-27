@@ -113,3 +113,4 @@ After seeding the local database:
 - [DATA_MODEL.md](./DATA_MODEL.md)
 - [API_SPEC.md](./API_SPEC.md)
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
+- [docs/ALTEGIO_MARKETPLACE.md](./docs/ALTEGIO_MARKETPLACE.md)
