@@ -5,11 +5,12 @@ import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.
 import { AltegioMarketplaceClient } from './altegio-marketplace.client';
 import { BillingWebhookController } from './billing-webhook.controller';
 import { BillingController } from './billing.controller';
+import { BillingStatsController } from './billing-stats.controller';
 import { BillingService } from './billing.service';
 
 @Module({
   imports: [forwardRef(() => AltegioSyncModule)],
-  controllers: [BillingController, BillingWebhookController, AltegioCallbackController],
+  controllers: [BillingController, BillingWebhookController, AltegioCallbackController, BillingStatsController],
   providers: [BillingService, AltegioMarketplaceClient, AltegioMarketplaceBillingService],
   exports: [BillingService, AltegioMarketplaceBillingService],
 })
