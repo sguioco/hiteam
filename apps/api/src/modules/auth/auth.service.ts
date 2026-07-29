@@ -442,13 +442,23 @@ export class AuthService {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const normalizedTenantSlug = dto.tenantSlug?.trim().toLowerCase();
 
-    const users = await this.prisma.user.findMany({
+    const userSelect = {
+      id: true,
+      tenantId: true,
+      email: true,
+      preferredLocale: true,
+    } as const;
+    const baseWhere: Prisma.UserWhereInput = {
+      email: {
+        equals: normalizedEmail,
+        mode: 'insensitive',
+      },
+      status: UserStatus.ACTIVE,
+    };
+
+    let users = await this.prisma.user.findMany({
       where: {
-        email: {
-          equals: normalizedEmail,
-          mode: 'insensitive',
-        },
-        status: UserStatus.ACTIVE,
+        ...baseWhere,
         ...(normalizedTenantSlug
           ? {
               tenant: {
@@ -457,14 +467,19 @@ export class AuthService {
             }
           : {}),
       },
-      select: {
-        id: true,
-        tenantId: true,
-        email: true,
-        preferredLocale: true,
-      },
+      select: userSelect,
       take: 2,
     });
+
+    let resolvedByEmailFallback = false;
+    if (normalizedTenantSlug && users.length === 0) {
+      users = await this.prisma.user.findMany({
+        where: baseWhere,
+        select: userSelect,
+        take: 2,
+      });
+      resolvedByEmailFallback = users.length === 1;
+    }
 
     const user = users[0] ?? null;
     if (
@@ -523,6 +538,8 @@ export class AuthService {
       metadata: {
         email: user.email,
         provider: delivery.provider,
+        requestedTenantSlug: normalizedTenantSlug ?? null,
+        resolvedByEmailFallback,
       },
     });
 

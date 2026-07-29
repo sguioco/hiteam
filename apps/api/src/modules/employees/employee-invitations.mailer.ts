@@ -208,83 +208,36 @@ export class EmployeeInvitationsMailerService {
 
     const html = this.renderHtml(params.template, params.locale);
     const text = this.renderText(params.template);
-    const graphResult = await this.lifecycleEmailService.sendTransactionalEmail({
+    const delivery = await this.lifecycleEmailService.sendTransactionalEmail({
       to: normalizedEmail,
       subject: params.template.subject,
       html,
       text,
     });
 
-    if (graphResult.status === 'accepted') {
+    if (delivery.status === 'accepted') {
       return this.buildDeliveryResult({
         status: 'accepted',
-        provider: graphResult.provider === 'resend' ? 'resend' : 'microsoft_graph',
-        recipients: graphResult.recipients,
+        provider: delivery.provider === 'resend' ? 'resend' : 'microsoft_graph',
+        recipients: delivery.recipients,
         actionUrl: params.actionUrl,
       });
     }
 
-    const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
-    if (!resendApiKey) {
-      const errorMessage = graphResult.errorMessage
-        ? `Microsoft Graph ${graphResult.status}: ${graphResult.errorMessage}. RESEND_API_KEY is not configured.`
-        : `Microsoft Graph ${graphResult.status}. RESEND_API_KEY is not configured.`;
-      this.logger.error(`Email for ${normalizedEmail} was not sent: ${errorMessage}`);
-      return this.buildDeliveryResult({
-        status: graphResult.status === 'disabled' ? 'disabled' : 'failed',
-        provider: 'none',
-        recipients: [normalizedEmail],
-        actionUrl: params.actionUrl,
-        errorMessage,
-      });
-    }
+    const errorMessage =
+      delivery.errorMessage ??
+      `Email delivery finished with status ${delivery.status}.`;
+    this.logger.error(`Email for ${normalizedEmail} was not sent: ${errorMessage}`);
 
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: this.resolveResendFrom(),
-          to: [normalizedEmail],
-          subject: params.template.subject,
-          html,
-          text,
-        }),
-      });
-
-      if (!response.ok) {
-        const body = await response.text();
-        const errorMessage = `Resend rejected email: ${response.status} ${body}`;
-        this.logger.error(`Email for ${normalizedEmail} was not sent: ${errorMessage}`);
-        return this.buildDeliveryResult({
-          status: 'failed',
-          provider: 'resend',
-          recipients: [normalizedEmail],
-          actionUrl: params.actionUrl,
-          errorMessage,
-        });
-      }
-
-      return this.buildDeliveryResult({
-        status: 'accepted',
-        provider: 'resend',
-        recipients: [normalizedEmail],
-        actionUrl: params.actionUrl,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to send email for ${normalizedEmail}: ${errorMessage}`);
-      return this.buildDeliveryResult({
-        status: 'failed',
-        provider: 'resend',
-        recipients: [normalizedEmail],
-        actionUrl: params.actionUrl,
-        errorMessage,
-      });
-    }
+    return this.buildDeliveryResult({
+      status: delivery.status === 'disabled' ? 'disabled' : 'failed',
+      provider: 'none',
+      recipients: delivery.recipients.length
+        ? delivery.recipients
+        : [normalizedEmail],
+      actionUrl: params.actionUrl,
+      errorMessage,
+    });
   }
 
   private requireAccepted(result: EmployeeEmailDeliveryResult, message: string) {
@@ -521,16 +474,6 @@ export class EmployeeInvitationsMailerService {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
     return `${baseUrl}${normalizedPath}`;
-  }
-
-  private resolveResendFrom() {
-    const configuredFrom = this.configService.get<string>('EMAIL_FROM')?.trim();
-    if (configuredFrom) {
-      return configuredFrom;
-    }
-
-    const graphSender = this.configService.get<string>('MICROSOFT_GRAPH_SENDER')?.trim() || 'info@hiteam.net';
-    return `HiTeam <${graphSender}>`;
   }
 
   private escapeHtml(value: string) {

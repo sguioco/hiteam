@@ -295,6 +295,12 @@ async function testFailedLifecycleEmailDoesNotBlockKommoSync() {
       },
     },
   });
+  let automationLogCreated = false;
+  (service as unknown as {
+    createAutomationLogOnce: () => Promise<void>;
+  }).createAutomationLogOnce = async () => {
+    automationLogCreated = true;
+  };
   let captured:
     | {
         tenantId: string;
@@ -340,6 +346,11 @@ async function testFailedLifecycleEmailDoesNotBlockKommoSync() {
     stageName: 'New Customer',
     lifecycleEmailResult: failedEmailResult,
   });
+  assert.equal(
+    automationLogCreated,
+    false,
+    'Failed lifecycle emails must remain eligible for retry.',
+  );
 }
 
 async function testDisabledLifecycleEmailIsVisibleInKommoSync() {
@@ -368,6 +379,12 @@ async function testDisabledLifecycleEmailIsVisibleInKommoSync() {
       },
     },
   });
+  let automationLogCreated = false;
+  (service as unknown as {
+    createAutomationLogOnce: () => Promise<void>;
+  }).createAutomationLogOnce = async () => {
+    automationLogCreated = true;
+  };
   let captured:
     | {
         tenantId: string;
@@ -409,6 +426,11 @@ async function testDisabledLifecycleEmailIsVisibleInKommoSync() {
     reason: 'payment_successful',
     lifecycleEmailResult: disabledEmailResult,
   });
+  assert.equal(
+    automationLogCreated,
+    true,
+    'Intentionally disabled lifecycle emails must not retry forever.',
+  );
 }
 
 async function testLeadLinksMissingCompanyAndEmployeeContacts() {

@@ -1020,15 +1020,23 @@ export class KommoService {
       !lifecycleEmailResult ||
       lifecycleEmailResult.status === 'failed' ||
       lifecycleEmailResult.status === 'disabled' ||
-      lifecycleEmailResult.status === 'no_recipient'
+      lifecycleEmailResult.status === 'no_recipient' ||
+      lifecycleEmailResult.status === 'missing_tenant'
     ) {
       this.logger.warn(
         `Lifecycle event ${event} for tenant ${tenantId} continues with email delivery status ${lifecycleEmailResult?.status ?? 'unknown'}.`,
       );
     }
 
+    const shouldRetryEmail =
+      lifecycleEmailsEnabled &&
+      lifecycleEmailResult?.status !== 'accepted' &&
+      lifecycleEmailResult?.status !== 'missing_tenant';
+
     if (!kommoEnabled) {
-      await this.createAutomationLogOnce(tenantId, key);
+      if (!shouldRetryEmail) {
+        await this.createAutomationLogOnce(tenantId, key);
+      }
       return;
     }
 
@@ -1052,7 +1060,9 @@ export class KommoService {
       );
     }
 
-    await this.createAutomationLogOnce(tenantId, key);
+    if (!shouldRetryEmail) {
+      await this.createAutomationLogOnce(tenantId, key);
+    }
   }
 
   private async runTenantAutomations(snapshot: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>) {

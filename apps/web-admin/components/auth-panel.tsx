@@ -45,6 +45,7 @@ import {
 import {
   AuthSession,
   clearSession,
+  getExplicitTenantSlug,
   getTenantSlug,
   persistSession,
   resolvePostLoginRoute,
@@ -771,7 +772,10 @@ export function AuthPanel() {
     setForgotLoading(true);
 
     try {
-      const tenantSlug = companyLookupResult?.tenantSlug ?? getTenantSlug();
+      const tenantSlug =
+        companyLookupResult?.email.trim().toLowerCase() === trimmedEmail
+          ? companyLookupResult.tenantSlug
+          : getExplicitTenantSlug();
       await apiRequest('/auth/password-reset/request', {
         method: 'POST',
         realBackend: true,

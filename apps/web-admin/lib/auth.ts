@@ -211,11 +211,8 @@ export function saveTenantSlug(tenantSlug: string): void {
   persistTenantSlugValue(normalized);
 }
 
-export function getTenantSlug(): string {
-  if (typeof window === 'undefined') {
-    return getDefaultTenantSlug();
-  }
-
+export function getExplicitTenantSlug(): string {
+  if (typeof window === 'undefined') return '';
   const searchTenant = new URLSearchParams(window.location.search).get('tenant');
   if (searchTenant?.trim()) {
     return normalizeTenantSlug(searchTenant);
@@ -224,6 +221,19 @@ export function getTenantSlug(): string {
   const hostnameTenant = getTenantSlugFromHostname(window.location.hostname);
   if (hostnameTenant) {
     return hostnameTenant;
+  }
+
+  return '';
+}
+
+export function getTenantSlug(): string {
+  if (typeof window === 'undefined') {
+    return getDefaultTenantSlug();
+  }
+
+  const explicitTenant = getExplicitTenantSlug();
+  if (explicitTenant) {
+    return explicitTenant;
   }
 
   const storedTenant = readBrowserStorageItem(TENANT_SLUG_KEY, {
