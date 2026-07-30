@@ -36,12 +36,14 @@ import { WorkspaceAccessGuard } from './common/guards/workspace-access.guard';
 import { HttpResponseCacheInterceptor } from './common/cache/http-response-cache.interceptor';
 import { ResponseCacheService } from './common/cache/response-cache.service';
 import { AppExceptionFilter } from './common/filters/app-exception.filter';
+import { validateEnvironment } from './config/validate-environment';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
+      validate: validateEnvironment,
     }),
     NestScheduleModule.forRoot(),
     GraphQLModule.forRoot<ApolloDriverConfig>({

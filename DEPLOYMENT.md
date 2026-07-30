@@ -66,6 +66,11 @@ Do not send secrets into chat if you do not want them persisted. You can also ad
 - `JWT_ACCESS_EXPIRES_IN`
 - `JWT_REFRESH_EXPIRES_IN`
 
+In production, `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are mandatory,
+must be different, and must each contain at least 32 characters. The API fails
+startup validation when this contract is not satisfied, so a broken Kubernetes
+rollout cannot replace the previous healthy pod.
+
 ### Web Admin
 
 - `NEXT_PUBLIC_API_URL`
