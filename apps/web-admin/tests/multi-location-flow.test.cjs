@@ -138,6 +138,16 @@ assert.doesNotMatch(
   "Slow in-app navigation must retry softly instead of hard-reloading the page.",
 );
 assert.match(
+  adminShell,
+  /const effectiveHeader = initialShellBootstrap\?\.header[\s\S]*: cachedHeader;/,
+  "Fresh server shell data must override a stale client header cache.",
+);
+assert.match(
+  adminShell,
+  /!organizationGuardReady[\s\S]*organization\?\.configured !== false/,
+  "Organization routing must wait for an authoritative setup response.",
+);
+assert.match(
   profilePage,
   /serverApiRequestWithSession<ProfileEmployee \| null>[\s\S]*\/employees\/me/,
   "Profile data must be prepared on the server before hydration.",

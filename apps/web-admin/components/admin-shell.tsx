@@ -412,6 +412,9 @@ export function AdminShell({
     useState<OrganizationHeaderState | null>(
       initialShellBootstrap?.header?.organization ?? null,
     );
+  const [organizationGuardReady, setOrganizationGuardReady] = useState(
+    Boolean(initialShellBootstrap?.header),
+  );
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
     initialShellBootstrap?.header?.accountProfile ?? null,
   );
@@ -459,6 +462,7 @@ export function AdminShell({
       mode !== "admin" ||
       !ready ||
       !session ||
+      !organizationGuardReady ||
       organization?.configured !== false ||
       pathname === toAdminHref("/organization") ||
       // Marketplace connect must finish on Billing before org setup.
@@ -468,7 +472,15 @@ export function AdminShell({
     }
 
     router.replace(toAdminHref("/organization"));
-  }, [mode, organization, pathname, ready, router, session]);
+  }, [
+    mode,
+    organization,
+    organizationGuardReady,
+    pathname,
+    ready,
+    router,
+    session,
+  ]);
 
   function applyHeaderSnapshot(
     snapshot: ShellHeaderCachePayload,
@@ -549,15 +561,15 @@ export function AdminShell({
           notificationsCacheKey,
           SHELL_NOTIFICATIONS_CACHE_TTL_MS,
         );
-      const effectiveHeader =
-        cachedHeader ??
-        (initialShellBootstrap?.header
-          ? {
-              value: initialShellBootstrap.header,
-              storedAt: Date.now(),
-              isStale: false,
-            }
-          : null);
+      // Server bootstrap is authoritative. A cached `configured: false` must
+      // never override a newer server response after organization setup.
+      const effectiveHeader = initialShellBootstrap?.header
+        ? {
+            value: initialShellBootstrap.header,
+            storedAt: Date.now(),
+            isStale: false,
+          }
+        : cachedHeader;
       const effectiveNotifications =
         cachedNotifications ??
         (initialShellBootstrap?.notifications
@@ -597,6 +609,10 @@ export function AdminShell({
         applyHeaderSnapshot(effectiveHeader.value, headerCacheKey);
       }
 
+      if (initialShellBootstrap?.header) {
+        setOrganizationGuardReady(true);
+      }
+
       if (effectiveNotifications) {
         applyNotificationsSnapshot(
           effectiveNotifications.value,
@@ -614,6 +630,7 @@ export function AdminShell({
             .then((snapshot) => {
               if (snapshot.header) {
                 applyHeaderSnapshot(snapshot.header, headerCacheKey);
+                setOrganizationGuardReady(true);
               }
 
               if (snapshot.notifications) {
@@ -642,6 +659,7 @@ export function AdminShell({
 
           if (snapshot.header) {
             applyHeaderSnapshot(snapshot.header, headerCacheKey);
+            setOrganizationGuardReady(true);
           }
 
           if (snapshot.notifications) {
@@ -758,6 +776,7 @@ export function AdminShell({
       const detail = customEvent.detail;
 
       if (detail) {
+        setOrganizationGuardReady(true);
         applyHeaderSnapshot(
           {
             employeeCount,
@@ -773,6 +792,7 @@ export function AdminShell({
         token: currentSession.accessToken,
       })
         .then((snapshot) => {
+          setOrganizationGuardReady(true);
           applyHeaderSnapshot(
             {
               employeeCount,
