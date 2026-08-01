@@ -6,6 +6,7 @@ import type {
   AnnouncementImageAspectRatio,
   AnnouncementItem,
   NewsBootstrapResponse,
+  OrganizationLocationSummary,
   WorkGroupItem,
 } from "@smart/types";
 import {
@@ -19,7 +20,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Toggle } from "@/components/base/toggle/toggle";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,6 +86,7 @@ type NewsDraft = {
   scheduleEnabled: boolean;
   scheduledDate: string;
   scheduledTime: string;
+  locationId: string;
 };
 
 type CreateOptionalSection = "link" | "documents" | "location";
@@ -95,6 +97,11 @@ type NewsCenterEmployeeItem = {
   firstName: string;
   lastName: string;
   employeeNumber: string;
+  primaryLocation?: { id: string; name: string } | null;
+  locationAssignments?: Array<{
+    locationId: string;
+    unassignedAt?: string | null;
+  }>;
 };
 
 const EMPTY_DRAFT: NewsDraft = {
@@ -115,6 +122,7 @@ const EMPTY_DRAFT: NewsDraft = {
   scheduleEnabled: false,
   scheduledDate: "",
   scheduledTime: "09:00",
+  locationId: "",
 };
 
 const EMPTY_CREATE_OPTIONAL_SECTIONS: CreateOptionalSections = {
@@ -129,6 +137,19 @@ const ANNOUNCEMENT_DOCUMENT_ACCEPT =
 
 function localize(locale: Locale, ru: string, en: string) {
   return locale === "ru" ? ru : en;
+}
+
+function newsEmployeeBelongsToLocation(
+  employee: NewsCenterEmployeeItem,
+  locationId: string,
+) {
+  return (
+    employee.primaryLocation?.id === locationId ||
+    (employee.locationAssignments ?? []).some(
+      (assignment) =>
+        assignment.locationId === locationId && !assignment.unassignedAt,
+    )
+  );
 }
 
 function formatDateInput(date: Date) {
@@ -308,13 +329,40 @@ export function HeaderNewsCreateDialog({
     useState<CreateOptionalSections>(EMPTY_CREATE_OPTIONAL_SECTIONS);
   const [employees, setEmployees] = useState<NewsCenterEmployeeItem[]>([]);
   const [groups, setGroups] = useState<WorkGroupItem[]>([]);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const visibleEmployees = useMemo(
+    () =>
+      draft.locationId
+        ? employees.filter((employee) =>
+            newsEmployeeBelongsToLocation(employee, draft.locationId),
+          )
+        : employees,
+    [draft.locationId, employees],
+  );
+  const visibleEmployeeIds = useMemo(
+    () => new Set(visibleEmployees.map((employee) => employee.id)),
+    [visibleEmployees],
+  );
+  const visibleGroups = useMemo(
+    () =>
+      draft.locationId
+        ? groups.filter((group) =>
+            group.memberships.some((membership) =>
+              visibleEmployeeIds.has(membership.employeeId),
+            ),
+          )
+        : groups,
+    [draft.locationId, groups, visibleEmployeeIds],
+  );
+
   function resetForm() {
     setDraft(EMPTY_DRAFT);
     setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
+    setLocations([]);
     setError(null);
     setSubmitting(false);
   }
@@ -344,6 +392,13 @@ export function HeaderNewsCreateDialog({
         if (!active) return;
         setEmployees(snapshot.initialData.employees ?? []);
         setGroups(snapshot.initialData.groups ?? []);
+        const nextLocations = snapshot.initialData.locations ?? [];
+        setLocations(nextLocations);
+        setDraft((current) => ({
+          ...current,
+          locationId:
+            nextLocations.length === 1 ? nextLocations[0]?.id ?? "" : "",
+        }));
       })
       .catch((loadError) => {
         if (!active) return;
@@ -472,6 +527,13 @@ export function HeaderNewsCreateDialog({
       return;
     }
 
+    if (locations.length > 1 && !draft.locationId) {
+      setError(
+        localize(locale, "Выберите локацию новости.", "Select a news location."),
+      );
+      return;
+    }
+
     if (
       draft.limitParticipants &&
       ((draft.participantScope === "GROUP" && draft.groupIds.length === 0) ||
@@ -525,7 +587,12 @@ export function HeaderNewsCreateDialog({
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
-          audience: draft.limitParticipants ? draft.participantScope : "ALL",
+          audience: draft.limitParticipants
+            ? draft.participantScope
+            : draft.locationId
+              ? "LOCATION"
+              : "ALL",
+          ...(draft.locationId ? { locationId: draft.locationId } : {}),
           title: draft.title.trim(),
           body: draft.body.trim(),
           isPinned: false,
@@ -633,6 +700,32 @@ export function HeaderNewsCreateDialog({
               )}
               value={draft.body}
             />
+            {locations.length > 1 ? (
+              <label className="grid gap-2 text-sm font-heading">
+                <span>{localize(locale, "Локация", "Location")}</span>
+                <AppSelectField
+                  onValueChange={(locationId) =>
+                    setDraft((current) => ({
+                      ...current,
+                      locationId,
+                      groupIds: [],
+                      targetEmployeeIds: [],
+                    }))
+                  }
+                  options={locations.map((location) => ({
+                    value: location.id,
+                    label: location.name,
+                  }))}
+                  placeholder={localize(
+                    locale,
+                    "Выберите локацию",
+                    "Select location",
+                  )}
+                  triggerClassName="h-11 rounded-xl bg-secondary/30"
+                  value={draft.locationId}
+                />
+              </label>
+            ) : null}
             <ImageAdjustField
               applyLabel={localize(locale, "Использовать фото", "Use photo")}
               cancelLabel={localize(locale, "Отмена", "Cancel")}
@@ -1039,8 +1132,8 @@ export function HeaderNewsCreateDialog({
                           <div className="px-3 py-2 text-sm text-[color:var(--muted-foreground)]">
                             {localize(locale, "Загружаем группы...", "Loading groups...")}
                           </div>
-                        ) : groups.length ? (
-                          groups.map((group) => {
+                        ) : visibleGroups.length ? (
+                          visibleGroups.map((group) => {
                             const checked = draft.groupIds.includes(group.id);
                             return (
                               <label
@@ -1080,8 +1173,8 @@ export function HeaderNewsCreateDialog({
                           <div className="px-3 py-2 text-sm text-[color:var(--muted-foreground)]">
                             {localize(locale, "Загружаем сотрудников...", "Loading employees...")}
                           </div>
-                        ) : employees.length ? (
-                          employees.map((employee) => {
+                        ) : visibleEmployees.length ? (
+                          visibleEmployees.map((employee) => {
                             const checked = draft.targetEmployeeIds.includes(employee.id);
                             return (
                               <label
@@ -1132,7 +1225,12 @@ export function HeaderNewsCreateDialog({
             {localize(locale, "Отмена", "Cancel")}
           </Button>
           <Button
-            disabled={submitting || !draft.title.trim() || !draft.body.trim()}
+            disabled={
+              submitting ||
+              !draft.title.trim() ||
+              !draft.body.trim() ||
+              (locations.length > 1 && !draft.locationId)
+            }
             onClick={() => void handleCreate()}
             type="button"
           >

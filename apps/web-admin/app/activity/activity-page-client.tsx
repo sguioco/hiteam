@@ -484,7 +484,7 @@ export default function ActivityPageClient({
               </div>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="activity-page-scope-filters">
             <Select
               onValueChange={(value) => {
                 setCompanyId(value);
@@ -492,7 +492,7 @@ export default function ActivityPageClient({
               }}
               value={companyId}
             >
-              <SelectTrigger className="h-10 min-w-[180px] rounded-xl">
+              <SelectTrigger className="activity-page-scope-trigger h-10 rounded-xl">
                 <SelectValue
                   placeholder={localize(
                     locale,
@@ -513,7 +513,7 @@ export default function ActivityPageClient({
               </SelectContent>
             </Select>
             <Select onValueChange={setLocationId} value={locationId}>
-              <SelectTrigger className="h-10 min-w-[180px] rounded-xl">
+              <SelectTrigger className="activity-page-scope-trigger h-10 rounded-xl">
                 <SelectValue
                   placeholder={localize(
                     locale,

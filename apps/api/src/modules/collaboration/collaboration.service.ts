@@ -3404,10 +3404,9 @@ export class CollaborationService {
       dto.assigneeEmployeeId,
       dto.groupId,
       dto.departmentId,
-      dto.locationId,
     ].filter((value) => Boolean(value));
 
-    if (selectedTargets.length === 0) {
+    if (selectedTargets.length === 0 && !dto.locationId) {
       throw new BadRequestException(
         "Template must target an employee, group, department, or location.",
       );
@@ -4809,12 +4808,25 @@ export class CollaborationService {
       targetEmployeeId,
       targetEmployeeIds,
     );
+    const locationWhere: Prisma.EmployeeWhereInput = locationId
+      ? {
+          OR: [
+            { primaryLocationId: locationId },
+            {
+              locationAssignments: {
+                some: { locationId, unassignedAt: null },
+              },
+            },
+          ],
+        }
+      : {};
 
     if (audience === AnnouncementAudience.ALL) {
       return this.prisma.employee.findMany({
         where: {
           tenantId,
           id: { not: authorEmployeeId },
+          ...locationWhere,
         },
         include: { user: true },
       });
@@ -4835,6 +4847,7 @@ export class CollaborationService {
           where: {
             tenantId,
             groupId: { in: normalizedGroupIds },
+            ...(locationId ? { employee: locationWhere } : {}),
           },
           include: {
             employee: {
@@ -4854,6 +4867,7 @@ export class CollaborationService {
         const directEmployees = await this.prisma.employee.findMany({
           where: {
             tenantId,
+            ...locationWhere,
             id: {
               in: normalizedTargetEmployeeIds.filter(
                 (employeeId) => employeeId !== authorEmployeeId,
@@ -4878,6 +4892,7 @@ export class CollaborationService {
       return this.prisma.employee.findMany({
         where: {
           tenantId,
+          ...locationWhere,
           id: { in: normalizedTargetEmployeeIds },
         },
         include: { user: true },
@@ -4892,6 +4907,7 @@ export class CollaborationService {
         where: {
           tenantId,
           groupId: { in: normalizedGroupIds },
+          ...(locationId ? { employee: locationWhere } : {}),
         },
         include: {
           employee: {
@@ -4911,6 +4927,7 @@ export class CollaborationService {
           tenantId,
           departmentId,
           id: { not: authorEmployeeId },
+          ...locationWhere,
         },
         include: { user: true },
       });
@@ -4920,7 +4937,7 @@ export class CollaborationService {
       return this.prisma.employee.findMany({
         where: {
           tenantId,
-          primaryLocationId: locationId,
+          ...locationWhere,
           id: { not: authorEmployeeId },
         },
         include: { user: true },

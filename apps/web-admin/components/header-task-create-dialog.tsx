@@ -3,6 +3,7 @@
 import type {
   EmployeeApiRecord,
   EmployeesBootstrapResponse,
+  OrganizationLocationSummary,
   TaskItem,
   WorkGroupItem,
 } from "@smart/types";
@@ -86,6 +87,19 @@ function buildEmployeeName(employee: {
     .trim();
 }
 
+function employeeBelongsToLocation(
+  employee: EmployeeApiRecord,
+  locationId: string,
+) {
+  return (
+    employee.primaryLocation?.id === locationId ||
+    (employee.locationAssignments ?? []).some(
+      (assignment) =>
+        assignment.locationId === locationId && !assignment.unassignedAt,
+    )
+  );
+}
+
 function getWeekdayShortLabel(day: number, locale: "ru" | "en") {
   const normalizedDay = day === 7 ? 0 : day;
 
@@ -129,6 +143,8 @@ export function HeaderTaskCreateDialog({
   const { locale } = useI18n();
   const [employees, setEmployees] = useState<EmployeeApiRecord[]>([]);
   const [groups, setGroups] = useState<WorkGroupItem[]>([]);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<HeaderTaskDraft>(() => getInitialTaskDraft());
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -154,13 +170,18 @@ export function HeaderTaskCreateDialog({
 
   const employeeOptions = useMemo(() => {
     return employees
+      .filter(
+        (employee) =>
+          !selectedLocationId ||
+          employeeBelongsToLocation(employee, selectedLocationId),
+      )
       .map((employee) => ({
         ...employee,
         displayName: buildEmployeeName(employee) || employee.user?.email || employee.id,
         group: employeeGroupByEmployeeId.get(employee.id) ?? null,
       }))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, locale));
-  }, [employeeGroupByEmployeeId, employees, locale]);
+  }, [employeeGroupByEmployeeId, employees, locale, selectedLocationId]);
 
   const selectedEmployeeSummary =
     selectedEmployeeIds.length === employeeOptions.length && employeeOptions.length > 0
@@ -193,6 +214,8 @@ export function HeaderTaskCreateDialog({
     setDraft(getInitialTaskDraft());
     setError(null);
     setSelectedEmployeeIds([]);
+    setLocations([]);
+    setSelectedLocationId("");
 
     if (!session?.accessToken) {
       return;
@@ -215,8 +238,20 @@ export function HeaderTaskCreateDialog({
         );
         setEmployees(activeItems);
         setGroups(snapshot.groups ?? snapshot.overview?.groups ?? []);
-        setSelectedEmployeeIds((current) =>
-          current.length > 0 ? current : activeItems[0]?.id ? [activeItems[0].id] : [],
+        const nextLocations = snapshot.locations ?? [];
+        const nextLocationId =
+          nextLocations.length === 1 ? nextLocations[0]?.id ?? "" : "";
+        const firstAvailableEmployee = nextLocationId
+          ? activeItems.find((employee) =>
+              employeeBelongsToLocation(employee, nextLocationId),
+            )
+          : nextLocations.length === 0
+            ? activeItems[0]
+            : null;
+        setLocations(nextLocations);
+        setSelectedLocationId(nextLocationId);
+        setSelectedEmployeeIds(
+          firstAvailableEmployee ? [firstAvailableEmployee.id] : [],
         );
       })
       .catch((requestError) => {
@@ -298,6 +333,7 @@ export function HeaderTaskCreateDialog({
                 startDate: draft.startDate || new Date().toISOString().split("T")[0],
                 dueAfterDays: 0,
                 dueTimeLocal: draft.hasDueTime ? draft.dueTimeLocal || undefined : undefined,
+                locationId: selectedLocationId || undefined,
                 assigneeEmployeeId,
               }),
             }),
@@ -315,6 +351,7 @@ export function HeaderTaskCreateDialog({
                 priority: draft.priority,
                 requiresPhoto: draft.requiresPhoto || undefined,
                 dueAt: draft.hasDueTime ? draft.dueAt || undefined : undefined,
+                locationId: selectedLocationId || undefined,
                 assigneeEmployeeId,
               }),
             }),
@@ -339,6 +376,7 @@ export function HeaderTaskCreateDialog({
   const canSubmit =
     Boolean(draft.title.trim()) &&
     selectedEmployeeIds.length > 0 &&
+    (locations.length <= 1 || Boolean(selectedLocationId)) &&
     (!draft.isRecurring || draft.weekDays.length > 0) &&
     (!draft.hasDueTime || (draft.isRecurring ? Boolean(draft.dueTimeLocal) : Boolean(draft.dueAt)));
 
@@ -357,6 +395,43 @@ export function HeaderTaskCreateDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {locations.length > 1 ? (
+            <label className="grid gap-2 text-sm font-heading">
+              <span>{localize(locale, "Локация", "Location")}</span>
+              <AppSelectField
+                emptyOptionsLabel={localize(
+                  locale,
+                  "Локаций пока нет",
+                  "No locations yet",
+                )}
+                onValueChange={(locationId) => {
+                  setSelectedLocationId(locationId);
+                  setSelectedEmployeeIds((current) =>
+                    current.filter((employeeId) => {
+                      const employee = employees.find(
+                        (item) => item.id === employeeId,
+                      );
+                      return employee
+                        ? employeeBelongsToLocation(employee, locationId)
+                        : false;
+                    }),
+                  );
+                }}
+                options={locations.map((location) => ({
+                  value: location.id,
+                  label: location.name,
+                }))}
+                placeholder={localize(
+                  locale,
+                  "Выберите локацию",
+                  "Select location",
+                )}
+                triggerClassName="h-11 rounded-xl bg-secondary/30"
+                value={selectedLocationId}
+              />
+            </label>
+          ) : null}
+
           <div className="grid gap-2 text-sm font-heading">
             <span>{localize(locale, "Получатель", "Recipient")}</span>
             <EmployeeDropdown

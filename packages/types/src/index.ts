@@ -709,6 +709,7 @@ export type EmployeesBootstrapResponse = {
   organizationSetup: OrganizationSetupResponse | null;
   canCheckWorkdays: boolean;
   groups: WorkGroupItem[];
+  locations: OrganizationLocationSummary[];
 };
 
 export type EmployeeManagerAccessResponse = {
@@ -761,6 +762,7 @@ export type NewsBootstrapResponse<TEmployee = EmployeeApiRecord> = {
     items: AnnouncementItem[];
     employees: TEmployee[];
     groups: WorkGroupItem[];
+    locations: OrganizationLocationSummary[];
   };
 };
 
@@ -947,6 +949,7 @@ export type LeaderboardEntry = {
       id: string;
       name: string;
     } | null;
+    locations: NamedEntityOption[];
   };
   points: number;
   todayPoints: number;
@@ -955,6 +958,7 @@ export type LeaderboardEntry = {
 
 export type LeaderboardOverviewResponse = {
   earliestMonthKey?: string;
+  locations: NamedEntityOption[];
   month: {
     key: string;
     startsAt: string;

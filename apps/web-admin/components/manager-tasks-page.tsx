@@ -71,6 +71,14 @@ export type EmployeeDirectoryItem = {
     id: string;
     name: string;
   } | null;
+  locationAssignments?: Array<{
+    locationId: string;
+    unassignedAt?: string | null;
+    location: {
+      id: string;
+      name: string;
+    };
+  }>;
   position?: {
     id: string;
     name: string;
@@ -106,6 +114,8 @@ type TaskTableRow = {
   statusActive: boolean;
   statusTone: "success" | "gray" | "error";
   statusSort: number;
+  locations: Array<{ id: string; name: string }>;
+  locationsSort: string;
   teams: string[];
   teamsSort: string;
   tasksSort: number;
@@ -114,7 +124,12 @@ type TaskTableRow = {
   entry: EmployeeTaskEntry;
 };
 
-type TaskSortColumn = "employeeName" | "status" | "teams" | "tasks";
+type TaskSortColumn =
+  | "employeeName"
+  | "status"
+  | "locations"
+  | "teams"
+  | "tasks";
 
 type TaskRenderRow =
   | (TaskTableRow & {
@@ -668,9 +683,30 @@ function getTaskAttentionRank(stats: EmployeeTaskStats) {
 }
 
 function getEmployeeSubtitle(
-  employee: Pick<EmployeeDirectoryItem, "department" | "position" | "primaryLocation">,
+  employee: Pick<EmployeeDirectoryItem, "department" | "position">,
 ) {
-  return employee.position?.name ?? employee.department?.name ?? employee.primaryLocation?.name ?? null;
+  return employee.position?.name ?? employee.department?.name ?? null;
+}
+
+function getEmployeeLocations(
+  employee: Pick<
+    EmployeeDirectoryItem,
+    "primaryLocation" | "locationAssignments"
+  >,
+) {
+  const locations = new Map<string, { id: string; name: string }>();
+
+  if (employee.primaryLocation) {
+    locations.set(employee.primaryLocation.id, employee.primaryLocation);
+  }
+
+  for (const assignment of employee.locationAssignments ?? []) {
+    if (!assignment.unassignedAt) {
+      locations.set(assignment.location.id, assignment.location);
+    }
+  }
+
+  return Array.from(locations.values());
 }
 
 function hasCompletedEmployeeRegistration(
@@ -735,6 +771,7 @@ export function ManagerTasksPage({
     proofs: { id: string; url: string }[];
   } | null>(null);
   const [groupFilter, setGroupFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [taskPresenceFilter, setTaskPresenceFilter] = useState("all");
   const [taskCountFilter, setTaskCountFilter] = useState("0");
@@ -1187,6 +1224,7 @@ export function ManagerTasksPage({
   const tableRows = useMemo<TaskTableRow[]>(() => {
     return employeeTaskEntries.map((entry) => {
       const employeeName = getEmployeeName(entry.employee, locale);
+      const locations = getEmployeeLocations(entry.employee);
       const teams = (teamsByEmployeeId.get(entry.employee.id) ?? []).map(
         (team) => employeeMetaTextMap[team] ?? team,
       );
@@ -1260,6 +1298,8 @@ export function ManagerTasksPage({
           : employeeSubtitle,
         employeeAvatarUrl: entry.employee.avatarUrl ?? null,
         ...statusSummary,
+        locations,
+        locationsSort: locations.map((location) => location.name).join(" "),
         teams,
         teamsSort: teams.join(" "),
         tasksSort: getTaskAttentionRank(entry.stats),
@@ -1483,6 +1523,21 @@ export function ManagerTasksPage({
     [groups, locale],
   );
 
+  const locationOptions = useMemo(() => {
+    const locations = new Map<string, string>();
+
+    for (const row of tableRows) {
+      for (const location of row.locations) {
+        locations.set(location.id, location.name);
+      }
+    }
+
+    return Array.from(locations, ([value, label]) => ({ value, label })).sort(
+      (left, right) =>
+        left.label.localeCompare(right.label, locale === "ru" ? "ru" : "en"),
+    );
+  }, [locale, tableRows]);
+
   const filteredRows = useMemo(() => {
     const minTasks = Number(taskCountFilter) || 0;
     const selectedGroupName = groupFilter
@@ -1498,7 +1553,12 @@ export function ManagerTasksPage({
         searchQuery &&
         !matchesTaskSearch &&
         !normalizeSearchText(
-          [row.employeeName, row.employeeSubtitle ?? "", row.teams.join(" ")]
+          [
+            row.employeeName,
+            row.employeeSubtitle ?? "",
+            row.locationsSort,
+            row.teams.join(" "),
+          ]
             .join(" "),
         ).includes(searchQuery)
       ) {
@@ -1506,6 +1566,13 @@ export function ManagerTasksPage({
       }
 
       if (selectedGroupName && !row.teams.includes(selectedGroupName)) {
+        return false;
+      }
+
+      if (
+        locationFilter &&
+        !row.locations.some((location) => location.id === locationFilter)
+      ) {
         return false;
       }
 
@@ -1542,6 +1609,7 @@ export function ManagerTasksPage({
   }, [
     groupFilter,
     groups,
+    locationFilter,
     searchQuery,
     statusFilter,
     tableRows,
@@ -1569,6 +1637,8 @@ export function ManagerTasksPage({
     [groupFilter, statusFilter, taskPresenceFilter, taskCountFilter],
   );
 
+  const hasTableFilters = hasActiveFilters || Boolean(locationFilter);
+
   const sortedRows = useMemo(() => {
     const items = [...filteredRows];
     const column = (sortDescriptor.column as TaskSortColumn | undefined) ?? "tasks";
@@ -1584,6 +1654,11 @@ export function ManagerTasksPage({
         );
       } else if (column === "status") {
         comparison = left.statusSort - right.statusSort;
+      } else if (column === "locations") {
+        comparison = left.locationsSort.localeCompare(
+          right.locationsSort,
+          locale === "ru" ? "ru" : "en",
+        );
       } else if (column === "teams") {
         comparison = left.teamsSort.localeCompare(right.teamsSort, locale === "ru" ? "ru" : "en");
       } else if (column === "tasks") {
@@ -1955,6 +2030,18 @@ export function ManagerTasksPage({
     );
   }
 
+  function renderLocations(item: TaskTableRow) {
+    if (!item.locations.length) {
+      return <span className="team-tasks-location-text is-empty">—</span>;
+    }
+
+    return (
+      <span className="team-tasks-location-text">
+        {item.locations.map((location) => location.name).join(", ")}
+      </span>
+    );
+  }
+
   return (
     <AdminShell>
       <main className="page-shell section-stack team-tasks-page">
@@ -1982,6 +2069,22 @@ export function ManagerTasksPage({
           </div>
 
           <div className="team-tasks-period-controls">
+            <div className="team-tasks-location-control">
+              <AppSelectField
+                className="team-tasks-location-select"
+                emptyLabel={localize(locale, "Все локации", "All locations")}
+                emptyOptionsLabel={localize(
+                  locale,
+                  "Локаций пока нет",
+                  "No locations yet",
+                )}
+                onValueChange={setLocationFilter}
+                options={locationOptions}
+                placeholder={localize(locale, "Локация", "Location")}
+                value={locationFilter}
+              />
+            </div>
+
             {preset === "custom" ? (
               <div className="team-tasks-custom-range">
                 <div className="team-tasks-custom-field">
@@ -2312,26 +2415,32 @@ export function ManagerTasksPage({
                     <Table.Header>
                       <Table.Head
                         allowsSorting
-                        className="w-[46%] min-w-[320px]"
+                        className="w-[34%] min-w-[300px]"
                         id="employeeName"
                         isRowHeader
                         label={`${localize(locale, "Сотрудники", "Employees")} ${sortedRows.length}`}
                       />
                       <Table.Head
                         allowsSorting
-                        className="w-[18%] min-w-[170px] team-tasks-head-center"
+                        className="w-[16%] min-w-[150px] team-tasks-head-center"
                         id="status"
                         label={localize(locale, "Статус", "Status")}
                       />
                       <Table.Head
                         allowsSorting
                         className="w-[18%] min-w-[170px] team-tasks-head-center"
+                        id="locations"
+                        label={localize(locale, "Локация", "Location")}
+                      />
+                      <Table.Head
+                        allowsSorting
+                        className="w-[16%] min-w-[150px] team-tasks-head-center"
                         id="teams"
                         label={localize(locale, "Команда", "Team")}
                       />
                       <Table.Head
                         allowsSorting
-                        className="w-[18%] min-w-[170px] team-tasks-head-center team-tasks-head-progress"
+                        className="w-[16%] min-w-[140px] team-tasks-head-center team-tasks-head-progress"
                         id="tasks"
                         label={localize(locale, "Задачи", "Tasks")}
                       />
@@ -2342,13 +2451,13 @@ export function ManagerTasksPage({
                       if (item.kind === "empty") {
                         return (
                           <Table.Row className="team-tasks-table-row team-tasks-table-row--empty" id={item.renderKey}>
-                            <Table.Cell className="team-tasks-empty-cell" colSpan={4}>
+                            <Table.Cell className="team-tasks-empty-cell" colSpan={5}>
                               {localize(
                                 locale,
-                                hasActiveFilters || Boolean(searchQuery)
+                                hasTableFilters || Boolean(searchQuery)
                                   ? "По этим фильтрам сотрудники не найдены"
                                   : "В выбранном периоде задач пока нет",
-                                hasActiveFilters || Boolean(searchQuery)
+                                hasTableFilters || Boolean(searchQuery)
                                   ? "No employees match these filters"
                                   : "No tasks were found in this range",
                               )}
@@ -2392,7 +2501,7 @@ export function ManagerTasksPage({
                             } !h-auto`}
                             id={item.renderKey}
                           >
-                            <Table.Cell className="team-tasks-detail-cell" colSpan={4}>
+                            <Table.Cell className="team-tasks-detail-cell" colSpan={5}>
                               <div className="team-tasks-detail-panel">
                                 {detailTasks.length ? (
                                   <div className="team-tasks-inline-details">
@@ -2476,6 +2585,16 @@ export function ManagerTasksPage({
                               type="button"
                             >
                               {renderStatusBadge(item)}
+                            </button>
+                          </Table.Cell>
+
+                          <Table.Cell className="align-middle">
+                            <button
+                              className="team-tasks-row-button team-tasks-row-button--center"
+                              onClick={() => toggleExpandedEmployee(item.id)}
+                              type="button"
+                            >
+                              {renderLocations(item)}
                             </button>
                           </Table.Cell>
 

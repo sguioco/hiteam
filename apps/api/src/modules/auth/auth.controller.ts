@@ -112,6 +112,7 @@ export class AuthController {
         return {
           header: {
             employeeCount: 0,
+            organizationCount: profile?.company?.name ? 1 : 0,
             organization: profile?.company?.name
               ? {
                   company: {
@@ -135,11 +136,12 @@ export class AuthController {
       }
     }
 
-    const [employeeStatsResult, organizationResult, profileResult] =
+    const [employeeStatsResult, organizationResult, profileResult, companiesResult] =
       await Promise.allSettled([
         this.employeesService.stats(user.tenantId, {}),
         this.orgService.getSetup(user.tenantId),
         this.employeesService.getMe(user),
+        this.orgService.listCompanies(user.tenantId, false, user.sub),
       ]);
 
     const accountProfile =
@@ -162,13 +164,20 @@ export class AuthController {
       header:
         employeeStatsResult.status === 'rejected' &&
         organizationResult.status === 'rejected' &&
-        profileResult.status === 'rejected'
+        profileResult.status === 'rejected' &&
+        companiesResult.status === 'rejected'
           ? null
           : {
               employeeCount:
                 employeeStatsResult.status === 'fulfilled'
                   ? employeeStatsResult.value.total
                   : 0,
+              organizationCount:
+                companiesResult.status === 'fulfilled'
+                  ? companiesResult.value.length
+                  : organization?.company
+                    ? 1
+                    : 0,
               organization,
               accountProfile,
             },

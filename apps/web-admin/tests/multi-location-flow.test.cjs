@@ -51,6 +51,34 @@ const select = fs.readFileSync(
   path.join(root, "components", "ui", "select.tsx"),
   "utf8",
 );
+const authController = fs.readFileSync(
+  path.resolve(root, "..", "api", "src", "modules", "auth", "auth.controller.ts"),
+  "utf8",
+);
+const managerTasks = fs.readFileSync(
+  path.join(root, "components", "manager-tasks-page.tsx"),
+  "utf8",
+);
+const leaderboard = fs.readFileSync(
+  path.join(root, "components", "leaderboard-center.tsx"),
+  "utf8",
+);
+const headerTaskCreate = fs.readFileSync(
+  path.join(root, "components", "header-task-create-dialog.tsx"),
+  "utf8",
+);
+const headerNewsCreate = fs.readFileSync(
+  path.join(root, "components", "header-news-create-dialog.tsx"),
+  "utf8",
+);
+const newsCenter = fs.readFileSync(
+  path.join(root, "components", "news-center.tsx"),
+  "utf8",
+);
+const headerShiftCreate = fs.readFileSync(
+  path.join(root, "components", "header-shift-create-dialog.tsx"),
+  "utf8",
+);
 
 assert.match(organization, /\/org\/companies/);
 assert.match(organization, /startAddLocation/);
@@ -169,6 +197,60 @@ assert.match(
 );
 assert.match(employees, /\/employees\/\$\{employeeId\}\/location/);
 assert.match(schedule, /templateLocationId/);
+assert.match(
+  managerTasks,
+  /team-tasks-location-control[\s\S]*Все локации[\s\S]*All locations/,
+  "Tasks toolbar must expose the location filter before its period controls.",
+);
+assert.match(
+  leaderboard,
+  /leaderboard-location-control[\s\S]*Все локации[\s\S]*All locations[\s\S]*locationFilter/,
+  "Leaderboard must expose a location dropdown next to its view switcher.",
+);
+assert.match(
+  adminShell,
+  /organizationCount > 1[\s\S]*sidebar-organization-indicator[\s\S]*BriefcaseBusiness[\s\S]*companyName/,
+  "The sidebar must identify the active organization when several organizations are available.",
+);
+assert.match(
+  authController,
+  /listCompanies\(user\.tenantId, false, user\.sub\)[\s\S]*organizationCount:/,
+  "Shell bootstrap must return the readable organization count from the backend.",
+);
+assert.match(
+  headerTaskCreate,
+  /locations\.length > 1[\s\S]*Выберите локацию/,
+  "Task creation must require and persist a location in multi-location workspaces.",
+);
+assert.match(headerTaskCreate, /locationId: selectedLocationId \|\| undefined/);
+assert.match(
+  headerNewsCreate,
+  /locations\.length > 1[\s\S]*Выберите локацию/,
+  "News creation must require and persist a location in multi-location workspaces.",
+);
+assert.match(headerNewsCreate, /locationId: draft\.locationId/);
+assert.match(
+  newsCenter,
+  /locations\.length > 1[\s\S]*Выберите локацию/,
+  "The News page compose dialog must require a location in multi-location workspaces.",
+);
+assert.match(newsCenter, /locationId: draft\.locationId/);
+assert.match(
+  headerShiftCreate,
+  /Локация[\s\S]*templateLocationId/,
+  "Shift creation must keep its location selection connected to the API payload.",
+);
+assert.match(headerShiftCreate, /locationId: location\.id/);
+assert.match(
+  leaderboard,
+  /employee\.locations[\s\S]*rank: index \+ 1/,
+  "Leaderboard location filtering must recompute visible ranks.",
+);
+assert.match(
+  managerTasks,
+  /locationAssignments[\s\S]*locationsSort[\s\S]*id="locations"[\s\S]*renderLocations/,
+  "Tasks table must filter and render all active employee locations.",
+);
 assert.doesNotMatch(
   schedule,
   /const location = locations\[0\]/,

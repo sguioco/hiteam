@@ -7,6 +7,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
+  BriefcaseBusiness,
   CalendarRange,
   ChevronDown,
   ChevronRight,
@@ -408,6 +409,9 @@ export function AdminShell({
   const [employeeCount, setEmployeeCount] = useState(
     initialShellBootstrap?.header?.employeeCount ?? 0,
   );
+  const [organizationCount, setOrganizationCount] = useState(
+    initialShellBootstrap?.header?.organizationCount ?? 0,
+  );
   const [organization, setOrganization] =
     useState<OrganizationHeaderState | null>(
       initialShellBootstrap?.header?.organization ?? null,
@@ -487,6 +491,7 @@ export function AdminShell({
     cacheKey?: string | null,
   ) {
     setEmployeeCount(snapshot.employeeCount);
+    setOrganizationCount(snapshot.organizationCount ?? (snapshot.organization?.company ? 1 : 0));
     setOrganization(snapshot.organization);
     setAccountProfile(snapshot.accountProfile);
 
@@ -780,27 +785,23 @@ export function AdminShell({
         applyHeaderSnapshot(
           {
             employeeCount,
+            organizationCount,
             organization: detail,
             accountProfile,
           },
           shellHeaderCacheKey,
         );
-        return;
       }
 
-      void apiRequest<{ setup: OrganizationHeaderState }>("/bootstrap/organization", {
+      void apiRequest<ShellBootstrapResponse>("/auth/bootstrap", {
         token: currentSession.accessToken,
+        skipClientCache: true,
       })
         .then((snapshot) => {
           setOrganizationGuardReady(true);
-          applyHeaderSnapshot(
-            {
-              employeeCount,
-              organization: snapshot.setup,
-              accountProfile,
-            },
-            shellHeaderCacheKey,
-          );
+          if (snapshot.header) {
+            applyHeaderSnapshot(snapshot.header, shellHeaderCacheKey);
+          }
         })
         .catch(() => undefined);
     }
@@ -816,7 +817,7 @@ export function AdminShell({
         handleOrganizationUpdated as EventListener,
       );
     };
-  }, [accountProfile, employeeCount, session, shellHeaderCacheKey]);
+  }, [accountProfile, employeeCount, organizationCount, session, shellHeaderCacheKey]);
 
   const searchParamsKey = searchParams.toString();
 
@@ -1600,6 +1601,15 @@ export function AdminShell({
         </nav>
 
         <div className="sidebar-footer-untitled">
+          {organizationCount > 1 ? (
+            <div
+              className="sidebar-organization-indicator"
+              title={companyName}
+            >
+              <BriefcaseBusiness aria-hidden="true" className="size-4" />
+              <span>{companyName}</span>
+            </div>
+          ) : null}
           <div className="sidebar-user-wrap" ref={accountMenuRef}>
             {accountMenuOpen ? (
               <div className="sidebar-user-menu">

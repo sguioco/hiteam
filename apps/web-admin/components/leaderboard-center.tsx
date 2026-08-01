@@ -23,6 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Table } from "@/components/application/table/table";
 import { Avatar } from "@/components/base/avatar/avatar";
+import { AppSelectField } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { apiRequest } from "@/lib/api";
@@ -467,6 +468,7 @@ export function LeaderboardCenter({
   const [monthTransitionDirection, setMonthTransitionDirection] =
     useState<MonthTransitionDirection>(null);
   const [tab, setTab] = useState<LeaderboardCenterTab>("table");
+  const [locationFilter, setLocationFilter] = useState("");
   const [overview, setOverview] = useState<LeaderboardOverviewResponse | null>(
     initialData ?? null,
   );
@@ -759,7 +761,37 @@ export function LeaderboardCenter({
     overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey;
   const canGoBack = selectedMonthKey > earliestMonthKey;
   const canGoForward = selectedMonthKey < currentMonthKey;
-  const leaderboard = overview?.leaderboard ?? [];
+  const availableLocations = overview?.locations ?? [];
+  const leaderboard = useMemo(() => {
+    const entries = overview?.leaderboard ?? [];
+    const filtered = locationFilter
+      ? entries.filter((entry) =>
+          (entry.employee.locations ?? []).some(
+            (location) => location.id === locationFilter,
+          ),
+        )
+      : entries;
+
+    return filtered.map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+  }, [locationFilter, overview?.leaderboard]);
+  const filteredMeRank = overview
+    ? leaderboard.find(
+        (entry) => entry.employee.id === overview.me.employeeId,
+      )?.rank ?? null
+    : null;
+
+  useEffect(() => {
+    if (
+      overview &&
+      locationFilter &&
+      !availableLocations.some((location) => location.id === locationFilter)
+    ) {
+      setLocationFilter("");
+    }
+  }, [availableLocations, locationFilter, overview]);
   const peersHiddenForViewer =
     overview?.visibility?.peersHiddenForViewer ?? false;
   const topLeaders = peersHiddenForViewer ? [] : leaderboard.slice(0, 3);
@@ -887,7 +919,7 @@ export function LeaderboardCenter({
           <div className="flex min-w-[82px] flex-col items-center text-center">
             <strong className="block text-2xl font-normal leading-none tracking-[-0.04em] tabular-nums text-[color:var(--foreground)]">
               {overview
-                ? `${overview.me.rank}/${overview.summary.participants}`
+                ? `${filteredMeRank ?? "—"}/${leaderboard.length}`
                 : "—"}
             </strong>
             <span className="section-kicker mt-1 block">
@@ -973,6 +1005,25 @@ export function LeaderboardCenter({
               </span>
             </div>
           ) : null}
+
+          <div className="leaderboard-location-control">
+            <AppSelectField
+              className="leaderboard-location-select"
+              emptyLabel={localize(locale, "Все локации", "All locations")}
+              emptyOptionsLabel={localize(
+                locale,
+                "Локаций пока нет",
+                "No locations yet",
+              )}
+              onValueChange={setLocationFilter}
+              options={availableLocations.map((location) => ({
+                value: location.id,
+                label: location.name,
+              }))}
+              placeholder={localize(locale, "Локация", "Location")}
+              value={locationFilter}
+            />
+          </div>
 
           <div className="flex h-12 overflow-hidden rounded-xl border border-border bg-white">
             <button

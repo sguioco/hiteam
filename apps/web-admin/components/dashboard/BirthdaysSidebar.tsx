@@ -41,9 +41,9 @@ export const BirthdaysSidebar = ({
             >
               <Avatar
                 alt={item.name}
-                className="shrink-0 shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+                className="birthdays-sidebar-avatar shrink-0"
                 initials={item.name}
-                size="xl"
+                size="md"
                 src={item.avatarUrl}
               />
               <div className="birthdays-sidebar-copy">

@@ -820,6 +820,7 @@ function buildEmptyLeaderboardOverview(month?: string, earliestMonthKey?: string
 
   return {
     earliestMonthKey,
+    locations: [],
     month: {
       key: formatLeaderboardMonthKey(monthStart),
       startsAt: monthStart.toISOString(),
@@ -1381,6 +1382,7 @@ export class BootstrapService {
       workdaySnapshot,
       scheduleTemplates,
       groups,
+      locations,
     ] = await Promise.all([
       withTimeoutFallback(
         this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
@@ -1438,6 +1440,13 @@ export class BootstrapService {
         1000,
         [],
       ),
+      withTimeoutFallback(
+        this.orgService
+          .listLocations(user.tenantId, undefined, false, user.sub)
+          .catch(() => []),
+        1000,
+        [],
+      ),
     ]);
     const employeeRecordIds = new Set(
       employeeRecords.map((employee) => employee.id),
@@ -1455,6 +1464,7 @@ export class BootstrapService {
       organizationSetup,
       canCheckWorkdays: workdaySnapshot.canCheckWorkdays,
       groups,
+      locations,
     };
   }
 
@@ -2109,14 +2119,18 @@ export class BootstrapService {
             .catch(() => []),
           employees: [],
           groups: [],
+          locations: [],
         },
       };
     }
 
-    const [items, employees, groups] = await Promise.all([
+    const [items, employees, groups, locations] = await Promise.all([
       this.collaborationService.listAnnouncementsForManager(user.sub).catch(() => []),
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
       this.collaborationService.listGroups(user.sub).catch(() => []),
+      this.orgService
+        .listLocations(user.tenantId, undefined, false, user.sub)
+        .catch(() => []),
     ]);
 
     return {
@@ -2125,6 +2139,7 @@ export class BootstrapService {
         items,
         employees,
         groups,
+        locations,
       },
     };
   }

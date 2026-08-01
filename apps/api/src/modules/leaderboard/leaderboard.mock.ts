@@ -7,6 +7,11 @@ import type {
 } from "./leaderboard.types";
 
 const DEMO_OWNER_EMAIL = "owner@demo.smart";
+const DEMO_LOCATIONS = [
+  { id: "location-central", name: "Central office" },
+  { id: "location-north", name: "North branch" },
+  { id: "location-south", name: "South branch" },
+];
 
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -362,6 +367,7 @@ function createEntries(): LeaderboardEntry[] {
           id: `position-${positionName.toLowerCase().replace(/\s+/g, "-")}`,
           name: positionName,
         },
+        locations: [DEMO_LOCATIONS[index % DEMO_LOCATIONS.length]!],
       },
       points,
       todayPoints,
@@ -427,6 +433,7 @@ export function buildDemoLeaderboardOverview(
   );
 
   return {
+    locations: DEMO_LOCATIONS,
     month,
     summary: {
       participants: leaderboard.length,

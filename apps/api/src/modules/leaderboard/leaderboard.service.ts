@@ -84,6 +84,14 @@ const VIEWER_EMPLOYEE_SELECT = {
   primaryLocation: {
     select: LOCATION_SELECT,
   },
+  locationAssignments: {
+    where: { unassignedAt: null },
+    select: {
+      location: {
+        select: LOCATION_SELECT,
+      },
+    },
+  },
 } satisfies Prisma.EmployeeSelect;
 
 const TEAM_EMPLOYEE_SELECT = {
@@ -118,6 +126,9 @@ type ViewerEmployee = {
   department: NamedEntity | null;
   position: NamedEntity | null;
   primaryLocation: (NamedEntity & { timezone: string }) | null;
+  locationAssignments: Array<{
+    location: NamedEntity & { timezone: string };
+  }>;
 };
 
 type TeamEmployee = Omit<ViewerEmployee, "user"> & {
@@ -230,6 +241,7 @@ export class LeaderboardService {
     }
 
     const employees = await this.loadTeamEmployees(viewer.tenantId, viewer.id);
+    const locations = this.collectEmployeeLocations(employees);
     const employeeIds = employees.map((employee) => employee.id);
 
     const [shifts, sessions, approvedLeaves, taskBuckets] = await Promise.all([
@@ -333,6 +345,7 @@ export class LeaderboardService {
                   name: viewer.position.name,
                 }
               : null,
+            locations: this.getEmployeeLocations(viewer),
           },
           points: 0,
           todayPoints: 0,
@@ -344,6 +357,7 @@ export class LeaderboardService {
 
     const overview: LeaderboardOverviewResponse = {
       earliestMonthKey: context.earliestMonthKey,
+      locations,
       month: {
         key: context.monthKey,
         startsAt: context.monthStart.toISOString(),
@@ -508,6 +522,52 @@ export class LeaderboardService {
     );
   }
 
+  private collectEmployeeLocations(employees: TeamEmployee[]) {
+    const locations = new Map<string, NamedEntity>();
+
+    for (const employee of employees) {
+      if (employee.primaryLocation) {
+        locations.set(employee.primaryLocation.id, {
+          id: employee.primaryLocation.id,
+          name: employee.primaryLocation.name,
+        });
+      }
+
+      for (const assignment of employee.locationAssignments) {
+        locations.set(assignment.location.id, {
+          id: assignment.location.id,
+          name: assignment.location.name,
+        });
+      }
+    }
+
+    return Array.from(locations.values()).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+  }
+
+  private getEmployeeLocations(
+    employee: Pick<ViewerEmployee, "primaryLocation" | "locationAssignments">,
+  ) {
+    const locations = new Map<string, NamedEntity>();
+
+    if (employee.primaryLocation) {
+      locations.set(employee.primaryLocation.id, {
+        id: employee.primaryLocation.id,
+        name: employee.primaryLocation.name,
+      });
+    }
+
+    for (const assignment of employee.locationAssignments) {
+      locations.set(assignment.location.id, {
+        id: assignment.location.id,
+        name: assignment.location.name,
+      });
+    }
+
+    return Array.from(locations.values());
+  }
+
   private buildOverviewCacheKey(args: {
     canManageLeaderboard: boolean;
     context: MonthContext;
@@ -602,6 +662,7 @@ export class LeaderboardService {
           avatarUrl: null,
           department: null,
           position: null,
+          locations: entry.employee.locations,
         },
         points: 0,
         todayPoints: 0,
@@ -774,6 +835,7 @@ export class LeaderboardService {
                 name: employee.position.name,
               }
             : null,
+          locations: this.getEmployeeLocations(employee),
         },
         points,
         todayPoints,

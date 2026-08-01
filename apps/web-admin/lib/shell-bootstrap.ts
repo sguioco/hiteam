@@ -22,6 +22,7 @@ export type AccountProfile = {
 
 export type ShellHeaderCachePayload = {
   employeeCount: number;
+  organizationCount?: number;
   organization: OrganizationHeaderState | null;
   accountProfile: AccountProfile | null;
 };

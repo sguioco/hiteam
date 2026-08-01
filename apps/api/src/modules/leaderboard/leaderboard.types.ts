@@ -45,6 +45,10 @@ export type LeaderboardEntry = {
       id: string;
       name: string;
     } | null;
+    locations: Array<{
+      id: string;
+      name: string;
+    }>;
   };
   points: number;
   todayPoints: number;
@@ -53,6 +57,10 @@ export type LeaderboardEntry = {
 
 export type LeaderboardOverviewResponse = {
   earliestMonthKey?: string;
+  locations: Array<{
+    id: string;
+    name: string;
+  }>;
   month: {
     key: string;
     startsAt: string;

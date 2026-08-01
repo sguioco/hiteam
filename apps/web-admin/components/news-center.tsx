@@ -5,6 +5,7 @@ import {
   AnnouncementAttachmentLocation,
   AnnouncementImageAspectRatio,
   NewsBootstrapResponse,
+  OrganizationLocationSummary,
   WorkGroupItem,
   AnnouncementItem,
   AnnouncementReadReceipt,
@@ -86,6 +87,7 @@ type NewsDraft = {
   title: string;
   body: string;
   linkUrl: string;
+  locationId: string;
   isPinned: boolean;
   notifyParticipants: boolean;
   limitParticipants: boolean;
@@ -110,6 +112,7 @@ const EMPTY_DRAFT: NewsDraft = {
   title: "",
   body: "",
   linkUrl: "",
+  locationId: "",
   isPinned: false,
   notifyParticipants: false,
   limitParticipants: false,
@@ -147,6 +150,11 @@ type NewsCenterEmployeeItem = {
   firstName: string;
   lastName: string;
   employeeNumber: string;
+  primaryLocation?: { id: string } | null;
+  locationAssignments?: Array<{
+    locationId: string;
+    isActive?: boolean;
+  }>;
 };
 
 type NewsCenterCachePayload =
@@ -159,6 +167,19 @@ function buildNewsCacheKey(
   mode: NewsCenterProps["mode"],
 ) {
   return session ? `news-center:${mode}:${session.user.id}` : null;
+}
+
+function employeeBelongsToLocation(employee: NewsCenterEmployeeItem, locationId: string) {
+  if (!locationId) {
+    return true;
+  }
+
+  return (
+    employee.primaryLocation?.id === locationId ||
+    employee.locationAssignments?.some(
+      (assignment) => assignment.locationId === locationId && assignment.isActive !== false,
+    ) === true
+  );
 }
 
 function localize(locale: Locale, ru: string, en: string) {
@@ -590,6 +611,26 @@ export function NewsCenter({
     initialData?.employees ?? [],
   );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>(
+    initialData?.locations ?? [],
+  );
+  const locationEmployees = useMemo(
+    () => employees.filter((employee) => employeeBelongsToLocation(employee, draft.locationId)),
+    [draft.locationId, employees],
+  );
+  const locationEmployeeIds = useMemo(
+    () => new Set(locationEmployees.map((employee) => employee.id)),
+    [locationEmployees],
+  );
+  const locationGroups = useMemo(
+    () =>
+      draft.locationId
+        ? groups.filter((group) =>
+            group.memberships.some((membership) => locationEmployeeIds.has(membership.employeeId)),
+          )
+        : groups,
+    [draft.locationId, groups, locationEmployeeIds],
+  );
   const didUseInitialData = useRef(Boolean(initialData));
 
   useEffect(() => {
@@ -601,6 +642,16 @@ export function NewsCenter({
     setCreateOptionalSections(EMPTY_CREATE_OPTIONAL_SECTIONS);
     setCreateOpen(true);
   }, [autoOpenCreate, isManagerView]);
+
+  useEffect(() => {
+    if (!createOpen || locations.length !== 1) {
+      return;
+    }
+
+    setDraft((current) =>
+      current.locationId ? current : { ...current, locationId: locations[0].id },
+    );
+  }, [createOpen, locations]);
 
   function toggleCreateOptionalSection(section: CreateOptionalSection, checked: boolean) {
     setCreateOptionalSections((current) => ({
@@ -629,6 +680,7 @@ export function NewsCenter({
     setItems(snapshot.items);
     setEmployees(snapshot.employees);
     setGroups(snapshot.groups);
+    setLocations(snapshot.locations);
   }
 
   async function loadItems(options?: { force?: boolean; silent?: boolean }) {
@@ -655,6 +707,7 @@ export function NewsCenter({
       if (isManagerView) {
         setEmployees(snapshot.initialData.employees ?? []);
         setGroups(snapshot.initialData.groups ?? []);
+        setLocations(snapshot.initialData.locations ?? []);
       }
     } catch (loadError) {
       if (!options?.silent) {
@@ -715,8 +768,9 @@ export function NewsCenter({
       items,
       employees,
       groups,
+      locations,
     } satisfies NewsCenterCachePayload);
-  }, [cacheKey, employees, groups, items, loading]);
+  }, [cacheKey, employees, groups, items, loading, locations]);
 
   useWorkspaceAutoRefresh({
     session,
@@ -814,6 +868,11 @@ export function NewsCenter({
       return;
     }
 
+    if (locations.length > 1 && !draft.locationId) {
+      setError(localize(locale, "Выбери локацию для новости.", "Choose a location for this news item."));
+      return;
+    }
+
     if (!draft.title.trim() || !draft.body.trim()) {
       setError(
         localize(
@@ -875,7 +934,12 @@ export function NewsCenter({
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
-          audience: draft.limitParticipants ? draft.participantScope : "ALL",
+          audience: draft.limitParticipants
+            ? draft.participantScope
+            : draft.locationId
+              ? "LOCATION"
+              : "ALL",
+          ...(draft.locationId ? { locationId: draft.locationId } : {}),
           title: draft.title.trim(),
           body: draft.body.trim(),
           isPinned: false,
@@ -978,6 +1042,7 @@ export function NewsCenter({
       title: item.title,
       body: item.body,
       linkUrl: item.linkUrl ?? "",
+      locationId: "",
       isPinned: item.isPinned,
       notifyParticipants: false,
       limitParticipants: false,
@@ -1319,6 +1384,28 @@ export function NewsCenter({
                   )}
                   value={draft.body}
                 />
+                {locations.length > 1 ? (
+                  <label className="grid gap-2 text-sm font-heading">
+                    <span>{localize(locale, "Локация", "Location")}</span>
+                    <AppSelectField
+                      onValueChange={(locationId) =>
+                        setDraft((current) => ({
+                          ...current,
+                          locationId,
+                          groupIds: [],
+                          targetEmployeeIds: [],
+                        }))
+                      }
+                      options={locations.map((location) => ({
+                        value: location.id,
+                        label: location.name,
+                      }))}
+                      placeholder={localize(locale, "Выберите локацию", "Select location")}
+                      triggerClassName="h-11 rounded-xl bg-secondary/30"
+                      value={draft.locationId}
+                    />
+                  </label>
+                ) : null}
                 <ImageAdjustField
                   applyLabel={localize(locale, "Использовать фото", "Use photo")}
                   cancelLabel={localize(locale, "Отмена", "Cancel")}
@@ -1719,8 +1806,8 @@ export function NewsCenter({
                       {draft.participantScope === "GROUP" ? (
                         <div className="rounded-[20px] border border-[rgba(148,163,184,0.2)] bg-slate-50/70 p-2 sm:col-span-1">
                           <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                            {groups.length ? (
-                              groups.map((group) => {
+                            {locationGroups.length ? (
+                              locationGroups.map((group) => {
                                 const checked = draft.groupIds.includes(group.id);
                                 return (
                                   <label
@@ -1756,8 +1843,8 @@ export function NewsCenter({
                       ) : (
                         <div className="rounded-[20px] border border-[rgba(148,163,184,0.2)] bg-slate-50/70 p-2 sm:col-span-1">
                           <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                            {employees.length ? (
-                              employees.map((employee) => {
+                            {locationEmployees.length ? (
+                              locationEmployees.map((employee) => {
                                 const checked = draft.targetEmployeeIds.includes(employee.id);
                                 return (
                                   <label
@@ -1801,7 +1888,11 @@ export function NewsCenter({
               <Button onClick={() => setCreateOpen(false)} type="button" variant="outline">
                 {localize(locale, "Отмена", "Cancel")}
               </Button>
-              <Button disabled={submitting} onClick={() => void handleCreate()} type="button">
+              <Button
+                disabled={submitting || (locations.length > 1 && !draft.locationId)}
+                onClick={() => void handleCreate()}
+                type="button"
+              >
                 {localize(locale, "Опубликовать", "Publish")}
               </Button>
             </DialogFooter>
