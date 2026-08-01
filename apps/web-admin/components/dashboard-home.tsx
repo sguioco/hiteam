@@ -1634,18 +1634,70 @@ export default function DashboardHome({
       return;
     }
     if (!session) return;
-    await apiRequest(`/collaboration/tasks/${taskId}/status`, {
-      method: "POST",
-      token: session.accessToken,
-      body: JSON.stringify({ status }),
-    });
-    setMessageAction(null);
-    setMessage(
-      status === "DONE"
-        ? localize(locale, "Задача отмечена как выполненная.", "Task marked as done.")
-        : localize(locale, "Статус задачи обновлен.", "Task status updated."),
+    const previousTask = taskBoard?.tasks.find((task) => task.id === taskId) ?? null;
+    const completedAt = status === "DONE" ? new Date().toISOString() : null;
+
+    setTaskBoard((current) =>
+      current
+        ? {
+            ...current,
+            tasks: current.tasks.map((task) =>
+              task.id === taskId ? { ...task, status, completedAt } : task,
+            ),
+          }
+        : current,
     );
-    await loadData();
+
+    try {
+      const updatedTask = await apiRequest<TaskItem>(
+        `/collaboration/tasks/${taskId}/status`,
+        {
+          method: "POST",
+          token: session.accessToken,
+          body: JSON.stringify({ status }),
+        },
+      );
+      setTaskBoard((current) =>
+        current
+          ? {
+              ...current,
+              tasks: current.tasks.map((task) =>
+                task.id === taskId ? updatedTask : task,
+              ),
+            }
+          : current,
+      );
+      setMessageAction(null);
+      setMessage(
+        status === "DONE"
+          ? localize(locale, "Задача отмечена как выполненная.", "Task marked as done.")
+          : localize(locale, "Статус задачи обновлен.", "Task status updated."),
+      );
+      void loadData().catch(() => undefined);
+    } catch (requestError) {
+      if (previousTask) {
+        setTaskBoard((current) =>
+          current
+            ? {
+                ...current,
+                tasks: current.tasks.map((task) =>
+                  task.id === taskId ? previousTask : task,
+                ),
+              }
+            : current,
+        );
+      }
+      setMessageAction(null);
+      setMessage(
+        requestError instanceof Error
+          ? requestError.message
+          : localize(
+              locale,
+              "Не удалось обновить задачу.",
+              "Unable to update the task.",
+            ),
+      );
+    }
   }
 
   async function handleApprove(requestId: string) {

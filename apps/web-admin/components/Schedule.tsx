@@ -3821,13 +3821,14 @@ export default function Schedule({
 
                     return (
                       <button
-                        className={`mx-auto flex size-8 min-w-0 items-center justify-center rounded-full border p-0 text-center text-[8px] font-semibold leading-none tracking-[-0.04em] transition-colors ${
+                        className={`mx-auto flex size-7 min-w-0 items-center justify-center rounded-full border p-0 text-center font-semibold leading-none transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
                         }`}
                         key={label}
                         onClick={() => toggleTemplateWeekDay(day)}
+                        style={{ fontSize: 9, letterSpacing: "-0.02em" }}
                         type="button"
                       >
                         {label}

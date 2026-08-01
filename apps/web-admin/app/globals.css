@@ -2974,7 +2974,7 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
-  align-items: start;
+  align-items: center;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
 }
@@ -2984,6 +2984,7 @@ textarea {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  align-self: center;
 }
 
 .organization-studio-scope-control,
@@ -3016,10 +3017,9 @@ textarea {
 }
 
 .organization-studio-location-switcher {
-  grid-column: 1 / -1;
   display: inline-flex;
   width: fit-content;
-  min-width: 260px;
+  min-width: 190px;
   align-items: center;
   gap: 8px;
   color: var(--muted-foreground);
@@ -3036,6 +3036,11 @@ textarea {
 .organization-studio-map-copy {
   display: grid;
   gap: 10px;
+}
+
+.organization-studio-name-field {
+  min-width: 0;
+  gap: 7px;
 }
 
 .organization-studio-logo-field {
@@ -3065,6 +3070,38 @@ textarea {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.organization-studio-label-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.organization-studio-count-badge {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.organization-studio-employee-trigger {
+  min-height: 48px;
+  border-radius: 18px;
+  background: var(--panel);
 }
 
 .organization-studio-name-row {
@@ -3167,10 +3204,18 @@ textarea {
 
 .organization-studio-meta-stack {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  align-items: center;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 12px;
+  align-items: baseline;
   justify-items: start;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.organization-studio-meta-stack::-webkit-scrollbar {
+  display: none;
 }
 
 .organization-studio-code {
@@ -3187,14 +3232,15 @@ textarea {
   font-size: 0.9rem;
   font-weight: 500;
   text-align: left;
-  overflow-wrap: anywhere;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .organization-studio-code strong {
   color: var(--foreground);
   font-weight: 700;
   letter-spacing: 0.04em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .organization-studio-code-icon {
@@ -10278,6 +10324,7 @@ body {
   }
 
   .organization-studio-location-switcher {
+    grid-column: 1 / -1;
     width: 100%;
     min-width: 0;
   }

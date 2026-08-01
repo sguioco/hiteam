@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { KeyRound, LogOut, Mail, Shield, Trash2, UploadCloud, UserRound } from 'lucide-react';
-import type { DashboardBootstrapResponse } from '@smart/types';
 import { AdminShell } from '../../components/admin-shell';
 import { ImageAdjustField } from '../../components/image-adjust-field';
 import { Button } from '../../components/ui/button';
@@ -26,7 +25,7 @@ import { useI18n } from '../../lib/i18n';
 import { buildUserDisplayName } from '../../lib/profile-display';
 import { readStoredProfileAvatar, writeStoredProfileAvatar } from '../../lib/profile-avatar';
 
-type ProfileEmployee = {
+export type ProfileEmployee = {
   avatarUrl?: string | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -53,7 +52,7 @@ export default function ProfilePageClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [employee, setEmployee] = useState<ProfileEmployee | null>(initialEmployee ?? null);
-  const didUseInitialEmployee = useRef(Boolean(initialEmployee));
+  const didUseInitialEmployee = useRef(initialEmployee !== undefined);
 
   useEffect(() => {
     const s = getSession();
@@ -65,9 +64,9 @@ export default function ProfilePageClient({
     setSession(s);
     setEmployeeMode(isEmployeeOnlyRole(s.user.roleCodes));
 
-    if (didUseInitialEmployee.current && initialEmployee) {
+    if (didUseInitialEmployee.current) {
       didUseInitialEmployee.current = false;
-      if (initialEmployee.avatarUrl) {
+      if (initialEmployee?.avatarUrl) {
         setAvatarPreview(initialEmployee.avatarUrl);
         writeStoredProfileAvatar(initialEmployee.avatarUrl, s.user.email);
       } else {
@@ -76,12 +75,11 @@ export default function ProfilePageClient({
       return;
     }
 
-    void apiRequest<DashboardBootstrapResponse>('/bootstrap/dashboard', {
+    void apiRequest<ProfileEmployee | null>('/employees/me', {
       token: s.accessToken,
       realBackend: true,
     })
-      .then((snapshot) => {
-        const employee = snapshot.initialData.profile;
+      .then((employee) => {
         setEmployee(employee);
 
         if (employee?.avatarUrl) {

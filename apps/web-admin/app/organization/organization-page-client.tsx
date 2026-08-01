@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
+import { EmployeeDropdown } from "../../components/employee-dropdown";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
 import {
@@ -22,7 +23,6 @@ import {
   LocationSelection,
 } from "../../components/location-map-picker";
 import { Button } from "../../components/ui/button";
-import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -101,6 +101,7 @@ type SetupDraft = {
   googlePlaceId: string;
   attendanceTrackingEnabled: boolean;
   latitude: string;
+  locationName: string;
   longitude: string;
   timezone: string;
 };
@@ -139,6 +140,7 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
   organizationId: null,
 };
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
+const ADD_LOCATION_SELECT_VALUE = "__add_location__";
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
 
@@ -218,7 +220,7 @@ function createEmptyDraft(): SetupDraft {
     address: "", companyLogoUrl: "", companyName: "", details: null,
     geofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS, googlePlaceId: "",
     attendanceTrackingEnabled: true,
-    latitude: "", longitude: "", timezone: detectedTimeZone,
+    latitude: "", locationName: "", longitude: "", timezone: detectedTimeZone,
   };
 }
 
@@ -232,6 +234,7 @@ function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
     googlePlaceId: setup.company?.googlePlaceId ?? "",
     attendanceTrackingEnabled: setup.attendanceTrackingEnabled ?? true,
     latitude: typeof setup.location?.latitude === "number" ? String(setup.location.latitude) : "",
+    locationName: setup.location?.name ?? "",
     longitude: typeof setup.location?.longitude === "number" ? String(setup.location.longitude) : "",
     timezone: setup.location?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   };
@@ -248,7 +251,10 @@ function buildAddEmployeePromptStorageKey(
 }
 
 export type OrganizationPageInitialData = {
+  companies?: Company[];
   employeeCount: number;
+  employees?: EmployeeOption[];
+  locations?: Location[];
   setup: OrganizationSetupResponse;
 };
 
@@ -264,10 +270,12 @@ export default function OrganizationPageClient({
   );
   const [employeeCount, setEmployeeCount] = useState(initialData?.employeeCount ?? 0);
   const [companies, setCompanies] = useState<Company[]>(
-    initialData?.setup.company ? [initialData.setup.company] : [],
+    initialData?.companies ??
+      (initialData?.setup.company ? [initialData.setup.company] : []),
   );
   const [locations, setLocations] = useState<Location[]>(
-    initialData?.setup.location ? [initialData.setup.location] : [],
+    initialData?.locations ??
+      (initialData?.setup.location ? [initialData.setup.location] : []),
   );
   const [selectedCompanyId, setSelectedCompanyId] = useState(
     initialData?.setup.company?.id ?? "",
@@ -280,7 +288,7 @@ export default function OrganizationPageClient({
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
   const [availableEmployees, setAvailableEmployees] = useState<
     EmployeeOption[]
-  >([]);
+  >(initialData?.employees ?? []);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<SetupDraft>(() =>
     buildDraftFromSetup(initialData?.setup ?? EMPTY_SETUP),
@@ -297,6 +305,7 @@ export default function OrganizationPageClient({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
   const [altegioConnectedLocationId, setAltegioConnectedLocationId] = useState<string | null>(null);
   const [altegioConnectionLoaded, setAltegioConnectionLoaded] = useState(false);
   const [locationConfirmationPending, setLocationConfirmationPending] =
@@ -342,32 +351,47 @@ export default function OrganizationPageClient({
     const session = getSession();
     if (!session) return;
 
-    const [nextCompanies, nextLocations, nextEmployees] = await Promise.all([
-      apiRequest<Company[]>("/org/companies", {
-        token: session.accessToken,
-      }),
-      apiRequest<Location[]>("/org/locations", {
-        token: session.accessToken,
-      }),
-      apiRequest<EmployeeOption[]>("/employees", {
-        token: session.accessToken,
-      }),
-    ]);
+    const snapshot = await apiRequest<OrganizationPageInitialData>(
+      "/bootstrap/organization",
+      { token: session.accessToken },
+    );
+    const nextCompanies = snapshot.companies ?? [];
+    const nextLocations = snapshot.locations ?? [];
+    const nextEmployees = snapshot.employees ?? [];
     setCompanies(nextCompanies);
     setLocations(nextLocations);
     setAvailableEmployees(nextEmployees);
 
     const currentCompany =
       nextCompanies.find(({ id }) => id === selectedCompanyId) ??
-      nextCompanies.find(({ id }) => id === setup.company?.id) ??
+      nextCompanies.find(({ id }) => id === snapshot.setup.company?.id) ??
       nextCompanies[0];
     if (!currentCompany) return;
     const currentLocation =
       nextLocations.find(({ id }) => id === selectedLocationId) ??
-      nextLocations.find(({ id }) => id === setup.location?.id) ??
+      nextLocations.find(({ id }) => id === snapshot.setup.location?.id) ??
       nextLocations.find(({ companyId }) => companyId === currentCompany.id) ??
       null;
-    applyScope(currentCompany, currentLocation);
+    const nextSetup = {
+      ...snapshot.setup,
+      company: currentCompany,
+      location: currentLocation,
+      configured: Boolean(currentLocation),
+    };
+    setSelectedCompanyId(currentCompany.id);
+    setSelectedLocationId(currentLocation?.id ?? "");
+    setEmployeeCount(currentCompany._count?.employees ?? snapshot.employeeCount);
+    setSetup(nextSetup);
+    setDraft(buildDraftFromSetup(nextSetup));
+    setRadiusInput(
+      String(
+        normalizeRadius(
+          currentLocation?.geofenceRadiusMeters ??
+            nextSetup.defaultGeofenceRadiusMeters,
+        ),
+      ),
+    );
+    setSetupMode(currentLocation ? "update" : "create-location");
   }
 
   function handleCompanySelect(companyId: string) {
@@ -380,6 +404,10 @@ export default function OrganizationPageClient({
   }
 
   function handleLocationSelect(locationId: string) {
+    if (locationId === ADD_LOCATION_SELECT_VALUE) {
+      startAddLocation();
+      return;
+    }
     const location = locations.find(({ id }) => id === locationId);
     const company = companies.find(({ id }) => id === location?.companyId);
     if (!location || !company) return;
@@ -416,6 +444,8 @@ export default function OrganizationPageClient({
     if (!session || !name) return;
     setIsCreatingCompany(true);
     setError(null);
+    setCreateCompanyOpen(false);
+    setNewCompanyName("");
     try {
       const company = await apiRequest<Company>("/org/companies", {
         method: "POST",
@@ -423,10 +453,10 @@ export default function OrganizationPageClient({
         body: JSON.stringify({ name }),
       });
       setCompanies((current) => [company, ...current]);
-      setCreateCompanyOpen(false);
-      setNewCompanyName("");
       applyScope(company, null);
     } catch (nextError) {
+      setNewCompanyName(name);
+      setCreateCompanyOpen(true);
       setError(
         nextError instanceof Error
           ? nextError.message
@@ -523,6 +553,14 @@ export default function OrganizationPageClient({
   }, [router]);
 
   useEffect(() => {
+    if (
+      initialData?.companies &&
+      initialData.locations &&
+      initialData.employees
+    ) {
+      return;
+    }
+
     void loadStructure().catch((nextError) => {
       setError(
         nextError instanceof Error
@@ -646,6 +684,10 @@ export default function OrganizationPageClient({
       setError(locale === "ru" ? "Укажи название организации." : "Enter the organization name.");
       return;
     }
+    if (setupMode === "create-location" && !draft.locationName.trim()) {
+      setError(locale === "ru" ? "Укажи название локации." : "Enter the location name.");
+      return;
+    }
     if (locationConfirmationPending) {
       setError(
         locale === "ru"
@@ -668,33 +710,29 @@ export default function OrganizationPageClient({
     }
     const shouldRedirectToEmployees =
       setupMode === "create" && !setup.configured;
+    const shouldUpdateAttendanceSettings =
+      setupMode !== "create" &&
+      draft.attendanceTrackingEnabled !== setup.attendanceTrackingEnabled;
 
     try {
-      setIsSaving(true); setError(null); setSaveSuccess(false);
+      setIsSaving(true); setError(null); setSaveSuccess(false); setLastSavedMode(setupMode);
       let nextSetup: OrganizationSetupResponse;
 
       if (setupMode === "create-location" && selectedCompanyId) {
-        const company = await apiRequest<Company>(
-          `/org/companies/${selectedCompanyId}`,
-          {
-            method: "PATCH",
-            token: session.accessToken,
-            body: JSON.stringify({
-              name: draft.companyName.trim(),
-              logoUrl: draft.companyLogoUrl || null,
-              googlePlaceId: draft.googlePlaceId || null,
-            }),
-          },
-        );
+        const company = companies.find(({ id }) => id === selectedCompanyId);
+        if (!company) {
+          throw new Error(
+            locale === "ru"
+              ? "Организация не найдена."
+              : "Organization was not found.",
+          );
+        }
         const location = await apiRequest<Location>("/org/locations", {
           method: "POST",
           token: session.accessToken,
           body: JSON.stringify({
             companyId: company.id,
-            name:
-              draft.details?.streetAddress?.trim() ||
-              draft.address.split(",")[0]?.trim() ||
-              company.name,
+            name: draft.locationName.trim(),
             code: `LOC-${Date.now().toString(36).toUpperCase()}`,
             address: draft.address.trim(),
             country:
@@ -733,6 +771,7 @@ export default function OrganizationPageClient({
             method: "PATCH",
             token: session.accessToken,
             body: JSON.stringify({
+              name: draft.locationName.trim() || draft.companyName.trim(),
               address: draft.address.trim(),
               country:
                 draft.details?.country || setup.location?.country || null,
@@ -764,7 +803,7 @@ export default function OrganizationPageClient({
           }),
         });
       }
-      if (setupMode !== "create") {
+      if (shouldUpdateAttendanceSettings) {
         await apiRequest("/org/settings", {
           method: "PATCH",
           token: session.accessToken,
@@ -781,7 +820,33 @@ export default function OrganizationPageClient({
       setDraft(buildDraftFromSetup(nextSetup));
       setRadiusInput(String(normalizeRadius(nextSetup.location?.geofenceRadiusMeters ?? nextSetup.defaultGeofenceRadiusMeters)));
       setSetupMode(nextSetup.configured ? "update" : "create");
-      await loadStructure();
+      if (nextSetup.company) {
+        setSelectedCompanyId(nextSetup.company.id);
+        setCompanies((current) => {
+          const exists = current.some(({ id }) => id === nextSetup.company?.id);
+          return exists
+            ? current.map((company) =>
+                company.id === nextSetup.company?.id
+                  ? { ...company, ...nextSetup.company }
+                  : company,
+              )
+            : [nextSetup.company as Company, ...current];
+        });
+      }
+      if (nextSetup.location) {
+        setSelectedLocationId(nextSetup.location.id);
+        setLocations((current) => {
+          const exists = current.some(({ id }) => id === nextSetup.location?.id);
+          return exists
+            ? current.map((location) =>
+                location.id === nextSetup.location?.id
+                  ? { ...location, ...nextSetup.location }
+                  : location,
+              )
+            : [nextSetup.location as Location, ...current];
+        });
+      }
+      void loadStructure().catch(() => undefined);
       window.dispatchEvent(
         new CustomEvent(ORGANIZATION_UPDATED_EVENT, {
           detail: {
@@ -887,11 +952,11 @@ export default function OrganizationPageClient({
                       </div>
                     </div>
                     <a
-                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-5 text-sm font-semibold text-white transition hover:bg-[#111418]"
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-5 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
                       href={buildAltegioMarketplaceConnectUrl() || "#"}
                     >
                       {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-4 w-4 text-white" />
                     </a>
                   </div>
                 </div>
@@ -913,19 +978,22 @@ export default function OrganizationPageClient({
                       className="organization-studio-name-input"
                       onChange={(e) => updateDraft("companyName", e.target.value)}
                       placeholder={locale === "ru" ? "Название организации" : "Organization name"}
+                      readOnly={setupMode === "create-location"}
                       ref={companyNameInputRef}
                       required
                       value={draft.companyName}
                     />
                   </span>
-                  <button
-                    aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
-                    className="organization-studio-inline-icon"
-                    onClick={() => companyNameInputRef.current?.focus()}
-                    type="button"
-                  >
-                    <Pencil className="h-5 w-5" />
-                  </button>
+                  {setupMode !== "create-location" ? (
+                    <button
+                      aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
+                      className="organization-studio-inline-icon"
+                      onClick={() => companyNameInputRef.current?.focus()}
+                      type="button"
+                    >
+                      <Pencil className="h-5 w-5" />
+                    </button>
+                  ) : null}
                 </div>
                 <div className="organization-studio-meta-stack">
                   <span className="organization-studio-meta">
@@ -976,54 +1044,60 @@ export default function OrganizationPageClient({
 
                 <Button
                   className="organization-studio-header-action"
+                  disabled={isCreatingCompany}
                   onClick={() => setCreateCompanyOpen(true)}
                   type="button"
                   variant="outline"
                 >
-                  <Plus className="size-4" />
-                  {locale === "ru" ? "Организация" : "Organization"}
+                  {isCreatingCompany ? (
+                    <>
+                      <Swirling className="size-4" />
+                      {locale === "ru" ? "Создаём…" : "Creating…"}
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="size-4" />
+                      {locale === "ru" ? "Организация" : "Organization"}
+                    </>
+                  )}
                 </Button>
-                <Button
-                  className="organization-studio-header-action"
-                  disabled={!selectedCompanyId}
-                  onClick={startAddLocation}
-                  type="button"
-                  variant="outline"
-                >
-                  <MapPin className="size-4" />
-                  {locale === "ru" ? "Адрес" : "Address"}
-                </Button>
+                {locations.filter(
+                  ({ companyId }) => companyId === selectedCompanyId,
+                ).length > 0 ? (
+                  <div className="organization-studio-location-switcher">
+                    <MapPin className="size-4" />
+                    <Select
+                      onValueChange={handleLocationSelect}
+                      value={selectedLocationId}
+                    >
+                      <SelectTrigger className="organization-studio-location-trigger">
+                        <SelectValue
+                          placeholder={
+                            locale === "ru" ? "Выберите адрес" : "Select address"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations
+                          .filter(
+                            ({ companyId }) => companyId === selectedCompanyId,
+                          )
+                          .map((location) => (
+                            <SelectItem key={location.id} value={location.id}>
+                              {location.name}
+                            </SelectItem>
+                          ))}
+                        <SelectItem value={ADD_LOCATION_SELECT_VALUE}>
+                          <span className="inline-flex items-center gap-2 font-semibold text-[color:var(--accent)]">
+                            <Plus className="size-4" />
+                            {locale === "ru" ? "Добавить локацию" : "Add location"}
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
               </div>
-              {locations.filter(
-                ({ companyId }) => companyId === selectedCompanyId,
-              ).length > 1 ? (
-                <div className="organization-studio-location-switcher">
-                  <MapPin className="size-4" />
-                  <Select
-                    onValueChange={handleLocationSelect}
-                    value={selectedLocationId}
-                  >
-                    <SelectTrigger className="organization-studio-location-trigger">
-                      <SelectValue
-                        placeholder={
-                          locale === "ru" ? "Выберите адрес" : "Select address"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations
-                        .filter(
-                          ({ companyId }) => companyId === selectedCompanyId,
-                        )
-                        .map((location) => (
-                          <SelectItem key={location.id} value={location.id}>
-                            {location.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
             </div>
 
             <div className="organization-studio-grid">
@@ -1199,51 +1273,82 @@ export default function OrganizationPageClient({
                           ? "Сотрудники на этом адресе"
                           : "Employees at this address"}
                       </span>
-                      <span className="text-xs text-[color:var(--muted-foreground)]">
+                      <span
+                        aria-label={
+                          locale === "ru"
+                            ? `Выбрано сотрудников: ${selectedEmployeeIds.length}`
+                            : `Selected employees: ${selectedEmployeeIds.length}`
+                        }
+                        className="organization-studio-count-badge"
+                      >
                         {selectedEmployeeIds.length}
                       </span>
                     </div>
-                    <div className="max-h-52 divide-y divide-[color:var(--border)] overflow-y-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)]">
-                      {availableEmployees.map((employee) => {
-                        const checked = selectedEmployeeIds.includes(
-                          employee.id,
-                        );
-                        const name =
-                          `${employee.lastName} ${employee.firstName}`.trim();
-                        return (
-                          <label
-                            className="flex cursor-pointer items-center gap-3 px-3 py-3 transition hover:bg-[color:var(--panel-strong)]"
-                            key={employee.id}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(nextChecked) =>
-                                setSelectedEmployeeIds((current) =>
-                                  nextChecked === true
-                                    ? [...new Set([...current, employee.id])]
-                                    : current.filter(
-                                        (id) => id !== employee.id,
-                                      ),
-                                )
-                              }
-                            />
-                            <span className="min-w-0">
-                              <strong className="block truncate text-sm">
-                                {name}
-                              </strong>
-                              <span className="block truncate text-xs text-[color:var(--muted-foreground)]">
-                                {employee.primaryLocation?.name ?? "—"}
-                              </span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <EmployeeDropdown
+                      allEmployeesLabel={
+                        locale === "ru" ? "Все сотрудники" : "All employees"
+                      }
+                      buttonClassName="organization-studio-employee-trigger"
+                      employeeLabel={
+                        locale === "ru" ? "Сотрудник" : "Employee"
+                      }
+                      employees={availableEmployees.map((employee) => ({
+                        ...employee,
+                        roleLabel:
+                          employee.primaryLocation?.name ??
+                          (locale === "ru" ? "Без адреса" : "No address"),
+                      }))}
+                      loadingLabel={
+                        locale === "ru"
+                          ? "Загружаем сотрудников"
+                          : "Loading employees"
+                      }
+                      mode="multiple"
+                      noEmployeesLabel={
+                        locale === "ru"
+                          ? "Сотрудники не найдены."
+                          : "No employees found."
+                      }
+                      onSelectedEmployeeIdsChange={setSelectedEmployeeIds}
+                      placeholder={
+                        locale === "ru"
+                          ? "Выберите сотрудников"
+                          : "Select employees"
+                      }
+                      searchPlaceholder={
+                        locale === "ru"
+                          ? "Поиск сотрудника"
+                          : "Search employee"
+                      }
+                      selectedEmployeeIds={selectedEmployeeIds}
+                      selectedEmployeesLabel={(count) =>
+                        locale === "ru"
+                          ? `${count} сотрудников выбрано`
+                          : `${count} employees selected`
+                      }
+                    />
                   </section>
                 ) : null}
               </div>
 
               <div className="organization-studio-main">
+                {setupMode !== "create" ? (
+                  <label className="organization-studio-fieldset">
+                    <span className="organization-studio-label">
+                      {locale === "ru" ? "Название локации" : "Location name"}
+                    </span>
+                    <Input
+                      className="h-11 rounded-2xl bg-[color:var(--panel)]"
+                      onChange={(event) =>
+                        updateDraft("locationName", event.target.value)
+                      }
+                      placeholder={
+                        locale === "ru" ? "Например, Центральный офис" : "For example, Central office"
+                      }
+                      value={draft.locationName}
+                    />
+                  </label>
+                ) : null}
                 <div className="organization-studio-map-copy">
                   <span className="organization-studio-label">
                     {locale === "ru" ? "Адрес организации" : "Organization address"}
@@ -1284,15 +1389,19 @@ export default function OrganizationPageClient({
             {isSaving ? (
               <span className="flex items-center gap-2">
                 <Swirling className="h-4 w-4" />
-                {locale === "ru" ? "Сохраняем организацию" : "Saving organization"}
+                {setupMode === "create-location"
+                  ? locale === "ru" ? "Добавляем локацию" : "Adding location"
+                  : locale === "ru" ? "Сохраняем организацию" : "Saving organization"}
               </span>
             ) : saveSuccess ? (
               <span className="flex items-center gap-2">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 animate-in zoom-in-50 duration-300">
                   <Check className="h-3.5 w-3.5" />
                 </span>
-                {setupMode === "create"
+                {lastSavedMode === "create"
                   ? locale === "ru" ? "Организация добавлена" : "Organization added"
+                  : lastSavedMode === "create-location"
+                    ? locale === "ru" ? "Локация добавлена" : "Location added"
                   : locale === "ru" ? "Организация сохранена" : "Organization saved"}
               </span>
             ) : (
@@ -1300,6 +1409,8 @@ export default function OrganizationPageClient({
                 <Save className="h-4 w-4" />
                 {setupMode === "create"
                   ? locale === "ru" ? "Добавить организацию" : "Add organization"
+                  : setupMode === "create-location"
+                    ? locale === "ru" ? "Добавить локацию" : "Add location"
                   : locale === "ru" ? "Сохранить организацию" : "Save organization"}
               </span>
             )}

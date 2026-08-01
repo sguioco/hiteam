@@ -35,7 +35,8 @@ export function isChunkLoadFailure(value: unknown): boolean {
   return (
     /ChunkLoadError/i.test(errorText) ||
     /Loading chunk \d+ failed/i.test(errorText) ||
-    /\/_next\/static\/chunks\//i.test(errorText)
+    /Failed to fetch dynamically imported module/i.test(errorText) ||
+    /Importing a module script failed/i.test(errorText)
   );
 }
 

@@ -726,7 +726,16 @@ export type EmployeeDetailBootstrapResponse = {
   employeeId: string;
   groups: WorkGroupItem[];
   history: AttendanceHistoryResponse | null;
+  locations: OrganizationLocationSummary[];
   managerAccess: EmployeeManagerAccessResponse | null;
+};
+
+export type OrganizationLocationSummary = {
+  id: string;
+  companyId: string;
+  name: string;
+  address?: string | null;
+  company?: { id: string; name: string } | null;
 };
 
 export type AttendanceBootstrapResponse = {

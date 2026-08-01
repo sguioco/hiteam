@@ -1,6 +1,7 @@
 "use client";
 
 import { Cake } from "lucide-react";
+import { Avatar } from "@/components/base/avatar/avatar";
 import { useI18n } from "@/lib/i18n";
 import { localizePersonName } from "@/lib/transliteration";
 
@@ -38,10 +39,12 @@ export const BirthdaysSidebar = ({
               className="birthdays-sidebar-item animate-fade-in"
               style={{ animationDelay: `${index * 60}ms` }}
             >
-              <img
+              <Avatar
                 alt={item.name}
-                className="h-11 w-11 shrink-0 rounded-full object-cover shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
-                src={item.avatarUrl ?? undefined}
+                className="shrink-0 shadow-[0_8px_20px_rgba(40,75,255,0.12)]"
+                initials={item.name}
+                size="xl"
+                src={item.avatarUrl}
               />
               <div className="birthdays-sidebar-copy">
                 <p className="birthdays-sidebar-name">

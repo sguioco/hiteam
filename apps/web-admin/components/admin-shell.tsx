@@ -1286,7 +1286,7 @@ export function AdminShell({
 
       const currentUrl = `${window.location.pathname}${window.location.search}`;
       if (currentUrl !== pendingHref) {
-        window.location.assign(pendingHref);
+        router.push(pendingHref);
       }
     }, 8000);
   }

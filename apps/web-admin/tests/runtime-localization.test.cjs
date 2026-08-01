@@ -4,6 +4,14 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const api = fs.readFileSync(path.join(root, "lib", "api.ts"), "utf8");
+const liveTranslation = fs.readFileSync(
+  path.join(root, "lib", "live-translation.ts"),
+  "utf8",
+);
+const dashboard = fs.readFileSync(
+  path.join(root, "components", "dashboard-home.tsx"),
+  "utf8",
+);
 const validation = fs.readFileSync(
   path.join(root, "lib", "humanize-validation-error.ts"),
   "utf8",
@@ -43,6 +51,9 @@ assert.match(
 assert.match(validation, /humanizeSingleValidationError\(item, locale\)/);
 assert.match(api, /humanizeValidationError\(payload\.message, locale\)/);
 assert.match(api, /API_ERROR_LOCALIZATIONS/);
+assert.match(api, /warmImageCacheFromPayload\(payload\)/);
+assert.match(liveTranslation, /const providers = \[[\s\S]*translateViaLibreTranslate[\s\S]*translateViaMyMemory[\s\S]*translateViaGoogleGtx/);
+assert.match(dashboard, /const completedAt = status === "DONE"[\s\S]*setTaskBoard[\s\S]*catch \(requestError\)/);
 
 for (const source of authSurfaces) {
   assert.match(source, /document\.documentElement\.lang = lang/);

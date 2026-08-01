@@ -1457,7 +1457,15 @@ export class BootstrapService {
   }
 
   async employeeDetail(user: JwtUser, employeeId: string) {
-    const [employee, history, anomalies, biometricHistory, managerAccess, groups] =
+    const [
+      employee,
+      history,
+      anomalies,
+      biometricHistory,
+      managerAccess,
+      groups,
+      locations,
+    ] =
       await Promise.all([
         this.employeesService
           .getById(user.tenantId, employeeId, user.sub)
@@ -1477,6 +1485,9 @@ export class BootstrapService {
               .catch(() => null)
           : Promise.resolve(null),
         this.collaborationService.listGroups(user.sub).catch(() => []),
+        this.orgService
+          .listLocations(user.tenantId, undefined, false, user.sub)
+          .catch(() => []),
       ]);
 
     return {
@@ -1487,6 +1498,7 @@ export class BootstrapService {
       biometricHistory,
       managerAccess,
       groups,
+      locations,
     };
   }
 
@@ -1932,13 +1944,19 @@ export class BootstrapService {
   }
 
   async analytics(user: JwtUser, days = 14, locationId?: string) {
-    const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
+    const [organizationSetup, locations] = await Promise.all([
+      this.loadOrganizationSetup(user.tenantId),
+      this.orgService
+        .listLocations(user.tenantId, undefined, false, user.sub)
+        .catch(() => []),
+    ]);
 
     if (organizationSetup.attendanceTrackingEnabled === false) {
       return {
         history: null,
         anomalies: null,
         employeeCount: 0,
+        locations,
         period: days === 7 ? '7d' : days === 30 ? '30d' : '14d',
       };
     }
@@ -2015,29 +2033,54 @@ export class BootstrapService {
         items: visibleAnomalies,
       },
       employeeCount: visibleEmployees.length,
+      locations,
       period: days === 7 ? '7d' : days === 30 ? '30d' : '14d',
     };
   }
 
   async organization(user: JwtUser) {
-    const setup = await this.orgService.getSetup(user.tenantId).catch(() => ({
-      configured: false,
-      company: null,
-      location: null,
-      attendanceTrackingEnabled: true,
-      defaultGeofenceRadiusMeters: 100,
-    }));
-    const employeeStats = setup.company?.id
-      ? await this.employeesService
-          .stats(user.tenantId, {
-            companyId: setup.company.id,
-          })
-          .catch(() => ({ total: 0 }))
-      : { total: 0 };
+    const [rawSetup, companies, locations, employees] = await Promise.all([
+      this.orgService.getSetup(user.tenantId).catch(() => ({
+        organizationId: null,
+        configured: false,
+        company: null,
+        location: null,
+        attendanceTrackingEnabled: true,
+        defaultGeofenceRadiusMeters: 100,
+      })),
+      this.orgService
+        .listCompanies(user.tenantId, false, user.sub)
+        .catch(() => []),
+      this.orgService
+        .listLocations(user.tenantId, undefined, false, user.sub)
+        .catch(() => []),
+      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+    ]);
+    const company =
+      companies.find(({ id }) => id === rawSetup.company?.id) ??
+      companies[0] ??
+      null;
+    const location = company
+      ? locations.find(({ id }) => id === rawSetup.location?.id) ??
+        locations.find(({ companyId }) => companyId === company.id) ??
+        null
+      : null;
+    const setup = {
+      ...rawSetup,
+      company,
+      location,
+      configured: Boolean(company && location),
+    };
+    const employeeCount = company
+      ? employees.filter((employee) => employee.company?.id === company.id).length
+      : 0;
 
     return {
       setup,
-      employeeCount: employeeStats.total,
+      employeeCount,
+      companies,
+      locations,
+      employees,
     };
   }
 

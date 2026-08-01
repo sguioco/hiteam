@@ -142,9 +142,10 @@ export class OrgService {
     if (
       assignments.some(
         ({ role, scopeId, scopeType }) =>
-          ['tenant_owner', 'operations_admin'].includes(role.code) &&
-          scopeType === 'tenant' &&
-          scopeId === tenantId,
+          role.code === 'tenant_owner' ||
+          (role.code === 'operations_admin' &&
+            scopeType === 'tenant' &&
+            scopeId === tenantId),
       )
     ) {
       return;
@@ -187,11 +188,10 @@ export class OrgService {
     if (
       assignments.some(
         ({ role, scopeId, scopeType }) =>
-          ['tenant_owner', 'hr_admin', 'operations_admin'].includes(
-            role.code,
-          ) &&
-          scopeType === 'tenant' &&
-          scopeId === tenantId,
+          role.code === 'tenant_owner' ||
+          (['hr_admin', 'operations_admin'].includes(role.code) &&
+            scopeType === 'tenant' &&
+            scopeId === tenantId),
       ) ||
       assignments.some(
         ({ role, scopeId, scopeType }) =>
@@ -301,54 +301,57 @@ export class OrgService {
       ]),
     );
     const now = new Date();
+    const existingAssignmentIds = existingAssignments.map(({ id }) => id);
+    const missingEmployeeIds = employees
+      .filter(({ id }) => !existingByEmployeeId.has(id))
+      .map(({ id }) => id);
 
-    for (const employee of employees) {
-      if (args.makePrimary) {
-        await tx.employeeLocationAssignment.updateMany({
+    if (args.makePrimary) {
+      await Promise.all([
+        tx.employeeLocationAssignment.updateMany({
           where: {
             tenantId: args.tenantId,
-            employeeId: employee.id,
+            employeeId: { in: employeeIds },
             isPrimary: true,
             unassignedAt: null,
             locationId: { not: args.locationId },
           },
           data: { isPrimary: false, unassignedAt: now },
-        });
-
-        await tx.employee.update({
-          where: { id: employee.id },
+        }),
+        tx.employee.updateMany({
+          where: {
+            tenantId: args.tenantId,
+            id: { in: employeeIds },
+          },
           data: {
             companyId: args.companyId,
             primaryLocationId: args.locationId,
           },
-        });
-      }
+        }),
+        existingAssignmentIds.length
+          ? tx.employeeLocationAssignment.updateMany({
+              where: { id: { in: existingAssignmentIds } },
+              data: {
+                isPrimary: true,
+                assignedByUserId: args.actorUserId,
+                reason: args.reason,
+              },
+            })
+          : Promise.resolve(),
+      ]);
+    }
 
-      const existing = existingByEmployeeId.get(employee.id);
-      if (existing) {
-        if (args.makePrimary && !existing.isPrimary) {
-          await tx.employeeLocationAssignment.update({
-            where: { id: existing.id },
-            data: {
-              isPrimary: true,
-              assignedByUserId: args.actorUserId,
-              reason: args.reason,
-            },
-          });
-        }
-        continue;
-      }
-
-      await tx.employeeLocationAssignment.create({
-        data: {
+    if (missingEmployeeIds.length) {
+      await tx.employeeLocationAssignment.createMany({
+        data: missingEmployeeIds.map((employeeId) => ({
           tenantId: args.tenantId,
           companyId: args.companyId,
-          employeeId: employee.id,
+          employeeId,
           locationId: args.locationId,
           isPrimary: args.makePrimary,
           assignedByUserId: args.actorUserId,
           reason: args.reason,
-        },
+        })),
       });
     }
 
@@ -472,12 +475,10 @@ export class OrgService {
       );
     }
 
-    await this.assertCanManageCompany(tenantId, actorUserId, company.id);
-    await this.assertEmployeesReadable(
-      tenantId,
-      actorUserId,
-      dto.employeeIds,
-    );
+    await Promise.all([
+      this.assertCanManageCompany(tenantId, actorUserId, company.id),
+      this.assertEmployeesReadable(tenantId, actorUserId, dto.employeeIds),
+    ]);
 
     const location = await this.prisma.$transaction(async (tx) => {
       const created = await tx.location.create({

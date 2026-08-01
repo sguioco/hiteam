@@ -159,20 +159,21 @@ async function translateSingleText(text: string, targetLocale: Locale) {
   const translationPromise = (async () => {
     let translatedText = text;
 
-    try {
-      const libre = await translateViaLibreTranslate(text, targetLocale);
-      translatedText = libre?.translatedText ?? translatedText;
-    } catch {
+    const providers = [
+      () => translateViaLibreTranslate(text, targetLocale),
+      () => translateViaMyMemory(text, targetLocale),
+      () => translateViaGoogleGtx(text, targetLocale),
+    ];
+
+    for (const provider of providers) {
       try {
-        const myMemory = await translateViaMyMemory(text, targetLocale);
-        translatedText = myMemory?.translatedText ?? translatedText;
-      } catch {
-        try {
-          const google = await translateViaGoogleGtx(text, targetLocale);
-          translatedText = google?.translatedText ?? translatedText;
-        } catch {
-          translatedText = text;
+        const result = await provider();
+        if (result?.translatedText?.trim()) {
+          translatedText = result.translatedText.trim();
+          break;
         }
+      } catch {
+        // Try the next provider.
       }
     }
 

@@ -19,10 +19,11 @@ const dashboard = fs.readFileSync(
 assert.match(headerDialog, /schedule-shift-dialog-actions/);
 assert.match(headerDialog, /"Шаблоны", "Templates"/);
 assert.match(headerDialog, /"Создать смену", "Create shift"/);
-assert.match(headerDialog, /mx-auto flex size-8[\s\S]*text-\[8px\]/);
+assert.match(headerDialog, /mx-auto flex size-7[\s\S]*fontSize: 9/);
+assert.match(headerDialog, /apiRequest<NamedEntityOption\[]>\("\/org\/locations"/);
 
 assert.match(schedule, /editingShiftId \? ui\.saveShift : ui\.createShift/);
-assert.match(schedule, /mx-auto flex size-8[\s\S]*text-\[8px\]/);
+assert.match(schedule, /mx-auto flex size-7[\s\S]*fontSize: 9/);
 assert.doesNotMatch(dashboard, /DashboardCreateShiftDraft/);
 assert.doesNotMatch(dashboard, /openDashboardCreateShift/);
 

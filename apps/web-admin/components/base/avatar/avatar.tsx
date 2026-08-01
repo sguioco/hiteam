@@ -1,6 +1,6 @@
 "use client";
 
-import { type FC, type ReactNode, useState } from "react";
+import { type FC, type ReactNode, useEffect, useState } from "react";
 import { User01 } from "@untitledui/icons";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { cx } from "@/lib/utils/cx";
@@ -96,6 +96,12 @@ export const Avatar = ({
     contentClassName,
 }: AvatarProps) => {
     const [isFailed, setIsFailed] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    useEffect(() => {
+        setIsFailed(false);
+        setIsLoaded(false);
+    }, [src]);
 
     const canShowImage = src && !isFailed;
     const fallbackInitials = initials || alt ? getAvatarInitials(initials || alt) : null;
@@ -103,14 +109,25 @@ export const Avatar = ({
     const renderMainContent = () => {
         if (canShowImage) {
             return (
-                <img
-                    data-avatar-img
-                    className="block size-full max-w-none rounded-[inherit] object-cover object-center"
-                    src={src}
-                    alt={alt}
-                    decoding="async"
-                    onError={() => setIsFailed(true)}
-                />
+                <>
+                    {fallbackInitials ? (
+                        <span className={cx("text-fg-quaternary", styles[size].initials)}>
+                            {fallbackInitials}
+                        </span>
+                    ) : null}
+                    <img
+                        data-avatar-img
+                        className={cx(
+                            "absolute inset-0 block size-full max-w-none rounded-[inherit] object-cover object-center transition-opacity duration-150",
+                            isLoaded ? "opacity-100" : "opacity-0",
+                        )}
+                        src={src}
+                        alt={alt}
+                        decoding="async"
+                        onError={() => setIsFailed(true)}
+                        onLoad={() => setIsLoaded(true)}
+                    />
+                </>
             );
         }
 

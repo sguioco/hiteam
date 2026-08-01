@@ -27,6 +27,7 @@ import {
   EmployeeBiometricHistoryResponse,
   EmployeeManagerAccessResponse,
   EmployeeWorkMode,
+  OrganizationLocationSummary,
   WorkGroupItem,
 } from "@smart/types";
 import { AdminShell } from "../../../components/admin-shell";
@@ -52,14 +53,6 @@ import {
 import { getAvatarInitials } from "../../../lib/avatar-placeholder";
 
 type EmployeeDetails = EmployeeDetailRecord;
-type OrganizationLocation = {
-  id: string;
-  companyId: string;
-  name: string;
-  address?: string | null;
-  company?: { id: string; name: string } | null;
-};
-
 type Tab = "info" | "attendance" | "biometric" | "anomalies";
 
 type EmployeeManagerAccess = EmployeeManagerAccessResponse;
@@ -319,7 +312,9 @@ export default function EmployeeCardPageClient({
     useState<EmployeeAccessRole>("employee");
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [workModeActionPending, setWorkModeActionPending] = useState(false);
-  const [locations, setLocations] = useState<OrganizationLocation[]>([]);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>(
+    initialData?.locations ?? [],
+  );
   const [locationActionPending, setLocationActionPending] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "success" | "error";
@@ -375,6 +370,7 @@ export default function EmployeeCardPageClient({
     setBiometricHistory(result.data.biometricHistory);
     setManagerAccess(result.data.managerAccess);
     setGroups(result.data.groups ?? []);
+    setLocations(result.data.locations ?? []);
   }
 
   async function loadLocations() {
@@ -382,7 +378,7 @@ export default function EmployeeCardPageClient({
     if (!session) return;
 
     const result = await settleRequest(
-      apiRequest<OrganizationLocation[]>("/org/locations", {
+      apiRequest<OrganizationLocationSummary[]>("/org/locations", {
         token: session.accessToken,
       }),
     );
@@ -401,8 +397,10 @@ export default function EmployeeCardPageClient({
   }, [employeeId, canManageRoles]);
 
   useEffect(() => {
-    if (canManageWorkMode) void loadLocations();
-  }, [canManageWorkMode]);
+    if (canManageWorkMode && initialData?.locations === undefined) {
+      void loadLocations();
+    }
+  }, [canManageWorkMode, initialData?.locations]);
 
   useEffect(() => {
     if (!notice) return;

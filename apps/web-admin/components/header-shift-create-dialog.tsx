@@ -242,14 +242,20 @@ export function HeaderShiftCreateDialog({
       dateTo: today,
     }).toString();
 
-    void apiRequest<ManagerScheduleBootstrapResponse>(
-      `/bootstrap/schedule?${query}`,
-      {
+    void Promise.all([
+      apiRequest<ManagerScheduleBootstrapResponse>(
+        `/bootstrap/schedule?${query}`,
+        {
+          token: session.accessToken,
+          skipClientCache: true,
+        },
+      ),
+      apiRequest<NamedEntityOption[]>("/org/locations", {
         token: session.accessToken,
         skipClientCache: true,
-      },
-    )
-      .then((snapshot) => {
+      }).catch(() => []),
+    ])
+      .then(([snapshot, directlyLoadedLocations]) => {
         if (cancelled) {
           return;
         }
@@ -270,11 +276,15 @@ export function HeaderShiftCreateDialog({
           ),
         );
         setGroups(snapshot.initialData.groups);
-        setLocations(snapshot.initialData.locations);
+        const availableLocations = directlyLoadedLocations.length
+          ? directlyLoadedLocations
+          : snapshot.initialData.locations;
+
+        setLocations(availableLocations);
         setTemplateLocationId((current) =>
-          snapshot.initialData!.locations.some(({ id }) => id === current)
+          availableLocations.some(({ id }) => id === current)
             ? current
-            : snapshot.initialData!.locations[0]?.id ?? "",
+            : availableLocations[0]?.id ?? "",
         );
         setPositions(snapshot.initialData.positions);
         setTemplates(snapshot.initialData.templates);
@@ -937,13 +947,14 @@ export function HeaderShiftCreateDialog({
 
                     return (
                       <button
-                        className={`mx-auto flex size-8 min-w-0 items-center justify-center rounded-full border p-0 text-center text-[8px] font-semibold leading-none tracking-[-0.04em] transition-colors ${
+                        className={`mx-auto flex size-7 min-w-0 items-center justify-center rounded-full border p-0 text-center font-semibold leading-none transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"
                         }`}
                         key={label}
                         onClick={() => toggleTemplateWeekDay(day)}
+                        style={{ fontSize: 9, letterSpacing: "-0.02em" }}
                         type="button"
                       >
                         {label}

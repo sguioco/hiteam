@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AttendanceAnomalyResponse, AttendanceHistoryResponse } from '@smart/types';
+import type {
+  AttendanceAnomalyResponse,
+  AttendanceHistoryResponse,
+  OrganizationLocationSummary,
+} from '@smart/types';
 import {
   AlertCircle,
   BarChart3,
@@ -18,12 +22,6 @@ import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 
 type Period = '7d' | '14d' | '30d';
-type AnalyticsLocation = {
-  id: string;
-  name: string;
-  company?: { id: string; name: string } | null;
-};
-
 type DailyAttendanceBucket = {
   absent: number;
   date: string;
@@ -91,6 +89,7 @@ export type AnalyticsPageInitialData = {
   anomalies: AttendanceAnomalyResponse | null;
   employeeCount: number;
   history: AttendanceHistoryResponse | null;
+  locations: OrganizationLocationSummary[];
   period: Period;
 };
 
@@ -110,21 +109,13 @@ export default function AnalyticsPageClient({
     initialData?.anomalies ?? null,
   );
   const [employeeCount, setEmployeeCount] = useState(initialData?.employeeCount ?? 0);
-  const [locations, setLocations] = useState<AnalyticsLocation[]>([]);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>(
+    initialData?.locations ?? [],
+  );
   const [locationId, setLocationId] = useState('');
   const didUseInitialData = useRef(Boolean(initialData));
 
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
-
-  useEffect(() => {
-    const session = getSession();
-    if (!session) return;
-    void apiRequest<AnalyticsLocation[]>('/org/locations', {
-      token: session.accessToken,
-    })
-      .then(setLocations)
-      .catch(() => setLocations([]));
-  }, []);
 
   useEffect(() => {
     if (
@@ -161,6 +152,7 @@ export default function AnalyticsPageClient({
         setHistory(snapshot.history);
         setAnomalies(snapshot.anomalies);
         setEmployeeCount(snapshot.employeeCount);
+        setLocations(snapshot.locations ?? []);
       })
       .catch((loadError) => {
         setHistory(null);

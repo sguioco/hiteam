@@ -14,6 +14,50 @@ let sessionRefreshPromise: Promise<AuthSession | null> | null = null;
 const API_CACHE_NAMESPACE_PREFIX = "smart:api-cache-namespace:";
 const API_CACHE_UPDATED_EVENT = "smart-api-cache-updated";
 const inFlightRequestCache = new Map<string, Promise<unknown>>();
+const warmedImageUrls = new Set<string>();
+const IMAGE_FIELD_PATTERN = /(?:avatar|image|photo)(?:url|uri)?$/i;
+
+function warmImageCacheFromPayload(payload: unknown) {
+  if (typeof window === "undefined") return;
+
+  const urls = new Set<string>();
+  const visited = new WeakSet<object>();
+
+  function collect(value: unknown, key = "") {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (
+        IMAGE_FIELD_PATTERN.test(key) &&
+        /^(?:https?:\/\/|data:image\/)/i.test(normalized)
+      ) {
+        urls.add(normalized);
+      }
+      return;
+    }
+
+    if (!value || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => collect(item, key));
+      return;
+    }
+
+    Object.entries(value as Record<string, unknown>).forEach(([childKey, child]) =>
+      collect(child, childKey),
+    );
+  }
+
+  collect(payload);
+  urls.forEach((url) => {
+    if (warmedImageUrls.has(url)) return;
+    warmedImageUrls.add(url);
+    const image = new window.Image();
+    image.decoding = "async";
+    image.onerror = () => warmedImageUrls.delete(url);
+    image.src = url;
+  });
+}
 
 type ApiRequestOptions = RequestInit & {
   token?: string;
@@ -245,6 +289,7 @@ async function fetchAndCacheApiRequest<T>(
     }
 
     const payload = (await response.json()) as T;
+    warmImageCacheFromPayload(payload);
     writeClientCache(cacheKey, payload);
 
     if (typeof window !== "undefined") {
@@ -588,7 +633,9 @@ export async function apiRequest<T>(
   options?: ApiRequestOptions,
 ): Promise<T> {
   if (!options?.realBackend && shouldUseDemoApi(path, options?.token)) {
-    return demoApiRequest<T>(path, options);
+    const payload = await demoApiRequest<T>(path, options);
+    warmImageCacheFromPayload(payload);
+    return payload;
   }
 
   const cacheableGet = isCacheableGetRequest(path, options);
@@ -607,6 +654,7 @@ export async function apiRequest<T>(
         );
       }
 
+      warmImageCacheFromPayload(cached.value);
       return cached.value;
     }
 
@@ -660,6 +708,7 @@ export async function apiRequest<T>(
   }
 
   const payload = (await response.json()) as T;
+  warmImageCacheFromPayload(payload);
 
   if (normalizeMethod(options?.method) !== "GET") {
     const currentSession = getSession();
