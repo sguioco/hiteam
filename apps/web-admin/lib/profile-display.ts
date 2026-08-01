@@ -3,7 +3,7 @@ export function buildUserDisplayName(
   lastName?: string | null,
   fallback = "",
 ) {
-  const fullName = [firstName, lastName]
+  const fullName = [lastName, firstName]
     .map((value) => value?.trim() ?? "")
     .filter(Boolean)
     .join(" ");

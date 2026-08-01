@@ -43,7 +43,7 @@ function formatEmployeeName(
     return null;
   }
 
-  return [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim() || null;
+  return [employee.lastName, employee.firstName].filter(Boolean).join(" ").trim() || null;
 }
 
 function getArchiveActionLabel(action: AnnouncementArchiveEntry["action"], locale: Locale) {

@@ -1286,7 +1286,7 @@ body:has(.landing-shell) {
 
 .today-attendance-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: 52px minmax(0, 1fr);
   gap: 14px;
   align-items: center;
   padding: 8px 0;
@@ -1333,27 +1333,33 @@ body:has(.landing-shell) {
 .today-attendance-row-lines {
   display: grid;
   gap: 2px;
+  min-width: 0;
   color: var(--muted-foreground);
   font-size: 0.74rem;
 }
 
+.today-attendance-row-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
 .today-attendance-row-side {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   align-items: flex-end;
-  justify-content: center;
-  align-self: center;
-  gap: 6px;
+  gap: 2px;
   justify-self: end;
-  min-width: 108px;
+  min-width: 86px;
   text-align: right;
 }
 
 .today-attendance-row-arrival {
   min-width: 5ch;
-  font-size: 1.15rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.35;
   letter-spacing: 0;
   text-align: right;
   font-variant-numeric: lining-nums tabular-nums;
@@ -1428,19 +1434,15 @@ body:has(.landing-shell) {
   }
 
   .today-attendance-row-side {
-    align-items: flex-start;
-    justify-self: stretch;
-    grid-column: 2;
-    min-width: 0;
-    text-align: left;
+    min-width: 82px;
   }
 
   .today-attendance-row-note {
-    text-align: left;
+    text-align: right;
   }
 
   .today-attendance-row-arrival {
-    text-align: left;
+    text-align: right;
   }
 
   .today-attendance-head {
@@ -2970,11 +2972,62 @@ textarea {
 
 .organization-studio-identity {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: start;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
+}
+
+.organization-studio-scope-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.organization-studio-scope-control,
+.organization-studio-header-action {
+  min-height: 44px;
+  height: 44px;
+  border-radius: 16px;
+}
+
+.organization-studio-scope-control {
+  min-width: 190px;
+  max-width: 260px;
+}
+
+.organization-studio-scope-control--static {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.organization-studio-header-action {
+  gap: 7px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+.organization-studio-location-switcher {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  width: fit-content;
+  min-width: 260px;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+}
+
+.organization-studio-location-trigger {
+  min-height: 40px;
+  border-radius: 14px;
 }
 
 .organization-studio-logo-field,
@@ -3572,7 +3625,7 @@ textarea {
 
 .org-map-confirmation {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 14px;
@@ -3608,6 +3661,7 @@ textarea {
 
 @media (max-width: 720px) {
   .org-map-confirmation {
+    align-items: stretch;
     flex-direction: column;
   }
 }
@@ -10127,6 +10181,15 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .organization-studio-scope-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .organization-studio-location-switcher {
+    grid-column: auto;
+  }
+
   .organization-studio-grid {
     grid-template-columns: 1fr;
   }
@@ -10199,6 +10262,25 @@ body {
 }
 
 @media (max-width: 760px) {
+  .organization-studio-scope-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .organization-studio-scope-control {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+  }
+
+  .organization-studio-header-action {
+    width: 100%;
+  }
+
+  .organization-studio-location-switcher {
+    width: 100%;
+    min-width: 0;
+  }
   .manager-performance-summary-grid,
   .manager-performance-dialog-grid {
     grid-template-columns: 1fr;
@@ -12945,22 +13027,25 @@ body {
     font-size: 0.68rem;
   }
 
+  .today-attendance-row-metrics {
+    gap: 10px;
+  }
+
   .today-attendance-row-side {
-    grid-column: 2;
-    justify-self: stretch;
-    align-items: flex-start;
-    min-width: 0;
+    justify-self: end;
+    align-items: flex-end;
+    min-width: 76px;
     gap: 3px;
-    text-align: left;
+    text-align: right;
   }
 
   .today-attendance-row-arrival,
   .today-attendance-row-note {
-    text-align: left;
+    text-align: right;
   }
 
   .today-attendance-row-arrival {
-    font-size: 0.95rem;
+    font-size: 0.76rem;
   }
 
   .today-attendance-row-note {

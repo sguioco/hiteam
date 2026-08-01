@@ -19,6 +19,7 @@ import {
   loadRequestsBootstrap,
   loadTodayBootstrap,
 } from "./api";
+import { getWorkspaceScope } from "./workspace-scope";
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
 import { readScreenCache, writeScreenCache } from "./screen-cache";
 import { formatDateKeyInTimeZone } from "./timezone";
@@ -42,6 +43,7 @@ type CalendarScreenCacheValue = {
   managerGroups?: ManagerScheduleInitialData["groups"];
   managerShifts?: ManagerScheduleInitialData["shifts"];
   shiftTemplates?: ManagerScheduleInitialData["templates"];
+  managerLocations?: ManagerScheduleInitialData["locations"];
 };
 
 export type TodayScreenCacheValue = {
@@ -102,9 +104,12 @@ function delay(ms: number) {
 export function getCalendarScreenCacheKey(
   date = new Date(),
   isManager = false,
+  locationId?: string | null,
 ) {
   const scope = isManager ? "manager" : "employee";
-  return `calendar-screen:v2:${scope}:${date.getFullYear()}-${date.getMonth()}`;
+  const locationScope =
+    isManager && locationId ? `:${locationId}` : "";
+  return `calendar-screen:v3:${scope}${locationScope}:${date.getFullYear()}-${date.getMonth()}`;
 }
 
 export function getNewsScreenCacheKey(isManager: boolean) {
@@ -265,10 +270,14 @@ async function warmCalendarScreenCache(
   isManager = false,
   language?: AppLanguage,
 ) {
+  const workspaceScope = isManager ? getWorkspaceScope() : null;
   const { rangeStart, rangeEnd } = buildCalendarDateRange(date);
   const scheduleBootstrap = await loadManagerScheduleBootstrap({
     dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
     dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
+    ...(workspaceScope?.locationId
+      ? { locationId: workspaceScope.locationId }
+      : {}),
   });
   const scheduleData = scheduleBootstrap.initialData;
   const scheduleShifts = scheduleData?.shifts ?? [];
@@ -282,6 +291,7 @@ async function warmCalendarScreenCache(
         managerGroups: scheduleData?.groups ?? [],
         managerShifts: scheduleShifts,
         shiftTemplates: scheduleData?.templates ?? [],
+        managerLocations: scheduleData?.locations ?? [],
       }
     : {
         shifts: scheduleShifts,
@@ -292,7 +302,14 @@ async function warmCalendarScreenCache(
     await primeTaskTranslations(tasks, language);
   }
 
-  await writeScreenCache(getCalendarScreenCacheKey(date, isManager), payload);
+  await writeScreenCache(
+    getCalendarScreenCacheKey(
+      date,
+      isManager,
+      workspaceScope?.locationId,
+    ),
+    payload,
+  );
 }
 
 async function warmNewsScreenCache(isManager: boolean, language?: AppLanguage) {

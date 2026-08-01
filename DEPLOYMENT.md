@@ -247,3 +247,35 @@ It is "one domain backend (`apps/api`) with multiple clients".
 4. which object storage provider you want to use
 
 Then I can finish deployment wiring and environment setup precisely.
+
+## 12. Multi-organization and multi-location rollout
+
+Deploy this feature in the following order:
+
+1. Put API writes into a short maintenance window.
+2. Apply the Prisma schema explicitly:
+
+```bash
+pnpm --filter @smart/api prisma:push
+```
+
+3. Backfill the current primary location of every employee:
+
+```bash
+pnpm --filter @smart/api prisma:backfill-locations
+```
+
+4. Run the backfill command a second time. It must report `Created 0 assignment(s)`.
+5. Deploy the API and verify `/api/v1/health/ready`.
+6. Deploy `web-admin`, then publish the mobile update.
+7. Smoke-test with two companies and two locations: create an address, move an
+   employee, create a location template and shift, check in/out, and confirm the
+   location in Activity and Analytics.
+
+Rollback order:
+
+1. Roll back clients first so they stop using the new endpoints.
+2. Roll back the API.
+3. Keep the new nullable columns and assignment table in place. They are
+   backward-compatible and preserve location history; remove them only in a
+   separate reviewed maintenance change.

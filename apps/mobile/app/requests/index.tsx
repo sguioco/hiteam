@@ -697,12 +697,12 @@ export default function RequestsScreen() {
                 <Text className="text-[12px] font-bold uppercase tracking-[1.8px] text-muted-foreground">{t('requests.approvalTimeline')}</Text>
                 {item.approvalSteps.map((step) => (
                   <Text key={step.id} className="text-[14px] leading-5 text-foreground">
-                    #{step.sequence} {step.approverEmployee.firstName} {step.approverEmployee.lastName} • {step.status}
+                    #{step.sequence} {step.approverEmployee.lastName} {step.approverEmployee.firstName} • {step.status}
                   </Text>
                 ))}
                 {item.comments.map((comment) => (
                   <Text key={comment.id} className="text-[13px] leading-5 text-muted-foreground">
-                    {comment.authorEmployee.firstName} {comment.authorEmployee.lastName}: {comment.body}
+                    {comment.authorEmployee.lastName} {comment.authorEmployee.firstName}: {comment.body}
                   </Text>
                 ))}
               </View>

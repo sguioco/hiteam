@@ -37,6 +37,7 @@ import { ReviewEmployeeInvitationDto } from './dto/review-employee-invitation.dt
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateEmployeeAccessDto } from './dto/update-employee-access.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
+import { TransferEmployeeLocationDto } from './dto/transfer-employee-location.dto';
 import {
   EmployeeEmailDeliveryResult,
   EmployeeInvitationsMailerService,
@@ -116,6 +117,27 @@ const EMPLOYEE_LIST_SELECT = {
       timezone: true,
     },
   },
+  locationAssignments: {
+    where: { unassignedAt: null },
+    select: {
+      id: true,
+      companyId: true,
+      locationId: true,
+      isPrimary: true,
+      assignedAt: true,
+      unassignedAt: true,
+      reason: true,
+      location: {
+        select: {
+          id: true,
+          companyId: true,
+          name: true,
+          timezone: true,
+        },
+      },
+    },
+    orderBy: [{ isPrimary: 'desc' }, { assignedAt: 'asc' }],
+  },
   position: {
     select: NAMED_ENTITY_SELECT,
   },
@@ -134,6 +156,26 @@ const EMPLOYEE_DETAIL_SELECT = {
       name: true,
       timezone: true,
     },
+  },
+  locationAssignments: {
+    select: {
+      id: true,
+      companyId: true,
+      locationId: true,
+      isPrimary: true,
+      assignedAt: true,
+      unassignedAt: true,
+      reason: true,
+      location: {
+        select: {
+          id: true,
+          companyId: true,
+          name: true,
+          timezone: true,
+        },
+      },
+    },
+    orderBy: { assignedAt: 'desc' },
   },
   devices: true,
 } satisfies Prisma.EmployeeSelect;
@@ -370,6 +412,168 @@ export class EmployeesService {
     return membership?.groupId ?? null;
   }
 
+  private async syncPrimaryLocationAssignment(
+    tx: PrismaTx,
+    employee: {
+      id: string;
+      tenantId: string;
+      companyId: string;
+      primaryLocationId: string;
+    },
+    assignedByUserId?: string | null,
+  ) {
+    const now = new Date();
+    await tx.employeeLocationAssignment.updateMany({
+      where: {
+        tenantId: employee.tenantId,
+        employeeId: employee.id,
+        isPrimary: true,
+        unassignedAt: null,
+        locationId: { not: employee.primaryLocationId },
+      },
+      data: { isPrimary: false, unassignedAt: now },
+    });
+
+    const current = await tx.employeeLocationAssignment.findFirst({
+      where: {
+        tenantId: employee.tenantId,
+        employeeId: employee.id,
+        locationId: employee.primaryLocationId,
+        unassignedAt: null,
+      },
+      select: { id: true, isPrimary: true },
+    });
+
+    if (current) {
+      if (!current.isPrimary) {
+        await tx.employeeLocationAssignment.update({
+          where: { id: current.id },
+          data: { isPrimary: true, assignedByUserId: assignedByUserId ?? null },
+        });
+      }
+      return;
+    }
+
+    await tx.employeeLocationAssignment.create({
+      data: {
+        tenantId: employee.tenantId,
+        companyId: employee.companyId,
+        employeeId: employee.id,
+        locationId: employee.primaryLocationId,
+        isPrimary: true,
+        assignedByUserId: assignedByUserId ?? null,
+        reason: 'Primary location assigned',
+      },
+    });
+  }
+
+  private async assertCanTransferEmployeeLocation(
+    tenantId: string,
+    actorUserId: string,
+    employee: { companyId: string; primaryLocationId: string },
+    target: { companyId: string; id: string },
+  ) {
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId: actorUserId },
+      select: {
+        scopeId: true,
+        scopeType: true,
+        role: { select: { code: true } },
+      },
+    });
+    if (
+      assignments.some(
+        ({ role, scopeId, scopeType }) =>
+          ['tenant_owner', 'hr_admin', 'operations_admin'].includes(
+            role.code,
+          ) &&
+          scopeType === 'tenant' &&
+          scopeId === tenantId,
+      )
+    ) {
+      return;
+    }
+
+    const managerScopes = assignments.filter(
+      ({ role }) => role.code === 'manager',
+    );
+    const canAccess = (companyId: string, locationId: string) =>
+      managerScopes.some(
+        ({ scopeId, scopeType }) =>
+          (scopeType === 'tenant' && scopeId === tenantId) ||
+          (scopeType === 'company' && scopeId === companyId) ||
+          (scopeType === 'location' && scopeId === locationId),
+      );
+
+    if (
+      !canAccess(employee.companyId, employee.primaryLocationId) ||
+      !canAccess(target.companyId, target.id)
+    ) {
+      throw new BadRequestException(
+        'You cannot move employees outside your assigned locations.',
+      );
+    }
+  }
+
+  private async resolveEmployeeVisibilityWhere(
+    tenantId: string,
+    actorUserId?: string,
+  ): Promise<Prisma.EmployeeWhereInput | undefined> {
+    if (!actorUserId) return undefined;
+
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId: actorUserId },
+      select: {
+        scopeId: true,
+        scopeType: true,
+        role: { select: { code: true } },
+      },
+    });
+
+    const elevated = assignments.some(
+      ({ role, scopeId, scopeType }) =>
+        ['tenant_owner', 'hr_admin', 'operations_admin'].includes(role.code) &&
+        scopeType === 'tenant' &&
+        scopeId === tenantId,
+    );
+    if (elevated) return undefined;
+
+    const managerScopes = assignments.filter(
+      ({ role }) => role.code === 'manager',
+    );
+    if (
+      managerScopes.some(
+        ({ scopeId, scopeType }) =>
+          scopeType === 'tenant' && scopeId === tenantId,
+      )
+    ) {
+      return undefined;
+    }
+
+    const visibleScopes: Prisma.EmployeeWhereInput[] = [];
+    for (const { scopeId, scopeType } of managerScopes) {
+      if (scopeType === 'company') {
+        visibleScopes.push({ companyId: scopeId });
+      }
+      if (scopeType === 'location') {
+        visibleScopes.push({
+          OR: [
+            { primaryLocationId: scopeId },
+            {
+              locationAssignments: {
+                some: { locationId: scopeId, unassignedAt: null },
+              },
+            },
+          ],
+        });
+      }
+    }
+
+    return visibleScopes.length > 0
+      ? { OR: visibleScopes }
+      : { userId: actorUserId };
+  }
+
   async list(tenantId: string, query: ListEmployeesQueryDto = {}, actorUserId?: string) {
     const requestedRole = query.role ? this.normalizeEmployeeAccessRole(query.role, 'EMPLOYEE') : null;
     const roleCode =
@@ -389,10 +593,62 @@ export class EmployeesService {
     const onlyUnassigned =
       requestedTeamId === '__none' || requestedTeamId === 'none' || requestedTeamId === 'unassigned';
     const teamId = requestedTeamId && !onlyUnassigned ? await this.assertTeamExists(tenantId, requestedTeamId) : null;
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
+    const searchWhere: Prisma.EmployeeWhereInput | undefined = query.search
+      ? {
+          OR: [
+            {
+              firstName: {
+                contains: query.search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              lastName: {
+                contains: query.search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              employeeNumber: {
+                contains: query.search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              user: {
+                email: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+            },
+          ],
+        }
+      : undefined;
 
     const employeeRecords = await this.prisma.employee.findMany({
       where: {
         tenantId,
+        ...(query.companyId ? { companyId: query.companyId } : {}),
+        ...(query.locationId
+          ? {
+              OR: [
+                { primaryLocationId: query.locationId },
+                {
+                  locationAssignments: {
+                    some: {
+                      locationId: query.locationId,
+                      unassignedAt: null,
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
         ...(roleCode
           ? {
               user: {
@@ -421,20 +677,10 @@ export class EmployeesService {
                 },
               }
             : {}),
-        OR: query.search
-          ? [
-              { firstName: { contains: query.search, mode: 'insensitive' } },
-              { lastName: { contains: query.search, mode: 'insensitive' } },
-              {
-                employeeNumber: { contains: query.search, mode: 'insensitive' },
-              },
-              {
-                user: {
-                  email: { contains: query.search, mode: 'insensitive' },
-                },
-              },
-            ]
-          : undefined,
+        AND: [
+          ...(visibilityWhere ? [visibilityWhere] : []),
+          ...(searchWhere ? [searchWhere] : []),
+        ],
       },
       select: EMPLOYEE_LIST_SELECT,
       orderBy: { createdAt: 'desc' },
@@ -502,9 +748,21 @@ export class EmployeesService {
     return { total };
   }
 
-  getById(tenantId: string, employeeId: string) {
+  async getById(
+    tenantId: string,
+    employeeId: string,
+    actorUserId?: string,
+  ) {
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
     return this.prisma.employee.findFirstOrThrow({
-      where: { tenantId, id: employeeId },
+      where: {
+        tenantId,
+        id: employeeId,
+        ...(visibilityWhere ?? {}),
+      },
       select: EMPLOYEE_DETAIL_SELECT,
     });
   }
@@ -598,8 +856,12 @@ export class EmployeesService {
   }
 
   async updateEmployeeAccess(tenantId: string, actorUserId: string, employeeId: string, dto: UpdateEmployeeAccessDto) {
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
     const employee = await this.prisma.employee.findFirstOrThrow({
-      where: { tenantId, id: employeeId },
+      where: { tenantId, id: employeeId, ...(visibilityWhere ?? {}) },
       select: {
         id: true,
         userId: true,
@@ -683,8 +945,16 @@ export class EmployeesService {
       throw new BadRequestException('Team leader must be assigned to a team.');
     }
 
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
     const employees = await this.prisma.employee.findMany({
-      where: { tenantId, id: { in: employeeIds } },
+      where: {
+        tenantId,
+        id: { in: employeeIds },
+        ...(visibilityWhere ?? {}),
+      },
       select: {
         id: true,
         userId: true,
@@ -766,9 +1036,163 @@ export class EmployeesService {
     };
   }
 
+  async transferLocation(
+    tenantId: string,
+    actorUserId: string,
+    employeeId: string,
+    dto: TransferEmployeeLocationDto,
+  ) {
+    const [employee, location, openSession] = await Promise.all([
+      this.prisma.employee.findFirst({
+        where: { id: employeeId, tenantId },
+        select: {
+          id: true,
+          userId: true,
+          companyId: true,
+          primaryLocationId: true,
+          primaryLocation: { select: { name: true } },
+        },
+      }),
+      this.prisma.location.findFirst({
+        where: { id: dto.locationId, tenantId, archivedAt: null },
+        select: { id: true, companyId: true, name: true },
+      }),
+      this.prisma.attendanceSession.findFirst({
+        where: {
+          tenantId,
+          employeeId,
+          status: { in: ['OPEN', 'ON_BREAK'] },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+    if (!location) {
+      throw new BadRequestException(
+        'Selected location was not found in this workspace.',
+      );
+    }
+    if (openSession) {
+      throw new BadRequestException(
+        'Close the active attendance session before moving this employee.',
+      );
+    }
+    await this.assertCanTransferEmployeeLocation(
+      tenantId,
+      actorUserId,
+      employee,
+      location,
+    );
+    if (employee.primaryLocationId === location.id) {
+      return this.getById(tenantId, employee.id);
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employeeLocationAssignment.updateMany({
+        where: {
+          tenantId,
+          employeeId,
+          isPrimary: true,
+          unassignedAt: null,
+        },
+        data: { isPrimary: false, unassignedAt: now },
+      });
+
+      const activeTargetAssignment =
+        await tx.employeeLocationAssignment.findFirst({
+          where: {
+            tenantId,
+            employeeId,
+            locationId: location.id,
+            unassignedAt: null,
+          },
+          select: { id: true },
+        });
+
+      if (activeTargetAssignment) {
+        await tx.employeeLocationAssignment.update({
+          where: { id: activeTargetAssignment.id },
+          data: {
+            isPrimary: true,
+            assignedByUserId: actorUserId,
+            reason: dto.reason,
+          },
+        });
+      } else {
+        await tx.employeeLocationAssignment.create({
+          data: {
+            tenantId,
+            companyId: location.companyId,
+            employeeId,
+            locationId: location.id,
+            isPrimary: true,
+            assignedByUserId: actorUserId,
+            reason: dto.reason,
+          },
+        });
+      }
+
+      await tx.employee.update({
+        where: { id: employee.id },
+        data: {
+          companyId: location.companyId,
+          primaryLocationId: location.id,
+        },
+      });
+
+      if (dto.futureShiftStrategy === 'cancel') {
+        await tx.shift.updateMany({
+          where: {
+            tenantId,
+            employeeId,
+            shiftDate: { gte: now },
+            status: { in: ['DRAFT', 'PUBLISHED'] },
+            locationId: { not: location.id },
+          },
+          data: { status: 'CANCELLED' },
+        });
+      }
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'employee',
+      entityId: employee.id,
+      action: 'employee.location_changed',
+      metadata: {
+        employeeId: employee.id,
+        previousCompanyId: employee.companyId,
+        previousLocationId: employee.primaryLocationId,
+        previousLocationName: employee.primaryLocation.name,
+        companyId: location.companyId,
+        locationId: location.id,
+        locationName: location.name,
+        futureShiftStrategy: dto.futureShiftStrategy ?? 'keep',
+        reason: dto.reason ?? null,
+      },
+    });
+
+    this.kommoService.recordEmployeeUpdated(
+      tenantId,
+      employee.id,
+      'location_changed',
+    );
+    this.emitWorkspaceRefreshForUser(employee.userId, 'employee_location_changed');
+    return this.getById(tenantId, employee.id);
+  }
+
   async updateBreaksAccess(tenantId: string, actorUserId: string, employeeId: string, breaksEnabled: boolean) {
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
     const employee = await this.prisma.employee.findFirstOrThrow({
-      where: { tenantId, id: employeeId },
+      where: { tenantId, id: employeeId, ...(visibilityWhere ?? {}) },
       select: { id: true, breaksEnabled: true },
     });
 
@@ -791,12 +1215,16 @@ export class EmployeesService {
     });
     this.kommoService.recordEmployeeUpdated(tenantId, employee.id, 'breaks_access_updated');
 
-    return this.getById(tenantId, employeeId);
+    return this.getById(tenantId, employeeId, actorUserId);
   }
 
   async updateWorkMode(tenantId: string, actorUserId: string, employeeId: string, workMode: EmployeeWorkModeInput) {
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(
+      tenantId,
+      actorUserId,
+    );
     const employee = await this.prisma.employee.findFirstOrThrow({
-      where: { tenantId, id: employeeId },
+      where: { tenantId, id: employeeId, ...(visibilityWhere ?? {}) },
       select: { id: true, workMode: true },
     });
     const nextWorkMode = this.normalizeWorkMode(workMode);
@@ -828,7 +1256,7 @@ export class EmployeesService {
       this.emitWorkspaceRefreshForUser(refreshedEmployee.userId, 'employee_work_mode_updated');
     }
 
-    return this.getById(tenantId, employeeId);
+    return this.getById(tenantId, employeeId, actorUserId);
   }
 
   async getMe(user: JwtUser) {
@@ -967,6 +1395,7 @@ export class EmployeesService {
         },
       });
 
+      await this.syncPrimaryLocationAssignment(tx, employee);
       await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, teamId);
 
       return employee;
@@ -1709,6 +2138,7 @@ export class EmployeesService {
           },
         });
 
+        await this.syncPrimaryLocationAssignment(tx, employee, user.id);
         if (invitation.approvedGroupId) {
           await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
         }
@@ -2080,6 +2510,7 @@ export class EmployeesService {
           },
         });
 
+        await this.syncPrimaryLocationAssignment(tx, employee, actorUserId);
         await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, requestedGroupId);
 
         if (approvedShiftTemplate?.id) {
@@ -2196,6 +2627,7 @@ export class EmployeesService {
             },
           });
 
+      await this.syncPrimaryLocationAssignment(tx, employee, actorUserId);
       await this.syncEmployeeGroupMembership(tx, tenantId, employee.id, requestedGroupId);
 
       if (approvedShiftTemplate?.id) {

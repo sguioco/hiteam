@@ -741,7 +741,7 @@ const scheduleCopy = {
     shiftTemplate: "Шаблон смены",
     selectTemplate: "Выберите шаблон",
     date: "Дата",
-    saveShift: "Сохранить смену",
+    saveShift: "Сохранить изменения",
     editShift: "Изменить",
     cancelShift: "Отменить",
     shiftAuthor: "Автор",
@@ -872,7 +872,7 @@ const scheduleCopy = {
     shiftTemplate: "Shift template",
     selectTemplate: "Select template",
     date: "Date",
-    saveShift: "Save shift",
+    saveShift: "Save changes",
     editShift: "Edit",
     cancelShift: "Cancel",
     shiftAuthor: "Author",
@@ -1027,6 +1027,9 @@ export default function Schedule({
   });
   const [templateDraft, setTemplateDraft] =
     useState<CreateTemplateDraft>(initialTemplateDraft);
+  const [templateLocationId, setTemplateLocationId] = useState(
+    initialData?.locations?.[0]?.id ?? "",
+  );
   const [massAssignDraft, setMassAssignDraft] = useState<MassAssignDraft>({
     templateId: "",
     dateFrom: formatDateInput(today),
@@ -1035,6 +1038,21 @@ export default function Schedule({
     locationId: "all",
     roleId: "all",
   });
+
+  useEffect(() => {
+    if (
+      templateLocationId &&
+      locations.some(({ id }) => id === templateLocationId)
+    ) {
+      return;
+    }
+    setTemplateLocationId(
+      locationFilter !== "all" &&
+        locations.some(({ id }) => id === locationFilter)
+        ? locationFilter
+        : locations[0]?.id ?? "",
+    );
+  }, [locationFilter, locations, templateLocationId]);
 
   function toggleTemplateWeekDay(day: number) {
     setTemplateDraft((current) => {
@@ -2349,6 +2367,7 @@ export default function Schedule({
       !templateDraft.name.trim() ||
       !templateDraft.startsAtLocal ||
       !templateDraft.endsAtLocal ||
+      !templateLocationId ||
       templateDraft.weekDays.length === 0
     ) {
       setMessage(ui.templateValidation);
@@ -2371,7 +2390,7 @@ export default function Schedule({
     }
 
     if (isMockMode) {
-      const location = locations[0];
+      const location = locations.find(({ id }) => id === templateLocationId);
       const position = positions[0];
       if (!location || !position) {
         setMessage(ui.templateDefaultsMissing);
@@ -2411,7 +2430,7 @@ export default function Schedule({
     }
 
     try {
-      const location = locations[0];
+      const location = locations.find(({ id }) => id === templateLocationId);
       const position = positions[0];
       if (!location || !position) {
         setMessage(ui.templateDefaultsMissing);
@@ -3599,7 +3618,7 @@ export default function Schedule({
                 onClick={() => void handleCreateShift()}
                 type="button"
               >
-                {ui.saveShift}
+                {editingShiftId ? ui.saveShift : ui.createShift}
               </Button>
             </div>
           </div>
@@ -3671,6 +3690,32 @@ export default function Schedule({
               <h2 className="font-heading text-lg font-bold text-foreground">
                 {ui.newTemplate}
               </h2>
+              <div className="grid gap-2">
+                <label className="text-sm font-semibold text-foreground">
+                  {locale === "ru" ? "Локация" : "Location"}
+                </label>
+                <Select
+                  onValueChange={setTemplateLocationId}
+                  value={templateLocationId}
+                >
+                  <SelectTrigger className="h-11 rounded-[14px]">
+                    <SelectTriggerLabel>
+                      {locations.find(({ id }) => id === templateLocationId)
+                        ?.name ??
+                        (locale === "ru"
+                          ? "Выберите локацию"
+                          : "Select location")}
+                    </SelectTriggerLabel>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Input
                   className="h-12 rounded-2xl border-[color:var(--accent)]/15 bg-[color:var(--soft-accent)]/35 px-4 font-heading text-lg placeholder:font-heading placeholder:text-muted-foreground/65 focus-visible:ring-[color:var(--accent)]/20"
@@ -3769,14 +3814,14 @@ export default function Schedule({
                   <p className="text-sm font-medium text-foreground">{ui.templateDays}</p>
                   <p className="text-xs text-muted-foreground">{ui.templateDaysHint}</p>
                 </div>
-                <div className="grid grid-cols-7 gap-1.5">
+                <div className="grid grid-cols-7 gap-1">
                   {ui.dayHeaders.map((label, index) => {
                     const day = index + 1;
                     const active = templateDraft.weekDays.includes(day);
 
                     return (
                       <button
-                        className={`flex aspect-square min-w-0 items-center justify-center rounded-full border p-0 text-center text-[9px] font-semibold leading-none transition-colors ${
+                        className={`mx-auto flex size-8 min-w-0 items-center justify-center rounded-full border p-0 text-center text-[8px] font-semibold leading-none tracking-[-0.04em] transition-colors ${
                           active
                             ? "border-[color:var(--accent)] bg-[color:var(--soft-accent)] text-[color:var(--accent-strong)]"
                             : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50"

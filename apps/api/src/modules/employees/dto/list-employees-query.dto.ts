@@ -20,4 +20,12 @@ export class ListEmployeesQueryDto {
   @IsOptional()
   @IsString()
   groupId?: string;
+
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @IsOptional()
+  @IsString()
+  locationId?: string;
 }

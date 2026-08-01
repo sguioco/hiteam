@@ -124,6 +124,11 @@ type ReviewInvitationResponse = {
 type ShiftTemplateRecord = ScheduleShiftTemplateRecord;
 type EmployeesDirectorySnapshot = EmployeesBootstrapResponse;
 type TeamOption = WorkGroupItem;
+type LocationOption = {
+  id: string;
+  companyId: string;
+  name: string;
+};
 
 export type EmployeesInitialData = EmployeesDirectorySnapshot;
 
@@ -216,6 +221,7 @@ type EmployeeRowView = {
   group: string | null;
   groupEmoji: string | null;
   location: string;
+  locationId: string | null;
   status: EmployeeStatus;
   activeTasks: number;
   phone: string;
@@ -898,6 +904,9 @@ const Employees = ({
   const [directoryGroups, setDirectoryGroups] = useState<WorkGroupItem[]>(
     initialData?.groups ?? [],
   );
+  const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
+  const [updatingLocationEmployeeId, setUpdatingLocationEmployeeId] =
+    useState<string | null>(null);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     null,
@@ -993,6 +1002,7 @@ const Employees = ({
   );
   const [bulkTargetGroupId, setBulkTargetGroupId] = useState("__none");
   const [bulkRole, setBulkRole] = useState<EmployeeAccessRole | "keep">("keep");
+  const [bulkLocationId, setBulkLocationId] = useState("keep");
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -1246,6 +1256,7 @@ const Employees = ({
           group: group?.name ?? null,
           groupEmoji: group?.emoji ?? null,
           location: employee.primaryLocation?.name ?? "—",
+          locationId: employee.primaryLocation?.id ?? null,
           status: resolveEmployeeStatus(employee, liveSession),
           activeTasks: tasksByEmployeeId.get(employee.id) ?? 0,
           phone: employee.phone ?? "—",
@@ -1265,6 +1276,63 @@ const Employees = ({
     locale,
     tasksByEmployeeId,
   ]);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session) return;
+    void apiRequest<LocationOption[]>("/org/locations", {
+      token: session.accessToken,
+    })
+      .then(setLocationOptions)
+      .catch(() => setLocationOptions([]));
+  }, []);
+
+  async function updateEmployeeLocation(
+    employeeId: string,
+    locationId: string,
+  ) {
+    const session = getSession();
+    if (!session) return;
+    setUpdatingLocationEmployeeId(employeeId);
+    setPageMessage(null);
+    try {
+      const updated = await apiRequest<EmployeeApiRecord>(
+        `/employees/${employeeId}/location`,
+        {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({
+            locationId,
+            futureShiftStrategy: "keep",
+          }),
+        },
+      );
+      setEmployeeRecords((current) =>
+        current.map((employee) =>
+          employee.id === employeeId ? { ...employee, ...updated } : employee,
+        ),
+      );
+      setPageMessage(
+        runtimeLocalize(
+          "Локация сотрудника обновлена.",
+          "Employee location updated.",
+          locale,
+        ),
+      );
+    } catch (nextError) {
+      setDirectoryError(
+        nextError instanceof Error
+          ? nextError.message
+          : runtimeLocalize(
+              "Не удалось изменить локацию.",
+              "Failed to update location.",
+              locale,
+            ),
+      );
+    } finally {
+      setUpdatingLocationEmployeeId(null);
+    }
+  }
 
   const taskEmployeeOptions = useMemo(
     () => employees.filter((employee) => employee.status !== "dismissed"),
@@ -2639,6 +2707,21 @@ const Employees = ({
           role: bulkRole === "keep" ? undefined : bulkRole,
         }),
       });
+      if (bulkLocationId !== "keep") {
+        await Promise.all(
+          employeeIds.map((employeeId) =>
+            apiRequest(`/employees/${employeeId}/location`, {
+              method: "PATCH",
+              token: session.accessToken,
+              body: JSON.stringify({
+                locationId: bulkLocationId,
+                futureShiftStrategy: "keep",
+                reason: "Bulk location transfer",
+              }),
+            }),
+          ),
+        );
+      }
 
       setBulkAssignDialogOpen(false);
       clearEmployeeSelection();
@@ -3234,15 +3317,41 @@ const Employees = ({
                   </Table.Cell>
 
                   <Table.Cell className="align-middle whitespace-nowrap">
-                    <button
-                      className="team-tasks-row-button team-tasks-row-button--center"
-                      onClick={(event) => openEmployeePage(employee.id, event)}
-                      type="button"
-                    >
-                      <span className="team-tasks-team-text">
-                        {employee.location}
-                      </span>
-                    </button>
+                    {locationOptions.length > 1 ? (
+                      <Select
+                        disabled={
+                          updatingLocationEmployeeId === employee.id ||
+                          employee.status === "dismissed"
+                        }
+                        onValueChange={(locationId) =>
+                          void updateEmployeeLocation(employee.id, locationId)
+                        }
+                        value={employee.locationId ?? undefined}
+                      >
+                        <SelectTrigger className="h-9 min-w-[150px] rounded-xl border-transparent bg-transparent px-2 text-sm shadow-none hover:border-[color:var(--border)] hover:bg-[color:var(--panel)]">
+                          <SelectValue placeholder={employee.location} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {locationOptions.map((location) => (
+                            <SelectItem key={location.id} value={location.id}>
+                              {location.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <button
+                        className="team-tasks-row-button team-tasks-row-button--center"
+                        onClick={(event) =>
+                          openEmployeePage(employee.id, event)
+                        }
+                        type="button"
+                      >
+                        <span className="team-tasks-team-text">
+                          {employee.location}
+                        </span>
+                      </button>
+                    )}
                   </Table.Cell>
 
                   <Table.Cell className="align-middle whitespace-nowrap">
@@ -3581,6 +3690,22 @@ const Employees = ({
                   >
                     <Crown className="h-4 w-4" />
                     {runtimeLocalize("Сменить роль", "Change role", locale)}
+                  </Button>
+                  <Button
+                    className="rounded-xl font-heading"
+                    onClick={() => {
+                      setBulkError(null);
+                      setBulkAssignDialogOpen(true);
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    <ArrowRightLeft className="h-4 w-4" />
+                    {runtimeLocalize(
+                      "Сменить локацию",
+                      "Change location",
+                      locale,
+                    )}
                   </Button>
                   <Button
                     className="rounded-xl font-heading"
@@ -4386,6 +4511,39 @@ const Employees = ({
               onSelect={setBulkTargetGroupId}
               selectedGroupId={bulkTargetGroupId}
             />
+            <div className="grid gap-2">
+              <div className="text-xs font-heading font-semibold uppercase text-muted-foreground">
+                {runtimeLocalize("Локация", "Location", locale)}
+              </div>
+              <Select
+                onValueChange={setBulkLocationId}
+                value={bulkLocationId}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue
+                    placeholder={runtimeLocalize(
+                      "Не менять локацию",
+                      "Keep location",
+                      locale,
+                    )}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">
+                    {runtimeLocalize(
+                      "Не менять локацию",
+                      "Keep location",
+                      locale,
+                    )}
+                  </SelectItem>
+                  {locationOptions.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-3">
               <div className="mb-2 text-xs font-heading font-semibold uppercase text-muted-foreground">
                 {runtimeLocalize("Роль", "Role", locale)}

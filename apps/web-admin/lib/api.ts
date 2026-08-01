@@ -363,8 +363,100 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   return sessionRefreshPromise;
 }
 
+const API_ERROR_LOCALIZATIONS: Record<
+  string,
+  { en: string; ru: string }
+> = {
+  "Укажите email или телефон сотрудника.": {
+    ru: "Укажите email или телефон сотрудника.",
+    en: "Enter the employee's email or phone number.",
+  },
+  "Укажите только email или только телефон сотрудника.": {
+    ru: "Укажите только email или только телефон сотрудника.",
+    en: "Enter either the employee's email or phone number, not both.",
+  },
+  "Такой email уже зарегистрирован.": {
+    ru: "Такой email уже зарегистрирован.",
+    en: "This email is already registered.",
+  },
+  "Сотрудник с таким телефоном уже зарегистрирован.": {
+    ru: "Сотрудник с таким телефоном уже зарегистрирован.",
+    en: "An employee with this phone number is already registered.",
+  },
+  "Укажите имя и фамилию сотрудника.": {
+    ru: "Укажите имя и фамилию сотрудника.",
+    en: "Enter the employee's first and last name.",
+  },
+  "Выберите смену для сотрудника.": {
+    ru: "Выберите смену для сотрудника.",
+    en: "Select a shift for the employee.",
+  },
+  "Приглашение истекло. Добавьте email заново.": {
+    ru: "Приглашение истекло. Добавьте email заново.",
+    en: "The invitation has expired. Add the email again.",
+  },
+  "Этот invite уже использован. Войдите в систему.": {
+    ru: "Это приглашение уже использовано. Войдите в систему.",
+    en: "This invitation has already been used. Sign in to continue.",
+  },
+  "Укажите email сотрудника.": {
+    ru: "Укажите email сотрудника.",
+    en: "Enter the employee's email.",
+  },
+  "Email не совпадает с приглашением.": {
+    ru: "Email не совпадает с приглашением.",
+    en: "The email does not match the invitation.",
+  },
+  "Добавьте фото профиля.": {
+    ru: "Добавьте фото профиля.",
+    en: "Add a profile photo.",
+  },
+  "Пожалуйста, выберите смену перед подтверждением анкеты.": {
+    ru: "Пожалуйста, выберите смену перед подтверждением анкеты.",
+    en: "Select a shift before approving the form.",
+  },
+  "У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.": {
+    ru: "У сотрудника не указан email. Попросите сотрудника завершить регистрацию по ссылке.",
+    en: "The employee has no email address. Ask them to complete registration using the invitation link.",
+  },
+  "Такой email уже зарегистрирован в компании.": {
+    ru: "Такой email уже зарегистрирован в компании.",
+    en: "This email is already registered in the company.",
+  },
+  "Этот email не найден в списке сотрудников. Попросите менеджера добавить его.": {
+    ru: "Этот email не найден в списке сотрудников. Попросите менеджера добавить его.",
+    en: "This email was not found in the employee list. Ask a manager to add it.",
+  },
+  "Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.": {
+    ru: "Этот email найден в нескольких организациях. Попросите менеджера отправить точную ссылку.",
+    en: "This email was found in multiple organizations. Ask a manager to send a direct invitation link.",
+  },
+  "Укажите телефон сотрудника.": {
+    ru: "Укажите телефон сотрудника.",
+    en: "Enter the employee's phone number.",
+  },
+  "Этот телефон не найден в списке сотрудников. Попросите менеджера добавить его.": {
+    ru: "Этот телефон не найден в списке сотрудников. Попросите менеджера добавить его.",
+    en: "This phone number was not found in the employee list. Ask a manager to add it.",
+  },
+  "Этот телефон найден в нескольких организациях. Попросите менеджера отправить точную ссылку.": {
+    ru: "Этот телефон найден в нескольких организациях. Попросите менеджера отправить точную ссылку.",
+    en: "This phone number was found in multiple organizations. Ask a manager to send a direct invitation link.",
+  },
+  "Организация не найдена.": {
+    ru: "Организация не найдена.",
+    en: "Organization not found.",
+  },
+};
+
 function humanizeAuthErrorMessage(message: string): string {
   const locale = getRuntimeLocale();
+  const localizedMessage = API_ERROR_LOCALIZATIONS[message];
+
+  if (localizedMessage) {
+    return localizedMessage[locale];
+  }
+
   switch (message) {
     case "Account with this email is not registered.":
       return locale === "ru"
@@ -414,8 +506,15 @@ function humanizeAuthErrorMessage(message: string): string {
       return locale === "ru"
         ? "Сервис обновляется. Попробуй ещё раз чуть позже."
         : "The service is updating. Please try again shortly.";
-    default:
-      return humanizeValidationError(message);
+    default: {
+      const humanizedMessage = humanizeValidationError(message, locale);
+
+      if (locale === "en" && /[А-Яа-яЁё]/.test(humanizedMessage)) {
+        return "Unable to complete the request. Check the entered data and try again.";
+      }
+
+      return humanizedMessage;
+    }
   }
 }
 
@@ -458,7 +557,7 @@ async function getApiErrorMessage(
     try {
       const payload = JSON.parse(text) as { message?: string | string[] };
       if (Array.isArray(payload.message) && payload.message.length) {
-        return humanizeValidationError(payload.message);
+        return humanizeValidationError(payload.message, locale);
       }
 
       if (typeof payload.message === "string" && payload.message.trim()) {

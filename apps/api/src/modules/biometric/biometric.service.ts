@@ -813,7 +813,7 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
 
         return {
           employeeId: employee.id,
-          employeeName: `${employee.firstName} ${employee.lastName}`,
+          employeeName: `${employee.lastName} ${employee.firstName}`,
           employeeNumber: employee.employeeNumber,
           department: employee.department.name,
           location: employee.primaryLocation.name,

@@ -33,6 +33,10 @@ export class CreateTaskDto {
   groupId?: string;
 
   @IsOptional()
+  @IsString()
+  locationId?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   checklist?: string[];

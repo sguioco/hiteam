@@ -15,7 +15,6 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   readBrowserStorageItem,
-  removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from "@/lib/browser-storage";
 
@@ -142,13 +141,8 @@ export default function InternalCreateOrganizationPage() {
 
   useEffect(() => {
     document.documentElement.lang = lang;
-
-    if (lang === "en") {
-      removeBrowserStorageItem("smart-admin-locale");
-      return;
-    }
-
     writeBrowserStorageItem("smart-admin-locale", lang);
+    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
   }, [lang]);
 
   async function copyValue(value: string, field: "manager") {

@@ -360,7 +360,7 @@ export class JobsService {
       }
 
       const dueAt = task.dueAt;
-      const managerName = `${task.managerEmployee.firstName} ${task.managerEmployee.lastName}`.trim();
+      const managerName = `${task.managerEmployee.lastName} ${task.managerEmployee.firstName}`.trim();
       const isMeeting = this.isMeetingTask(task.title, task.description);
 
       if (isMeeting) {

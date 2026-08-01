@@ -188,12 +188,24 @@ export function useAuthFlowState() {
 }
 
 export function signInLocally(options?: { workspaceSetupStep?: WorkspaceSetupStep }) {
+  const session = getCachedDemoSession();
+  if (!session) {
+    updateAuthFlowState({
+      isAuthenticated: false,
+      roleCodes: [],
+      workspaceAccessAllowed: false,
+      workspaceSetupStep: null,
+    });
+    return false;
+  }
+
   updateAuthFlowState({
     isAuthenticated: true,
-    roleCodes: getCachedDemoSession()?.user.roleCodes ?? [],
-    workspaceAccessAllowed: getCachedDemoSession()?.user.workspaceAccessAllowed ?? false,
+    roleCodes: session.user.roleCodes,
+    workspaceAccessAllowed: session.user.workspaceAccessAllowed,
     workspaceSetupStep: options?.workspaceSetupStep ?? null,
   });
+  return true;
 }
 
 export function signOutLocally() {

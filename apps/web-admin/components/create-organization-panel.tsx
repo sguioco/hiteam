@@ -14,7 +14,6 @@ import {
 } from '@/lib/altegio-marketplace';
 import {
   readBrowserStorageItem,
-  removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
 import { BrandWordmark } from './brand-wordmark';
@@ -295,13 +294,8 @@ export function CreateOrganizationPanel() {
 
   useEffect(() => {
     document.documentElement.lang = lang;
-
-    if (lang === 'en') {
-      removeBrowserStorageItem('smart-admin-locale');
-      return;
-    }
-
     writeBrowserStorageItem('smart-admin-locale', lang);
+    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
   }, [lang]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

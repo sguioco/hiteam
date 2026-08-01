@@ -32,7 +32,6 @@ import {
 import { apiRequest } from '@/lib/api';
 import {
   readBrowserStorageItem,
-  removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
 import {
@@ -605,12 +604,9 @@ export function AuthPanel() {
   }, []);
 
   useEffect(() => {
-    if (lang === 'en') {
-      removeBrowserStorageItem('smart-admin-locale');
-      return;
-    }
-
+    document.documentElement.lang = lang;
     writeBrowserStorageItem('smart-admin-locale', lang);
+    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
   }, [lang]);
 
   useEffect(() => {

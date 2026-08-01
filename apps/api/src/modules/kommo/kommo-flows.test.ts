@@ -619,8 +619,8 @@ async function testRecurringTaskUpdateBuildsKommoNote() {
   assert.match(captured.note ?? '', /Task: Open the cafe/);
   assert.match(captured.note ?? '', /Occurrence: 2026-06-21/);
   assert.match(captured.note ?? '', /Status: DONE/);
-  assert.match(captured.note ?? '', /Assignee: Ivan Worker \(E-001, ivan@example\.com\)/);
-  assert.match(captured.note ?? '', /Manager: Mary Manager \(M-001, manager@example\.com\)/);
+  assert.match(captured.note ?? '', /Assignee: Worker Ivan \(E-001, ivan@example\.com\)/);
+  assert.match(captured.note ?? '', /Manager: Manager Mary \(M-001, manager@example\.com\)/);
 }
 
 async function testTaskTemplateCreateBuildsKommoNote() {
@@ -758,8 +758,8 @@ async function testTaskTemplateCreateBuildsKommoNote() {
   assert.match(captured.note ?? '', /Week days: MONDAY, WEDNESDAY/);
   assert.match(captured.note ?? '', /Start: 2026-06-21/);
   assert.match(captured.note ?? '', /End: 2026-08-21/);
-  assert.match(captured.note ?? '', /Assignee: Ivan Worker \(E-001, ivan@example\.com\)/);
-  assert.match(captured.note ?? '', /Manager: Mary Manager \(M-001, manager@example\.com\)/);
+  assert.match(captured.note ?? '', /Assignee: Worker Ivan \(E-001, ivan@example\.com\)/);
+  assert.match(captured.note ?? '', /Manager: Manager Mary \(M-001, manager@example\.com\)/);
   assert.match(captured.note ?? '', /Group: Operations/);
   assert.match(captured.note ?? '', /Department: Kitchen/);
   assert.match(captured.note ?? '', /Location: Downtown/);
@@ -821,7 +821,7 @@ async function testTaskTemplateDeleteBuildsKommoNote() {
       'Task: Open the cafe',
       'Template ID: template-1',
       'Assignee: unassigned',
-      'Manager: Mary Manager (M-001, manager@example.com)',
+      'Manager: Manager Mary (M-001, manager@example.com)',
       'Group: Operations',
       'Department: n/a',
       'Location: Downtown',

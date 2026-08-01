@@ -254,6 +254,9 @@ export class AttendanceService {
       metadata: {
         eventId: event.id,
         distanceMeters: Math.round(context.distanceMeters),
+        companyId: context.location.companyId,
+        locationId: context.location.id,
+        locationName: context.location.name,
         shiftId: shift?.id ?? null,
         lateMinutes,
         workMode: employee.workMode,
@@ -590,6 +593,9 @@ export class AttendanceService {
         totalMinutes,
         distanceMeters: Math.round(context.distanceMeters),
         shiftId: session.shiftId,
+        companyId: context.location.companyId,
+        locationId: context.location.id,
+        locationName: context.location.name,
         workMode: employee.workMode,
         earlyLeaveMinutes,
         unpaidBreakIncrement,
@@ -796,7 +802,7 @@ export class AttendanceService {
         eventId: event.id,
         source: 'ATTENDANCE_EVENT' as const,
         employeeId: event.employee.id,
-        employeeName: `${event.employee.firstName} ${event.employee.lastName}`,
+        employeeName: `${event.employee.lastName} ${event.employee.firstName}`,
         employeeNumber: event.employee.employeeNumber,
         department: event.employee.department.name,
         eventType: event.eventType,
@@ -868,7 +874,7 @@ export class AttendanceService {
           eventId: log.id,
           source: 'AUDIT_LOG' as const,
           employeeId: employee.id,
-          employeeName: `${employee.firstName} ${employee.lastName}`,
+          employeeName: `${employee.lastName} ${employee.firstName}`,
           employeeNumber: employee.employeeNumber,
           department: employee.department.name,
           eventType: (log.metadata.eventType as AttendanceEventType) ?? AttendanceEventType.CHECK_IN,
@@ -1125,7 +1131,7 @@ export class AttendanceService {
         userId: correctionRequest.approverEmployee.userId,
         type: NotificationType.ATTENDANCE_CORRECTION_ACTION_REQUIRED,
         title: `Attendance correction requires approval`,
-        body: `${requester.firstName} ${requester.lastName} requested a correction for ${session.employee.firstName} ${session.employee.lastName}.`,
+        body: `${requester.lastName} ${requester.firstName} requested a correction for ${session.employee.lastName} ${session.employee.firstName}.`,
         actionUrl: '/attendance',
         metadata: {
           correctionRequestId: correctionRequest.id,
@@ -1512,7 +1518,7 @@ export class AttendanceService {
 
     for (const shift of shifts) {
       const session = shiftIdToSession.get(shift.id);
-      const employeeName = `${shift.employee.firstName} ${shift.employee.lastName}`;
+      const employeeName = `${shift.employee.lastName} ${shift.employee.firstName}`;
       const baseMeta = {
         employeeId: shift.employee.id,
         employeeName,
@@ -1590,7 +1596,7 @@ export class AttendanceService {
         continue;
       }
 
-      const employeeName = `${session.employee.firstName} ${session.employee.lastName}`;
+      const employeeName = `${session.employee.lastName} ${session.employee.firstName}`;
       anomalies.push({
         anomalyId: `repeated-lateness:${session.employeeId}`,
         type: 'REPEATED_LATENESS',
@@ -1829,7 +1835,7 @@ export class AttendanceService {
         ? 'Attendance correction approved'
         : 'Attendance correction rejected';
 
-    const bodyBase = `${correctionRequest.employee.firstName} ${correctionRequest.employee.lastName}`;
+    const bodyBase = `${correctionRequest.employee.lastName} ${correctionRequest.employee.firstName}`;
     const body = comment
       ? `${bodyBase}: ${comment}`
       : `${bodyBase}: correction request was ${decision}.`;
@@ -1962,6 +1968,8 @@ export class AttendanceService {
       enforceGeofence?: boolean;
       location: {
         id: string;
+        companyId: string;
+        name: string;
         latitude: number;
         longitude: number;
         geofenceRadiusMeters: number;
@@ -2150,7 +2158,7 @@ export class AttendanceService {
     dto: AttendanceActionDto;
     context: {
       device: { id: string };
-      location: { id: string };
+      location: { id: string; companyId: string; name: string };
       distanceMeters: number;
     };
     returnSessionToStatus: AttendanceSessionStatus;
@@ -2220,6 +2228,9 @@ export class AttendanceService {
         maxBreakMinutes: policy?.maxBreakMinutes ?? 60,
         sessionId: args.sessionId,
         distanceMeters: Math.round(args.context.distanceMeters),
+        companyId: args.context.location.companyId,
+        locationId: args.context.location.id,
+        locationName: args.context.location.name,
       },
     });
 
@@ -2408,7 +2419,7 @@ export class AttendanceService {
       rows: sessions.map((session) => ({
         sessionId: session.id,
         employeeId: session.employee.id,
-        employeeName: `${session.employee.firstName} ${session.employee.lastName}`,
+        employeeName: `${session.employee.lastName} ${session.employee.firstName}`,
         employeeNumber: session.employee.employeeNumber,
         workMode: session.employee.workMode,
         department: session.employee.department.name,
@@ -2524,7 +2535,7 @@ export class AttendanceService {
     return {
       sessionId: session.id,
       employeeId: session.employee.id,
-      employeeName: `${session.employee.firstName} ${session.employee.lastName}`,
+      employeeName: `${session.employee.lastName} ${session.employee.firstName}`,
       employeeNumber: session.employee.employeeNumber,
       department: session.employee.department.name,
       location:

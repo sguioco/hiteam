@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/billing-launch-flow.test.cjs && node tests/mobile-app-links.test.cjs && node tests/geofence-radius.test.cjs && node tests/location-quality.test.cjs && node tests/password-reset-flow.test.cjs"
+    "test": "node tests/billing-launch-flow.test.cjs && node tests/mobile-app-links.test.cjs && node tests/geofence-radius.test.cjs && node tests/location-quality.test.cjs && node tests/password-reset-flow.test.cjs && node tests/shift-create-consistency.test.cjs && node tests/runtime-localization.test.cjs && node tests/multi-location-flow.test.cjs"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.1",

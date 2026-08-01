@@ -142,7 +142,7 @@ function formatMetaLine(
 ) {
   const author = item.authorEmployee;
   const authorName = author
-    ? `${author.firstName ?? ''} ${author.lastName ?? ''}`.trim()
+    ? `${author.lastName ?? ''} ${author.firstName ?? ''}`.trim()
     : localizeText(language, 'Команда', 'Team');
   const relativeOrDate = formatDate(getAnnouncementDisplayTimestamp(item), language);
 

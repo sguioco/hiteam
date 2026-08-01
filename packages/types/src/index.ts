@@ -288,6 +288,7 @@ export type TaskItem = {
   createdAt: string;
   updatedAt: string;
   groupId: string | null;
+  locationId?: string | null;
   assigneeEmployeeId: string | null;
   managerEmployee: {
     id: string;
@@ -311,6 +312,11 @@ export type TaskItem = {
   } | null;
   group: {
     id: string;
+    name: string;
+  } | null;
+  location?: {
+    id: string;
+    companyId: string;
     name: string;
   } | null;
   checklistItems: Array<{
@@ -469,6 +475,19 @@ export type EmployeeApiRecord = {
   company?: NamedEntityOption | null;
   department?: NamedEntityOption | null;
   primaryLocation?: (NamedEntityOption & { timezone?: string | null }) | null;
+  locationAssignments?: Array<{
+    id: string;
+    companyId: string;
+    locationId: string;
+    isPrimary: boolean;
+    assignedAt: string;
+    unassignedAt?: string | null;
+    reason?: string | null;
+    location: NamedEntityOption & {
+      companyId?: string;
+      timezone?: string | null;
+    };
+  }>;
   position?: NamedEntityOption | null;
 };
 
@@ -657,7 +676,13 @@ export type ScheduleBootstrapInitialData<TEmployee = EmployeeApiRecord> = {
   employees: TEmployee[];
   groups: WorkGroupItem[];
   isMockMode: boolean;
-  locations: NamedEntityOption[];
+  locations: Array<
+    NamedEntityOption & {
+      companyId?: string;
+      address?: string | null;
+      timezone?: string | null;
+    }
+  >;
   mode: 'admin' | 'employee';
   organizationSetup?: OrganizationSetupResponse | null;
   positions: NamedEntityOption[];

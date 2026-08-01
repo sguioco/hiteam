@@ -506,23 +506,24 @@ export function TodayAttendancePanel({
 
                 <div className="today-attendance-row-copy">
                   <strong>{row.fullName}</strong>
-                  <div className="today-attendance-row-lines">
-                    <span>{row.department}</span>
-                    <span>{row.shiftLabel}</span>
+                  <div className="today-attendance-row-metrics">
+                    <div className="today-attendance-row-lines">
+                      <span>{row.department}</span>
+                      <span>{row.shiftLabel}</span>
+                    </div>
+                    <div className="today-attendance-row-side">
+                      <span
+                        className={`today-attendance-row-note is-${row.timeTone}`}
+                      >
+                        {row.note}
+                      </span>
+                      <span
+                        className={`today-attendance-row-arrival is-${row.timeTone}`}
+                      >
+                        {row.time}
+                      </span>
+                    </div>
                   </div>
-                </div>
-
-                <div className="today-attendance-row-side">
-                  <span
-                    className={`today-attendance-row-arrival is-${row.timeTone}`}
-                  >
-                    {row.time}
-                  </span>
-                  <span
-                    className={`today-attendance-row-note is-${row.timeTone}`}
-                  >
-                    {row.note}
-                  </span>
                 </div>
               </article>
             ))

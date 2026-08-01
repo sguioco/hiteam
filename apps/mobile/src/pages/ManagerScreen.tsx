@@ -276,7 +276,7 @@ function buildEmployeeName(
   firstName?: string | null,
   lastName?: string | null,
 ) {
-  return [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ").trim();
+  return [lastName?.trim(), firstName?.trim()].filter(Boolean).join(" ").trim();
 }
 
 function buildManagerEmployeeFromTask(task: TaskItem): ManagerEmployee | null {
@@ -974,6 +974,20 @@ export default function ManagerScreen({
                       size={20}
                     />
                   </PressableScale>
+                  <PressableScale
+                    accessibilityLabel={
+                      language === "ru" ? "Локации" : "Locations"
+                    }
+                    className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/80"
+                    haptic="selection"
+                    onPress={() => router.push("/locations" as never)}
+                  >
+                    <Ionicons
+                      color="#1f2937"
+                      name="location-outline"
+                      size={20}
+                    />
+                  </PressableScale>
 
                   <Button
                     className="rounded-full border-white/80 bg-white/80 px-5"
@@ -1039,14 +1053,14 @@ export default function ManagerScreen({
                           ) : (
                             <View className="h-14 w-14 items-center justify-center rounded-2xl bg-[#eef2ff]">
                               <Text className="text-[16px] font-extrabold text-foreground">
-                                {item.employee.firstName.charAt(0)}
                                 {item.employee.lastName.charAt(0)}
+                                {item.employee.firstName.charAt(0)}
                               </Text>
                             </View>
                           )}
                           <View className="flex-1">
                             <Text className="font-display text-[20px] font-bold text-foreground">
-                              {item.employee.firstName} {item.employee.lastName}
+                              {item.employee.lastName} {item.employee.firstName}
                             </Text>
                             <Text className="mt-1 text-[14px] leading-5 text-[#7b8798]">
                               {getEmployeeMetaLabel(item.employee)}

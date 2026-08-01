@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { AttendanceSessionStatus, Prisma, ShiftStatus, UserStatus } from '@prisma/client';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
 import { HITEAM_SHIFT_SOURCE } from '../altegio-sync/altegio-sync.helpers';
@@ -79,6 +79,7 @@ function isPrismaUniqueConstraintError(error: unknown) {
 
 const LOCATION_SELECT = {
   id: true,
+  companyId: true,
   name: true,
   address: true,
   latitude: true,
@@ -185,17 +186,103 @@ export class ScheduleService {
     });
   }
 
-  listTemplates(tenantId: string) {
+  private async resolveReadableLocationIds(
+    tenantId: string,
+    actorUserId?: string,
+  ): Promise<string[] | null> {
+    if (!actorUserId) return null;
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId: actorUserId },
+      select: {
+        scopeId: true,
+        scopeType: true,
+        role: { select: { code: true } },
+      },
+    });
+    if (
+      assignments.some(
+        ({ role, scopeId, scopeType }) =>
+          WORKSPACE_MANAGER_ROLE_CODES.includes(
+            role.code as (typeof WORKSPACE_MANAGER_ROLE_CODES)[number],
+          ) &&
+          scopeType === 'tenant' &&
+          scopeId === tenantId,
+      )
+    ) {
+      return null;
+    }
+
+    const companyIds = assignments
+      .filter(
+        ({ role, scopeType }) =>
+          role.code === 'manager' && scopeType === 'company',
+      )
+      .map(({ scopeId }) => scopeId);
+    const locationIds = assignments
+      .filter(
+        ({ role, scopeType }) =>
+          role.code === 'manager' && scopeType === 'location',
+      )
+      .map(({ scopeId }) => scopeId);
+    if (companyIds.length > 0) {
+      const companyLocations = await this.prisma.location.findMany({
+        where: { tenantId, companyId: { in: companyIds }, archivedAt: null },
+        select: { id: true },
+      });
+      locationIds.push(...companyLocations.map(({ id }) => id));
+    }
+    return [...new Set(locationIds)];
+  }
+
+  private async assertLocationReadable(
+    tenantId: string,
+    actorUserId: string,
+    locationId: string,
+  ) {
+    const readableLocationIds = await this.resolveReadableLocationIds(
+      tenantId,
+      actorUserId,
+    );
+    if (
+      readableLocationIds &&
+      !readableLocationIds.includes(locationId)
+    ) {
+      throw new ForbiddenException(
+        'You cannot manage schedules for this location.',
+      );
+    }
+  }
+
+  async listTemplates(tenantId: string, actorUserId?: string) {
+    const readableLocationIds = await this.resolveReadableLocationIds(
+      tenantId,
+      actorUserId,
+    );
     return this.prisma.shiftTemplate.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(readableLocationIds
+          ? { locationId: { in: readableLocationIds } }
+          : {}),
+      },
       select: SHIFT_TEMPLATE_SELECT,
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  listShifts(tenantId: string) {
+  async listShifts(tenantId: string, actorUserId?: string) {
+    const readableLocationIds = await this.resolveReadableLocationIds(
+      tenantId,
+      actorUserId,
+    );
     return this.prisma.shift.findMany({
-      where: { tenantId, status: { not: ShiftStatus.CANCELLED } },
+      where: {
+        tenantId,
+        status: { not: ShiftStatus.CANCELLED },
+        ...(readableLocationIds
+          ? { locationId: { in: readableLocationIds } }
+          : {}),
+      },
       select: SHIFT_SELECT,
       orderBy: [{ shiftDate: 'desc' }, { startsAt: 'asc' }],
       take: 50,
@@ -218,7 +305,15 @@ export class ScheduleService {
         : null;
     const codeSeed = dto.code?.trim() || dto.name;
     let code = await this.generateTemplateCode(tenantId, codeSeed);
-    const locationId = dto.locationId || (await this.resolveDefaultLocationId(tenantId));
+    const readableLocationIds = await this.resolveReadableLocationIds(
+      tenantId,
+      actorUserId,
+    );
+    const locationId =
+      dto.locationId ||
+      readableLocationIds?.[0] ||
+      (await this.resolveDefaultLocationId(tenantId));
+    await this.assertLocationReadable(tenantId, actorUserId, locationId);
     const positionId = dto.positionId || (await this.resolveDefaultPositionId(tenantId));
     const fixedBreak = this.normalizeFixedBreak(
       dto.fixedBreakStartsAtLocal,
@@ -292,19 +387,49 @@ export class ScheduleService {
         fixedBreakStartsAtLocal: true,
         fixedBreakDurationMinutes: true,
         fixedBreakIsPaid: true,
+        location: {
+          select: {
+            id: true,
+            companyId: true,
+            name: true,
+          },
+        },
       },
     });
 
     if (!template) {
       throw new NotFoundException('Shift template not found.');
     }
+    await this.assertLocationReadable(
+      tenantId,
+      actorUserId,
+      template.locationId,
+    );
 
     const employee = await this.prisma.employee.findFirst({
       where: { tenantId, id: dto.employeeId },
+      include: {
+        locationAssignments: {
+          where: {
+            locationId: template.locationId,
+            unassignedAt: null,
+          },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');
+    }
+    if (
+      employee.primaryLocationId !== template.locationId &&
+      employee.locationAssignments.length === 0
+    ) {
+      throw new BadRequestException(
+        'Employee is not assigned to the template location.',
+      );
     }
 
     const shiftDate = new Date(dto.shiftDate);
@@ -349,9 +474,12 @@ export class ScheduleService {
       metadata: {
         employeeId: employee.id,
         employeeIds: [employee.id],
-        employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+        employeeName: `${employee.lastName} ${employee.firstName}`.trim(),
         templateId: template.id,
         templateName: template.name,
+        companyId: template.location.companyId,
+        locationId: template.location.id,
+        locationName: template.location.name,
         shiftDate: shiftDate.toISOString(),
         startsAt: shift.startsAt.toISOString(),
         endsAt: shift.endsAt.toISOString(),
@@ -381,6 +509,11 @@ export class ScheduleService {
     if (!existingShift) {
       throw new NotFoundException('Shift not found.');
     }
+    await this.assertLocationReadable(
+      tenantId,
+      actorUserId,
+      existingShift.location.id,
+    );
 
     if (existingShift.status === ShiftStatus.CANCELLED) {
       throw new BadRequestException('Cancelled shift cannot be edited.');
@@ -398,20 +531,49 @@ export class ScheduleService {
         fixedBreakStartsAtLocal: true,
         fixedBreakDurationMinutes: true,
         fixedBreakIsPaid: true,
+        location: {
+          select: {
+            id: true,
+            companyId: true,
+            name: true,
+          },
+        },
       },
     });
 
     if (!template) {
       throw new NotFoundException('Shift template not found.');
     }
+    await this.assertLocationReadable(
+      tenantId,
+      actorUserId,
+      template.locationId,
+    );
 
     const employee = await this.prisma.employee.findFirst({
       where: { tenantId, id: dto.employeeId ?? existingShift.employeeId },
-      select: { id: true, firstName: true, lastName: true },
+      include: {
+        locationAssignments: {
+          where: {
+            locationId: template.locationId,
+            unassignedAt: null,
+          },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
     if (!employee) {
       throw new NotFoundException('Employee not found.');
+    }
+    if (
+      employee.primaryLocationId !== template.locationId &&
+      employee.locationAssignments.length === 0
+    ) {
+      throw new BadRequestException(
+        'Employee is not assigned to the template location.',
+      );
     }
 
     const shiftDate = dto.shiftDate
@@ -468,9 +630,12 @@ export class ScheduleService {
       metadata: {
         employeeId: employee.id,
         employeeIds: [employee.id],
-        employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+        employeeName: `${employee.lastName} ${employee.firstName}`.trim(),
         templateId: template.id,
         templateName: template.name,
+        companyId: template.location.companyId,
+        locationId: template.location.id,
+        locationName: template.location.name,
         shiftDate: shiftDate.toISOString(),
       },
     });
@@ -508,6 +673,17 @@ export class ScheduleService {
 
     if (!existingShift) {
       throw new NotFoundException('Shift not found.');
+    }
+    const existingLocation = await this.prisma.shift.findUnique({
+      where: { id: existingShift.id },
+      select: { locationId: true },
+    });
+    if (existingLocation) {
+      await this.assertLocationReadable(
+        tenantId,
+        actorUserId,
+        existingLocation.locationId,
+      );
     }
 
     if (existingShift.attendanceSessions.length > 0) {

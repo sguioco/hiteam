@@ -45,7 +45,7 @@ export function ParticipantAvatarStrip({
             />
           ) : (
             <Text className="text-[10px] font-extrabold text-[#566df6]">
-              {`${participant.firstName.charAt(0)}${participant.lastName.charAt(0)}`.toUpperCase()}
+              {`${participant.lastName.charAt(0)}${participant.firstName.charAt(0)}`.toUpperCase()}
             </Text>
           )}
         </View>

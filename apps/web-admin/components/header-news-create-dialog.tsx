@@ -1102,7 +1102,7 @@ export function HeaderNewsCreateDialog({
                                   }
                                 />
                                 <span className="min-w-0 text-sm font-medium text-[color:var(--foreground)]">
-                                  {employee.firstName} {employee.lastName}
+                                  {employee.lastName} {employee.firstName}
                                 </span>
                               </label>
                             );

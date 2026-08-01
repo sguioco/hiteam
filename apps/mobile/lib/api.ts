@@ -60,6 +60,7 @@ const API_REQUEST_TIMEOUT_MS = 20_000;
 const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
 const API_REQUEST_RETRY_DELAY_MS = 450;
 const DEVICE_BOOTSTRAP_TTL_MS = 60 * 60_000;
+let activeApiLanguage: AppLanguage | null = null;
 
 type BackendLocale = "en" | "ru";
 
@@ -97,6 +98,7 @@ export type MobileOrganizationSetup = {
   configured: boolean;
   defaultGeofenceRadiusMeters: number;
   location: {
+    id?: string;
     address: string;
     country?: string | null;
     geofenceRadiusMeters?: number | null;
@@ -119,6 +121,36 @@ export type SaveMobileOrganizationSetupInput = {
   longitude: number;
   mode: "create" | "update";
   timezone: string;
+};
+
+export type MobileCompany = {
+  id: string;
+  name: string;
+  code: string;
+  logoUrl?: string | null;
+  googlePlaceId?: string | null;
+  archivedAt?: string | null;
+  _count?: {
+    employees: number;
+    locations: number;
+  };
+};
+
+export type MobileWorkLocation = {
+  id: string;
+  companyId: string;
+  name: string;
+  code: string;
+  address: string;
+  country?: string | null;
+  latitude: number;
+  longitude: number;
+  geofenceRadiusMeters: number;
+  timezone: string;
+  archivedAt?: string | null;
+  _count?: {
+    employeeAssignments: number;
+  };
 };
 
 let cachedSession: AppSession | null = null;
@@ -164,6 +196,10 @@ function toBackendLocale(language?: AppLanguage | null): BackendLocale {
 }
 
 function getRuntimeBackendLocale(): BackendLocale {
+  if (activeApiLanguage) {
+    return toBackendLocale(activeApiLanguage);
+  }
+
   if (cachedSession?.user.preferredLocale === "ru") {
     return "ru";
   }
@@ -175,6 +211,10 @@ function getRuntimeBackendLocale(): BackendLocale {
   } catch {
     return "en";
   }
+}
+
+export function setApiLanguage(language: AppLanguage) {
+  activeApiLanguage = language;
 }
 
 function getGenericServerErrorMessage(status: number) {
@@ -193,6 +233,60 @@ function getGenericServerErrorMessage(status: number) {
 
 function isRawInternalServerError(message: string) {
   return message.trim().toLowerCase() === "internal server error";
+}
+
+function humanizeValidationMessage(message: string, locale: BackendLocale) {
+  const trimmed = message.trim();
+  const fieldLabels = {
+    password: locale === "ru" ? "пароль" : "password",
+    firstName: locale === "ru" ? "имя" : "first name",
+    lastName: locale === "ru" ? "фамилию" : "last name",
+    middleName: locale === "ru" ? "отчество" : "middle name",
+    birthDate: locale === "ru" ? "дату рождения" : "birth date",
+    gender: locale === "ru" ? "пол" : "gender",
+    phone: locale === "ru" ? "телефон" : "phone number",
+    email: "email",
+  } as const;
+  const requiredMatch = trimmed.match(/^(\w+) (?:should not be empty|must be a string)$/);
+  if (requiredMatch) {
+    const label = fieldLabels[requiredMatch[1] as keyof typeof fieldLabels];
+    if (label) {
+      return locale === "ru" ? `Укажите ${label}` : `Enter ${label}`;
+    }
+  }
+
+  const minLengthMatch = trimmed.match(
+    /^(\w+) must be longer than or equal to (\d+) characters$/,
+  );
+  if (minLengthMatch) {
+    const [, field, rawLength] = minLengthMatch;
+    const label = fieldLabels[field as keyof typeof fieldLabels];
+    if (label) {
+      return locale === "ru"
+        ? field === "password"
+          ? `Пароль должен содержать минимум ${rawLength} символов`
+          : `Значение поля «${label}» должно содержать минимум ${rawLength} символов`
+        : `${field === "password" ? "Password" : label.charAt(0).toUpperCase() + label.slice(1)} must contain at least ${rawLength} characters`;
+    }
+  }
+
+  if (/^\w+ must be an email$/.test(trimmed)) {
+    return locale === "ru"
+      ? "Укажите корректный email"
+      : "Enter a valid email address";
+  }
+
+  if (/^birthDate must be a valid ISO 8601 date string$/.test(trimmed)) {
+    return locale === "ru"
+      ? "Укажите корректную дату рождения"
+      : "Enter a valid birth date";
+  }
+
+  if (/^gender must be one of the following values:/.test(trimmed)) {
+    return locale === "ru" ? "Выберите пол" : "Select gender";
+  }
+
+  return trimmed;
 }
 
 function humanizeApiMessage(message: string) {
@@ -245,8 +339,23 @@ function humanizeApiMessage(message: string) {
       return locale === "ru"
         ? "Сервис проверки лица временно недоступен. Попробуй ещё раз через минуту."
         : message;
-    default:
-      return message;
+    default: {
+      const humanizedMessage = humanizeValidationMessage(message, locale);
+
+      if (locale === "en" && /[А-Яа-яЁё]/.test(humanizedMessage)) {
+        return "Unable to complete the request. Check the entered data and try again.";
+      }
+
+      if (
+        locale === "ru" &&
+        !/[А-Яа-яЁё]/.test(humanizedMessage) &&
+        /[A-Za-z]{3,}/.test(humanizedMessage)
+      ) {
+        return "Не удалось выполнить запрос. Проверьте введённые данные и попробуйте ещё раз.";
+      }
+
+      return humanizedMessage;
+    }
   }
 }
 
@@ -477,7 +586,9 @@ async function readErrorMessage(response: Response, fallbackMessage: string) {
     };
 
     if (Array.isArray(parsed.message) && parsed.message.length > 0) {
-      return parsed.message.join(", ");
+      return Array.from(
+        new Set(parsed.message.map((message) => humanizeApiMessage(message))),
+      ).join(". ");
     }
 
     if (typeof parsed.message === "string" && parsed.message.trim()) {
@@ -605,6 +716,7 @@ export async function getDemoSession(): Promise<AppSession> {
     return restoredSession;
   }
 
+  handleUnauthorized();
   throw new Error("Not authenticated. Sign in again.");
 }
 
@@ -733,6 +845,77 @@ export async function saveMobileOrganizationSetup(
   });
 }
 
+export async function loadMobileCompanies() {
+  return authRequest<MobileCompany[]>("/org/companies");
+}
+
+export async function loadMobileLocations(companyId?: string) {
+  const query = companyId
+    ? `?companyId=${encodeURIComponent(companyId)}`
+    : "";
+  return authRequest<MobileWorkLocation[]>(`/org/locations${query}`);
+}
+
+export async function createMobileCompany(payload: { name: string }) {
+  return authRequest<MobileCompany>("/org/companies", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createMobileLocation(payload: {
+  companyId: string;
+  name: string;
+  code: string;
+  address: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  geofenceRadiusMeters?: number;
+  timezone: string;
+  employeeIds?: string[];
+}) {
+  return authRequest<MobileWorkLocation>("/org/locations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function assignMobileLocationEmployees(
+  locationId: string,
+  payload: {
+    employeeIds: string[];
+    makePrimary?: boolean;
+    reason?: string;
+  },
+) {
+  return authRequest<{
+    updated: number;
+    companyId: string;
+    locationId: string;
+  }>(`/org/locations/${locationId}/employees`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function transferMobileEmployeeLocation(
+  employeeId: string,
+  payload: {
+    locationId: string;
+    reason?: string;
+    futureShiftStrategy?: "keep" | "cancel";
+  },
+) {
+  return authRequest<ManagerEmployeeItem>(
+    `/employees/${employeeId}/location`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function createManagerTeam(payload: {
   avatarEmoji?: string;
   description?: string;
@@ -772,6 +955,7 @@ export async function requestPasswordReset(
 }
 
 export async function updatePreferredLocale(language: AppLanguage) {
+  setApiLanguage(language);
   const preferredLocale = toBackendLocale(language);
   const existingSession = cachedSession ?? (await readPersistedSession());
 
@@ -1280,6 +1464,7 @@ function normalizeManagerEmployee(emp: any): ManagerEmployeeItem {
 export async function loadManagerScheduleBootstrap(query?: {
   dateFrom?: string;
   dateTo?: string;
+  locationId?: string;
 }): Promise<ManagerScheduleBootstrapResponse<ManagerEmployeeItem>> {
   const searchParams = new URLSearchParams();
 
@@ -1289,6 +1474,9 @@ export async function loadManagerScheduleBootstrap(query?: {
 
   if (query?.dateTo) {
     searchParams.set("dateTo", query.dateTo);
+  }
+  if (query?.locationId) {
+    searchParams.set("locationId", query.locationId);
   }
 
   const suffix = searchParams.toString();
@@ -1335,6 +1523,7 @@ export async function createManagerShiftTemplate(payload: {
   fixedBreakStartsAtLocal?: string;
   fixedBreakDurationMinutes?: number;
   fixedBreakIsPaid?: boolean;
+  locationId?: string;
 }) {
   return authRequest<ManagerShiftTemplateItem>("/schedule/templates", {
     method: "POST",
@@ -1967,6 +2156,7 @@ export async function loadCollaborationBootstrap(query?: {
 export async function loadManagerTasksBootstrap(query?: {
   dateFrom?: string;
   dateTo?: string;
+  locationId?: string;
 }): Promise<ManagerTasksBootstrapResponse<ManagerEmployeeItem>> {
   const searchParams = new URLSearchParams();
 
@@ -1976,6 +2166,9 @@ export async function loadManagerTasksBootstrap(query?: {
 
   if (query?.dateTo) {
     searchParams.set("dateTo", query.dateTo);
+  }
+  if (query?.locationId) {
+    searchParams.set("locationId", query.locationId);
   }
 
   const suffix = searchParams.toString();

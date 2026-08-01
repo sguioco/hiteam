@@ -1,4 +1,11 @@
-import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { MIN_GEOFENCE_RADIUS_METERS } from '../geofence-radius';
 
 export class CreateLocationDto {
@@ -11,6 +18,10 @@ export class CreateLocationDto {
 
   @IsString()
   address!: string;
+
+  @IsOptional()
+  @IsString()
+  country?: string;
 
   @IsNumber()
   latitude!: number;
@@ -28,4 +39,9 @@ export class CreateLocationDto {
 
   @IsString()
   timezone!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  employeeIds?: string[];
 }

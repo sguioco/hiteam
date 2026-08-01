@@ -11,7 +11,6 @@ import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
 import {
   readBrowserStorageItem,
-  removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from '@/lib/browser-storage';
 import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
@@ -176,12 +175,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   }, []);
 
   useEffect(() => {
-    if (lang === 'en') {
-      removeBrowserStorageItem('smart-admin-locale');
-      return;
-    }
-
+    document.documentElement.lang = lang;
     writeBrowserStorageItem('smart-admin-locale', lang);
+    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
   }, [lang]);
 
   async function handleSubmit(event: React.FormEvent) {

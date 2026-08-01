@@ -8,6 +8,13 @@ import { DateRangePicker } from "@/components/application/date-picker/date-range
 import { AdminShell } from "@/components/admin-shell";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ActivityTargetAvatars,
   type DashboardActivityItem,
   formatTimeLabel,
@@ -32,6 +39,11 @@ export type ActivityPageInitialData = {
 type ActivityDateRange = {
   dateFrom: string;
   dateTo: string;
+};
+type ActivityScopeOption = {
+  id: string;
+  name: string;
+  companyId?: string;
 };
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -111,11 +123,21 @@ function formatDayHeader(value: string) {
   };
 }
 
-function buildActivityBootstrapPath(range: ActivityDateRange) {
+function buildActivityBootstrapPath(
+  range: ActivityDateRange,
+  companyId?: string,
+  locationId?: string,
+) {
   const searchParams = new URLSearchParams({
     dateFrom: range.dateFrom,
     dateTo: range.dateTo,
   });
+  if (companyId && companyId !== "all") {
+    searchParams.set("companyId", companyId);
+  }
+  if (locationId && locationId !== "all") {
+    searchParams.set("locationId", locationId);
+  }
 
   return `/bootstrap/activity?${searchParams.toString()}`;
 }
@@ -132,10 +154,12 @@ function buildDashboardBootstrapPath(range: ActivityDateRange) {
 async function fetchActivitySnapshot(
   token: string,
   range: ActivityDateRange,
+  companyId?: string,
+  locationId?: string,
 ): Promise<ActivityPageInitialData> {
   try {
     return await apiRequest<ActivityPageInitialData>(
-      buildActivityBootstrapPath(range),
+      buildActivityBootstrapPath(range, companyId, locationId),
       { token },
     );
   } catch {
@@ -214,6 +238,7 @@ function ActivityFeedItem({
                 {formatTimeLabel(item.createdAt, locale)}
               </time>
               {item.context ? <span>{item.context}</span> : null}
+              {item.locationName ? <span>{item.locationName}</span> : null}
             </div>
           </div>
         </div>
@@ -243,6 +268,10 @@ export default function ActivityPageClient({
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<ActivityScopeOption[]>([]);
+  const [locations, setLocations] = useState<ActivityScopeOption[]>([]);
+  const [companyId, setCompanyId] = useState("all");
+  const [locationId, setLocationId] = useState("all");
   const didUseInitialData = useRef(Boolean(initialData));
 
   useEffect(() => {
@@ -270,7 +299,12 @@ export default function ActivityPageClient({
     setLoading(true);
     setError(null);
 
-    void fetchActivitySnapshot(session.accessToken, { dateFrom, dateTo })
+    void fetchActivitySnapshot(
+      session.accessToken,
+      { dateFrom, dateTo },
+      companyId,
+      locationId,
+    )
       .then((snapshot) => {
         setItems(snapshot.items ?? []);
         setCollapsedDays(new Set());
@@ -290,7 +324,25 @@ export default function ActivityPageClient({
       .finally(() => {
         setLoading(false);
       });
-  }, [dateFrom, dateTo, initialData, locale]);
+  }, [companyId, dateFrom, dateTo, initialData, locale, locationId]);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session) return;
+    void Promise.all([
+      apiRequest<ActivityScopeOption[]>("/org/companies", {
+        token: session.accessToken,
+      }),
+      apiRequest<ActivityScopeOption[]>("/org/locations", {
+        token: session.accessToken,
+      }),
+    ])
+      .then(([nextCompanies, nextLocations]) => {
+        setCompanies(nextCompanies);
+        setLocations(nextLocations);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const groupedItems = useMemo(() => {
     const rangeStart = parseDateKey(dateFrom);
@@ -431,6 +483,62 @@ export default function ActivityPageClient({
                 </div>
               </div>
             ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              onValueChange={(value) => {
+                setCompanyId(value);
+                setLocationId("all");
+              }}
+              value={companyId}
+            >
+              <SelectTrigger className="h-10 min-w-[180px] rounded-xl">
+                <SelectValue
+                  placeholder={localize(
+                    locale,
+                    "Все организации",
+                    "All organizations",
+                  )}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {localize(locale, "Все организации", "All organizations")}
+                </SelectItem>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select onValueChange={setLocationId} value={locationId}>
+              <SelectTrigger className="h-10 min-w-[180px] rounded-xl">
+                <SelectValue
+                  placeholder={localize(
+                    locale,
+                    "Все локации",
+                    "All locations",
+                  )}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {localize(locale, "Все локации", "All locations")}
+                </SelectItem>
+                {locations
+                  .filter(
+                    (location) =>
+                      companyId === "all" ||
+                      location.companyId === companyId,
+                  )
+                  .map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
         </section>
 

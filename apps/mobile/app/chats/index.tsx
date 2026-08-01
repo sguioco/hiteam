@@ -136,7 +136,7 @@ export default function ChatsScreen() {
             const title =
               thread.title ??
               thread.group?.name ??
-              thread.participants.map((participant) => `${participant.employee.firstName} ${participant.employee.lastName}`).join(', ');
+              thread.participants.map((participant) => `${participant.employee.lastName} ${participant.employee.firstName}`).join(', ');
 
             return (
               <Pressable
@@ -163,7 +163,7 @@ export default function ChatsScreen() {
             {selected.messages.map((message) => (
               <View key={message.id} className="gap-1 border-t border-[#d3cbbd] pt-3">
                 <Text className="text-[15px] font-bold text-foreground">
-                  {message.authorEmployee.firstName} {message.authorEmployee.lastName}
+                  {message.authorEmployee.lastName} {message.authorEmployee.firstName}
                 </Text>
                 <Text className="text-[15px] leading-6 text-foreground">{message.body}</Text>
               </View>

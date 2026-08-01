@@ -40,6 +40,9 @@ type ActivityShiftRef = {
   shiftDate: string;
   startsAt: string;
   endsAt: string;
+  companyId: string;
+  locationId: string;
+  locationName: string;
 };
 
 type ActivityAnnouncementRef = {
@@ -80,12 +83,17 @@ export type CompanyActivityItem = {
   context: string | null;
   targetLabel: string | null;
   targetEmployees: ActivityPerson[];
+  companyId?: string | null;
+  locationId?: string | null;
+  locationName?: string | null;
 };
 
 type CompanyActivityListOptions = {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+  companyId?: string;
+  locationId?: string;
   visibilityScope?: ActivityVisibilityScope;
 };
 
@@ -378,6 +386,13 @@ export class AuditService {
                     name: true,
                   },
                 },
+                location: {
+                  select: {
+                    id: true,
+                    companyId: true,
+                    name: true,
+                  },
+                },
               },
             })
           : [],
@@ -465,6 +480,9 @@ export class AuditService {
           shiftDate: shift.shiftDate.toISOString(),
           startsAt: shift.startsAt.toISOString(),
           endsAt: shift.endsAt.toISOString(),
+          companyId: shift.location.companyId,
+          locationId: shift.location.id,
+          locationName: shift.location.name,
         },
       ]),
     );
@@ -516,7 +534,36 @@ export class AuditService {
           return null;
         }
 
-        return item;
+        const shiftId =
+          this.readString(metadata.shiftId) ??
+          (log.action === 'schedule.shift_created' ? log.entityId : null);
+        const shift = shiftId ? refs.shiftMap.get(shiftId) ?? null : null;
+        const scopedItem: CompanyActivityItem = {
+          ...item,
+          companyId:
+            this.readString(metadata.companyId) ?? shift?.companyId ?? null,
+          locationId:
+            this.readString(metadata.locationId) ?? shift?.locationId ?? null,
+          locationName:
+            this.readString(metadata.locationName) ??
+            shift?.locationName ??
+            null,
+        };
+
+        if (
+          options?.companyId &&
+          scopedItem.companyId !== options.companyId
+        ) {
+          return null;
+        }
+        if (
+          options?.locationId &&
+          scopedItem.locationId !== options.locationId
+        ) {
+          return null;
+        }
+
+        return scopedItem;
       })
       .filter((item): item is CompanyActivityItem => Boolean(item))
       .slice(0, limit);
@@ -890,7 +937,7 @@ export class AuditService {
     lastName: string;
     avatarUrl: string | null;
   }): ActivityPerson {
-    const displayName = `${employee.firstName} ${employee.lastName}`.trim();
+    const displayName = `${employee.lastName} ${employee.firstName}`.trim();
 
     return {
       id: employee.id,

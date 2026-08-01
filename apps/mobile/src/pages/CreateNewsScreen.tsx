@@ -335,8 +335,8 @@ export default function CreateNewsScreen() {
   const orderedEmployees = useMemo(
     () =>
       [...employees].sort((left, right) =>
-        `${left.firstName} ${left.lastName}`.localeCompare(
-          `${right.firstName} ${right.lastName}`,
+        `${left.lastName} ${left.firstName}`.localeCompare(
+          `${right.lastName} ${right.firstName}`,
           locale,
         ),
       ),
@@ -377,8 +377,8 @@ export default function CreateNewsScreen() {
     });
 
     return Array.from(selectedById.values()).sort((left, right) =>
-      `${left.firstName} ${left.lastName}`.localeCompare(
-        `${right.firstName} ${right.lastName}`,
+      `${left.lastName} ${left.firstName}`.localeCompare(
+        `${right.lastName} ${right.firstName}`,
         locale,
       ),
     );
@@ -576,7 +576,7 @@ export default function CreateNewsScreen() {
           <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
           <View className="flex-1">
             <Text className="text-[14px] font-semibold text-foreground">
-              {employee.firstName} {employee.lastName}
+              {employee.lastName} {employee.firstName}
             </Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">{subtitle}</Text>
           </View>
@@ -1685,7 +1685,7 @@ export default function CreateNewsScreen() {
                       <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
                       <View className="flex-1">
                         <Text className="text-[14px] font-semibold text-foreground">
-                          {employee.firstName} {employee.lastName}
+                          {employee.lastName} {employee.firstName}
                         </Text>
                         <Text className="text-[12px] text-muted-foreground">
                           {getEmployeeSubtitle(employee)}

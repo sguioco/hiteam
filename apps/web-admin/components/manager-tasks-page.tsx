@@ -251,7 +251,7 @@ function getEmployeeName(
   }
 
   return localizePersonName(
-    `${employee.firstName} ${employee.lastName}`.trim(),
+    `${employee.lastName} ${employee.firstName}`.trim(),
     "en",
   );
 }

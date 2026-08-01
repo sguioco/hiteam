@@ -216,6 +216,86 @@ function resolveSidebarRoleLabel(roleCodes: string[], locale: Locale) {
   return locale === "ru" ? "Пользователь" : "User";
 }
 
+function LocaleFlagIcon({ locale }: { locale: Locale }) {
+  if (locale === "ru") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="sidebar-flag-icon"
+        focusable="false"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <clipPath id="sidebar-flag-ru-clip">
+            <circle cx="12" cy="12" r="12" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#sidebar-flag-ru-clip)">
+          <rect fill="#fff" height="8" width="24" x="0" y="0" />
+          <rect fill="#1451b8" height="8" width="24" x="0" y="8" />
+          <rect fill="#d52b1e" height="8" width="24" x="0" y="16" />
+        </g>
+        <circle
+          cx="12"
+          cy="12"
+          fill="none"
+          r="11.5"
+          stroke="rgba(0,0,0,0.12)"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="sidebar-flag-icon"
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <defs>
+        <clipPath id="sidebar-flag-en-clip">
+          <circle cx="12" cy="12" r="12" />
+        </clipPath>
+      </defs>
+      <g clipPath="url(#sidebar-flag-en-clip)">
+        <rect fill="#012169" height="24" width="24" />
+        <path
+          d="M0 0 24 24M24 0 0 24"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="5.5"
+        />
+        <path
+          d="M0 0 24 24M24 0 0 24"
+          fill="none"
+          stroke="#c8102e"
+          strokeWidth="2.2"
+        />
+        <path
+          d="M12 0v24M0 12h24"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="7"
+        />
+        <path
+          d="M12 0v24M0 12h24"
+          fill="none"
+          stroke="#c8102e"
+          strokeWidth="4"
+        />
+      </g>
+      <circle
+        cx="12"
+        cy="12"
+        fill="none"
+        r="11.5"
+        stroke="rgba(0,0,0,0.12)"
+      />
+    </svg>
+  );
+}
+
 function resolveDemoHeaderBrand(
   email: string | undefined,
   locale: Locale,
@@ -367,10 +447,9 @@ export function AdminShell({
   const languageOptions: Array<{
     value: Locale;
     label: string;
-    icon: string;
   }> = [
-    { value: "ru", label: "Русский", icon: "/ru.png" },
-    { value: "en", label: "English", icon: "/en.png" },
+    { value: "ru", label: "Русский" },
+    { value: "en", label: "English" },
   ];
   const profileAvatarScope =
     session?.user.email ?? initialSession?.user.email ?? null;
@@ -1519,11 +1598,7 @@ export function AdminShell({
                         title={option.label}
                         type="button"
                       >
-                        <img
-                          alt={option.label}
-                          className="sidebar-flag-icon"
-                          src={option.icon}
-                        />
+                        <LocaleFlagIcon locale={option.value} />
                       </button>
                     ))}
                   </div>

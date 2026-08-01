@@ -17,7 +17,7 @@ export class ScheduleController {
   @Roles('tenant_owner', 'operations_admin', 'manager', 'hr_admin')
   @Get('templates')
   templates(@CurrentUser() user: JwtUser) {
-    return this.scheduleService.listTemplates(user.tenantId);
+    return this.scheduleService.listTemplates(user.tenantId, user.sub);
   }
 
   @Roles('tenant_owner', 'operations_admin', 'manager', 'hr_admin')
@@ -29,7 +29,7 @@ export class ScheduleController {
   @Roles('tenant_owner', 'operations_admin', 'manager', 'hr_admin')
   @Get('shifts')
   shifts(@CurrentUser() user: JwtUser) {
-    return this.scheduleService.listShifts(user.tenantId);
+    return this.scheduleService.listShifts(user.tenantId, user.sub);
   }
 
   @Roles('tenant_owner', 'operations_admin', 'manager', 'hr_admin')

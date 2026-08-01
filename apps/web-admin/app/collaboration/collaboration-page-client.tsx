@@ -320,7 +320,7 @@ export default function CollaborationPageClient({
             <div className="detail-list">
               <div className="detail-row">
                 <span>{t('collaboration.assignToEmployee')}</span>
-                <strong>{task.assigneeEmployee ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}` : '—'}</strong>
+                <strong>{task.assigneeEmployee ? `${task.assigneeEmployee.lastName} ${task.assigneeEmployee.firstName}` : '—'}</strong>
               </div>
               <div className="detail-row">
                 <span>{t('collaboration.dueAt')}</span>
@@ -970,7 +970,7 @@ export default function CollaborationPageClient({
                 {analytics.employeePerformance.map((item) => (
                   <div className="table-row table-row-collaboration-leaderboard" key={item.employee?.id ?? `${item.totalTasks}`}>
                     <div>
-                      <strong>{item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '—'}</strong>
+                      <strong>{item.employee ? `${item.employee.lastName} ${item.employee.firstName}` : '—'}</strong>
                       <p>{item.employee?.employeeNumber ?? '—'}</p>
                     </div>
                     <div>
@@ -1145,7 +1145,7 @@ export default function CollaborationPageClient({
               value={taskBoardFilters.assigneeEmployeeId}
               emptyLabel={t('collaboration.assignToEmployee')}
               onValueChange={(value) => setTaskBoardFilters((current) => ({ ...current, assigneeEmployeeId: value }))}
-              options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+              options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
             />
             <AppSelectField
               value={taskBoardFilters.departmentId}
@@ -1200,7 +1200,7 @@ export default function CollaborationPageClient({
                   <div className="detail-list">
                     <div className="detail-row">
                       <span>{t('collaboration.assignToEmployee')}</span>
-                      <strong>{task.assigneeEmployee ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}` : '—'}</strong>
+                      <strong>{task.assigneeEmployee ? `${task.assigneeEmployee.lastName} ${task.assigneeEmployee.firstName}` : '—'}</strong>
                     </div>
                     <div className="detail-row">
                       <span>{t('organization.departments')}</span>
@@ -1246,7 +1246,7 @@ export default function CollaborationPageClient({
                       onChange={() => setGroupDraft((current) => ({ ...current, memberEmployeeIds: toggleEmployeeSelection(current.memberEmployeeIds, employee.id) }))}
                       type="checkbox"
                     />
-                    <span>{employee.firstName} {employee.lastName}</span>
+                    <span>{employee.lastName} {employee.firstName}</span>
                   </label>
                 ))}
               </div>
@@ -1280,7 +1280,7 @@ export default function CollaborationPageClient({
                   value={taskDraft.assigneeEmployeeId}
                   emptyLabel={t('collaboration.assignToEmployee')}
                   onValueChange={(value) => setTaskDraft((current) => ({ ...current, assigneeEmployeeId: value }))}
-                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
                 />
               )}
               <AppSelectField
@@ -1409,7 +1409,7 @@ export default function CollaborationPageClient({
                   value={templateDraft.assigneeEmployeeId}
                   emptyLabel={t('collaboration.assignToEmployee')}
                   onValueChange={(value) => setTemplateDraft((current) => ({ ...current, assigneeEmployeeId: value }))}
-                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
                 />
               ) : templateDraft.targetMode === 'department' ? (
                 <AppSelectField
@@ -1578,7 +1578,7 @@ export default function CollaborationPageClient({
                       </div>
                       <div className="detail-row">
                         <span>{t('collaboration.assignToEmployee')}</span>
-                        <strong>{template.assigneeEmployee ? `${template.assigneeEmployee.firstName} ${template.assigneeEmployee.lastName}` : '—'}</strong>
+                        <strong>{template.assigneeEmployee ? `${template.assigneeEmployee.lastName} ${template.assigneeEmployee.firstName}` : '—'}</strong>
                       </div>
                       <div className="detail-row">
                         <span>{t('collaboration.dueAfterDays')}</span>
@@ -1652,7 +1652,7 @@ export default function CollaborationPageClient({
                   value={announcementDraft.targetEmployeeId}
                   emptyLabel={t('collaboration.targetEmployee')}
                   onValueChange={(value) => setAnnouncementDraft((current) => ({ ...current, targetEmployeeId: value }))}
-                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
                 />
               ) : null}
               {announcementDraft.audience === 'DEPARTMENT' ? (
@@ -1743,7 +1743,7 @@ export default function CollaborationPageClient({
                   onValueChange={(value) =>
                     setAnnouncementTemplateDraft((current) => ({ ...current, targetEmployeeId: value }))
                   }
-                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
                 />
               ) : null}
               {announcementTemplateDraft.audience === 'DEPARTMENT' ? (
@@ -1948,7 +1948,7 @@ export default function CollaborationPageClient({
                   value={chatDraft.employeeId}
                   emptyLabel={t('collaboration.assignToEmployee')}
                   onValueChange={(value) => setChatDraft((current) => ({ ...current, employeeId: value }))}
-                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.firstName} ${employee.lastName}` }))}
+                  options={employees.map((employee) => ({ value: employee.id, label: `${employee.lastName} ${employee.firstName}` }))}
                 />
               ) : (
                 <AppSelectField
@@ -2008,7 +2008,7 @@ export default function CollaborationPageClient({
                       {employees.map((employee) => (
                         <label className="action-row" key={`${group.id}-${employee.id}`}>
                           <input checked={(groupMembersDraft[group.id] ?? []).includes(employee.id)} onChange={() => setGroupMembersDraft((current) => ({ ...current, [group.id]: toggleEmployeeSelection(current[group.id] ?? [], employee.id) }))} type="checkbox" />
-                          <span>{employee.firstName} {employee.lastName}</span>
+                          <span>{employee.lastName} {employee.firstName}</span>
                         </label>
                       ))}
                     </div>
@@ -2018,7 +2018,7 @@ export default function CollaborationPageClient({
                         {groupAnalytics.members.map((member) => (
                           <div className="table-row table-row-collaboration-member" key={member.employee.id}>
                             <div>
-                              <strong>{member.employee.firstName} {member.employee.lastName}</strong>
+                              <strong>{member.employee.lastName} {member.employee.firstName}</strong>
                               <p>{member.employee.employeeNumber}</p>
                             </div>
                             <div>
@@ -2094,7 +2094,7 @@ export default function CollaborationPageClient({
                       <span className="status-chip">{task.status}</span>
                     </div>
                     <div className="detail-list">
-                      <div className="detail-row"><span>{t('collaboration.assignToEmployee')}</span><strong>{task.assigneeEmployee?.firstName} {task.assigneeEmployee?.lastName}</strong></div>
+                      <div className="detail-row"><span>{t('collaboration.assignToEmployee')}</span><strong>{task.assigneeEmployee?.lastName} {task.assigneeEmployee?.firstName}</strong></div>
                       <div className="detail-row"><span>{t('collaboration.assignToGroup')}</span><strong>{task.group?.name ?? '—'}</strong></div>
                     </div>
                   </article>
@@ -2135,7 +2135,7 @@ export default function CollaborationPageClient({
               <div className="section-stack">
                 {chats.map((chat) => (
                   <button className="ghost-button" key={chat.id} onClick={() => setSelectedChatId(chat.id)} type="button">
-                    {chat.title ?? chat.participants.map((participant) => `${participant.employee.firstName} ${participant.employee.lastName}`).join(', ')}
+                    {chat.title ?? chat.participants.map((participant) => `${participant.employee.lastName} ${participant.employee.firstName}`).join(', ')}
                     {chat.unreadCount ? ` (${chat.unreadCount})` : ''}
                   </button>
                 ))}
@@ -2152,7 +2152,7 @@ export default function CollaborationPageClient({
                 <div className="section-stack compact-stack">
                   {selectedChat.messages.map((item) => (
                     <div className="timeline-item" key={item.id}>
-                      <strong>{item.authorEmployee.firstName} {item.authorEmployee.lastName}</strong>
+                      <strong>{item.authorEmployee.lastName} {item.authorEmployee.firstName}</strong>
                       <span>{item.body}</span>
                     </div>
                   ))}

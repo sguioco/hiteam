@@ -273,7 +273,7 @@ export default function CreateTaskScreen() {
     return [...employees].sort((left, right) => {
       if (left.id === preselectedEmployeeId) return -1;
       if (right.id === preselectedEmployeeId) return 1;
-      return `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`);
+      return `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`);
     });
   }, [employees, preselectedEmployeeId]);
 
@@ -302,7 +302,7 @@ export default function CreateTaskScreen() {
     });
 
     return Array.from(selectedById.values()).sort((left, right) =>
-      `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`),
+      `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`),
     );
   }, [employeeById, selectedEmployeeIds, selectedGroups]);
   const selectedAssigneeIds = useMemo(() => selectedAssignees.map((employee) => employee.id), [selectedAssignees]);
@@ -360,7 +360,7 @@ export default function CreateTaskScreen() {
           </View>
           <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
           <View className="flex-1">
-            <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
+            <Text className="text-[14px] font-semibold text-foreground">{employee.lastName} {employee.firstName}</Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">{employeeSubtitle}</Text>
           </View>
         </View>
@@ -671,7 +671,7 @@ export default function CreateTaskScreen() {
                     <View key={employee.id} className="flex-row items-center gap-3 rounded-[18px] bg-[#f8fafc] px-3 py-2">
                       <EmployeeAvatarImage source={getEmployeeAvatarSource(employee)} className="h-10 w-10 rounded-full" />
                       <View className="flex-1">
-                        <Text className="text-[14px] font-semibold text-foreground">{employee.firstName} {employee.lastName}</Text>
+                        <Text className="text-[14px] font-semibold text-foreground">{employee.lastName} {employee.firstName}</Text>
                         <Text className="text-[12px] text-muted-foreground">
                           {'department' in employee
                             ? employee.department?.name ?? employee.position?.name ?? employee.email

@@ -665,7 +665,7 @@ export default function LeaderboardScreen({
                       <Text className="text-[15px] font-semibold text-[#1f2430]">
                         {isPrivate
                           ? copy("Скрытый сотрудник", "Hidden employee")
-                          : `${entry.employee.firstName} ${entry.employee.lastName}`}
+                          : `${entry.employee.lastName} ${entry.employee.firstName}`}
                       </Text>
                       <Text className="text-[11px] text-[#8b95a7]">
                         {isPrivate

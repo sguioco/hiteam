@@ -198,7 +198,7 @@ export class RequestsService {
         userId: firstApprover.userId,
         type: NotificationType.REQUEST_ACTION_REQUIRED,
         title: `Approval required: ${request.title}`,
-        body: `${employee.firstName} ${employee.lastName} submitted a ${request.requestType.toLowerCase()} request.`,
+        body: `${employee.lastName} ${employee.firstName} submitted a ${request.requestType.toLowerCase()} request.`,
         actionUrl: '/requests',
         metadata: {
           requestId: request.id,
@@ -312,7 +312,7 @@ export class RequestsService {
           orderBy: { kind: 'asc' },
         },
       },
-      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
 
     const sickLeaveStats = await this.prisma.employeeRequest.groupBy({
@@ -408,7 +408,7 @@ export class RequestsService {
 
     return {
       employeeId: employee.id,
-      employeeName: `${employee.firstName} ${employee.lastName}`,
+      employeeName: `${employee.lastName} ${employee.firstName}`,
       balances: this.mapBalancesSummary(balances),
     };
   }
@@ -960,7 +960,7 @@ export class RequestsService {
         userId: nextStep.approverEmployee.userId,
         type: NotificationType.REQUEST_ACTION_REQUIRED,
         title: `Approval required: ${updatedRequest.title}`,
-        body: `${updatedRequest.employee.firstName} ${updatedRequest.employee.lastName} request moved to step ${nextStep.sequence}.`,
+        body: `${updatedRequest.employee.lastName} ${updatedRequest.employee.firstName} request moved to step ${nextStep.sequence}.`,
         actionUrl: '/requests',
         metadata: {
           requestId: updatedRequest.id,

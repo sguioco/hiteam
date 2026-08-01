@@ -233,7 +233,7 @@ export class AltegioStaffScheduleSyncService {
         try {
           const created = await this.altegioB2b.createTeamMember({
             locationId: ctx.locationId,
-            name: `${employee.firstName} ${employee.lastName}`.trim(),
+            name: `${employee.lastName} ${employee.firstName}`.trim(),
             specialization: 'HiTeam',
             phone: employee.phone,
             email: employee.user.email.endsWith('@users.hiteam.local') ? null : employee.user.email,
@@ -466,7 +466,7 @@ export class AltegioStaffScheduleSyncService {
     try {
       const created = await this.altegioB2b.createTeamMember({
         locationId: ctx.locationId,
-        name: `${employee.firstName} ${employee.lastName}`.trim(),
+        name: `${employee.lastName} ${employee.firstName}`.trim(),
         specialization: 'HiTeam',
         phone: employee.phone,
         email: employee.user.email.endsWith('@users.hiteam.local') ? null : employee.user.email,

@@ -42,6 +42,9 @@ export type DashboardActivityItem = {
   context: string | null;
   targetLabel: string | null;
   targetEmployees: DashboardActivityPerson[];
+  companyId?: string | null;
+  locationId?: string | null;
+  locationName?: string | null;
 };
 
 type DailyActivityPanelProps = {
@@ -75,7 +78,7 @@ function resolvePersonName(
   }
 
   if (person.firstName || person.lastName) {
-    const fullName = `${person.firstName ?? ""} ${person.lastName ?? ""}`.trim();
+    const fullName = `${person.lastName ?? ""} ${person.firstName ?? ""}`.trim();
 
     if (fullName) {
       return locale === "en" ? localizePersonName(fullName, locale) : fullName;
@@ -353,6 +356,9 @@ export function DailyActivityPanel({
                             {formatTimeLabel(item.createdAt, locale)}
                           </time>
                           {itemContext ? <span>{itemContext}</span> : null}
+                          {item.locationName ? (
+                            <span>{item.locationName}</span>
+                          ) : null}
                         </div>
                       </div>
                     </div>

@@ -27,6 +27,7 @@ import type {
   ManagerEmployeeItem,
   ManagerScheduleShiftItem,
   ManagerShiftTemplateItem,
+  NamedEntityOption,
   TaskItem,
   WorkGroupItem,
 } from "@smart/types";
@@ -88,6 +89,11 @@ import {
   NEWS_SCREEN_CACHE_TTL_MS,
   warmAnnouncementImages,
 } from "../../lib/workspace-cache";
+import {
+  hydrateWorkspaceScope,
+  setWorkspaceScope,
+  useWorkspaceScope,
+} from "../../lib/workspace-scope";
 
 type CalendarDayItem = {
   authorName: string;
@@ -162,6 +168,7 @@ type CalendarScreenCacheValue = {
   managerGroups?: ManagerGroup[];
   managerShifts?: ManagerScheduleShift[];
   shiftTemplates?: ManagerShiftTemplate[];
+  managerLocations?: NamedEntityOption[];
 };
 
 type ShiftTemplateDraft = {
@@ -492,6 +499,7 @@ export default function CalendarScreen({
   const directionalIconStyle = getDirectionalIconStyle(language);
   const locale = getDateLocale(language);
   const isManager = hasManagerAccess(roleCodes);
+  const workspaceScope = useWorkspaceScope();
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(
     () => new Date(today.getFullYear(), today.getMonth(), 1),
@@ -534,7 +542,11 @@ export default function CalendarScreen({
     month: "long",
     year: "numeric",
   });
-  const calendarCacheKey = getCalendarScreenCacheKey(currentDate, isManager);
+  const calendarCacheKey = getCalendarScreenCacheKey(
+    currentDate,
+    isManager,
+    workspaceScope?.locationId,
+  );
   const initialSnapshot = useMemo(
     () =>
       peekScreenCache<CalendarScreenCacheValue>(
@@ -576,6 +588,9 @@ export default function CalendarScreen({
   );
   const [shiftTemplates, setShiftTemplates] = useState<ManagerShiftTemplate[]>(
     initialSnapshot?.value.shiftTemplates ?? [],
+  );
+  const [managerLocations, setManagerLocations] = useState<NamedEntityOption[]>(
+    initialSnapshot?.value.managerLocations ?? [],
   );
   const [managerFilterSheetVisible, setManagerFilterSheetVisible] =
     useState(false);
@@ -626,6 +641,7 @@ export default function CalendarScreen({
   const [templateDraft, setTemplateDraft] = useState<ShiftTemplateDraft>(() =>
     createDefaultShiftTemplateDraft(),
   );
+  const [templateLocationId, setTemplateLocationId] = useState("");
   const [templateTimePickerTarget, setTemplateTimePickerTarget] = useState<
     "start" | "end" | "break" | null
   >(null);
@@ -640,6 +656,10 @@ export default function CalendarScreen({
   const [activePhotoTaskId, setActivePhotoTaskId] = useState<string | null>(
     null,
   );
+
+  useEffect(() => {
+    void hydrateWorkspaceScope();
+  }, []);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
@@ -665,6 +685,7 @@ export default function CalendarScreen({
         setManagerGroups([]);
         setManagerShifts([]);
         setShiftTemplates([]);
+        setManagerLocations([]);
         setOrganizationStartDate(null);
         setLoading(true);
         return;
@@ -679,6 +700,7 @@ export default function CalendarScreen({
       setManagerGroups(entry.value.managerGroups ?? []);
       setManagerShifts(entry.value.managerShifts ?? []);
       setShiftTemplates(entry.value.shiftTemplates ?? []);
+      setManagerLocations(entry.value.managerLocations ?? []);
       setOrganizationStartDate(
         parseOrganizationStartDate(entry.value.organizationStartDate),
       );
@@ -783,6 +805,9 @@ export default function CalendarScreen({
         const rangeQuery = {
           dateFrom: formatDateKey(rangeStart),
           dateTo: formatDateKey(rangeEnd),
+          ...(isManager && workspaceScope?.locationId
+            ? { locationId: workspaceScope.locationId }
+            : {}),
         };
         let nextShifts: CalendarShift[] = [];
         let nextTasks: TaskItem[] = [];
@@ -790,6 +815,7 @@ export default function CalendarScreen({
         let nextManagerGroups: ManagerGroup[] = [];
         let nextManagerShifts: ManagerScheduleShift[] = [];
         let nextShiftTemplates: ManagerShiftTemplate[] = [];
+        let nextManagerLocations: NamedEntityOption[] = [];
         let nextOrganizationStartDate: Date | null = null;
         let partialLoadError: string | null = null;
 
@@ -840,6 +866,7 @@ export default function CalendarScreen({
               : taskFallbackGroups;
             nextManagerShifts = scheduleData.shifts;
             nextShiftTemplates = scheduleData.templates;
+            nextManagerLocations = scheduleData.locations;
 
             if (
               nextManagerEmployees.length === 0 ||
@@ -927,6 +954,7 @@ export default function CalendarScreen({
           setManagerGroups(nextManagerGroups);
           setManagerShifts(nextManagerShifts);
           setShiftTemplates(nextShiftTemplates);
+          setManagerLocations(nextManagerLocations);
           void writeScreenCache(calendarCacheKey, {
             organizationStartDate:
               nextOrganizationStartDate?.toISOString() ?? null,
@@ -936,6 +964,7 @@ export default function CalendarScreen({
             managerGroups: nextManagerGroups,
             managerShifts: nextManagerShifts,
             shiftTemplates: nextShiftTemplates,
+            managerLocations: nextManagerLocations,
           });
           setError(partialLoadError);
         }
@@ -969,6 +998,7 @@ export default function CalendarScreen({
     manualRefreshSignal,
     monthIndex,
     t,
+    workspaceScope?.locationId,
     year,
   ]);
 
@@ -2230,6 +2260,41 @@ export default function CalendarScreen({
     setAssignShiftBreakDurationMinutes(String(breakDuration || 30));
   }
 
+  useEffect(() => {
+    const scopedLocationId =
+      workspaceScope?.locationId &&
+      managerLocations.some(({ id }) => id === workspaceScope.locationId)
+        ? workspaceScope.locationId
+        : null;
+    if (
+      templateLocationId &&
+      managerLocations.some(({ id }) => id === templateLocationId) &&
+      (!scopedLocationId || templateLocationId === scopedLocationId)
+    ) {
+      return;
+    }
+    setTemplateLocationId(scopedLocationId ?? managerLocations[0]?.id ?? "");
+  }, [managerLocations, templateLocationId, workspaceScope?.locationId]);
+
+  useEffect(() => {
+    if (
+      !isManager ||
+      managerLocations.length === 0 ||
+      managerLocations.some(({ id }) => id === workspaceScope?.locationId)
+    ) {
+      return;
+    }
+    const firstLocation = managerLocations[0] as NamedEntityOption & {
+      companyId?: string;
+    };
+    if (firstLocation.companyId) {
+      void setWorkspaceScope({
+        companyId: firstLocation.companyId,
+        locationId: firstLocation.id,
+      });
+    }
+  }, [isManager, managerLocations, workspaceScope?.locationId]);
+
   function toggleAssignShiftEmployee(employeeId: string) {
     setAssignShiftError(null);
     if (editingShiftId) {
@@ -2264,7 +2329,7 @@ export default function CalendarScreen({
       templateDraft.fixedBreakDurationMinutes,
     );
 
-    if (!name || templateDraft.weekDays.length === 0) {
+    if (!name || !templateLocationId || templateDraft.weekDays.length === 0) {
       setAssignShiftError(t("calendar.shiftTemplateValidation"));
       return;
     }
@@ -2295,6 +2360,7 @@ export default function CalendarScreen({
           ? fixedBreakDuration
           : 0,
         fixedBreakIsPaid: false,
+        locationId: templateLocationId,
       });
 
       setShiftTemplates((current) => [createdTemplate, ...current]);
@@ -4680,6 +4746,45 @@ export default function CalendarScreen({
 
                 {templateComposerVisible ? (
                   <View className="gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
+                    <View className="gap-2">
+                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                        {language === "ru" ? "Локация" : "Location"}
+                      </Text>
+                      <ScrollView
+                        contentContainerStyle={{ gap: 8 }}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        {managerLocations.map((location) => {
+                          const selected =
+                            location.id === templateLocationId;
+                          return (
+                            <PressableScale
+                              className={`h-10 justify-center rounded-2xl border px-3 ${
+                                selected
+                                  ? "border-primary bg-primary"
+                                  : "border-[#dce4f2] bg-white"
+                              }`}
+                              haptic="selection"
+                              key={location.id}
+                              onPress={() =>
+                                setTemplateLocationId(location.id)
+                              }
+                            >
+                              <Text
+                                className={`font-body text-[13px] font-bold ${
+                                  selected
+                                    ? "text-white"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {location.name}
+                              </Text>
+                            </PressableScale>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
                     <View>
                       <Input
                         autoCapitalize="words"

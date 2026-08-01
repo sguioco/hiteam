@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { runtimeLocalize } from "@/lib/runtime-locale";
 
 type ImageAdjustFieldProps = {
   value?: string | null;
@@ -61,14 +62,30 @@ async function compressImageToDataUrl(
   const sourceDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+    reader.onerror = () =>
+      reject(
+        new Error(
+          runtimeLocalize(
+            "Не удалось прочитать файл.",
+            "Unable to read the file.",
+          ),
+        ),
+      );
     reader.readAsDataURL(file);
   });
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
-    nextImage.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    nextImage.onerror = () =>
+      reject(
+        new Error(
+          runtimeLocalize(
+            "Не удалось обработать изображение.",
+            "Unable to process the image.",
+          ),
+        ),
+      );
     nextImage.src = sourceDataUrl;
   });
 
@@ -82,7 +99,12 @@ async function compressImageToDataUrl(
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Не удалось подготовить изображение.");
+    throw new Error(
+      runtimeLocalize(
+        "Не удалось подготовить изображение.",
+        "Unable to prepare the image.",
+      ),
+    );
   }
 
   context.fillStyle = "#ffffff";
@@ -91,7 +113,12 @@ async function compressImageToDataUrl(
 
   const compressed = canvas.toDataURL("image/jpeg", options?.quality ?? 0.82);
   if (compressed.length > 7_000_000) {
-    throw new Error("Фото слишком большое. Выбери изображение поменьше.");
+    throw new Error(
+      runtimeLocalize(
+        "Фото слишком большое. Выбери изображение поменьше.",
+        "The photo is too large. Choose a smaller image.",
+      ),
+    );
   }
 
   return {
@@ -157,7 +184,15 @@ async function renderAdjustedImagePreviewDataUrl(
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image();
     nextImage.onload = () => resolve(nextImage);
-    nextImage.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    nextImage.onerror = () =>
+      reject(
+        new Error(
+          runtimeLocalize(
+            "Не удалось обработать изображение.",
+            "Unable to process the image.",
+          ),
+        ),
+      );
     nextImage.src = sourceDataUrl;
   });
 
@@ -167,7 +202,12 @@ async function renderAdjustedImagePreviewDataUrl(
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Не удалось подготовить превью.");
+    throw new Error(
+      runtimeLocalize(
+        "Не удалось подготовить превью.",
+        "Unable to prepare the preview.",
+      ),
+    );
   }
 
   context.fillStyle = "#ffffff";
@@ -286,7 +326,12 @@ export function ImageAdjustField({
       onError?.(null);
     } catch (error) {
       onError?.(
-        error instanceof Error ? error.message : "Не удалось подготовить изображение.",
+        error instanceof Error
+          ? error.message
+          : runtimeLocalize(
+              "Не удалось подготовить изображение.",
+              "Unable to prepare the image.",
+            ),
       );
     }
   }
@@ -310,7 +355,14 @@ export function ImageAdjustField({
       setEditorOpen(false);
       onError?.(null);
     } catch (error) {
-      onError?.(error instanceof Error ? error.message : "Не удалось применить превью.");
+      onError?.(
+        error instanceof Error
+          ? error.message
+          : runtimeLocalize(
+              "Не удалось применить превью.",
+              "Unable to apply the preview.",
+            ),
+      );
     }
   }
 

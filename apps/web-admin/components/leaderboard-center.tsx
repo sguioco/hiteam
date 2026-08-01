@@ -336,7 +336,7 @@ function formatActivityDayLabel(dayKey: string, locale: Locale) {
 function getEmployeeFullName(
   entry: LeaderboardOverviewResponse["leaderboard"][number],
 ) {
-  return `${entry.employee.firstName} ${entry.employee.lastName}`.trim();
+  return `${entry.employee.lastName} ${entry.employee.firstName}`.trim();
 }
 
 function getEmployeeSubtitle(

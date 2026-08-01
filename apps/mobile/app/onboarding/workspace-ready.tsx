@@ -62,6 +62,7 @@ export default function WorkspaceReadyOnboardingScreen() {
     [isIos, t],
   );
   const [loading, setLoading] = useState(true);
+  const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<PreciseLocationAccessStatus>({
     status: 'missing',
@@ -296,6 +297,12 @@ export default function WorkspaceReadyOnboardingScreen() {
   }
 
   async function handleFinish() {
+    if (finishing) {
+      return;
+    }
+
+    setFinishing(true);
+    setError(null);
     try {
       if (locationStatus.status !== 'ready') {
         setError(copy.permissionRequired);
@@ -318,6 +325,8 @@ export default function WorkspaceReadyOnboardingScreen() {
       router.replace('/today' as never);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : copy.permissionRequired);
+    } finally {
+      setFinishing(false);
     }
   }
 
@@ -459,13 +468,15 @@ export default function WorkspaceReadyOnboardingScreen() {
       <View className="px-6 pt-4" style={{ paddingBottom: bottomActionPadding }}>
         <PressableScale
           className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
-            locationStatus.status === 'ready' ? '' : 'opacity-70'
+            locationStatus.status === 'ready' && !finishing ? '' : 'opacity-70'
           }`}
-          disabled={locationStatus.status !== 'ready'}
+          disabled={locationStatus.status !== 'ready' || finishing}
           haptic="medium"
           onPress={() => void handleFinish()}
         >
-          <Text style={actionLabelStyle}>{copy.finish}</Text>
+          <Text style={actionLabelStyle}>
+            {finishing ? t('common.loading') : copy.finish}
+          </Text>
         </PressableScale>
       </View>
     </SafeAreaView>

@@ -2557,6 +2557,7 @@ export class CollaborationService {
             managerEmployeeId: manager.id,
             assigneeEmployeeId: assignee.id,
             groupId: dto.groupId ?? null,
+            locationId: dto.locationId ?? assignee.primaryLocationId,
             title: dto.title,
             description: dto.description,
             priority: dto.priority ?? TaskPriority.MEDIUM,
@@ -2655,8 +2656,8 @@ export class CollaborationService {
           type: NotificationType.OPERATIONS_ALERT,
           title: `${isMeeting ? "New meeting" : "New task"}: ${task.title}`,
           body: isMeeting
-            ? `${manager.firstName} ${manager.lastName} added a meeting to your calendar.`
-            : `${manager.firstName} ${manager.lastName} assigned you a task.`,
+            ? `${manager.lastName} ${manager.firstName} added a meeting to your calendar.`
+            : `${manager.lastName} ${manager.firstName} assigned you a task.`,
           actionUrl: isMeeting ? "/employee/calendar" : "/employee/tasks",
           pushPreference: "assignmentAlerts",
           metadata: {
@@ -3000,6 +3001,66 @@ export class CollaborationService {
     const manager = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
     });
+    const roleAssignments = await this.prisma.userRole.findMany({
+      where: { userId },
+      select: {
+        scopeId: true,
+        scopeType: true,
+        role: { select: { code: true } },
+      },
+    });
+    const hasTenantAccess = roleAssignments.some(
+      ({ role, scopeId, scopeType }) =>
+        ((WORKSPACE_ADMIN_ROLE_CODES.has(role.code) ||
+          role.code === "manager") &&
+          scopeType === "tenant" &&
+          scopeId === manager.tenantId),
+    );
+    const scopedEmployeeConditions: Prisma.EmployeeWhereInput[] = [];
+    const scopedTaskConditions: Prisma.TaskWhereInput[] = [];
+    for (const { role, scopeId, scopeType } of roleAssignments) {
+      if (role.code !== "manager") continue;
+      if (scopeType === "company") {
+        scopedEmployeeConditions.push({ companyId: scopeId });
+        scopedTaskConditions.push(
+          { assigneeEmployee: { companyId: scopeId } },
+          { location: { companyId: scopeId } },
+        );
+      }
+      if (scopeType === "location") {
+        scopedEmployeeConditions.push(
+          { primaryLocationId: scopeId },
+          {
+            locationAssignments: {
+              some: { locationId: scopeId, unassignedAt: null },
+            },
+          },
+        );
+        scopedTaskConditions.push(
+          { locationId: scopeId },
+          {
+            locationId: null,
+            assigneeEmployee: { primaryLocationId: scopeId },
+          },
+        );
+      }
+    }
+    scopedEmployeeConditions.push({ id: manager.id });
+    scopedTaskConditions.push(
+      { assigneeEmployeeId: manager.id },
+      { managerEmployeeId: manager.id },
+    );
+    const scopedEmployeeWhere: Prisma.EmployeeWhereInput | undefined =
+      hasTenantAccess
+        ? undefined
+        : {
+            OR: scopedEmployeeConditions,
+          };
+    const scopedTaskWhere: Prisma.TaskWhereInput | undefined = hasTenantAccess
+      ? undefined
+      : {
+          OR: scopedTaskConditions,
+        };
     const now = new Date();
     const taskWindow = this.resolveTaskWindow(query);
     const onlyOverdue = query.onlyOverdue === "true";
@@ -3024,13 +3085,29 @@ export class CollaborationService {
         groupId: query.groupId,
         assigneeEmployeeId: query.assigneeEmployeeId,
         dueAt: onlyOverdue && !taskWindow ? { lt: now } : undefined,
-        assigneeEmployee:
-          query.departmentId || query.locationId
-            ? {
-                departmentId: query.departmentId,
-                primaryLocationId: query.locationId,
-              }
-            : undefined,
+        AND: [
+          ...(scopedTaskWhere ? [scopedTaskWhere] : []),
+          ...(query.locationId
+            ? [
+                {
+                  OR: [
+                { locationId: query.locationId },
+                {
+                  locationId: null,
+                  assigneeEmployee: {
+                    primaryLocationId: query.locationId,
+                  },
+                },
+                  ],
+                },
+              ]
+            : []),
+        ],
+        assigneeEmployee: query.departmentId
+          ? {
+              departmentId: query.departmentId,
+            }
+          : undefined,
         ...this.buildTaskDateWhere(taskWindow),
       },
       include: this.taskListInclude(),
@@ -3051,6 +3128,7 @@ export class CollaborationService {
         taskWindow.start,
         taskWindow.end,
         query,
+        scopedEmployeeWhere,
       );
       boardTasks = [...boardTasks, ...recurringTasks].sort((left, right) => {
         const leftDone =
@@ -3682,7 +3760,7 @@ export class CollaborationService {
             thread.participants
               .map(
                 (participant) =>
-                  `${participant.employee.firstName} ${participant.employee.lastName}`,
+                  `${participant.employee.lastName} ${participant.employee.firstName}`,
               )
               .join(", "),
           preview: lastMessage?.body ?? null,
@@ -3979,7 +4057,7 @@ export class CollaborationService {
           tenantId: employee.tenantId,
           userId: participant.employee.userId,
           type: NotificationType.OPERATIONS_ALERT,
-          title: `${employee.firstName} ${employee.lastName} sent a message`,
+          title: `${employee.lastName} ${employee.firstName} sent a message`,
           body: dto.body,
           actionUrl: "/employee/chats",
           metadata: {
@@ -5882,6 +5960,7 @@ export class CollaborationService {
             managerEmployeeId: manager.id,
             assigneeEmployeeId: assignee.id,
             groupId: template.groupId,
+            locationId: template.locationId ?? assignee.primaryLocationId,
             title: template.title,
             description: template.description,
             priority: template.priority,
@@ -5961,7 +6040,7 @@ export class CollaborationService {
           userId: task.assigneeEmployee.userId,
           type: NotificationType.OPERATIONS_ALERT,
           title: `New recurring task: ${task.title}`,
-          body: `${manager.firstName} ${manager.lastName} assigned a recurring workflow task.`,
+          body: `${manager.lastName} ${manager.firstName} assigned a recurring workflow task.`,
           actionUrl: "/employee/tasks",
           pushPreference: "assignmentAlerts",
           metadata: {
@@ -6130,8 +6209,8 @@ export class CollaborationService {
         type: NotificationType.OPERATIONS_ALERT,
         title: `${options.escalation ? "Escalation" : "Reminder"}: ${task.title}`,
         body: options.escalation
-          ? `${manager.firstName} ${manager.lastName} escalated this overdue task.`
-          : `${manager.firstName} ${manager.lastName} asked for an update.`,
+          ? `${manager.lastName} ${manager.firstName} escalated this overdue task.`
+          : `${manager.lastName} ${manager.firstName} asked for an update.`,
         actionUrl: "/employee/tasks",
         pushPreference: "taskDeadlineReminders",
         metadata: {
@@ -6156,7 +6235,7 @@ export class CollaborationService {
         userId: manager.userId,
         type: NotificationType.OPERATIONS_ALERT,
         title: `Escalated overdue task: ${task.title}`,
-        body: `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName} still has an overdue task.`,
+        body: `${task.assigneeEmployee.lastName} ${task.assigneeEmployee.firstName} still has an overdue task.`,
         actionUrl: "/collaboration",
         metadata: {
           taskId: task.id,
@@ -6574,6 +6653,7 @@ export class CollaborationService {
     start: Date,
     end: Date,
     query: ListManagerTasksQueryDto,
+    visibilityWhere?: Prisma.EmployeeWhereInput,
   ) {
     const templates = await this.prisma.taskTemplate.findMany({
       where: {
@@ -6607,6 +6687,7 @@ export class CollaborationService {
     const candidateEmployees = await this.prisma.employee.findMany({
       where: {
         tenantId: manager.tenantId,
+        ...(visibilityWhere ?? {}),
         id: query.assigneeEmployeeId,
         departmentId: query.departmentId,
         primaryLocationId: query.locationId,
@@ -6978,6 +7059,7 @@ export class CollaborationService {
           managerEmployeeId: template.managerEmployee.id,
           assigneeEmployeeId: employee.id,
           groupId: template.group?.id ?? null,
+          locationId: template.locationId ?? employee.primaryLocationId,
           title: template.title,
           description: template.description,
           priority: template.priority,
@@ -7324,7 +7406,7 @@ export class CollaborationService {
     if (directTaskConflict?.assigneeEmployee) {
       return {
         employeeName:
-          `${directTaskConflict.assigneeEmployee.firstName} ${directTaskConflict.assigneeEmployee.lastName}`.trim(),
+          `${directTaskConflict.assigneeEmployee.lastName} ${directTaskConflict.assigneeEmployee.firstName}`.trim(),
       };
     }
 
@@ -7374,7 +7456,7 @@ export class CollaborationService {
     ) {
       return {
         employeeName:
-          `${recurringTemplateConflict.assigneeEmployee.firstName} ${recurringTemplateConflict.assigneeEmployee.lastName}`.trim(),
+          `${recurringTemplateConflict.assigneeEmployee.lastName} ${recurringTemplateConflict.assigneeEmployee.firstName}`.trim(),
       };
     }
 
@@ -8020,6 +8102,7 @@ export class CollaborationService {
         },
       },
       group: true,
+      location: true,
       checklistItems: {
         include: {
           completedByEmployee: true,
@@ -8074,6 +8157,13 @@ export class CollaborationService {
       group: {
         select: {
           id: true,
+          name: true,
+        },
+      },
+      location: {
+        select: {
+          id: true,
+          companyId: true,
           name: true,
         },
       },

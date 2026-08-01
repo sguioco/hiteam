@@ -595,6 +595,16 @@ function testManagerSetupEmailStatusIsSyncedToKommo() {
   );
 }
 
+function testManagerEmailCanBeUsedInMultipleWorkspaces() {
+  const source = readFileSync(join(__dirname, '../auth/auth.service.ts'), 'utf8');
+
+  assert.doesNotMatch(
+    source,
+    /assertWorkspaceEmailAvailability|Manager email is already used in another workspace/,
+    'Organization registration must not reject an email used in another workspace.',
+  );
+}
+
 async function main() {
   await testResendEnablesTransactionalEmail();
   await testGraphFallsBackToResend();
@@ -605,6 +615,7 @@ async function main() {
   await testEmployeeEmailsRespectGlobalDeliverySwitch();
   await testAllLifecycleTemplatesUseConfiguredPublicUrl();
   testManagerSetupEmailStatusIsSyncedToKommo();
+  testManagerEmailCanBeUsedInMultipleWorkspaces();
   console.log('email flow tests passed');
 }
 

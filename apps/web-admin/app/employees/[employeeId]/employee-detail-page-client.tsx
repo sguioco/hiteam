@@ -52,6 +52,13 @@ import {
 import { getAvatarInitials } from "../../../lib/avatar-placeholder";
 
 type EmployeeDetails = EmployeeDetailRecord;
+type OrganizationLocation = {
+  id: string;
+  companyId: string;
+  name: string;
+  address?: string | null;
+  company?: { id: string; name: string } | null;
+};
 
 type Tab = "info" | "attendance" | "biometric" | "anomalies";
 
@@ -312,6 +319,8 @@ export default function EmployeeCardPageClient({
     useState<EmployeeAccessRole>("employee");
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [workModeActionPending, setWorkModeActionPending] = useState(false);
+  const [locations, setLocations] = useState<OrganizationLocation[]>([]);
+  const [locationActionPending, setLocationActionPending] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "success" | "error";
     text: string;
@@ -368,6 +377,18 @@ export default function EmployeeCardPageClient({
     setGroups(result.data.groups ?? []);
   }
 
+  async function loadLocations() {
+    const session = getSession();
+    if (!session) return;
+
+    const result = await settleRequest(
+      apiRequest<OrganizationLocation[]>("/org/locations", {
+        token: session.accessToken,
+      }),
+    );
+    if (result.ok) setLocations(result.data);
+  }
+
   useEffect(() => {
     if (!employeeId) return;
 
@@ -378,6 +399,10 @@ export default function EmployeeCardPageClient({
 
     void loadEmployeePageData(employeeId);
   }, [employeeId, canManageRoles]);
+
+  useEffect(() => {
+    if (canManageWorkMode) void loadLocations();
+  }, [canManageWorkMode]);
 
   useEffect(() => {
     if (!notice) return;
@@ -417,7 +442,7 @@ export default function EmployeeCardPageClient({
     );
 
   const fullName = employee
-    ? `${employee.firstName} ${employee.lastName}`
+    ? `${employee.lastName} ${employee.firstName}`
     : "...";
   const currentTeam = useMemo(
     () =>
@@ -562,6 +587,55 @@ export default function EmployeeCardPageClient({
       });
     } finally {
       setTeamActionPending(false);
+    }
+  }
+
+  async function handleTransferLocation(locationId: string) {
+    const session = getSession();
+    if (
+      !session ||
+      !employeeId ||
+      !employee ||
+      locationActionPending ||
+      locationId === employee.primaryLocation.id
+    ) {
+      return;
+    }
+
+    setLocationActionPending(true);
+    try {
+      await apiRequest(`/employees/${employeeId}/location`, {
+        method: "PATCH",
+        token: session.accessToken,
+        body: JSON.stringify({
+          locationId,
+          futureShiftStrategy: "keep",
+          reason:
+            locale === "ru"
+              ? "Перенос из карточки сотрудника"
+              : "Transferred from employee profile",
+        }),
+      });
+      await loadEmployeePageData(employeeId);
+      setNotice({
+        kind: "success",
+        text:
+          locale === "ru"
+            ? "Основная локация сотрудника изменена."
+            : "Employee primary location updated.",
+      });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "ru"
+              ? "Не удалось перенести сотрудника."
+              : "Failed to transfer employee.",
+      });
+    } finally {
+      setLocationActionPending(false);
     }
   }
 
@@ -1557,7 +1631,7 @@ export default function EmployeeCardPageClient({
                         {locale === "ru" ? "Имя" : "Name"}
                       </dt>
                       <dd className="font-medium">
-                        {employee.firstName} {employee.lastName}
+                        {employee.lastName} {employee.firstName}
                       </dd>
                     </div>
                     <div className="flex justify-between">
@@ -1618,12 +1692,37 @@ export default function EmployeeCardPageClient({
                       </dt>
                       <dd className="font-medium">{employee.position.name}</dd>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex items-center justify-between gap-4">
                       <dt className="text-muted-foreground">
                         {locale === "ru" ? "Локация" : "Location"}
                       </dt>
-                      <dd className="font-medium">
-                        {employee.primaryLocation.name}
+                      <dd className="min-w-0 font-medium">
+                        {canManageWorkMode && locations.length > 1 ? (
+                          <select
+                            aria-label={
+                              locale === "ru"
+                                ? "Основная локация сотрудника"
+                                : "Employee primary location"
+                            }
+                            className="h-10 max-w-[250px] rounded-xl border border-border bg-background px-3 text-sm font-medium outline-none transition-colors focus:border-[#546cf2]"
+                            disabled={locationActionPending}
+                            onChange={(event) =>
+                              void handleTransferLocation(event.target.value)
+                            }
+                            value={employee.primaryLocation.id}
+                          >
+                            {locations.map((location) => (
+                              <option key={location.id} value={location.id}>
+                                {location.company?.name
+                                  ? `${location.company.name} · `
+                                  : ""}
+                                {location.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          employee.primaryLocation.name
+                        )}
                       </dd>
                     </div>
                     <div className="flex justify-between">
@@ -1656,6 +1755,53 @@ export default function EmployeeCardPageClient({
                     ) : null}
                   </dl>
                 </div>
+                {(employee.locationAssignments?.length ?? 0) > 0 ? (
+                  <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
+                    <h3 className="mb-4 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                      <ArrowRightLeft className="size-4" />
+                      {locale === "ru"
+                        ? "История локаций"
+                        : "Location history"}
+                    </h3>
+                    <div className="space-y-2">
+                      {employee.locationAssignments?.map((assignment) => (
+                        <div
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
+                          key={assignment.id}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground">
+                              {assignment.location.name}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {formatDateTime(assignment.assignedAt)}
+                              {assignment.unassignedAt
+                                ? ` — ${formatDateTime(assignment.unassignedAt)}`
+                                : locale === "ru"
+                                  ? " — по настоящее время"
+                                  : " — present"}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              assignment.unassignedAt
+                                ? "bg-slate-100 text-slate-600"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
+                          >
+                            {assignment.unassignedAt
+                              ? locale === "ru"
+                                ? "Завершено"
+                                : "Ended"
+                              : locale === "ru"
+                                ? "Активна"
+                                : "Active"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {canManageWorkMode ? (
                   <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
                     <h3 className="mb-3 flex items-center gap-2 font-heading text-sm font-bold uppercase tracking-wider text-muted-foreground">

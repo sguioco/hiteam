@@ -2,7 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, ImagePlus, Pencil, Users, Save } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  ImagePlus,
+  MapPin,
+  Pencil,
+  Plus,
+  Save,
+  Users,
+} from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
@@ -12,6 +22,15 @@ import {
   LocationSelection,
 } from "../../components/location-map-picker";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import {
   Select,
@@ -35,15 +54,33 @@ type Company = {
   googlePlaceId?: string | null;
   logoUrl?: string | null;
   name: string;
+  archivedAt?: string | null;
+  _count?: {
+    employees: number;
+    locations: number;
+  };
 };
 
 type Location = {
+  id: string;
+  companyId: string;
+  name: string;
+  code: string;
   address: string;
   country?: string | null;
   geofenceRadiusMeters?: number;
   latitude?: number;
   longitude?: number;
   timezone: string;
+};
+type EmployeeOption = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  primaryLocation?: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 type OrganizationSetupResponse = {
@@ -68,7 +105,7 @@ type SetupDraft = {
   timezone: string;
 };
 
-type SetupMode = "create" | "update";
+type SetupMode = "create" | "update" | "create-location";
 type TimeZonePreset = {
   address: string;
   latitude: string;
@@ -226,6 +263,25 @@ export default function OrganizationPageClient({
     initialData?.setup ?? EMPTY_SETUP,
   );
   const [employeeCount, setEmployeeCount] = useState(initialData?.employeeCount ?? 0);
+  const [companies, setCompanies] = useState<Company[]>(
+    initialData?.setup.company ? [initialData.setup.company] : [],
+  );
+  const [locations, setLocations] = useState<Location[]>(
+    initialData?.setup.location ? [initialData.setup.location] : [],
+  );
+  const [selectedCompanyId, setSelectedCompanyId] = useState(
+    initialData?.setup.company?.id ?? "",
+  );
+  const [selectedLocationId, setSelectedLocationId] = useState(
+    initialData?.setup.location?.id ?? "",
+  );
+  const [createCompanyOpen, setCreateCompanyOpen] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [isCreatingCompany, setIsCreatingCompany] = useState(false);
+  const [availableEmployees, setAvailableEmployees] = useState<
+    EmployeeOption[]
+  >([]);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<SetupDraft>(() =>
     buildDraftFromSetup(initialData?.setup ?? EMPTY_SETUP),
   );
@@ -256,6 +312,132 @@ export default function OrganizationPageClient({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
   const timeZonePreset = useMemo(() => TIME_ZONE_PRESETS[getTimeZoneOffsetLabel(draft.timezone)] ?? null, [draft.timezone]);
+
+  function applyScope(company: Company, location?: Location | null) {
+    const nextSetup: OrganizationSetupResponse = {
+      ...setup,
+      company,
+      location: location ?? null,
+      configured: Boolean(location),
+    };
+    setSelectedCompanyId(company.id);
+    setSelectedLocationId(location?.id ?? "");
+    setEmployeeCount(company._count?.employees ?? 0);
+    setSetup(nextSetup);
+    setDraft(buildDraftFromSetup(nextSetup));
+    setRadiusInput(
+      String(
+        normalizeRadius(
+          location?.geofenceRadiusMeters ??
+            nextSetup.defaultGeofenceRadiusMeters,
+        ),
+      ),
+    );
+    setSetupMode(location ? "update" : "create-location");
+    setError(null);
+    setSaveSuccess(false);
+  }
+
+  async function loadStructure() {
+    const session = getSession();
+    if (!session) return;
+
+    const [nextCompanies, nextLocations, nextEmployees] = await Promise.all([
+      apiRequest<Company[]>("/org/companies", {
+        token: session.accessToken,
+      }),
+      apiRequest<Location[]>("/org/locations", {
+        token: session.accessToken,
+      }),
+      apiRequest<EmployeeOption[]>("/employees", {
+        token: session.accessToken,
+      }),
+    ]);
+    setCompanies(nextCompanies);
+    setLocations(nextLocations);
+    setAvailableEmployees(nextEmployees);
+
+    const currentCompany =
+      nextCompanies.find(({ id }) => id === selectedCompanyId) ??
+      nextCompanies.find(({ id }) => id === setup.company?.id) ??
+      nextCompanies[0];
+    if (!currentCompany) return;
+    const currentLocation =
+      nextLocations.find(({ id }) => id === selectedLocationId) ??
+      nextLocations.find(({ id }) => id === setup.location?.id) ??
+      nextLocations.find(({ companyId }) => companyId === currentCompany.id) ??
+      null;
+    applyScope(currentCompany, currentLocation);
+  }
+
+  function handleCompanySelect(companyId: string) {
+    const company = companies.find(({ id }) => id === companyId);
+    if (!company) return;
+    const location =
+      locations.find(({ companyId: ownerId }) => ownerId === company.id) ??
+      null;
+    applyScope(company, location);
+  }
+
+  function handleLocationSelect(locationId: string) {
+    const location = locations.find(({ id }) => id === locationId);
+    const company = companies.find(({ id }) => id === location?.companyId);
+    if (!location || !company) return;
+    applyScope(company, location);
+  }
+
+  function startAddLocation() {
+    const company = companies.find(({ id }) => id === selectedCompanyId);
+    if (!company) return;
+    const empty = createEmptyDraft();
+    setSelectedLocationId("");
+    setSetup((current) => ({
+      ...current,
+      company,
+      configured: false,
+      location: null,
+    }));
+    setDraft({
+      ...empty,
+      companyLogoUrl: company.logoUrl ?? "",
+      companyName: company.name,
+      googlePlaceId: company.googlePlaceId ?? "",
+    });
+    setRadiusInput(String(DEFAULT_GEOFENCE_RADIUS_METERS));
+    setSetupMode("create-location");
+    setSelectedEmployeeIds([]);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function submitCreateCompany() {
+    const session = getSession();
+    const name = newCompanyName.trim();
+    if (!session || !name) return;
+    setIsCreatingCompany(true);
+    setError(null);
+    try {
+      const company = await apiRequest<Company>("/org/companies", {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({ name }),
+      });
+      setCompanies((current) => [company, ...current]);
+      setCreateCompanyOpen(false);
+      setNewCompanyName("");
+      applyScope(company, null);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : locale === "ru"
+            ? "Не удалось создать организацию."
+            : "Failed to create organization.",
+      );
+    } finally {
+      setIsCreatingCompany(false);
+    }
+  }
 
   async function loadData() {
     const session = getSession();
@@ -339,6 +521,18 @@ export default function OrganizationPageClient({
         // ignore — org page still works without billing banner
       });
   }, [router]);
+
+  useEffect(() => {
+    void loadStructure().catch((nextError) => {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : locale === "ru"
+            ? "Не удалось загрузить организации и локации."
+            : "Failed to load organizations and locations.",
+      );
+    });
+  }, []);
 
   useEffect(() => {
     if (!saveSuccess) {
@@ -472,25 +666,122 @@ export default function OrganizationPageClient({
       );
       return;
     }
-    const shouldRedirectToEmployees = setupMode === "create" || !setup.configured;
+    const shouldRedirectToEmployees =
+      setupMode === "create" && !setup.configured;
 
     try {
       setIsSaving(true); setError(null); setSaveSuccess(false);
-      const nextSetup = await apiRequest<OrganizationSetupResponse>("/org/setup", {
-        method: "POST", token: session.accessToken,
-        body: JSON.stringify({
-          mode: setupMode, address: draft.address.trim(), companyLogoUrl: draft.companyLogoUrl || undefined,
-          country: draft.details?.country || setup.location?.country || undefined,
-          companyName: draft.companyName.trim(), geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
-          googlePlaceId: draft.googlePlaceId || undefined, latitude: Number(draft.latitude), longitude: Number(draft.longitude),
+      let nextSetup: OrganizationSetupResponse;
+
+      if (setupMode === "create-location" && selectedCompanyId) {
+        const company = await apiRequest<Company>(
+          `/org/companies/${selectedCompanyId}`,
+          {
+            method: "PATCH",
+            token: session.accessToken,
+            body: JSON.stringify({
+              name: draft.companyName.trim(),
+              logoUrl: draft.companyLogoUrl || null,
+              googlePlaceId: draft.googlePlaceId || null,
+            }),
+          },
+        );
+        const location = await apiRequest<Location>("/org/locations", {
+          method: "POST",
+          token: session.accessToken,
+          body: JSON.stringify({
+            companyId: company.id,
+            name:
+              draft.details?.streetAddress?.trim() ||
+              draft.address.split(",")[0]?.trim() ||
+              company.name,
+            code: `LOC-${Date.now().toString(36).toUpperCase()}`,
+            address: draft.address.trim(),
+            country:
+              draft.details?.country || setup.location?.country || undefined,
+            geofenceRadiusMeters: normalizeRadius(
+              draft.geofenceRadiusMeters,
+            ),
+            latitude: Number(draft.latitude),
+            longitude: Number(draft.longitude),
+            timezone: draft.timezone.trim() || "UTC",
+            employeeIds: selectedEmployeeIds,
+          }),
+        });
+        nextSetup = {
+          ...setup,
+          company,
+          configured: true,
+          location,
+        };
+      } else if (
+        setupMode === "update" &&
+        selectedCompanyId &&
+        selectedLocationId
+      ) {
+        const [company, location] = await Promise.all([
+          apiRequest<Company>(`/org/companies/${selectedCompanyId}`, {
+            method: "PATCH",
+            token: session.accessToken,
+            body: JSON.stringify({
+              name: draft.companyName.trim(),
+              logoUrl: draft.companyLogoUrl || null,
+              googlePlaceId: draft.googlePlaceId || null,
+            }),
+          }),
+          apiRequest<Location>(`/org/locations/${selectedLocationId}`, {
+            method: "PATCH",
+            token: session.accessToken,
+            body: JSON.stringify({
+              address: draft.address.trim(),
+              country:
+                draft.details?.country || setup.location?.country || null,
+              geofenceRadiusMeters: normalizeRadius(
+                draft.geofenceRadiusMeters,
+              ),
+              latitude: Number(draft.latitude),
+              longitude: Number(draft.longitude),
+              timezone: draft.timezone.trim() || "UTC",
+            }),
+          }),
+        ]);
+        nextSetup = {
+          ...setup,
+          company,
+          configured: true,
+          location,
+        };
+      } else {
+        nextSetup = await apiRequest<OrganizationSetupResponse>("/org/setup", {
+          method: "POST", token: session.accessToken,
+          body: JSON.stringify({
+            mode: setupMode, address: draft.address.trim(), companyLogoUrl: draft.companyLogoUrl || undefined,
+            country: draft.details?.country || setup.location?.country || undefined,
+            companyName: draft.companyName.trim(), geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
+            googlePlaceId: draft.googlePlaceId || undefined, latitude: Number(draft.latitude), longitude: Number(draft.longitude),
+            attendanceTrackingEnabled: draft.attendanceTrackingEnabled,
+            timezone: draft.timezone.trim() || "UTC",
+          }),
+        });
+      }
+      if (setupMode !== "create") {
+        await apiRequest("/org/settings", {
+          method: "PATCH",
+          token: session.accessToken,
+          body: JSON.stringify({
+            attendanceTrackingEnabled: draft.attendanceTrackingEnabled,
+          }),
+        });
+        nextSetup = {
+          ...nextSetup,
           attendanceTrackingEnabled: draft.attendanceTrackingEnabled,
-          timezone: draft.timezone.trim() || "UTC",
-        }),
-      });
+        };
+      }
       setSetup(nextSetup);
       setDraft(buildDraftFromSetup(nextSetup));
       setRadiusInput(String(normalizeRadius(nextSetup.location?.geofenceRadiusMeters ?? nextSetup.defaultGeofenceRadiusMeters)));
       setSetupMode(nextSetup.configured ? "update" : "create");
+      await loadStructure();
       window.dispatchEvent(
         new CustomEvent(ORGANIZATION_UPDATED_EVENT, {
           detail: {
@@ -654,6 +945,85 @@ export default function OrganizationPageClient({
                   ) : null}
                 </div>
               </div>
+              <div className="organization-studio-scope-actions">
+                {companies.length > 1 ? (
+                  <Select
+                    onValueChange={handleCompanySelect}
+                    value={selectedCompanyId}
+                  >
+                    <SelectTrigger className="organization-studio-scope-control">
+                      <SelectValue
+                        placeholder={
+                          locale === "ru"
+                            ? "Выберите организацию"
+                            : "Select organization"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : companies[0] ? (
+                  <div className="organization-studio-scope-control organization-studio-scope-control--static">
+                    <span>{companies[0].name}</span>
+                  </div>
+                ) : null}
+
+                <Button
+                  className="organization-studio-header-action"
+                  onClick={() => setCreateCompanyOpen(true)}
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="size-4" />
+                  {locale === "ru" ? "Организация" : "Organization"}
+                </Button>
+                <Button
+                  className="organization-studio-header-action"
+                  disabled={!selectedCompanyId}
+                  onClick={startAddLocation}
+                  type="button"
+                  variant="outline"
+                >
+                  <MapPin className="size-4" />
+                  {locale === "ru" ? "Адрес" : "Address"}
+                </Button>
+              </div>
+              {locations.filter(
+                ({ companyId }) => companyId === selectedCompanyId,
+              ).length > 1 ? (
+                <div className="organization-studio-location-switcher">
+                  <MapPin className="size-4" />
+                  <Select
+                    onValueChange={handleLocationSelect}
+                    value={selectedLocationId}
+                  >
+                    <SelectTrigger className="organization-studio-location-trigger">
+                      <SelectValue
+                        placeholder={
+                          locale === "ru" ? "Выберите адрес" : "Select address"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations
+                        .filter(
+                          ({ companyId }) => companyId === selectedCompanyId,
+                        )
+                        .map((location) => (
+                          <SelectItem key={location.id} value={location.id}>
+                            {location.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
 
             <div className="organization-studio-grid">
@@ -819,6 +1189,58 @@ export default function OrganizationPageClient({
                     </span>
                   </button>
                 </section>
+
+                {setupMode === "create-location" &&
+                availableEmployees.length ? (
+                  <section className="organization-studio-fieldset">
+                    <div className="organization-studio-label-row">
+                      <span className="organization-studio-label">
+                        {locale === "ru"
+                          ? "Сотрудники на этом адресе"
+                          : "Employees at this address"}
+                      </span>
+                      <span className="text-xs text-[color:var(--muted-foreground)]">
+                        {selectedEmployeeIds.length}
+                      </span>
+                    </div>
+                    <div className="max-h-52 divide-y divide-[color:var(--border)] overflow-y-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)]">
+                      {availableEmployees.map((employee) => {
+                        const checked = selectedEmployeeIds.includes(
+                          employee.id,
+                        );
+                        const name =
+                          `${employee.lastName} ${employee.firstName}`.trim();
+                        return (
+                          <label
+                            className="flex cursor-pointer items-center gap-3 px-3 py-3 transition hover:bg-[color:var(--panel-strong)]"
+                            key={employee.id}
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(nextChecked) =>
+                                setSelectedEmployeeIds((current) =>
+                                  nextChecked === true
+                                    ? [...new Set([...current, employee.id])]
+                                    : current.filter(
+                                        (id) => id !== employee.id,
+                                      ),
+                                )
+                              }
+                            />
+                            <span className="min-w-0">
+                              <strong className="block truncate text-sm">
+                                {name}
+                              </strong>
+                              <span className="block truncate text-xs text-[color:var(--muted-foreground)]">
+                                {employee.primaryLocation?.name ?? "—"}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
               </div>
 
               <div className="organization-studio-main">
@@ -883,6 +1305,62 @@ export default function OrganizationPageClient({
             )}
           </Button>
         </form>
+        <Dialog open={createCompanyOpen} onOpenChange={setCreateCompanyOpen}>
+          <DialogContent className="max-w-[520px]">
+            <DialogHeader>
+              <DialogTitle>
+                {locale === "ru"
+                  ? "Добавить организацию"
+                  : "Add organization"}
+              </DialogTitle>
+              <DialogDescription>
+                {locale === "ru"
+                  ? "Создайте организацию, затем добавьте её первый рабочий адрес."
+                  : "Create the organization, then add its first work address."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2 py-2">
+              <label
+                className="text-sm font-semibold text-[color:var(--foreground)]"
+                htmlFor="new-company-name"
+              >
+                {locale === "ru" ? "Название" : "Name"}
+              </label>
+              <Input
+                autoFocus
+                id="new-company-name"
+                onChange={(event) => setNewCompanyName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submitCreateCompany();
+                  }
+                }}
+                placeholder={
+                  locale === "ru"
+                    ? "Название организации"
+                    : "Organization name"
+                }
+                value={newCompanyName}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={isCreatingCompany || !newCompanyName.trim()}
+                onClick={() => void submitCreateCompany()}
+                type="button"
+              >
+                {isCreatingCompany
+                  ? locale === "ru"
+                    ? "Создаём…"
+                    : "Creating…"
+                  : locale === "ru"
+                    ? "Создать"
+                    : "Create"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminShell>
   );

@@ -308,6 +308,34 @@ function testMobileLocationQualityControls() {
   );
 }
 
+function testWorkspaceReadyRequiresARealSession() {
+  const api = read("lib/api.ts");
+  const authFlow = read("lib/auth-flow.ts");
+  const workspaceReady = read("app/onboarding/workspace-ready.tsx");
+  const invitedEmployeeRegistration = read("app/auth/register/[token].tsx");
+
+  assert.match(
+    api,
+    /export async function getDemoSession[\s\S]*handleUnauthorized\(\);[\s\S]*Not authenticated\. Sign in again\./,
+    "Missing persisted sessions must reset auth state instead of leaving onboarding open.",
+  );
+  assert.match(
+    authFlow,
+    /export function signInLocally[\s\S]*const session = getCachedDemoSession\(\);[\s\S]*if \(!session\)[\s\S]*return false;/,
+    "Local auth state must never become authenticated without a real API session.",
+  );
+  assert.match(
+    invitedEmployeeRegistration,
+    /if \(signInLocally\(\{ workspaceSetupStep: 'location' \}\)\)[\s\S]*workspace-ready[\s\S]*router\.replace\('\/'/,
+    "Biometric return must fall back to sign-in when its API session is gone.",
+  );
+  assertContains(
+    workspaceReady,
+    "disabled={locationStatus.status !== 'ready' || finishing}",
+    "Workspace Continue must prevent duplicate requests while finishing.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
@@ -319,5 +347,6 @@ testExpoConfigHasOneSourceOfTruth();
 testAllPhotoFlowsUseSharedSdkCompatibleImagePicker();
 testAndroidBirthDateUsesSpinnerPicker();
 testMobileLocationQualityControls();
+testWorkspaceReadyRequiresARealSession();
 
 console.log("mobile launch flow tests passed");

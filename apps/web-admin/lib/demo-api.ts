@@ -15,6 +15,7 @@ import {
   writeBrowserStorageItem,
 } from "./browser-storage";
 import { appendTaskMeta } from "./task-meta";
+import { runtimeLocalize } from "./runtime-locale";
 
 const DEMO_STATE_KEY = "smart-admin-demo-state";
 const DEMO_COMPANY_NAME_EN = "Beauty Saloon";
@@ -2079,7 +2080,7 @@ function buildAttendanceAnomalies(state: DemoState) {
         location: state.employees[1].primaryLocation?.name ?? "—",
         shiftLabel: "09:00-18:00",
         detectedAt: createIsoAt(0, 9, 25),
-        summary: `${state.employees[1].firstName} ${state.employees[1].lastName} has repeated lateness.`,
+        summary: `${state.employees[1].lastName} ${state.employees[1].firstName} has repeated lateness.`,
         details: "Опоздания фиксировались 3 раза за последние 7 дней.",
         actionUrl: "/attendance",
       },
@@ -2660,7 +2661,7 @@ function buildDemoAnnouncementReadReceipts(
     (item) => item.id === announcementId,
   );
   if (!announcement) {
-    throw new Error("Новость не найдена.");
+    throw new Error(runtimeLocalize("Новость не найдена.", "News item not found."));
   }
 
   const readAtByEmployeeId =
@@ -3130,7 +3131,7 @@ function applyDemoEmployeeAccessRole(employee: DemoEmployee, role?: string) {
 function buildDemoEmployeeManagerAccess(state: DemoState, employeeId: string) {
   const employee = state.employees.find((item) => item.id === employeeId);
   if (!employee) {
-    throw new Error("Сотрудник не найден.");
+    throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
   }
 
   const storedRoles =
@@ -3163,7 +3164,7 @@ function buildDemoEmployeeDetailBootstrap(
   const employee = snapshot.employees.find((item) => item.id === employeeId);
 
   if (!employee) {
-    throw new Error("Сотрудник не найден.");
+    throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
   }
 
   const anomalies = buildAttendanceAnomalies(snapshot);
@@ -4870,7 +4871,7 @@ function buildEmployeeBiometricHistory(state: DemoState, employeeId: string) {
   );
 
   if (!employee || !biometric) {
-    throw new Error("Сотрудник не найден.");
+    throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
   }
 
   return {
@@ -5061,7 +5062,9 @@ export async function demoApiRequest<T>(
 ): Promise<T> {
   const token = options?.token ?? getSession()?.accessToken ?? undefined;
   if (!shouldHandle(token)) {
-    throw new Error("Demo mode is not active.");
+    throw new Error(
+      runtimeLocalize("Демо-режим не активен.", "Demo mode is not active."),
+    );
   }
 
   const session = getSession();
@@ -5284,7 +5287,7 @@ export async function demoApiRequest<T>(
       (item) => item.id === employeeDetailsMatch[1],
     );
     if (!employee) {
-      throw new Error("Сотрудник не найден.");
+      throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
     }
     return employee as T;
   }
@@ -5306,7 +5309,7 @@ export async function demoApiRequest<T>(
         (item) => item.id === employeeManagerAccessMatch[1],
       );
       if (!employee?.user) {
-        throw new Error("Сотрудник не найден.");
+        throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
       }
 
       (employee.user as any).roles = payload.grantManagerAccess
@@ -5328,7 +5331,7 @@ export async function demoApiRequest<T>(
         (item) => item.id === employeeBreaksMatch[1],
       );
       if (!employee) {
-        throw new Error("Сотрудник не найден.");
+        throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
       }
       employee.breaksEnabled = Boolean(payload.breaksEnabled);
     });
@@ -5349,7 +5352,7 @@ export async function demoApiRequest<T>(
         (item) => item.id === employeeWorkModeMatch[1],
       );
       if (!employee) {
-        throw new Error("Сотрудник не найден.");
+        throw new Error(runtimeLocalize("Сотрудник не найден.", "Employee not found."));
       }
       employee.workMode = payload.workMode === "FIELD" ? "FIELD" : "STATIONARY";
     });
@@ -5475,7 +5478,9 @@ export async function demoApiRequest<T>(
         (item) => item.id === setupInvitationMatch[1],
       );
       if (!invitation) {
-        throw new Error("Приглашение не найдено.");
+        throw new Error(
+          runtimeLocalize("Приглашение не найдено.", "Invitation not found."),
+        );
       }
 
       invitation.firstName = payload.firstName?.trim() || null;
@@ -6041,7 +6046,7 @@ export async function demoApiRequest<T>(
     });
 
     if (!updatedAnnouncement) {
-      throw new Error("Новость не найдена.");
+      throw new Error(runtimeLocalize("Новость не найдена.", "News item not found."));
     }
 
     return buildDemoAnnouncementItemForViewer(
@@ -6696,7 +6701,12 @@ export async function demoApiRequest<T>(
     return { updated: employeeIds.length } as T;
   }
 
-  throw new Error(`Демо-режим пока не поддерживает ${method} ${pathname}.`);
+  throw new Error(
+    runtimeLocalize(
+      `Демо-режим пока не поддерживает ${method} ${pathname}.`,
+      `Demo mode does not support ${method} ${pathname} yet.`,
+    ),
+  );
 }
 
 export async function demoApiDownload(
@@ -6705,7 +6715,9 @@ export async function demoApiDownload(
 ) {
   const token = options?.token ?? getSession()?.accessToken ?? undefined;
   if (!shouldHandle(token)) {
-    throw new Error("Demo mode is not active.");
+    throw new Error(
+      runtimeLocalize("Демо-режим не активен.", "Demo mode is not active."),
+    );
   }
 
   const url = new URL(path, "https://demo.local");

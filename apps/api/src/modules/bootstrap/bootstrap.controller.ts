@@ -17,8 +17,9 @@ export class BootstrapController {
     @CurrentUser() user: JwtUser,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('locationId') locationId?: string,
   ) {
-    return this.bootstrapService.tasks(user, dateFrom, dateTo);
+    return this.bootstrapService.tasks(user, dateFrom, dateTo, locationId);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
@@ -61,8 +62,9 @@ export class BootstrapController {
     @CurrentUser() user: JwtUser,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('locationId') locationId?: string,
   ) {
-    return this.bootstrapService.schedule(user, dateFrom, dateTo);
+    return this.bootstrapService.schedule(user, dateFrom, dateTo, locationId);
   }
 
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
@@ -81,8 +83,16 @@ export class BootstrapController {
     @CurrentUser() user: JwtUser,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('companyId') companyId?: string,
+    @Query('locationId') locationId?: string,
   ) {
-    return this.bootstrapService.activity(user, dateFrom, dateTo);
+    return this.bootstrapService.activity(
+      user,
+      dateFrom,
+      dateTo,
+      companyId,
+      locationId,
+    );
   }
 
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
@@ -97,8 +107,16 @@ export class BootstrapController {
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('analytics')
-  analytics(@CurrentUser() user: JwtUser, @Query('days') days?: string) {
-    return this.bootstrapService.analytics(user, days ? Number(days) : undefined);
+  analytics(
+    @CurrentUser() user: JwtUser,
+    @Query('days') days?: string,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.bootstrapService.analytics(
+      user,
+      days ? Number(days) : undefined,
+      locationId,
+    );
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

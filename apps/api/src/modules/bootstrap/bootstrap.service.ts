@@ -184,7 +184,7 @@ function normalizeDemoLookup(value?: string | null) {
 function demoEmployeeName(
   employee: Pick<DemoEmployeeRecord, 'firstName' | 'lastName'>,
 ) {
-  return `${employee.firstName} ${employee.lastName}`.trim();
+  return `${employee.lastName} ${employee.firstName}`.trim();
 }
 
 function demoTaskEmployee(employee: DemoEmployeeRecord) {
@@ -1136,7 +1136,12 @@ export class BootstrapService {
     };
   }
 
-  async tasks(user: JwtUser, dateFrom?: string, dateTo?: string) {
+  async tasks(
+    user: JwtUser,
+    dateFrom?: string,
+    dateTo?: string,
+    locationId?: string,
+  ) {
     if (isDemoOwnerAccount(user)) {
       const [employees, groups] = await Promise.all([
         withTimeoutFallback(
@@ -1163,7 +1168,10 @@ export class BootstrapService {
       );
     }
 
-    const resolvedRange = resolveBootstrapTaskRange(dateFrom, dateTo);
+    const resolvedRange = {
+      ...resolveBootstrapTaskRange(dateFrom, dateTo),
+      ...(locationId ? { locationId } : {}),
+    };
     const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
     const attendanceTrackingEnabled =
       organizationSetup.attendanceTrackingEnabled ?? true;
@@ -1171,7 +1179,13 @@ export class BootstrapService {
     const [taskBoard, employees, groups, liveSessions] = await Promise.all([
       this.collaborationService.listManagerTasks(user.sub, resolvedRange).catch(() => null),
       withTimeoutFallback(
-        this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+        this.employeesService
+          .list(
+            user.tenantId,
+            locationId ? { locationId } : {},
+            user.sub,
+          )
+          .catch(() => []),
         1500,
         [],
       ),
@@ -1188,12 +1202,13 @@ export class BootstrapService {
         [],
       ),
     ]);
-
     return {
       tasks: taskBoard?.tasks ?? [],
       employees,
       groups,
-      liveSessions,
+      liveSessions: liveSessions.filter((session) =>
+        employees.some((employee) => employee.id === session.employeeId),
+      ),
     };
   }
 
@@ -1267,13 +1282,86 @@ export class BootstrapService {
       this.attendanceService.liveTeam(user.tenantId).catch(() => []),
       this.attendanceService.teamAudit(user.tenantId, query).catch(() => null),
     ]);
+    const visibleEmployeeIds = new Set(
+      employees.map((employee) => employee.id),
+    );
+    const visibleHistoryRows =
+      history?.rows.filter((row) => visibleEmployeeIds.has(row.employeeId)) ??
+      [];
+    const visibleAnomalyItems =
+      anomalies?.items.filter((item) =>
+        visibleEmployeeIds.has(item.employeeId),
+      ) ?? [];
+    const visibleAuditItems =
+      audit?.items.filter((item) => visibleEmployeeIds.has(item.employeeId)) ??
+      [];
 
     return {
       employees,
-      history,
-      anomalies,
-      liveSessions,
-      audit,
+      history: history
+        ? {
+            ...history,
+            totals: {
+              sessions: visibleHistoryRows.length,
+              workedMinutes: visibleHistoryRows.reduce(
+                (sum, row) => sum + row.workedMinutes,
+                0,
+              ),
+              breakMinutes: visibleHistoryRows.reduce(
+                (sum, row) => sum + row.breakMinutes,
+                0,
+              ),
+              paidBreakMinutes: visibleHistoryRows.reduce(
+                (sum, row) => sum + row.paidBreakMinutes,
+                0,
+              ),
+              lateMinutes: visibleHistoryRows.reduce(
+                (sum, row) => sum + row.lateMinutes,
+                0,
+              ),
+              earlyLeaveMinutes: visibleHistoryRows.reduce(
+                (sum, row) => sum + row.earlyLeaveMinutes,
+                0,
+              ),
+            },
+            rows: visibleHistoryRows,
+          }
+        : null,
+      anomalies: anomalies
+        ? {
+            ...anomalies,
+            totals: {
+              critical: visibleAnomalyItems.filter(
+                (item) => item.severity === 'critical',
+              ).length,
+              warning: visibleAnomalyItems.filter(
+                (item) => item.severity === 'warning',
+              ).length,
+            },
+            items: visibleAnomalyItems,
+          }
+        : null,
+      liveSessions: liveSessions.filter((session) =>
+        visibleEmployeeIds.has(session.employeeId),
+      ),
+      audit: audit
+        ? {
+            ...audit,
+            totals: {
+              total: visibleAuditItems.length,
+              accepted: visibleAuditItems.filter(
+                (item) => item.result === 'ACCEPTED',
+              ).length,
+              rejected: visibleAuditItems.filter(
+                (item) => item.result === 'REJECTED',
+              ).length,
+              reviewRequired: visibleAuditItems.filter(
+                (item) => item.biometricVerification?.result === 'REVIEW',
+              ).length,
+            },
+            items: visibleAuditItems,
+          }
+        : null,
       dateFrom,
       dateTo,
     };
@@ -1317,7 +1405,7 @@ export class BootstrapService {
       withTimeoutFallback(
         attendanceTrackingEnabled
           ? this.scheduleService
-              .listShifts(user.tenantId)
+              .listShifts(user.tenantId, user.sub)
               .then((shifts) => ({
                 canCheckWorkdays: true,
                 scheduleShifts: shifts,
@@ -1338,7 +1426,7 @@ export class BootstrapService {
       ),
       withTimeoutFallback(
         attendanceTrackingEnabled
-          ? this.scheduleService.listTemplates(user.tenantId).catch(() => [])
+          ? this.scheduleService.listTemplates(user.tenantId, user.sub).catch(() => [])
           : Promise.resolve([]),
         1200,
         [],
@@ -1349,10 +1437,15 @@ export class BootstrapService {
         [],
       ),
     ]);
+    const employeeRecordIds = new Set(
+      employeeRecords.map((employee) => employee.id),
+    );
 
     return {
       employeeRecords,
-      liveSessions,
+      liveSessions: liveSessions.filter((session) =>
+        employeeRecordIds.has(session.employeeId),
+      ),
       overview,
       pendingInvitations,
       scheduleShifts: workdaySnapshot.scheduleShifts,
@@ -1366,7 +1459,9 @@ export class BootstrapService {
   async employeeDetail(user: JwtUser, employeeId: string) {
     const [employee, history, anomalies, biometricHistory, managerAccess, groups] =
       await Promise.all([
-        this.employeesService.getById(user.tenantId, employeeId).catch(() => null),
+        this.employeesService
+          .getById(user.tenantId, employeeId, user.sub)
+          .catch(() => null),
         this.attendanceService
           .employeeHistory(user.tenantId, employeeId, {})
           .catch(() => null),
@@ -1395,7 +1490,12 @@ export class BootstrapService {
     };
   }
 
-  async schedule(user: JwtUser, visibleDateFrom?: string, visibleDateTo?: string) {
+  async schedule(
+    user: JwtUser,
+    visibleDateFrom?: string,
+    visibleDateTo?: string,
+    locationId?: string,
+  ) {
     const mode = isEmployeeOnlyRole(user.roleCodes) ? 'employee' : 'admin';
     const today = new Date();
     const calendarDays = buildCalendarDays(today);
@@ -1452,12 +1552,28 @@ export class BootstrapService {
       };
     }
 
+    const locations = await withTimeoutFallback(
+      this.orgService
+        .listLocations(user.tenantId, undefined, false, user.sub)
+        .catch(() => []),
+      1200,
+      [],
+    );
+    const readableLocationIds = new Set(
+      locations.map((location) => location.id),
+    );
+    const selectedLocationId =
+      locationId && readableLocationIds.has(locationId) ? locationId : null;
+    const managerTaskQuery = {
+      ...taskQuery,
+      ...(selectedLocationId ? { locationId: selectedLocationId } : {}),
+    };
+
     const [
       templates,
       shifts,
       employees,
       groups,
-      locations,
       departments,
       positions,
       requests,
@@ -1465,19 +1581,20 @@ export class BootstrapService {
       overdueTaskBoard,
     ] = await Promise.all([
       attendanceTrackingEnabled
-        ? this.scheduleService.listTemplates(user.tenantId).catch(() => [])
+        ? this.scheduleService.listTemplates(user.tenantId, user.sub).catch(() => [])
         : Promise.resolve([]),
       attendanceTrackingEnabled
-        ? this.scheduleService.listShifts(user.tenantId).catch(() => [])
+        ? this.scheduleService.listShifts(user.tenantId, user.sub).catch(() => [])
         : Promise.resolve([]),
-      this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.employeesService
+        .list(
+          user.tenantId,
+          selectedLocationId ? { locationId: selectedLocationId } : {},
+          user.sub,
+        )
+        .catch(() => []),
       withTimeoutFallback(
         this.collaborationService.listGroups(user.sub).catch(() => []),
-        1200,
-        [],
-      ),
-      withTimeoutFallback(
-        this.orgService.listLocations(user.tenantId).catch(() => []),
         1200,
         [],
       ),
@@ -1498,14 +1615,19 @@ export class BootstrapService {
       ),
       withTimeoutFallback(
         this.collaborationService
-          .listManagerTasks(user.sub, taskQuery)
+          .listManagerTasks(user.sub, managerTaskQuery)
           .catch(() => null),
         1500,
         null,
       ),
       withTimeoutFallback(
         this.collaborationService
-          .listManagerTasks(user.sub, { onlyOverdue: 'true' })
+          .listManagerTasks(user.sub, {
+            onlyOverdue: 'true',
+            ...(selectedLocationId
+              ? { locationId: selectedLocationId }
+              : {}),
+          })
           .catch(() => null),
         1500,
         null,
@@ -1513,6 +1635,16 @@ export class BootstrapService {
     ]);
 
     const taskBoard = mergeTaskBoards([scheduleTaskBoard, overdueTaskBoard]);
+    const visibleTemplates = templates.filter(
+      (template) =>
+        readableLocationIds.has(template.location.id) &&
+        (!selectedLocationId || template.location.id === selectedLocationId),
+    );
+    const visibleShifts = shifts.filter(
+      (shift) =>
+        readableLocationIds.has(shift.location.id) &&
+        (!selectedLocationId || shift.location.id === selectedLocationId),
+    );
 
     return {
       mode,
@@ -1522,8 +1654,8 @@ export class BootstrapService {
         visibleDateTo: resolvedVisibleDateTo,
         isMockMode: false,
         organizationSetup,
-        templates,
-        shifts,
+        templates: visibleTemplates,
+        shifts: visibleShifts,
         employees,
         groups,
         locations,
@@ -1645,7 +1777,7 @@ export class BootstrapService {
       this.collaborationService.listGroups(user.sub).catch(() => []),
       attendanceTrackingEnabled
         ? this.scheduleService
-            .listShifts(user.tenantId)
+            .listShifts(user.tenantId, user.sub)
             .then((result) => ({
               canCheckWorkdays: true,
               scheduleShifts: result,
@@ -1671,14 +1803,36 @@ export class BootstrapService {
         [],
       ),
     ]);
+    const dashboardEmployeeIds = new Set(
+      employees.map((employee) => employee.id),
+    );
+    const dashboardAnomalyItems =
+      anomalies?.items.filter((item) =>
+        dashboardEmployeeIds.has(item.employeeId),
+      ) ?? [];
 
     return {
       mode,
       initialData: {
         profile,
         attendanceStatus,
-        liveSessions,
-        anomalies,
+        liveSessions: liveSessions.filter((session) =>
+          dashboardEmployeeIds.has(session.employeeId),
+        ),
+        anomalies: anomalies
+          ? {
+              ...anomalies,
+              totals: {
+                critical: dashboardAnomalyItems.filter(
+                  (item) => item.severity === 'critical',
+                ).length,
+                warning: dashboardAnomalyItems.filter(
+                  (item) => item.severity === 'warning',
+                ).length,
+              },
+              items: dashboardAnomalyItems,
+            }
+          : null,
         requests,
         taskBoard,
         personalTaskBoard: {
@@ -1700,13 +1854,25 @@ export class BootstrapService {
         scheduleShifts: scheduleShifts.scheduleShifts,
         canCheckWorkdays: scheduleShifts.canCheckWorkdays,
         personalHistory,
-        dailyActivity,
+        dailyActivity: dailyActivity.filter(
+          (item) =>
+            item.targetEmployees.length === 0 ||
+            item.targetEmployees.some((employee) =>
+              dashboardEmployeeIds.has(employee.id),
+            ),
+        ),
         organizationSetup,
       },
     };
   }
 
-  async activity(user: JwtUser, dateFrom?: string, dateTo?: string) {
+  async activity(
+    user: JwtUser,
+    dateFrom?: string,
+    dateTo?: string,
+    companyId?: string,
+    locationId?: string,
+  ) {
     const visibilityScope = await this.resolveActivityVisibilityScope(user).catch(() =>
       isEmployeeOnlyRole(user.roleCodes)
         ? { visibleEmployeeIds: [], visibleGroupIds: [] }
@@ -1718,6 +1884,8 @@ export class BootstrapService {
         .listCompanyActivity(user.tenantId, {
           dateFrom,
           dateTo,
+          companyId,
+          locationId,
           limit: 80,
           visibilityScope,
         })
@@ -1763,7 +1931,7 @@ export class BootstrapService {
     };
   }
 
-  async analytics(user: JwtUser, days = 14) {
+  async analytics(user: JwtUser, days = 14, locationId?: string) {
     const organizationSetup = await this.loadOrganizationSetup(user.tenantId);
 
     if (organizationSetup.attendanceTrackingEnabled === false) {
@@ -1787,16 +1955,66 @@ export class BootstrapService {
       dateTo: end.toISOString(),
     };
 
-    const [history, anomalies, employeeStats] = await Promise.all([
+    const [history, anomalies, visibleEmployees] = await Promise.all([
       this.attendanceService.teamHistory(user.tenantId, query),
       this.attendanceService.teamAnomalies(user.tenantId, query),
-      this.employeesService.stats(user.tenantId, {}),
+      this.employeesService.list(
+        user.tenantId,
+        locationId ? { locationId } : {},
+        user.sub,
+      ),
     ]);
+    const visibleEmployeeIds = new Set(
+      visibleEmployees.map((employee) => employee.id),
+    );
+    const visibleRows = history.rows.filter((row) =>
+      visibleEmployeeIds.has(row.employeeId),
+    );
+    const visibleAnomalies = anomalies.items.filter((item) =>
+      visibleEmployeeIds.has(item.employeeId),
+    );
 
     return {
-      history,
-      anomalies,
-      employeeCount: employeeStats.total,
+      history: {
+        ...history,
+        totals: {
+          sessions: visibleRows.length,
+          workedMinutes: visibleRows.reduce(
+            (sum, row) => sum + row.workedMinutes,
+            0,
+          ),
+          breakMinutes: visibleRows.reduce(
+            (sum, row) => sum + row.breakMinutes,
+            0,
+          ),
+          paidBreakMinutes: visibleRows.reduce(
+            (sum, row) => sum + row.paidBreakMinutes,
+            0,
+          ),
+          lateMinutes: visibleRows.reduce(
+            (sum, row) => sum + row.lateMinutes,
+            0,
+          ),
+          earlyLeaveMinutes: visibleRows.reduce(
+            (sum, row) => sum + row.earlyLeaveMinutes,
+            0,
+          ),
+        },
+        rows: visibleRows,
+      },
+      anomalies: {
+        ...anomalies,
+        totals: {
+          critical: visibleAnomalies.filter(
+            (item) => item.severity === 'critical',
+          ).length,
+          warning: visibleAnomalies.filter(
+            (item) => item.severity === 'warning',
+          ).length,
+        },
+        items: visibleAnomalies,
+      },
+      employeeCount: visibleEmployees.length,
       period: days === 7 ? '7d' : days === 30 ? '30d' : '14d',
     };
   }

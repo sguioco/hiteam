@@ -18,6 +18,11 @@ import { getSession } from '../../lib/auth';
 import { useI18n } from '../../lib/i18n';
 
 type Period = '7d' | '14d' | '30d';
+type AnalyticsLocation = {
+  id: string;
+  name: string;
+  company?: { id: string; name: string } | null;
+};
 
 type DailyAttendanceBucket = {
   absent: number;
@@ -105,15 +110,28 @@ export default function AnalyticsPageClient({
     initialData?.anomalies ?? null,
   );
   const [employeeCount, setEmployeeCount] = useState(initialData?.employeeCount ?? 0);
+  const [locations, setLocations] = useState<AnalyticsLocation[]>([]);
+  const [locationId, setLocationId] = useState('');
   const didUseInitialData = useRef(Boolean(initialData));
 
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
 
   useEffect(() => {
+    const session = getSession();
+    if (!session) return;
+    void apiRequest<AnalyticsLocation[]>('/org/locations', {
+      token: session.accessToken,
+    })
+      .then(setLocations)
+      .catch(() => setLocations([]));
+  }, []);
+
+  useEffect(() => {
     if (
       didUseInitialData.current &&
       initialData &&
-      period === initialData.period
+      period === initialData.period &&
+      !locationId
     ) {
       didUseInitialData.current = false;
       setLoading(false);
@@ -133,7 +151,10 @@ export default function AnalyticsPageClient({
     setLoading(true);
     setError(null);
 
-    void apiRequest<AnalyticsPageInitialData>(`/bootstrap/analytics?days=${days}`, {
+    const query = new URLSearchParams({ days: String(days) });
+    if (locationId) query.set('locationId', locationId);
+
+    void apiRequest<AnalyticsPageInitialData>(`/bootstrap/analytics?${query.toString()}`, {
         token: session.accessToken,
       })
       .then((snapshot) => {
@@ -156,7 +177,7 @@ export default function AnalyticsPageClient({
       .finally(() => {
         setLoading(false);
       });
-  }, [days, locale]);
+  }, [days, locale, locationId]);
 
   const chartData = useMemo(() => {
     const { buckets } = createDailyBuckets(days, locale);
@@ -263,21 +284,43 @@ export default function AnalyticsPageClient({
               {locale === 'ru' ? 'Обзор посещаемости' : 'Attendance overview'}
             </h1>
           </div>
-          <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
-            {periods.map((item) => (
-              <button
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
-                  period === item.key
-                    ? 'bg-accent text-white shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                key={item.key}
-                onClick={() => setPeriod(item.key)}
-                type="button"
+          <div className="flex flex-wrap items-center gap-2">
+            {locations.length > 1 ? (
+              <select
+                aria-label={locale === 'ru' ? 'Локация' : 'Location'}
+                className="h-10 rounded-xl border border-border bg-card px-3 text-sm font-medium outline-none focus:border-accent"
+                onChange={(event) => setLocationId(event.target.value)}
+                value={locationId}
               >
-                {item.label}
-              </button>
-            ))}
+                <option value="">
+                  {locale === 'ru' ? 'Все локации' : 'All locations'}
+                </option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.company?.name
+                      ? `${location.company.name} · `
+                      : ''}
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
+              {periods.map((item) => (
+                <button
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                    period === item.key
+                      ? 'bg-accent text-white shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  key={item.key}
+                  onClick={() => setPeriod(item.key)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

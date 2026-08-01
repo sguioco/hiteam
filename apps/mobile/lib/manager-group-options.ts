@@ -208,7 +208,7 @@ export function mergeGroupOptions(primaryGroups: GroupOption[], fallbackGroups: 
     .map((group) => ({
       ...group,
       members: [...group.members].sort((left, right) =>
-        `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`),
+        `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`),
       ),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));

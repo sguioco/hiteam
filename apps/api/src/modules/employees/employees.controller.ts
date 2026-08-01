@@ -20,6 +20,7 @@ import { UpdateEmployeeWorkModeDto } from './dto/update-employee-work-mode.dto';
 import { UpdateEmployeeInvitationSetupDto } from './dto/update-employee-invitation-setup.dto';
 import { UpdateEmployeeAccessDto } from './dto/update-employee-access.dto';
 import { UpdateMyPreferencesDto } from './dto/update-my-preferences.dto';
+import { TransferEmployeeLocationDto } from './dto/transfer-employee-location.dto';
 import { EmployeesService } from './employees.service';
 
 @Controller('employees')
@@ -140,7 +141,11 @@ export class EmployeesController {
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get(':employeeId')
   getById(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
-    return this.employeesService.getById(user.tenantId, employeeId);
+    return this.employeesService.getById(
+      user.tenantId,
+      employeeId,
+      user.sub,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -174,6 +179,22 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeWorkModeDto,
   ) {
     return this.employeesService.updateWorkMode(user.tenantId, user.sub, employeeId, dto.workMode);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Patch(':employeeId/location')
+  transferLocation(
+    @CurrentUser() user: JwtUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: TransferEmployeeLocationDto,
+  ) {
+    return this.employeesService.transferLocation(
+      user.tenantId,
+      user.sub,
+      employeeId,
+      dto,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

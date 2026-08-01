@@ -10,7 +10,7 @@ import { deleteMyAccount, loadMyProfile } from "../../lib/api";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import { getDirectionalIconStyle, getLanguageLabel, languageOptions, useI18n } from "../../lib/i18n";
 import { clearScreenCache, peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from "../../lib/screen-cache";
-import { signOutLocally } from "../../lib/auth-flow";
+import { signOutLocally, useAuthFlowState } from "../../lib/auth-flow";
 import { hapticSuccess } from "../../lib/haptics";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS } from "../../lib/workspace-cache";
@@ -34,6 +34,10 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
   const signOutConfirmSheetHeight = bottomSheetActionBottomOffset + 180;
   const router = useRouter();
   const { language, t } = useI18n();
+  const { roleCodes } = useAuthFlowState();
+  const canManageWorkspaceLocations = roleCodes.some((role) =>
+    ["tenant_owner", "operations_admin"].includes(role),
+  );
   const directionalIconStyle = getDirectionalIconStyle(language);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -159,7 +163,7 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
       return "...";
     }
 
-    return [normalizedProfile.firstName, normalizedProfile.lastName]
+    return [normalizedProfile.lastName, normalizedProfile.firstName]
       .filter(Boolean)
       .join(" ");
   }, [normalizedProfile]);
@@ -428,6 +432,38 @@ const ProfileScreen = ({ active = true }: ProfileScreenProps) => {
                 <Ionicons color="#6b7a90" name="chevron-forward" size={18} style={directionalIconStyle} />
               </PressableScale>
             </Animated.View>
+
+            {canManageWorkspaceLocations ? (
+              <Animated.View
+                entering={FadeInDown.delay(90)
+                  .duration(180)
+                  .withInitialValues({
+                    opacity: 0,
+                    transform: [{ translateY: 8 }],
+                  })}
+              >
+                <PressableScale
+                  className="flex-row items-center gap-3 rounded-2xl border border-white/35 bg-white/72 px-4 py-4 shadow-sm shadow-[#1f2687]/10"
+                  haptic="selection"
+                  onPress={() => router.push("/locations" as never)}
+                >
+                  <Ionicons
+                    color="#315cf6"
+                    name="location-outline"
+                    size={20}
+                  />
+                  <Text className="flex-1 font-body text-[15px] text-foreground">
+                    {language === "ru" ? "Локации" : "Locations"}
+                  </Text>
+                  <Ionicons
+                    color="#6b7a90"
+                    name="chevron-forward"
+                    size={18}
+                    style={directionalIconStyle}
+                  />
+                </PressableScale>
+              </Animated.View>
+            ) : null}
 
             <Animated.View
               entering={FadeInDown.delay(105)

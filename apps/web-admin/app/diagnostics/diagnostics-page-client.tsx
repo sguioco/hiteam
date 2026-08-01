@@ -277,7 +277,7 @@ export default function DiagnosticsPageClient({
       biometricJobs.filter((job) => {
         const matchesStatus = biometricStatusFilter === 'ALL' || job.status === biometricStatusFilter;
         const search = biometricSearch.trim().toLowerCase();
-        const fullName = `${job.employee.firstName} ${job.employee.lastName} ${job.employee.employeeNumber}`.toLowerCase();
+        const fullName = `${job.employee.lastName} ${job.employee.firstName} ${job.employee.employeeNumber}`.toLowerCase();
         const matchesSearch =
           search.length === 0 ||
           fullName.includes(search) ||
@@ -683,7 +683,7 @@ export default function DiagnosticsPageClient({
                       <span>{t('diagnostics.selectItem')}</span>
                     </label>
                   ) : null}
-                  <strong>{job.employee.firstName} {job.employee.lastName} ({job.employee.employeeNumber})</strong>
+                  <strong>{job.employee.lastName} {job.employee.firstName} ({job.employee.employeeNumber})</strong>
                   <span>{job.type}</span>
                   <span>{job.status}</span>
                   <span>{new Date(job.createdAt).toLocaleString(localeTag)}</span>

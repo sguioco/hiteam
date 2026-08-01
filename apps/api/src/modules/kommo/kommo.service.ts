@@ -1837,7 +1837,7 @@ export class KommoService {
     const name = owner
       ? this.employeeFullName(owner)
       : invitation?.firstName || invitation?.lastName
-        ? [invitation.firstName, invitation.lastName].filter(Boolean).join(' ')
+        ? [invitation.lastName, invitation.firstName].filter(Boolean).join(' ')
         : `${snapshot.tenant.name} manager`;
     const email = owner?.user.email ?? invitation?.email ?? null;
     const phone = owner?.phone ?? invitation?.phone ?? null;
@@ -1937,7 +1937,7 @@ export class KommoService {
     invitation: Awaited<ReturnType<KommoService['loadTenantSnapshot']>>['tenant']['employeeInvitations'][number],
   ) {
     const name =
-      [invitation.firstName, invitation.lastName].filter(Boolean).join(' ') ||
+      [invitation.lastName, invitation.firstName].filter(Boolean).join(' ') ||
       invitation.email ||
       invitation.phone ||
       `Invitation ${invitation.id.slice(0, 8)}`;
@@ -2757,7 +2757,7 @@ export class KommoService {
       return 'unassigned';
     }
 
-    return `${person.firstName} ${person.lastName} (${person.employeeNumber}, ${person.user?.email ?? 'no email'})`;
+    return `${person.lastName} ${person.firstName} (${person.employeeNumber}, ${person.user?.email ?? 'no email'})`;
   }
 
   private formatTaskTemplateWeekDays(weekDaysJson: string | null) {
@@ -3351,7 +3351,7 @@ export class KommoService {
   }
 
   private employeeFullName(employee: { firstName: string; lastName: string; middleName?: string | null }) {
-    return [employee.firstName, employee.middleName, employee.lastName].filter(Boolean).join(' ');
+    return [employee.lastName, employee.firstName, employee.middleName].filter(Boolean).join(' ');
   }
 
   private inferCountryFromAddress(address?: string | null) {

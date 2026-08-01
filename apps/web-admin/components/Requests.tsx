@@ -403,7 +403,7 @@ export default function Requests({
   );
   const [commentLoadingId, setCommentLoadingId] = useState<string | null>(null);
   const formatPersonName = (firstName: string, lastName: string) =>
-    localizePersonName(`${firstName} ${lastName}`.trim(), locale);
+    localizePersonName(`${lastName} ${firstName}`.trim(), locale);
   const didUseInitialItems = useRef(Boolean(initialItems));
   const requestTypeLabels = ui.requestTypes;
   const requestStatusLabels = ui.statuses;
@@ -533,7 +533,7 @@ export default function Requests({
     return items
       .filter((item) => {
         const employeeName =
-          `${item.request.employee.firstName} ${item.request.employee.lastName}`.toLowerCase();
+          `${item.request.employee.lastName} ${item.request.employee.firstName}`.toLowerCase();
         const typeLabel = requestTypeLabels[item.request.requestType].toLowerCase();
         const matchesSearch =
           !query ||
@@ -1120,7 +1120,7 @@ export default function Requests({
                         )}
                       >
                         {getAvatarInitials(
-                          `${selectedItem.request.employee.firstName} ${selectedItem.request.employee.lastName}`.trim(),
+                          `${selectedItem.request.employee.lastName} ${selectedItem.request.employee.firstName}`.trim(),
                         )}
                       </span>
                       <div>

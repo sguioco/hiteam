@@ -18,7 +18,7 @@
     "test:kommo": "ts-node src/modules/kommo/kommo-flows.test.ts",
     "test:collaboration": "ts-node src/modules/collaboration/collaboration-flows.test.ts",
     "test:employees": "ts-node src/modules/employees/employees-flows.test.ts",
-    "test:org": "ts-node src/modules/org/org-radius.test.ts",
+    "test:org": "ts-node src/modules/org/org-radius.test.ts && ts-node src/modules/org/org-multi-location.test.ts",
     "test:altegio-sync": "ts-node src/modules/altegio-sync/altegio-sync.helpers.test.ts",
     "test:altegio-marketplace": "ts-node scripts/test-altegio-marketplace-helpers.ts",
     "test:attendance": "ts-node src/modules/attendance/attendance-location.test.ts",
@@ -26,6 +26,7 @@
     "prisma:push": "node ../../scripts/run-api-prisma.cjs push",
     "prisma:migrate": "node ../../scripts/run-api-prisma.cjs migrate",
     "prisma:seed": "node ../../scripts/run-api-prisma.cjs seed",
+    "prisma:backfill-locations": "ts-node prisma/backfill-location-assignments.ts",
     "prisma:push:docker": "node ../../scripts/run-api-prisma.cjs push --profile=docker",
     "prisma:seed:docker": "node ../../scripts/run-api-prisma.cjs seed --profile=docker"
   },

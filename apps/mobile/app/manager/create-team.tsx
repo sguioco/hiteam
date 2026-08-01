@@ -27,11 +27,11 @@ import { EmployeeAvatarImage } from "../../src/components/employee-avatar-image"
 import { ParticipantAvatarStrip } from "../../src/components/participant-avatar-strip";
 
 function getEmployeeName(employee: ManagerEmployeeItem) {
-  return `${employee.firstName} ${employee.lastName}`.trim();
+  return `${employee.lastName} ${employee.firstName}`.trim();
 }
 
 function getEmployeeInitials(employee: ManagerEmployeeItem) {
-  return `${employee.firstName.charAt(0)}${employee.lastName.charAt(0)}`.toUpperCase();
+  return `${employee.lastName.charAt(0)}${employee.firstName.charAt(0)}`.toUpperCase();
 }
 
 export default function CreateTeamScreen() {

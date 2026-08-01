@@ -21,7 +21,6 @@ import {
   DashboardBootstrapInitialData,
   DashboardBootstrapResponse,
   EmployeeProfileResponse,
-  ScheduleShiftTemplateRecord,
   TaskItem,
   WorkGroupItem,
 } from "@smart/types";
@@ -146,15 +145,6 @@ type TaskDraft = {
   meetingMode: "online" | "offline";
   meetingLink: string;
   meetingLocation: string;
-};
-
-type DashboardCreateShiftDraft = {
-  employeeIds: string[];
-  templateId: string;
-  shiftDate: string;
-  fixedBreakEnabled: boolean;
-  fixedBreakStartsAtLocal: string;
-  fixedBreakDurationMinutes: string;
 };
 
 type PersonalCalendarParticipant = {
@@ -285,7 +275,7 @@ function buildActionCenterItems(
     .filter((item) => item.status === "PENDING")
     .slice(0, 15)
     .map((item, index) => {
-      const employeeName = `${item.request.employee.firstName} ${item.request.employee.lastName}`.trim();
+      const employeeName = `${item.request.employee.lastName} ${item.request.employee.firstName}`.trim();
       const localizedName =
         locale === "en" ? localizePersonName(employeeName, locale) : employeeName;
       const periodLabel =
@@ -625,7 +615,7 @@ function getTaskParticipant(
   locale: "ru" | "en",
 ): PersonalCalendarParticipant {
   const assigneeName = task.assigneeEmployee
-    ? `${task.assigneeEmployee.firstName} ${task.assigneeEmployee.lastName}`.trim()
+    ? `${task.assigneeEmployee.lastName} ${task.assigneeEmployee.firstName}`.trim()
     : "";
   const groupName = task.group?.name?.trim() ?? "";
   const fallbackName = localize(locale, "Без исполнителя", "No assignee");
@@ -916,22 +906,6 @@ export default function DashboardHome({
   );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
-  const [createShiftOpen, setCreateShiftOpen] = useState(false);
-  const [createShiftSubmitting, setCreateShiftSubmitting] = useState(false);
-  const [createShiftTemplatesLoading, setCreateShiftTemplatesLoading] =
-    useState(false);
-  const [createShiftTemplates, setCreateShiftTemplates] = useState<
-    ScheduleShiftTemplateRecord[]
-  >([]);
-  const [createShiftDraft, setCreateShiftDraft] =
-    useState<DashboardCreateShiftDraft>(() => ({
-      employeeIds: [],
-      templateId: "",
-      shiftDate: formatDateKey(new Date()),
-      fixedBreakEnabled: false,
-      fixedBreakStartsAtLocal: "13:00",
-      fixedBreakDurationMinutes: "30",
-    }));
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [taskDraft, setTaskDraft] = useState<TaskDraft>(initialTaskDraft);
   const [mockTaskStatuses, setMockTaskStatuses] = useState<
@@ -1210,7 +1184,7 @@ export default function DashboardHome({
     () =>
       employees.map((employee) => ({
         ...employee,
-        displayName: `${employee.firstName} ${employee.lastName}`.trim(),
+        displayName: `${employee.lastName} ${employee.firstName}`.trim(),
         group: employeeGroupByEmployeeId.get(employee.id) ?? null,
         position: employee.department?.name ?? null,
       })),
@@ -1222,183 +1196,6 @@ export default function DashboardHome({
       null,
     [employees, session?.user.id],
   );
-
-  function resetCreateShiftDraft() {
-    setCreateShiftDraft({
-      employeeIds: [],
-      templateId: "",
-      shiftDate: formatDateKey(new Date()),
-      fixedBreakEnabled: false,
-      fixedBreakStartsAtLocal: "13:00",
-      fixedBreakDurationMinutes: "30",
-    });
-  }
-
-  async function loadCreateShiftTemplates() {
-    const currentSession = getSession();
-
-    if (!currentSession) {
-      setMessageAction(null);
-      setMessage(
-        localize(locale, "Сессия истекла. Войди заново", "Session expired. Sign in again"),
-      );
-      return;
-    }
-
-    try {
-      setCreateShiftTemplatesLoading(true);
-      const templates = await apiRequest<ScheduleShiftTemplateRecord[]>(
-        "/schedule/templates",
-        {
-          token: currentSession.accessToken,
-          skipClientCache: true,
-        },
-      );
-      setCreateShiftTemplates(templates);
-    } catch (error) {
-      setMessageAction(null);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : localize(
-              locale,
-              "Не удалось загрузить шаблоны смен.",
-              "Failed to load shift templates.",
-            ),
-      );
-    } finally {
-      setCreateShiftTemplatesLoading(false);
-    }
-  }
-
-  function getCreateShiftTemplateDefaults(templateId: string) {
-    const template = createShiftTemplates.find((item) => item.id === templateId);
-    const duration = template?.fixedBreakDurationMinutes ?? 0;
-
-    return {
-      fixedBreakEnabled: duration > 0,
-      fixedBreakStartsAtLocal: template?.fixedBreakStartsAtLocal ?? "13:00",
-      fixedBreakDurationMinutes: String(duration || 30),
-    };
-  }
-
-  function openDashboardCreateShift() {
-    resetCreateShiftDraft();
-    setCreateShiftOpen(true);
-    void loadCreateShiftTemplates();
-  }
-
-  function hasValidCreateShiftBreak() {
-    if (!createShiftDraft.fixedBreakEnabled) {
-      return true;
-    }
-
-    const duration = Number(createShiftDraft.fixedBreakDurationMinutes);
-    return Number.isFinite(duration) && duration > 0;
-  }
-
-  function buildCreateShiftPayload(employeeId: string) {
-    const fixedBreakDuration = Number(createShiftDraft.fixedBreakDurationMinutes);
-
-    return {
-      employeeId,
-      templateId: createShiftDraft.templateId,
-      shiftDate: createShiftDraft.shiftDate,
-      fixedBreakStartsAtLocal: createShiftDraft.fixedBreakEnabled
-        ? createShiftDraft.fixedBreakStartsAtLocal
-        : undefined,
-      fixedBreakDurationMinutes: createShiftDraft.fixedBreakEnabled
-        ? fixedBreakDuration
-        : 0,
-      fixedBreakIsPaid: false,
-    };
-  }
-
-  async function handleCreateDashboardShift() {
-    const currentSession = getSession();
-    const selectedEmployeeIds = Array.from(
-      new Set(createShiftDraft.employeeIds.filter(Boolean)),
-    );
-
-    if (
-      selectedEmployeeIds.length === 0 ||
-      !createShiftDraft.templateId ||
-      !createShiftDraft.shiftDate
-    ) {
-      setMessageAction(null);
-      setMessage(
-        localize(
-          locale,
-          "Выберите сотрудника, шаблон и дату.",
-          "Select an employee, template, and date.",
-        ),
-      );
-      return;
-    }
-
-    if (!hasValidCreateShiftBreak()) {
-      setMessageAction(null);
-      setMessage(
-        localize(
-          locale,
-          "Укажите длительность фиксированного перерыва.",
-          "Enter fixed break duration.",
-        ),
-      );
-      return;
-    }
-
-    const shiftDate = parseDateKey(createShiftDraft.shiftDate);
-    if (
-      Number.isNaN(shiftDate.getTime()) ||
-      startOfDay(shiftDate) < startOfDay(new Date())
-    ) {
-      setMessageAction(null);
-      setMessage(
-        localize(
-          locale,
-          "Нельзя создать смену на прошедшую дату.",
-          "You cannot create a shift in the past.",
-        ),
-      );
-      return;
-    }
-
-    if (!currentSession) {
-      setMessageAction(null);
-      setMessage(
-        localize(locale, "Сессия истекла. Войди заново", "Session expired. Sign in again"),
-      );
-      return;
-    }
-
-    try {
-      setCreateShiftSubmitting(true);
-      await Promise.all(
-        selectedEmployeeIds.map((employeeId) =>
-          apiRequest("/schedule/shifts", {
-            method: "POST",
-            token: currentSession.accessToken,
-            body: JSON.stringify(buildCreateShiftPayload(employeeId)),
-          }),
-        ),
-      );
-      setCreateShiftOpen(false);
-      resetCreateShiftDraft();
-      setMessageAction(null);
-      setMessage(localize(locale, "Смена создана.", "Shift created."));
-      await loadData({ force: true, silent: true });
-    } catch (error) {
-      setMessageAction(null);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : localize(locale, "Не удалось создать смену.", "Failed to create shift."),
-      );
-    } finally {
-      setCreateShiftSubmitting(false);
-    }
-  }
 
   const createAction = isEmployeeMode
     ? undefined
@@ -1440,7 +1237,6 @@ export default function DashboardHome({
               "Open the create shift dialog",
             ),
             icon: CalendarRange,
-            onSelect: openDashboardCreateShift,
           },
           {
             id: "news",
@@ -1519,7 +1315,7 @@ export default function DashboardHome({
           employeeId,
           dayKey: status.dayKey,
           isWorkday: status.isWorkday,
-          name: `${employee.firstName} ${employee.lastName}`.trim(),
+          name: `${employee.lastName} ${employee.firstName}`.trim(),
         };
       })
       .filter(
@@ -1597,7 +1393,7 @@ export default function DashboardHome({
       .sort((left, right) => left.nextDate.getTime() - right.nextDate.getTime())
       .slice(0, 5)
       .map((item) => ({
-        name: `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+        name: `${item.employee.lastName} ${item.employee.firstName}`.trim(),
         dateLabel: item.nextDate.toLocaleDateString(toIntlLocale(locale), {
           day: "numeric",
           month: "long",
@@ -1605,15 +1401,15 @@ export default function DashboardHome({
         avatarUrl:
           item.employee.avatarUrl ||
           actionCenterAvatarMap.get(
-            `${item.employee.firstName} ${item.employee.lastName}`.trim().toLowerCase(),
+            `${item.employee.lastName} ${item.employee.firstName}`.trim().toLowerCase(),
           ) ||
           actionCenterAvatarMap.get(
             (locale === "en"
               ? localizePersonName(
-                  `${item.employee.firstName} ${item.employee.lastName}`.trim(),
+                  `${item.employee.lastName} ${item.employee.firstName}`.trim(),
                   locale,
                 )
-              : `${item.employee.firstName} ${item.employee.lastName}`.trim()
+              : `${item.employee.lastName} ${item.employee.firstName}`.trim()
             ).toLowerCase(),
           ) ||
           null,
@@ -1677,7 +1473,7 @@ export default function DashboardHome({
   const attendanceRows = employees
     .map((employee) => {
       const session = liveSessionByEmployeeId.get(employee.id);
-      const fullName = `${employee.firstName} ${employee.lastName}`.trim();
+      const fullName = `${employee.lastName} ${employee.firstName}`.trim();
       const hasMissingPunch = issueEmployeeIds.has(employee.id);
 
       return {
@@ -2655,236 +2451,6 @@ export default function DashboardHome({
                       </Button>
                     </div>
                   </form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            onOpenChange={(open) => {
-              setCreateShiftOpen(open);
-              if (!open) {
-                resetCreateShiftDraft();
-              }
-            }}
-            open={createShiftOpen}
-          >
-            <DialogContent className="max-w-xl overflow-visible rounded-[28px]">
-              <DialogHeader>
-                <DialogTitle className="font-heading text-2xl">
-                  {localize(locale, "Создать смену", "Create shift")}
-                </DialogTitle>
-                <DialogDescription>
-                  {localize(
-                    locale,
-                    "Назначьте одного или нескольких сотрудников на дату по шаблону.",
-                    "Assign one or more employees to a date using a template.",
-                  )}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4">
-                <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {localize(locale, "Сотрудник", "Employee")}
-                  </label>
-                  <EmployeeDropdown
-                    allEmployeesLabel={localize(locale, "Все сотрудники", "All employees")}
-                    employeeLabel={localize(locale, "Сотрудник", "Employee")}
-                    employees={createShiftEmployeeOptions}
-                    groupBy="group"
-                    groupFallbackLabel={localize(locale, "Без группы", "Without group")}
-                    isLoading={isBootstrapping}
-                    loadingLabel={localize(
-                      locale,
-                      "Загружаем сотрудников",
-                      "Loading employees",
-                    )}
-                    mode="multiple"
-                    noEmployeesLabel={localize(
-                      locale,
-                      "Сотрудники не найдены.",
-                      "No employees found.",
-                    )}
-                    onSelectedEmployeeIdsChange={(employeeIds) =>
-                      setCreateShiftDraft((current) => ({
-                        ...current,
-                        employeeIds,
-                      }))
-                    }
-                    placeholder={localize(
-                      locale,
-                      "Выберите сотрудника",
-                      "Select employee",
-                    )}
-                    portal={false}
-                    searchPlaceholder={localize(
-                      locale,
-                      "Поиск сотрудника",
-                      "Search employee",
-                    )}
-                    selectedEmployeeIds={createShiftDraft.employeeIds}
-                    selectedEmployeesLabel={(count) =>
-                      localize(
-                        locale,
-                        `Выбрано сотрудников: ${count}`,
-                        `${count} employees selected`,
-                      )
-                    }
-                    showAllEmployeesOption
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {localize(locale, "Шаблон смены", "Shift template")}
-                  </label>
-                  <Select
-                    onValueChange={(value) =>
-                      setCreateShiftDraft((current) => ({
-                        ...current,
-                        templateId: value,
-                        ...getCreateShiftTemplateDefaults(value),
-                      }))
-                    }
-                    value={createShiftDraft.templateId}
-                  >
-                    <SelectTrigger
-                      disabled={
-                        createShiftTemplatesLoading ||
-                        createShiftTemplates.length === 0
-                      }
-                    >
-                      <SelectTriggerLabel
-                        className={
-                          createShiftTemplates.find(
-                            (template) => template.id === createShiftDraft.templateId,
-                          )?.name
-                            ? undefined
-                            : "text-muted-foreground"
-                        }
-                      >
-                        {createShiftTemplates.find(
-                          (template) => template.id === createShiftDraft.templateId,
-                        )?.name ??
-                          (createShiftTemplatesLoading
-                            ? localize(locale, "Загружаем шаблоны...", "Loading templates...")
-                            : createShiftTemplates.length > 0
-                              ? localize(locale, "Выберите шаблон", "Select template")
-                              : localize(locale, "Шаблонов пока нет", "No templates yet"))}
-                      </SelectTriggerLabel>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {createShiftTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          <SelectOptionContent>
-                            <SelectOptionText>
-                              <SelectOptionTitle>{template.name}</SelectOptionTitle>
-                              <SelectOptionDescription>
-                                {template.startsAtLocal}-{template.endsAtLocal} ·{" "}
-                                {template.location.name}
-                              </SelectOptionDescription>
-                            </SelectOptionText>
-                          </SelectOptionContent>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {localize(locale, "Дата", "Date")}
-                  </label>
-                  <TaskDatePicker
-                    locale={locale}
-                    minToday
-                    onChange={(value) =>
-                      setCreateShiftDraft((current) => ({
-                        ...current,
-                        shiftDate: value,
-                      }))
-                    }
-                    value={createShiftDraft.shiftDate}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <label className="flex min-h-10 items-center gap-3 text-sm font-semibold text-foreground">
-                    <input
-                      checked={createShiftDraft.fixedBreakEnabled}
-                      className="h-4 w-4 rounded border accent-primary"
-                      onChange={(event) =>
-                        setCreateShiftDraft((current) => ({
-                          ...current,
-                          fixedBreakEnabled: event.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    {localize(locale, "Фиксированный перерыв", "Fixed break")}
-                  </label>
-
-                  <AnimatedDisclosure show={createShiftDraft.fixedBreakEnabled}>
-                    <div className="flex flex-wrap items-end gap-3">
-                      <label className="w-36 max-w-full space-y-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {localize(locale, "Начало перерыва", "Break start")}
-                        </span>
-                        <TaskTimePicker
-                          buttonClassName="h-11 rounded-[14px]"
-                          locale={locale}
-                          onChange={(value) =>
-                            setCreateShiftDraft((current) => ({
-                              ...current,
-                              fixedBreakStartsAtLocal: value,
-                            }))
-                          }
-                          value={createShiftDraft.fixedBreakStartsAtLocal}
-                        />
-                      </label>
-                      <label className="w-28 max-w-full space-y-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {localize(locale, "Длительность, мин", "Duration, min")}
-                        </span>
-                        <Input
-                          className="h-11 rounded-[14px]"
-                          min={1}
-                          onChange={(event) =>
-                            setCreateShiftDraft((current) => ({
-                              ...current,
-                              fixedBreakDurationMinutes: event.target.value,
-                            }))
-                          }
-                          type="number"
-                          value={createShiftDraft.fixedBreakDurationMinutes}
-                        />
-                      </label>
-                    </div>
-                  </AnimatedDisclosure>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <Button
-                    onClick={() => setCreateShiftOpen(false)}
-                    type="button"
-                    variant="outline"
-                  >
-                    {localize(locale, "Отмена", "Cancel")}
-                  </Button>
-                  <Button
-                    disabled={
-                      createShiftSubmitting ||
-                      createShiftTemplatesLoading ||
-                      createShiftTemplates.length === 0
-                    }
-                    onClick={() => void handleCreateDashboardShift()}
-                    type="button"
-                  >
-                    {createShiftSubmitting
-                      ? localize(locale, "Сохраняем...", "Saving...")
-                      : localize(locale, "Сохранить смену", "Save shift")}
-                  </Button>
-                </div>
-              </div>
             </DialogContent>
           </Dialog>
 

@@ -17,7 +17,7 @@ import {
   type StyleProp,
   type TextStyle,
 } from "react-native";
-import { updatePreferredLocale } from "./api";
+import { setApiLanguage, updatePreferredLocale } from "./api";
 import { generatedTranslations } from "./generated-translations";
 
 export const supportedAppLanguages = [
@@ -2270,6 +2270,10 @@ export function I18nProvider({
     }
     loadLanguage();
   }, [initialLanguage]);
+
+  useEffect(() => {
+    setApiLanguage(language);
+  }, [language]);
 
   const setLanguage = useCallback(
     async (next: AppLanguage) => {
