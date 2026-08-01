@@ -20,6 +20,7 @@ import {
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
+import { AltegioPilotService } from '../altegio-sync/altegio-pilot.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
@@ -219,6 +220,7 @@ export class EmployeesService {
     private readonly invitationsMailer: EmployeeInvitationsMailerService,
     private readonly kommoService: KommoService,
     @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
+    @Optional() private readonly altegioPilot?: AltegioPilotService,
   ) {}
 
   private syncBillingSeatsInBackground(tenantId: string) {
@@ -233,6 +235,13 @@ export class EmployeesService {
     void this.altegioStaffScheduleSync?.pushEmployeeToAltegio(tenantId, employeeId).catch((error) => {
       this.logger.warn(
         `Unable to push employee ${employeeId} to Altegio: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+    void this.altegioPilot?.pushEmployeeToAltegio(tenantId, employeeId).catch((error) => {
+      this.logger.warn(
+        `Unable to push employee ${employeeId} to Altegio Pilot: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -1183,6 +1192,7 @@ export class EmployeesService {
       'location_changed',
     );
     this.emitWorkspaceRefreshForUser(employee.userId, 'employee_location_changed');
+    this.pushEmployeeToAltegioInBackground(tenantId, employee.id);
     return this.getById(tenantId, employee.id);
   }
 

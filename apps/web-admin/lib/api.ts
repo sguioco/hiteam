@@ -513,6 +513,10 @@ function humanizeAuthErrorMessage(message: string): string {
         : "No account is registered with this phone.";
     case "Invalid password.":
       return locale === "ru" ? "Неверный пароль." : "Invalid password.";
+    case "Invalid Altegio login or password.":
+      return locale === "ru"
+        ? "Неверный логин или пароль Altegio."
+        : "Invalid Altegio login or password.";
     case "This account is inactive.":
       return locale === "ru"
         ? "Аккаунт неактивен. Обратись к администратору."

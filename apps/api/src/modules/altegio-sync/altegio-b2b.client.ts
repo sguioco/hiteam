@@ -12,6 +12,17 @@ export class AltegioB2bError extends Error {
   }
 }
 
+/**
+ * Altegio's auth endpoint currently answers an invalid login/password with 404
+ * and a `Wrong login or password` message. Keep this endpoint-specific
+ * translation separate from generic 404s (for example, a missing location).
+ */
+export function isAltegioInvalidCredentialsError(error: unknown) {
+  if (!(error instanceof AltegioB2bError) || error.statusCode !== 404) return false;
+  const payload = error.payload as { meta?: { message?: unknown } } | undefined;
+  return String(payload?.meta?.message ?? '').trim().toLowerCase() === 'wrong login or password';
+}
+
 export type AltegioTeamMember = {
   id: string;
   name: string;
@@ -69,18 +80,63 @@ export class AltegioB2bClient {
     return (this.configService.get<string>('ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN') ?? '').trim();
   }
 
-  async getLocationProfile(locationId: string): Promise<AltegioLocationProfile> {
+  hasPartnerToken() {
+    return Boolean(this.partnerToken());
+  }
+
+  async authenticateUser(login: string, password: string) {
+    const payload = await this.request(
+      'POST',
+      `${this.apiBase}/api/v1/auth`,
+      { login: login.trim(), password },
+      'application/vnd.api.v2+json',
+      false,
+    );
+    const data = (payload.data && typeof payload.data === 'object' ? payload.data : payload) as Record<
+      string,
+      unknown
+    >;
+    const userToken = String(data.user_token ?? '').trim();
+    if (!userToken) {
+      throw new AltegioB2bError('altegio_auth_missing_user_token', 502, payload);
+    }
+    return {
+      userToken,
+      id: String(data.id ?? '').trim(),
+      name: String(data.name ?? '').trim() || null,
+      email: String(data.email ?? '').trim() || null,
+    };
+  }
+
+  async listLocations(userToken: string): Promise<AltegioLocationProfile[]> {
+    const payload = await this.request(
+      'GET',
+      `${this.apiBase}/api/v1/companies?my=1`,
+      undefined,
+      'application/vnd.api.v2+json',
+      true,
+      userToken,
+    );
+    const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    return rows
+      .filter((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object'))
+      .map((row) => parseLocationProfilePayload({ data: row }, String(row.id ?? '')))
+      .filter((location) => Boolean(location.id));
+  }
+
+  async getLocationProfile(locationId: string, userToken?: string): Promise<AltegioLocationProfile> {
     const payload = await this.request(
       'GET',
       `${this.apiBase}/api/v1/company/${encodeURIComponent(locationId)}`,
       undefined,
       'application/vnd.api.v2+json',
-      false,
+      Boolean(userToken),
+      userToken,
     );
     return parseLocationProfilePayload(payload, locationId);
   }
 
-  async listTeamMembers(locationId: string): Promise<AltegioTeamMember[]> {
+  async listTeamMembers(locationId: string, userToken?: string): Promise<AltegioTeamMember[]> {
     const query = new URLSearchParams();
     query.append('filter[fired]', '0');
     query.append('filter[deleted]', '0');
@@ -92,6 +148,8 @@ export class AltegioB2bClient {
       `${this.apiBase}/api/v2/locations/${encodeURIComponent(locationId)}/team_members?${query.toString()}`,
       undefined,
       'application/vnd.api.v2+json',
+      true,
+      userToken,
     );
 
     return parseTeamMembersPayload(payload);
@@ -104,6 +162,7 @@ export class AltegioB2bClient {
     phone?: string | null;
     email?: string | null;
     positionId?: number | null;
+    userToken?: string;
   }) {
     const phoneDigits = digitsOnly(args.phone);
     const payload = await this.request(
@@ -120,6 +179,8 @@ export class AltegioB2bClient {
         is_paid_staff: false,
       },
       'application/vnd.api.v2+json',
+      true,
+      args.userToken,
     );
 
     const data = (payload.data && typeof payload.data === 'object' ? payload.data : payload) as Record<
@@ -138,6 +199,7 @@ export class AltegioB2bClient {
     startDate: string;
     endDate: string;
     staffIds?: string[];
+    userToken?: string;
   }): Promise<AltegioScheduleDay[]> {
     const query = new URLSearchParams({
       start_date: args.startDate,
@@ -152,6 +214,8 @@ export class AltegioB2bClient {
       `${this.apiBase}/api/v1/company/${encodeURIComponent(args.locationId)}/staff/schedule?${query.toString()}`,
       undefined,
       'application/vnd.api.v2+json',
+      true,
+      args.userToken,
     );
 
     return parseSchedulePayload(payload);
@@ -168,22 +232,27 @@ export class AltegioB2bClient {
       teamMemberId: string;
       dates: string[];
     }>;
+    userToken?: string;
   }) {
     return this.request(
       'PUT',
       `${this.apiBase}/api/v1/company/${encodeURIComponent(args.locationId)}/staff/schedule`,
       {
         schedules_to_set: (args.schedulesToSet ?? []).map((item) => ({
-          team_member_id: Number.parseInt(item.teamMemberId, 10),
+          // Altegio's schedule endpoint calls this entity `staff` even though
+          // the read endpoints expose it as a team member.
+          staff_id: Number.parseInt(item.teamMemberId, 10),
           dates: item.dates,
           slots: item.slots,
         })),
         schedules_to_delete: (args.schedulesToDelete ?? []).map((item) => ({
-          team_member_id: Number.parseInt(item.teamMemberId, 10),
+          staff_id: Number.parseInt(item.teamMemberId, 10),
           dates: item.dates,
         })),
       },
       'application/vnd.api.v2+json',
+      true,
+      args.userToken,
     );
   }
 
@@ -193,9 +262,10 @@ export class AltegioB2bClient {
     json?: Record<string, unknown>,
     accept = 'application/vnd.api.v2+json',
     includeUserToken = true,
+    userTokenOverride?: string,
   ) {
     const partnerToken = this.partnerToken();
-    const userToken = this.systemUserToken();
+    const userToken = userTokenOverride?.trim() || this.systemUserToken();
     if (!partnerToken || (includeUserToken && !userToken)) {
       throw new AltegioB2bError('altegio_b2b_tokens_missing', 503);
     }

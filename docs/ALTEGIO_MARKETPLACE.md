@@ -13,6 +13,25 @@
 | `ALTEGIO_CALLBACK_TOKEN` | optional | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks` для вызовов без `partner_token` |
 | `ALTEGIO_MARKETPLACE_PAYMENT_CURRENCY` | optional | Fallback currency для notify (default `USD`) |
 | `ALTEGIO_WEBHOOK_URL` | optional | Регистрируется в Altegio при connect, обычно `https://api.hiteam.net/api/v1/altegio/webhooks` |
+| `ALTEGIO_PILOT_ENCRYPTION_KEY` | yes for pilot | Отдельный сильный секрет для AES-256-GCM шифрования пользовательских токенов Altegio |
+
+## Pilot direct connection (before Marketplace approval)
+
+`/api/v1/altegio/pilot` is isolated from Marketplace billing and install state. A HiTeam
+administrator signs in with an Altegio account; the API exchanges the credentials for an
+Altegio `user_token`, immediately discards the password, and encrypts that token at rest.
+The account may select up to three locations it can access. HiTeam's server-side
+`ALTEGIO_PARTNER_TOKEN` is never shown to the administrator.
+
+Pilot endpoints (JWT; tenant owner, HR admin, operations admin):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/altegio/pilot` | Pilot connection and selected locations |
+| POST | `/api/v1/altegio/pilot/authorize` | Exchange Altegio login/password for a user token; returns accessible locations |
+| POST | `/api/v1/altegio/pilot/locations` | Select one to three accessible locations |
+| POST | `/api/v1/altegio/pilot/sync` | Two-way staff and schedule synchronization for all selected locations |
+| DELETE | `/api/v1/altegio/pilot` | Delete encrypted token and pilot bindings |
 
 ## URLs в кабинете разработчика Altegio
 
@@ -90,6 +109,22 @@ Trial-claim (`AltegioMarketplaceTrialClaim`) при disconnect не удаляе
 - **Employees:** матч по `altegioTeamMemberId` → phone → email; автосоздание в HiTeam/Altegio
 - **Schedule:** Altegio slots → `Shift` с `source=ALTEGIO`; HiTeam `PUBLISHED` с `source=HITEAM` → push в Altegio
 - B2B API: `GET /api/v2/.../team_members`, `GET/PUT /api/v1/company/{id}/staff/schedule`
+
+When a manager removes the final HiTeam-authored shift for a staff-day, HiTeam
+sends that day in `schedules_to_delete`. This deletion is sent only for a
+direct HiTeam edit; a periodic pull never removes an Altegio-authored day.
+
+### Pilot direct connection
+
+Pilot uses the encrypted Altegio user token and a separate `AltegioPilotStaffLink`
+per selected location. This is deliberately separate from the Marketplace
+`Employee.altegioTeamMemberId` binding: an employee can work at more than one
+Pilot location. Selecting locations runs the initial two-way sync immediately;
+`POST /altegio/pilot/sync` repeats it on demand, and staff/schedule webhooks for
+a selected Pilot location trigger the same reconciliation. Staff are matched by
+existing Pilot link, phone, then email. Altegio schedule slots are imported into
+shifts whose source is `ALTEGIO_PILOT_<binding id>`; published HiTeam shifts for
+that location are pushed back to Altegio.
 
 ## Trial protection
 

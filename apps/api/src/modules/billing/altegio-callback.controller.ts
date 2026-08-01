@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 import { AltegioB2bClient } from '../altegio-sync/altegio-b2b.client';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
+import { AltegioPilotService } from '../altegio-sync/altegio-pilot.service';
 import { AltegioMarketplaceBillingService } from './altegio-marketplace-billing.service';
 import { AltegioMarketplaceClient } from './altegio-marketplace.client';
 import { classifyMarketplaceLifecycleEvent } from './altegio-marketplace.helpers';
@@ -23,6 +24,7 @@ export class AltegioCallbackController {
     private readonly altegioMarketplaceClient: AltegioMarketplaceClient,
     private readonly altegioB2bClient: AltegioB2bClient,
     @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
+    @Optional() private readonly altegioPilot?: AltegioPilotService,
   ) {}
 
   @Get('onboarding/preview')
@@ -93,7 +95,9 @@ export class AltegioCallbackController {
     if (!this.altegioStaffScheduleSync) {
       return { ok: true, ignored: 'sync_service_unavailable' };
     }
-    return this.altegioStaffScheduleSync.handleWebhookEvent(payload);
+    const marketplace = await this.altegioStaffScheduleSync.handleWebhookEvent(payload);
+    if (marketplace.ignored !== 'unknown_location' || !this.altegioPilot) return marketplace;
+    return this.altegioPilot.handleWebhookEvent(payload);
   }
 
   private isMarketplaceLifecycleEvent(payload: Record<string, unknown>) {

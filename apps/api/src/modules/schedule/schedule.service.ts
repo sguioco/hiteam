@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { AttendanceSessionStatus, Prisma, ShiftStatus, UserStatus } from '@prisma/client';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
+import { AltegioPilotService } from '../altegio-sync/altegio-pilot.service';
 import { HITEAM_SHIFT_SOURCE } from '../altegio-sync/altegio-sync.helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -174,12 +175,20 @@ export class ScheduleService {
     private readonly auditService: AuditService,
     private readonly collaborationRealtimeService: CollaborationRealtimeService,
     @Optional() private readonly altegioStaffScheduleSync?: AltegioStaffScheduleSyncService,
+    @Optional() private readonly altegioPilot?: AltegioPilotService,
   ) {}
 
   private pushShiftDayToAltegioInBackground(tenantId: string, employeeId: string, shiftDate: Date) {
     void this.altegioStaffScheduleSync?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate).catch((error) => {
       this.logger.warn(
         `Unable to push shift day to Altegio tenantId=${tenantId} employeeId=${employeeId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+    void this.altegioPilot?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate).catch((error) => {
+      this.logger.warn(
+        `Unable to push shift day to Altegio Pilot tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

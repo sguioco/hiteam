@@ -6701,6 +6701,15 @@ export async function demoApiRequest<T>(
     return { updated: employeeIds.length } as T;
   }
 
+  if (pathname.startsWith("/altegio/pilot")) {
+    throw new Error(
+      runtimeLocalize(
+        "Подключение Altegio недоступно в демо-режиме. Войдите в рабочий аккаунт HiTeam, чтобы подключить локации.",
+        "Altegio connection is unavailable in demo mode. Sign in to a HiTeam workspace to connect locations.",
+      ),
+    );
+  }
+
   throw new Error(
     runtimeLocalize(
       `Демо-режим пока не поддерживает ${method} ${pathname}.`,

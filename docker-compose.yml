@@ -91,10 +91,16 @@ services:
       COMPRE_FACE_SIMILARITY_THRESHOLD: 0.75
       EXPO_ACCESS_TOKEN: ''
       FRONTEND_URL: http://localhost:3000
-      JWT_ACCESS_SECRET: change-me-access-secret
-      JWT_REFRESH_SECRET: change-me-refresh-secret
+      # These defaults are for the local Compose stack only. Production must
+      # provide distinct secrets through its managed environment file.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-compose-access-secret-2026-do-not-reuse}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-compose-refresh-secret-2026-do-not-reuse}
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
+      # Compose reads the root .env for interpolation but does not inject it
+      # into containers. Pass the Altegio credentials explicitly.
+      ALTEGIO_PARTNER_TOKEN: ${ALTEGIO_PARTNER_TOKEN:-}
+      ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN: ${ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN:-}
     ports:
       - '4000:4000'
     depends_on:

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
 import { EmployeeDropdown } from "../../components/employee-dropdown";
+import { AltegioPilotConnect } from "../../components/altegio-pilot-connect";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
 import {
@@ -43,7 +44,6 @@ import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
 import {
-  buildAltegioMarketplaceConnectUrl,
   peekAltegioMarketplaceParams,
 } from "../../lib/altegio-marketplace";
 import { writeBrowserStorageItem } from "../../lib/browser-storage";
@@ -923,41 +923,35 @@ export default function OrganizationPageClient({
                   </button>
                 </div>
               ) : (
-                <div className="relative mb-7 overflow-hidden rounded-[26px] border border-[#eadf9a] bg-[linear-gradient(120deg,#fffdf4_0%,#ffffff_55%,#fff4a8_100%)] px-5 py-5 shadow-[0_18px_48px_rgba(119,94,12,0.10)] sm:px-6">
-                  <div className="pointer-events-none absolute -right-14 -top-20 h-48 w-48 rounded-full bg-[#ffe35b]/45 blur-3xl" />
-                  <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-6 font-heading">
+                  <div className="flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[20px] shadow-[0_12px_28px_rgba(224,180,11,0.25)]">
+                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
                         <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xl font-semibold tracking-[-0.04em] text-[#22262c]">
-                            altegio
-                          </span>
-                          <span className="rounded-full bg-[#22262c] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
-                            Marketplace
-                          </span>
+                          <span className="font-semibold text-foreground">Altegio</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Marketplace</span>
                         </div>
-                        <p className="mt-1.5 font-semibold text-foreground">
+                        <p className="mt-0.5 max-w-lg text-sm text-muted-foreground">
                           {locale === "ru"
-                            ? "Подключите ваш салон к HiTeam"
-                            : "Connect your location to HiTeam"}
-                        </p>
-                        <p className="mt-1 max-w-lg text-sm leading-5 text-muted-foreground">
-                          {locale === "ru"
-                            ? "Импортируйте сотрудников и синхронизируйте рабочее расписание."
-                            : "Import staff and keep working schedules synchronized."}
+                            ? "Синхронизация HiTeam с вашим салоном"
+                            : "Sync HiTeam with your location"}
                         </p>
                       </div>
                     </div>
-                    <a
-                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-5 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
-                      href={buildAltegioMarketplaceConnectUrl() || "#"}
-                    >
-                      {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
-                      <ExternalLink className="h-4 w-4 text-white" />
-                    </a>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <button
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500"
+                        disabled
+                        type="button"
+                      >
+                        {locale === "ru" ? "Скоро в Marketplace" : "Available soon"}
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+                      <AltegioPilotConnect />
+                    </div>
                   </div>
                 </div>
               )

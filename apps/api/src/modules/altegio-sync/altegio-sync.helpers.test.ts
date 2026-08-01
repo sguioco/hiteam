@@ -11,6 +11,8 @@ import {
   syntheticAltegioEmail,
 } from './altegio-sync.helpers';
 import {
+  AltegioB2bError,
+  isAltegioInvalidCredentialsError,
   parseLocationProfilePayload,
   parseSchedulePayload,
   parseTeamMembersPayload,
@@ -171,6 +173,21 @@ function testPayloadParsers() {
   assert.deepEqual(days[0].slots, [{ from: '10:00', to: '19:00' }]);
 }
 
+function testInvalidAltegioCredentialsAreRecognized() {
+  assert.equal(
+    isAltegioInvalidCredentialsError(
+      new AltegioB2bError('Altegio B2B request failed with 404', 404, {
+        meta: { message: 'Wrong login or password' },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isAltegioInvalidCredentialsError(new AltegioB2bError('missing location', 404, {})),
+    false,
+  );
+}
+
 function testMarketplaceTrialCannotBeExtendedOrTransferred() {
   const now = new Date('2026-07-27T12:00:00.000Z');
   const claim = {
@@ -215,6 +232,7 @@ testNameSplitAndSyntheticEmail();
 testEmployeeMatching();
 testScheduleHelpers();
 testPayloadParsers();
+testInvalidAltegioCredentialsAreRecognized();
 testMarketplaceTrialCannotBeExtendedOrTransferred();
 
 console.log('altegio staff/schedule sync helpers: ok');

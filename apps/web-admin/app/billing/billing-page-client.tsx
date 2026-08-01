@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { AltegioPilotConnect } from "@/components/altegio-pilot-connect";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import {
   Dialog,
@@ -105,6 +106,7 @@ type BillingRedirectResponse = {
   mode: "checkout" | "portal";
   url: string | null;
 };
+
 
 export type BillingPageInitialData = BillingSummary;
 
@@ -707,6 +709,7 @@ export default function BillingPageClient({
     }
   }, []);
 
+
   useEffect(() => {
     setSelectedSeatCount((current) => Math.max(current, minimumSeatCount));
   }, [minimumSeatCount]);
@@ -862,6 +865,7 @@ export default function BillingPageClient({
     }
   }
 
+
   const altegioBusy = altegioConnecting || altegioDisconnecting;
   const isDisconnectDialog = altegioDialogMode === "disconnect";
 
@@ -946,28 +950,22 @@ export default function BillingPageClient({
                 </p>
               </div>
             </div>
-            <button
-              className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-                summary.altegio?.connected
-                  ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
-                  : "bg-[#20242a] text-white hover:bg-[#111418]"
-              }`}
-              onClick={handleAltegioAction}
-              type="button"
-            >
-              {summary.altegio?.connected ? (
-                <Unlink className="h-4 w-4" />
-              ) : (
-                <ExternalLink className="h-4 w-4" />
-              )}
-              {summary.altegio?.connected
-                ? locale === "ru"
-                  ? "Отключить"
-                  : "Disconnect"
-                : locale === "ru"
-                  ? "Подключить"
-                  : "Connect"}
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
+                  summary.altegio?.connected
+                    ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
+                    : "cursor-not-allowed bg-slate-200 text-slate-500"
+                }`}
+                disabled={!summary.altegio?.connected}
+                onClick={handleAltegioAction}
+                type="button"
+              >
+                {summary.altegio?.connected ? <Unlink className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+                {summary.altegio?.connected ? (locale === "ru" ? "Отключить" : "Disconnect") : (locale === "ru" ? "Скоро в Marketplace" : "Available soon")}
+              </button>
+              <AltegioPilotConnect />
+            </div>
           </section>
         )}
 

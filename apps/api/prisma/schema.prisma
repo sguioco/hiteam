@@ -308,6 +308,65 @@ model Tenant {
   trialPromoRedemptions        TrialPromoRedemption[]
   kommoEntityLinks             KommoEntityLink[]
   kommoAutomationLogs          KommoAutomationLog[]
+  altegioPilotConnections      AltegioPilotConnection[]
+}
+
+/// Temporary direct B2B authorization used while Marketplace approval is pending.
+/// The user token is encrypted at rest and never returned through the API.
+model AltegioPilotConnection {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  altegioUserId       String
+  altegioUserName     String?
+  altegioUserEmail    String?
+  userTokenCiphertext String
+  createdByUserId     String
+  lastAuthenticatedAt DateTime @default(now())
+  lastError           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant    Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locations AltegioPilotLocation[]
+
+  @@index([tenantId, createdAt])
+  @@unique([tenantId])
+}
+
+model AltegioPilotLocation {
+  id                  String   @id @default(uuid())
+  connectionId        String
+  altegioLocationId   String
+  altegioLocationName String
+  hiteamLocationId    String
+  staffLastSyncedAt   DateTime?
+  scheduleLastSyncedAt DateTime?
+  lastError           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  connection     AltegioPilotConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  hiteamLocation Location               @relation(fields: [hiteamLocationId], references: [id], onDelete: Restrict)
+  staffLinks     AltegioPilotStaffLink[]
+
+  @@unique([connectionId, altegioLocationId])
+  @@unique([hiteamLocationId])
+  @@index([altegioLocationId])
+}
+
+model AltegioPilotStaffLink {
+  id              String   @id @default(uuid())
+  pilotLocationId String
+  altegioStaffId  String
+  employeeId      String
+  linkedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  pilotLocation AltegioPilotLocation @relation(fields: [pilotLocationId], references: [id], onDelete: Cascade)
+  employee      Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([pilotLocationId, altegioStaffId])
+  @@index([employeeId])
 }
 
 model BillingSubscription {
@@ -671,6 +730,7 @@ model Location {
   announcements         Announcement[]
   tasks                 Task[]
   employeeAssignments   EmployeeLocationAssignment[]
+  altegioPilotLocations AltegioPilotLocation[]
 
   @@unique([tenantId, code])
   @@index([tenantId, companyId, archivedAt])
@@ -725,6 +785,7 @@ model Employee {
   department                       Department                    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   primaryLocation                  Location                      @relation(fields: [primaryLocationId], references: [id], onDelete: Cascade)
   position                         Position                      @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  altegioPilotStaffLinks           AltegioPilotStaffLink[]
   devices                          Device[]
   attendanceEvents                 AttendanceEvent[]
   attendanceSessions               AttendanceSession[]

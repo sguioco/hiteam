@@ -504,7 +504,7 @@ export class AltegioStaffScheduleSyncService {
       const pushed = await this.pushHiteamShiftsToAltegio(tenantId, ctx.locationId, {
         from: dayStart,
         to: dayEnd,
-      }, [employeeId]);
+      }, [employeeId], true);
       return { skipped: false as const, pushed };
     } catch (error) {
       this.logger.warn(
@@ -555,6 +555,7 @@ export class AltegioStaffScheduleSyncService {
     locationId: string,
     window: { from: Date; to: Date },
     employeeIds?: string[],
+    deleteEmptyDays = false,
   ) {
     const shifts = await this.prisma.shift.findMany({
       where: {
@@ -590,7 +591,11 @@ export class AltegioStaffScheduleSyncService {
         })),
     );
 
-    if (grouped.length === 0) {
+    const schedulesToDelete = deleteEmptyDays && employeeIds?.length
+      ? await this.emptyHiteamScheduleDays(tenantId, employeeIds, window)
+      : [];
+
+    if (grouped.length === 0 && schedulesToDelete.length === 0) {
       return 0;
     }
 
@@ -614,9 +619,52 @@ export class AltegioStaffScheduleSyncService {
     await this.altegioB2b.setStaffSchedule({
       locationId,
       schedulesToSet: [...byMemberSlots.values()],
+      schedulesToDelete,
     });
 
     return grouped.length;
+  }
+
+  /** A direct HiTeam edit owns its staff-day. When the final HiTeam shift on
+   * that day is removed, Altegio must receive an explicit deletion; otherwise
+   * the old slot is resurrected on the next pull. Full reconciliation never
+   * calls this path, so imported Altegio-only days remain untouched. */
+  private async emptyHiteamScheduleDays(
+    tenantId: string,
+    employeeIds: string[],
+    window: { from: Date; to: Date },
+  ) {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, id: { in: employeeIds }, altegioTeamMemberId: { not: null } },
+      select: { id: true, altegioTeamMemberId: true },
+    });
+    const published = await this.prisma.shift.findMany({
+      where: {
+        tenantId,
+        employeeId: { in: employees.map((employee) => employee.id) },
+        source: HITEAM_SHIFT_SOURCE,
+        status: ShiftStatus.PUBLISHED,
+        shiftDate: { gte: window.from, lt: window.to },
+      },
+      select: { employeeId: true, shiftDate: true },
+    });
+    const datesByEmployee = new Map<string, Set<string>>();
+    for (const shift of published) {
+      const dates = datesByEmployee.get(shift.employeeId) ?? new Set<string>();
+      dates.add(formatDateOnly(shift.shiftDate));
+      datesByEmployee.set(shift.employeeId, dates);
+    }
+    const dates = [] as string[];
+    for (let value = new Date(window.from); value < window.to; value.setUTCDate(value.getUTCDate() + 1)) {
+      dates.push(formatDateOnly(value));
+    }
+    return employees.flatMap((employee) => {
+      const occupied = datesByEmployee.get(employee.id) ?? new Set<string>();
+      const emptyDates = dates.filter((date) => !occupied.has(date));
+      return emptyDates.length && employee.altegioTeamMemberId
+        ? [{ teamMemberId: employee.altegioTeamMemberId, dates: emptyDates }]
+        : [];
+    });
   }
 
   private async createLocalEmployeeFromAltegio(
