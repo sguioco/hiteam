@@ -109,15 +109,11 @@ function resolveInitialLocale(
   const browserLocale = parsePreferredLocaleFromAcceptLanguage(acceptLanguageHeader);
 
   if (isPublicRoute) {
-    if (browserLocale) {
-      return browserLocale;
-    }
-
     if (localeCookie === "ru" || localeCookie === "en") {
       return localeCookie;
     }
 
-    return "en";
+    return browserLocale ?? "en";
   }
 
   if (sessionPreferredLocale === "ru" || sessionPreferredLocale === "en") {
@@ -140,7 +136,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const initialSession = isPublicRoute ? null : await getServerSessionSnapshot();
   const initialLocale = resolveInitialLocale(
     requestHeaders.get("accept-language"),
-    cookieStore.get("smart-admin-locale")?.value,
+    cookieStore.get("smart-admin-locale")?.value ??
+      cookieStore.get("hiteam-landing-locale")?.value,
     isPublicRoute,
     initialSession?.user.preferredLocale,
   );

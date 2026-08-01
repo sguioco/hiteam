@@ -1752,7 +1752,9 @@ export function I18nProvider({
   useEffect(() => {
     document.documentElement.lang = locale;
     writeBrowserStorageItem(STORAGE_KEY, locale);
+    writeBrowserStorageItem("hiteam-landing-locale", locale);
     document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
+    document.cookie = `hiteam-landing-locale=${locale}; path=/; max-age=31536000; samesite=lax`;
 
     const session = getSession();
     if (

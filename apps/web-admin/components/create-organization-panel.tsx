@@ -12,10 +12,7 @@ import {
   resolvePostLoginRouteWithAltegio,
   saveAltegioOnboardingPreview,
 } from '@/lib/altegio-marketplace';
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from '@/lib/browser-storage';
+import { useI18n } from '@/lib/i18n';
 import { BrandWordmark } from './brand-wordmark';
 import { Button } from './ui/button';
 import {
@@ -34,7 +31,7 @@ import {
 } from './ui/select';
 import { Swirling } from './ui/swirling';
 
-type SupportedLang = 'en' | 'ru' | 'ar';
+type SupportedLang = 'en' | 'ru';
 type RegisterOwnerResponse = {
   tenantId: string;
   tenantSlug: string;
@@ -44,7 +41,6 @@ type RegisterOwnerResponse = {
 const langs: { code: SupportedLang; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'ru', label: 'Русский' },
-  { code: 'ar', label: 'العربية' },
 ];
 
 function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
@@ -236,7 +232,7 @@ function LanguagePicker({
 }
 
 export function CreateOrganizationPanel() {
-  const [lang, setLang] = useState<SupportedLang>('en');
+  const { locale: lang, setLocale: setLang } = useI18n();
   const [organizationName, setOrganizationName] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [firstName, setFirstName] = useState('');
@@ -254,11 +250,6 @@ export function CreateOrganizationPanel() {
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(timezone), [timezone]);
 
   useEffect(() => {
-    const saved = readBrowserStorageItem('smart-admin-locale');
-    if (saved === 'ru' || saved === 'ar') {
-      setLang(saved);
-    }
-
     setTimezone(getBrowserTimezone());
 
     const pending = captureAltegioMarketplaceParams();
@@ -291,12 +282,6 @@ export function CreateOrganizationPanel() {
         );
       });
   }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    writeBrowserStorageItem('smart-admin-locale', lang);
-    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
-  }, [lang]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

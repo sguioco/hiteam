@@ -78,8 +78,8 @@ function resolveMobileBlockLocale(request: NextRequest): LandingLocale {
   const adminLocale = request.cookies.get(ADMIN_LOCALE_COOKIE_NAME)?.value;
 
   if (isLandingLocale(queryLocale)) return queryLocale;
-  if (isLandingLocale(landingLocale)) return landingLocale;
   if (isLandingLocale(adminLocale)) return adminLocale;
+  if (isLandingLocale(landingLocale)) return landingLocale;
 
   return (
     parsePreferredLandingLocale(request.headers.get("accept-language")) ?? "en"

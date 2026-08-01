@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Copy, ExternalLink, Eye, EyeOff, Globe, Mail, ShieldCheck } from "lucide-react";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from "@/lib/browser-storage";
+import { useI18n } from "@/lib/i18n";
 
 type RegisterOrganizationResponse = {
   managerEmail: string;
@@ -120,7 +117,7 @@ function LanguagePicker({
 }
 
 export default function InternalCreateOrganizationPage() {
-  const [lang, setLang] = useState<SupportedLang>("en");
+  const { locale: lang, setLocale: setLang } = useI18n();
   const [accessKey, setAccessKey] = useState("");
   const [accessKeyVisible, setAccessKeyVisible] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
@@ -131,19 +128,6 @@ export default function InternalCreateOrganizationPage() {
   const [result, setResult] = useState<RegisterOrganizationResponse | null>(null);
   const [copiedField, setCopiedField] = useState<"manager" | null>(null);
   const t = texts[lang];
-
-  useEffect(() => {
-    const savedLocale = readBrowserStorageItem("smart-admin-locale");
-    if (savedLocale === "ru") {
-      setLang("ru");
-    }
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    writeBrowserStorageItem("smart-admin-locale", lang);
-    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
-  }, [lang]);
 
   async function copyValue(value: string, field: "manager") {
     try {

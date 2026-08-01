@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { LocateFixed } from "lucide-react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Check, LocateFixed } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 
@@ -41,9 +41,11 @@ type LocationMapPickerProps = {
   mode?: "preview" | "setup";
   longitude: string;
   onConfirmationRequiredChange?: (required: boolean) => void;
+  onConfirmedSelect?: (next: LocationSelection) => Promise<void> | void;
   onSelect: (next: LocationSelection) => void;
   searchLabel?: string;
   searchPlaceholder?: string;
+  searchTrailingContent?: ReactNode;
   showCopy?: boolean;
 };
 
@@ -322,9 +324,11 @@ export function LocationMapPicker({
   longitude,
   mode = "setup",
   onConfirmationRequiredChange,
+  onConfirmedSelect,
   onSelect,
   searchLabel = "Адрес организации",
   searchPlaceholder = "Например, Новосибирск, Красный проспект 25",
+  searchTrailingContent,
   showCopy = true,
 }: LocationMapPickerProps) {
   const autocompleteServiceRef = useRef<any>(null);
@@ -333,6 +337,8 @@ export function LocationMapPicker({
   const circleRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const confirmationTimerRef = useRef<number | null>(null);
+  const onConfirmedSelectRef = useRef(onConfirmedSelect);
   const onSelectRef = useRef(onSelect);
   const geofenceRadiusRef = useRef(geofenceRadiusMeters);
   const locationAbortControllerRef = useRef<AbortController | null>(null);
@@ -360,6 +366,9 @@ export function LocationMapPicker({
   >(null);
   const [pendingLocationConfirmation, setPendingLocationConfirmation] =
     useState<PendingLocationConfirmation | null>(null);
+  const [confirmationPhase, setConfirmationPhase] = useState<
+    "idle" | "saving" | "success" | "closing"
+  >("idle");
   const isSetupMode = mode === "setup";
   const copy =
     locale === "ru"
@@ -378,6 +387,8 @@ export function LocationMapPicker({
           confirmLocationBody:
             "Для этой координаты Google не нашёл обычный адрес. Проверьте метку на карте перед сохранением.",
           confirmLocation: "Точка верная",
+          savingLocation: "Сохраняем…",
+          locationSaved: "Сохранено",
           chooseAnotherLocation: "Выбрать другую",
           locationUnsupported:
             "Браузер не поддерживает определение текущего местоположения.",
@@ -408,6 +419,8 @@ export function LocationMapPicker({
           confirmLocationBody:
             "Google did not find a regular street address for these coordinates. Check the marker before saving.",
           confirmLocation: "Use this point",
+          savingLocation: "Saving…",
+          locationSaved: "Saved",
           chooseAnotherLocation: "Choose another",
           locationUnsupported:
             "This browser does not support current location detection.",
@@ -490,6 +503,7 @@ export function LocationMapPicker({
     const lng = Number(selection.longitude);
 
     setPendingLocationConfirmation(null);
+    setConfirmationPhase("idle");
     lastResolvedCoordsRef.current = `${lat.toFixed(6)},${lng.toFixed(6)}`;
     onSelectRef.current(selection);
   }
@@ -530,6 +544,7 @@ export function LocationMapPicker({
     focusMapOnGeofence({ lat, lng });
 
     if (requiresManualAddressConfirmation(result)) {
+      setConfirmationPhase("idle");
       setPendingLocationConfirmation({ selection });
       return false;
     }
@@ -555,7 +570,12 @@ export function LocationMapPicker({
   }
 
   function dismissPendingLocation() {
+    if (confirmationTimerRef.current !== null) {
+      window.clearTimeout(confirmationTimerRef.current);
+      confirmationTimerRef.current = null;
+    }
     setPendingLocationConfirmation(null);
+    setConfirmationPhase("idle");
     setLocationAccuracyMeters(null);
     setLocationAccessMessage(null);
     skipAutocompleteRef.current = true;
@@ -578,6 +598,10 @@ export function LocationMapPicker({
   }, [onSelect]);
 
   useEffect(() => {
+    onConfirmedSelectRef.current = onConfirmedSelect;
+  }, [onConfirmedSelect]);
+
+  useEffect(() => {
     onConfirmationRequiredChange?.(pendingLocationConfirmation !== null);
   }, [onConfirmationRequiredChange, pendingLocationConfirmation]);
 
@@ -588,6 +612,9 @@ export function LocationMapPicker({
   useEffect(() => {
     return () => {
       locationAbortControllerRef.current?.abort();
+      if (confirmationTimerRef.current !== null) {
+        window.clearTimeout(confirmationTimerRef.current);
+      }
     };
   }, []);
 
@@ -807,6 +834,12 @@ export function LocationMapPicker({
 
     lastResolvedCoordsRef.current = coordKey;
 
+    // A persisted address with persisted coordinates was already confirmed.
+    // Hydration must never recreate the confirmation prompt.
+    if (address.trim()) {
+      return;
+    }
+
     geocoderRef.current.geocode(
       { location: { lat, lng } },
       (results: any[], geocodeStatus: string) => {
@@ -819,7 +852,37 @@ export function LocationMapPicker({
         stageOrApplyLocation(topResult, lat, lng);
       },
     );
-  }, [isSetupMode, latitude, longitude, status]);
+  }, [address, isSetupMode, latitude, longitude, status]);
+
+  async function confirmPendingLocation() {
+    if (!pendingLocationConfirmation || confirmationPhase !== "idle") return;
+
+    const { selection } = pendingLocationConfirmation;
+    const lat = Number(selection.latitude);
+    const lng = Number(selection.longitude);
+    setConfirmationPhase("saving");
+    lastResolvedCoordsRef.current = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    onSelectRef.current(selection);
+
+    try {
+      await onConfirmedSelectRef.current?.(selection);
+      if (typeof selection.accuracyMeters === "number") {
+        setLocationMessageTone("success");
+        setLocationAccessMessage(copy.accuracyAccepted(selection.accuracyMeters));
+      }
+      setConfirmationPhase("success");
+      confirmationTimerRef.current = window.setTimeout(() => {
+        setConfirmationPhase("closing");
+        confirmationTimerRef.current = window.setTimeout(() => {
+          setPendingLocationConfirmation(null);
+          setConfirmationPhase("idle");
+          confirmationTimerRef.current = null;
+        }, 180);
+      }, 260);
+    } catch {
+      setConfirmationPhase("idle");
+    }
+  }
 
   function handleSuggestionSelect(prediction: any) {
     geocoderRef.current?.geocode(
@@ -936,20 +999,36 @@ export function LocationMapPicker({
 
       {isSetupMode ? (
         <div className="org-map-search-block">
-          <label className="org-field" htmlFor={searchInputId}>
-            <span>{searchLabel}</span>
-            <Input
-              id={searchInputId}
-              onChange={(event) => {
-                setSearchValue(event.target.value);
-                setPendingLocationConfirmation(null);
-                setLocationAccuracyMeters(null);
-                setLocationAccessMessage(null);
-              }}
-              placeholder={searchPlaceholder}
-              value={searchValue}
-            />
-          </label>
+          <div className="org-field">
+            {searchLabel ? (
+              <label className="org-field-label" htmlFor={searchInputId}>
+                {searchLabel}
+              </label>
+            ) : null}
+            <div className="org-map-search-control">
+              <Input
+                className={
+                  searchTrailingContent
+                    ? "org-map-search-input org-map-search-input--with-trailing"
+                    : "org-map-search-input"
+                }
+                id={searchInputId}
+                onChange={(event) => {
+                  setSearchValue(event.target.value);
+                  setPendingLocationConfirmation(null);
+                  setLocationAccuracyMeters(null);
+                  setLocationAccessMessage(null);
+                }}
+                placeholder={searchPlaceholder}
+                value={searchValue}
+              />
+              {searchTrailingContent ? (
+                <div className="org-map-search-trailing">
+                  {searchTrailingContent}
+                </div>
+              ) : null}
+            </div>
+          </div>
 
           <div className="org-map-location-actions">
             <Button
@@ -973,7 +1052,11 @@ export function LocationMapPicker({
           </div>
 
           {pendingLocationConfirmation ? (
-            <div className="org-map-confirmation" role="alert">
+            <div
+              className="org-map-confirmation"
+              data-state={confirmationPhase}
+              role="alert"
+            >
               <div className="org-map-confirmation-copy">
                 <strong>{copy.confirmLocationTitle}</strong>
                 <p>{copy.confirmLocationBody}</p>
@@ -989,22 +1072,25 @@ export function LocationMapPicker({
               </div>
               <div className="org-map-confirmation-actions">
                 <Button
-                  onClick={() => {
-                    const { selection } = pendingLocationConfirmation;
-                    applyLocationSelection(selection);
-                    if (typeof selection.accuracyMeters === "number") {
-                      setLocationMessageTone("success");
-                      setLocationAccessMessage(
-                        copy.accuracyAccepted(selection.accuracyMeters),
-                      );
-                    }
-                  }}
+                  disabled={confirmationPhase !== "idle"}
+                  onClick={() => void confirmPendingLocation()}
                   size="sm"
                   type="button"
                 >
-                  {copy.confirmLocation}
+                  {confirmationPhase === "success" ||
+                  confirmationPhase === "closing" ? (
+                    <>
+                      <Check className="size-4" />
+                      {copy.locationSaved}
+                    </>
+                  ) : confirmationPhase === "saving" ? (
+                    copy.savingLocation
+                  ) : (
+                    copy.confirmLocation
+                  )}
                 </Button>
                 <Button
+                  disabled={confirmationPhase !== "idle"}
                   onClick={dismissPendingLocation}
                   size="sm"
                   type="button"

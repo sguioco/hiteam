@@ -23,6 +23,12 @@ const authSurfaces = [
   path.join(root, "components", "create-organization-panel.tsx"),
   path.join(root, "app", "hi-team", "create-organization", "page.tsx"),
 ].map((file) => fs.readFileSync(file, "utf8"));
+const i18n = fs.readFileSync(path.join(root, "lib", "i18n.tsx"), "utf8");
+const layout = fs.readFileSync(path.join(root, "app", "layout.tsx"), "utf8");
+const landing = fs.readFileSync(
+  path.join(root, "components", "sales-landing-page.tsx"),
+  "utf8",
+);
 const mobileApi = fs.readFileSync(
   path.resolve(root, "..", "mobile", "lib", "api.ts"),
   "utf8",
@@ -56,9 +62,15 @@ assert.match(liveTranslation, /const providers = \[[\s\S]*translateViaLibreTrans
 assert.match(dashboard, /const completedAt = status === "DONE"[\s\S]*setTaskBoard[\s\S]*catch \(requestError\)/);
 
 for (const source of authSurfaces) {
-  assert.match(source, /document\.documentElement\.lang = lang/);
-  assert.match(source, /writeBrowserStorageItem\(['"]smart-admin-locale['"], lang\)/);
+  assert.match(source, /useI18n\(\)/);
+  assert.doesNotMatch(source, /writeBrowserStorageItem\(['"]smart-admin-locale['"]/);
 }
+
+assert.match(i18n, /writeBrowserStorageItem\(STORAGE_KEY, locale\)/);
+assert.match(i18n, /writeBrowserStorageItem\("hiteam-landing-locale", locale\)/);
+assert.match(layout, /smart-admin-locale[\s\S]*hiteam-landing-locale/);
+assert.match(landing, /LANDING_LOCALE_OPTIONS = \["en", "ru"\]/);
+assert.doesNotMatch(landing, /useState<LandingLocale>/);
 
 assert.match(mobileApi, /export function setApiLanguage/);
 assert.match(mobileApi, /humanizeValidationMessage\(message, locale\)/);

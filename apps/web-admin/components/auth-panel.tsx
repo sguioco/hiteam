@@ -30,10 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { apiRequest } from '@/lib/api';
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from '@/lib/browser-storage';
+import { useI18n } from '@/lib/i18n';
 import {
   DEMO_ADMIN_EMAIL,
   DEMO_ADMIN_PASSWORD,
@@ -60,7 +57,7 @@ import { BrandWordmark } from './brand-wordmark';
 
 gsap.registerPlugin(useGSAP);
 
-type SupportedLang = 'en' | 'ru' | 'ar';
+type SupportedLang = 'en' | 'ru';
 type AuthTab = 'signin' | 'join';
 type RegistrationMode = 'create' | 'join';
 type CompanyLookupResult = {
@@ -81,7 +78,6 @@ type RegisterOwnerResponse = {
 const langs: { code: SupportedLang; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'ru', label: 'Русский' },
-  { code: 'ar', label: 'العربية' },
 ];
 
 function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
@@ -404,7 +400,7 @@ export function AuthPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasAnimatedAuthPanelRef = useRef(false);
-  const [lang, setLang] = useState<SupportedLang>('en');
+  const { locale: lang, setLocale: setLang } = useI18n();
   const [tab, setTab] = useState<AuthTab>('signin');
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('create');
   const [identifier, setIdentifier] = useState('');
@@ -595,19 +591,8 @@ export function AuthPanel() {
   }, [tab]);
 
   useEffect(() => {
-    const saved = readBrowserStorageItem('smart-admin-locale');
-    if (saved === 'ru' || saved === 'ar') {
-      setLang(saved);
-    }
-
     setOrganizationTimezone(getBrowserTimezone());
   }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    writeBrowserStorageItem('smart-admin-locale', lang);
-    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
-  }, [lang]);
 
   useEffect(() => {
     router.prefetch('/app');

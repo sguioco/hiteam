@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { BiometricModule } from '../biometric/biometric.module';
+import { BillingModule } from '../billing/billing.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
@@ -16,6 +17,7 @@ import { BootstrapService } from './bootstrap.service';
     AuditModule,
     AttendanceModule,
     BiometricModule,
+    BillingModule,
     CollaborationModule,
     EmployeesModule,
     LeaderboardModule,

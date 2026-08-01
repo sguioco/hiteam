@@ -4,6 +4,7 @@ import type { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AuditService } from '../audit/audit.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { BiometricService } from '../biometric/biometric.service';
+import { AltegioMarketplaceBillingService } from '../billing/altegio-marketplace-billing.service';
 import { CollaborationService } from '../collaboration/collaboration.service';
 import { EmployeesService } from '../employees/employees.service';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
@@ -1035,6 +1036,7 @@ export class BootstrapService {
     private readonly auditService: AuditService,
     private readonly attendanceService: AttendanceService,
     private readonly biometricService: BiometricService,
+    private readonly altegioMarketplaceBilling: AltegioMarketplaceBillingService,
     private readonly collaborationService: CollaborationService,
     private readonly employeesService: EmployeesService,
     private readonly leaderboardService: LeaderboardService,
@@ -2039,7 +2041,7 @@ export class BootstrapService {
   }
 
   async organization(user: JwtUser) {
-    const [rawSetup, companies, locations, employees] = await Promise.all([
+    const [rawSetup, companies, locations, employees, groups, altegio] = await Promise.all([
       this.orgService.getSetup(user.tenantId).catch(() => ({
         organizationId: null,
         configured: false,
@@ -2055,6 +2057,15 @@ export class BootstrapService {
         .listLocations(user.tenantId, undefined, false, user.sub)
         .catch(() => []),
       this.employeesService.list(user.tenantId, {}, user.sub).catch(() => []),
+      this.collaborationService.listGroups(user.sub).catch(() => []),
+      this.altegioMarketplaceBilling
+        .getMarketplaceSummary(user.tenantId)
+        .catch(() => ({
+          connected: false,
+          locationId: null,
+          applicationId: null,
+          activatedAt: null,
+        })),
     ]);
     const company =
       companies.find(({ id }) => id === rawSetup.company?.id) ??
@@ -2069,7 +2080,7 @@ export class BootstrapService {
       ...rawSetup,
       company,
       location,
-      configured: Boolean(company && location),
+      configured: Boolean(rawSetup.configured && company && location),
     };
     const employeeCount = company
       ? employees.filter((employee) => employee.company?.id === company.id).length
@@ -2081,6 +2092,8 @@ export class BootstrapService {
       companies,
       locations,
       employees,
+      groups,
+      altegio,
     };
   }
 

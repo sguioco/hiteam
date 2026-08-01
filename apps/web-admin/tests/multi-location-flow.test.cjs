@@ -39,11 +39,43 @@ const analytics = fs.readFileSync(
   path.join(root, "app", "analytics", "analytics-page-client.tsx"),
   "utf8",
 );
+const employeeDropdown = fs.readFileSync(
+  path.join(root, "components", "employee-dropdown.tsx"),
+  "utf8",
+);
+const selectableListbox = fs.readFileSync(
+  path.join(root, "components", "ui", "selectable-listbox.tsx"),
+  "utf8",
+);
+const select = fs.readFileSync(
+  path.join(root, "components", "ui", "select.tsx"),
+  "utf8",
+);
 
 assert.match(organization, /\/org\/companies/);
 assert.match(organization, /startAddLocation/);
 assert.match(organization, /organization-studio-scope-actions/);
 assert.match(organization, /ADD_LOCATION_SELECT_VALUE/);
+assert.match(
+  organization,
+  /getLocationAddressLabel[\s\S]*location\.address/,
+  "Location switcher must identify a location by its address, not only its name.",
+);
+assert.match(
+  organization,
+  /organization-studio-location-menu[\s\S]*SelectOptionDescription[\s\S]*location\.address \|\| location\.name/,
+  "Location menu must expose the full address in its expanded option.",
+);
+assert.match(
+  organization,
+  /searchTrailingContent=[\s\S]*organization-studio-address-switcher-trigger/,
+  "Saved locations must be selected from the organization address field.",
+);
+assert.doesNotMatch(
+  organization,
+  /organization-studio-location-switcher/,
+  "The location switcher must not duplicate the address field in the header.",
+);
 assert.match(organization, /Location name/);
 assert.match(
   organization,
@@ -57,8 +89,43 @@ assert.doesNotMatch(
 );
 assert.match(
   bootstrap,
-  /async organization\(user: JwtUser\)[\s\S]*companies,[\s\S]*locations,[\s\S]*employees,/,
+  /async organization\(user: JwtUser\)[\s\S]*companies,[\s\S]*locations,[\s\S]*employees,[\s\S]*groups,[\s\S]*altegio,/,
   "Organization must be delivered as one backend bootstrap payload.",
+);
+assert.doesNotMatch(
+  organization,
+  /"\/billing\/summary"/,
+  "Organization must render Altegio state from its server bootstrap without a client waterfall.",
+);
+assert.match(
+  organization,
+  /initialData\?\.altegio\?\.connected[\s\S]*Boolean\(initialData\?\.altegio\)/,
+  "Altegio banner state must be ready during the first render.",
+);
+assert.match(
+  organization,
+  /size=\{1\}[\s\S]*value=\{draft\.companyName\}/,
+  "The organization name input must shrink to its text so the edit icon stays adjacent.",
+);
+assert.match(
+  organization,
+  /groupByEmployeeId[\s\S]*groupBy="group"/,
+  "Organization location assignment must support selecting employee groups.",
+);
+assert.match(
+  employeeDropdown,
+  /grid-rows-\[auto_minmax\(0,1fr\)\][\s\S]*bg-white[\s\S]*overflow-y-auto/,
+  "The employee search header must remain opaque above an independently scrolling option list.",
+);
+assert.match(
+  selectableListbox,
+  /rounded-none[\s\S]*first:rounded-t-\[20px\][\s\S]*last:rounded-b-\[20px\]/,
+  "Employee option rows must form one continuous list.",
+);
+assert.match(
+  select,
+  /rounded-none[\s\S]*first:rounded-t-\[20px\][\s\S]*last:rounded-b-\[20px\]/,
+  "Shared select options must use continuous list corners.",
 );
 assert.doesNotMatch(
   chunkRecovery,

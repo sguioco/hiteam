@@ -32,10 +32,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from "@/lib/browser-storage";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -46,7 +42,7 @@ import { cx } from "@/lib/utils/cx";
 
 type LandingLocale = "en" | "ru" | "es" | "ar";
 type PricingDurationKey = "monthly" | "six" | "year";
-const LANDING_LOCALE_OPTIONS = ["en", "ru", "es", "ar"] as const;
+const LANDING_LOCALE_OPTIONS = ["en", "ru"] as const;
 const LANGUAGE_NAMES: Record<LandingLocale, string> = {
   en: "English",
   ru: "Русский",
@@ -233,8 +229,6 @@ type Copy = {
   };
 };
 
-const LANDING_LOCALE_STORAGE_KEY = "hiteam-landing-locale";
-const LANDING_LOCALE_COOKIE_NAME = "hiteam-landing-locale";
 const EMPLOYEE_OPTIONS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 150, 200];
 const FEATURE_ICON_NAMES: FeatureIconName[] = [
   "clock",
@@ -2166,42 +2160,6 @@ const COPY: Record<LandingLocale, Copy> = {
   },
 };
 
-function isLandingLocale(value: string | null): value is LandingLocale {
-  return value === "en" || value === "ru" || value === "es" || value === "ar";
-}
-
-function resolveBrowserLocale(): LandingLocale {
-  if (typeof window === "undefined") {
-    return "en";
-  }
-
-  const candidates = [
-    ...(Array.isArray(window.navigator.languages)
-      ? window.navigator.languages
-      : []),
-    window.navigator.language,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.toLowerCase());
-
-  if (candidates.some((value) => value === "ru" || value.startsWith("ru-")))
-    return "ru";
-  if (candidates.some((value) => value === "es" || value.startsWith("es-")))
-    return "es";
-  if (candidates.some((value) => value === "ar" || value.startsWith("ar-")))
-    return "ar";
-
-  return "en";
-}
-
-function writeLandingLocaleCookie(locale: LandingLocale) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.cookie = `${LANDING_LOCALE_COOKIE_NAME}=${locale}; path=/; max-age=31536000; samesite=lax`;
-}
-
 function formatMoney(value: number) {
   return `$${value.toLocaleString("en-US", {
     maximumFractionDigits: value % 1 === 0 ? 0 : 2,
@@ -3551,7 +3509,7 @@ function HeroPhoneCard({ copy }: { copy: Copy }) {
 export function SalesLandingPage() {
   const { locale: appLocale, setLocale: setAppLocale } = useI18n();
   const reduceMotion = useReducedMotion();
-  const [locale, setLandingLocale] = useState<LandingLocale>(appLocale);
+  const locale = appLocale;
   const [activeCase, setActiveCase] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [employeeCount, setEmployeeCount] = useState(20);
@@ -3564,17 +3522,6 @@ export function SalesLandingPage() {
   const [demoEmail, setDemoEmail] = useState("");
   const [demoPhone, setDemoPhone] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
-
-  useEffect(() => {
-    const storedLocale = readBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY);
-    const nextLocale = isLandingLocale(storedLocale)
-      ? storedLocale
-      : resolveBrowserLocale();
-
-    setLandingLocale(nextLocale);
-    writeBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY, nextLocale);
-    writeLandingLocaleCookie(nextLocale);
-  }, []);
 
   useEffect(() => {
     const updateHeader = () => setIsHeaderSolid(window.scrollY > 16);
@@ -3601,23 +3548,13 @@ export function SalesLandingPage() {
   const totalText = useMemo(() => {
     if (locale === "ru")
       return `${formatMoney(total)} ${copy.pricing.totalSuffix} · доступ ${accessMonths} мес.`;
-    if (locale === "es")
-      return `${formatMoney(total)} ${copy.pricing.totalSuffix} · ${accessMonths} meses de acceso`;
-    if (locale === "ar")
-      return `${formatMoney(total)} ${copy.pricing.totalSuffix} · وصول ${accessMonths} شهر`;
     return `${formatMoney(total)} ${copy.pricing.totalSuffix} · ${accessMonths} months of access`;
   }, [accessMonths, copy.pricing.totalSuffix, locale, total]);
 
-  const updateLocale = (nextLocale: LandingLocale) => {
-    setLandingLocale(nextLocale);
+  const updateLocale = (nextLocale: "en" | "ru") => {
     setIsLocaleMenuOpen(false);
     setIsMobileMenuOpen(false);
-    writeBrowserStorageItem(LANDING_LOCALE_STORAGE_KEY, nextLocale);
-    writeLandingLocaleCookie(nextLocale);
-
-    if (nextLocale === "en" || nextLocale === "ru") {
-      setAppLocale(nextLocale);
-    }
+    setAppLocale(nextLocale);
   };
 
   const scrollTo = (id: string) => {
@@ -4275,11 +4212,7 @@ export function SalesLandingPage() {
                           <p>
                             {locale === "ru"
                               ? "Новость отправлена:"
-                              : locale === "es"
-                                ? "Noticia enviada:"
-                                : locale === "ar"
-                                  ? "تم إرسال الخبر:"
-                                  : "Company news sent:"}
+                              : "Company news sent:"}
                           </p>
                         </div>
                         <div className="mt-2 ml-7 rounded-[8px] border border-blue-100 bg-[#eff6ff] px-3 py-2.5">

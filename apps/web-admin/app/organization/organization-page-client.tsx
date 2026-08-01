@@ -7,7 +7,6 @@ import {
   Copy,
   ExternalLink,
   ImagePlus,
-  MapPin,
   Pencil,
   Plus,
   Save,
@@ -37,6 +36,10 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectOptionContent,
+  SelectOptionDescription,
+  SelectOptionText,
+  SelectOptionTitle,
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
@@ -44,6 +47,7 @@ import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
 import {
+  buildAltegioMarketplaceConnectUrl,
   peekAltegioMarketplaceParams,
 } from "../../lib/altegio-marketplace";
 import { writeBrowserStorageItem } from "../../lib/browser-storage";
@@ -74,6 +78,8 @@ type Location = {
   timezone: string;
 };
 type EmployeeOption = {
+  avatarUrl?: string | null;
+  employeeNumber?: string | null;
   id: string;
   firstName: string;
   lastName: string;
@@ -81,6 +87,19 @@ type EmployeeOption = {
     id: string;
     name: string;
   } | null;
+};
+type WorkGroupOption = {
+  id: string;
+  name: string;
+  memberships: Array<{
+    employeeId: string;
+  }>;
+};
+type AltegioBootstrapStatus = {
+  activatedAt?: string | null;
+  applicationId?: string | null;
+  connected: boolean;
+  locationId?: string | null;
 };
 
 type OrganizationSetupResponse = {
@@ -143,6 +162,8 @@ const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const ADD_LOCATION_SELECT_VALUE = "__add_location__";
 const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
+const STREET_ADDRESS_MARKERS =
+  /(?:^|[\s.])(street|st\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|lane|ln\.?|drive|dr\.?|highway|hwy\.?|улица|ул\.?|проспект|пр-т|переулок|пер\.?|шоссе|набережная|площадь|проезд|ถนน)(?:[\s.]|$)/iu;
 
 const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
   "UTC-08:00": { address: "Downtown Anchorage, Alaska, United States", latitude: "61.217381", longitude: "-149.863129" },
@@ -214,6 +235,24 @@ function normalizeRadius(value?: number | null) {
   return Math.min(MAX_GEOFENCE_RADIUS_METERS, Math.max(MIN_GEOFENCE_RADIUS_METERS, value));
 }
 
+function getLocationAddressLabel(location: Pick<Location, "address" | "name">) {
+  const address = location.address.trim();
+  if (!address) return location.name;
+
+  const addressParts = address
+    .split(/\s*(?:,|;|·|\s+-\s+)\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const streetPart = addressParts.find((part) =>
+    STREET_ADDRESS_MARKERS.test(part),
+  );
+  const numberedPart = addressParts.find(
+    (part) => /\d/u.test(part) && !/^\d{4,6}$/u.test(part),
+  );
+
+  return streetPart ?? numberedPart ?? addressParts[0] ?? location.name;
+}
+
 function createEmptyDraft(): SetupDraft {
   const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   return {
@@ -240,6 +279,12 @@ function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
   };
 }
 
+function resolveSetupMode(setup: OrganizationSetupResponse): SetupMode {
+  if (setup.location) return "update";
+  if (setup.company) return "create-location";
+  return "create";
+}
+
 function hasDraftCoordinates(draft: SetupDraft) {
   return draft.latitude.trim() !== "" && draft.longitude.trim() !== "";
 }
@@ -251,9 +296,11 @@ function buildAddEmployeePromptStorageKey(
 }
 
 export type OrganizationPageInitialData = {
+  altegio?: AltegioBootstrapStatus;
   companies?: Company[];
   employeeCount: number;
   employees?: EmployeeOption[];
+  groups?: WorkGroupOption[];
   locations?: Location[];
   setup: OrganizationSetupResponse;
 };
@@ -289,6 +336,9 @@ export default function OrganizationPageClient({
   const [availableEmployees, setAvailableEmployees] = useState<
     EmployeeOption[]
   >(initialData?.employees ?? []);
+  const [availableGroups, setAvailableGroups] = useState<WorkGroupOption[]>(
+    initialData?.groups ?? [],
+  );
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<SetupDraft>(() =>
     buildDraftFromSetup(initialData?.setup ?? EMPTY_SETUP),
@@ -306,12 +356,19 @@ export default function OrganizationPageClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
-  const [altegioConnectedLocationId, setAltegioConnectedLocationId] = useState<string | null>(null);
-  const [altegioConnectionLoaded, setAltegioConnectionLoaded] = useState(false);
+  const [altegioConnectedLocationId, setAltegioConnectedLocationId] =
+    useState<string | null>(() =>
+      initialData?.altegio?.connected
+        ? initialData.altegio.locationId ?? null
+        : null,
+    );
+  const [altegioConnectionLoaded, setAltegioConnectionLoaded] = useState(
+    Boolean(initialData?.altegio),
+  );
   const [locationConfirmationPending, setLocationConfirmationPending] =
     useState(false);
   const [setupMode, setSetupMode] = useState<SetupMode>(
-    initialData?.setup.configured ? "update" : "create",
+    resolveSetupMode(initialData?.setup ?? EMPTY_SETUP),
   );
   const successTimeoutRef = useRef<number | null>(null);
   const employeesRedirectTimeoutRef = useRef<number | null>(null);
@@ -321,6 +378,36 @@ export default function OrganizationPageClient({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
   const timeZonePreset = useMemo(() => TIME_ZONE_PRESETS[getTimeZoneOffsetLabel(draft.timezone)] ?? null, [draft.timezone]);
+  const companyLocations = useMemo(
+    () =>
+      locations.filter(({ companyId }) => companyId === selectedCompanyId),
+    [locations, selectedCompanyId],
+  );
+  const selectedHeaderLocation = useMemo(
+    () => companyLocations.find(({ id }) => id === selectedLocationId) ?? null,
+    [companyLocations, selectedLocationId],
+  );
+  const groupByEmployeeId = useMemo(() => {
+    const groupsByEmployee = new Map<string, { id: string; name: string }>();
+
+    availableGroups.forEach((group) => {
+      group.memberships.forEach(({ employeeId }) => {
+        if (!groupsByEmployee.has(employeeId)) {
+          groupsByEmployee.set(employeeId, { id: group.id, name: group.name });
+        }
+      });
+    });
+
+    return groupsByEmployee;
+  }, [availableGroups]);
+
+  function applyAltegioStatus(status?: AltegioBootstrapStatus) {
+    if (!status) return;
+    setAltegioConnectedLocationId(
+      status.connected ? status.locationId ?? null : null,
+    );
+    setAltegioConnectionLoaded(true);
+  }
 
   function applyScope(company: Company, location?: Location | null) {
     const nextSetup: OrganizationSetupResponse = {
@@ -358,9 +445,12 @@ export default function OrganizationPageClient({
     const nextCompanies = snapshot.companies ?? [];
     const nextLocations = snapshot.locations ?? [];
     const nextEmployees = snapshot.employees ?? [];
+    const nextGroups = snapshot.groups ?? [];
     setCompanies(nextCompanies);
     setLocations(nextLocations);
     setAvailableEmployees(nextEmployees);
+    setAvailableGroups(nextGroups);
+    applyAltegioStatus(snapshot.altegio);
 
     const currentCompany =
       nextCompanies.find(({ id }) => id === selectedCompanyId) ??
@@ -489,12 +579,13 @@ export default function OrganizationPageClient({
       });
 
       setSetup(snapshot.setup);
+      applyAltegioStatus(snapshot.altegio);
       setEmployeeCount(snapshot.employeeCount);
       setDraft(buildDraftFromSetup(snapshot.setup));
       setRadiusInput(String(normalizeRadius(snapshot.setup.location?.geofenceRadiusMeters ?? snapshot.setup.defaultGeofenceRadiusMeters)));
       setError(null);
       setSaveSuccess(false);
-      setSetupMode(snapshot.setup.configured ? "update" : "create");
+      setSetupMode(resolveSetupMode(snapshot.setup));
     } catch (loadError) {
       setSetup(EMPTY_SETUP);
       setEmployeeCount(0);
@@ -532,24 +623,6 @@ export default function OrganizationPageClient({
       return;
     }
 
-    const session = getSession();
-    if (!session) return;
-    void apiRequest<{
-      altegio?: { connected?: boolean; locationId?: string | null };
-    }>("/billing/summary", {
-      token: session.accessToken,
-      skipClientCache: true,
-    })
-      .then((summary) => {
-        if (summary.altegio?.connected && summary.altegio.locationId) {
-          setAltegioConnectedLocationId(summary.altegio.locationId);
-        }
-        setAltegioConnectionLoaded(true);
-      })
-      .catch(() => {
-        setAltegioConnectionLoaded(true);
-        // ignore — org page still works without billing banner
-      });
   }, [router]);
 
   useEffect(() => {
@@ -645,6 +718,107 @@ export default function OrganizationPageClient({
       latitude: next.latitude,
       longitude: next.longitude,
     }));
+  }
+
+  async function persistConfirmedLocation(next: LocationSelection) {
+    if (!selectedCompanyId) {
+      return;
+    }
+
+    if (setupMode === "update" && !selectedLocationId) return;
+    if (setupMode !== "update" && setupMode !== "create-location") return;
+
+    const session = getSession();
+    if (!session) {
+      const message =
+        locale === "ru"
+          ? "Сессия истекла. Войди заново, чтобы сохранить точку."
+          : "Session expired. Sign in again to save this point.";
+      setError(message);
+      throw new Error(message);
+    }
+
+    try {
+      setError(null);
+      const company = companies.find(({ id }) => id === selectedCompanyId);
+      if (!company) {
+        throw new Error(
+          locale === "ru" ? "Организация не найдена." : "Organization was not found.",
+        );
+      }
+
+      const locationName =
+        draft.locationName.trim() ||
+        getLocationAddressLabel({
+          address: next.address?.trim() || draft.address.trim(),
+          name: draft.companyName.trim(),
+        });
+      const locationPayload = {
+        address: next.address?.trim() || draft.address.trim(),
+        country:
+          next.details?.country ||
+          draft.details?.country ||
+          setup.location?.country ||
+          null,
+        geofenceRadiusMeters: normalizeRadius(draft.geofenceRadiusMeters),
+        latitude: Number(next.latitude),
+        longitude: Number(next.longitude),
+        name: locationName,
+        timezone: draft.timezone.trim() || "UTC",
+      };
+      const location =
+        setupMode === "create-location"
+          ? await apiRequest<Location>("/org/locations", {
+              method: "POST",
+              token: session.accessToken,
+              body: JSON.stringify({
+                ...locationPayload,
+                code: `LOC-${Date.now().toString(36).toUpperCase()}`,
+                companyId: company.id,
+                employeeIds: selectedEmployeeIds,
+              }),
+            })
+          : await apiRequest<Location>(`/org/locations/${selectedLocationId}`, {
+              method: "PATCH",
+              token: session.accessToken,
+              body: JSON.stringify(locationPayload),
+            });
+
+      setSetup((current) => ({
+        ...current,
+        company,
+        configured: true,
+        location,
+      }));
+      setDraft((current) => ({
+        ...current,
+        address: location.address,
+        latitude: String(location.latitude),
+        locationName: location.name,
+        longitude: String(location.longitude),
+      }));
+      setSelectedLocationId(location.id);
+      setLocations((current) => {
+        const exists = current.some(({ id }) => id === location.id);
+        return exists
+          ? current.map((item) => (item.id === location.id ? location : item))
+          : [location, ...current];
+      });
+      setSetupMode("update");
+      setLastSavedMode(
+        setupMode === "create-location" ? "create-location" : "update",
+      );
+      setSaveSuccess(true);
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error
+          ? nextError.message
+          : locale === "ru"
+            ? "Не удалось сохранить подтверждённую точку."
+            : "Failed to save the confirmed point.";
+      setError(message);
+      throw nextError instanceof Error ? nextError : new Error(message);
+    }
   }
 
   function shiftRadius(delta: number) {
@@ -819,7 +993,7 @@ export default function OrganizationPageClient({
       setSetup(nextSetup);
       setDraft(buildDraftFromSetup(nextSetup));
       setRadiusInput(String(normalizeRadius(nextSetup.location?.geofenceRadiusMeters ?? nextSetup.defaultGeofenceRadiusMeters)));
-      setSetupMode(nextSetup.configured ? "update" : "create");
+      setSetupMode(resolveSetupMode(nextSetup));
       if (nextSetup.company) {
         setSelectedCompanyId(nextSetup.company.id);
         setCompanies((current) => {
@@ -942,14 +1116,15 @@ export default function OrganizationPageClient({
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <button
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500"
-                        disabled
-                        type="button"
+                      <a
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-4 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
+                        href={buildAltegioMarketplaceConnectUrl() || "#"}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        {locale === "ru" ? "Скоро в Marketplace" : "Available soon"}
+                        {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
                         <ExternalLink className="h-4 w-4" />
-                      </button>
+                      </a>
                       <AltegioPilotConnect />
                     </div>
                   </div>
@@ -975,6 +1150,7 @@ export default function OrganizationPageClient({
                       readOnly={setupMode === "create-location"}
                       ref={companyNameInputRef}
                       required
+                      size={1}
                       value={draft.companyName}
                     />
                   </span>
@@ -1055,42 +1231,6 @@ export default function OrganizationPageClient({
                     </>
                   )}
                 </Button>
-                {locations.filter(
-                  ({ companyId }) => companyId === selectedCompanyId,
-                ).length > 0 ? (
-                  <div className="organization-studio-location-switcher">
-                    <MapPin className="size-4" />
-                    <Select
-                      onValueChange={handleLocationSelect}
-                      value={selectedLocationId}
-                    >
-                      <SelectTrigger className="organization-studio-location-trigger">
-                        <SelectValue
-                          placeholder={
-                            locale === "ru" ? "Выберите адрес" : "Select address"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {locations
-                          .filter(
-                            ({ companyId }) => companyId === selectedCompanyId,
-                          )
-                          .map((location) => (
-                            <SelectItem key={location.id} value={location.id}>
-                              {location.name}
-                            </SelectItem>
-                          ))}
-                        <SelectItem value={ADD_LOCATION_SELECT_VALUE}>
-                          <span className="inline-flex items-center gap-2 font-semibold text-[color:var(--accent)]">
-                            <Plus className="size-4" />
-                            {locale === "ru" ? "Добавить локацию" : "Add location"}
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
               </div>
             </div>
 
@@ -1288,10 +1428,15 @@ export default function OrganizationPageClient({
                       }
                       employees={availableEmployees.map((employee) => ({
                         ...employee,
+                        group: groupByEmployeeId.get(employee.id) ?? null,
                         roleLabel:
                           employee.primaryLocation?.name ??
                           (locale === "ru" ? "Без адреса" : "No address"),
                       }))}
+                      groupBy="group"
+                      groupFallbackLabel={
+                        locale === "ru" ? "Без группы" : "Without group"
+                      }
                       loadingLabel={
                         locale === "ru"
                           ? "Загружаем сотрудников"
@@ -1343,11 +1488,6 @@ export default function OrganizationPageClient({
                     />
                   </label>
                 ) : null}
-                <div className="organization-studio-map-copy">
-                  <span className="organization-studio-label">
-                    {locale === "ru" ? "Адрес организации" : "Organization address"}
-                  </span>
-                </div>
                 <div className="organization-studio-map-shell">
                   <LocationMapPicker
                     address={draft.address}
@@ -1358,10 +1498,77 @@ export default function OrganizationPageClient({
                     longitude={draft.longitude}
                     mode="setup"
                     onConfirmationRequiredChange={setLocationConfirmationPending}
-                    searchLabel=""
+                    onConfirmedSelect={persistConfirmedLocation}
                     searchPlaceholder={locale === "ru"
                       ? "Красный проспект, 24, Новосибирск"
                       : "1600 Amphitheatre Parkway, Mountain View"}
+                    searchTrailingContent={selectedCompanyId ? (
+                      <Select
+                        onValueChange={handleLocationSelect}
+                        value={selectedLocationId}
+                      >
+                        <SelectTrigger
+                          aria-label={
+                            locale === "ru"
+                              ? "Выбрать сохранённый адрес"
+                              : "Select saved address"
+                          }
+                          className="organization-studio-address-switcher-trigger"
+                          title={
+                            selectedHeaderLocation?.address ||
+                            (locale === "ru"
+                              ? "Выбрать сохранённый адрес"
+                              : "Select saved address")
+                          }
+                        >
+                          <span className="sr-only">
+                            {locale === "ru"
+                              ? "Выбрать сохранённый адрес"
+                              : "Select saved address"}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent
+                          align="end"
+                          className="organization-studio-location-menu"
+                        >
+                          {companyLocations.length > 0 ? (
+                            companyLocations.map((location) => (
+                              <SelectItem
+                                className="organization-studio-location-option"
+                                key={location.id}
+                                value={location.id}
+                              >
+                                <SelectOptionContent className="items-start">
+                                  <SelectOptionText className="gap-1">
+                                    <SelectOptionTitle>
+                                      {getLocationAddressLabel(location)}
+                                    </SelectOptionTitle>
+                                    <SelectOptionDescription>
+                                      {location.address || location.name}
+                                    </SelectOptionDescription>
+                                  </SelectOptionText>
+                                </SelectOptionContent>
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem disabled value="__no_saved_locations__">
+                              {locale === "ru"
+                                ? "Сохранённых адресов пока нет"
+                                : "No saved addresses yet"}
+                            </SelectItem>
+                          )}
+                          <SelectItem value={ADD_LOCATION_SELECT_VALUE}>
+                            <span className="inline-flex items-center gap-2 font-semibold text-[color:var(--accent)]">
+                              <Plus className="size-4" />
+                              {locale === "ru" ? "Добавить локацию" : "Add location"}
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                    searchLabel={
+                      locale === "ru" ? "Адрес организации" : "Organization address"
+                    }
                     showCopy={false}
                     onSelect={handleMapSelect}
                   />

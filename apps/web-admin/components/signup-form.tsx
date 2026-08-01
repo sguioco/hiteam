@@ -8,10 +8,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiRequest } from '@/lib/api';
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from '@/lib/browser-storage';
+import { useI18n } from '@/lib/i18n';
 import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
 import {
   captureAltegioMarketplaceParams,
@@ -24,12 +21,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-type SupportedLang = 'en' | 'ru' | 'ar';
+type SupportedLang = 'en' | 'ru';
 
 const langs: { code: SupportedLang; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'ru', label: 'Русский' },
-  { code: 'ar', label: 'العربية' },
 ];
 
 function toBackendLocale(lang: SupportedLang): 'en' | 'ru' {
@@ -121,7 +117,7 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (l: S
 }
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'div'>) {
-  const [lang, setLang] = useState<SupportedLang>('en');
+  const { locale: lang, setLocale: setLang } = useI18n();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -133,17 +129,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
 
   useEffect(() => {
     captureAltegioMarketplaceParams();
-    const saved = readBrowserStorageItem('smart-admin-locale');
-    if (saved === 'ru' || saved === 'ar') {
-      setLang(saved);
-    }
   }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    writeBrowserStorageItem('smart-admin-locale', lang);
-    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
-  }, [lang]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

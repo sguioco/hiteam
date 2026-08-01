@@ -31,6 +31,11 @@ assert.match(
   'Archiving a populated location must be blocked.',
 );
 assert.match(
+  orgService,
+  /configuredPair[\s\S]*companies[\s\S]*isConfiguredLocation/,
+  'An unfinished new company must not hide an existing configured workspace.',
+);
+assert.match(
   employeesService,
   /Close the active attendance session before moving this employee/,
 );

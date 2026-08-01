@@ -47,5 +47,20 @@ assert.match(
   /onConfirmationRequiredChange=\{setLocationConfirmationPending\}/,
   "Organization setup must block saving while map confirmation is pending.",
 );
+assert.match(
+  picker,
+  /A persisted address with persisted coordinates was already confirmed\.[\s\S]*if \(address\.trim\(\)\)[\s\S]*return;/,
+  "A saved location must not ask for the same map confirmation after hydration.",
+);
+assert.match(
+  picker,
+  /confirmationPhase[\s\S]*onConfirmedSelectRef[\s\S]*setConfirmationPhase\("closing"\)/,
+  "Confirmed points must show saving feedback and animate out after persistence.",
+);
+assert.match(
+  organization,
+  /persistConfirmedLocation[\s\S]*\/org\/locations\/\$\{selectedLocationId\}[\s\S]*method: "PATCH"/,
+  "Confirming an existing location must persist it immediately.",
+);
 
 console.log("web location quality tests passed");

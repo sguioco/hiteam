@@ -28,7 +28,7 @@ function SelectableOptionButton({
     <button
       aria-selected={selected}
       className={cn(
-        "relative flex min-h-[48px] w-full items-center gap-3 rounded-[20px] px-3 py-2 pr-10 text-left transition-[background-color,color] duration-150",
+        "relative flex min-h-[48px] w-full items-center gap-3 rounded-none px-3 py-2 pr-10 text-left transition-[background-color,color] duration-150 first:rounded-t-[20px] last:rounded-b-[20px]",
         selected
           ? "bg-[color:var(--accent)] text-white"
           : "text-foreground hover:bg-[rgba(15,23,42,0.05)]",

@@ -124,6 +124,18 @@ export class OrgService {
     );
   }
 
+  private isConfiguredLocation(location: {
+    address: string;
+    latitude: number;
+    longitude: number;
+  } | null) {
+    return Boolean(
+      location &&
+        location.address !== "Not set yet" &&
+        !(location.latitude === 0 && location.longitude === 0),
+    );
+  }
+
   private async assertCanManageCompany(
     tenantId: string,
     actorUserId: string,
@@ -359,31 +371,45 @@ export class OrgService {
   }
 
   async getSetup(tenantId: string) {
-    const [tenant, company] = await Promise.all([
+    const [tenant, companies, locations] = await Promise.all([
       this.prisma.tenant.findUnique({
         where: { id: tenantId },
         select: TENANT_SETUP_SELECT,
       }),
-      this.prisma.company.findFirst({
+      this.prisma.company.findMany({
         where: { tenantId, archivedAt: null },
         select: COMPANY_SETUP_SELECT,
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.location.findMany({
+        where: { tenantId, archivedAt: null },
+        select: LOCATION_SETUP_SELECT,
         orderBy: { createdAt: "desc" },
       }),
     ]);
     const attendanceTrackingEnabled =
       tenant?.attendanceTrackingEnabled ?? true;
 
-    const location = company
-      ? await this.prisma.location.findFirst({
-          where: {
-            tenantId,
-            companyId: company.id,
-            archivedAt: null,
-          },
-          select: LOCATION_SETUP_SELECT,
-          orderBy: { createdAt: "desc" },
-        })
-      : null;
+    const configuredPair = companies
+      .map((company) => ({
+        company,
+        location:
+          locations.find(
+            (location) =>
+              location.companyId === company.id &&
+              this.isConfiguredLocation(location),
+          ) ?? null,
+      }))
+      .find(
+        ({ company, location }) =>
+          location && !this.isPlaceholderSetup({ company, location }),
+      );
+    const company = configuredPair?.company ?? companies[0] ?? null;
+    const location =
+      configuredPair?.location ??
+      (company
+        ? locations.find(({ companyId }) => companyId === company.id) ?? null
+        : null);
 
     if (this.isPlaceholderSetup({ company, location })) {
       return {
@@ -396,12 +422,7 @@ export class OrgService {
       };
     }
 
-    const configured = Boolean(
-      company &&
-      location &&
-      location.address !== "Not set yet" &&
-      !(location.latitude === 0 && location.longitude === 0),
-    );
+    const configured = Boolean(company && this.isConfiguredLocation(location));
 
     return {
       organizationId: tenant?.businessId ?? null,

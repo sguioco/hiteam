@@ -9,10 +9,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
-import {
-  readBrowserStorageItem,
-  writeBrowserStorageItem,
-} from '@/lib/browser-storage';
+import { useI18n } from '@/lib/i18n';
 import { AuthSession, persistSession, resolvePostLoginRoute } from '@/lib/auth';
 import {
   captureAltegioMarketplaceParams,
@@ -25,12 +22,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-type SupportedLang = 'en' | 'ru' | 'ar';
+type SupportedLang = 'en' | 'ru';
 
 const langs: { code: SupportedLang; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'ru', label: 'Русский' },
-  { code: 'ar', label: 'العربية' },
 ];
 
 const texts = {
@@ -154,8 +150,7 @@ function LanguagePicker({ lang, setLang }: { lang: SupportedLang; setLang: (l: S
 
 export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) {
   const isApple = useIsApplePlatform();
-
-  const [lang, setLang] = useState<SupportedLang>('en');
+  const { locale: lang, setLocale: setLang } = useI18n();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -166,19 +161,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   useEffect(() => {
     captureAltegioMarketplaceParams();
   }, []);
-
-  useEffect(() => {
-    const saved = readBrowserStorageItem('smart-admin-locale');
-    if (saved === 'ru' || saved === 'ar') {
-      setLang(saved);
-    }
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    writeBrowserStorageItem('smart-admin-locale', lang);
-    document.cookie = `smart-admin-locale=${lang}; path=/; max-age=31536000; samesite=lax`;
-  }, [lang]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

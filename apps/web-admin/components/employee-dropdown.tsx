@@ -414,9 +414,8 @@ export function EmployeeDropdown({
 
   const menuContent = (
     <div
-      aria-multiselectable={mode === "multiple"}
       className={cn(
-        "pointer-events-auto overflow-y-auto rounded-[26px] border border-[rgba(24,24,27,0.12)] bg-white/98 p-2 shadow-[0_22px_54px_rgba(15,23,42,0.16)] backdrop-blur-sm",
+        "pointer-events-auto grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[26px] border border-[rgba(24,24,27,0.12)] bg-white shadow-[0_22px_54px_rgba(15,23,42,0.16)]",
         portal
           ? "fixed z-[1000]"
           : "absolute left-0 top-[calc(100%+0.375rem)] z-[80] w-full",
@@ -424,7 +423,6 @@ export function EmployeeDropdown({
       onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       ref={menuRef}
-      role="listbox"
       style={
         portal && dropdownMetrics
           ? {
@@ -438,7 +436,7 @@ export function EmployeeDropdown({
             }
       }
     >
-      <div className="sticky top-0 z-10 mb-2 bg-white/98 pb-2">
+      <div className="relative z-10 border-b border-[rgba(15,23,42,0.07)] bg-white p-2">
         <label className="flex min-h-10 items-center gap-2 rounded-[18px] border border-[rgba(24,24,27,0.1)] bg-[rgba(246,247,251,0.92)] px-3">
           <Search className="size-4 shrink-0 text-[rgba(72,84,104,0.58)]" />
           <input
@@ -450,127 +448,143 @@ export function EmployeeDropdown({
         </label>
       </div>
 
-      {isLoading ? (
-        <WorkspaceLoading
-          className="min-h-[124px]"
-          iconClassName="size-8"
-          label={loadingLabel}
-        />
-      ) : employees.length ? (
-        <>
-          {showAllEmployeesOption ? (
-            <>
-              <SelectableOptionButton
-                closeOnSelected={false}
-                onClose={() => setOpen(false)}
-                onSelect={selectAllEmployees}
-                selected={allOptionSelected}
-              >
-                <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-[rgba(72,84,104,0.72)]">
-                  <Users className="size-4" />
-                </span>
-                <span className="grid min-w-0 gap-0.5">
-                  <span className="truncate text-sm font-semibold leading-[1.2] text-current">
-                    {allEmployeesLabel}
-                  </span>
-                  <span
-                    className={cn(
-                      "truncate text-xs leading-[1.25]",
-                      allOptionSelected
-                        ? "text-white/75"
-                        : "text-[rgba(72,84,104,0.72)]",
-                    )}
+      <div
+        aria-multiselectable={mode === "multiple"}
+        className="min-h-0 overflow-y-auto px-2 pb-2 pt-2"
+        role="listbox"
+      >
+        {isLoading ? (
+          <WorkspaceLoading
+            className="min-h-[124px]"
+            iconClassName="size-8"
+            label={loadingLabel}
+          />
+        ) : employees.length ? (
+          <>
+            {showAllEmployeesOption ? (
+              <>
+                <div data-dropdown-option-list>
+                  <SelectableOptionButton
+                    closeOnSelected={false}
+                    onClose={() => setOpen(false)}
+                    onSelect={selectAllEmployees}
+                    selected={allOptionSelected}
                   >
-                    {selectedEmployeesLabel(employees.length)}
-                  </span>
-                </span>
-                {allOptionSelected ? (
-                  <Check className="absolute right-3 size-4 text-white" />
-                ) : null}
-              </SelectableOptionButton>
+                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(227,231,239,0.78)] text-[rgba(72,84,104,0.72)]">
+                      <Users className="size-4" />
+                    </span>
+                    <span className="grid min-w-0 gap-0.5">
+                      <span className="truncate text-sm font-semibold leading-[1.2] text-current">
+                        {allEmployeesLabel}
+                      </span>
+                      <span
+                        className={cn(
+                          "truncate text-xs leading-[1.25]",
+                          allOptionSelected
+                            ? "text-white/75"
+                            : "text-[rgba(72,84,104,0.72)]",
+                        )}
+                      >
+                        {selectedEmployeesLabel(employees.length)}
+                      </span>
+                    </span>
+                    {allOptionSelected ? (
+                      <Check className="absolute right-3 size-4 text-white" />
+                    ) : null}
+                  </SelectableOptionButton>
+                </div>
 
-              <div className="my-2 h-px bg-[rgba(15,23,42,0.08)]" />
-            </>
-          ) : null}
+                <div className="my-2 h-px bg-[rgba(15,23,42,0.08)]" />
+              </>
+            ) : null}
 
-          {filteredEmployees.length ? (
-            shouldRenderGroups ? (
-              groupedEmployees.map((section) => {
-                const isCollapsed = collapsedGroupIds.has(section.id);
-                const employeeIds = section.employees.map((employee) => employee.id);
-                const selectedInGroupCount = employeeIds.filter((employeeId) =>
-                  selectedIds.has(employeeId),
-                ).length;
-                const allGroupSelected =
-                  employeeIds.length > 0 &&
-                  selectedInGroupCount === employeeIds.length;
-                const someGroupSelected =
-                  selectedInGroupCount > 0 && !allGroupSelected;
+            {filteredEmployees.length ? (
+              shouldRenderGroups ? (
+                groupedEmployees.map((section) => {
+                  const isCollapsed = collapsedGroupIds.has(section.id);
+                  const employeeIds = section.employees.map(
+                    (employee) => employee.id,
+                  );
+                  const selectedInGroupCount = employeeIds.filter(
+                    (employeeId) => selectedIds.has(employeeId),
+                  ).length;
+                  const allGroupSelected =
+                    employeeIds.length > 0 &&
+                    selectedInGroupCount === employeeIds.length;
+                  const someGroupSelected =
+                    selectedInGroupCount > 0 && !allGroupSelected;
 
-                return (
-                  <div className="mt-2 first:mt-0" key={section.id}>
-                    <div className="flex min-h-10 items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-1 pt-2 first:border-t-0 first:pt-0">
-                      {mode === "multiple" ? (
+                  return (
+                    <div className="mt-2 first:mt-0" key={section.id}>
+                      <div className="flex min-h-10 items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-1 pt-2 first:border-t-0 first:pt-0">
+                        {mode === "multiple" ? (
+                          <button
+                            aria-label={`${section.label}: ${selectedInGroupCount}/${employeeIds.length}`}
+                            className={cn(
+                              "inline-flex size-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96]",
+                              allGroupSelected
+                                ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
+                                : someGroupSelected
+                                  ? "border-[color:var(--accent)] bg-white text-[color:var(--accent)]"
+                                  : "border-[rgba(72,84,104,0.28)] bg-white text-transparent hover:border-[color:var(--accent)]",
+                            )}
+                            onClick={() => selectEmployeeGroup(employeeIds)}
+                            type="button"
+                          >
+                            {allGroupSelected || someGroupSelected ? (
+                              <Check className="size-3.5" />
+                            ) : null}
+                          </button>
+                        ) : null}
+
                         <button
-                          aria-label={`${section.label}: ${selectedInGroupCount}/${employeeIds.length}`}
-                          className={cn(
-                            "inline-flex size-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96]",
-                            allGroupSelected
-                              ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
-                              : someGroupSelected
-                                ? "border-[color:var(--accent)] bg-white text-[color:var(--accent)]"
-                                : "border-[rgba(72,84,104,0.28)] bg-white text-transparent hover:border-[color:var(--accent)]",
-                          )}
-                          onClick={() => selectEmployeeGroup(employeeIds)}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition-[background-color] duration-150 hover:bg-[rgba(15,23,42,0.04)]"
+                          onClick={() => toggleGroupCollapsed(section.id)}
                           type="button"
                         >
-                          {allGroupSelected || someGroupSelected ? (
-                            <Check className="size-3.5" />
-                          ) : null}
+                          {isCollapsed ? (
+                            <ChevronRight className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
+                          ) : (
+                            <ChevronDown className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
+                          )}
+                          <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgba(72,84,104,0.72)]">
+                            {section.label}
+                          </span>
+                          <span className="shrink-0 text-xs font-semibold tabular-nums text-[rgba(72,84,104,0.58)]">
+                            {selectedInGroupCount}/{employeeIds.length}
+                          </span>
                         </button>
-                      ) : null}
+                      </div>
 
-                      <button
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition-[background-color] duration-150 hover:bg-[rgba(15,23,42,0.04)]"
-                        onClick={() => toggleGroupCollapsed(section.id)}
-                        type="button"
-                      >
-                        {isCollapsed ? (
-                          <ChevronRight className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
-                        ) : (
-                          <ChevronDown className="size-4 shrink-0 text-[rgba(72,84,104,0.66)]" />
-                        )}
-                        <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgba(72,84,104,0.72)]">
-                          {section.label}
-                        </span>
-                        <span className="shrink-0 text-xs font-semibold tabular-nums text-[rgba(72,84,104,0.58)]">
-                          {selectedInGroupCount}/{employeeIds.length}
-                        </span>
-                      </button>
+                      {isCollapsed ? null : (
+                        <div data-dropdown-option-list>
+                          {section.employees.map((employee) =>
+                            renderEmployeeOption(employee),
+                          )}
+                        </div>
+                      )}
                     </div>
-
-                    {isCollapsed
-                      ? null
-                      : section.employees.map((employee) =>
-                          renderEmployeeOption(employee),
-                        )}
-                  </div>
-                );
-              })
+                  );
+                })
+              ) : (
+                <div data-dropdown-option-list>
+                  {filteredEmployees.map((employee) =>
+                    renderEmployeeOption(employee),
+                  )}
+                </div>
+              )
             ) : (
-              filteredEmployees.map((employee) => renderEmployeeOption(employee))
-            )
-          ) : (
-            <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
-              {noEmployeesLabel}
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
-          {noEmployeesLabel}
-        </div>
-      )}
+              <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
+                {noEmployeesLabel}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="px-3 py-6 text-center text-sm font-medium text-[color:var(--muted-foreground)]">
+            {noEmployeesLabel}
+          </div>
+        )}
+      </div>
     </div>
   );
 
