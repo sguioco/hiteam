@@ -70,6 +70,26 @@ function dateDaysFromNow(offsetDays: number, year: number) {
   return next;
 }
 
+async function deleteDemoNotifications(tenantId: string) {
+  const batchSize = 500;
+
+  while (true) {
+    const batch = await prisma.notification.findMany({
+      where: { tenantId },
+      select: { id: true },
+      take: batchSize,
+    });
+
+    if (batch.length === 0) {
+      return;
+    }
+
+    await prisma.notification.deleteMany({
+      where: { id: { in: batch.map(({ id }) => id) } },
+    });
+  }
+}
+
 async function ensureRole(code: string, name: string, description: string) {
   return prisma.role.upsert({
     where: { code },
@@ -1006,9 +1026,7 @@ async function main(): Promise<void> {
   // Notifications and announcements in the demo workspace are fixture data.
   // Reset them completely so scheduled workers and repeated seed runs cannot
   // leave thousands of stale records behind.
-  await prisma.notification.deleteMany({
-    where: { tenantId: tenant.id },
-  });
+  await deleteDemoNotifications(tenant.id);
   await prisma.announcement.deleteMany({
     where: { tenantId: tenant.id },
   });
