@@ -53,6 +53,7 @@ type HeaderShiftDraft = {
   fixedBreakStartsAtLocal: string;
   shiftDate: string;
   templateId: string;
+  locationId: string;
 };
 
 type HeaderTemplateDraft = {
@@ -94,6 +95,21 @@ function buildEmployeeName(employee: {
     .trim();
 }
 
+function employeeBelongsToLocation(
+  employee: EmployeeApiRecord,
+  locationId: string,
+) {
+  if (!locationId) return true;
+
+  return (
+    employee.primaryLocation?.id === locationId ||
+    employee.locationAssignments?.some(
+      (assignment) =>
+        assignment.locationId === locationId && !assignment.unassignedAt,
+    ) === true
+  );
+}
+
 function getInitialDraft(): HeaderShiftDraft {
   return {
     employeeIds: [],
@@ -102,6 +118,7 @@ function getInitialDraft(): HeaderShiftDraft {
     fixedBreakStartsAtLocal: "13:00",
     shiftDate: formatDateInput(new Date()),
     templateId: "",
+    locationId: "",
   };
 }
 
@@ -203,6 +220,7 @@ export function HeaderShiftCreateDialog({
 
   const employeeOptions = useMemo(() => {
     return employees
+      .filter((employee) => employeeBelongsToLocation(employee, draft.locationId))
       .map((employee) => ({
         ...employee,
         displayName:
@@ -213,7 +231,16 @@ export function HeaderShiftCreateDialog({
         group: employeeGroupByEmployeeId.get(employee.id) ?? null,
       }))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, locale));
-  }, [employeeGroupByEmployeeId, employees, locale]);
+  }, [draft.locationId, employeeGroupByEmployeeId, employees, locale]);
+
+  const visibleTemplates = useMemo(
+    () =>
+      templates.filter(
+        (template) =>
+          !draft.locationId || template.location.id === draft.locationId,
+      ),
+    [draft.locationId, templates],
+  );
 
   const selectedTemplate = templates.find((template) => template.id === draft.templateId);
   const dayHeaders =
@@ -281,6 +308,13 @@ export function HeaderShiftCreateDialog({
           : snapshot.initialData.locations;
 
         setLocations(availableLocations);
+        setDraft((current) => ({
+          ...current,
+          locationId:
+            availableLocations.length === 1
+              ? availableLocations[0]?.id ?? ""
+              : "",
+        }));
         setTemplateLocationId((current) =>
           availableLocations.some(({ id }) => id === current)
             ? current
@@ -480,12 +514,17 @@ export function HeaderShiftCreateDialog({
 
     const selectedEmployeeIds = Array.from(new Set(draft.employeeIds.filter(Boolean)));
 
-    if (selectedEmployeeIds.length === 0 || !draft.templateId || !draft.shiftDate) {
+    if (
+      selectedEmployeeIds.length === 0 ||
+      !draft.locationId ||
+      !draft.templateId ||
+      !draft.shiftDate
+    ) {
       setError(
         localize(
           locale,
-          "Выберите сотрудника, шаблон и дату.",
-          "Select an employee, template, and date.",
+          "Выберите локацию, сотрудника, шаблон и дату.",
+          "Select a location, employee, template, and date.",
         ),
       );
       return;
@@ -562,6 +601,46 @@ export function HeaderShiftCreateDialog({
           </DialogHeader>
 
           <div className="grid gap-4">
+            {locations.length > 0 ? (
+              <div>
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {localize(locale, "Локация", "Location")}
+                </label>
+                <Select
+                  onValueChange={(locationId) =>
+                    setDraft((current) => ({
+                      ...current,
+                      locationId,
+                      templateId: "",
+                      employeeIds: current.employeeIds.filter((employeeId) => {
+                        const employee = employees.find(({ id }) => id === employeeId);
+                        return employee
+                          ? employeeBelongsToLocation(employee, locationId)
+                          : false;
+                      }),
+                    }))
+                  }
+                  value={draft.locationId}
+                >
+                  <SelectTrigger disabled={loading}>
+                    <SelectTriggerLabel
+                      className={draft.locationId ? undefined : "text-muted-foreground"}
+                    >
+                      {locations.find(({ id }) => id === draft.locationId)?.name ??
+                        localize(locale, "Выберите локацию", "Select location")}
+                    </SelectTriggerLabel>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {localize(locale, "Сотрудник", "Employee")}
@@ -608,21 +687,21 @@ export function HeaderShiftCreateDialog({
                 }
                 value={draft.templateId}
               >
-                <SelectTrigger disabled={loading || templates.length === 0}>
+                <SelectTrigger disabled={loading || !draft.locationId || visibleTemplates.length === 0}>
                   <SelectTriggerLabel
                     className={selectedTemplate?.name ? undefined : "text-muted-foreground"}
                   >
                     {selectedTemplate?.name ??
                       (loading
                         ? localize(locale, "Загружаем шаблоны...", "Loading templates...")
-                        : templates.length > 0
+                        : visibleTemplates.length > 0
                           ? localize(locale, "Выберите шаблон", "Select template")
                           : localize(locale, "Шаблонов пока нет", "No templates yet"))}
                   </SelectTriggerLabel>
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.length > 0 ? (
-                    templates.map((template) => (
+                  {visibleTemplates.length > 0 ? (
+                    visibleTemplates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
                         <SelectOptionContent>
                           <SelectOptionText>
@@ -720,7 +799,12 @@ export function HeaderShiftCreateDialog({
                 {localize(locale, "Шаблоны", "Templates")}
               </Button>
               <Button
-                disabled={submitting || loading || templates.length === 0}
+                disabled={
+                  submitting ||
+                  loading ||
+                  !draft.locationId ||
+                  visibleTemplates.length === 0
+                }
                 onClick={() => void handleSubmit()}
                 type="button"
               >

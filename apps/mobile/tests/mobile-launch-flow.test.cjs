@@ -22,12 +22,12 @@ function testMobileTaskApiUsesSharedBackend() {
   );
   assert.match(
     source,
-    /export async function createManagerTask[\s\S]*authRequest<TaskItem>\("\/collaboration\/tasks",\s*\{[\s\S]*method:\s*"POST"[\s\S]*body:\s*JSON\.stringify\(payload\)/,
+    /export async function createManagerTask[\s\S]*authRequest<TaskItem>\("\/collaboration\/tasks",\s*\{[\s\S]*method:\s*"POST"[\s\S]*locationId:\s*payload\.locationId \?\? getWorkspaceScope\(\)\?\.locationId/,
     "Mobile one-off task creation must hit the shared backend collaboration endpoint.",
   );
   assert.match(
     source,
-    /export async function createManagerTaskTemplate[\s\S]*authRequest<TaskTemplateItem>\("\/collaboration\/task-templates",\s*\{[\s\S]*method:\s*"POST"[\s\S]*body:\s*JSON\.stringify\(payload\)/,
+    /export async function createManagerTaskTemplate[\s\S]*authRequest<TaskTemplateItem>\("\/collaboration\/task-templates",\s*\{[\s\S]*method:\s*"POST"[\s\S]*locationId:\s*payload\.locationId \?\? getWorkspaceScope\(\)\?\.locationId/,
     "Mobile recurring task creation must hit the shared backend task-template endpoint.",
   );
 }

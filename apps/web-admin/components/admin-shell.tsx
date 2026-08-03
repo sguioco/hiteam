@@ -43,6 +43,7 @@ import { Locale, useI18n } from "../lib/i18n";
 import { getAvatarInitials } from "../lib/avatar-placeholder";
 import { BrandWordmark } from "./brand-wordmark";
 import { AdminShellLoadingSidebar } from "./admin-shell-loading-sidebar";
+import { useAdminShellState } from "./admin-shell-state-provider";
 import { CreateDialog, type CreateDialogAction } from "./CreateDialog";
 import { HeaderEmployeeCreateDialog } from "./header-employee-create-dialog";
 import { HeaderNewsCreateDialog } from "./header-news-create-dialog";
@@ -273,12 +274,7 @@ function LocaleFlagIcon({ locale }: { locale: Locale }) {
           stroke="#c8102e"
           strokeWidth="2.2"
         />
-        <path
-          d="M12 0v24M0 12h24"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="7"
-        />
+        <path d="M12 0v24M0 12h24" fill="none" stroke="#fff" strokeWidth="7" />
         <path
           d="M12 0v24M0 12h24"
           fill="none"
@@ -286,13 +282,7 @@ function LocaleFlagIcon({ locale }: { locale: Locale }) {
           strokeWidth="4"
         />
       </g>
-      <circle
-        cx="12"
-        cy="12"
-        fill="none"
-        r="11.5"
-        stroke="rgba(0,0,0,0.12)"
-      />
+      <circle cx="12" cy="12" fill="none" r="11.5" stroke="rgba(0,0,0,0.12)" />
     </svg>
   );
 }
@@ -379,6 +369,11 @@ export function AdminShell({
   showTopbar?: boolean;
   mode?: "admin" | "employee";
 }) {
+  const persistentShellState = useAdminShellState();
+  const browserSession = initialSession ?? getSession();
+  const rememberedShell = browserSession
+    ? persistentShellState.read(browserSession, mode)
+    : null;
   const initialShellBootstrap =
     initialSession &&
     (() => {
@@ -389,38 +384,49 @@ export function AdminShell({
       if (bootstrap.mode !== mode) return null;
       return bootstrap;
     })();
-  const hasValidatedServerSession = Boolean(initialSession);
+  const initialHeaderSnapshot =
+    initialShellBootstrap?.header ?? rememberedShell?.header ?? null;
+  const initialNotificationsSnapshot =
+    initialShellBootstrap?.notifications ??
+    rememberedShell?.notifications ??
+    null;
+  const canResumePersistentShell = Boolean(
+    !initialSession && browserSession && rememberedShell?.header,
+  );
+  const resolvedInitialSession =
+    initialSession ?? (canResumePersistentShell ? browserSession : null);
+  const hasValidatedServerSession = Boolean(resolvedInitialSession);
   const hasValidatedInitialShell = Boolean(
-    initialSession && initialShellBootstrap,
+    resolvedInitialSession && initialHeaderSnapshot,
   );
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
   const [session, setSession] = useState<AuthSession | null>(
-    hasValidatedServerSession ? initialSession : null,
+    hasValidatedServerSession ? resolvedInitialSession : null,
   );
   const [unreadCount, setUnreadCount] = useState(
-    initialShellBootstrap?.notifications?.unreadCount ?? 0,
+    initialNotificationsSnapshot?.unreadCount ?? 0,
   );
   const [notificationItems, setNotificationItems] = useState<
     NotificationItem[]
-  >(initialShellBootstrap?.notifications?.notificationItems ?? []);
+  >(initialNotificationsSnapshot?.notificationItems ?? []);
   const [employeeCount, setEmployeeCount] = useState(
-    initialShellBootstrap?.header?.employeeCount ?? 0,
+    initialHeaderSnapshot?.employeeCount ?? 0,
   );
   const [organizationCount, setOrganizationCount] = useState(
-    initialShellBootstrap?.header?.organizationCount ?? 0,
+    initialHeaderSnapshot?.organizationCount ?? 0,
   );
   const [organization, setOrganization] =
     useState<OrganizationHeaderState | null>(
-      initialShellBootstrap?.header?.organization ?? null,
+      initialHeaderSnapshot?.organization ?? null,
     );
   const [organizationGuardReady, setOrganizationGuardReady] = useState(
-    Boolean(initialShellBootstrap?.header),
+    Boolean(initialHeaderSnapshot),
   );
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(
-    initialShellBootstrap?.header?.accountProfile ?? null,
+    initialHeaderSnapshot?.accountProfile ?? null,
   );
   const [storedAvatarUrl, setStoredAvatarUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(hasValidatedServerSession);
@@ -491,12 +497,19 @@ export function AdminShell({
     cacheKey?: string | null,
   ) {
     setEmployeeCount(snapshot.employeeCount);
-    setOrganizationCount(snapshot.organizationCount ?? (snapshot.organization?.company ? 1 : 0));
+    setOrganizationCount(
+      snapshot.organizationCount ?? (snapshot.organization?.company ? 1 : 0),
+    );
     setOrganization(snapshot.organization);
     setAccountProfile(snapshot.accountProfile);
 
     if (cacheKey) {
       writeClientCache(cacheKey, snapshot);
+    }
+
+    const snapshotSession = session ?? initialSession ?? getSession();
+    if (snapshotSession) {
+      persistentShellState.write(snapshotSession, mode, { header: snapshot });
     }
   }
 
@@ -509,6 +522,13 @@ export function AdminShell({
 
     if (cacheKey) {
       writeClientCache(cacheKey, snapshot);
+    }
+
+    const snapshotSession = session ?? initialSession ?? getSession();
+    if (snapshotSession) {
+      persistentShellState.write(snapshotSession, mode, {
+        notifications: snapshot,
+      });
     }
   }
 
@@ -574,16 +594,27 @@ export function AdminShell({
             storedAt: Date.now(),
             isStale: false,
           }
-        : cachedHeader;
-      const effectiveNotifications =
-        cachedNotifications ??
-        (initialShellBootstrap?.notifications
+        : rememberedShell?.header
           ? {
-              value: initialShellBootstrap.notifications,
+              value: rememberedShell.header,
               storedAt: Date.now(),
               isStale: false,
             }
-          : null);
+          : cachedHeader;
+      const effectiveNotifications = rememberedShell?.notifications
+        ? {
+            value: rememberedShell.notifications,
+            storedAt: Date.now(),
+            isStale: false,
+          }
+        : (cachedNotifications ??
+          (initialShellBootstrap?.notifications
+            ? {
+                value: initialShellBootstrap.notifications,
+                storedAt: Date.now(),
+                isStale: false,
+              }
+            : null));
       const shouldRefreshHeader = !effectiveHeader || effectiveHeader.isStale;
       const shouldRefreshNotifications =
         !effectiveNotifications || effectiveNotifications.isStale;
@@ -682,7 +713,7 @@ export function AdminShell({
     return () => {
       cancelled = true;
     };
-  }, [initialSession, initialShellBootstrap, mode, router]);
+  }, [initialSession, initialShellBootstrap, mode, rememberedShell, router]);
 
   useEffect(() => {
     setStoredAvatarUrl(readStoredProfileAvatar(profileAvatarScope));
@@ -817,7 +848,13 @@ export function AdminShell({
         handleOrganizationUpdated as EventListener,
       );
     };
-  }, [accountProfile, employeeCount, organizationCount, session, shellHeaderCacheKey]);
+  }, [
+    accountProfile,
+    employeeCount,
+    organizationCount,
+    session,
+    shellHeaderCacheKey,
+  ]);
 
   const searchParamsKey = searchParams.toString();
 
@@ -876,6 +913,7 @@ export function AdminShell({
     }
 
     function handleSessionExpired() {
+      persistentShellState.clear();
       setSession(null);
       setReady(false);
       redirectToLogin();
@@ -893,7 +931,7 @@ export function AdminShell({
       );
       window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
     };
-  }, [router]);
+  }, [persistentShellState, router]);
 
   const managerOnly = session
     ? isManagerOnlyRole(session.user.roleCodes)
@@ -968,9 +1006,9 @@ export function AdminShell({
       }
 
       items.push({
-          href: newsHref,
-          label: locale === "ru" ? "Новости" : "News",
-          icon: FileText,
+        href: newsHref,
+        label: locale === "ru" ? "Новости" : "News",
+        icon: FileText,
       });
 
       if (attendanceTrackingEnabled) {
@@ -1447,50 +1485,50 @@ export function AdminShell({
         session={session}
       />
 
-        <aside
-          className={`sidebar sidebar-untitled${compactSidebarOpen ? " is-mobile-open" : ""}`}
-        >
-          <div className="sidebar-brand sidebar-untitled-brand">
-            <div className="sidebar-untitled-brand-row">
-              <Link
-                className="sidebar-full-brand-link"
-                href={homeHref}
-                onClick={(event) => handleRouteStart(homeHref, event)}
-              >
-                <BrandWordmark className="text-[1.8rem]" />
-              </Link>
-              <button
-                aria-label={
-                  compactSidebarOpen
-                    ? locale === "ru"
-                      ? "Свернуть меню"
-                      : "Collapse menu"
-                    : locale === "ru"
-                      ? "Открыть меню"
-                      : "Open menu"
-                }
-                className="sidebar-compact-toggle"
-                onClick={() => setCompactSidebarOpen((current) => !current)}
-                title={
-                  compactSidebarOpen
-                    ? locale === "ru"
-                      ? "Свернуть меню"
-                      : "Collapse menu"
-                    : locale === "ru"
-                      ? "Открыть меню"
-                      : "Open menu"
-                }
-                type="button"
-              >
-                <img
-                  alt=""
-                  aria-hidden="true"
-                  className="sidebar-compact-wave"
-                  src="/waving-hand-skin-1.svg"
-                />
-              </button>
-            </div>
+      <aside
+        className={`sidebar sidebar-untitled${compactSidebarOpen ? " is-mobile-open" : ""}`}
+      >
+        <div className="sidebar-brand sidebar-untitled-brand">
+          <div className="sidebar-untitled-brand-row">
+            <Link
+              className="sidebar-full-brand-link"
+              href={homeHref}
+              onClick={(event) => handleRouteStart(homeHref, event)}
+            >
+              <BrandWordmark className="text-[1.8rem]" />
+            </Link>
+            <button
+              aria-label={
+                compactSidebarOpen
+                  ? locale === "ru"
+                    ? "Свернуть меню"
+                    : "Collapse menu"
+                  : locale === "ru"
+                    ? "Открыть меню"
+                    : "Open menu"
+              }
+              className="sidebar-compact-toggle"
+              onClick={() => setCompactSidebarOpen((current) => !current)}
+              title={
+                compactSidebarOpen
+                  ? locale === "ru"
+                    ? "Свернуть меню"
+                    : "Collapse menu"
+                  : locale === "ru"
+                    ? "Открыть меню"
+                    : "Open menu"
+              }
+              type="button"
+            >
+              <img
+                alt=""
+                aria-hidden="true"
+                className="sidebar-compact-wave"
+                src="/waving-hand-skin-1.svg"
+              />
+            </button>
           </div>
+        </div>
 
         <nav className="sidebar-nav sidebar-nav-untitled">
           {navItems.map((item) => {
@@ -1521,7 +1559,11 @@ export function AdminShell({
                       ) : null}
                     </button>
                   ) : (
-                    <a className="sidebar-link-main" href={item.href}>
+                    <Link
+                      className="sidebar-link-main"
+                      href={item.href}
+                      onClick={(event) => handleRouteStart(item.href, event)}
+                    >
                       <span className="sidebar-nav-label-wrap">
                         <Icon className="size-4" />
                         <span className="sidebar-nav-label">{item.label}</span>
@@ -1529,7 +1571,7 @@ export function AdminShell({
                       {typeof item.count === "number" && item.count > 0 ? (
                         <span className="sidebar-count-pill">{item.count}</span>
                       ) : null}
-                    </a>
+                    </Link>
                   )}
 
                   {hasChildren ? (
@@ -1565,7 +1607,9 @@ export function AdminShell({
                         >
                           <span className="sidebar-nav-label-wrap">
                             <SubIcon className="size-4" />
-                            <span className="sidebar-nav-label">{subItem.label}</span>
+                            <span className="sidebar-nav-label">
+                              {subItem.label}
+                            </span>
                           </span>
                           {typeof subItem.count === "number" &&
                           subItem.count > 0 ? (
@@ -1575,14 +1619,19 @@ export function AdminShell({
                           ) : null}
                         </button>
                       ) : (
-                        <a
+                        <Link
                           className={`sidebar-sublink ${isActive(pathname, subItem.href) ? "is-active" : ""}`}
                           href={subItem.href}
                           key={subItem.href}
+                          onClick={(event) =>
+                            handleRouteStart(subItem.href, event)
+                          }
                         >
                           <span className="sidebar-nav-label-wrap">
                             <SubIcon className="size-4" />
-                            <span className="sidebar-nav-label">{subItem.label}</span>
+                            <span className="sidebar-nav-label">
+                              {subItem.label}
+                            </span>
                           </span>
                           {typeof subItem.count === "number" &&
                           subItem.count > 0 ? (
@@ -1590,7 +1639,7 @@ export function AdminShell({
                               {subItem.count}
                             </span>
                           ) : null}
-                        </a>
+                        </Link>
                       );
                     })}
                   </div>
@@ -1602,10 +1651,7 @@ export function AdminShell({
 
         <div className="sidebar-footer-untitled">
           {organizationCount > 1 ? (
-            <div
-              className="sidebar-organization-indicator"
-              title={companyName}
-            >
+            <div className="sidebar-organization-indicator" title={companyName}>
               <BriefcaseBusiness aria-hidden="true" className="size-4" />
               <span>{companyName}</span>
             </div>
@@ -1655,6 +1701,7 @@ export function AdminShell({
                   className="sidebar-user-menu-item is-danger"
                   onClick={() => {
                     setAccountMenuOpen(false);
+                    persistentShellState.clear();
                     void destroySession().finally(() => {
                       setSession(null);
                       redirectToLogin();

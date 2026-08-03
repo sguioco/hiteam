@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  BriefcaseBusiness,
   CalendarRange,
   ChevronRight,
   FileText,
@@ -10,10 +11,12 @@ import {
   Trophy,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import type { ComponentType } from "react";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useI18n } from "@/lib/i18n";
 import { BrandWordmark } from "./brand-wordmark";
+import { useAdminShellState } from "./admin-shell-state-provider";
 
 type LoadingSidebarLocale = "en" | "ru";
 
@@ -78,7 +81,13 @@ export function AdminShellLoadingSidebar({
   locale?: LoadingSidebarLocale;
 }) {
   const { locale: contextLocale } = useI18n();
+  const persistentShellState = useAdminShellState();
   const resolvedLocale = locale ?? contextLocale;
+  const rememberedHeader = persistentShellState.readLatest("admin")?.header;
+  const companyName = rememberedHeader?.organization?.company?.name?.trim();
+  const organizationCount =
+    rememberedHeader?.organizationCount ??
+    (rememberedHeader?.organization?.company ? 1 : 0);
   const profileName = resolvedLocale === "ru" ? "Алекс Петров" : "Alex Petrov";
   const profileRole = resolvedLocale === "ru" ? "Владелец" : "Owner";
 
@@ -110,12 +119,12 @@ export function AdminShellLoadingSidebar({
               <div
                 className={`sidebar-link sidebar-link-untitled${active ? " is-active" : ""}`}
               >
-                <a className="sidebar-link-main" href={item.href}>
+                <Link className="sidebar-link-main" href={item.href}>
                   <span className="sidebar-nav-label-wrap">
                     <Icon className="size-4" />
                     <span className="sidebar-nav-label">{item.label}</span>
                   </span>
-                </a>
+                </Link>
                 {item.expandable ? (
                   <span className="sidebar-expand-toggle">
                     <ChevronRight className="size-4" />
@@ -128,6 +137,12 @@ export function AdminShellLoadingSidebar({
       </nav>
 
       <div className="sidebar-footer-untitled">
+        {organizationCount > 1 && companyName ? (
+          <div className="sidebar-organization-indicator" title={companyName}>
+            <BriefcaseBusiness aria-hidden="true" className="size-4" />
+            <span>{companyName}</span>
+          </div>
+        ) : null}
         <div className="sidebar-user-card sidebar-loading-user-card">
           <div className="sidebar-user-avatar">
             <span

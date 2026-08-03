@@ -21,6 +21,7 @@ import {
   DashboardBootstrapInitialData,
   DashboardBootstrapResponse,
   EmployeeProfileResponse,
+  OrganizationLocationSummary,
   TaskItem,
   WorkGroupItem,
 } from "@smart/types";
@@ -125,9 +126,15 @@ type EmployeeDirectoryItem = {
   user?: { id?: string } | null;
   company?: { name: string } | null;
   department?: { name: string } | null;
+  primaryLocation?: { id: string; name?: string } | null;
+  locationAssignments?: Array<{
+    locationId: string;
+    unassignedAt?: string | null;
+  }>;
 };
 
 type TaskDraft = {
+  locationId: string;
   mode: "task" | "meeting";
   title: string;
   description: string;
@@ -339,6 +346,7 @@ function buildDashboardCacheKey(
 }
 
 const initialTaskDraft: TaskDraft = {
+  locationId: "",
   mode: "task",
   title: "",
   description: "",
@@ -905,6 +913,18 @@ export default function DashboardHome({
     initialData?.employees ?? [],
   );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
+  const [locations, setLocations] = useState<OrganizationLocationSummary[]>(
+    initialData?.locations ?? [],
+  );
+
+  useEffect(() => {
+    if (locations.length !== 1) return;
+    setTaskDraft((current) =>
+      current.locationId
+        ? current
+        : { ...current, locationId: locations[0]?.id ?? "" },
+    );
+  }, [locations]);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [taskDraft, setTaskDraft] = useState<TaskDraft>(initialTaskDraft);
@@ -947,6 +967,7 @@ export default function DashboardHome({
     setTaskBoard(snapshot.taskBoard);
     setEmployees(snapshot.employees);
     setGroups(snapshot.groups);
+    setLocations(snapshot.locations ?? []);
     setScheduleShifts(snapshot.scheduleShifts);
     setCanCheckWorkdays(snapshot.canCheckWorkdays);
     setPersonalHistory(snapshot.personalHistory);
@@ -1182,13 +1203,24 @@ export default function DashboardHome({
   }, [groups]);
   const createShiftEmployeeOptions = useMemo(
     () =>
-      employees.map((employee) => ({
+      employees
+      .filter(
+        (employee) =>
+          !taskDraft.locationId ||
+          employee.primaryLocation?.id === taskDraft.locationId ||
+          employee.locationAssignments?.some(
+            (assignment) =>
+              assignment.locationId === taskDraft.locationId &&
+              !assignment.unassignedAt,
+          ) === true,
+      )
+      .map((employee) => ({
         ...employee,
         displayName: `${employee.lastName} ${employee.firstName}`.trim(),
         group: employeeGroupByEmployeeId.get(employee.id) ?? null,
         position: employee.department?.name ?? null,
       })),
-    [employeeGroupByEmployeeId, employees],
+    [employeeGroupByEmployeeId, employees, taskDraft.locationId],
   );
   const managerEmployee = useMemo(
     () =>
@@ -1743,6 +1775,12 @@ export default function DashboardHome({
       return;
     }
 
+    if (locations.length > 0 && !taskDraft.locationId) {
+      setMessageAction(null);
+      setMessage(localize(locale, "Выберите локацию.", "Select a location."));
+      return;
+    }
+
     if (taskDraft.mode === "task" && taskDraft.isRecurring && taskDraft.weekDays.length === 0) {
       setMessageAction(null);
       setMessage(localize(locale, "Выберите хотя бы один день повтора.", "Select at least one recurring day."));
@@ -1814,6 +1852,7 @@ export default function DashboardHome({
                 dueAfterDays: 0,
                 dueTimeLocal: taskDueTimeLocal || undefined,
                 assigneeEmployeeId,
+                locationId: taskDraft.locationId || undefined,
               }),
             }),
           ),
@@ -1835,6 +1874,7 @@ export default function DashboardHome({
             dueAfterDays: 0,
             dueTimeLocal: taskDueTimeLocal || undefined,
             groupId: selectedGroupId,
+            locationId: taskDraft.locationId || undefined,
           }),
         });
       }
@@ -1851,6 +1891,7 @@ export default function DashboardHome({
                   : taskDraft.title,
               description: payloadDescription,
               assigneeEmployeeId,
+              locationId: taskDraft.locationId || undefined,
               priority: taskDraft.priority,
               dueAt: taskDueAt || undefined,
               requiresPhoto:
@@ -1872,6 +1913,7 @@ export default function DashboardHome({
               : taskDraft.title,
           description: payloadDescription,
           groupId: selectedGroupId,
+          locationId: taskDraft.locationId || undefined,
           priority: taskDraft.priority,
           dueAt: taskDueAt || undefined,
           requiresPhoto:
@@ -2031,6 +2073,56 @@ export default function DashboardHome({
                         }
                         value={taskDraft.title}
                       />
+                      {locations.length > 0 ? (
+                        <div className="manager-form-block">
+                          <div className="manager-form-block-head">
+                            <strong>{localize(locale, "Локация", "Location")}</strong>
+                          </div>
+                          <Select
+                            onValueChange={(locationId) =>
+                              setTaskDraft((current) => ({
+                                ...current,
+                                locationId,
+                                assigneeEmployeeIds:
+                                  current.assigneeEmployeeIds.filter((employeeId) => {
+                                    const employee = employees.find(
+                                      ({ id }) => id === employeeId,
+                                    );
+                                    return Boolean(
+                                      employee &&
+                                        (employee.primaryLocation?.id === locationId ||
+                                          employee.locationAssignments?.some(
+                                            (assignment) =>
+                                              assignment.locationId === locationId &&
+                                              !assignment.unassignedAt,
+                                          )),
+                                    );
+                                  }),
+                              }))
+                            }
+                            value={taskDraft.locationId}
+                          >
+                            <SelectTrigger>
+                              <SelectTriggerLabel>
+                                <SelectValue
+                                  placeholder={localize(
+                                    locale,
+                                    "Выберите локацию",
+                                    "Select location",
+                                  )}
+                                />
+                              </SelectTriggerLabel>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {locations.map((location) => (
+                                <SelectItem key={location.id} value={location.id}>
+                                  {location.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
                       <div className="manager-form-block">
                       <div className="manager-form-block-head">
                         <strong>

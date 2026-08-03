@@ -1384,7 +1384,7 @@ export function NewsCenter({
                   )}
                   value={draft.body}
                 />
-                {locations.length > 1 ? (
+                {locations.length > 0 ? (
                   <label className="grid gap-2 text-sm font-heading">
                     <span>{localize(locale, "Локация", "Location")}</span>
                     <AppSelectField

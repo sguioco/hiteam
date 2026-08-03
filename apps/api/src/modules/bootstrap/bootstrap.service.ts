@@ -1721,6 +1721,7 @@ export class BootstrapService {
         scheduleShifts,
         employeeTasks,
         personalHistory,
+        locations,
       ] = await Promise.all([
         this.employeesService.getMe(user).catch(() => null),
         attendanceTrackingEnabled
@@ -1733,6 +1734,9 @@ export class BootstrapService {
         attendanceTrackingEnabled
           ? this.attendanceService.myHistory(user.sub, historyQuery).catch(() => null)
           : Promise.resolve(null),
+        this.orgService
+          .listLocations(user.tenantId, undefined, false, user.sub)
+          .catch(() => []),
       ]);
 
       const taskBoard = {
@@ -1760,6 +1764,7 @@ export class BootstrapService {
           requests: [],
           employees: [],
           groups: [],
+          locations,
           scheduleShifts,
           canCheckWorkdays: false,
           personalHistory,
@@ -1783,6 +1788,7 @@ export class BootstrapService {
       scheduleShifts,
       personalHistory,
       dailyActivity,
+      locations,
     ] = await Promise.all([
       this.employeesService.getMe(user).catch(() => null),
       attendanceTrackingEnabled
@@ -1826,6 +1832,9 @@ export class BootstrapService {
         1200,
         [],
       ),
+      this.orgService
+        .listLocations(user.tenantId, undefined, false, user.sub)
+        .catch(() => []),
     ]);
     const dashboardEmployeeIds = new Set(
       employees.map((employee) => employee.id),
@@ -1875,6 +1884,7 @@ export class BootstrapService {
         },
         employees,
         groups,
+        locations,
         scheduleShifts: scheduleShifts.scheduleShifts,
         canCheckWorkdays: scheduleShifts.canCheckWorkdays,
         personalHistory,

@@ -16,7 +16,15 @@ const schedule = fs.readFileSync(
   "utf8",
 );
 const bootstrap = fs.readFileSync(
-  path.resolve(root, "..", "api", "src", "modules", "bootstrap", "bootstrap.service.ts"),
+  path.resolve(
+    root,
+    "..",
+    "api",
+    "src",
+    "modules",
+    "bootstrap",
+    "bootstrap.service.ts",
+  ),
   "utf8",
 );
 const chunkRecovery = fs.readFileSync(
@@ -27,12 +35,30 @@ const adminShell = fs.readFileSync(
   path.join(root, "components", "admin-shell.tsx"),
   "utf8",
 );
+const adminShellLoadingSidebar = fs.readFileSync(
+  path.join(root, "components", "admin-shell-loading-sidebar.tsx"),
+  "utf8",
+);
+const adminShellStateProvider = fs.readFileSync(
+  path.join(root, "components", "admin-shell-state-provider.tsx"),
+  "utf8",
+);
+const providers = fs.readFileSync(
+  path.join(root, "app", "providers.tsx"),
+  "utf8",
+);
 const profilePage = fs.readFileSync(
   path.join(root, "app", "profile", "page.tsx"),
   "utf8",
 );
 const employeeDetail = fs.readFileSync(
-  path.join(root, "app", "employees", "[employeeId]", "employee-detail-page-client.tsx"),
+  path.join(
+    root,
+    "app",
+    "employees",
+    "[employeeId]",
+    "employee-detail-page-client.tsx",
+  ),
   "utf8",
 );
 const analytics = fs.readFileSync(
@@ -52,7 +78,15 @@ const select = fs.readFileSync(
   "utf8",
 );
 const authController = fs.readFileSync(
-  path.resolve(root, "..", "api", "src", "modules", "auth", "auth.controller.ts"),
+  path.resolve(
+    root,
+    "..",
+    "api",
+    "src",
+    "modules",
+    "auth",
+    "auth.controller.ts",
+  ),
   "utf8",
 );
 const managerTasks = fs.readFileSync(
@@ -135,6 +169,16 @@ assert.match(
   /size=\{1\}[\s\S]*value=\{draft\.companyName\}/,
   "The organization name input must shrink to its text so the edit icon stays adjacent.",
 );
+assert.doesNotMatch(
+  organization,
+  /readOnly=\{setupMode === "create-location"\}/,
+  "The organization name must remain editable while adding another address.",
+);
+assert.match(
+  organization,
+  /persistCompanyDraft\(company, session\.accessToken\)[\s\S]*apiRequest<Location>\("\/org\/locations"/,
+  "Editing a company while adding an address must persist both changes together.",
+);
 assert.match(
   organization,
   /groupByEmployeeId[\s\S]*groupBy="group"/,
@@ -213,32 +257,52 @@ assert.match(
   "The sidebar must identify the active organization when several organizations are available.",
 );
 assert.match(
+  providers,
+  /<AdminShellStateProvider>[\s\S]*\{children\}[\s\S]*<\/AdminShellStateProvider>/,
+  "Shell identity must live above page routes so it survives navigation.",
+);
+assert.match(
+  adminShellStateProvider,
+  /readLatest[\s\S]*snapshotsRef[\s\S]*write/,
+  "The layout shell store must retain its latest organization snapshot.",
+);
+assert.match(
+  adminShell,
+  /<Link[\s\S]*className="sidebar-link-main"[\s\S]*handleRouteStart/,
+  "Sidebar routes must use soft navigation instead of reloading the layout.",
+);
+assert.match(
+  adminShellLoadingSidebar,
+  /readLatest\("admin"\)[\s\S]*sidebar-organization-indicator/,
+  "Route loading states must retain the active organization label.",
+);
+assert.match(
   authController,
   /listCompanies\(user\.tenantId, false, user\.sub\)[\s\S]*organizationCount:/,
   "Shell bootstrap must return the readable organization count from the backend.",
 );
 assert.match(
   headerTaskCreate,
-  /locations\.length > 1[\s\S]*Выберите локацию/,
-  "Task creation must require and persist a location in multi-location workspaces.",
+  /locations\.length > 0[\s\S]*Выберите локацию/,
+  "Task creation must expose and persist a location in every workspace.",
 );
 assert.match(headerTaskCreate, /locationId: selectedLocationId \|\| undefined/);
 assert.match(
   headerNewsCreate,
-  /locations\.length > 1[\s\S]*Выберите локацию/,
-  "News creation must require and persist a location in multi-location workspaces.",
+  /locations\.length > 0[\s\S]*Выберите локацию/,
+  "News creation must expose and persist a location in every workspace.",
 );
 assert.match(headerNewsCreate, /locationId: draft\.locationId/);
 assert.match(
   newsCenter,
-  /locations\.length > 1[\s\S]*Выберите локацию/,
-  "The News page compose dialog must require a location in multi-location workspaces.",
+  /locations\.length > 0[\s\S]*Выберите локацию/,
+  "The News page compose dialog must expose a location in every workspace.",
 );
 assert.match(newsCenter, /locationId: draft\.locationId/);
 assert.match(
   headerShiftCreate,
-  /Локация[\s\S]*templateLocationId/,
-  "Shift creation must keep its location selection connected to the API payload.",
+  /locationId: string[\s\S]*employeeBelongsToLocation[\s\S]*visibleTemplates/,
+  "Shift creation must scope employees and templates by the selected location.",
 );
 assert.match(headerShiftCreate, /locationId: location\.id/);
 assert.match(

@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import { getWorkspaceScope } from "./workspace-scope";
 import {
   AttendanceActionResponse,
   AttendanceStatusResponse,
@@ -1941,7 +1942,9 @@ export async function createManagerAnnouncement(input: {
   imageDataUrl?: string;
   imageAspectRatio?: AnnouncementImageAspectRatio;
   scheduledFor?: string;
+  locationId?: string;
 }) {
+  const locationId = input.locationId ?? getWorkspaceScope()?.locationId;
   const normalizedGroupIds = Array.from(
     new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean)),
   );
@@ -1956,7 +1959,9 @@ export async function createManagerAnnouncement(input: {
   return authRequest<AnnouncementItem>("/collaboration/announcements", {
     method: "POST",
     body: JSON.stringify({
-      audience: input.audience ?? "ALL",
+      audience:
+        input.audience ?? (locationId ? "LOCATION" : "ALL"),
+      ...(locationId ? { locationId } : {}),
       title: input.title,
       body: input.body,
       isPinned: input.isPinned ?? false,
@@ -2242,10 +2247,14 @@ export async function createManagerTask(payload: {
   dueAt?: string;
   assigneeEmployeeId?: string;
   groupId?: string;
+  locationId?: string;
 }) {
   return authRequest<TaskItem>("/collaboration/tasks", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      locationId: payload.locationId ?? getWorkspaceScope()?.locationId,
+    }),
   });
 }
 
@@ -2271,7 +2280,10 @@ export async function createManagerTaskTemplate(payload: {
 }) {
   return authRequest<TaskTemplateItem>("/collaboration/task-templates", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      locationId: payload.locationId ?? getWorkspaceScope()?.locationId,
+    }),
   });
 }
 

@@ -231,6 +231,21 @@ type EmployeeRowView = {
   avatarUrl: string | null;
 };
 
+function employeeRecordBelongsToLocation(
+  employee: EmployeeApiRecord | undefined,
+  locationId: string,
+) {
+  if (!employee || !locationId) return Boolean(employee);
+
+  return (
+    employee.primaryLocation?.id === locationId ||
+    employee.locationAssignments?.some(
+      (assignment) =>
+        assignment.locationId === locationId && !assignment.unassignedAt,
+    ) === true
+  );
+}
+
 const statusStyles: Record<EmployeeStatus, string> = {
   late: "bg-[color:var(--soft-danger)] text-[color:var(--danger)]",
   on_shift: "bg-[color:var(--soft-success)] text-[color:var(--success)]",
@@ -263,6 +278,7 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
 });
 
 const initialTaskDraft = {
+  locationId: "",
   title: "",
   description: "",
   priority: "MEDIUM" as TaskItem["priority"],
@@ -904,7 +920,9 @@ const Employees = ({
   const [directoryGroups, setDirectoryGroups] = useState<WorkGroupItem[]>(
     initialData?.groups ?? [],
   );
-  const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
+  const [locationOptions, setLocationOptions] = useState<LocationOption[]>(
+    initialData?.locations ?? [],
+  );
   const [updatingLocationEmployeeId, setUpdatingLocationEmployeeId] =
     useState<string | null>(null);
 
@@ -1020,6 +1038,7 @@ const Employees = ({
 
   const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
   const [templateDraft, setTemplateDraft] = useState({
+    locationId: initialData?.locations?.length === 1 ? initialData.locations[0]?.id ?? "" : "",
     name: "",
     startsAtLocal: "09:00",
     endsAtLocal: "18:00",
@@ -1039,6 +1058,7 @@ const Employees = ({
     employeeName: string;
   } | null>(null);
   const [assignShiftDraft, setAssignShiftDraft] = useState({
+    locationId: "",
     templateId: "",
     shiftDate: new Date().toISOString().split("T")[0],
     fixedBreakEnabled: false,
@@ -1060,6 +1080,7 @@ const Employees = ({
 
   async function handleCreateTemplate() {
     if (
+      !templateDraft.locationId ||
       !templateDraft.name.trim() ||
       !templateDraft.startsAtLocal ||
       !templateDraft.endsAtLocal ||
@@ -1112,6 +1133,7 @@ const Employees = ({
         token: session.accessToken,
         body: JSON.stringify({
           name: templateDraft.name.trim(),
+          locationId: templateDraft.locationId,
           code: templateDraft.name.trim().toLowerCase().replace(/\s+/g, "-"),
           startsAtLocal: templateDraft.startsAtLocal,
           endsAtLocal: templateDraft.endsAtLocal,
@@ -1162,6 +1184,7 @@ const Employees = ({
 
       setCreateTemplateOpen(false);
       setTemplateDraft({
+        locationId: locationOptions.length === 1 ? locationOptions[0]?.id ?? "" : "",
         name: "",
         startsAtLocal: "09:00",
         endsAtLocal: "18:00",
@@ -1335,8 +1358,17 @@ const Employees = ({
   }
 
   const taskEmployeeOptions = useMemo(
-    () => employees.filter((employee) => employee.status !== "dismissed"),
-    [employees],
+    () =>
+      employees.filter(
+        (employee) =>
+          employee.status !== "dismissed" &&
+          (!taskDraft.locationId ||
+            employeeRecordBelongsToLocation(
+              employeeRecords.find(({ id }) => id === employee.id),
+              taskDraft.locationId,
+            )),
+      ),
+    [employeeRecords, employees, taskDraft.locationId],
   );
   const taskRecipientSummary = useMemo(() => {
     if (taskDialog?.mode !== "employee") {
@@ -1623,6 +1655,7 @@ const Employees = ({
     setLiveSessions(snapshot.liveSessions ?? []);
     setOverview(snapshot.overview);
     setDirectoryGroups(snapshot.groups ?? []);
+    setLocationOptions(snapshot.locations ?? []);
     setPendingInvitations(snapshot.pendingInvitations);
     setScheduleShifts(snapshot.scheduleShifts);
     setScheduleTemplates(snapshot.scheduleTemplates);
@@ -2750,7 +2783,12 @@ const Employees = ({
 
   function openTaskDialogForEmployee(employee: EmployeeRowView) {
     setTaskError(null);
-    setTaskDraft(initialTaskDraft);
+    setTaskDraft({
+      ...initialTaskDraft,
+      locationId:
+        employee.locationId ??
+        (locationOptions.length === 1 ? locationOptions[0]?.id ?? "" : ""),
+    });
     setTaskDayOffConfirmOpen(false);
     setTaskDialog({
       mode: "employee",
@@ -2761,7 +2799,10 @@ const Employees = ({
 
   function openTaskDialogForGroup(groupId: string, groupName: string) {
     setTaskError(null);
-    setTaskDraft(initialTaskDraft);
+    setTaskDraft({
+      ...initialTaskDraft,
+      locationId: locationOptions.length === 1 ? locationOptions[0]?.id ?? "" : "",
+    });
     setTaskDayOffConfirmOpen(false);
     setTaskDialog({
       mode: "group",
@@ -2779,6 +2820,13 @@ const Employees = ({
         : [];
 
     setTaskError(null);
+
+    if (locationOptions.length > 0 && !taskDraft.locationId) {
+      setTaskError(
+        runtimeLocalize("Выберите локацию.", "Select a location.", locale),
+      );
+      return;
+    }
 
     if (taskDialog.mode === "employee" && assigneeEmployeeIds.length === 0) {
       setTaskError(
@@ -2869,6 +2917,7 @@ const Employees = ({
                     ? taskDraft.dueTimeLocal || undefined
                     : undefined,
                   assigneeEmployeeId,
+                  locationId: taskDraft.locationId || undefined,
                 }),
               }),
             ),
@@ -2892,6 +2941,7 @@ const Employees = ({
                 ? taskDraft.dueTimeLocal || undefined
                 : undefined,
               groupId: taskDialog.targetId,
+              locationId: taskDraft.locationId || undefined,
             }),
           });
         }
@@ -2911,6 +2961,7 @@ const Employees = ({
                     ? taskDraft.dueAt || undefined
                     : undefined,
                   assigneeEmployeeId,
+                  locationId: taskDraft.locationId || undefined,
                 }),
               }),
             ),
@@ -2928,6 +2979,7 @@ const Employees = ({
                 ? taskDraft.dueAt || undefined
                 : undefined,
               groupId: taskDialog.targetId,
+              locationId: taskDraft.locationId || undefined,
             }),
           });
         }
@@ -2972,10 +3024,16 @@ const Employees = ({
   }
 
   function openAssignShiftDialog(employee: EmployeeRowView) {
-    const template = scheduleTemplates[0];
+    const locationId =
+      employee.locationId ??
+      (locationOptions.length === 1 ? locationOptions[0]?.id ?? "" : "");
+    const template = scheduleTemplates.find(
+      (item) => !locationId || item.location.id === locationId,
+    );
     const fixedBreakDuration = template?.fixedBreakDurationMinutes ?? 0;
     setAssignShiftError(null);
     setAssignShiftDraft({
+      locationId,
       templateId: template?.id ?? "",
       shiftDate: new Date().toISOString().split("T")[0],
       fixedBreakEnabled: fixedBreakDuration > 0,
@@ -3007,7 +3065,7 @@ const Employees = ({
     const session = getSession();
     if (!session || !assignShiftDialog) return;
 
-    if (!assignShiftDraft.templateId || !assignShiftDraft.shiftDate) {
+    if (!assignShiftDraft.locationId || !assignShiftDraft.templateId || !assignShiftDraft.shiftDate) {
       setAssignShiftError(
         runtimeLocalize(
           "Выберите шаблон и дату",
@@ -5433,6 +5491,27 @@ const Employees = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {locationOptions.length > 0 ? (
+              <label className="grid gap-2 text-sm font-heading">
+                <span>{runtimeLocalize("Локация", "Location", locale)}</span>
+                <AppSelectField
+                  onValueChange={(locationId) =>
+                    setTemplateDraft((current) => ({ ...current, locationId }))
+                  }
+                  options={locationOptions.map((location) => ({
+                    value: location.id,
+                    label: location.name,
+                  }))}
+                  placeholder={runtimeLocalize(
+                    "Выберите локацию",
+                    "Select location",
+                    locale,
+                  )}
+                  triggerClassName="h-11 rounded-xl bg-secondary/30"
+                  value={templateDraft.locationId}
+                />
+              </label>
+            ) : null}
             <div className="space-y-2">
               <label className="text-[11px] font-heading font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]/75">
                 {runtimeLocalize("Название шаблона", "Template name", locale)}
@@ -6241,6 +6320,40 @@ const Employees = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {locationOptions.length > 0 ? (
+              <label className="grid gap-2 text-sm font-heading">
+                <span>{runtimeLocalize("Локация", "Location", locale)}</span>
+                <AppSelectField
+                  onValueChange={(locationId) => {
+                    setTaskDraft((current) => ({ ...current, locationId }));
+                    setTaskDialog((current) =>
+                      current?.mode === "employee"
+                        ? {
+                            ...current,
+                            targetIds: current.targetIds.filter((employeeId) =>
+                              employeeRecordBelongsToLocation(
+                                employeeRecords.find(({ id }) => id === employeeId),
+                                locationId,
+                              ),
+                            ),
+                          }
+                        : current,
+                    );
+                  }}
+                  options={locationOptions.map((location) => ({
+                    value: location.id,
+                    label: location.name,
+                  }))}
+                  placeholder={runtimeLocalize(
+                    "Выберите локацию",
+                    "Select location",
+                    locale,
+                  )}
+                  triggerClassName="h-11 rounded-xl bg-secondary/30"
+                  value={taskDraft.locationId}
+                />
+              </label>
+            ) : null}
             {taskDialog?.mode === "employee" ? (
               <div className="grid gap-2 text-sm font-heading">
                 <span>{runtimeLocalize("Получатель", "Recipient", locale)}</span>
@@ -6796,6 +6909,39 @@ const Employees = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {locationOptions.length > 0 ? (
+              <label className="grid gap-2 text-sm font-heading">
+                <span>{runtimeLocalize("Локация", "Location", locale)}</span>
+                <AppSelectField
+                  onValueChange={(locationId) => {
+                    const template = scheduleTemplates.find(
+                      (item) => item.location.id === locationId,
+                    );
+                    const duration = template?.fixedBreakDurationMinutes ?? 0;
+                    setAssignShiftDraft((current) => ({
+                      ...current,
+                      locationId,
+                      templateId: template?.id ?? "",
+                      fixedBreakEnabled: duration > 0,
+                      fixedBreakStartsAtLocal:
+                        template?.fixedBreakStartsAtLocal ?? "13:00",
+                      fixedBreakDurationMinutes: String(duration || 30),
+                    }));
+                  }}
+                  options={locationOptions.map((location) => ({
+                    value: location.id,
+                    label: location.name,
+                  }))}
+                  placeholder={runtimeLocalize(
+                    "Выберите локацию",
+                    "Select location",
+                    locale,
+                  )}
+                  triggerClassName="h-11 rounded-xl bg-secondary/30"
+                  value={assignShiftDraft.locationId}
+                />
+              </label>
+            ) : null}
             <label className="grid gap-2 text-sm font-heading">
               <span>
                 {runtimeLocalize("Шаблон смены", "Shift template", locale)}
@@ -6821,12 +6967,18 @@ const Employees = ({
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {scheduleTemplates.map((template) => (
+                  {scheduleTemplates
+                    .filter(
+                      (template) =>
+                        !assignShiftDraft.locationId ||
+                        template.location.id === assignShiftDraft.locationId,
+                    )
+                    .map((template) => (
                     <SelectItem key={template.id} value={template.id}>
                       {template.name} ({template.startsAtLocal}-
                       {template.endsAtLocal})
                     </SelectItem>
-                  ))}
+                    ))}
                   <SelectItem value={CREATE_SHIFT_TEMPLATE_OPTION}>
                     {runtimeLocalize(
                       "+ Создать шаблон смены",

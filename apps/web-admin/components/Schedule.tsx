@@ -196,6 +196,7 @@ type CalendarDayEntry = {
 
 type CreateShiftDraft = {
   employeeIds: string[];
+  locationId: string;
   templateId: string;
   shiftDate: string;
   fixedBreakEnabled: boolean;
@@ -203,6 +204,21 @@ type CreateShiftDraft = {
   fixedBreakDurationMinutes: string;
   fixedBreakIsPaid: boolean;
 };
+
+function employeeBelongsToLocation(
+  employee: EmployeeApiRecord,
+  locationId: string,
+) {
+  if (!locationId) return true;
+
+  return (
+    employee.primaryLocation?.id === locationId ||
+    employee.locationAssignments?.some(
+      (assignment) =>
+        assignment.locationId === locationId && !assignment.unassignedAt,
+    ) === true
+  );
+}
 
 type CreateTemplateDraft = {
   name: string;
@@ -1018,6 +1034,7 @@ export default function Schedule({
 
   const [createShiftDraft, setCreateShiftDraft] = useState<CreateShiftDraft>({
     employeeIds: [],
+    locationId: initialData?.locations?.length === 1 ? initialData.locations[0]?.id ?? "" : "",
     templateId: "",
     shiftDate: formatDateInput(today),
     fixedBreakEnabled: false,
@@ -1196,11 +1213,25 @@ export default function Schedule({
 
   const createShiftEmployeeOptions = useMemo(
     () =>
-      employees.map((employee) => ({
-        ...employee,
-        group: employeeGroupByEmployeeId.get(employee.id) ?? null,
-      })),
-    [employeeGroupByEmployeeId, employees],
+      employees
+        .filter((employee) =>
+          employeeBelongsToLocation(employee, createShiftDraft.locationId),
+        )
+        .map((employee) => ({
+          ...employee,
+          group: employeeGroupByEmployeeId.get(employee.id) ?? null,
+        })),
+    [createShiftDraft.locationId, employeeGroupByEmployeeId, employees],
+  );
+
+  const createShiftTemplates = useMemo(
+    () =>
+      templates.filter(
+        (template) =>
+          !createShiftDraft.locationId ||
+          template.location.id === createShiftDraft.locationId,
+      ),
+    [createShiftDraft.locationId, templates],
   );
 
   const enrichedShifts = useMemo<EnrichedShift[]>(
@@ -2063,6 +2094,7 @@ export default function Schedule({
           : selectedEmployeeId !== "all"
             ? [selectedEmployeeId]
             : [],
+      locationId: current.locationId,
       templateId: current.templateId,
       shiftDate:
         current.shiftDate || formatDateInput(selectedDay ?? currentDate ?? new Date()),
@@ -2112,6 +2144,7 @@ export default function Schedule({
   function resetCreateShiftDraft(nextDate = selectedDay ?? today) {
     setCreateShiftDraft({
       employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
+      locationId: locations.length === 1 ? locations[0]?.id ?? "" : "",
       templateId: "",
       shiftDate: formatDateInput(nextDate),
       fixedBreakEnabled: false,
@@ -2126,6 +2159,7 @@ export default function Schedule({
     setCreateShiftDraft({
       shiftDate: formatDateInput(day),
       employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
+      locationId: locations.length === 1 ? locations[0]?.id ?? "" : "",
       templateId: "",
       fixedBreakEnabled: false,
       fixedBreakStartsAtLocal: "13:00",
@@ -2157,6 +2191,7 @@ export default function Schedule({
     setEditingShiftId(shift.id);
     setCreateShiftDraft({
       employeeIds: [shift.employeeId],
+      locationId: shift.locationId,
       templateId: shift.templateId,
       shiftDate: formatDateInput(shift.shiftDate),
       fixedBreakEnabled: shift.fixedBreakDurationMinutes > 0,
@@ -2224,6 +2259,7 @@ export default function Schedule({
 
     if (
       !primaryEmployeeId ||
+      !createShiftDraft.locationId ||
       !createShiftDraft.templateId ||
       !createShiftDraft.shiftDate
     ) {
@@ -3419,6 +3455,52 @@ export default function Schedule({
           </DialogHeader>
 
           <div className="grid gap-4">
+            {locations.length > 0 ? (
+              <div>
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {ui.location}
+                </label>
+                <Select
+                  onValueChange={(locationId) =>
+                    setCreateShiftDraft((current) => ({
+                      ...current,
+                      locationId,
+                      templateId: "",
+                      employeeIds: current.employeeIds.filter((employeeId) => {
+                        const employee = employees.find(({ id }) => id === employeeId);
+                        return employee
+                          ? employeeBelongsToLocation(employee, locationId)
+                          : false;
+                      }),
+                    }))
+                  }
+                  value={createShiftDraft.locationId}
+                >
+                  <SelectTrigger disabled={Boolean(editingShiftId)}>
+                    <SelectTriggerLabel
+                      className={
+                        createShiftDraft.locationId
+                          ? undefined
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {locations.find(
+                        ({ id }) => id === createShiftDraft.locationId,
+                      )?.name ??
+                        (locale === "ru" ? "Выберите локацию" : "Select location")}
+                    </SelectTriggerLabel>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {ui.employee}
@@ -3463,27 +3545,27 @@ export default function Schedule({
                 }
                 value={createShiftDraft.templateId}
               >
-                <SelectTrigger disabled={templates.length === 0}>
+                <SelectTrigger disabled={!createShiftDraft.locationId || createShiftTemplates.length === 0}>
                   <SelectTriggerLabel
                     className={
-                      templates.find(
+                      createShiftTemplates.find(
                         (template) => template.id === createShiftDraft.templateId,
                       )?.name
                         ? undefined
                         : "text-muted-foreground"
                     }
                   >
-                    {templates.find(
+                    {createShiftTemplates.find(
                       (template) => template.id === createShiftDraft.templateId,
                     )?.name ??
-                      (templates.length > 0
+                      (createShiftTemplates.length > 0
                         ? ui.selectTemplate
                         : ui.noShiftTemplates)}
                   </SelectTriggerLabel>
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.length > 0 ? (
-                    templates.map((template) => {
+                  {createShiftTemplates.length > 0 ? (
+                    createShiftTemplates.map((template) => {
                       const isSelected =
                         createShiftDraft.templateId === template.id;
 

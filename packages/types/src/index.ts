@@ -788,6 +788,7 @@ export type DashboardBootstrapInitialData<
   employees: TEmployee[];
   groups: WorkGroupItem[];
   liveSessions: AttendanceLiveSession[];
+  locations: OrganizationLocationSummary[];
   personalHistory: AttendanceHistoryResponse | null;
   personalTaskBoard?: CollaborationTaskBoardResponse | null;
   profile: TProfile;

@@ -3165,18 +3165,21 @@ textarea {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
 .organization-studio-name-input-shell {
   display: inline-grid;
-  max-width: calc(100% - 36px);
+  width: fit-content;
+  max-width: calc(100% - 38px);
   min-width: 1ch;
+  padding-right: 0.18em;
 }
 
 .organization-studio-name-input-shell::after {
-  content: attr(data-value) " ";
+  content: attr(data-value) "\00a0\00a0";
   grid-area: 1 / 1;
   min-width: 1ch;
   visibility: hidden;
@@ -3194,7 +3197,7 @@ textarea {
   width: 100%;
   min-width: 0;
   height: auto;
-  padding: 0;
+  padding: 0 0.18em 0 0;
   border: 0;
   border-radius: 0;
   border-bottom: 1px solid transparent;

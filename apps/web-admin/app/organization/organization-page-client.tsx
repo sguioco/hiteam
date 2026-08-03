@@ -528,6 +528,26 @@ export default function OrganizationPageClient({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function persistCompanyDraft(company: Company, accessToken: string) {
+    const name = draft.companyName.trim();
+    const logoUrl = draft.companyLogoUrl || null;
+    const googlePlaceId = draft.googlePlaceId || null;
+
+    if (
+      name === company.name &&
+      logoUrl === (company.logoUrl ?? null) &&
+      googlePlaceId === (company.googlePlaceId ?? null)
+    ) {
+      return company;
+    }
+
+    return apiRequest<Company>(`/org/companies/${company.id}`, {
+      method: "PATCH",
+      token: accessToken,
+      body: JSON.stringify({ name, logoUrl, googlePlaceId }),
+    });
+  }
+
   async function submitCreateCompany() {
     const session = getSession();
     const name = newCompanyName.trim();
@@ -766,9 +786,9 @@ export default function OrganizationPageClient({
         name: locationName,
         timezone: draft.timezone.trim() || "UTC",
       };
-      const location =
+      const locationRequest =
         setupMode === "create-location"
-          ? await apiRequest<Location>("/org/locations", {
+          ? apiRequest<Location>("/org/locations", {
               method: "POST",
               token: session.accessToken,
               body: JSON.stringify({
@@ -778,18 +798,28 @@ export default function OrganizationPageClient({
                 employeeIds: selectedEmployeeIds,
               }),
             })
-          : await apiRequest<Location>(`/org/locations/${selectedLocationId}`, {
+          : apiRequest<Location>(`/org/locations/${selectedLocationId}`, {
               method: "PATCH",
               token: session.accessToken,
               body: JSON.stringify(locationPayload),
             });
 
+      const [nextCompany, location] = await Promise.all([
+        persistCompanyDraft(company, session.accessToken),
+        locationRequest,
+      ]);
+
       setSetup((current) => ({
         ...current,
-        company,
+        company: nextCompany,
         configured: true,
         location,
       }));
+      setCompanies((current) =>
+        current.map((item) =>
+          item.id === nextCompany.id ? { ...item, ...nextCompany } : item,
+        ),
+      );
       setDraft((current) => ({
         ...current,
         address: location.address,
@@ -807,6 +837,16 @@ export default function OrganizationPageClient({
       setSetupMode("update");
       setLastSavedMode(
         setupMode === "create-location" ? "create-location" : "update",
+      );
+      window.dispatchEvent(
+        new CustomEvent(ORGANIZATION_UPDATED_EVENT, {
+          detail: {
+            company: nextCompany,
+            attendanceTrackingEnabled: setup.attendanceTrackingEnabled,
+            configured: true,
+            organizationId: setup.organizationId,
+          },
+        }),
       );
       setSaveSuccess(true);
     } catch (nextError) {
@@ -901,28 +941,31 @@ export default function OrganizationPageClient({
               : "Organization was not found.",
           );
         }
-        const location = await apiRequest<Location>("/org/locations", {
-          method: "POST",
-          token: session.accessToken,
-          body: JSON.stringify({
-            companyId: company.id,
-            name: draft.locationName.trim(),
-            code: `LOC-${Date.now().toString(36).toUpperCase()}`,
-            address: draft.address.trim(),
-            country:
-              draft.details?.country || setup.location?.country || undefined,
-            geofenceRadiusMeters: normalizeRadius(
-              draft.geofenceRadiusMeters,
-            ),
-            latitude: Number(draft.latitude),
-            longitude: Number(draft.longitude),
-            timezone: draft.timezone.trim() || "UTC",
-            employeeIds: selectedEmployeeIds,
+        const [nextCompany, location] = await Promise.all([
+          persistCompanyDraft(company, session.accessToken),
+          apiRequest<Location>("/org/locations", {
+            method: "POST",
+            token: session.accessToken,
+            body: JSON.stringify({
+              companyId: company.id,
+              name: draft.locationName.trim(),
+              code: `LOC-${Date.now().toString(36).toUpperCase()}`,
+              address: draft.address.trim(),
+              country:
+                draft.details?.country || setup.location?.country || undefined,
+              geofenceRadiusMeters: normalizeRadius(
+                draft.geofenceRadiusMeters,
+              ),
+              latitude: Number(draft.latitude),
+              longitude: Number(draft.longitude),
+              timezone: draft.timezone.trim() || "UTC",
+              employeeIds: selectedEmployeeIds,
+            }),
           }),
-        });
+        ]);
         nextSetup = {
           ...setup,
-          company,
+          company: nextCompany,
           configured: true,
           location,
         };
@@ -1147,23 +1190,27 @@ export default function OrganizationPageClient({
                       className="organization-studio-name-input"
                       onChange={(e) => updateDraft("companyName", e.target.value)}
                       placeholder={locale === "ru" ? "Название организации" : "Organization name"}
-                      readOnly={setupMode === "create-location"}
                       ref={companyNameInputRef}
                       required
                       size={1}
                       value={draft.companyName}
                     />
                   </span>
-                  {setupMode !== "create-location" ? (
-                    <button
-                      aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
-                      className="organization-studio-inline-icon"
-                      onClick={() => companyNameInputRef.current?.focus()}
-                      type="button"
-                    >
-                      <Pencil className="h-5 w-5" />
-                    </button>
-                  ) : null}
+                  <button
+                    aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
+                    className="organization-studio-inline-icon"
+                    onClick={() => {
+                      const input = companyNameInputRef.current;
+                      input?.focus();
+                      input?.setSelectionRange(
+                        draft.companyName.length,
+                        draft.companyName.length,
+                      );
+                    }}
+                    type="button"
+                  >
+                    <Pencil className="h-5 w-5" />
+                  </button>
                 </div>
                 <div className="organization-studio-meta-stack">
                   <span className="organization-studio-meta">
