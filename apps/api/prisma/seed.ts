@@ -1819,6 +1819,143 @@ async function main(): Promise<void> {
       },
     ],
   });
+
+  await prisma.auditLog.deleteMany({
+    where: { tenantId: tenant.id },
+  });
+  await prisma.auditLog.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        actorUserId: alex.user.id,
+        entityType: 'AttendanceSession',
+        entityId: shifts.alex.id,
+        action: 'attendance.check_in',
+        metadataJson: JSON.stringify({
+          shiftId: shifts.alex.id,
+          employeeId: alex.employee.id,
+          companyId: company.id,
+          locationId: location.id,
+          locationName: location.name,
+        }),
+        createdAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 9, 12),
+      },
+      {
+        tenantId: tenant.id,
+        actorUserId: sergey.user.id,
+        entityType: 'AttendanceSession',
+        entityId: shifts.sergey.id,
+        action: 'attendance.check_out',
+        metadataJson: JSON.stringify({
+          shiftId: shifts.sergey.id,
+          employeeId: sergey.employee.id,
+          companyId: company.id,
+          locationId: location.id,
+          locationName: location.name,
+        }),
+        createdAt: dateAtUtcOffset(DEMO_SHIFT_UTC_OFFSET_HOURS, 14, 25),
+      },
+      ...[allAnnouncement, groupAnnouncement, locationAnnouncement].map(
+        (announcement, index) => ({
+          tenantId: tenant.id,
+          actorUserId: owner.user.id,
+          entityType: 'Announcement',
+          entityId: announcement.id,
+          action: 'announcement.created',
+          metadataJson: JSON.stringify({
+            title: announcement.title,
+            groupId: index === 1 ? group.id : undefined,
+            companyId: company.id,
+            locationId: index === 2 ? location.id : undefined,
+            locationName: index === 2 ? location.name : undefined,
+          }),
+          createdAt: dateAtUtcOffsetDaysFromNow(
+            DEMO_SHIFT_UTC_OFFSET_HOURS,
+            -index,
+            10 + index,
+            15,
+          ),
+        }),
+      ),
+      {
+        tenantId: tenant.id,
+        actorUserId: owner.user.id,
+        entityType: 'Task',
+        entityId: 'demo-task-activity',
+        action: 'task.created',
+        metadataJson: JSON.stringify({
+          title: 'Prepare treatment rooms',
+          assigneeEmployeeIds: [alex.employee.id, julia.employee.id],
+          groupId: group.id,
+          companyId: company.id,
+          locationId: location.id,
+          locationName: location.name,
+        }),
+        createdAt: dateAtUtcOffsetDaysFromNow(
+          DEMO_SHIFT_UTC_OFFSET_HOURS,
+          -1,
+          16,
+          20,
+        ),
+      },
+      {
+        tenantId: tenant.id,
+        actorUserId: owner.user.id,
+        entityType: 'Shift',
+        entityId: shifts.julia.id,
+        action: 'schedule.shift_created',
+        metadataJson: JSON.stringify({
+          shiftId: shifts.julia.id,
+          employeeId: julia.employee.id,
+          templateName: 'Front desk morning',
+          companyId: company.id,
+          locationId: location.id,
+          locationName: location.name,
+        }),
+        createdAt: dateAtUtcOffsetDaysFromNow(
+          DEMO_SHIFT_UTC_OFFSET_HOURS,
+          -2,
+          13,
+          40,
+        ),
+      },
+      {
+        tenantId: tenant.id,
+        actorUserId: owner.user.id,
+        entityType: 'Employee',
+        entityId: maria.employee.id,
+        action: 'employee.review_approved',
+        metadataJson: JSON.stringify({ employeeId: maria.employee.id }),
+        createdAt: dateAtUtcOffsetDaysFromNow(
+          DEMO_SHIFT_UTC_OFFSET_HOURS,
+          -3,
+          11,
+          5,
+        ),
+      },
+      {
+        tenantId: tenant.id,
+        actorUserId: alex.user.id,
+        entityType: 'EmployeeRequest',
+        entityId: supplyRequest.id,
+        action: 'request.created',
+        metadataJson: JSON.stringify({
+          requestType: supplyRequest.title,
+          employeeId: alex.employee.id,
+          approverEmployeeIds: [owner.employee.id],
+          companyId: company.id,
+          locationId: location.id,
+          locationName: location.name,
+        }),
+        createdAt: dateAtUtcOffsetDaysFromNow(
+          DEMO_SHIFT_UTC_OFFSET_HOURS,
+          -4,
+          15,
+          30,
+        ),
+      },
+    ],
+  });
 }
 
 main()
