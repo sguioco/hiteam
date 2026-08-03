@@ -1144,65 +1144,15 @@ async function main(): Promise<void> {
     ),
   });
 
-  const demoTaskTitles = [
-    'Prepare two treatment rooms',
-    'Restock towels and cleaning supplies',
-    'Take before-service photos',
-    'Meeting: front desk briefing',
-    'Finish laundry cycle',
-    'Owner: review next week staffing',
-    'Owner: approve studio supply budget',
-    'Owner: 1:1 with Alexander',
-    'Owner: lobby walkthrough',
-    'Owner: approve photo report from stock room',
-    'Owner: quick sync with reception',
-    'Owner: audit storage room photo report',
-    'Owner: sign contractor extension',
-    'Owner: weekly planning board review',
-    'Owner: online finance sync',
-    'Owner: approve weekend promo setup',
-    'Employee: prep VIP room for tomorrow',
-    'Employee: confirm weekend inventory count',
-    'Employee: training check-in with owner',
-    'Employee: reception zone photo report',
-    'Employee: deep clean coffee point',
-    'Employee: prepare retail shelf photos',
-    'Employee: online product training',
-    'Employee: post-shift towel count',
-    'Employee: overdue dust check in studio A',
-    'Alex: opening checklist 2 of 4',
-    'Alex: sanitize treatment rooms',
-    'Julia: client cards 3 of 4',
-    'Julia: confirm reception handoff',
-    'Sergey: cash count 1 of 4',
-    'Sergey: close early-leave note',
-    'Maria: break follow-up photo report',
-    'Anna: no-show shift handoff',
-  ];
-
-  const demoTaskTemplateTitles = [
-    'Owner recurring: weekly floor walk',
-    'Owner recurring: monthly vendor approvals',
-    'Employee recurring: opening photo report',
-    'Employee recurring: weekly consumables count',
-    'Weekly floor walk',
-    'Monthly vendor approvals',
-    'Opening photo report',
-    'Weekly consumables count',
-  ];
-
+  // The demo workspace is fully owned by this seed. Clear all generated and
+  // hand-created showcase tasks so repeated runs stay deterministic instead of
+  // accumulating recurring task occurrences over time.
   await prisma.task.deleteMany({
-    where: {
-      tenantId: tenant.id,
-      title: { in: demoTaskTitles },
-    },
+    where: { tenantId: tenant.id },
   });
 
   await prisma.taskTemplate.deleteMany({
-    where: {
-      tenantId: tenant.id,
-      title: { in: demoTaskTemplateTitles },
-    },
+    where: { tenantId: tenant.id },
   });
 
   await prisma.task.create({
