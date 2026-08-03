@@ -69,6 +69,11 @@ for (const source of authSurfaces) {
 assert.match(i18n, /writeBrowserStorageItem\(STORAGE_KEY, locale\)/);
 assert.match(i18n, /writeBrowserStorageItem\("hiteam-landing-locale", locale\)/);
 assert.match(layout, /smart-admin-locale[\s\S]*hiteam-landing-locale/);
+assert.match(
+  layout,
+  /const shouldRenderWidget = isPublicRoute && pathname !== "\/mobile"/,
+  "The third-party support widget must not run inside authenticated workspaces.",
+);
 assert.match(landing, /LANDING_LOCALE_OPTIONS = \["en", "ru"\]/);
 assert.doesNotMatch(landing, /useState<LandingLocale>/);
 

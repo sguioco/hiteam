@@ -132,7 +132,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
   const isPublicRoute = requestHeaders.get("x-smart-public-route") === "1";
   const pathname = requestHeaders.get("x-smart-pathname");
-  const shouldRenderWidget = pathname !== "/mobile";
+  const shouldRenderWidget = isPublicRoute && pathname !== "/mobile";
   const initialSession = isPublicRoute ? null : await getServerSessionSnapshot();
   const initialLocale = resolveInitialLocale(
     requestHeaders.get("accept-language"),

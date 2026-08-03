@@ -251,6 +251,11 @@ assert.match(
   /leaderboard-location-control[\s\S]*Все локации[\s\S]*All locations[\s\S]*locationFilter/,
   "Leaderboard must expose a location dropdown next to its view switcher.",
 );
+assert.doesNotMatch(
+  leaderboard,
+  /LEADERBOARD_PREFETCH_MONTHS_BACK|buildLeaderboardPrefetchMonthKeys/,
+  "Leaderboard must not preload historical months and exhaust API memory.",
+);
 assert.match(
   adminShell,
   /organizationCount > 1[\s\S]*sidebar-organization-indicator[\s\S]*BriefcaseBusiness[\s\S]*companyName/,
@@ -270,6 +275,16 @@ assert.match(
   adminShell,
   /<Link[\s\S]*className="sidebar-link-main"[\s\S]*handleRouteStart/,
   "Sidebar routes must use soft navigation instead of reloading the layout.",
+);
+assert.match(
+  adminShell,
+  /initialPersistentShellRef[\s\S]*persistentShellState\.read/,
+  "Persistent shell state must be captured once so route transitions cannot create an update loop.",
+);
+assert.match(
+  select,
+  /hasEmptyOption[\s\S]*APP_SELECT_EMPTY_VALUE[\s\S]*: "";/,
+  "Shared selects must remain controlled while their options are loading.",
 );
 assert.match(
   adminShellLoadingSidebar,

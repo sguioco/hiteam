@@ -39,7 +39,6 @@ type LeaderboardCenterTab = "table" | "progress";
 type MonthTransitionDirection = "previous" | "next" | null;
 
 const LEADERBOARD_CACHE_TTL_MS = 10 * 60_000;
-const LEADERBOARD_PREFETCH_MONTHS_BACK = 12;
 const leaderboardOverviewRequests = new Map<
   string,
   Promise<LeaderboardOverviewResponse>
@@ -150,34 +149,6 @@ function normalizeSelectableMonthKey(
 
   const monthKey = formatMonthKey(parsed);
   return monthKey <= currentMonthKey ? monthKey : currentMonthKey;
-}
-
-function buildLeaderboardPrefetchMonthKeys(
-  selectedMonthKey: string,
-  currentMonthKey: string,
-  earliestMonthKey: string,
-) {
-  const result: string[] = [];
-  const seen = new Set<string>();
-  const add = (monthKey: string) => {
-    if (monthKey > currentMonthKey || monthKey < earliestMonthKey || seen.has(monthKey)) {
-      return;
-    }
-
-    seen.add(monthKey);
-    result.push(monthKey);
-  };
-
-  add(selectedMonthKey);
-  add(shiftMonthKey(selectedMonthKey, -1));
-  add(shiftMonthKey(selectedMonthKey, 1));
-  add(currentMonthKey);
-
-  for (let index = 1; index < LEADERBOARD_PREFETCH_MONTHS_BACK; index += 1) {
-    add(shiftMonthKey(currentMonthKey, -index));
-  }
-
-  return result;
 }
 
 async function requestLeaderboardOverview(params: {
@@ -587,53 +558,6 @@ export function LeaderboardCenter({
 
     writeClientCache(cacheKey, overview);
   }, [cacheKey, loading, overview, selectedMonthKey]);
-
-  useEffect(() => {
-    if (!session?.accessToken) {
-      return;
-    }
-
-    let cancelled = false;
-    const monthKeys = buildLeaderboardPrefetchMonthKeys(
-      selectedMonthKey,
-      currentMonthKey,
-      overview?.earliestMonthKey ?? initialData?.earliestMonthKey ?? currentMonthKey,
-    );
-
-    void (async () => {
-      for (const monthKey of monthKeys) {
-        if (cancelled) {
-          return;
-        }
-
-        const nextCacheKey = buildLeaderboardCacheKey(session, monthKey);
-        const cached = nextCacheKey
-          ? readClientCache<LeaderboardOverviewResponse>(
-              nextCacheKey,
-              LEADERBOARD_CACHE_TTL_MS,
-            )
-          : null;
-
-        if (cached && !cached.isStale) {
-          continue;
-        }
-
-        try {
-          await requestLeaderboardOverview({
-            accessToken: session.accessToken,
-            cacheKey: nextCacheKey,
-            monthKey,
-          });
-        } catch {
-          // Background prefetch should never block the active month.
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentMonthKey, initialData?.earliestMonthKey, overview?.earliestMonthKey, selectedMonthKey, session?.accessToken]);
 
   useWorkspaceAutoRefresh({
     session,

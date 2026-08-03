@@ -370,10 +370,23 @@ export function AdminShell({
   mode?: "admin" | "employee";
 }) {
   const persistentShellState = useAdminShellState();
-  const browserSession = initialSession ?? getSession();
-  const rememberedShell = browserSession
-    ? persistentShellState.read(browserSession, mode)
-    : null;
+  const initialPersistentShellRef = useRef<{
+    browserSession: AuthSession | null;
+    rememberedShell: ReturnType<typeof persistentShellState.read>;
+  } | null>(null);
+
+  if (!initialPersistentShellRef.current) {
+    const browserSession = initialSession ?? getSession();
+    initialPersistentShellRef.current = {
+      browserSession,
+      rememberedShell: browserSession
+        ? persistentShellState.read(browserSession, mode)
+        : null,
+    };
+  }
+
+  const { browserSession, rememberedShell } =
+    initialPersistentShellRef.current;
   const initialShellBootstrap =
     initialSession &&
     (() => {

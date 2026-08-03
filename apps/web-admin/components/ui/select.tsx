@@ -365,7 +365,7 @@ function AppSelectField({
       ? value
       : hasEmptyOption
         ? APP_SELECT_EMPTY_VALUE
-        : undefined;
+        : "";
   const resolvedPlaceholder =
     !hasEmptyOption && options.length === 0
       ? emptyOptionsLabel ?? getDefaultEmptyOptionsLabel()
