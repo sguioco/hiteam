@@ -1003,28 +1003,14 @@ async function main(): Promise<void> {
     })),
   });
 
-  const demoAnnouncementTitles = [
-    'Планёрка по открытию новой недели',
-    'Фотоотчёт по витрине до 18:00',
-    'Индивидуальный onboarding по CRM',
-    'Проверка кассовой зоны перед вечерней сменой',
-  ];
-  const demoAnnouncementNotificationTitles = demoAnnouncementTitles.map(
-    (title) => `Announcement: ${title}`,
-  );
-
+  // Notifications and announcements in the demo workspace are fixture data.
+  // Reset them completely so scheduled workers and repeated seed runs cannot
+  // leave thousands of stale records behind.
   await prisma.notification.deleteMany({
-    where: {
-      tenantId: tenant.id,
-      type: NotificationType.OPERATIONS_ALERT,
-      title: { in: demoAnnouncementNotificationTitles },
-    },
+    where: { tenantId: tenant.id },
   });
   await prisma.announcement.deleteMany({
-    where: {
-      tenantId: tenant.id,
-      title: { in: demoAnnouncementTitles },
-    },
+    where: { tenantId: tenant.id },
   });
 
   const allAnnouncement = await prisma.announcement.create({
@@ -1694,16 +1680,8 @@ async function main(): Promise<void> {
     ],
   });
 
-  const demoRequestTitles = [
-    'Supply request for consumables',
-    'Leave request for next week',
-  ];
-
   await prisma.employeeRequest.deleteMany({
-    where: {
-      tenantId: tenant.id,
-      title: { in: demoRequestTitles },
-    },
+    where: { tenantId: tenant.id },
   });
 
   const supplyRequest = await prisma.employeeRequest.create({
