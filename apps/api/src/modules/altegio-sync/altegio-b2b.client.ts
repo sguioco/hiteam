@@ -61,6 +61,52 @@ export type AltegioLocationProfile = {
   email: string | null;
 };
 
+/** Event flags returned by Altegio hooks_settings; preserved verbatim on merge. */
+export const ALTEGIO_HOOKS_EVENT_FLAGS = [
+  'salon',
+  'service_category',
+  'service',
+  'good',
+  'master',
+  'client',
+  'record',
+  'loyalty_card',
+  'goods_operations_sale',
+  'goods_operations_receipt',
+  'goods_operations_consumable',
+  'goods_operations_stolen',
+  'goods_operations_move',
+  'finances_operation',
+] as const;
+
+export function mergeAltegioHooksSettings(args: {
+  current: Record<string, unknown>;
+  webhookUrl: string;
+  active?: boolean;
+  master?: boolean;
+}) {
+  const webhookUrl = String(args.webhookUrl || '').trim();
+  const current = args.current && typeof args.current === 'object' ? args.current : {};
+  const existingUrls = Array.isArray(current.urls) ? current.urls : [];
+  const urls = [
+    ...new Set(
+      [...existingUrls, ...(webhookUrl ? [webhookUrl] : [])]
+        .map((url) => String(url).trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  const payload: Record<string, unknown> = { urls };
+  for (const key of ALTEGIO_HOOKS_EVENT_FLAGS) {
+    if (current[key] !== undefined && current[key] !== null) {
+      payload[key] = current[key] ? 1 : 0;
+    }
+  }
+  payload.active = args.active || current.active ? 1 : 0;
+  payload.master = args.master || current.master ? 1 : 0;
+  return payload;
+}
+
 @Injectable()
 export class AltegioB2bClient {
   private readonly logger = new Logger(AltegioB2bClient.name);
@@ -250,6 +296,53 @@ export class AltegioB2bClient {
           dates: item.dates,
         })),
       },
+      'application/vnd.api.v2+json',
+      true,
+      args.userToken,
+    );
+  }
+
+  async getHooksSettings(locationId: string, userToken: string) {
+    const payload = await this.request(
+      'GET',
+      `${this.apiBase}/api/v1/hooks_settings/${encodeURIComponent(locationId)}`,
+      undefined,
+      'application/vnd.api.v2+json',
+      true,
+      userToken,
+    );
+    return payload.data && typeof payload.data === 'object'
+      ? (payload.data as Record<string, unknown>)
+      : {};
+  }
+
+  /** Append HiTeam webhook URL without clobbering other integrations' hooks_settings. */
+  async addHooksUrl(args: {
+    locationId: string;
+    userToken: string;
+    webhookUrl: string;
+    active?: boolean;
+    master?: boolean;
+  }) {
+    let current: Record<string, unknown> = {};
+    try {
+      current = await this.getHooksSettings(args.locationId, args.userToken);
+    } catch (error) {
+      if (!(error instanceof AltegioB2bError) || error.statusCode !== 404) {
+        throw error;
+      }
+    }
+
+    const body = mergeAltegioHooksSettings({
+      current,
+      webhookUrl: args.webhookUrl,
+      active: args.active ?? true,
+      master: args.master ?? true,
+    });
+    return this.request(
+      'POST',
+      `${this.apiBase}/api/v1/hooks_settings/${encodeURIComponent(args.locationId)}`,
+      body,
       'application/vnd.api.v2+json',
       true,
       args.userToken,

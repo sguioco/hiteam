@@ -1,10 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { BadRequestException, Injectable, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmployeeStatus, ShiftStatus, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { AltegioB2bClient, isAltegioInvalidCredentialsError } from './altegio-b2b.client';
+import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError } from './altegio-b2b.client';
 import {
   ALTEGIO_SHIFT_SOURCE,
   HITEAM_SHIFT_SOURCE,
@@ -24,6 +24,8 @@ const MAX_PILOT_LOCATIONS = 3;
 
 @Injectable()
 export class AltegioPilotService {
+  private readonly logger = new Logger(AltegioPilotService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -121,7 +123,49 @@ export class AltegioPilotService {
     // Do this after the transaction so staff links and shifts never point to a
     // location binding that was rolled back.
     const sync = await this.sync(tenantId);
-    return { ...(await this.status(tenantId)), sync };
+    const webhooks = await this.registerPilotWebhooks(token, selected);
+    return { ...(await this.status(tenantId)), sync, webhooks };
+  }
+
+  private async registerPilotWebhooks(userToken: string, altegioLocationIds: string[]) {
+    const webhookUrl = this.config.get<string>('ALTEGIO_WEBHOOK_URL')?.trim() || '';
+    if (!webhookUrl) {
+      return altegioLocationIds.map((altegioLocationId) => ({
+        altegioLocationId,
+        ok: false,
+        skipped: 'webhook_url_not_configured' as const,
+      }));
+    }
+
+    const results: Array<{
+      altegioLocationId: string;
+      ok: boolean;
+      skipped?: 'webhook_url_not_configured';
+      error?: string;
+    }> = [];
+    for (const altegioLocationId of altegioLocationIds) {
+      try {
+        await this.altegio.addHooksUrl({
+          locationId: altegioLocationId,
+          userToken,
+          webhookUrl,
+          active: true,
+          master: true,
+        });
+        this.logger.log(`Registered Altegio hooks_settings for pilot location ${altegioLocationId}`);
+        results.push({ altegioLocationId, ok: true });
+      } catch (error) {
+        const message =
+          error instanceof AltegioB2bError
+            ? `altegio_hooks_settings_${error.statusCode}`
+            : 'webhook_registration_failed';
+        this.logger.warn(
+          `Altegio hooks_settings registration failed for pilot location ${altegioLocationId}: ${message}`,
+        );
+        results.push({ altegioLocationId, ok: false, error: message });
+      }
+    }
+    return results;
   }
 
   async status(tenantId: string) {

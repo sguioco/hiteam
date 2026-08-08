@@ -13,6 +13,7 @@ import {
 import {
   AltegioB2bError,
   isAltegioInvalidCredentialsError,
+  mergeAltegioHooksSettings,
   parseLocationProfilePayload,
   parseSchedulePayload,
   parseTeamMembersPayload,
@@ -227,6 +228,43 @@ function testMarketplaceTrialCannotBeExtendedOrTransferred() {
   assert.equal(expiredReconnect.reason, 'trial_expired');
 }
 
+function testHooksSettingsMerge() {
+  const merged = mergeAltegioHooksSettings({
+    current: {
+      urls: ['https://other.example/webhook'],
+      active: 1,
+      record: 1,
+      client: 1,
+      master: 0,
+      service: 0,
+    },
+    webhookUrl: 'https://api.hiteam.net/api/v1/altegio/webhooks',
+    active: true,
+    master: true,
+  });
+  assert.deepEqual(merged.urls, [
+    'https://other.example/webhook',
+    'https://api.hiteam.net/api/v1/altegio/webhooks',
+  ]);
+  assert.equal(merged.active, 1);
+  assert.equal(merged.master, 1);
+  assert.equal(merged.record, 1);
+  assert.equal(merged.client, 1);
+  assert.equal(merged.service, 0);
+
+  const idempotent = mergeAltegioHooksSettings({
+    current: {
+      urls: ['https://api.hiteam.net/api/v1/altegio/webhooks'],
+      active: 1,
+      master: 1,
+    },
+    webhookUrl: 'https://api.hiteam.net/api/v1/altegio/webhooks',
+    active: true,
+    master: true,
+  });
+  assert.deepEqual(idempotent.urls, ['https://api.hiteam.net/api/v1/altegio/webhooks']);
+}
+
 testPhoneMatching();
 testNameSplitAndSyntheticEmail();
 testEmployeeMatching();
@@ -234,5 +272,6 @@ testScheduleHelpers();
 testPayloadParsers();
 testInvalidAltegioCredentialsAreRecognized();
 testMarketplaceTrialCannotBeExtendedOrTransferred();
+testHooksSettingsMerge();
 
 console.log('altegio staff/schedule sync helpers: ok');

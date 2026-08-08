@@ -119,9 +119,10 @@ direct HiTeam edit; a periodic pull never removes an Altegio-authored day.
 Pilot uses the encrypted Altegio user token and a separate `AltegioPilotStaffLink`
 per selected location. This is deliberately separate from the Marketplace
 `Employee.altegioTeamMemberId` binding: an employee can work at more than one
-Pilot location. Selecting locations runs the initial two-way sync immediately;
-`POST /altegio/pilot/sync` repeats it on demand, and staff/schedule webhooks for
-a selected Pilot location trigger the same reconciliation. Staff are matched by
+Pilot location. Selecting locations runs the initial two-way sync immediately, registers HiTeam in
+Altegio `hooks_settings` for staff/schedule webhooks (existing URLs and event
+flags are preserved), calls `POST /altegio/pilot/sync` on demand, and staff/schedule
+webhooks for a selected Pilot location trigger the same reconciliation. Staff are matched by
 existing Pilot link, phone, then email. Altegio schedule slots are imported into
 shifts whose source is `ALTEGIO_PILOT_<binding id>`; published HiTeam shifts for
 that location are pushed back to Altegio.
