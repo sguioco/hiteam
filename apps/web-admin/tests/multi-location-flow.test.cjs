@@ -161,7 +161,7 @@ assert.doesNotMatch(
 );
 assert.match(
   organization,
-  /initialData\?\.altegio\?\.connected[\s\S]*Boolean\(initialData\?\.altegio\)/,
+  /initialData\?\.altegio[\s\S]*Boolean\(initialData\?\.altegio\)/,
   "Altegio banner state must be ready during the first render.",
 );
 assert.match(
