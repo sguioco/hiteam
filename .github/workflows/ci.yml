@@ -5,11 +5,28 @@ on:
     branches: [main]
     paths-ignore:
       - ".cd/values.hiteam-main.yaml"
+      - ".cd/values.hiteam-main.example.yaml"
+      - ".cd/argocd-application.example.yaml"
+      - "docs/**"
+      - "altegio-docs/**"
+      - "README.md"
+      - "PRD.md"
+      - "AGENTS.md"
   pull_request:
+    paths-ignore:
+      - ".cd/values.hiteam-main.yaml"
+      - ".cd/values.hiteam-main.example.yaml"
+      - ".cd/argocd-application.example.yaml"
+      - "docs/**"
+      - "altegio-docs/**"
+      - "README.md"
+      - "PRD.md"
+      - "AGENTS.md"
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -21,7 +38,7 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build

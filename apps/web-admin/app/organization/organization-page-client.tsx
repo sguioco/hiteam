@@ -5,7 +5,6 @@ import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import {
   Check,
   Copy,
-  ExternalLink,
   ImagePlus,
   Pencil,
   Plus,
@@ -13,8 +12,8 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
+import { AltegioIntegrationPanel } from "../../components/altegio-integration-panel";
 import { EmployeeDropdown } from "../../components/employee-dropdown";
-import { AltegioPilotConnect } from "../../components/altegio-pilot-connect";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
 import {
@@ -47,7 +46,6 @@ import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
 import { getSession } from "../../lib/auth";
 import {
-  buildAltegioMarketplaceConnectUrl,
   peekAltegioMarketplaceParams,
 } from "../../lib/altegio-marketplace";
 import { writeBrowserStorageItem } from "../../lib/browser-storage";
@@ -356,13 +354,10 @@ export default function OrganizationPageClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
-  const [altegioConnectedLocationId, setAltegioConnectedLocationId] =
-    useState<string | null>(() =>
-      initialData?.altegio?.connected
-        ? initialData.altegio.locationId ?? null
-        : null,
-    );
-  const [altegioConnectionLoaded, setAltegioConnectionLoaded] = useState(
+  const [altegioStatus, setAltegioStatus] = useState<AltegioBootstrapStatus | null>(
+    initialData?.altegio ?? null,
+  );
+  const [altegioStatusLoaded, setAltegioStatusLoaded] = useState(
     Boolean(initialData?.altegio),
   );
   const [locationConfirmationPending, setLocationConfirmationPending] =
@@ -403,10 +398,8 @@ export default function OrganizationPageClient({
 
   function applyAltegioStatus(status?: AltegioBootstrapStatus) {
     if (!status) return;
-    setAltegioConnectedLocationId(
-      status.connected ? status.locationId ?? null : null,
-    );
-    setAltegioConnectionLoaded(true);
+    setAltegioStatus(status);
+    setAltegioStatusLoaded(true);
   }
 
   function applyScope(company: Company, location?: Location | null) {
@@ -1111,68 +1104,12 @@ export default function OrganizationPageClient({
               </div>
             ) : null}
 
-            {altegioConnectionLoaded ? (
-              altegioConnectedLocationId ? (
-                <div className="mb-6 flex flex-col gap-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(135deg,#f4fff9_0%,#ffffff_100%)] px-5 py-4 shadow-[0_12px_36px_rgba(16,185,129,0.08)] sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[15px] shadow-[0_8px_20px_rgba(236,193,23,0.22)]">
-                      <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {locale === "ru"
-                          ? `Altegio подключён · salon ${altegioConnectedLocationId}`
-                          : `Altegio connected · salon ${altegioConnectedLocationId}`}
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {locale === "ru"
-                          ? "Сотрудники и расписание синхронизируются с HiTeam."
-                          : "Staff and schedules are connected to HiTeam."}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    className="shrink-0 text-sm font-semibold text-[color:var(--accent)]"
-                    onClick={() => router.push(toAdminHref("/billing"))}
-                    type="button"
-                  >
-                    {locale === "ru" ? "Управлять интеграцией" : "Manage integration"}
-                  </button>
-                </div>
-              ) : (
-                <div className="mb-6 font-heading">
-                  <div className="flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
-                        <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-foreground">Altegio</span>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Marketplace</span>
-                        </div>
-                        <p className="mt-0.5 max-w-lg text-sm text-muted-foreground">
-                          {locale === "ru"
-                            ? "Синхронизация HiTeam с вашим салоном"
-                            : "Sync HiTeam with your location"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <a
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-4 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
-                        href={buildAltegioMarketplaceConnectUrl() || "#"}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                      <AltegioPilotConnect />
-                    </div>
-                  </div>
-                </div>
-              )
+            {altegioStatusLoaded ? (
+              <AltegioIntegrationPanel
+                marketplace={altegioStatus}
+                onManageIntegration={() => router.push(toAdminHref("/billing"))}
+                variant="organization"
+              />
             ) : null}
 
             <div className="organization-studio-identity">

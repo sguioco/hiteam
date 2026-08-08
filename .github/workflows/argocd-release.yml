@@ -2,58 +2,38 @@ name: Build Images For ArgoCD
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 concurrency:
-  group: hiteam-argocd-release
+  group: hiteam-argocd-release-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
   contents: read
   packages: write
 
+env:
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-${{ github.event.workflow_run.head_sha || github.sha }}
+  API_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-latest
+  WEB_ADMIN_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-${{ github.event.workflow_run.head_sha || github.sha }}
+  WEB_ADMIN_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-latest
+  WEB_ADMIN_PUBLIC_API_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_API_URL }}
+  WEB_ADMIN_PUBLIC_GRAPHQL_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL }}
+  WEB_ADMIN_BASE_URL: ${{ vars.ARGOCD_WEB_ADMIN_BASE_URL }}
+  WEB_ADMIN_GOOGLE_MAPS_API_KEY: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
+
 jobs:
-  validate:
+  gate:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 5
+    outputs:
+      should_deploy: ${{ steps.changes.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.3
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm test
-      - run: pnpm typecheck
-      - run: pnpm build
-
-  build-and-publish:
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      API_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-${{ github.sha }}
-      API_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-api:main-latest
-      WEB_ADMIN_IMAGE: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-${{ github.sha }}
-      WEB_ADMIN_IMAGE_LATEST: ghcr.io/${{ github.repository_owner }}/hiteam-web-admin:main-latest
-      WEB_ADMIN_PUBLIC_API_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_API_URL }}
-      WEB_ADMIN_PUBLIC_GRAPHQL_URL: ${{ vars.ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL }}
-      WEB_ADMIN_BASE_URL: ${{ vars.ARGOCD_WEB_ADMIN_BASE_URL }}
-      WEB_ADMIN_GOOGLE_MAPS_API_KEY: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
-
       - name: Validate required repo variables
         run: |
           set -euo pipefail
@@ -79,6 +59,63 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/checkout@v5
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 2
+
+      - name: Detect deploy-relevant changes
+        id: changes
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual release requested."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(git diff --name-only HEAD~1 HEAD)"
+          if [ -z "$files" ]; then
+            echo "No changed files detected; skipping release."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$files"
+
+          deploy=false
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              docs/*|altegio-docs/*|README.md|PRD.md|AGENTS.md|.cd/values.hiteam-main.yaml|.cd/values.hiteam-main.example.yaml|.cd/argocd-application.example.yaml)
+                ;;
+              *)
+                deploy=true
+                break
+                ;;
+            esac
+          done <<< "$files"
+
+          if [ "$deploy" = false ]; then
+            echo "Only docs or runtime values changed; skipping image build and deploy."
+          fi
+
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+
+  build-api:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 1
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
@@ -97,6 +134,28 @@ jobs:
           tags: |
             ${{ env.API_IMAGE }}
             ${{ env.API_IMAGE_LATEST }}
+          cache-from: type=gha,scope=hiteam-api
+          cache-to: type=gha,mode=max,scope=hiteam-api
+
+  build-web-admin:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 1
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Web Admin image
         uses: docker/build-push-action@v7
@@ -112,7 +171,15 @@ jobs:
           tags: |
             ${{ env.WEB_ADMIN_IMAGE }}
             ${{ env.WEB_ADMIN_IMAGE_LATEST }}
+          cache-from: type=gha,scope=hiteam-web-admin
+          cache-to: type=gha,mode=max,scope=hiteam-web-admin
 
+  deploy:
+    needs: [gate, build-api, build-web-admin]
+    if: needs.gate.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
       - name: Deploy new images via Argo application override
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -139,7 +206,7 @@ jobs:
 
             kubectl -n argocd annotate application hiteam-main argocd.argoproj.io/refresh=hard --overwrite
 
-            for attempt in $(seq 1 240); do
+            for attempt in $(seq 1 180); do
               sync_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.sync.status}')"
               health_status="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.health.status}')"
               operation_phase="$(kubectl -n argocd get application hiteam-main -o jsonpath='{.status.operationState.phase}')"
@@ -148,7 +215,7 @@ jobs:
 
               if [ "${operation_phase:-}" = "Failed" ] || [ "${operation_phase:-}" = "Error" ]; then
                 kubectl -n hiteam-main logs job/hiteam-migrations --all-containers=true || true
-                kubectl -n hiteam-main describe job hiteam-migrations || true
+                kubectl -n hiteam-main describe job/hiteam-migrations || true
                 kubectl -n argocd get application hiteam-main -o yaml
                 exit 1
               fi
@@ -162,6 +229,13 @@ jobs:
 
             echo "[argocd] deployment did not become Synced/Healthy in time"
             kubectl -n hiteam-main logs job/hiteam-migrations --all-containers=true || true
-            kubectl -n hiteam-main describe job hiteam-migrations || true
+            kubectl -n hiteam-main describe job/hiteam-migrations || true
             kubectl -n argocd get application hiteam-main -o yaml
             exit 1
+
+  skip:
+    needs: gate
+    if: needs.gate.outputs.should_deploy != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Release skipped because only docs or runtime values changed."

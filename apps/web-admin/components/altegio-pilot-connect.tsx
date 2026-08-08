@@ -8,14 +8,38 @@ import { apiRequest } from "@/lib/api";
 import { clearSession, getSession, redirectToLogin } from "@/lib/auth";
 import { isDemoAccessToken } from "@/lib/demo-mode";
 import { useI18n } from "@/lib/i18n";
+import type { AltegioPilotStatus } from "@/lib/altegio-integration";
 
-type PilotLocation = { id: string; altegioLocationId: string; name: string };
 type AvailableLocation = { id: string; name: string; publicName: string | null };
-type PilotStatus = { connected: boolean; locations: PilotLocation[] };
 
-export function AltegioPilotConnect() {
+export function AltegioPilotConnect({
+  onStatusChange,
+  pilotStatus,
+  skipInitialFetch = false,
+}: {
+  onStatusChange?: (status: AltegioPilotStatus) => void;
+  pilotStatus?: AltegioPilotStatus | null;
+  skipInitialFetch?: boolean;
+} = {}) {
   const { locale } = useI18n();
-  const [status, setStatus] = useState<PilotStatus | null>(null);
+  const [internalStatus, setInternalStatus] = useState<AltegioPilotStatus | null>(null);
+  const status = pilotStatus ?? internalStatus;
+
+  function updateStatus(nextStatus: AltegioPilotStatus) {
+    if (pilotStatus === undefined) {
+      setInternalStatus(nextStatus);
+    }
+    onStatusChange?.(nextStatus);
+  }
+
+  useEffect(() => {
+    if (skipInitialFetch || pilotStatus !== undefined) return;
+    const session = getSession();
+    if (!session) return;
+    void apiRequest<AltegioPilotStatus>("/altegio/pilot", { token: session.accessToken })
+      .then(updateStatus)
+      .catch(() => undefined);
+  }, [pilotStatus, skipInitialFetch]);
   const [open, setOpen] = useState(false);
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -24,12 +48,6 @@ export function AltegioPilotConnect() {
   const [editingLocations, setEditingLocations] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const session = getSession();
-    if (!session) return;
-    void apiRequest<PilotStatus>("/altegio/pilot", { token: session.accessToken }).then(setStatus).catch(() => undefined);
-  }, []);
 
   function resetDialog() {
     setPassword(""); setAvailable([]); setSelected([]); setEditingLocations(false); setError(null);
@@ -61,10 +79,10 @@ export function AltegioPilotConnect() {
     if (!session) return;
     try {
       setLoading(true); setError(null);
-      const result = await apiRequest<PilotStatus>("/altegio/pilot/locations", {
+      const result = await apiRequest<AltegioPilotStatus>("/altegio/pilot/locations", {
         method: "POST", token: session.accessToken, body: JSON.stringify({ locationIds: selected }),
       });
-      setStatus(result); setEditingLocations(false); setOpen(false); resetDialog();
+      updateStatus(result); setEditingLocations(false); setOpen(false); resetDialog();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save locations"); }
     finally { setLoading(false); }
   }
@@ -74,8 +92,8 @@ export function AltegioPilotConnect() {
     if (!session) return;
     try {
       setLoading(true); setError(null);
-      const result = await apiRequest<PilotStatus>(`/altegio/pilot/locations/${locationId}`, { method: "DELETE", token: session.accessToken });
-      setStatus(result);
+      const result = await apiRequest<AltegioPilotStatus>(`/altegio/pilot/locations/${locationId}`, { method: "DELETE", token: session.accessToken });
+      updateStatus(result);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to disconnect location"); }
     finally { setLoading(false); }
   }

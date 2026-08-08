@@ -14,11 +14,16 @@ It does not modify the existing `qr-form-altegio-main` app.
 ## Intended deployment model
 
 1. Push app code to `main`.
-2. GitHub Actions builds and pushes:
+2. `CI` runs tests, typecheck, and build once.
+3. After a green `CI` run, `Build Images For ArgoCD` builds and pushes in parallel:
    - `ghcr.io/sguioco/hiteam-api`
    - `ghcr.io/sguioco/hiteam-web-admin`
-3. The workflow updates [`.cd/values.hiteam-main.yaml`](../.cd/values.hiteam-main.yaml) with immutable image tags.
-4. ArgoCD sees the new Git state and syncs `hiteam-main`.
+4. The release workflow patches the ArgoCD application with immutable image tags.
+5. ArgoCD syncs `hiteam-main`.
+
+Pushes that change only docs, markdown, or `.cd/values.hiteam-main.yaml` do not run
+`CI` or trigger a release build. Manual release remains available via
+`workflow_dispatch` on `Build Images For ArgoCD`.
 
 ## Required GitHub repository variables
 

@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
-import { AltegioPilotConnect } from "@/components/altegio-pilot-connect";
+import { AltegioIntegrationPanel } from "@/components/altegio-integration-panel";
 import { BrandWordmark } from "@/components/brand-wordmark";
 import {
   Dialog,
@@ -910,63 +910,11 @@ export default function BillingPageClient({
         </header>
 
         {summary && (
-          <section className="flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex -space-x-2">
-                <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
-                  <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
-                  <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
-                </div>
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-foreground">Altegio</p>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      summary.altegio?.connected
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {summary.altegio?.connected
-                      ? locale === "ru"
-                        ? "Подключено"
-                        : "Connected"
-                      : locale === "ru"
-                        ? "Не подключено"
-                        : "Not connected"}
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                  {summary.altegio?.connected
-                    ? locale === "ru"
-                      ? `Сотрудники и расписание · salon ${summary.altegio.locationId}`
-                      : `Staff and schedule · salon ${summary.altegio.locationId}`
-                    : locale === "ru"
-                      ? "Синхронизация HiTeam с вашим салоном"
-                      : "Sync HiTeam with your location"}
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <button
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-                  summary.altegio?.connected
-                    ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
-                    : "cursor-not-allowed bg-slate-200 text-slate-500"
-                }`}
-                disabled={!summary.altegio?.connected}
-                onClick={handleAltegioAction}
-                type="button"
-              >
-                {summary.altegio?.connected ? <Unlink className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-                {summary.altegio?.connected ? (locale === "ru" ? "Отключить" : "Disconnect") : (locale === "ru" ? "Скоро в Marketplace" : "Available soon")}
-              </button>
-              <AltegioPilotConnect />
-            </div>
-          </section>
+          <AltegioIntegrationPanel
+            marketplace={summary.altegio}
+            onMarketplaceAction={handleAltegioAction}
+            variant="billing"
+          />
         )}
 
         <Dialog
