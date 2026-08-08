@@ -7,6 +7,8 @@ import {
   normalizeAltegioEmail,
   normalizeAltegioPhone,
   phonesMatch,
+  pilotAltegioEmployeeNumber,
+  pilotAltegioSyntheticEmail,
   splitAltegioStaffName,
   syntheticAltegioEmail,
 } from './altegio-sync.helpers';
@@ -74,6 +76,19 @@ function testEmployeeMatching() {
       email: 'missing@x.com',
     }),
     null,
+  );
+  assert.equal(
+    matchEmployeeToAltegioStaff(
+      [{ id: 'e4', altegioTeamMemberId: null, employeeNumber: 'ALT-759658-100', phone: null, email: null }],
+      { id: '100', phone: null, email: null },
+      '759658',
+    )?.id,
+    'e4',
+  );
+  assert.equal(pilotAltegioEmployeeNumber('759658', '100'), 'ALT-759658-100');
+  assert.equal(
+    pilotAltegioSyntheticEmail('759658', '100'),
+    'altegio+759658-100@users.hiteam.local',
   );
 }
 

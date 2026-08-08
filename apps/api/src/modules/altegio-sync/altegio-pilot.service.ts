@@ -16,8 +16,9 @@ import {
   normalizeAltegioEmail,
   normalizeAltegioPhone,
   parseDateOnlyToUtc,
+  pilotAltegioEmployeeNumber,
+  pilotAltegioSyntheticEmail,
   splitAltegioStaffName,
-  syntheticAltegioEmail,
 } from './altegio-sync.helpers';
 
 const MAX_PILOT_LOCATIONS = 3;
@@ -92,13 +93,6 @@ export class AltegioPilotService {
       await tx.altegioPilotLocation.deleteMany({ where: { connectionId: connection.id, altegioLocationId: { notIn: selected } } });
       for (const altegioLocationId of selected) {
         const remote = byId.get(altegioLocationId)!;
-        const existing = await tx.altegioPilotLocation.findUnique({
-          where: { connectionId_altegioLocationId: { connectionId: connection.id, altegioLocationId } },
-        });
-        if (existing) {
-          await tx.altegioPilotLocation.update({ where: { id: existing.id }, data: { altegioLocationName: remote.publicName || remote.name } });
-          continue;
-        }
         const local = await tx.location.upsert({
           where: { tenantId_code: { tenantId, code: `ALT-${altegioLocationId}` } },
           update: { name: remote.publicName || remote.name, address: remote.address || 'Not set yet', country: remote.country, latitude: remote.latitude, longitude: remote.longitude, timezone: remote.timezone || 'UTC' },
@@ -114,15 +108,33 @@ export class AltegioPilotService {
             timezone: remote.timezone || 'UTC',
           },
         });
-        await tx.altegioPilotLocation.create({
-          data: { connectionId: connection.id, altegioLocationId, altegioLocationName: remote.publicName || remote.name, hiteamLocationId: local.id },
+        await tx.altegioPilotLocation.upsert({
+          where: { connectionId_altegioLocationId: { connectionId: connection.id, altegioLocationId } },
+          update: {
+            altegioLocationName: remote.publicName || remote.name,
+            hiteamLocationId: local.id,
+            lastError: null,
+          },
+          create: {
+            connectionId: connection.id,
+            altegioLocationId,
+            altegioLocationName: remote.publicName || remote.name,
+            hiteamLocationId: local.id,
+          },
         });
       }
     });
     // A direct connection is useful only when it imports the chosen locations.
     // Do this after the transaction so staff links and shifts never point to a
     // location binding that was rolled back.
-    const sync = await this.sync(tenantId);
+    let sync: Awaited<ReturnType<AltegioPilotService['sync']>> | { ok: false; error: string };
+    try {
+      sync = await this.sync(tenantId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+      this.logger.warn(`Pilot location selection saved but initial sync failed for tenant ${tenantId}: ${message}`);
+      sync = { ok: false, error: message };
+    }
     const webhooks = await this.registerPilotWebhooks(token, selected);
     return { ...(await this.status(tenantId)), sync, webhooks };
   }
@@ -361,8 +373,14 @@ export class AltegioPilotService {
       this.prisma.employee.findMany({
         where: { tenantId, primaryLocationId: pilotLocation.hiteamLocationId },
         select: {
-          id: true, firstName: true, lastName: true, phone: true, status: true,
-          altegioTeamMemberId: true, user: { select: { email: true } },
+          id: true,
+          employeeNumber: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          status: true,
+          altegioTeamMemberId: true,
+          user: { select: { email: true } },
           altegioPilotStaffLinks: { where: { pilotLocationId: pilotLocation.id }, select: { altegioStaffId: true } },
         },
       }),
@@ -376,6 +394,7 @@ export class AltegioPilotService {
     const matchable = localEmployees.map((employee) => ({
       id: employee.id,
       altegioTeamMemberId: employee.altegioPilotStaffLinks[0]?.altegioStaffId ?? null,
+      employeeNumber: employee.employeeNumber,
       phone: employee.phone,
       email: employee.user.email,
     }));
@@ -383,7 +402,9 @@ export class AltegioPilotService {
     let linkedEmployees = 0;
     const linkedLocalEmployeeIds = new Set<string>();
     for (const remote of staff) {
-      const matchedId = linksByStaff.get(remote.id) ?? matchEmployeeToAltegioStaff(matchable, remote)?.id;
+      const matchedId =
+        linksByStaff.get(remote.id) ??
+        matchEmployeeToAltegioStaff(matchable, remote, pilotLocation.altegioLocationId)?.id;
       let employeeId = matchedId;
       if (!employeeId) {
         employeeId = await this.createPilotEmployee(tenantId, pilotLocation, department.id, position.id, remote);
@@ -468,15 +489,68 @@ export class AltegioPilotService {
     return { remoteScheduleDays: remoteDays.length, importedShifts, exportedShiftDays: grouped.length };
   }
 
-  private async createPilotEmployee(tenantId: string, pilotLocation: { id: string; altegioLocationId: string; hiteamLocationId: string; hiteamLocation: { companyId: string } }, departmentId: string, positionId: string, staff: import('./altegio-b2b.client').AltegioTeamMember) {
+  private async createPilotEmployee(
+    tenantId: string,
+    pilotLocation: { id: string; altegioLocationId: string; hiteamLocationId: string; hiteamLocation: { companyId: string } },
+    departmentId: string,
+    positionId: string,
+    staff: import('./altegio-b2b.client').AltegioTeamMember,
+  ) {
     const name = splitAltegioStaffName(staff.name);
-    const email = normalizeAltegioEmail(staff.email) && !staff.email?.endsWith('@users.hiteam.local') ? normalizeAltegioEmail(staff.email)! : syntheticAltegioEmail(`${pilotLocation.id}-${staff.id}`);
-    const existing = await this.prisma.user.findFirst({ where: { tenantId, email }, include: { employee: true } });
-    if (existing?.employee) return existing.employee.id;
-    const role = await this.prisma.role.upsert({ where: { code: 'employee' }, update: {}, create: { code: 'employee', name: 'Employee', description: 'Standard employee access' } });
-    const user = await this.prisma.user.create({ data: { tenantId, email, passwordHash: await bcrypt.hash(randomBytes(24).toString('hex'), 10), status: UserStatus.INVITED } });
-    await this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id, scopeType: 'tenant', scopeId: tenantId } });
-    const employee = await this.prisma.employee.create({ data: { tenantId, userId: user.id, companyId: pilotLocation.hiteamLocation.companyId, departmentId, primaryLocationId: pilotLocation.hiteamLocationId, positionId, employeeNumber: `ALT-${pilotLocation.altegioLocationId}-${staff.id}`.slice(0, 32), firstName: name.firstName, lastName: name.lastName, phone: normalizeAltegioPhone(staff.phone), status: staff.fired ? EmployeeStatus.INACTIVE : EmployeeStatus.ACTIVE, hireDate: new Date() } });
+    const employeeNumber = pilotAltegioEmployeeNumber(pilotLocation.altegioLocationId, staff.id);
+    const existingEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, employeeNumber },
+      select: { id: true },
+    });
+    if (existingEmployee) return existingEmployee.id;
+
+    const staffEmail = normalizeAltegioEmail(staff.email);
+    const email =
+      staffEmail && !staffEmail.endsWith('@users.hiteam.local')
+        ? staffEmail
+        : pilotAltegioSyntheticEmail(pilotLocation.altegioLocationId, staff.id);
+    const existingUser = await this.prisma.user.findFirst({
+      where: { tenantId, email },
+      include: { employee: true },
+    });
+    if (existingUser?.employee) return existingUser.employee.id;
+
+    const role = await this.prisma.role.upsert({
+      where: { code: 'employee' },
+      update: {},
+      create: { code: 'employee', name: 'Employee', description: 'Standard employee access' },
+    });
+    const user =
+      existingUser ??
+      (await this.prisma.user.create({
+        data: {
+          tenantId,
+          email,
+          passwordHash: await bcrypt.hash(randomBytes(24).toString('hex'), 10),
+          status: UserStatus.INVITED,
+        },
+      }));
+    if (!existingUser) {
+      await this.prisma.userRole.create({
+        data: { userId: user.id, roleId: role.id, scopeType: 'tenant', scopeId: tenantId },
+      });
+    }
+    const employee = await this.prisma.employee.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        companyId: pilotLocation.hiteamLocation.companyId,
+        departmentId,
+        primaryLocationId: pilotLocation.hiteamLocationId,
+        positionId,
+        employeeNumber,
+        firstName: name.firstName,
+        lastName: name.lastName,
+        phone: normalizeAltegioPhone(staff.phone),
+        status: staff.fired ? EmployeeStatus.INACTIVE : EmployeeStatus.ACTIVE,
+        hireDate: new Date(),
+      },
+    });
     return employee.id;
   }
 

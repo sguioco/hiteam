@@ -1,6 +1,7 @@
 export type MatchableEmployee = {
   id: string;
   altegioTeamMemberId: string | null;
+  employeeNumber?: string | null;
   phone: string | null;
   email: string | null;
 };
@@ -63,13 +64,30 @@ export function syntheticAltegioEmail(teamMemberId: string) {
   return `altegio+${teamMemberId}@users.hiteam.local`;
 }
 
+export function pilotAltegioEmployeeNumber(altegioLocationId: string, staffId: string) {
+  return `ALT-${altegioLocationId}-${staffId}`.slice(0, 32);
+}
+
+export function pilotAltegioSyntheticEmail(altegioLocationId: string, staffId: string) {
+  return syntheticAltegioEmail(`${altegioLocationId}-${staffId}`);
+}
+
 export function matchEmployeeToAltegioStaff(
   employees: MatchableEmployee[],
   staff: AltegioStaffIdentity,
+  altegioLocationId?: string,
 ): MatchableEmployee | null {
   const byId = employees.find((employee) => employee.altegioTeamMemberId === staff.id);
   if (byId) {
     return byId;
+  }
+
+  if (altegioLocationId) {
+    const targetNumber = pilotAltegioEmployeeNumber(altegioLocationId, staff.id);
+    const byEmployeeNumber = employees.find((employee) => employee.employeeNumber === targetNumber);
+    if (byEmployeeNumber) {
+      return byEmployeeNumber;
+    }
   }
 
   if (staff.phone) {
