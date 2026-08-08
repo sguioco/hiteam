@@ -57,6 +57,11 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
   );
   assertContains(
     source,
+    "AltegioIntegrationPanel",
+    "Billing must render the shared Altegio integration panel.",
+  );
+  assertContains(
+    read("components/altegio-integration-panel.tsx"),
     "buildAltegioMarketplaceConnectUrl",
     "Altegio connection must use the published marketplace short-link.",
   );
@@ -120,6 +125,7 @@ function testDemoBillingMatchesProductionContracts() {
 function testAltegioRegistrationPrefillsOrganization() {
   const authSource = read("components/auth-panel.tsx");
   const createSource = read("components/create-organization-panel.tsx");
+  const integrationPanelSource = read("components/altegio-integration-panel.tsx");
   const organizationSource = read("app/organization/organization-page-client.tsx");
   const signupSource = read("app/signup/page.tsx");
   const marketplaceSource = read("lib/altegio-marketplace.ts");
@@ -155,12 +161,17 @@ function testAltegioRegistrationPrefillsOrganization() {
     "Existing accounts must open the published Altegio short-link for consent.",
   );
   assertContains(
-    organizationSource,
+    integrationPanelSource,
     "buildAltegioMarketplaceConnectUrl",
     "Organization setup must link directly to the published Altegio application.",
   );
   assertContains(
     organizationSource,
+    "AltegioIntegrationPanel",
+    "Organization setup must render the shared Altegio integration panel.",
+  );
+  assertContains(
+    integrationPanelSource,
     "/altegio-logo.png",
     "Organization setup must show the Altegio logo.",
   );
