@@ -530,12 +530,19 @@ function formatDayHeader(value: Date, locale: "ru" | "en") {
 
 function formatMonthLabel(value: Date, locale: "ru" | "en") {
   return value
-    .toLocaleDateString(toIntlLocale(locale), { month: "long" })
+    .toLocaleDateString(toIntlLocale(locale), { month: "short" })
     .replace(/\.$/, "")
     .toUpperCase();
 }
 
 function formatWeekdayLabel(value: Date, locale: "ru" | "en") {
+  return value
+    .toLocaleDateString(toIntlLocale(locale), { weekday: "short" })
+    .replace(/\.$/, "")
+    .toUpperCase();
+}
+
+function formatWeekdayLongLabel(value: Date, locale: "ru" | "en") {
   return value
     .toLocaleDateString(toIntlLocale(locale), { weekday: "short" })
     .replace(/\.$/, "")
@@ -1645,9 +1652,7 @@ export default function DashboardHome({
       label: formatDayHeader(date, locale),
       monthLabel: formatMonthLabel(date, locale),
       weekdayLabel: formatWeekdayLabel(date, locale),
-      weekdayLongLabel: date
-        .toLocaleDateString(toIntlLocale(locale), { weekday: "long" })
-        .toUpperCase(),
+      weekdayLongLabel: formatWeekdayLongLabel(date, locale),
       dateNumber: date.getDate(),
       taskCountLabel: formatTaskCountLabel(events.length, locale),
       tasks: events,

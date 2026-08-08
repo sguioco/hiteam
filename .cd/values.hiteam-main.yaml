@@ -12,9 +12,9 @@ sharedInfo:
 api:
   image: "ghcr.io/sguioco/hiteam-api:main-544e9d3f25b021446875ad2a149285e2a8c76330"
   env:
-    API_PUBLIC_URL: "https://api.85.237.211.182.nip.io"
-    FRONTEND_URL: "https://hiteam.85.237.211.182.nip.io"
-    WEB_ADMIN_BASE_URL: "https://hiteam.85.237.211.182.nip.io"
+    API_PUBLIC_URL: "https://api.hiteam.net"
+    FRONTEND_URL: "https://hiteam.net"
+    WEB_ADMIN_BASE_URL: "https://hiteam.net"
     DATABASE_URL: ""
     REDIS_URL: ""
     S3_ENDPOINT: ""
@@ -24,7 +24,7 @@ api:
     S3_PUBLIC_BASE_URL: ""
     GOOGLE_OAUTH_CLIENT_ID: ""
     GOOGLE_OAUTH_CLIENT_SECRET: ""
-    GOOGLE_OAUTH_REDIRECT_URI: "https://api.85.237.211.182.nip.io/api/v1/org/google-business/callback"
+    GOOGLE_OAUTH_REDIRECT_URI: "https://api.hiteam.net/api/v1/org/google-business/callback"
     GOOGLE_OAUTH_STATE_SECRET: ""
     JWT_ACCESS_SECRET: ""
     JWT_REFRESH_SECRET: ""
@@ -45,11 +45,11 @@ api:
 webAdmin:
   image: "ghcr.io/sguioco/hiteam-web-admin:main-544e9d3f25b021446875ad2a149285e2a8c76330"
   env:
-    NEXT_PUBLIC_API_URL: "https://api.85.237.211.182.nip.io"
-    NEXT_PUBLIC_GRAPHQL_URL: "https://api.85.237.211.182.nip.io/graphql"
+    NEXT_PUBLIC_API_URL: "https://api.hiteam.net"
+    NEXT_PUBLIC_GRAPHQL_URL: "https://api.hiteam.net/graphql"
     INTERNAL_API_URL: "http://hiteam-svc-api:80"
-    WEB_ADMIN_BASE_URL: "https://hiteam.85.237.211.182.nip.io"
-    NEXT_PUBLIC_WEB_ADMIN_BASE_URL: "https://hiteam.85.237.211.182.nip.io"
+    WEB_ADMIN_BASE_URL: "https://hiteam.net"
+    NEXT_PUBLIC_WEB_ADMIN_BASE_URL: "https://hiteam.net"
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ""
     SYSTEM_SECRET: ""
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
@@ -125,17 +125,17 @@ compreface:
 ingress:
   frontend:
     enabled: true
-    host: "hiteam.85.237.211.182.nip.io"
+    host: "hiteam.net"
     extraHosts:
-      - "hiteam.net"
       - "www.hiteam.net"
+      - "hiteam.85.237.211.182.nip.io"
     tlsSecret: "hiteam-main-tls-frontend"
     enableWwwRedirect: true
   backend:
     enabled: true
-    host: "api.85.237.211.182.nip.io"
+    host: "api.hiteam.net"
     extraHosts:
-      - "api.hiteam.net"
+      - "api.85.237.211.182.nip.io"
     tlsSecret: "hiteam-main-tls-api"
   storage:
     enabled: true

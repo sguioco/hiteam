@@ -24,10 +24,14 @@ It does not modify the existing `qr-form-altegio-main` app.
 
 Set these in `Settings -> Secrets and variables -> Actions -> Variables`:
 
-- `ARGOCD_WEB_ADMIN_PUBLIC_API_URL`
-- `ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL`
-- `ARGOCD_WEB_ADMIN_BASE_URL`
+- `ARGOCD_WEB_ADMIN_PUBLIC_API_URL` = `https://api.hiteam.net`
+- `ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL` = `https://api.hiteam.net/graphql`
+- `ARGOCD_WEB_ADMIN_BASE_URL` = `https://hiteam.net`
 - `ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY` (optional)
+
+These values are baked into the web-admin image at build time (`NEXT_PUBLIC_*`).
+If they still point at `*.nip.io`, the browser will call the wrong API host even when
+the user opens `https://hiteam.net`.
 
 The release workflow fails fast if the first three are missing.
 

@@ -96,12 +96,12 @@ function parseDateKey(value: string) {
 }
 
 function formatSelectedDayLabel(value: string, locale: "ru" | "en") {
-  return parseDateKey(value)
-    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
-      day: "numeric",
-      month: "short",
-    })
+  const date = parseDateKey(value);
+  const day = date.getDate();
+  const month = date
+    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { month: "short" })
     .replace(/\.$/, "");
+  return `${day} ${month}`;
 }
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -481,14 +481,16 @@ export function TodayAttendancePanel({
           </button>
         </div>
         <div className="today-attendance-title-group">
-          <h2>{localize(locale, "Attendance", "Attendance")}</h2>
+          <div className="today-attendance-title-row">
+            <h2>{localize(locale, "Attendance", "Attendance")}</h2>
+            <span className="today-attendance-head-count">
+              {presentCount}/{expectedCount}
+            </span>
+          </div>
           <span className="today-attendance-date-label">
             {formatSelectedDayLabel(selectedDate, locale)}
           </span>
         </div>
-        <span className="today-attendance-head-count">
-          {presentCount}/{expectedCount}
-        </span>
       </div>
 
       <div className={`today-attendance-body${rows.length === 0 ? " is-empty" : ""}`}>
