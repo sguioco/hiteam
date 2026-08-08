@@ -9,8 +9,132 @@ declare global {
   interface Window {
     google?: any;
     __smartGoogleMapsInit?: () => void;
-    __smartGoogleMapsLoader?: Promise<any>;
+    __smartGoogleMapsLoader?: Promise<GoogleMapsBundle>;
   }
+}
+
+export type GoogleMapsLatLng = { lat: number; lng: number };
+
+export type GoogleMapsBundle = {
+  maps: any;
+  mapId?: string;
+  AdvancedMarkerElement?: any;
+  PinElement?: any;
+};
+
+export type MapMarkerHandle = {
+  setDraggable: (value: boolean) => void;
+  setVisible: (value: boolean) => void;
+  setPosition: (position: GoogleMapsLatLng) => void;
+  setTitle: (title: string) => void;
+  addListener: (eventName: string, handler: (event: any) => void) => any;
+};
+
+function getGoogleMapsMapId() {
+  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID?.trim() || "DEMO_MAP_ID";
+}
+
+async function buildGoogleMapsBundle(maps: any): Promise<GoogleMapsBundle> {
+  const mapId = getGoogleMapsMapId();
+  if (!mapId || typeof maps.importLibrary !== "function") {
+    return { maps };
+  }
+
+  try {
+    const markerLib = await maps.importLibrary("marker");
+    return {
+      maps,
+      mapId,
+      AdvancedMarkerElement: markerLib.AdvancedMarkerElement,
+      PinElement: markerLib.PinElement,
+    };
+  } catch {
+    return { maps };
+  }
+}
+
+export function buildGoogleMapOptions(
+  bundle: GoogleMapsBundle,
+  base: Record<string, unknown>,
+) {
+  return bundle.mapId ? { ...base, mapId: bundle.mapId } : base;
+}
+
+export function createMapMarker(
+  bundle: GoogleMapsBundle,
+  args: {
+    map: any;
+    position: GoogleMapsLatLng;
+    draggable?: boolean;
+    visible?: boolean;
+    title?: string;
+    pin?: { background?: string; borderColor?: string; scale?: number };
+  },
+): MapMarkerHandle {
+  const visible = args.visible !== false;
+
+  if (bundle.AdvancedMarkerElement && bundle.mapId) {
+    let content: Element | undefined;
+    if (args.pin && bundle.PinElement) {
+      const pin = new bundle.PinElement({
+        background: args.pin.background ?? "#3154ff",
+        borderColor: args.pin.borderColor ?? "#ffffff",
+        scale: args.pin.scale ?? 1,
+      });
+      content = pin.element;
+    }
+
+    const marker = new bundle.AdvancedMarkerElement({
+      map: visible ? args.map : null,
+      position: args.position,
+      gmpDraggable: args.draggable ?? false,
+      title: args.title,
+      ...(content ? { content } : {}),
+    });
+
+    return {
+      setDraggable: (value) => {
+        marker.gmpDraggable = value;
+      },
+      setVisible: (value) => {
+        marker.map = value ? args.map : null;
+      },
+      setPosition: (position) => {
+        marker.position = position;
+      },
+      setTitle: (title) => {
+        marker.title = title;
+      },
+      addListener: (eventName, handler) => marker.addListener(eventName, handler),
+    };
+  }
+
+  const marker = new bundle.maps.Marker({
+    map: visible ? args.map : null,
+    position: args.position,
+    draggable: args.draggable ?? false,
+    title: args.title,
+    ...(args.pin
+      ? {
+          icon: {
+            path: bundle.maps.SymbolPath.CIRCLE,
+            scale: (args.pin.scale ?? 1) * 8,
+            fillColor: args.pin.background ?? "#3154ff",
+            fillOpacity: 1,
+            strokeColor: args.pin.borderColor ?? "#ffffff",
+            strokeWeight: 2,
+          },
+        }
+      : {}),
+  });
+
+  return {
+    setDraggable: (value) => marker.setDraggable(value),
+    setVisible: (value) => marker.setVisible(value),
+    setPosition: (position) => marker.setPosition(position),
+    setTitle: (title) => marker.setTitle(title),
+    addListener: (eventName, handler) => marker.addListener(eventName, handler),
+  };
 }
 
 export type LocationAddressDetails = {
@@ -225,7 +349,7 @@ function requiresManualAddressConfirmation(result: any) {
   );
 }
 
-export function loadGoogleMaps(apiKey: string) {
+export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsBundle> {
   if (typeof window === "undefined") {
     return Promise.reject(
       new Error("Google Maps is only available in the browser."),
@@ -233,7 +357,7 @@ export function loadGoogleMaps(apiKey: string) {
   }
 
   if (window.google?.maps?.places || window.google?.maps?.importLibrary) {
-    return Promise.resolve(window.google.maps);
+    return buildGoogleMapsBundle(window.google.maps);
   }
 
   if (window.__smartGoogleMapsLoader) {
@@ -262,7 +386,7 @@ export function loadGoogleMaps(apiKey: string) {
           return;
         }
 
-        resolve(maps);
+        resolve(await buildGoogleMapsBundle(maps));
       } catch (error) {
         reject(
           error instanceof Error
@@ -336,7 +460,7 @@ export function LocationMapPicker({
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const circleRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const markerRef = useRef<MapMarkerHandle | null>(null);
   const confirmationTimerRef = useRef<number | null>(null);
   const onConfirmedSelectRef = useRef(onConfirmedSelect);
   const onSelectRef = useRef(onSelect);
@@ -644,8 +768,9 @@ export function LocationMapPicker({
       try {
         setStatus("loading");
         setStatusMessage(null);
-        const maps = await loadGoogleMaps(resolvedApiKey);
+        const googleMaps = await loadGoogleMaps(resolvedApiKey);
         if (cancelled || !mapNodeRef.current) return;
+        const maps = googleMaps.maps;
 
         const center = {
           lat: parseCoordinate(latitude, DEFAULT_LATITUDE),
@@ -660,21 +785,24 @@ export function LocationMapPicker({
           new maps.places.AutocompleteService();
 
         if (!mapRef.current) {
-          mapRef.current = new maps.Map(mapNodeRef.current, {
-            center,
-            zoom: hasCoordinates
-              ? FALLBACK_SELECTED_LOCATION_ZOOM
-              : DEFAULT_MAP_ZOOM,
-            disableDefaultUI: true,
-            gestureHandling: "greedy",
-            clickableIcons: false,
-            zoomControl: true,
-            streetViewControl: false,
-            fullscreenControl: false,
-            mapTypeControl: false,
-          });
+          mapRef.current = new maps.Map(
+            mapNodeRef.current,
+            buildGoogleMapOptions(googleMaps, {
+              center,
+              zoom: hasCoordinates
+                ? FALLBACK_SELECTED_LOCATION_ZOOM
+                : DEFAULT_MAP_ZOOM,
+              disableDefaultUI: true,
+              gestureHandling: "greedy",
+              clickableIcons: false,
+              zoomControl: true,
+              streetViewControl: false,
+              fullscreenControl: false,
+              mapTypeControl: false,
+            }),
+          );
 
-          markerRef.current = new maps.Marker({
+          markerRef.current = createMapMarker(googleMaps, {
             map: mapRef.current,
             position: center,
             draggable: isSetupMode,

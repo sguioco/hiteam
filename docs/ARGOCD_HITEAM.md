@@ -33,6 +33,7 @@ Set these in `Settings -> Secrets and variables -> Actions -> Variables`:
 - `ARGOCD_WEB_ADMIN_PUBLIC_GRAPHQL_URL` = `https://api.hiteam.net/graphql`
 - `ARGOCD_WEB_ADMIN_BASE_URL` = `https://hiteam.net`
 - `ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY` (optional)
+- `ARGOCD_WEB_ADMIN_GOOGLE_MAPS_MAP_ID` (optional, default in app code is `DEMO_MAP_ID` for Advanced Markers)
 
 These values are baked into the web-admin image at build time (`NEXT_PUBLIC_*`).
 If they still point at `*.nip.io`, the browser will call the wrong API host even when

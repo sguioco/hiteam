@@ -51,6 +51,7 @@ webAdmin:
     WEB_ADMIN_BASE_URL: "https://hiteam.net"
     NEXT_PUBLIC_WEB_ADMIN_BASE_URL: "https://hiteam.net"
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ""
+    NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: "DEMO_MAP_ID"
     SYSTEM_SECRET: ""
     HI_TEAM_INTERNAL_ACCESS_KEY: ""
 

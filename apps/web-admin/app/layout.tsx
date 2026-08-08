@@ -153,9 +153,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         petersburgHero.variable,
       )}
     >
-      <head>
-        <link as="image" fetchPriority="high" href={LANDING_HERO_POSTER_SRC} rel="preload" />
-      </head>
+      <head />
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers initialLocale={initialLocale}>{children}</Providers>

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { loadGoogleMaps } from "./location-map-picker";
+import { createMapMarker, loadGoogleMaps } from "./location-map-picker";
+import type { MapMarkerHandle } from "./location-map-picker";
 
 type AttendanceAuditMapProps = {
   apiKey?: string;
@@ -34,8 +35,8 @@ export function AttendanceAuditMap({
   const { locale } = useI18n();
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
-  const eventMarkerRef = useRef<any>(null);
-  const locationMarkerRef = useRef<any>(null);
+  const eventMarkerRef = useRef<MapMarkerHandle | null>(null);
+  const locationMarkerRef = useRef<MapMarkerHandle | null>(null);
   const circleRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing_key" | "error">(
     apiKey ? "loading" : "missing_key",
@@ -53,8 +54,9 @@ export function AttendanceAuditMap({
 
     async function initMap() {
       try {
-        const maps = await loadGoogleMaps(resolvedApiKey);
+        const googleMaps = await loadGoogleMaps(resolvedApiKey);
         if (cancelled || !mapNodeRef.current) return;
+        const maps = googleMaps.maps;
 
         const center = {
           lat: locationLatitude || eventLatitude || SCRIPT_FALLBACK_LATITUDE,
@@ -69,25 +71,23 @@ export function AttendanceAuditMap({
             zoomControl: true,
             clickableIcons: false,
             gestureHandling: "greedy",
+            ...(googleMaps.mapId ? { mapId: googleMaps.mapId } : {}),
           });
 
-          locationMarkerRef.current = new maps.Marker({
+          locationMarkerRef.current = createMapMarker(googleMaps, {
             map: mapRef.current,
             position: { lat: locationLatitude, lng: locationLongitude },
             title: locationLabel,
           });
 
-          eventMarkerRef.current = new maps.Marker({
+          eventMarkerRef.current = createMapMarker(googleMaps, {
             map: mapRef.current,
             position: { lat: eventLatitude, lng: eventLongitude },
             title: eventLabel,
-            icon: {
-              path: maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#3154ff",
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 2,
+            pin: {
+              background: "#3154ff",
+              borderColor: "#ffffff",
+              scale: 1,
             },
           });
 
