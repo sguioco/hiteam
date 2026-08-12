@@ -824,6 +824,7 @@ export class LifecycleEmailService {
 
   private async sendWithResend(params: {
     sender: string;
+    replyTo: string;
     to: string[];
     subject: string;
     html: string;
@@ -838,6 +839,7 @@ export class LifecycleEmailService {
       },
       body: JSON.stringify({
         from: this.resolveResendFrom(params.sender),
+        reply_to: params.replyTo,
         to: params.to,
         subject: params.subject,
         html: params.html,
@@ -861,21 +863,31 @@ export class LifecycleEmailService {
   }): Promise<'microsoft_graph' | 'resend'> {
     const errors: string[] = [];
 
-    if (this.isGraphConfigured()) {
-      try {
-        await this.sendWithMicrosoftGraph(params);
-        return 'microsoft_graph';
-      } catch (error) {
-        errors.push(`Microsoft Graph: ${this.getErrorMessage(error)}`);
-      }
-    }
+    const preferredProvider = this.configService
+      .get<string>('EMAIL_DELIVERY_PROVIDER')
+      ?.trim()
+      .toLowerCase();
+    const providers = preferredProvider === 'resend'
+      ? ['resend', 'microsoft_graph'] as const
+      : ['microsoft_graph', 'resend'] as const;
 
-    if (this.isResendConfigured()) {
-      try {
-        await this.sendWithResend(params);
-        return 'resend';
-      } catch (error) {
-        errors.push(`Resend: ${this.getErrorMessage(error)}`);
+    for (const provider of providers) {
+      if (provider === 'microsoft_graph' && this.isGraphConfigured()) {
+        try {
+          await this.sendWithMicrosoftGraph(params);
+          return 'microsoft_graph';
+        } catch (error) {
+          errors.push(`Microsoft Graph: ${this.getErrorMessage(error)}`);
+        }
+      }
+
+      if (provider === 'resend' && this.isResendConfigured()) {
+        try {
+          await this.sendWithResend(params);
+          return 'resend';
+        } catch (error) {
+          errors.push(`Resend: ${this.getErrorMessage(error)}`);
+        }
       }
     }
 

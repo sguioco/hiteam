@@ -77,7 +77,7 @@ export class EmployeeInvitationsMailerService {
     locale?: string | null;
   }) {
     const locale = normalizeEmailLocale(params.locale);
-    const inviteUrl = this.buildUrl(`/join/${params.token}`);
+    const inviteUrl = this.buildInvitationUrl(params.token);
     const copy = INVITATION_EMAIL_COPY[locale];
     const result = await this.deliverEmail({
       email: params.email,
@@ -180,7 +180,7 @@ export class EmployeeInvitationsMailerService {
     tenantName: string;
     token: string;
   }) {
-    const inviteUrl = this.buildUrl(`/join/${params.token}`);
+    const inviteUrl = this.buildInvitationUrl(params.token);
 
     // SMS provider is intentionally a stub for now. Wire Twilio/SMS.ru/etc here later.
     this.logger.warn(
@@ -188,6 +188,10 @@ export class EmployeeInvitationsMailerService {
     );
 
     return { provider: 'log', inviteUrl };
+  }
+
+  buildInvitationUrl(token: string) {
+    return this.buildUrl(`/join/${encodeURIComponent(token)}`);
   }
 
   private async deliverEmail(params: {

@@ -56,6 +56,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { ImageAdjustField } from "@/components/image-adjust-field";
+import { InvitationDeliveryDialog } from "@/components/invitation-delivery-dialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
 import { Input } from "@/components/ui/input";
 import {
@@ -960,6 +961,8 @@ const Employees = ({
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [invitationDelivery, setInvitationDelivery] =
+    useState<InvitationRecord | null>(null);
   const [mobileLinkCopied, setMobileLinkCopied] = useState(false);
   const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
   const [copiedInviteField, setCopiedInviteField] = useState<
@@ -2034,6 +2037,7 @@ const Employees = ({
     setInviteTeamEmoji("🍳");
     setInviteTeamError(null);
     setInviteEmail("");
+    setInvitationDelivery(null);
   }
 
   function getInviteContactValue() {
@@ -2157,7 +2161,7 @@ const Employees = ({
     setInviteError(null);
 
     try {
-      await apiRequest<InvitationRecord>("/employees/invitations", {
+      const invitation = await apiRequest<InvitationRecord>("/employees/invitations", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
@@ -2170,14 +2174,7 @@ const Employees = ({
         }),
       });
       setInviteDialogOpen(false);
-      resetInviteDraft();
-      setPageMessage(
-        runtimeLocalize(
-          `Приглашение отправлено. Роль: ${getEmployeeAccessRoleLabel(inviteRole, locale)}.`,
-          `Invitation sent. Role: ${getEmployeeAccessRoleLabel(inviteRole, locale)}.`,
-          locale,
-        ),
-      );
+      setInvitationDelivery(invitation);
       await loadDirectory({ force: true });
     } catch (requestError) {
       const message =
@@ -2298,22 +2295,17 @@ const Employees = ({
     }
   }
 
-  async function handleResend(invitationId: string) {
+  async function handleResend(invitation: InvitationRecord) {
     const session = getSession();
     if (!session) return;
 
     try {
-      await apiRequest(`/employees/invitations/${invitationId}/resend`, {
+      const result = await apiRequest<InvitationRecord>(
+        `/employees/invitations/${invitation.id}/resend`, {
         method: "POST",
         token: session.accessToken,
       });
-      setPageMessage(
-        runtimeLocalize(
-          "Приглашение отправлено повторно.",
-          "Invitation was resent.",
-          locale,
-        ),
-      );
+      setInvitationDelivery({ ...invitation, ...result });
       await loadDirectory();
     } catch (requestError) {
       setInviteError(
@@ -3845,7 +3837,7 @@ const Employees = ({
                         ) : null}
                         <Button
                           className="rounded-xl font-heading"
-                          onClick={() => void handleResend(invitation.id)}
+                          onClick={() => void handleResend(invitation)}
                           size="sm"
                           variant="outline"
                         >
@@ -4535,6 +4527,14 @@ const Employees = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <InvitationDeliveryDialog
+        invitation={invitationDelivery}
+        locale={locale}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setInvitationDelivery(null);
+        }}
+      />
 
       <Dialog
         onOpenChange={(open) => {

@@ -37,6 +37,11 @@ function testInvitationEmailFailureDoesNotBlockKommoSync() {
     'Creating an invitation must return email delivery status to the client.',
   );
   assert.match(
+    createInvitation,
+    /invitationUrl: this\.invitationsMailer\.buildInvitationUrl\(token\)/,
+    'Creating an invitation must return a direct fallback URL to the manager.',
+  );
+  assert.match(
     resendInvitation,
     /emailDeliveryResult = await this\.sendInvitationEmailSafely\(/,
     'Resending an invitation must not call the throwing invitation mailer directly.',
@@ -45,6 +50,11 @@ function testInvitationEmailFailureDoesNotBlockKommoSync() {
     resendInvitation,
     /recordEmployeeInvited\(tenantId, invitation\.id, emailDeliveryResult\)/,
     'Resending an invitation must sync email delivery status to Kommo.',
+  );
+  assert.match(
+    resendInvitation,
+    /invitationUrl: this\.invitationsMailer\.buildInvitationUrl\(token\)/,
+    'Resending an invitation must return a fresh direct fallback URL.',
   );
 }
 

@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { InvitationDeliveryDialog } from "@/components/invitation-delivery-dialog";
 import {
   Select,
   SelectContent,
@@ -110,6 +111,8 @@ export function HeaderEmployeeCreateDialog({
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdInvitation, setCreatedInvitation] =
+    useState<InvitationRecord | null>(null);
 
   const sortedGroups = useMemo(
     () => [...groups].sort((left, right) => left.name.localeCompare(right.name, locale)),
@@ -130,6 +133,7 @@ export function HeaderEmployeeCreateDialog({
     setAssignTeam(false);
     setTeamId("__none");
     setError(null);
+    setCreatedInvitation(null);
 
     if (!session?.accessToken) {
       return;
@@ -237,7 +241,7 @@ export function HeaderEmployeeCreateDialog({
     setError(null);
 
     try {
-      await apiRequest<InvitationRecord>("/employees/invitations", {
+      const invitation = await apiRequest<InvitationRecord>("/employees/invitations", {
         method: "POST",
         token: session.accessToken,
         body: JSON.stringify({
@@ -250,6 +254,7 @@ export function HeaderEmployeeCreateDialog({
         }),
       });
 
+      setCreatedInvitation(invitation);
       onOpenChange(false);
       onCreated?.();
     } catch (requestError) {
@@ -273,7 +278,8 @@ export function HeaderEmployeeCreateDialog({
   }
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <>
+      <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-1.5rem))] max-w-none overflow-y-auto rounded-[28px] border-[color:var(--border)] bg-[color:var(--panel-strong)] p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="font-heading text-2xl">
@@ -491,6 +497,14 @@ export function HeaderEmployeeCreateDialog({
           )}
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <InvitationDeliveryDialog
+        invitation={createdInvitation}
+        locale={locale}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setCreatedInvitation(null);
+        }}
+      />
+    </>
   );
 }

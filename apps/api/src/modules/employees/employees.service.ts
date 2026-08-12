@@ -1646,6 +1646,7 @@ export class EmployeesService {
       workMode: invitation.workMode,
       companyName: tenant.companies[0]?.name ?? tenant.name,
       tenantName: tenant.name,
+      invitationUrl: this.invitationsMailer.buildInvitationUrl(token),
       emailDeliveryStatus: emailDeliveryResult.status,
       emailDeliveryProvider: emailDeliveryResult.provider,
     };
@@ -1933,6 +1934,7 @@ export class EmployeesService {
       status: updated.status,
       expiresAt: updated.expiresAt.toISOString(),
       resentCount: updated.resentCount,
+      invitationUrl: this.invitationsMailer.buildInvitationUrl(token),
       emailDeliveryStatus: emailDeliveryResult.status,
       emailDeliveryProvider: emailDeliveryResult.provider,
     };

@@ -565,6 +565,9 @@ export type InvitationRecord = {
   approvedGroupId?: string | null;
   role?: EmployeeAccessRole;
   workMode?: EmployeeWorkMode;
+  invitationUrl?: string;
+  emailDeliveryStatus?: 'accepted' | 'disabled' | 'failed' | 'no_recipient';
+  emailDeliveryProvider?: 'microsoft_graph' | 'resend' | 'none';
 };
 
 export type OrganizationSetupResponse = {
