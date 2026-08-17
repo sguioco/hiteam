@@ -32,7 +32,11 @@ Create the GitHub Actions repository variable `FAST_DEPLOY`:
 - `0` (default) — standard release: build and deploy both API and web-admin.
 - `1` — build and deploy only images affected by the changed files. The other
   service keeps its currently deployed immutable image tag in ArgoCD. Mobile-only
-  changes do not rebuild API/web images; they are released through EAS.
+changes do not rebuild API/web images; they are released through EAS.
+
+A manual run with `FAST_DEPLOY=0` always forces a full API + web-admin release,
+including when the latest commit is empty. This is the way to rebuild the
+current revision on demand.
 
 This flag reduces image-build time but does not bypass the normal CI workflow
 for push-triggered releases. Use `1` only when the change is compatible with

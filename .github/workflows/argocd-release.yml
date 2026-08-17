@@ -77,6 +77,15 @@ jobs:
 
           files="$(git diff --name-only HEAD~1 HEAD)"
           if [ -z "$files" ]; then
+            if [ "${{ github.event_name }}" = 'workflow_dispatch' ] && [ "${FAST_DEPLOY}" != '1' ]; then
+              echo "Manual standard release requested without changed files: forcing both images."
+              echo "deploy=true" >> "$GITHUB_OUTPUT"
+              echo "build_api=true" >> "$GITHUB_OUTPUT"
+              echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
+              echo "fast_deploy=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
             echo "No changed files detected; skipping release."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             echo "build_api=false" >> "$GITHUB_OUTPUT"
