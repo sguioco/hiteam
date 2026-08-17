@@ -243,8 +243,10 @@ jobs:
             build_api='${{ needs.gate.outputs.build_api }}'
             build_web_admin='${{ needs.gate.outputs.build_web_admin }}'
 
-            current_api_image="$(kubectl -n argocd get application hiteam-main -o json | jq -r '.spec.source.helm.parameters[]? | select(.name == "api.image") | .value' | tail -1)"
-            current_web_admin_image="$(kubectl -n argocd get application hiteam-main -o json | jq -r '.spec.source.helm.parameters[]? | select(.name == "webAdmin.image") | .value' | tail -1)"
+            # This command runs on the production host through SSH. Keep it
+            # self-contained: the host has kubectl but does not guarantee jq.
+            current_api_image="$(kubectl -n argocd get application hiteam-main -o go-template='{{range .spec.source.helm.parameters}}{{if eq .name "api.image"}}{{.value}}{{end}}{{end}}')"
+            current_web_admin_image="$(kubectl -n argocd get application hiteam-main -o go-template='{{range .spec.source.helm.parameters}}{{if eq .name "webAdmin.image"}}{{.value}}{{end}}{{end}}')"
 
             api_image="${current_api_image:-${{ env.API_IMAGE }}}"
             web_admin_image="${current_web_admin_image:-${{ env.WEB_ADMIN_IMAGE }}}"
