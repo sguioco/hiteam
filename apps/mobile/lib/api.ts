@@ -177,6 +177,17 @@ function buildApiUrl(path: string, apiUrl = API_URL) {
   return `${apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function getMobileRequestHeaders(headers?: HeadersInit) {
+  const resolved = new Headers(headers ?? {});
+  resolved.set("X-HiTeam-Client", "mobile");
+  resolved.set("X-HiTeam-Client-Platform", Platform.OS);
+  resolved.set(
+    "X-HiTeam-Client-Version",
+    Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "unknown",
+  );
+  return resolved;
+}
+
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
@@ -412,6 +423,7 @@ async function fetchOnceWithTimeout(
   try {
     return await fetch(buildApiUrl(path, apiUrl), {
       ...options,
+      headers: getMobileRequestHeaders(options?.headers),
       signal: controller.signal,
     });
   } catch (error) {

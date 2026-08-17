@@ -318,6 +318,8 @@ async function performApiFetch(
   overrideToken?: string,
 ) {
   const headers = new Headers(options?.headers ?? {});
+  headers.set("X-HiTeam-Client", "web");
+  headers.set("X-HiTeam-Client-Platform", "browser");
   if (!(options?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -349,6 +351,8 @@ async function performApiDownloadFetch(
   overrideToken?: string,
 ) {
   const headers = new Headers(options?.headers ?? {});
+  headers.set("X-HiTeam-Client", "web");
+  headers.set("X-HiTeam-Client-Platform", "browser");
   const token = overrideToken ?? options?.token;
 
   if (token) {
@@ -386,6 +390,8 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "X-HiTeam-Client": "web",
+            "X-HiTeam-Client-Platform": "browser",
           },
           body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
         });

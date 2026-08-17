@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-system-secret": systemSecret,
+        "X-HiTeam-Client": "web-admin-server",
+        "X-HiTeam-Client-Platform": "server",
       },
       body: JSON.stringify({
         organizationName,

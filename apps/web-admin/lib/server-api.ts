@@ -40,6 +40,8 @@ export async function serverApiRequest<T>(
 ): Promise<T> {
   const { token, timeoutMs, ...requestOptions } = options ?? {};
   const headers = new Headers(options?.headers ?? {});
+  headers.set("X-HiTeam-Client", "web-admin-server");
+  headers.set("X-HiTeam-Client-Platform", "server");
 
   if (!(options?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
