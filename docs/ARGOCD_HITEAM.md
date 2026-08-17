@@ -25,17 +25,19 @@ Pushes that change only docs, markdown, or `.cd/values.hiteam-main.yaml` do not 
 `CI` or trigger a release build. Manual release remains available via
 `workflow_dispatch` on `Build Images For ArgoCD`.
 
-### Fast manual deploy
+### Fast deploy flag
 
-For an urgent, isolated change, run `Build Images For ArgoCD` manually and set
-`fast_deploy=true`. Select `api`, `web-admin`, or `both` as the target. This
-skips the CI gate and builds/deploys only the selected image; the other service
-keeps its currently deployed immutable image tag.
+Create the GitHub Actions repository variable `FAST_DEPLOY`:
 
-Use this only when the change is compatible with the currently deployed
-counterpart and does not require an unreviewed database migration. The default
-(`fast_deploy=false`) remains the standard release path and builds both images
-after CI passes.
+- `0` (default) — standard release: build and deploy both API and web-admin.
+- `1` — build and deploy only images affected by the changed files. The other
+  service keeps its currently deployed immutable image tag in ArgoCD. Mobile-only
+  changes do not rebuild API/web images; they are released through EAS.
+
+This flag reduces image-build time but does not bypass the normal CI workflow
+for push-triggered releases. Use `1` only when the change is compatible with
+the currently deployed counterpart and does not require an unreviewed database
+migration.
 
 ## Required GitHub repository variables
 

@@ -2,21 +2,6 @@ name: Build Images For ArgoCD
 
 on:
   workflow_dispatch:
-    inputs:
-      fast_deploy:
-        description: 'Skip CI gate and build only the selected service. Use only for isolated, migration-compatible changes.'
-        required: false
-        default: false
-        type: boolean
-      target:
-        description: 'Services to build and deploy in fast mode (standard releases always build both).'
-        required: false
-        default: both
-        type: choice
-        options:
-          - api
-          - web-admin
-          - both
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -41,6 +26,8 @@ env:
   WEB_ADMIN_BASE_URL: ${{ vars.ARGOCD_WEB_ADMIN_BASE_URL }}
   WEB_ADMIN_GOOGLE_MAPS_API_KEY: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_API_KEY }}
   WEB_ADMIN_GOOGLE_MAPS_MAP_ID: ${{ vars.ARGOCD_WEB_ADMIN_GOOGLE_MAPS_MAP_ID }}
+  # Configure as a GitHub Actions repository variable: 0 = full release, 1 = only affected images.
+  FAST_DEPLOY: ${{ vars.FAST_DEPLOY || '0' }}
 
 jobs:
   gate:
@@ -79,7 +66,6 @@ jobs:
           fi
 
       - uses: actions/checkout@v5
-        if: github.event_name != 'workflow_dispatch'
         with:
           ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 2
@@ -88,40 +74,6 @@ jobs:
         id: changes
         run: |
           set -euo pipefail
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            fast_deploy="${{ inputs.fast_deploy }}"
-            target="${{ inputs.target }}"
-
-            if [ "$fast_deploy" = "true" ]; then
-              echo "Fast manual release requested for target=$target. CI is intentionally bypassed."
-              case "$target" in
-                api)
-                  echo "build_api=true" >> "$GITHUB_OUTPUT"
-                  echo "build_web_admin=false" >> "$GITHUB_OUTPUT"
-                  ;;
-                web-admin)
-                  echo "build_api=false" >> "$GITHUB_OUTPUT"
-                  echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
-                  ;;
-                both)
-                  echo "build_api=true" >> "$GITHUB_OUTPUT"
-                  echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
-                  ;;
-                *)
-                  echo "Unsupported fast deploy target: $target" >&2
-                  exit 1
-                  ;;
-              esac
-            else
-              echo "Standard manual release requested."
-              echo "build_api=true" >> "$GITHUB_OUTPUT"
-              echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
-            fi
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            echo "fast_deploy=$fast_deploy" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           files="$(git diff --name-only HEAD~1 HEAD)"
           if [ -z "$files" ]; then
@@ -137,14 +89,33 @@ jobs:
           echo "$files"
 
           deploy=false
+          build_api=false
+          build_web_admin=false
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
               docs/*|altegio-docs/*|README.md|PRD.md|AGENTS.md|.cd/values.hiteam-main.yaml|.cd/values.hiteam-main.example.yaml|.cd/argocd-application.example.yaml)
                 ;;
+              apps/api/*)
+                deploy=true
+                build_api=true
+                ;;
+              apps/web-admin/*)
+                deploy=true
+                build_web_admin=true
+                ;;
+              apps/mobile/*)
+                # Mobile is released via EAS; it does not require an API/web image.
+                ;;
+              packages/types/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig.base.json|turbo.json|.npmrc|Dockerfile|.cd/*)
+                deploy=true
+                build_api=true
+                build_web_admin=true
+                ;;
               *)
                 deploy=true
-                break
+                build_api=true
+                build_web_admin=true
                 ;;
             esac
           done <<< "$files"
@@ -153,10 +124,20 @@ jobs:
             echo "Only docs or runtime values changed; skipping image build and deploy."
           fi
 
+          if [ "${FAST_DEPLOY}" = '1' ]; then
+            echo "Fast deploy enabled: api=$build_api web-admin=$build_web_admin"
+          else
+            echo "Standard deploy enabled: building both images."
+            if [ "$deploy" = true ]; then
+              build_api=true
+              build_web_admin=true
+            fi
+          fi
+
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-          echo "build_api=$deploy" >> "$GITHUB_OUTPUT"
-          echo "build_web_admin=$deploy" >> "$GITHUB_OUTPUT"
-          echo "fast_deploy=false" >> "$GITHUB_OUTPUT"
+          echo "build_api=$build_api" >> "$GITHUB_OUTPUT"
+          echo "build_web_admin=$build_web_admin" >> "$GITHUB_OUTPUT"
+          echo "fast_deploy=$([ "${FAST_DEPLOY}" = '1' ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   build-api:
     needs: gate
