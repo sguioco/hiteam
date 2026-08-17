@@ -2,6 +2,21 @@ name: Build Images For ArgoCD
 
 on:
   workflow_dispatch:
+    inputs:
+      fast_deploy:
+        description: 'Skip CI gate and build only the selected service. Use only for isolated, migration-compatible changes.'
+        required: false
+        default: false
+        type: boolean
+      target:
+        description: 'Services to build and deploy in fast mode (standard releases always build both).'
+        required: false
+        default: both
+        type: choice
+        options:
+          - api
+          - web-admin
+          - both
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -34,6 +49,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       should_deploy: ${{ steps.changes.outputs.deploy }}
+      build_api: ${{ steps.changes.outputs.build_api }}
+      build_web_admin: ${{ steps.changes.outputs.build_web_admin }}
+      fast_deploy: ${{ steps.changes.outputs.fast_deploy }}
     steps:
       - name: Validate required repo variables
         run: |
@@ -72,8 +90,36 @@ jobs:
           set -euo pipefail
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual release requested."
+            fast_deploy="${{ inputs.fast_deploy }}"
+            target="${{ inputs.target }}"
+
+            if [ "$fast_deploy" = "true" ]; then
+              echo "Fast manual release requested for target=$target. CI is intentionally bypassed."
+              case "$target" in
+                api)
+                  echo "build_api=true" >> "$GITHUB_OUTPUT"
+                  echo "build_web_admin=false" >> "$GITHUB_OUTPUT"
+                  ;;
+                web-admin)
+                  echo "build_api=false" >> "$GITHUB_OUTPUT"
+                  echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
+                  ;;
+                both)
+                  echo "build_api=true" >> "$GITHUB_OUTPUT"
+                  echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
+                  ;;
+                *)
+                  echo "Unsupported fast deploy target: $target" >&2
+                  exit 1
+                  ;;
+              esac
+            else
+              echo "Standard manual release requested."
+              echo "build_api=true" >> "$GITHUB_OUTPUT"
+              echo "build_web_admin=true" >> "$GITHUB_OUTPUT"
+            fi
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "fast_deploy=$fast_deploy" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -81,6 +127,9 @@ jobs:
           if [ -z "$files" ]; then
             echo "No changed files detected; skipping release."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "build_api=false" >> "$GITHUB_OUTPUT"
+            echo "build_web_admin=false" >> "$GITHUB_OUTPUT"
+            echo "fast_deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -105,10 +154,13 @@ jobs:
           fi
 
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "build_api=$deploy" >> "$GITHUB_OUTPUT"
+          echo "build_web_admin=$deploy" >> "$GITHUB_OUTPUT"
+          echo "fast_deploy=false" >> "$GITHUB_OUTPUT"
 
   build-api:
     needs: gate
-    if: needs.gate.outputs.should_deploy == 'true'
+    if: needs.gate.outputs.build_api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -140,7 +192,7 @@ jobs:
 
   build-web-admin:
     needs: gate
-    if: needs.gate.outputs.should_deploy == 'true'
+    if: needs.gate.outputs.build_web_admin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -178,7 +230,10 @@ jobs:
 
   deploy:
     needs: [gate, build-api, build-web-admin]
-    if: needs.gate.outputs.should_deploy == 'true'
+    if: >-
+      always() && needs.gate.outputs.should_deploy == 'true' &&
+      (needs.build-api.result == 'success' || needs.build-api.result == 'skipped') &&
+      (needs.build-web-admin.result == 'success' || needs.build-web-admin.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -193,13 +248,31 @@ jobs:
           script: |
             set -euo pipefail
 
+            build_api='${{ needs.gate.outputs.build_api }}'
+            build_web_admin='${{ needs.gate.outputs.build_web_admin }}'
+
+            current_api_image="$(kubectl -n argocd get application hiteam-main -o json | jq -r '.spec.source.helm.parameters[]? | select(.name == "api.image") | .value' | tail -1)"
+            current_web_admin_image="$(kubectl -n argocd get application hiteam-main -o json | jq -r '.spec.source.helm.parameters[]? | select(.name == "webAdmin.image") | .value' | tail -1)"
+
+            api_image="${current_api_image:-${{ env.API_IMAGE }}}"
+            web_admin_image="${current_web_admin_image:-${{ env.WEB_ADMIN_IMAGE }}}"
+
+            if [ "$build_api" = 'true' ]; then
+              api_image='${{ env.API_IMAGE }}'
+            fi
+            if [ "$build_web_admin" = 'true' ]; then
+              web_admin_image='${{ env.WEB_ADMIN_IMAGE }}'
+            fi
+
+            echo "Deploying api=${api_image} web-admin=${web_admin_image}"
+
             kubectl -n argocd patch application hiteam-main --type merge -p '{
               "spec": {
                 "source": {
                   "helm": {
                     "parameters": [
-                      {"name":"api.image","value":"${{ env.API_IMAGE }}"},
-                      {"name":"webAdmin.image","value":"${{ env.WEB_ADMIN_IMAGE }}"}
+                      {"name":"api.image","value":"'"${api_image}"'"},
+                      {"name":"webAdmin.image","value":"'"${web_admin_image}"'"}
                     ]
                   }
                 }
