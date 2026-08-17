@@ -9,7 +9,9 @@ on:
 
 concurrency:
   group: hiteam-argocd-release-${{ github.event.workflow_run.head_sha || github.sha }}
-  cancel-in-progress: true
+  # A manual release and the CI follow-up can target the same SHA.  Queue them
+  # instead of dropping one halfway through image build or ArgoCD patching.
+  cancel-in-progress: false
 
 permissions:
   contents: read

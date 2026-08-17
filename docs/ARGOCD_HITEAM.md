@@ -38,6 +38,11 @@ A manual run with `FAST_DEPLOY=0` always forces a full API + web-admin release,
 including when the latest commit is empty. This is the way to rebuild the
 current revision on demand.
 
+Release requests for the same commit are serialized rather than canceled. This
+prevents a manual release and the automatic release after CI from interrupting
+each other; a duplicate request may wait, but it will not discard an active
+deployment.
+
 This flag reduces image-build time but does not bypass the normal CI workflow
 for push-triggered releases. Use `1` only when the change is compatible with
 the currently deployed counterpart and does not require an unreviewed database
