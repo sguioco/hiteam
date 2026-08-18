@@ -71,6 +71,11 @@ import {
 } from "../lib/navigation";
 import { primeWorkspaceExperience } from "../lib/workspace-warmup";
 import { CHUNK_PENDING_ROUTE_STORAGE_KEY } from "../lib/chunk-load-recovery";
+import {
+  isOrganizationSetupAllowedPath,
+  ORGANIZATION_SETUP_REQUIRED_EVENT,
+  ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+} from "../lib/organization-setup";
 import { WorkspaceLoading } from "./workspace-loading";
 
 type NavItem = {
@@ -487,13 +492,15 @@ export function AdminShell({
       !session ||
       !organizationGuardReady ||
       organization?.configured !== false ||
-      pathname === toAdminHref("/organization") ||
-      // Marketplace connect must finish on Billing before org setup.
-      pathname === toAdminHref("/billing")
+      isOrganizationSetupAllowedPath(pathname)
     ) {
       return;
     }
 
+    window.sessionStorage.setItem(
+      ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+      "1",
+    );
     router.replace(toAdminHref("/organization"));
   }, [
     mode,
@@ -1330,6 +1337,27 @@ export function AdminShell({
     event?: RouteClickEvent | null,
   ) {
     if (!href || isActive(pathname, href) || !shouldHandleRouteClick(event)) {
+      return;
+    }
+
+    if (
+      mode === "admin" &&
+      organizationGuardReady &&
+      organization?.configured === false &&
+      !isOrganizationSetupAllowedPath(href)
+    ) {
+      event?.preventDefault();
+      resetRouteLoadingState();
+
+      if (pathname === toAdminHref("/organization")) {
+        window.dispatchEvent(new Event(ORGANIZATION_SETUP_REQUIRED_EVENT));
+      } else {
+        window.sessionStorage.setItem(
+          ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+          "1",
+        );
+        router.replace(toAdminHref("/organization"));
+      }
       return;
     }
 

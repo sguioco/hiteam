@@ -167,6 +167,7 @@ type LocationMapPickerProps = {
   onConfirmationRequiredChange?: (required: boolean) => void;
   onConfirmedSelect?: (next: LocationSelection) => Promise<void> | void;
   onSelect: (next: LocationSelection) => void;
+  searchError?: string | null;
   searchLabel?: string;
   searchPlaceholder?: string;
   searchTrailingContent?: ReactNode;
@@ -450,6 +451,7 @@ export function LocationMapPicker({
   onConfirmationRequiredChange,
   onConfirmedSelect,
   onSelect,
+  searchError = null,
   searchLabel = "Адрес организации",
   searchPlaceholder = "Например, Новосибирск, Красный проспект 25",
   searchTrailingContent,
@@ -1135,6 +1137,8 @@ export function LocationMapPicker({
             ) : null}
             <div className="org-map-search-control">
               <Input
+                aria-describedby={searchError ? `${searchInputId}-error` : undefined}
+                aria-invalid={Boolean(searchError)}
                 className={
                   searchTrailingContent
                     ? "org-map-search-input org-map-search-input--with-trailing"
@@ -1156,6 +1160,15 @@ export function LocationMapPicker({
                 </div>
               ) : null}
             </div>
+            {searchError ? (
+              <p
+                className="org-map-search-error"
+                id={`${searchInputId}-error`}
+                role="alert"
+              >
+                {searchError}
+              </p>
+            ) : null}
           </div>
 
           <div className="org-map-location-actions">

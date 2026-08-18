@@ -44,6 +44,10 @@ import {
 } from "../../components/ui/select";
 import { apiRequest } from "../../lib/api";
 import { toAdminHref } from "../../lib/admin-routes";
+import {
+  ORGANIZATION_SETUP_REQUIRED_EVENT,
+  ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+} from "../../lib/organization-setup";
 import { getSession } from "../../lib/auth";
 import {
   peekAltegioMarketplaceParams,
@@ -124,11 +128,6 @@ type SetupDraft = {
 };
 
 type SetupMode = "create" | "update" | "create-location";
-type TimeZonePreset = {
-  address: string;
-  latitude: string;
-  longitude: string;
-};
 
 const MIN_GEOFENCE_RADIUS_METERS = 50;
 const DEFAULT_GEOFENCE_RADIUS_METERS = 100;
@@ -162,21 +161,6 @@ const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
 const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
 const STREET_ADDRESS_MARKERS =
   /(?:^|[\s.])(street|st\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|lane|ln\.?|drive|dr\.?|highway|hwy\.?|улица|ул\.?|проспект|пр-т|переулок|пер\.?|шоссе|набережная|площадь|проезд|ถนน)(?:[\s.]|$)/iu;
-
-const TIME_ZONE_PRESETS: Record<string, TimeZonePreset> = {
-  "UTC-08:00": { address: "Downtown Anchorage, Alaska, United States", latitude: "61.217381", longitude: "-149.863129" },
-  "UTC-07:00": { address: "Denver, Colorado, United States", latitude: "39.739236", longitude: "-104.990251" },
-  "UTC-06:00": { address: "Chicago, Illinois, United States", latitude: "41.878113", longitude: "-87.629799" },
-  "UTC-05:00": { address: "Manhattan, New York, United States", latitude: "40.758000", longitude: "-73.985500" },
-  "UTC+00:00": { address: "Westminster, London, United Kingdom", latitude: "51.500729", longitude: "-0.124625" },
-  "UTC+01:00": { address: "Alexanderplatz, Berlin, Germany", latitude: "52.521918", longitude: "13.413215" },
-  "UTC+03:00": { address: "Moscow City, Moscow, Russia", latitude: "55.749447", longitude: "37.537087" },
-  "UTC+04:00": { address: "Burj Khalifa, Downtown Dubai, Dubai, United Arab Emirates", latitude: "25.197197", longitude: "55.274376" },
-  "UTC+05:00": { address: "Tashkent City, Tashkent, Uzbekistan", latitude: "41.299496", longitude: "69.240074" },
-  "UTC+06:00": { address: "Almaty, Kazakhstan", latitude: "43.238949", longitude: "76.889709" },
-  "UTC+07:00": { address: "Bangkok, Thailand", latitude: "13.756331", longitude: "100.501762" },
-  "UTC+09:00": { address: "Shinjuku, Tokyo, Japan", latitude: "35.693840", longitude: "139.703549" },
-};
 
 function getTimeZoneOffsetLabel(timeZone: string) {
   try {
@@ -235,7 +219,7 @@ function normalizeRadius(value?: number | null) {
 
 function getLocationAddressLabel(location: Pick<Location, "address" | "name">) {
   const address = location.address.trim();
-  if (!address) return location.name;
+  if (!address || address === "Not set yet") return location.name;
 
   const addressParts = address
     .split(/\s*(?:,|;|·|\s+-\s+)\s*/u)
@@ -261,18 +245,37 @@ function createEmptyDraft(): SetupDraft {
   };
 }
 
+function isConfiguredLocation(location: Location | null | undefined) {
+  if (!location) return false;
+
+  const address = location.address.trim();
+  return Boolean(
+    address &&
+      address !== "Not set yet" &&
+      typeof location.latitude === "number" &&
+      Number.isFinite(location.latitude) &&
+      typeof location.longitude === "number" &&
+      Number.isFinite(location.longitude) &&
+      !(location.latitude === 0 && location.longitude === 0),
+  );
+}
+
 function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
+  const configuredLocation = isConfiguredLocation(setup.location)
+    ? setup.location
+    : null;
+
   return {
-    address: setup.location?.address ?? "",
+    address: configuredLocation?.address ?? "",
     companyLogoUrl: setup.company?.logoUrl ?? "",
     companyName: setup.company?.name ?? "",
     details: null,
     geofenceRadiusMeters: normalizeRadius(setup.location?.geofenceRadiusMeters ?? setup.defaultGeofenceRadiusMeters ?? DEFAULT_GEOFENCE_RADIUS_METERS),
     googlePlaceId: setup.company?.googlePlaceId ?? "",
     attendanceTrackingEnabled: setup.attendanceTrackingEnabled ?? true,
-    latitude: typeof setup.location?.latitude === "number" ? String(setup.location.latitude) : "",
+    latitude: configuredLocation ? String(configuredLocation.latitude) : "",
     locationName: setup.location?.name ?? "",
-    longitude: typeof setup.location?.longitude === "number" ? String(setup.location.longitude) : "",
+    longitude: configuredLocation ? String(configuredLocation.longitude) : "",
     timezone: setup.location?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   };
 }
@@ -281,10 +284,6 @@ function resolveSetupMode(setup: OrganizationSetupResponse): SetupMode {
   if (setup.location) return "update";
   if (setup.company) return "create-location";
   return "create";
-}
-
-function hasDraftCoordinates(draft: SetupDraft) {
-  return draft.latitude.trim() !== "" && draft.longitude.trim() !== "";
 }
 
 function buildAddEmployeePromptStorageKey(
@@ -362,6 +361,7 @@ export default function OrganizationPageClient({
   );
   const [locationConfirmationPending, setLocationConfirmationPending] =
     useState(false);
+  const [addressRequired, setAddressRequired] = useState(false);
   const [setupMode, setSetupMode] = useState<SetupMode>(
     resolveSetupMode(initialData?.setup ?? EMPTY_SETUP),
   );
@@ -372,7 +372,6 @@ export default function OrganizationPageClient({
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
-  const timeZonePreset = useMemo(() => TIME_ZONE_PRESETS[getTimeZoneOffsetLabel(draft.timezone)] ?? null, [draft.timezone]);
   const companyLocations = useMemo(
     () =>
       locations.filter(({ companyId }) => companyId === selectedCompanyId),
@@ -407,7 +406,7 @@ export default function OrganizationPageClient({
       ...setup,
       company,
       location: location ?? null,
-      configured: Boolean(location),
+      configured: isConfiguredLocation(location),
     };
     setSelectedCompanyId(company.id);
     setSelectedLocationId(location?.id ?? "");
@@ -459,7 +458,7 @@ export default function OrganizationPageClient({
       ...snapshot.setup,
       company: currentCompany,
       location: currentLocation,
-      configured: Boolean(currentLocation),
+      configured: isConfiguredLocation(currentLocation),
     };
     setSelectedCompanyId(currentCompany.id);
     setSelectedLocationId(currentLocation?.id ?? "");
@@ -614,6 +613,34 @@ export default function OrganizationPageClient({
   }
 
   useEffect(() => {
+    function showAddressRequired() {
+      setAddressRequired(true);
+    }
+
+    if (
+      window.sessionStorage.getItem(
+        ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+      ) === "1"
+    ) {
+      window.sessionStorage.removeItem(
+        ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
+      );
+      showAddressRequired();
+    }
+
+    window.addEventListener(
+      ORGANIZATION_SETUP_REQUIRED_EVENT,
+      showAddressRequired,
+    );
+    return () => {
+      window.removeEventListener(
+        ORGANIZATION_SETUP_REQUIRED_EVENT,
+        showAddressRequired,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
     if (didUseInitialData.current && initialData) {
       didUseInitialData.current = false;
       return;
@@ -685,13 +712,6 @@ export default function OrganizationPageClient({
     };
   }, []);
 
-  useEffect(() => {
-    if (!timeZonePreset || draft.address.trim() || hasDraftCoordinates(draft)) return;
-    setDraft((current) => ({
-      ...current, address: timeZonePreset.address, latitude: timeZonePreset.latitude, longitude: timeZonePreset.longitude,
-    }));
-  }, [draft, timeZonePreset]);
-
   function updateDraft<K extends keyof SetupDraft>(key: K, value: SetupDraft[K]) {
     if (saveSuccess) {
       setSaveSuccess(false);
@@ -722,6 +742,7 @@ export default function OrganizationPageClient({
     if (saveSuccess) {
       setSaveSuccess(false);
     }
+    setAddressRequired(false);
     setDraft((current) => ({
       ...current,
       address: next.address ?? current.address,
@@ -1483,9 +1504,14 @@ export default function OrganizationPageClient({
                     mode="setup"
                     onConfirmationRequiredChange={setLocationConfirmationPending}
                     onConfirmedSelect={persistConfirmedLocation}
+                    searchError={addressRequired
+                      ? locale === "ru"
+                        ? "Сначала добавьте адрес"
+                        : "Add an address first"
+                      : null}
                     searchPlaceholder={locale === "ru"
-                      ? "Красный проспект, 24, Новосибирск"
-                      : "1600 Amphitheatre Parkway, Mountain View"}
+                      ? "Введите адрес"
+                      : "Enter your address"}
                     searchTrailingContent={selectedCompanyId ? (
                       <Select
                         onValueChange={handleLocationSelect}
@@ -1499,7 +1525,9 @@ export default function OrganizationPageClient({
                           }
                           className="organization-studio-address-switcher-trigger"
                           title={
-                            selectedHeaderLocation?.address ||
+                            (isConfiguredLocation(selectedHeaderLocation)
+                              ? selectedHeaderLocation?.address
+                              : null) ||
                             (locale === "ru"
                               ? "Выбрать сохранённый адрес"
                               : "Select saved address")
@@ -1528,7 +1556,11 @@ export default function OrganizationPageClient({
                                       {getLocationAddressLabel(location)}
                                     </SelectOptionTitle>
                                     <SelectOptionDescription>
-                                      {location.address || location.name}
+                                      {isConfiguredLocation(location)
+                                        ? location.address
+                                        : locale === "ru"
+                                          ? "Адрес не добавлен"
+                                          : "Address not added"}
                                     </SelectOptionDescription>
                                   </SelectOptionText>
                                 </SelectOptionContent>

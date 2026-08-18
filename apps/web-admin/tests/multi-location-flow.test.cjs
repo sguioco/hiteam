@@ -125,7 +125,7 @@ assert.match(
 );
 assert.match(
   organization,
-  /organization-studio-location-menu[\s\S]*SelectOptionDescription[\s\S]*location\.address \|\| location\.name/,
+  /organization-studio-location-menu[\s\S]*SelectOptionDescription[\s\S]*isConfiguredLocation\(location\)[\s\S]*location\.address/,
   "Location menu must expose the full address in its expanded option.",
 );
 assert.match(
@@ -218,6 +218,21 @@ assert.match(
   adminShell,
   /!organizationGuardReady[\s\S]*organization\?\.configured !== false/,
   "Organization routing must wait for an authoritative setup response.",
+);
+assert.match(
+  adminShell,
+  /organization\?\.configured === false[\s\S]*event\?\.preventDefault\(\)[\s\S]*ORGANIZATION_SETUP_REQUIRED_EVENT/,
+  "Blocked sidebar routes must explain the missing address without navigating away first.",
+);
+assert.match(
+  organization,
+  /searchError=\{addressRequired[\s\S]*Сначала добавьте адрес[\s\S]*Add an address first/,
+  "Organization setup must explain why protected sidebar routes are unavailable.",
+);
+assert.match(
+  organization,
+  /Введите адрес[\s\S]*Enter your address/,
+  "The empty address field must use a clear localized placeholder.",
 );
 assert.match(
   profilePage,

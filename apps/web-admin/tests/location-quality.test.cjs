@@ -62,5 +62,20 @@ assert.match(
   /persistConfirmedLocation[\s\S]*\/org\/locations\/\$\{selectedLocationId\}[\s\S]*method: "PATCH"/,
   "Confirming an existing location must persist it immediately.",
 );
+assert.match(
+  organization,
+  /function isConfiguredLocation[\s\S]*address !== "Not set yet"[\s\S]*Number\.isFinite\(location\.latitude\)[\s\S]*location\.latitude === 0 && location\.longitude === 0/,
+  "A seeded placeholder must not be rendered as a real map point.",
+);
+assert.match(
+  organization,
+  /const configuredLocation = isConfiguredLocation\(setup\.location\)[\s\S]*address: configuredLocation\?\.address \?\? ""[\s\S]*latitude: configuredLocation \? String\(configuredLocation\.latitude\) : ""/,
+  "Placeholder coordinates must hydrate as an empty location draft.",
+);
+assert.doesNotMatch(
+  organization,
+  /TIME_ZONE_PRESETS/,
+  "An empty location must not silently become a different city based only on its UTC offset.",
+);
 
 console.log("web location quality tests passed");

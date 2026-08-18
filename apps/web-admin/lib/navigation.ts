@@ -7,6 +7,7 @@ export type RouteClickEvent = Pick<
   | "ctrlKey"
   | "defaultPrevented"
   | "metaKey"
+  | "preventDefault"
   | "shiftKey"
 >;
 
