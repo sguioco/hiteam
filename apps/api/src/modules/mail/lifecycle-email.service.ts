@@ -154,6 +154,10 @@ export class LifecycleEmailService {
         text: this.renderText(template, context),
       });
 
+      this.logger.log(
+        `Lifecycle email ${params.event} accepted by ${deliveryProvider} for tenant ${params.tenantId}.`,
+      );
+
       return this.buildSendResult({
         event: params.event,
         status: 'accepted',
@@ -223,6 +227,9 @@ export class LifecycleEmailService {
         html: params.html,
         text: params.text,
       });
+      this.logger.log(
+        `Transactional email accepted by ${deliveryProvider} for ${recipients.join(', ')}.`,
+      );
 
       return this.buildTransactionalSendResult({
         status: 'accepted',
@@ -873,20 +880,38 @@ export class LifecycleEmailService {
 
     for (const provider of providers) {
       if (provider === 'microsoft_graph' && this.isGraphConfigured()) {
-        try {
-          await this.sendWithMicrosoftGraph(params);
-          return 'microsoft_graph';
-        } catch (error) {
-          errors.push(`Microsoft Graph: ${this.getErrorMessage(error)}`);
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            await this.sendWithMicrosoftGraph(params);
+            return 'microsoft_graph';
+          } catch (error) {
+            if (attempt < 3 && this.shouldRetryProviderError(error)) {
+              this.logger.warn(`Microsoft Graph email attempt ${attempt} failed; retrying.`);
+              await this.waitBeforeEmailRetry(attempt);
+              continue;
+            }
+
+            errors.push(`Microsoft Graph: ${this.getErrorMessage(error)}`);
+            break;
+          }
         }
       }
 
       if (provider === 'resend' && this.isResendConfigured()) {
-        try {
-          await this.sendWithResend(params);
-          return 'resend';
-        } catch (error) {
-          errors.push(`Resend: ${this.getErrorMessage(error)}`);
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            await this.sendWithResend(params);
+            return 'resend';
+          } catch (error) {
+            if (attempt < 3 && this.shouldRetryProviderError(error)) {
+              this.logger.warn(`Resend email attempt ${attempt} failed; retrying.`);
+              await this.waitBeforeEmailRetry(attempt);
+              continue;
+            }
+
+            errors.push(`Resend: ${this.getErrorMessage(error)}`);
+            break;
+          }
         }
       }
     }
@@ -1036,6 +1061,21 @@ export class LifecycleEmailService {
 
   private getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private shouldRetryProviderError(error: unknown) {
+    const message = this.getErrorMessage(error).toLowerCase();
+    return (
+      /\b(408|409|425|429|500|502|503|504)\b/.test(message) ||
+      message.includes('fetch failed') ||
+      message.includes('network') ||
+      message.includes('timeout') ||
+      message.includes('timed out')
+    );
+  }
+
+  private async waitBeforeEmailRetry(attempt: number) {
+    await new Promise((resolve) => setTimeout(resolve, attempt * 350));
   }
 
   private normalizeEmailLocale(locale?: string | null): EmailLocale {

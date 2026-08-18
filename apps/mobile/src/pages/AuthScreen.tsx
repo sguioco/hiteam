@@ -277,24 +277,42 @@ function getDeviceTimeZone() {
 
 function getTimeZoneOffsetLabel(timeZone: string) {
   try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-GB', {
       timeZone,
-      timeZoneName: 'shortOffset',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
     });
-    const zoneName = formatter.formatToParts(new Date()).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
-    const normalized = zoneName.replace('GMT', 'UTC');
+    const values = Object.fromEntries(
+      formatter
+        .formatToParts(now)
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    const localAsUtc = Date.UTC(
+      values.year,
+      values.month - 1,
+      values.day,
+      values.hour === 24 ? 0 : values.hour,
+      values.minute,
+      values.second,
+    );
+    const currentSecond = now.getTime() - now.getMilliseconds();
+    let offsetMinutes = Math.round((localAsUtc - currentSecond) / 60_000);
 
-    if (normalized === 'UTC') {
-      return 'UTC+00:00';
-    }
+    while (offsetMinutes > 14 * 60) offsetMinutes -= 24 * 60;
+    while (offsetMinutes < -12 * 60) offsetMinutes += 24 * 60;
 
-    const match = normalized.match(/^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/);
-    if (!match) {
-      return normalized;
-    }
-
-    const [, sign, hours, minutes] = match;
-    return `UTC${sign}${hours.padStart(2, '0')}:${(minutes ?? '00').padStart(2, '0')}`;
+    const sign = offsetMinutes < 0 ? '-' : '+';
+    const absoluteMinutes = Math.abs(offsetMinutes);
+    const hours = Math.floor(absoluteMinutes / 60);
+    const minutes = absoluteMinutes % 60;
+    return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   } catch {
     return 'UTC+00:00';
   }
@@ -1119,7 +1137,10 @@ const AuthScreen = () => {
     ? t('login.hidePassword')
     : t('login.showPassword');
 
-  async function completeAuthenticatedEntry(session: Awaited<ReturnType<typeof signInWithEmail>>) {
+  async function completeAuthenticatedEntry(
+    session: Awaited<ReturnType<typeof signInWithEmail>>,
+    workspaceSetupHint?: 'organization',
+  ) {
     if (!session.user.workspaceAccessAllowed) {
       signInLocally({ workspaceSetupStep: null });
       return;
@@ -1127,7 +1148,7 @@ const AuthScreen = () => {
 
     void bootstrapDemoDevice().catch(() => undefined);
     void bootstrapPushNotifications().catch(() => undefined);
-    const workspaceSetupStep = await resolveWorkspaceSetupStep();
+    const workspaceSetupStep = workspaceSetupHint ?? await resolveWorkspaceSetupStep();
 
     signInLocally({ workspaceSetupStep });
 
@@ -1183,7 +1204,7 @@ const AuthScreen = () => {
         language,
       );
       hapticSuccess();
-      await completeAuthenticatedEntry(session);
+      await completeAuthenticatedEntry(session, 'organization');
     } catch (error) {
       hapticError();
       setMessage(error instanceof Error ? error.message : signupUi.requiredFields);
@@ -1645,10 +1666,6 @@ const AuthScreen = () => {
                               </Pressable>
                             </View>
 
-                            <View className="min-h-[32px] items-center justify-center px-2">
-                              {message ? <Text style={joinProfileErrorStyle}>{message}</Text> : null}
-                            </View>
-
                             <PressableScale
                               className="min-h-[24px] items-center justify-center"
                               disabled={submitting}
@@ -2025,7 +2042,7 @@ const AuthScreen = () => {
                         </View>
                       )}
 
-                      {mode !== 'joinProfile' && mode !== 'signup' ? (
+                      {mode !== 'joinProfile' ? (
                         <View className="mt-4 min-h-[40px] items-center justify-center px-2">
                           {message ? (
                             <Text className="text-center text-[14px] leading-[20px] text-[#9e3541]">

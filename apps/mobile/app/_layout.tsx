@@ -1,10 +1,10 @@
 import '../global.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
-import { Slot, SplashScreen, usePathname, useRouter } from 'expo-router';
+import { Slot, SplashScreen, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as Updates from 'expo-updates';
-import { LogBox, Platform, View } from 'react-native';
+import { ActivityIndicator, LogBox, Platform, Pressable, Text, View } from 'react-native';
 import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,6 +29,31 @@ import {
 } from '../lib/workspace-setup';
 
 void SplashScreen.preventAutoHideAsync();
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', padding: 28 }}>
+      <Text style={{ color: '#25324c', fontSize: 24, fontWeight: '700', textAlign: 'center' }}>
+        Не удалось открыть экран
+      </Text>
+      <Text style={{ marginTop: 10, color: '#7f879d', fontSize: 15, lineHeight: 22, textAlign: 'center' }}>
+        Something went wrong. Try opening this screen again.
+      </Text>
+      {__DEV__ ? (
+        <Text selectable style={{ marginTop: 14, color: '#b42318', fontSize: 12, textAlign: 'center' }}>
+          {error.message}
+        </Text>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        onPress={retry}
+        style={{ marginTop: 22, minWidth: 180, alignItems: 'center', borderRadius: 18, backgroundColor: '#3155ff', paddingHorizontal: 24, paddingVertical: 14 }}
+      >
+        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>Попробовать снова</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
@@ -93,7 +118,7 @@ function AppRouterSlot() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Manrope_500Medium,
     Manrope_600SemiBold,
     Manrope_700Bold,
@@ -108,6 +133,32 @@ export default function RootLayout() {
   const [bannerThemeReady, setBannerThemeReady] = useState(false);
   const [initialLanguage, setInitialLanguage] = useState<AppLanguage | null>(null);
   const [languageReady, setLanguageReady] = useState(false);
+  const [startupDeadlineReached, setStartupDeadlineReached] = useState(false);
+
+  const startupReady = useMemo(
+    () =>
+      startupDeadlineReached ||
+      ((fontsLoaded || Boolean(fontError)) &&
+        bannerReady &&
+        authReady &&
+        bannerThemeReady &&
+        languageReady),
+    [authReady, bannerReady, bannerThemeReady, fontError, fontsLoaded, languageReady, startupDeadlineReached],
+  );
+
+  useEffect(() => {
+    const loadingScreenTimer = setTimeout(() => {
+      void SplashScreen.hideAsync();
+    }, 700);
+    const startupDeadlineTimer = setTimeout(() => {
+      setStartupDeadlineReached(true);
+    }, 8_000);
+
+    return () => {
+      clearTimeout(loadingScreenTimer);
+      clearTimeout(startupDeadlineTimer);
+    };
+  }, []);
 
   useEffect(() => {
     if (__DEV__ || !Updates.isEnabled) {
@@ -191,17 +242,26 @@ export default function RootLayout() {
     let cancelled = false;
 
     const hydrateLanguage = async () => {
-      const language = await loadPersistedLanguagePreference();
-      const layout = await applyLanguageLayoutDirection(language, {
-        reloadOnChange: true,
-      });
+      try {
+        const language = await loadPersistedLanguagePreference();
+        const layout = await applyLanguageLayoutDirection(language, {
+          reloadOnChange: true,
+        });
 
-      if (layout.didChange || cancelled) {
-        return;
+        if (layout.didChange || cancelled) {
+          return;
+        }
+
+        setInitialLanguage(language);
+      } catch {
+        if (!cancelled) {
+          setInitialLanguage('en');
+        }
+      } finally {
+        if (!cancelled) {
+          setLanguageReady(true);
+        }
       }
-
-      setInitialLanguage(language);
-      setLanguageReady(true);
     };
 
     void hydrateLanguage();
@@ -253,21 +313,28 @@ export default function RootLayout() {
   }, [initialLanguage]);
 
   useEffect(() => {
-    if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady || !languageReady) {
+    if (!startupReady) {
       return;
     }
 
     void SplashScreen.hideAsync();
-  }, [authReady, bannerReady, bannerThemeReady, fontsLoaded, languageReady]);
+  }, [startupReady]);
 
-  if (!fontsLoaded || !bannerReady || !authReady || !bannerThemeReady || !languageReady || !initialLanguage) {
-    return null;
+  if (!startupReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
+        <Text style={{ color: '#25324c', fontFamily: 'serif', fontSize: 42 }}>HiTeam</Text>
+        <ActivityIndicator color="#3155ff" size="small" style={{ marginTop: 22 }} />
+      </View>
+    );
   }
+
+  const resolvedInitialLanguage = initialLanguage ?? 'en';
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BannerThemeProvider initialTheme={bannerTheme}>
-        <I18nProvider initialLanguage={initialLanguage}>
+        <I18nProvider initialLanguage={resolvedInitialLanguage}>
           <HeroUINativeProvider config={{ toast: false, devInfo: { stylingPrinciples: false } }}>
             <AppRouterSlot />
           </HeroUINativeProvider>

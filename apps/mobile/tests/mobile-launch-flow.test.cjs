@@ -83,6 +83,21 @@ function testMobileOwnerRegistrationUsesSharedBackend() {
     "registerOrganizationOwner(",
     "The mobile sign-up form must submit through the shared backend helper.",
   );
+  assertContains(
+    authScreen,
+    "completeAuthenticatedEntry(session, 'organization')",
+    "A newly registered owner must immediately enter organization setup.",
+  );
+  assertContains(
+    authScreen,
+    "localAsUtc - currentSecond",
+    "Timezone labels must calculate offsets without shortOffset support.",
+  );
+  assert.match(
+    api,
+    /response\.status === 409[\s\S]*return await authenticateSession/,
+    "Registration must recover when the account was created before a retry conflict.",
+  );
   assert.match(
     authScreen,
     /mode === ['"]signup['"]/,
@@ -182,15 +197,16 @@ function testExpoImagePickerMatchesExpoSdk() {
 function testExpoNativeDependenciesMatchSdk54() {
   const packageJson = JSON.parse(read("package.json"));
   const expectedDependencies = {
-    expo: "~54.0.36",
-    "expo-file-system": "~19.0.23",
+    expo: "~54.0.37",
+    "expo-constants": "~18.0.14",
+    "expo-file-system": "~19.0.24",
     "expo-font": "~14.0.12",
     "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-localization": "~17.0.9",
     "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.24",
-    "expo-updates": "~29.0.19",
+    "expo-updates": "~29.0.20",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-svg": "15.12.1",
   };
@@ -336,6 +352,31 @@ function testWorkspaceReadyRequiresARealSession() {
   );
 }
 
+function testRootStartupNeverStaysBlank() {
+  const rootLayout = read("app/_layout.tsx");
+
+  assertContains(
+    rootLayout,
+    "export function ErrorBoundary",
+    "Mobile routes must render a recoverable error screen instead of a white screen.",
+  );
+  assertContains(
+    rootLayout,
+    "setStartupDeadlineReached(true)",
+    "Mobile startup must have a deadline when an initializer hangs.",
+  );
+  assertContains(
+    rootLayout,
+    "<ActivityIndicator",
+    "Mobile startup must render visible progress instead of returning null.",
+  );
+  assert.doesNotMatch(
+    rootLayout,
+    /if \(!fontsLoaded[\s\S]{0,300}return null;/,
+    "Mobile startup must not return a permanent blank screen while fonts load.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
@@ -348,5 +389,6 @@ testAllPhotoFlowsUseSharedSdkCompatibleImagePicker();
 testAndroidBirthDateUsesSpinnerPicker();
 testMobileLocationQualityControls();
 testWorkspaceReadyRequiresARealSession();
+testRootStartupNeverStaysBlank();
 
 console.log("mobile launch flow tests passed");

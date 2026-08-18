@@ -120,6 +120,62 @@ async function testGraphFallsBackToResend() {
   }
 }
 
+async function testGraphRetriesTransientFailures() {
+  const originalFetch = globalThis.fetch;
+  let graphSendAttempts = 0;
+
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    if (String(url).includes('login.microsoftonline.com')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: 'token', expires_in: 3600 }),
+      } as Response;
+    }
+
+    if (String(url).includes('graph.microsoft.com')) {
+      graphSendAttempts += 1;
+      if (graphSendAttempts < 3) {
+        return {
+          ok: false,
+          status: 429,
+          text: async () => 'Too Many Requests',
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        status: 202,
+        text: async () => '',
+      } as Response;
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const service = buildLifecycleEmailService({
+      MICROSOFT_GRAPH_TENANT_ID: 'tenant',
+      MICROSOFT_GRAPH_CLIENT_ID: 'client',
+      MICROSOFT_GRAPH_CLIENT_SECRET: 'secret',
+      MICROSOFT_GRAPH_SENDER: 'graph@example.com',
+    });
+
+    const result = await service.sendTransactionalEmail({
+      to: 'user@example.com',
+      subject: 'Retry',
+      html: '<p>Retry</p>',
+      text: 'Retry',
+    });
+
+    assert.equal(result.status, 'accepted');
+    assert.equal(result.provider, 'microsoft_graph');
+    assert.equal(graphSendAttempts, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function testPaymentSuccessfulLifecycleEmailIncludesBillingDetails() {
   const originalFetch = globalThis.fetch;
   const bodies: Array<{
@@ -608,6 +664,7 @@ function testManagerEmailCanBeUsedInMultipleWorkspaces() {
 async function main() {
   await testResendEnablesTransactionalEmail();
   await testGraphFallsBackToResend();
+  await testGraphRetriesTransientFailures();
   await testPaymentSuccessfulLifecycleEmailIncludesBillingDetails();
   await testPasswordResetCreatesHashedTokenAndSendsEmail();
   await testPasswordResetFallsBackFromStaleTenantSlug();

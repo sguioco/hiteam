@@ -828,9 +828,26 @@ export async function registerOrganizationOwner(
   });
 
   if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "Unable to create organization."),
+    const registrationError = await readErrorMessage(
+      response,
+      "Unable to create organization.",
     );
+
+    // The server can finish registration before a timed-out client retry gets
+    // a conflict. Reuse that account instead of trapping the owner in sign-up.
+    if (response.status === 409) {
+      try {
+        return await authenticateSession({
+          email: normalizedEmail,
+          password: payload.password,
+          language,
+        });
+      } catch {
+        // Keep the original registration error for an unrelated conflict.
+      }
+    }
+
+    throw new Error(registrationError);
   }
 
   const registration = (await response.json()) as {
