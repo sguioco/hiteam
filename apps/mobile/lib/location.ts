@@ -13,6 +13,7 @@ const RECENT_ATTENDANCE_LOCATION_MAX_AGE_MS = 30_000;
 const ATTENDANCE_LOCATION_COLLECTION_DURATION_MS = 10_000;
 export const SETUP_LOCATION_COLLECTION_DURATION_MS = 12_000;
 export const MAX_SETUP_LOCATION_ACCURACY_METERS = 100;
+export const IOS_PRECISE_LOCATION_PURPOSE_KEY = "attendanceVerification";
 let lastAttendanceLocationSnapshot: AttendanceLocationSnapshot | null = null;
 
 export type BestLocationCaptureProgress = {
@@ -47,6 +48,37 @@ export function isPreciseLocationError(
   error: unknown,
 ): error is PreciseLocationError {
   return error instanceof PreciseLocationError;
+}
+
+type IosLocationAccuracyAuthorization = "full" | "reduced";
+
+async function getIosLocationAccuracyAuthorization(options?: {
+  requestIfNeeded?: boolean;
+}): Promise<IosLocationAccuracyAuthorization | null> {
+  if (Platform.OS !== "ios") {
+    return null;
+  }
+
+  try {
+    // expo-location exposes the foreground grant on iOS, but not the system
+    // Full/Reduced Accuracy authorization. Query Core Location through the
+    // dedicated native permission API instead of inferring it from one GPS fix.
+    const permissions = await import("react-native-permissions");
+    let accuracy = await permissions.checkLocationAccuracy();
+
+    if (accuracy === "reduced" && options?.requestIfNeeded) {
+      accuracy = await permissions.requestLocationAccuracy({
+        purposeKey: IOS_PRECISE_LOCATION_PURPOSE_KEY,
+      });
+    }
+
+    return accuracy === "full" || accuracy === "reduced" ? accuracy : null;
+  } catch {
+    // Expo Go and older native builds do not contain RNPermissions. Do not
+    // permanently lock onboarding in that case; attendance capture still
+    // validates the actual coordinate accuracy before sending anything.
+    return null;
+  }
 }
 
 export async function captureBestLocationOverTime({
@@ -159,67 +191,70 @@ export async function getPreciseLocationAccessStatus(options?: {
     };
   }
 
-  try {
-    if (
-      Platform.OS === "android" &&
-      permission.android?.accuracy !== "fine" &&
-      requestIfNeeded
-    ) {
-      permission = await Location.requestForegroundPermissionsAsync();
-    }
-
-    if (Platform.OS === "android") {
-      if (isExpoGoAndroid && permission.granted) {
-        return {
-          status: "ready",
-          accuracyMeters: null,
-        };
-      }
-
-      if (permission.android?.accuracy === "fine") {
-        return {
-          status: "ready",
-          accuracyMeters: null,
-        };
-      }
-
-      return {
-        status: "imprecise",
-        accuracyMeters: null,
-      };
-    }
-
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.BestForNavigation,
-      mayShowUserSettingsDialog: false,
-    });
-    const accuracyMeters = Math.round(
-      location.coords.accuracy ?? Number.POSITIVE_INFINITY,
+  if (Platform.OS === "ios") {
+    const locationServicesEnabled = await Location.hasServicesEnabledAsync().catch(
+      () => true,
     );
 
-    if (!Number.isFinite(accuracyMeters)) {
+    if (!locationServicesEnabled) {
+      return {
+        status: "missing",
+        accuracyMeters: null,
+      };
+    }
+
+    const accuracyAuthorization = await getIosLocationAccuracyAuthorization({
+      requestIfNeeded,
+    });
+
+    if (accuracyAuthorization === "reduced") {
       return {
         status: "imprecise",
         accuracyMeters: null,
       };
     }
 
-    if (Platform.OS === "ios" && accuracyMeters > 500) {
-      return {
-        status: "imprecise",
-        accuracyMeters,
-      };
-    }
+    // Full Accuracy is authoritative. A temporarily weak or unavailable GPS
+    // fix indoors must not be presented as a disabled iOS permission.
     return {
       status: "ready",
-      accuracyMeters,
+      accuracyMeters: null,
     };
-  } catch {
+  }
+
+  if (
+    Platform.OS === "android" &&
+    permission.android?.accuracy !== "fine" &&
+    requestIfNeeded
+  ) {
+    permission = await Location.requestForegroundPermissionsAsync();
+  }
+
+  if (Platform.OS === "android") {
+    if (isExpoGoAndroid && permission.granted) {
+      return {
+        status: "ready",
+        accuracyMeters: null,
+      };
+    }
+
+    if (permission.android?.accuracy === "fine") {
+      return {
+        status: "ready",
+        accuracyMeters: null,
+      };
+    }
+
     return {
       status: "imprecise",
       accuracyMeters: null,
     };
   }
+
+  return {
+    status: "ready",
+    accuracyMeters: null,
+  };
 }
 
 export async function capturePreciseAttendanceLocation(
@@ -249,6 +284,16 @@ export async function capturePreciseAttendanceLocation(
   let location: Location.LocationObject;
 
   try {
+    if (Platform.OS === "ios") {
+      const accuracyAuthorization = await getIosLocationAccuracyAuthorization({
+        requestIfNeeded: true,
+      });
+
+      if (accuracyAuthorization === "reduced") {
+        throw new PreciseLocationError("PRECISE_LOCATION_REQUIRED");
+      }
+    }
+
     if (Platform.OS === "android" && permission.android?.accuracy !== "fine") {
       permission = await Location.requestForegroundPermissionsAsync();
     }
@@ -282,23 +327,16 @@ export async function capturePreciseAttendanceLocation(
       accuracy: Location.Accuracy.Highest,
       durationMs: ATTENDANCE_LOCATION_COLLECTION_DURATION_MS,
     });
-  } catch {
+  } catch (error) {
+    if (isPreciseLocationError(error)) {
+      throw error;
+    }
     throw new PreciseLocationError("LOCATION_CAPTURE_FAILED");
   }
 
   const accuracyMeters = Math.round(
     location.coords.accuracy ?? Number.POSITIVE_INFINITY,
   );
-
-  // Expo does not expose the iOS "Precise Location" toggle directly.
-  // In practice, iOS reduced accuracy usually reports a very large uncertainty radius.
-  if (
-    Platform.OS === "ios" &&
-    Number.isFinite(accuracyMeters) &&
-    accuracyMeters > 500
-  ) {
-    throw new PreciseLocationError("PRECISE_LOCATION_REQUIRED");
-  }
 
   if (Platform.OS === "android") {
     const reportedFine = permission.android?.accuracy === "fine";

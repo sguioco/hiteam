@@ -281,6 +281,8 @@ function testAndroidBirthDateUsesSpinnerPicker() {
 function testMobileLocationQualityControls() {
   const location = read("lib/location.ts");
   const organization = read("app/onboarding/organization.tsx");
+  const packageJson = JSON.parse(read("package.json"));
+  const appConfig = JSON.parse(read("app.base.json"));
 
   assertContains(
     location,
@@ -301,6 +303,43 @@ function testMobileLocationQualityControls() {
     location,
     "durationMs: ATTENDANCE_LOCATION_COLLECTION_DURATION_MS",
     "Attendance capture must use the multi-sample location helper.",
+  );
+  assertContains(
+    location,
+    'permissions.checkLocationAccuracy()',
+    "iOS onboarding must read the real Full/Reduced Accuracy authorization.",
+  );
+  assertContains(
+    location,
+    'permissions.requestLocationAccuracy({',
+    "iOS must be able to request temporary precise location access.",
+  );
+  assert.doesNotMatch(
+    location,
+    /Platform\.OS === "ios"[\s\S]{0,160}accuracyMeters > 500/,
+    "A weak indoor GPS fix must not be mistaken for a disabled iOS permission.",
+  );
+  assert.equal(
+    packageJson.dependencies["react-native-permissions"],
+    "5.6.1",
+    "The native iOS accuracy authorization API must be pinned.",
+  );
+  assert.deepEqual(
+    appConfig.expo.ios.infoPlist.NSLocationTemporaryUsageDescriptionDictionary,
+    {
+      attendanceVerification:
+        "HiTeam needs precise location temporarily to confirm that you are inside the approved workplace when starting or ending a shift.",
+    },
+    "iOS must declare the temporary precise-location purpose key.",
+  );
+  assert.ok(
+    appConfig.expo.plugins.some(
+      (plugin) =>
+        Array.isArray(plugin) &&
+        plugin[0] === "react-native-permissions" &&
+        plugin[1]?.iosPermissions?.includes("LocationAccuracy"),
+    ),
+    "The iOS native build must include the LocationAccuracy permission handler.",
   );
   assertContains(
     organization,

@@ -4,7 +4,7 @@
     "slug": "smart",
     "scheme": "hiteam",
     "description": "HiTeam helps companies manage shifts, tasks, attendance, news, and employee performance in one mobile workspace.",
-    "version": "5.0.8",
+    "version": "5.0.9",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -36,6 +36,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Smart uses the front camera to verify your identity before you can enter the workspace.",
         "NSLocationWhenInUseUsageDescription": "Smart uses your precise location to confirm that you are inside the approved work area when starting or ending a shift.",
+        "NSLocationTemporaryUsageDescriptionDictionary": {
+          "attendanceVerification": "HiTeam needs precise location temporarily to confirm that you are inside the approved workplace when starting or ending a shift."
+        },
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -81,6 +84,12 @@
         }
       ],
       [
+        "react-native-permissions",
+        {
+          "iosPermissions": ["LocationAccuracy", "LocationWhenInUse"]
+        }
+      ],
+      [
         "expo-localization",
         {
           "supportedLocales": {
@@ -116,7 +125,7 @@
         "projectId": "35bb3b6c-af5d-410a-b463-0d3da3c0de78"
       }
     },
-    "runtimeVersion": "5.0.8",
+    "runtimeVersion": "5.0.9",
     "updates": {
       "url": "https://u.expo.dev/35bb3b6c-af5d-410a-b463-0d3da3c0de78"
     }
