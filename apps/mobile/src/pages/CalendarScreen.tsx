@@ -79,7 +79,6 @@ import {
   primeTaskTranslations,
   useTranslatedTaskCopy,
 } from "../../lib/use-translated-task-copy";
-import { useWorkspaceRealtimeRefresh } from "../../lib/use-workspace-realtime-refresh";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -781,8 +780,8 @@ export default function CalendarScreen({
       if (cached && !cancelled) {
         const cachedHasRequiredManagerAssignmentData =
           !isManager ||
-          ((cached.value.managerEmployees?.length ?? 0) > 0 &&
-            (cached.value.shiftTemplates?.length ?? 0) > 0);
+          (Array.isArray(cached.value.managerEmployees) &&
+            Array.isArray(cached.value.shiftTemplates));
         const cachedHasOrganizationStartDate = Boolean(
           cached.value.organizationStartDate,
         );
@@ -1007,13 +1006,6 @@ export default function CalendarScreen({
       setSelectedDay(daysInMonth);
     }
   }, [daysInMonth, selectedDay]);
-
-  useWorkspaceRealtimeRefresh({
-    enabled: active,
-    onRefresh: () => {
-      setManualRefreshSignal((current) => current + 1);
-    },
-  });
 
   useEffect(() => {
     if (!organizationStartDate) {

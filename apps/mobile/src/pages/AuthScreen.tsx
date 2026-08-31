@@ -30,7 +30,7 @@ import {
 import { signInLocally } from '../../lib/auth-flow';
 import { isRTLLanguage, useI18n } from '../../lib/i18n';
 import { hapticError, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { warmWorkspaceCachesWithinBudget } from '../../lib/workspace-cache';
+import { warmWorkspaceCaches } from '../../lib/workspace-cache';
 import { PressableScale } from '../../components/ui/pressable-scale';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { BrandWordmark } from '../components/brand-wordmark';
@@ -1150,16 +1150,17 @@ const AuthScreen = () => {
     void bootstrapPushNotifications().catch(() => undefined);
     const workspaceSetupStep = workspaceSetupHint ?? await resolveWorkspaceSetupStep();
 
-    signInLocally({ workspaceSetupStep });
-
     if (workspaceSetupStep) {
+      signInLocally({ workspaceSetupStep });
       router.replace(getWorkspaceSetupHref(workspaceSetupStep) as never);
       return;
     }
 
-    void warmWorkspaceCachesWithinBudget(session.user.roleCodes, 2200, {
+    await warmWorkspaceCaches(session.user.roleCodes, {
+      force: true,
       language,
     }).catch(() => undefined);
+    signInLocally({ workspaceSetupStep: null });
   }
 
   async function handleSignup() {

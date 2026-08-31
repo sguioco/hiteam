@@ -4,16 +4,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
-import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
-import * as Updates from "expo-updates";
 import {
-  DevSettings,
-  I18nManager,
-  Platform,
   type StyleProp,
   type TextStyle,
 } from "react-native";
@@ -2204,33 +2200,11 @@ export function getDirectionalIconStyle(language: AppLanguage) {
 
 export async function applyLanguageLayoutDirection(
   language: AppLanguage,
-  options?: { reloadOnChange?: boolean },
+  _options?: { reloadOnChange?: boolean },
 ) {
   const shouldUseRTL = isRTLLanguage(language);
-  const isExpoGoRuntime = Constants.executionEnvironment === "storeClient";
 
-  if (Platform.OS === "web" || isExpoGoRuntime) {
-    return { didChange: false, isRTL: shouldUseRTL };
-  }
-
-  I18nManager.allowRTL(shouldUseRTL);
-  I18nManager.swapLeftAndRightInRTL(true);
-
-  const didChange = I18nManager.isRTL !== shouldUseRTL;
-
-  if (didChange) {
-    I18nManager.forceRTL(shouldUseRTL);
-
-    if (options?.reloadOnChange ?? true) {
-      if (__DEV__) {
-        DevSettings.reload();
-      } else {
-        await Updates.reloadAsync();
-      }
-    }
-  }
-
-  return { didChange, isRTL: shouldUseRTL };
+  return { didChange: false, isRTL: shouldUseRTL };
 }
 
 function translate(
@@ -2258,6 +2232,8 @@ export function I18nProvider({
   const [language, setLanguageState] = useState<AppLanguage>(
     initialLanguage ?? detectInitialLanguage,
   );
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   useEffect(() => {
     if (initialLanguage) {
@@ -2277,8 +2253,12 @@ export function I18nProvider({
 
   const setLanguage = useCallback(
     async (next: AppLanguage) => {
-      const didDirectionChange =
-        isRTLLanguage(next) !== isRTLLanguage(language);
+      if (next === languageRef.current) {
+        return;
+      }
+
+      languageRef.current = next;
+      setLanguageState(next);
 
       try {
         await FileSystem.writeAsStringAsync(LANGUAGE_STORAGE_PATH, next);
@@ -2287,43 +2267,46 @@ export function I18nProvider({
       }
 
       void updatePreferredLocale(next).catch(() => undefined);
-
-      if (didDirectionChange) {
-        const layout = await applyLanguageLayoutDirection(next, {
-          reloadOnChange: true,
-        });
-        if (!layout.didChange) {
-          setLanguageState(next);
-        }
-        return;
-      }
-
-      setLanguageState(next);
     },
-    [language],
+    [],
   );
+
+  const t = useCallback(
+    (key: TranslationKey, variables?: Record<string, string | number>) =>
+      translate(languageRef.current, key, variables),
+    [],
+  );
+  const tp = useCallback(
+    (
+      count: number,
+      ruForms: [string, string, string],
+      enForms: [string, string],
+    ) => {
+      if (languageRef.current === "ru") {
+        return `${count} ${pluralizeRu(count, ruForms)}`;
+      }
+      return `${count} ${count === 1 ? enForms[0] : enForms[1]}`;
+    },
+    [],
+  );
+  const tc = useCallback((text: string) => {
+    if (languageRef.current === "ru") return text;
+    if (languageRef.current === "en") {
+      return contentTranslations[text] || text;
+    }
+    return text;
+  }, []);
 
   const value = useMemo<I18nContextValue>(() => {
     return {
       language,
       isRTL: isRTLLanguage(language),
       setLanguage,
-      t: (key, variables) => translate(language, key, variables),
-      tp: (count, ruForms, enForms) => {
-        if (language === "ru") {
-          return `${count} ${pluralizeRu(count, ruForms)}`;
-        }
-        return `${count} ${count === 1 ? enForms[0] : enForms[1]}`;
-      },
-      tc: (text) => {
-        if (language === "ru") return text;
-        if (language === "en") {
-          return contentTranslations[text] || text;
-        }
-        return text;
-      },
+      t,
+      tp,
+      tc,
     };
-  }, [language, setLanguage]);
+  }, [language, setLanguage, t, tc, tp]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

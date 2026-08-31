@@ -10,7 +10,6 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Socket } from 'socket.io-client';
 import { AnnouncementItem } from '@smart/types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -29,11 +28,9 @@ import {
   type AppLanguage,
   useI18n,
 } from '../../lib/i18n';
-import { createNotificationsSocket } from '../../lib/notifications-socket';
 import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCache } from '../../lib/screen-cache';
 import { shouldHideTranslatedSourceText } from '../../lib/live-translation-policy';
 import { hasResolvedLiveText, primeLiveTextMap, useLiveTextMap } from '../../lib/use-live-text-map';
-import { useWorkspaceRealtimeRefresh } from '../../lib/use-workspace-realtime-refresh';
 import { getNewsScreenCacheKey, NEWS_SCREEN_CACHE_TTL_MS, warmAnnouncementImages } from '../../lib/workspace-cache';
 import { announcementAspectRatioToNumber } from '../lib/announcement-images';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -395,35 +392,6 @@ export default function NewsScreen({ standalone = false }: NewsScreenProps) {
 
     void warmAnnouncementImages(items);
   }, [items]);
-
-  useEffect(() => {
-    let socket: Socket | null = null;
-    let active = true;
-
-    void createNotificationsSocket().then((instance) => {
-      if (!active) {
-        instance.disconnect();
-        return;
-      }
-
-      socket = instance;
-      socket.on('notifications:new', () => {
-        void loadData();
-      });
-      socket.on('notifications:unread-count', () => {
-        void loadData();
-      });
-    });
-
-    return () => {
-      active = false;
-      socket?.disconnect();
-    };
-  }, [isManager]);
-
-  useWorkspaceRealtimeRefresh({
-    onRefresh: () => loadData({ silent: true }),
-  });
 
   async function handleOpen(item: AnnouncementItem) {
     const nextExpanded = expandedId === item.id ? null : item.id;

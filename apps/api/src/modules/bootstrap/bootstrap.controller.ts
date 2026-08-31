@@ -11,6 +11,15 @@ import { BootstrapService } from './bootstrap.service';
 export class BootstrapController {
   constructor(private readonly bootstrapService: BootstrapService) {}
 
+  @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('workspace')
+  workspace(
+    @CurrentUser() user: JwtUser,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.bootstrapService.workspace(user, query);
+  }
+
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('tasks')
   tasks(

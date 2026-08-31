@@ -32,20 +32,11 @@ export function shouldRequestLiveTextTranslation(
   return hasCyrillic || hasLatin;
 }
 
-export function shouldHideTranslatedSourceText(text: string, language: AppLanguage) {
-  const normalized = text.trim();
-
-  if (!normalized || language === 'ru') {
-    return false;
-  }
-
-  if (containsCyrillic(normalized)) {
-    return true;
-  }
-
-  if (language !== 'en' && containsLatin(normalized)) {
-    return true;
-  }
-
+export function shouldHideTranslatedSourceText(
+  _text: string,
+  _language: AppLanguage,
+) {
+  // Keep the last available source visible while an optional live translation
+  // is prepared. Blank content causes visible flashes across task/news screens.
   return false;
 }

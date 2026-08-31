@@ -1342,6 +1342,104 @@ export type MobileDashboardBootstrapResponse = DashboardBootstrapResponse<
   EmployeeProfileResponse | null
 >;
 
+export type MobileWorkspaceBootstrapResponse = {
+  generatedAt: string;
+  dashboard: MobileDashboardBootstrapResponse;
+  schedule: ManagerScheduleBootstrapResponse<ManagerEmployeeItem>;
+  news: NewsBootstrapResponse<ManagerEmployeeItem>;
+  requests: RequestsBootstrapResponse;
+  leaderboard: LeaderboardBootstrapResponse;
+  chats: ChatThreadItem[];
+};
+
+export async function loadWorkspaceBootstrap(query: {
+  todayDateFrom: string;
+  todayDateTo: string;
+  calendarDateFrom: string;
+  calendarDateTo: string;
+  requestsDateFrom: string;
+  requestsDateTo: string;
+  leaderboardMonth?: string;
+  locationId?: string;
+}): Promise<MobileWorkspaceBootstrapResponse> {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  });
+
+  const response = await authRequest<{
+    generatedAt: string;
+    dashboard: DashboardBootstrapResponse;
+    schedule: ManagerScheduleBootstrapResponse;
+    news: NewsBootstrapResponse;
+    requests: RequestsBootstrapResponse;
+    leaderboard: LeaderboardBootstrapResponse;
+    chats: ChatThreadItem[];
+  }>(`/bootstrap/workspace?${searchParams.toString()}`);
+  const dashboardInitialData = response.dashboard.initialData;
+  const scheduleInitialData = response.schedule.initialData;
+  const newsInitialData = response.news.initialData;
+
+  return {
+    ...response,
+    dashboard: {
+      ...response.dashboard,
+      initialData: {
+        ...dashboardInitialData,
+        employees: (dashboardInitialData.employees ?? []).map(
+          normalizeManagerEmployee,
+        ),
+        groups: dashboardInitialData.groups ?? [],
+        liveSessions: dashboardInitialData.liveSessions ?? [],
+        requests: dashboardInitialData.requests ?? [],
+        scheduleShifts: dashboardInitialData.scheduleShifts ?? [],
+        taskBoard: dashboardInitialData.taskBoard ?? null,
+        personalTaskBoard: dashboardInitialData.personalTaskBoard ?? null,
+        attendanceStatus: dashboardInitialData.attendanceStatus ?? null,
+        profile:
+          (dashboardInitialData.profile as EmployeeProfileResponse | null) ??
+          null,
+        personalHistory: dashboardInitialData.personalHistory ?? null,
+        anomalies: dashboardInitialData.anomalies ?? null,
+        canCheckWorkdays: dashboardInitialData.canCheckWorkdays ?? false,
+        organizationSetup: dashboardInitialData.organizationSetup ?? null,
+      },
+    },
+    schedule: {
+      ...response.schedule,
+      initialData: scheduleInitialData
+        ? {
+            ...scheduleInitialData,
+            employees: (scheduleInitialData.employees ?? []).map(
+              normalizeManagerEmployee,
+            ),
+            groups: scheduleInitialData.groups ?? [],
+            shifts: scheduleInitialData.shifts ?? [],
+            templates: scheduleInitialData.templates ?? [],
+            taskBoard: scheduleInitialData.taskBoard ?? null,
+          }
+        : null,
+    },
+    news: {
+      ...response.news,
+      initialData: {
+        ...newsInitialData,
+        employees: (newsInitialData.employees ?? []).map(
+          normalizeManagerEmployee,
+        ),
+        groups: newsInitialData.groups ?? [],
+        items: newsInitialData.items ?? [],
+      },
+    },
+    requests: response.requests,
+    leaderboard: response.leaderboard,
+    chats: response.chats ?? [],
+  };
+}
+
 export async function loadDashboardBootstrap(query?: {
   dateFrom?: string;
   dateTo?: string;

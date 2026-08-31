@@ -1069,6 +1069,44 @@ export class BootstrapService {
     return mergeTaskBoards([upcomingBoard, overdueBoard]);
   }
 
+  async workspace(
+    user: JwtUser,
+    query: Record<string, string | undefined>,
+  ) {
+    const [dashboard, schedule, news, requests, leaderboard, chats] =
+      await Promise.all([
+        this.dashboard(
+          user,
+          query.todayDateFrom,
+          query.todayDateTo,
+        ),
+        this.schedule(
+          user,
+          query.calendarDateFrom,
+          query.calendarDateTo,
+          query.locationId,
+        ),
+        this.news(user),
+        this.requests(
+          user,
+          query.requestsDateFrom,
+          query.requestsDateTo,
+        ),
+        this.leaderboard(user, query.leaderboardMonth),
+        this.collaborationService.listChats(user.sub).catch(() => []),
+      ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      dashboard,
+      schedule,
+      news,
+      requests,
+      leaderboard,
+      chats,
+    };
+  }
+
   private async loadOrganizationSetup(tenantId: string) {
     return this.orgService.getSetup(tenantId).catch(() => ({
       configured: false,

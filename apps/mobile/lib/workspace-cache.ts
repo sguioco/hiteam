@@ -18,10 +18,15 @@ import {
   loadNewsBootstrap,
   loadRequestsBootstrap,
   loadTodayBootstrap,
+  loadWorkspaceBootstrap,
 } from "./api";
-import { getWorkspaceScope } from "./workspace-scope";
+import { getWorkspaceScope, hydrateWorkspaceScope } from "./workspace-scope";
 import { resolveEmployeeAvatarSource } from "./employee-avatar";
-import { readScreenCache, writeScreenCache } from "./screen-cache";
+import {
+  getScreenCacheScope,
+  readScreenCache,
+  writeScreenCache,
+} from "./screen-cache";
 import { formatDateKeyInTimeZone } from "./timezone";
 import { primeLiveTextMap } from "./use-live-text-map";
 import { primeTaskTranslations } from "./use-translated-task-copy";
@@ -37,6 +42,7 @@ type ManagerScheduleInitialData = NonNullable<
   Awaited<ReturnType<typeof loadManagerScheduleBootstrap>>["initialData"]
 >;
 type CalendarScreenCacheValue = {
+  organizationStartDate?: string | null;
   shifts: ManagerScheduleInitialData["shifts"];
   tasks: TaskItem[];
   managerEmployees?: ManagerScheduleInitialData["employees"];
@@ -68,7 +74,7 @@ export const NEWS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const REQUESTS_SCREEN_CACHE_TTL_MS = 5 * 60_000;
 export const CHATS_SCREEN_CACHE_KEY = "chats-screen:v1";
 export const CHATS_SCREEN_CACHE_TTL_MS = 60_000;
-export const WORKSPACE_REFRESH_INTERVAL_MS = 10_000;
+export const WORKSPACE_REFRESH_INTERVAL_MS = 60_000;
 
 export type RequestsScreenCacheValue = {
   balances: RequestsBalances;
@@ -80,10 +86,12 @@ export type RequestsScreenCacheValue = {
 const WORKSPACE_WARMUP_MIN_INTERVAL_MS = WORKSPACE_REFRESH_INTERVAL_MS;
 
 let lastWorkspaceWarmupAt = 0;
+let lastWorkspaceWarmupScope = "";
 let workspaceWarmupPromise: Promise<void> | null = null;
-let workspaceBackgroundWarmupPromise: Promise<void> | null = null;
+let workspaceWarmupScope = "";
 let queuedWorkspaceWarmup:
   | {
+      cacheScope: string;
       options?: { force?: boolean; language?: AppLanguage };
       roleCodes: string[];
     }
@@ -95,12 +103,6 @@ function addDays(date: Date, amount: number) {
   return next;
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export function getCalendarScreenCacheKey(
   date = new Date(),
   isManager = false,
@@ -109,7 +111,7 @@ export function getCalendarScreenCacheKey(
   const scope = isManager ? "manager" : "employee";
   const locationScope =
     isManager && locationId ? `:${locationId}` : "";
-  return `calendar-screen:v3:${scope}${locationScope}:${date.getFullYear()}-${date.getMonth()}`;
+  return `calendar-screen:v4:${scope}${locationScope}:${date.getFullYear()}-${date.getMonth()}`;
 }
 
 export function getNewsScreenCacheKey(isManager: boolean) {
@@ -154,6 +156,13 @@ function buildRequestsDateRange(date = new Date()) {
     dateFrom: `${rangeStart.getFullYear()}-${`${rangeStart.getMonth() + 1}`.padStart(2, "0")}-${`${rangeStart.getDate()}`.padStart(2, "0")}`,
     dateTo: `${rangeEnd.getFullYear()}-${`${rangeEnd.getMonth() + 1}`.padStart(2, "0")}-${`${rangeEnd.getDate()}`.padStart(2, "0")}`,
   };
+}
+
+function formatLocalDateKey(date: Date) {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(
+    2,
+    "0",
+  )}-${`${date.getDate()}`.padStart(2, "0")}`;
 }
 
 function getRemoteImageUri(
@@ -399,29 +408,142 @@ async function warmManagerScreenCache(
   ]);
 }
 
-function warmWorkspaceBackgroundCaches(
-  isManager: boolean,
-  attendanceTrackingEnabled: boolean,
+async function fetchAndCommitWorkspaceSnapshot(
+  roleCodes: string[],
   language?: AppLanguage,
 ) {
-  if (workspaceBackgroundWarmupPromise) {
-    return workspaceBackgroundWarmupPromise;
-  }
-
-  workspaceBackgroundWarmupPromise = (async () => {
-    await Promise.allSettled([
-      warmCalendarScreenCache(new Date(), isManager, language),
-      attendanceTrackingEnabled
-        ? warmLeaderboardScreenCache()
-        : Promise.resolve(),
-      warmNewsScreenCache(isManager, language),
-      warmRequestsScreenCache(new Date(), language),
-    ]);
-  })().finally(() => {
-    workspaceBackgroundWarmupPromise = null;
+  const cacheScope = getScreenCacheScope();
+  const now = new Date();
+  const workspaceScope = await hydrateWorkspaceScope();
+  const { previousDateKey, nextDateKey } = buildTodayDateRange();
+  const calendarRange = buildCalendarDateRange(now);
+  const requestsRange = buildRequestsDateRange(now);
+  const snapshot = await loadWorkspaceBootstrap({
+    todayDateFrom: previousDateKey,
+    todayDateTo: nextDateKey,
+    calendarDateFrom: formatLocalDateKey(calendarRange.rangeStart),
+    calendarDateTo: formatLocalDateKey(calendarRange.rangeEnd),
+    requestsDateFrom: requestsRange.dateFrom,
+    requestsDateTo: requestsRange.dateTo,
+    ...(workspaceScope?.locationId
+      ? { locationId: workspaceScope.locationId }
+      : {}),
   });
 
-  return workspaceBackgroundWarmupPromise;
+  if (cacheScope !== getScreenCacheScope()) {
+    return;
+  }
+
+  const dashboard = snapshot.dashboard.initialData;
+  const schedule = snapshot.schedule.initialData;
+  const profile = dashboard.profile;
+  const todayTasks = dashboard.taskBoard?.tasks ?? [];
+  const attendanceTrackingEnabled =
+    dashboard.organizationSetup?.attendanceTrackingEnabled ?? true;
+  const isManager =
+    hasManagerAccess(roleCodes) || !attendanceTrackingEnabled;
+  const scheduleTasks = schedule?.taskBoard?.tasks ?? [];
+  const organizationCreatedAt = schedule?.organizationSetup?.company?.createdAt;
+  const calendarPayload: CalendarScreenCacheValue = isManager
+    ? {
+        organizationStartDate:
+          typeof organizationCreatedAt === "string"
+            ? organizationCreatedAt
+            : organizationCreatedAt?.toISOString() ?? null,
+        shifts: [],
+        tasks: scheduleTasks,
+        managerEmployees: schedule?.employees ?? [],
+        managerGroups: schedule?.groups ?? [],
+        managerShifts: schedule?.shifts ?? [],
+        shiftTemplates: schedule?.templates ?? [],
+        managerLocations: schedule?.locations ?? [],
+      }
+    : {
+        organizationStartDate:
+          typeof organizationCreatedAt === "string"
+            ? organizationCreatedAt
+            : organizationCreatedAt?.toISOString() ?? null,
+        shifts: schedule?.shifts ?? [],
+        tasks: scheduleTasks,
+      };
+  const todayPayload: TodayScreenCacheValue = {
+    attendanceStatus: dashboard.attendanceStatus,
+    attendanceTrackingEnabled,
+    profile,
+    shifts: dashboard.scheduleShifts,
+    tasks: todayTasks,
+  };
+  const newsItems = snapshot.news.initialData.items;
+  const requestData = snapshot.requests.initialData;
+
+  const cacheWrites: Array<Promise<void>> = [
+    writeScreenCache(TODAY_SCREEN_CACHE_KEY, todayPayload),
+    writeScreenCache(
+      getCalendarScreenCacheKey(
+        now,
+        isManager,
+        workspaceScope?.locationId,
+      ),
+      calendarPayload,
+    ),
+    writeScreenCache(getNewsScreenCacheKey(isManager), newsItems),
+    writeScreenCache(
+      getLeaderboardScreenCacheKey(snapshot.leaderboard.initialData.month.key),
+      snapshot.leaderboard.initialData,
+    ),
+    writeScreenCache(CHATS_SCREEN_CACHE_KEY, snapshot.chats),
+  ];
+
+  if (profile) {
+    cacheWrites.push(writeScreenCache(PROFILE_SCREEN_CACHE_KEY, profile));
+  }
+
+  if (isManager) {
+    cacheWrites.push(
+      writeScreenCache(MANAGER_SCREEN_CACHE_KEY, {
+        profile,
+        employees: dashboard.employees,
+        liveSessions: dashboard.liveSessions,
+        tasks: todayTasks,
+      }),
+    );
+  }
+
+  if (requestData.balances && requestData.calendar) {
+    cacheWrites.push(
+      writeScreenCache(getRequestsScreenCacheKey(now), {
+        balances: requestData.balances,
+        items: requestData.items,
+        calendar: requestData.calendar,
+        tasks: requestData.tasks,
+      }),
+    );
+  }
+
+  await Promise.all(cacheWrites);
+
+  if (language) {
+    void Promise.allSettled([
+      primeTaskTranslations(
+        [...todayTasks, ...scheduleTasks, ...requestData.tasks],
+        language,
+      ),
+      primeLiveTextMap(collectAnnouncementTexts(newsItems), language),
+    ]);
+  }
+
+  void Promise.allSettled([
+    prefetchImageSources([
+      profile ? buildProfileAvatarSource(profile) : null,
+      ...dashboard.employees.map((employee) => employee.avatar),
+    ]),
+    prefetchImageSources([
+      ...collectTaskPhotoUris(todayTasks),
+      ...collectTaskPhotoUris(scheduleTasks),
+      ...collectTaskPhotoUris(requestData.tasks),
+    ]),
+    prefetchImageSources(newsItems.map((item) => item.imageUrl)),
+  ]);
 }
 
 export async function warmAnnouncementImages(items: AnnouncementItem[]) {
@@ -432,13 +554,30 @@ export async function hydrateWorkspaceCaches(
   roleCodes: string[],
   language?: AppLanguage,
 ) {
-  const isManager = hasManagerAccess(roleCodes);
+  await hydrateWorkspaceScope();
+  const todaySnapshot = await readScreenCache<TodayScreenCacheValue>(
+    TODAY_SCREEN_CACHE_KEY,
+    TODAY_SCREEN_CACHE_TTL_MS,
+  );
+  const isManager =
+    hasManagerAccess(roleCodes) ||
+    todaySnapshot?.value.attendanceTrackingEnabled === false;
+  const workspaceScope = getWorkspaceScope();
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(
+    2,
+    "0",
+  )}`;
 
   const results = await Promise.allSettled([
-    readScreenCache(TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS),
+    Promise.resolve(todaySnapshot),
     readScreenCache(PROFILE_SCREEN_CACHE_KEY, PROFILE_SCREEN_CACHE_TTL_MS),
     readScreenCache(
-      getCalendarScreenCacheKey(new Date(), isManager),
+      getCalendarScreenCacheKey(
+        new Date(),
+        isManager,
+        workspaceScope?.locationId,
+      ),
       WORKSPACE_REFRESH_INTERVAL_MS,
     ),
     readScreenCache(getNewsScreenCacheKey(isManager), NEWS_SCREEN_CACHE_TTL_MS),
@@ -447,6 +586,10 @@ export async function hydrateWorkspaceCaches(
     isManager
       ? readScreenCache(MANAGER_SCREEN_CACHE_KEY, MANAGER_SCREEN_CACHE_TTL_MS)
       : Promise.resolve(null),
+    readScreenCache(
+      getLeaderboardScreenCacheKey(currentMonthKey),
+      LEADERBOARD_SCREEN_CACHE_TTL_MS,
+    ),
   ]);
 
   if (!language) {
@@ -473,7 +616,7 @@ export async function hydrateWorkspaceCaches(
       ? results[3].value.value
       : [];
 
-  await Promise.allSettled([
+  void Promise.allSettled([
     taskBuckets.length > 0
       ? primeTaskTranslations(taskBuckets, language)
       : Promise.resolve(),
@@ -487,9 +630,17 @@ export async function warmWorkspaceCaches(
   roleCodes: string[],
   options?: { force?: boolean; language?: AppLanguage },
 ) {
+  const cacheScope = getScreenCacheScope();
+
   if (workspaceWarmupPromise) {
+    if (workspaceWarmupScope !== cacheScope) {
+      await workspaceWarmupPromise.catch(() => undefined);
+      return warmWorkspaceCaches(roleCodes, options);
+    }
+
     if (options?.force) {
       queuedWorkspaceWarmup = {
+        cacheScope,
         roleCodes: [...roleCodes],
         options: { ...options, force: true },
       };
@@ -500,70 +651,26 @@ export async function warmWorkspaceCaches(
 
   if (
     !options?.force &&
+    lastWorkspaceWarmupScope === cacheScope &&
     Date.now() - lastWorkspaceWarmupAt < WORKSPACE_WARMUP_MIN_INTERVAL_MS
   ) {
     return;
   }
 
+  workspaceWarmupScope = cacheScope;
   workspaceWarmupPromise = (async () => {
-    const isManager = hasManagerAccess(roleCodes);
-    const profile = await warmProfileScreenCache().catch(() => null);
-    const todayResult = await warmTodayScreenCache(
-      profile,
-      options?.language,
-    ).catch(() => null);
-    const attendanceTrackingEnabled =
-      todayResult?.attendanceTrackingEnabled ?? true;
-    const effectiveIsManager = isManager || !attendanceTrackingEnabled;
-
-    await Promise.allSettled([
-      warmChatsScreenCache(),
-      options?.force
-        ? warmCalendarScreenCache(
-            new Date(),
-            effectiveIsManager,
-            options.language,
-          )
-        : Promise.resolve(),
-      effectiveIsManager
-        ? warmManagerScreenCache(profile, options?.language)
-        : Promise.resolve(),
-    ]);
-
+    await fetchAndCommitWorkspaceSnapshot(roleCodes, options?.language);
     lastWorkspaceWarmupAt = Date.now();
-    void warmWorkspaceBackgroundCaches(
-      effectiveIsManager,
-      attendanceTrackingEnabled,
-      options?.language,
-    );
+    lastWorkspaceWarmupScope = cacheScope;
   })().finally(() => {
     workspaceWarmupPromise = null;
+    workspaceWarmupScope = "";
     const nextWarmup = queuedWorkspaceWarmup;
     queuedWorkspaceWarmup = null;
-    if (nextWarmup) {
+    if (nextWarmup?.cacheScope === getScreenCacheScope()) {
       void warmWorkspaceCaches(nextWarmup.roleCodes, nextWarmup.options);
     }
   });
 
   return workspaceWarmupPromise;
-}
-
-export async function warmWorkspaceCachesWithinBudget(
-  roleCodes: string[],
-  budgetMs = 320,
-  options?: { language?: AppLanguage },
-) {
-  const warmup = warmWorkspaceCaches(roleCodes, {
-    force: true,
-    language: options?.language,
-  });
-
-  if (!warmup) {
-    return;
-  }
-
-  await Promise.race([
-    warmup.catch(() => undefined),
-    delay(Math.max(budgetMs, 0)),
-  ]);
 }

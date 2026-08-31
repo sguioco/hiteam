@@ -13,7 +13,6 @@ import { peekScreenCache, readScreenCache, subscribeScreenCache, writeScreenCach
 import { formatDateKeyInTimeZone } from '../../lib/timezone';
 import { primeTaskTranslations } from '../../lib/use-translated-task-copy';
 import { TODAY_SCREEN_CACHE_KEY, TODAY_SCREEN_CACHE_TTL_MS, type TodayScreenCacheValue } from '../../lib/workspace-cache';
-import { useWorkspaceRealtimeRefresh } from '../../lib/use-workspace-realtime-refresh';
 import { resolveAttendanceActionHref } from '../../lib/workspace-setup';
 import MeetingsList from '../components/MeetingsList';
 import ShiftStatusCard from '../components/ShiftStatusCard';
@@ -190,10 +189,6 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       cancelled = true;
     };
   }, [initialSnapshot, refreshAttendance]);
-
-  useWorkspaceRealtimeRefresh({
-    onRefresh: () => refreshAttendance({ silent: true }),
-  });
 
   useEffect(() => {
     const hasCachedSnapshot = Boolean(profile || attendanceStatus || shifts.length || tasks.length);

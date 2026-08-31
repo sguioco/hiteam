@@ -20,7 +20,10 @@ import {
   useI18n,
   type AppLanguage,
 } from '../lib/i18n';
-import { warmWorkspaceCachesWithinBudget } from '../lib/workspace-cache';
+import {
+  hydrateWorkspaceCaches,
+  warmWorkspaceCaches,
+} from '../lib/workspace-cache';
 import {
   getWorkspaceSetupHref,
   isWorkspaceSetupRoute,
@@ -110,7 +113,7 @@ function AppRouterSlot() {
   return (
     <View
       {...(Platform.OS === 'web' ? { dir: direction } : {})}
-      style={{ flex: 1, backgroundColor: '#ffffff' }}
+      style={{ flex: 1, backgroundColor: '#ffffff', direction }}
     >
       <Slot />
     </View>
@@ -272,15 +275,26 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!initialLanguage) {
+      return;
+    }
+
     let cancelled = false;
 
     const hydrateAuth = async () => {
       try {
         const session = await restorePersistedSession();
-        const workspaceSetupStep =
+        const [workspaceSetupStep] = await Promise.all([
           session?.user.workspaceAccessAllowed
-            ? await resolveWorkspaceSetupStep()
-            : null;
+            ? resolveWorkspaceSetupStep()
+            : Promise.resolve(null),
+          session?.user.workspaceAccessAllowed
+            ? hydrateWorkspaceCaches(
+                session.user.roleCodes,
+                initialLanguage,
+              )
+            : Promise.resolve(),
+        ]);
         if (cancelled) {
           return;
         }
@@ -292,9 +306,9 @@ export default function RootLayout() {
           workspaceSetupStep,
         });
 
-        if (session?.user.workspaceAccessAllowed && !workspaceSetupStep && initialLanguage) {
+        if (session?.user.workspaceAccessAllowed && !workspaceSetupStep) {
           void bootstrapPushNotifications();
-          await warmWorkspaceCachesWithinBudget(session.user.roleCodes, 240, {
+          void warmWorkspaceCaches(session.user.roleCodes, {
             language: initialLanguage,
           });
         }

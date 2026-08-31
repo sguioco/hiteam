@@ -255,3 +255,7 @@ export function setScreenCacheScope(scope: string | null | undefined) {
   memoryCache.clear();
   notifyAllCacheListeners(null);
 }
+
+export function getScreenCacheScope() {
+  return activeCacheScope;
+}

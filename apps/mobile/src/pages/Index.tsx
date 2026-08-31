@@ -34,7 +34,6 @@ import {
 } from "../../lib/auth-flow";
 import {
   loadMyProfile,
-  loadTodayBootstrap,
   refreshCurrentSession,
 } from "../../lib/api";
 import { createCollaborationSocket } from "../../lib/collaboration-socket";
@@ -71,7 +70,6 @@ import {
   peekScreenCache,
   readScreenCache,
   subscribeScreenCache,
-  writeScreenCache,
 } from "../../lib/screen-cache";
 import { getTodayNavBadgeState } from "../../lib/today-task-state";
 
@@ -322,6 +320,7 @@ const Index = () => {
     initialTodaySnapshot?.value.attendanceTrackingEnabled ?? true,
   );
   const appStateRef = useRef(AppState.currentState);
+  const languageRef = useRef(language);
   const startShiftPromptDismissedUntilRef = useRef(0);
   const handWaveRotation = useSharedValue(0);
   const isManager = hasManagerAccess(roleCodes);
@@ -456,25 +455,32 @@ const Index = () => {
   }, [handWaveRotation]);
 
   useEffect(() => {
+    languageRef.current = language;
+
+    if (hasWorkspaceEntry) {
+      void hydrateWorkspaceCaches(roleCodes, language);
+    }
+  }, [hasWorkspaceEntry, language, roleCodes]);
+
+  useEffect(() => {
     if (!hasWorkspaceEntry) {
       return;
     }
 
-    void hydrateWorkspaceCaches(roleCodes, language);
-    void warmWorkspaceCaches(roleCodes, { language });
+    void warmWorkspaceCaches(roleCodes, { language: languageRef.current });
 
     const interval = setInterval(() => {
       if (appStateRef.current !== "active") {
         return;
       }
 
-      void warmWorkspaceCaches(roleCodes, { language });
+      void warmWorkspaceCaches(roleCodes, { language: languageRef.current });
     }, WORKSPACE_REFRESH_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
     };
-  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
+  }, [hasWorkspaceEntry, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -489,6 +495,17 @@ const Index = () => {
           entry?.tasks ?? [],
           entry?.profile?.primaryLocation?.timezone,
         ).hasBadge,
+      );
+
+      if (!entry?.attendanceTrackingEnabled) {
+        applyStartShiftPrompt(null);
+        return;
+      }
+
+      applyStartShiftPrompt(
+        entry?.attendanceStatus
+          ? buildStartShiftPrompt(entry.attendanceStatus, entry.shifts)
+          : null,
       );
     };
 
@@ -505,7 +522,7 @@ const Index = () => {
     });
 
     return unsubscribe;
-  }, [hasWorkspaceEntry]);
+  }, [applyStartShiftPrompt, hasWorkspaceEntry]);
 
   useEffect(() => {
     if (!isTasksOnlyOrganization) {
@@ -565,18 +582,6 @@ const Index = () => {
 
       setNavProfile(entry?.value ?? null);
 
-      if (!entry?.value?.avatarUrl) {
-        void loadMyProfile()
-          .then((profile) => {
-            if (cancelled) {
-              return;
-            }
-
-            setNavProfile(profile);
-            return writeScreenCache(PROFILE_SCREEN_CACHE_KEY, profile);
-          })
-          .catch(() => undefined);
-      }
     });
 
     return () => {
@@ -608,8 +613,11 @@ const Index = () => {
         nextState === "active"
       ) {
         void refreshSessionRoleCodes().then((nextRoleCodes) => {
-          void hydrateWorkspaceCaches(nextRoleCodes, language);
-          void warmWorkspaceCaches(nextRoleCodes, { force: true, language });
+          void hydrateWorkspaceCaches(nextRoleCodes, languageRef.current);
+          void warmWorkspaceCaches(nextRoleCodes, {
+            force: true,
+            language: languageRef.current,
+          });
         });
         triggerAppEntry();
       }
@@ -618,7 +626,7 @@ const Index = () => {
     return () => {
       subscription.remove();
     };
-  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
+  }, [hasWorkspaceEntry, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!hasWorkspaceEntry) {
@@ -638,8 +646,11 @@ const Index = () => {
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
         void refreshSessionRoleCodes().then((nextRoleCodes) => {
-          void hydrateWorkspaceCaches(nextRoleCodes, language);
-          void warmWorkspaceCaches(nextRoleCodes, { force: true, language });
+          void hydrateWorkspaceCaches(nextRoleCodes, languageRef.current);
+          void warmWorkspaceCaches(nextRoleCodes, {
+            force: true,
+            language: languageRef.current,
+          });
         });
       }, 180);
     };
@@ -681,54 +692,16 @@ const Index = () => {
       notificationsSocket?.disconnect();
       collaborationSocket?.disconnect();
     };
-  }, [hasWorkspaceEntry, language, refreshSessionRoleCodes, roleCodes]);
+  }, [hasWorkspaceEntry, refreshSessionRoleCodes, roleCodes]);
 
   useEffect(() => {
     if (!appEntrySignal || !hasWorkspaceEntry) {
       return;
     }
-
-    let cancelled = false;
-
-    const refreshStartShiftPrompt = async () => {
-      try {
-        const todayBootstrap = await loadTodayBootstrap();
-        if (cancelled) {
-          return;
-        }
-
-        if (!todayBootstrap.attendanceTrackingEnabled) {
-          setStartShiftPrompt(null);
-          setStartShiftPromptVisible(false);
-          return;
-        }
-
-        const nextPrompt = todayBootstrap.attendanceStatus
-          ? buildStartShiftPrompt(
-              todayBootstrap.attendanceStatus,
-              todayBootstrap.shifts,
-            )
-          : null;
-        applyStartShiftPrompt(nextPrompt);
-      } catch {
-        if (!cancelled) {
-          setStartShiftPrompt(null);
-          setStartShiftPromptVisible(false);
-        }
-      }
-    };
-
-    void refreshStartShiftPrompt();
-    void warmWorkspaceCaches(roleCodes, { language });
-
-    return () => {
-      cancelled = true;
-    };
+    void warmWorkspaceCaches(roleCodes, { language: languageRef.current });
   }, [
     appEntrySignal,
-    applyStartShiftPrompt,
     hasWorkspaceEntry,
-    language,
     roleCodes,
   ]);
 

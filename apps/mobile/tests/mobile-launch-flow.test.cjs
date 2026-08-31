@@ -416,6 +416,72 @@ function testRootStartupNeverStaysBlank() {
   );
 }
 
+function testWorkspaceUsesOnePersistentBackendSnapshot() {
+  const api = read("lib/api.ts");
+  const cache = read("lib/workspace-cache.ts");
+  const rootLayout = read("app/_layout.tsx");
+  const authScreen = read("src/pages/AuthScreen.tsx");
+  const index = read("src/pages/Index.tsx");
+
+  assertContains(
+    api,
+    'authRequest<{',
+    "The mobile workspace snapshot must be loaded through the authenticated backend client.",
+  );
+  assertContains(
+    api,
+    '`/bootstrap/workspace?${searchParams.toString()}`',
+    "Workspace data must come from one backend-first bootstrap endpoint.",
+  );
+  assertContains(
+    cache,
+    "fetchAndCommitWorkspaceSnapshot",
+    "The backend workspace response must be committed as one persistent screen snapshot.",
+  );
+  assert.match(
+    rootLayout,
+    /restorePersistedSession\(\)[\s\S]*hydrateWorkspaceCaches\([\s\S]*updateAuthFlowState\(/,
+    "Cold launch must restore disk snapshots before authenticated screens mount.",
+  );
+  assert.match(
+    authScreen,
+    /await warmWorkspaceCaches\([\s\S]*signInLocally\(\{ workspaceSetupStep: null \}\)/,
+    "First sign-in must prepare the workspace snapshot before opening the tab shell.",
+  );
+  assertContains(
+    index,
+    'collaborationSocket.on("workspace:refresh", scheduleWorkspaceRefresh)',
+    "Live backend workspace events must refresh the shared snapshot.",
+  );
+}
+
+function testLanguageChangesNeverReloadTheApp() {
+  const i18n = read("lib/i18n.tsx");
+  const translationPolicy = read("lib/live-translation-policy.ts");
+  const rootLayout = read("app/_layout.tsx");
+
+  assert.doesNotMatch(
+    i18n,
+    /Updates\.reloadAsync|DevSettings\.reload|I18nManager\.forceRTL/,
+    "Changing language or text direction must never restart the native app.",
+  );
+  assert.match(
+    i18n,
+    /setLanguageState\(next\)[\s\S]*writeAsStringAsync\(LANGUAGE_STORAGE_PATH, next\)/,
+    "Language must update in memory immediately, before persistence finishes.",
+  );
+  assertContains(
+    rootLayout,
+    "style={{ flex: 1, backgroundColor: '#ffffff', direction }}",
+    "The mounted app tree must switch LTR/RTL direction without remounting.",
+  );
+  assert.match(
+    translationPolicy,
+    /Blank content causes visible flashes[\s\S]*return false;/,
+    "Dynamic content must keep its source visible until live translation is ready.",
+  );
+}
+
 testMobileTaskApiUsesSharedBackend();
 testMobileScreensUseSharedTaskApi();
 testMobileOwnerRegistrationUsesSharedBackend();
@@ -429,5 +495,7 @@ testAndroidBirthDateUsesSpinnerPicker();
 testMobileLocationQualityControls();
 testWorkspaceReadyRequiresARealSession();
 testRootStartupNeverStaysBlank();
+testWorkspaceUsesOnePersistentBackendSnapshot();
+testLanguageChangesNeverReloadTheApp();
 
 console.log("mobile launch flow tests passed");
