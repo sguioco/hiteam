@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import { config } from 'dotenv';
 
 // This file performs real writes in both systems. It is deliberately opt-in and
 // requires a disposable HiTeam tenant plus an Altegio test location.
-config({ path: '.env.e2e.local' });
+config({ path: resolve(__dirname, '../../../.env.e2e.local') });
 
 const required = (key: string) => {
   const value = process.env[key]?.trim();
@@ -14,16 +15,17 @@ const required = (key: string) => {
 async function request<T>(
   baseUrl: string,
   path: string,
-  options: { token?: string; body?: unknown } = {},
+  options: { token?: string; body?: unknown; method?: 'DELETE' | 'GET' | 'POST' } = {},
 ): Promise<T> {
+  const method = options.method ?? (options.body ? 'POST' : 'GET');
   const response = await fetch(`${baseUrl}${path}`, {
-    method: options.body ? 'POST' : 'GET',
+    method,
     headers: {
       Accept: 'application/json',
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
@@ -65,11 +67,14 @@ async function main() {
   });
 
   const before = await request<PilotStatus>(baseUrl, '/altegio/pilot', { token: login.accessToken });
-  assert.equal(
-    before.connected,
-    false,
-    'The E2E tenant already has a Pilot connection. Use a disposable test tenant.',
-  );
+  if (before.connected) {
+    assert.equal(
+      process.env.ALTEGIO_E2E_RESET_EXISTING_CONNECTION,
+      'true',
+      'The E2E tenant already has a Pilot connection. Use a disposable test tenant or explicitly set ALTEGIO_E2E_RESET_EXISTING_CONNECTION=true.',
+    );
+    await request(baseUrl, '/altegio/pilot', { token: login.accessToken, method: 'DELETE' });
+  }
 
   const authorized = await request<{ locations: Array<{ id: string }> }>(
     baseUrl,

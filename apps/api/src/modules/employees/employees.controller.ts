@@ -9,6 +9,7 @@ import { BulkAssignEmployeesDto } from './dto/bulk-assign-employees.dto';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeInvitationDto } from './dto/create-employee-invitation.dto';
 import { EmployeeStatsQueryDto } from './dto/employee-stats-query.dto';
+import { InviteExistingEmployeeDto } from './dto/invite-existing-employee.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { PublicEmailLookupDto } from './dto/public-email-lookup.dto';
 import { PublicPhoneLookupDto } from './dto/public-phone-lookup.dto';
@@ -135,6 +136,13 @@ export class EmployeesController {
   @Patch('bulk-assign')
   bulkAssign(@CurrentUser() user: JwtUser, @Body() dto: BulkAssignEmployeesDto) {
     return this.employeesService.bulkAssignEmployees(user.tenantId, user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Post(':employeeId/invite')
+  inviteExistingEmployee(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string, @Body() dto: InviteExistingEmployeeDto) {
+    return this.employeesService.inviteExistingEmployee(user.tenantId, user.sub, employeeId, dto.email);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

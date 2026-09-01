@@ -680,6 +680,45 @@ export default function EmployeeCardPageClient({
     }
   }
 
+  async function handleInviteImportedEmployee() {
+    const session = getSession();
+    if (!session || !employeeId || !employee) return;
+    const currentEmail = employee.user?.email ?? "";
+    const email = window.prompt(
+      locale === "ru"
+        ? "Укажите рабочий email сотрудника. Приглашение подключится к текущей карточке без дубля."
+        : "Enter the employee work email. The invitation will use the existing profile without a duplicate.",
+      currentEmail.endsWith("@users.hiteam.local") ? "" : currentEmail,
+    )?.trim();
+    if (!email) return;
+
+    try {
+      await apiRequest(`/employees/${employeeId}/invite`, {
+        method: "POST",
+        token: session.accessToken,
+        body: JSON.stringify({ email }),
+      });
+      setNotice({
+        kind: "success",
+        text:
+          locale === "ru"
+            ? "Приглашение отправлено. После регистрации сотрудник будет подключён к этой карточке."
+            : "Invitation sent. After registration, the employee will be connected to this profile.",
+      });
+      await loadEmployeePageData(employeeId);
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "ru"
+              ? "Не удалось отправить приглашение."
+              : "Failed to send invitation.",
+      });
+    }
+  }
+
   async function handleToggleManagerAccess() {
     const session = getSession();
     if (
@@ -990,6 +1029,15 @@ export default function EmployeeCardPageClient({
                 </div>
               ) : null}
             </div>
+            {employee?.altegioTeamMemberId && employee.user?.status !== "ACTIVE" ? (
+              <button
+                className="rounded-xl border border-[#546cf2] bg-[#546cf2] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#455bd6]"
+                onClick={() => void handleInviteImportedEmployee()}
+                type="button"
+              >
+                {locale === "ru" ? "Пригласить в HiTeam" : "Invite to HiTeam"}
+              </button>
+            ) : null}
             {canPromoteToFieldManager ? (
               <button
                 className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
