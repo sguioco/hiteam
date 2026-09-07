@@ -112,8 +112,8 @@ function ResetPasswordForm() {
   }
 
   const loginHref = tenantSlug
-    ? `/login?tenant=${encodeURIComponent(tenantSlug)}`
-    : "/login";
+    ? `/login?force=1&tenant=${encodeURIComponent(tenantSlug)}`
+    : "/login?force=1";
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted p-6">

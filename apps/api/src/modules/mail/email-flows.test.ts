@@ -264,7 +264,7 @@ async function testPaymentSuccessfulLifecycleEmailIncludesBillingDetails() {
   }
 }
 
-async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
+async function testPasswordResetCreatesHashedTokenAndSendsEmail(count = 1) {
   const createdTokens: Array<{ data: { tokenHash: string; userId: string } }> = [];
   const mailCalls: Array<{ email: string; resetToken: string }> = [];
   const auditCalls: unknown[] = [];
@@ -276,7 +276,7 @@ async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
   };
   const prisma = {
     user: {
-      findMany: async () => [user],
+      findMany: async () => Array.from({ length: count }, (_, index) => ({ ...user, id: `user-${index}`, tenant: { name: `Workspace ${index}` } })),
     },
     passwordResetToken: {
       deleteMany: async () => ({ count: 0 }),
@@ -321,12 +321,14 @@ async function testPasswordResetCreatesHashedTokenAndSendsEmail() {
     locale: 'en',
   });
 
-  assert.equal(createdTokens.length, 1);
-  assert.equal(mailCalls.length, 1);
-  assert.equal(auditCalls.length, 1);
+  assert.equal(createdTokens.length, count);
+  assert.equal(mailCalls.length, count);
+  assert.equal(auditCalls.length, count);
   assert.equal(mailCalls[0].email, 'user@example.com');
   assert.notEqual(createdTokens[0].data.tokenHash, mailCalls[0].resetToken);
   assert.equal(createdTokens[0].data.tokenHash.length, 64);
+  assert.equal(new Set(createdTokens.map(token => token.data.tokenHash)).size, count);
+  assert.equal(new Set(createdTokens.map(token => token.data.userId)).size, count);
 }
 
 async function testPasswordResetFallsBackFromStaleTenantSlug() {
@@ -667,6 +669,7 @@ async function main() {
   await testGraphRetriesTransientFailures();
   await testPaymentSuccessfulLifecycleEmailIncludesBillingDetails();
   await testPasswordResetCreatesHashedTokenAndSendsEmail();
+  await testPasswordResetCreatesHashedTokenAndSendsEmail(3);
   await testPasswordResetFallsBackFromStaleTenantSlug();
   await testTransactionalTemplatesUseConfiguredPublicUrl();
   await testEmployeeEmailsRespectGlobalDeliverySwitch();

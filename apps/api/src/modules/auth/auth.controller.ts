@@ -34,6 +34,11 @@ export class AuthController {
     return this.authService.registerOwner(dto);
   }
 
+  @Post('login/workspaces')
+  loginWorkspaces(@Body() dto: LoginDto) {
+    return this.authService.loginWorkspaces(dto);
+  }
+
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);

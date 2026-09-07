@@ -1,0 +1,50 @@
+services:
+  v4fun-site:
+    build:
+      context: .
+    container_name: v4fun-site
+    command: ["node", "src/site-worker.mjs"]
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HEALTH_PORT: "8111"
+    ports:
+      - "127.0.0.1:8111:8111"
+    volumes:
+      - v4fun-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8111/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+
+  v4fun-api:
+    build:
+      context: .
+    container_name: v4fun-api
+    command: ["node", "src/api-worker.mjs"]
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HEALTH_PORT: "8112"
+    ports:
+      - "127.0.0.1:8112:8112"
+    volumes:
+      - v4fun-data:/data
+    depends_on:
+      v4fun-site:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8112/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  v4fun-data:

@@ -11,6 +11,7 @@ const PUBLIC_EXACT_PATHS = new Set([
   "/dpa",
   "/login",
   "/mobile",
+  "/reset-password",
   "/privacy",
   "/privacy-en",
   "/signup",
@@ -134,6 +135,7 @@ export function middleware(request: NextRequest) {
     isPhoneRequest(request) &&
     pathname !== "/" &&
     pathname !== "/account-deletion" &&
+    pathname !== "/reset-password" &&
     pathname !== MOBILE_BLOCK_PATH
   ) {
     const mobileUrl = getPublicRequestUrl(request, MOBILE_BLOCK_PATH);

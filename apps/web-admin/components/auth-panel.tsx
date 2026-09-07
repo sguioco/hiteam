@@ -408,6 +408,8 @@ export function AuthPanel() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginWorkspaces, setLoginWorkspaces] = useState<Array<{ slug: string; name: string }>>([]);
+  const [loginTenant, setLoginTenant] = useState('');
   const [joinEmail, setJoinEmail] = useState('');
   const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
   const [companyLookupError, setCompanyLookupError] = useState('');
@@ -614,6 +616,18 @@ export function AuthPanel() {
 
     try {
       const demoRole = getDemoRoleByCredentials(identifier, password);
+      let tenantSlug = loginTenant || companyLookupResult?.tenantSlug || getExplicitTenantSlug();
+      if (!demoRole && !tenantSlug) {
+        const workspaces = await apiRequest<Array<{ slug: string; name: string }>>('/auth/login/workspaces', {
+          method: 'POST', realBackend: true,
+          body: JSON.stringify({ identifier, password }),
+        });
+        if (workspaces.length > 1) {
+          setLoginWorkspaces(workspaces);
+          return;
+        }
+        tenantSlug = workspaces[0]?.slug ?? '';
+      }
       const session = await apiRequest<AuthSession>('/auth/login', {
         method: 'POST',
         realBackend: true,
@@ -628,8 +642,8 @@ export function AuthPanel() {
               : password,
           ...(demoRole
             ? { tenantSlug: 'demo' }
-            : companyLookupResult?.tenantSlug
-            ? { tenantSlug: companyLookupResult.tenantSlug }
+            : tenantSlug
+            ? { tenantSlug }
             : {}),
         }),
       });
@@ -953,6 +967,16 @@ export function AuthPanel() {
                           </div>
                         ) : null}
 
+                        {loginWorkspaces.length > 1 ? (
+                          <label className="auth-panel-field block space-y-2 text-sm">
+                            <span>{lang === 'ru' ? 'Выберите рабочее пространство' : 'Choose a workspace'}</span>
+                            <select className="w-full rounded-[18px] border bg-white px-4 py-3 text-base" required value={loginTenant} onChange={(event) => setLoginTenant(event.target.value)}>
+                              <option value="" disabled>{lang === 'ru' ? 'Выберите' : 'Select'}</option>
+                              {loginWorkspaces.map((workspace) => <option key={workspace.slug} value={workspace.slug}>{workspace.name} ({workspace.slug})</option>)}
+                            </select>
+                          </label>
+                        ) : null}
+
                         {loginError ? (
                           <div className="auth-panel-field rounded-[18px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                             {loginError}
@@ -965,7 +989,7 @@ export function AuthPanel() {
                             autoComplete="username"
                             disabled={loginLoading}
                             id="login-identifier"
-                            onChange={(event) => setIdentifier(event.target.value)}
+                            onChange={(event) => { setIdentifier(event.target.value); setLoginWorkspaces([]); setLoginTenant(''); }}
                             placeholder={t.emailOrPhone}
                             required
                             type="text"
@@ -981,7 +1005,7 @@ export function AuthPanel() {
                               className="pr-11"
                               disabled={loginLoading}
                               id="login-password"
-                              onChange={(event) => setPassword(event.target.value)}
+                              onChange={(event) => { setPassword(event.target.value); setLoginWorkspaces([]); setLoginTenant(''); }}
                               placeholder={t.password}
                               required
                               type={passwordVisible ? 'text' : 'password'}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
 import {
   type AuthSession,
+  getSession,
   persistSession,
   resolvePostLoginRoute,
   saveTenantSlug,
@@ -148,6 +149,14 @@ export default function JoinInvitationPageClient({
             ? "Не удалось завершить регистрацию."
             : "Failed to complete registration.",
       );
+      setSubmitting(false);
+      return;
+    }
+
+    if (getSession()) {
+      setSuccess(locale === "ru"
+        ? "Сотрудник зарегистрирован. Текущий аккаунт остаётся открытым."
+        : "Employee registered. Your current account remains signed in.");
       setSubmitting(false);
       return;
     }
@@ -422,7 +431,7 @@ export default function JoinInvitationPageClient({
               {locale === "ru" ? "Далее" : "Continue"}
             </button>
           ) : (
-            <button className="solid-button" disabled={submitting} type="submit">
+            <button className="solid-button" disabled={submitting || Boolean(success)} type="submit">
               {submitting
                 ? locale === "ru"
                   ? "Создаём аккаунт..."

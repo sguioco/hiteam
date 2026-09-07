@@ -17,6 +17,7 @@ export class AuthMailerService {
   async sendPasswordResetEmail(params: {
     email: string;
     resetToken: string;
+    workspaceName?: string;
     locale?: string | null;
   }): Promise<TransactionalEmailSendResult> {
     const locale = this.normalizeEmailLocale(params.locale);
@@ -27,7 +28,7 @@ export class AuthMailerService {
 
     return this.lifecycleEmailService.sendTransactionalEmail({
       to: params.email,
-      subject: template.subject,
+      subject: params.workspaceName ? `${template.subject} — ${params.workspaceName}` : template.subject,
       html: this.renderHtml(template, locale),
       text: this.renderText(template),
     });

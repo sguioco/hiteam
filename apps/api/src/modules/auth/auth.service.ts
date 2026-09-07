@@ -293,11 +293,12 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    user: AuthSessionUser;
-  }> {
+  async loginWorkspaces(dto: LoginDto) {
+    const users = await this.findLoginUsers(dto);
+    return users.map((user) => ({ slug: user.tenant.slug, name: user.tenant.name }));
+  }
+
+  private async findLoginUsers(dto: LoginDto) {
     const identifier = (dto.identifier ?? dto.email ?? '').trim();
     if (!identifier) {
       throw new UnauthorizedException('Account identifier is required.');
@@ -334,13 +335,13 @@ export class AuthService {
     const matches = await this.prisma.user.findMany({
       where,
       include: {
+        tenant: { select: { slug: true, name: true } },
         roles: {
           include: {
             role: true,
           },
         },
       },
-      take: 2,
     });
 
     if (matches.length === 0) {
@@ -351,20 +352,29 @@ export class AuthService {
       );
     }
 
+    const validUsers: typeof matches = [];
+    for (const user of matches) {
+      if (user.status === UserStatus.ACTIVE && !this.isBlockedDemoAccount(user.email)
+          && await bcrypt.compare(dto.password, user.passwordHash)) {
+        validUsers.push(user);
+      }
+    }
+    if (!validUsers.length) {
+      throw new UnauthorizedException('Invalid password.');
+    }
+    return validUsers;
+  }
+
+  async login(dto: LoginDto): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: AuthSessionUser;
+  }> {
+    const matches = await this.findLoginUsers(dto);
     if (matches.length > 1) {
       throw new UnauthorizedException('Multiple workspaces found for this account. Contact support or use a direct invite link.');
     }
-
-    let user = matches[0];
-
-    if (!user || user.status !== UserStatus.ACTIVE || this.isBlockedDemoAccount(user.email)) {
-      throw new UnauthorizedException('This account is inactive.');
-    }
-
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid password.');
-    }
+    const user = matches[0];
 
     const {
       accessToken,
@@ -408,6 +418,7 @@ export class AuthService {
       tenantId: true,
       email: true,
       preferredLocale: true,
+      tenant: { select: { name: true } },
     } as const;
     const baseWhere: Prisma.UserWhereInput = {
       email: {
@@ -429,7 +440,6 @@ export class AuthService {
           : {}),
       },
       select: userSelect,
-      take: 2,
     });
 
     let resolvedByEmailFallback = false;
@@ -437,73 +447,68 @@ export class AuthService {
       users = await this.prisma.user.findMany({
         where: baseWhere,
         select: userSelect,
-        take: 2,
       });
-      resolvedByEmailFallback = users.length === 1;
+      resolvedByEmailFallback = users.length > 0;
     }
 
-    const user = users[0] ?? null;
-    if (
-      users.length !== 1 ||
-      !user ||
-      user.email.trim().toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)
-    ) {
-      return { success: true };
-    }
+    for (const user of users) {
+      if (user.email.trim().toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)) continue;
 
-    const token = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
-    const tokenHash = this.hashPasswordResetToken(token);
+      const token = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
+      const tokenHash = this.hashPasswordResetToken(token);
 
-    await this.prisma.$transaction([
-      this.prisma.passwordResetToken.deleteMany({
-        where: {
-          userId: user.id,
-          usedAt: null,
-        },
-      }),
-      this.prisma.passwordResetToken.deleteMany({
-        where: {
-          expiresAt: {
-            lt: new Date(),
+      await this.prisma.$transaction([
+        this.prisma.passwordResetToken.deleteMany({
+          where: {
+            userId: user.id,
+            usedAt: null,
           },
-        },
-      }),
-      this.prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          expiresAt: this.buildPasswordResetExpiry(),
-        },
-      }),
-    ]);
+        }),
+        this.prisma.passwordResetToken.deleteMany({
+          where: {
+            expiresAt: {
+              lt: new Date(),
+            },
+          },
+        }),
+        this.prisma.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash,
+            expiresAt: this.buildPasswordResetExpiry(),
+          },
+        }),
+      ]);
 
-    const delivery = await this.authMailerService.sendPasswordResetEmail({
-      email: user.email,
-      resetToken: token,
-      locale: dto.locale ?? user.preferredLocale,
-    });
-
-    if (delivery.status !== 'accepted') {
-      throw new ServiceUnavailableException(
-        delivery.errorMessage ??
-          'Password reset email provider is not configured or rejected the message.',
-      );
-    }
-
-    await this.auditService.log({
-      tenantId: user.tenantId,
-      actorUserId: user.id,
-      entityType: 'user',
-      entityId: user.id,
-      action: 'auth.password_reset_requested',
-      metadata: {
+      const delivery = await this.authMailerService.sendPasswordResetEmail({
         email: user.email,
-        provider: delivery.provider,
-        requestedTenantSlug: normalizedTenantSlug ?? null,
-        resolvedByEmailFallback,
-      },
-    });
+        resetToken: token,
+        workspaceName: user.tenant?.name,
+        locale: dto.locale ?? user.preferredLocale,
+      });
 
+      if (delivery.status !== 'accepted') {
+        throw new ServiceUnavailableException(
+          delivery.errorMessage ??
+            'Password reset email provider is not configured or rejected the message.',
+        );
+      }
+
+      await this.auditService.log({
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        entityType: 'user',
+        entityId: user.id,
+        action: 'auth.password_reset_requested',
+        metadata: {
+          email: user.email,
+          provider: delivery.provider,
+          requestedTenantSlug: normalizedTenantSlug ?? null,
+          resolvedByEmailFallback,
+        },
+      });
+
+    }
     return { success: true };
   }
 

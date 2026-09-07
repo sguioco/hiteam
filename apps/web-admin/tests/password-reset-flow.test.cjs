@@ -53,3 +53,22 @@ assert.doesNotMatch(
 );
 
 console.log('password reset flow tests passed');
+
+const ts = require('typescript');
+const vm = require('node:vm');
+const middlewareSource = readFileSync(join(__dirname, '../middleware.ts'), 'utf8');
+const context = { exports: {}, Headers, require: (name) => {
+  if (name === 'next/server') return { NextResponse: { next: (options) => ({ next: true, options }), redirect: (url) => ({ redirect: String(url) }) } };
+  if (name === '@/lib/request-origin') return { getPublicRequestUrl: (request, path) => new URL(path, request.nextUrl) };
+  if (name === '@/lib/session-cookie') return { decodeSessionCookie: () => null, SESSION_COOKIE_NAME: 'session' };
+  throw new Error(name);
+} };
+vm.runInNewContext(ts.transpileModule(middlewareSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
+for (const agent of ['Desktop', 'iPhone']) {
+  const result = context.exports.middleware({ nextUrl: new URL('https://hiteam.net/reset-password?token=valid'), headers: new Headers({ 'user-agent': agent }), cookies: { get: () => undefined } });
+  assert.equal(result.next, true, 'Reset link must remain accessible without a session, including phones');
+  assert.equal(result.options.request.headers.get('x-smart-public-route'), '1');
+}
+const protectedResult = context.exports.middleware({ nextUrl: new URL('https://hiteam.net/app'), headers: new Headers(), cookies: { get: () => undefined } });
+assert.match(protectedResult.redirect, /login/);
+console.log('Password reset middleware regression tests passed');

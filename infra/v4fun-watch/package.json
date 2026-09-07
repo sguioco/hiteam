@@ -1,0 +1,14 @@
+{
+  "name": "v4fun-watch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:site": "node src/site-worker.mjs",
+    "start:api": "node src/api-worker.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
