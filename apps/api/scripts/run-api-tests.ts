@@ -9,6 +9,7 @@ const suites = [
   'src/modules/billing/billing-flows.test.ts',
   'src/modules/kommo/kommo-flows.test.ts',
   'src/modules/collaboration/collaboration-flows.test.ts',
+  'src/modules/collaboration/task-automation.test.ts',
   'src/modules/employees/employees-flows.test.ts',
   'src/modules/org/org-radius.test.ts',
   'src/modules/org/org-multi-location.test.ts',

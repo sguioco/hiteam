@@ -340,6 +340,14 @@ async function performApiFetch(
       headers,
       signal: requestSignal.signal,
     });
+  } catch (error) {
+    if (error instanceof TypeError || (error instanceof Error && error.name === "AbortError")) {
+      const locale = getRuntimeLocale();
+      throw new Error(locale === "ru"
+        ? "Не удалось получить ответ. Проверьте соединение и повторите попытку."
+        : "No response received. Check your connection and try again.");
+    }
+    throw error;
   } finally {
     requestSignal.cleanup();
   }

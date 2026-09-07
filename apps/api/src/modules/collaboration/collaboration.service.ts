@@ -3321,7 +3321,17 @@ export class CollaborationService {
           not: null,
         },
       },
-      include: this.taskInclude(),
+      // Reminders need no history, photos or checklist. History grows on every run.
+      select: {
+        id: true,
+        title: true,
+        dueAt: true,
+        lastReminderAt: true,
+        lastEscalatedAt: true,
+        assigneeEmployee: {
+          select: { id: true, firstName: true, lastName: true, userId: true },
+        },
+      },
     });
 
     const reminderTasks = tasks.filter(
