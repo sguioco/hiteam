@@ -191,6 +191,7 @@ export class AltegioStaffScheduleSyncService {
 
         if (matched) {
           usedEmployeeIds.add(matched.id);
+          if (localEmployees.find(employee => employee.id === matched.id)?.status === EmployeeStatus.TERMINATED) continue;
           const { firstName, lastName } = splitAltegioStaffName(staff.name);
           await this.prisma.employee.update({
             where: { id: matched.id },

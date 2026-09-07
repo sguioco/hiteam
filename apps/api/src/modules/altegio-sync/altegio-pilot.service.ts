@@ -405,6 +405,7 @@ export class AltegioPilotService {
       const matchedId =
         linksByStaff.get(remote.id) ??
         matchEmployeeToAltegioStaff(matchable, remote, pilotLocation.altegioLocationId)?.id;
+      if (matchedId && localEmployees.find(employee => employee.id === matchedId)?.status === EmployeeStatus.TERMINATED) continue;
       let employeeId = matchedId;
       if (!employeeId) {
         employeeId = await this.createPilotEmployee(tenantId, pilotLocation, department.id, position.id, remote);

@@ -93,6 +93,7 @@ const translations = {
     "login.countryPickerSearchPlaceholder": "Поиск по стране или коду",
     "login.identifierPlaceholder": "Email или телефон",
     "login.signInErrorEmpty": "Заполните номер телефона или email и пароль",
+    "login.chooseWorkspace": "Выберите компанию",
     "login.signInErrorEmail": "Введите корректный email",
     "login.signInPhoneHint":
       "Вход по номеру подготовлен на интерфейсе. Проверка номера будет подключена на API",
@@ -1086,6 +1087,7 @@ const translations = {
     "login.countryPickerSearchPlaceholder": "Search by country or code",
     "login.identifierPlaceholder": "Email or phone",
     "login.signInErrorEmpty": "Enter your phone number or email and password.",
+    "login.chooseWorkspace": "Choose a company",
     "login.signInErrorEmail": "Enter a valid email.",
     "login.signInPhoneHint":
       "Phone sign-in UI is ready. Phone verification still needs API support.",

@@ -781,6 +781,17 @@ export async function translateTexts(
   return payload.translations ?? {};
 }
 
+export type LoginWorkspace = { slug: string; name: string };
+
+export async function getLoginWorkspaces(email: string, password: string) {
+  const response = await fetchWithTimeout('/api/v1/auth/login/workspaces', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Unable to sign in.'));
+  return (await response.json()) as LoginWorkspace[];
+}
+
 export async function signInWithEmail(
   email: string,
   password: string,

@@ -26,6 +26,8 @@ import {
   registerOrganizationOwner,
   requestPasswordReset,
   signInWithEmail,
+  getLoginWorkspaces,
+  type LoginWorkspace,
 } from '../../lib/api';
 import { signInLocally } from '../../lib/auth-flow';
 import { isRTLLanguage, useI18n } from '../../lib/i18n';
@@ -399,6 +401,8 @@ const AuthScreen = () => {
   const [joinPhone, setJoinPhone] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [loginWorkspaces, setLoginWorkspaces] = useState<LoginWorkspace[]>([]);
+  const [loginTenant, setLoginTenant] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [signupForm, setSignupForm] = useState<SignupForm>(createInitialSignupForm);
   const [signupPasswordVisible, setSignupPasswordVisible] = useState(false);
@@ -1216,7 +1220,7 @@ const AuthScreen = () => {
 
   async function handleSignIn() {
     const trimmedIdentifier = identifier.trim();
-    const trimmedPassword = password.trim();
+    const trimmedPassword = password;
 
     if (!trimmedIdentifier || !trimmedPassword) {
       hapticError();
@@ -1232,10 +1236,20 @@ const AuthScreen = () => {
         throw new Error(t('login.signInPhoneHint'));
       }
 
+      let tenantSlug = loginTenant;
+      if (!tenantSlug) {
+        const workspaces = await getLoginWorkspaces(trimmedIdentifier, trimmedPassword);
+        if (workspaces.length > 1) {
+          Keyboard.dismiss();
+          setLoginWorkspaces(workspaces);
+          return;
+        }
+        tenantSlug = workspaces[0]?.slug ?? '';
+      }
       const session = await signInWithEmail(
         trimmedIdentifier,
         trimmedPassword,
-        undefined,
+        tenantSlug,
         language,
       );
       hapticSuccess();
@@ -1989,6 +2003,7 @@ const AuthScreen = () => {
                                 key="signin-identifier-input"
                                 onChangeText={(nextValue) => {
                                   setIdentifier(nextValue);
+                                  setLoginWorkspaces([]); setLoginTenant('');
                                   setMessage(null);
                                 }}
                                 placeholder={t('login.emailPlaceholder')}
@@ -2000,6 +2015,19 @@ const AuthScreen = () => {
                                 textAlign="center"
                                 value={identifier}
                               />
+                              {loginWorkspaces.length > 1 ? (
+                                <View className="gap-2">
+                                  <Text className="text-center text-[16px]">{t('login.chooseWorkspace')}</Text>
+                                  {loginWorkspaces.map((workspace) => (
+                                    <Pressable key={workspace.slug} accessibilityRole="radio" accessibilityState={{ checked: loginTenant === workspace.slug }} disabled={submitting}
+                                      onPress={() => setLoginTenant(workspace.slug)}
+                                      className={`rounded-[18px] border px-4 py-4 ${loginTenant === workspace.slug ? 'border-[#546cf2] bg-[#eef1ff]' : 'border-[#ddd5c7] bg-white'}`}>
+                                      <Text className="text-center text-[16px]">{workspace.name}</Text>
+                                      <Text className="text-center text-[12px] text-[#6f7892]">{workspace.slug}</Text>
+                                    </Pressable>
+                                  ))}
+                                </View>
+                              ) : null}
                               <View className="relative justify-center">
                                 <View
                                   className="absolute left-0 top-0 h-[58px] w-14"
@@ -2012,6 +2040,7 @@ const AuthScreen = () => {
                                   key="signin-password-input"
                                   onChangeText={(nextValue) => {
                                     setPassword(nextValue);
+                                    setLoginWorkspaces([]); setLoginTenant('');
                                     setMessage(null);
                                   }}
                                   placeholder={t('login.passwordPlaceholder')}

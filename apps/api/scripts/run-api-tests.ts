@@ -11,6 +11,7 @@ const suites = [
   'src/modules/collaboration/collaboration-flows.test.ts',
   'src/modules/collaboration/task-automation.test.ts',
   'src/modules/employees/employees-flows.test.ts',
+  'src/modules/employees/employee-removal.test.ts',
   'src/modules/org/org-radius.test.ts',
   'src/modules/org/org-multi-location.test.ts',
   'src/modules/altegio-sync/altegio-sync.helpers.test.ts',

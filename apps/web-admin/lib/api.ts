@@ -517,6 +517,11 @@ function humanizeAuthErrorMessage(message: string): string {
   }
 
   switch (message) {
+    case "Only the owner can remove employees.":
+      return locale === "ru" ? "Удалить сотрудника может только владелец." : message;
+    case "An owner cannot be removed. Change their role first.":
+      return locale === "ru" ? "Нельзя удалить владельца. Сначала измените его роль." : message;
+
     case "Account with this email is not registered.":
       return locale === "ru"
         ? "Аккаунт с таким email не зарегистрирован."

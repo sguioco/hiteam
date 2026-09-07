@@ -325,7 +325,23 @@ export default function EmployeeCardPageClient({
   >(null);
   const [selectedAttendanceSessionId, setSelectedAttendanceSessionId] =
     useState<string | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const session = getSession();
+  const canRemoveEmployee = session?.user.roleCodes.includes('tenant_owner') && employee?.user?.id !== session?.user.id && !employee?.user.roles?.some(entry => entry.role?.code === 'tenant_owner');
+
+  async function handleRemoveEmployee() {
+    if (!session || !employee || removing) return;
+    setRemoving(true);
+    try {
+      await apiRequest(`/employees/${employeeId}`, { method: 'DELETE', token: session.accessToken });
+      window.location.replace('/employees');
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : (locale === 'ru' ? 'Не удалось удалить сотрудника.' : 'Unable to remove employee.') });
+      setRemoveOpen(false);
+      setRemoving(false);
+    }
+  }
   const canManageRoles = hasDesktopAdminAccess(session?.user.roleCodes ?? []);
   const canManageWorkMode = hasWorkspaceManagerAccess(
     session?.user.roleCodes ?? [],
@@ -944,6 +960,20 @@ export default function EmployeeCardPageClient({
   return (
     <AdminShell>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <Dialog open={removeOpen} onOpenChange={(open) => { if (!removing) setRemoveOpen(open); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{locale === 'ru' ? 'Удалить сотрудника из компании?' : 'Remove employee from the company?'}</DialogTitle>
+              <DialogDescription>{locale === 'ru'
+                ? `${fullName} потеряет доступ к этой компании. История работы сохранится. Аккаунты в других компаниях не изменятся.`
+                : `${fullName} will lose access to this company. Work history will be kept. Accounts in other companies will stay unchanged.`}</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="rounded-xl border px-4 py-3" disabled={removing} onClick={() => setRemoveOpen(false)}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button>
+              <button type="button" className="rounded-xl bg-red-600 px-4 py-3 text-white disabled:opacity-50" disabled={removing} onClick={() => void handleRemoveEmployee()}>{locale === 'ru' ? (removing ? 'Удаляем…' : 'Удалить из компании') : (removing ? 'Removing…' : 'Remove from company')}</button>
+            </div>
+          </DialogContent>
+        </Dialog>
         {/* Header */}
         <div className="mb-6">
           <Link
@@ -954,6 +984,11 @@ export default function EmployeeCardPageClient({
             {locale === "ru" ? "Сотрудники" : "Employees"}
           </Link>
 
+          {canRemoveEmployee ? (
+            <button type="button" className="mb-3 rounded-xl border border-red-200 px-4 py-3 text-sm text-red-700" onClick={() => setRemoveOpen(true)}>
+              {locale === 'ru' ? 'Удалить из компании' : 'Remove from company'}
+            </button>
+          ) : null}
           <div className="flex flex-wrap items-center gap-4">
             {employee?.avatarUrl ? (
               <img

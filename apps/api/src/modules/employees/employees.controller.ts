@@ -146,6 +146,13 @@ export class EmployeesController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('tenant_owner')
+  @Delete(':employeeId')
+  removeEmployee(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {
+    return this.employeesService.removeEmployee(user.tenantId, user.sub, employeeId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get(':employeeId')
   getById(@CurrentUser() user: JwtUser, @Param('employeeId') employeeId: string) {

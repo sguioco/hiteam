@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   InternalServerErrorException,
   Injectable,
@@ -644,6 +645,7 @@ export class EmployeesService {
     const employeeRecords = await this.prisma.employee.findMany({
       where: {
         tenantId,
+        status: { not: EmployeeStatus.TERMINATED },
         ...(query.companyId ? { companyId: query.companyId } : {}),
         ...(query.locationId
           ? {
@@ -752,6 +754,7 @@ export class EmployeesService {
     const total = await this.prisma.employee.count({
       where: {
         tenantId,
+        status: { not: EmployeeStatus.TERMINATED },
         companyId: query.companyId || undefined,
       },
     });
@@ -864,6 +867,37 @@ export class EmployeesService {
     );
 
     return this.getManagerAccess(tenantId, employeeId);
+  }
+
+  async removeEmployee(tenantId: string, actorUserId: string, employeeId: string) {
+    const employee = await this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: { id: actorUserId, tenantId, status: UserStatus.ACTIVE, roles: { some: { role: { code: 'tenant_owner' } } } },
+        select: { id: true },
+      });
+      if (!actor) throw new ForbiddenException('Only the owner can remove employees.');
+      const employee = await tx.employee.findFirst({
+        where: { id: employeeId, tenantId },
+        include: { user: { include: { roles: { include: { role: true } } } } },
+      });
+      if (!employee) throw new NotFoundException('Employee not found.');
+      if (employee.userId === actorUserId || employee.user.roles.some(entry => entry.role.code === 'tenant_owner')) {
+        throw new BadRequestException('An owner cannot be removed. Change their role first.');
+      }
+      await tx.employee.update({ where: { id: employee.id }, data: { status: EmployeeStatus.TERMINATED } });
+      await tx.user.update({ where: { id: employee.userId }, data: { status: UserStatus.SUSPENDED, workspaceAccessAllowed: false } });
+      await tx.session.deleteMany({ where: { userId: employee.userId } });
+      await tx.passwordResetToken.deleteMany({ where: { userId: employee.userId } });
+      await tx.pushDevice.deleteMany({ where: { userId: employee.userId } });
+      await tx.employeeInvitation.updateMany({ where: { tenantId, OR: [{ employeeId }, { userId: employee.userId }] }, data: { status: EmployeeInvitationStatus.EXPIRED, expiresAt: new Date() } });
+      await tx.workGroupMembership.deleteMany({ where: { tenantId, employeeId } });
+      return employee;
+    });
+    await this.auditService.log({ tenantId, actorUserId, entityType: 'employee', entityId: employeeId, action: 'employee.removed' });
+    this.syncBillingSeatsInBackground(tenantId);
+    this.kommoService.recordEmployeeUpdated(tenantId, employeeId, 'removed');
+    this.emitWorkspaceRefreshForUser(employee.userId, 'employee_removed');
+    return { deleted: true, employeeId };
   }
 
   async updateEmployeeAccess(tenantId: string, actorUserId: string, employeeId: string, dto: UpdateEmployeeAccessDto) {
