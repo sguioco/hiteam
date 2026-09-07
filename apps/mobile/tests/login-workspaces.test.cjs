@@ -25,3 +25,13 @@ vm.createContext(context); vm.runInContext(handler, context);
   await context.handleSignIn(); assert.equal(calls[1][2],'only');
   console.log('Mobile workspace selection tests passed');
 })();
+
+const apiSource = fs.readFileSync(path.join(__dirname, '../lib/api.ts'), 'utf8');
+const messageStart = apiSource.indexOf('function humanizeApiMessage(');
+const messageEnd = apiSource.indexOf('function resolveRequestTimeoutMs(', messageStart);
+const messageContext = { getRuntimeBackendLocale: () => 'ru' };
+vm.createContext(messageContext);
+vm.runInContext(ts.transpileModule(apiSource.slice(messageStart, messageEnd), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, messageContext);
+assert.match(messageContext.humanizeApiMessage('Multiple workspaces found for this account. Contact support or use a direct invite link.'), /Выберите компанию/);
+assert.equal(messageContext.humanizeApiMessage('Invalid password.'), 'Неверный пароль.');
+console.log('Mobile login error messages passed');

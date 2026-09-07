@@ -305,6 +305,17 @@ function humanizeApiMessage(message: string) {
   const locale = getRuntimeBackendLocale();
 
   switch (message) {
+    case "Multiple workspaces found for this account. Contact support or use a direct invite link.":
+      return locale === "ru"
+        ? "Для аккаунта найдено несколько компаний. Выберите компанию для входа."
+        : "This account belongs to multiple companies. Choose a company to sign in.";
+    case "Invalid password.":
+      return locale === "ru" ? "Неверный пароль." : message;
+    case "Account with this email is not registered.":
+      return locale === "ru" ? "Аккаунт с таким email не зарегистрирован." : message;
+    case "This account is inactive.":
+      return locale === "ru" ? "Доступ к аккаунту закрыт. Обратитесь к администратору компании." : message;
+
     case "Unexpected server error. Please try again.":
       return getGenericServerErrorMessage(500);
     case "The service is temporarily unavailable. Please try again.":
