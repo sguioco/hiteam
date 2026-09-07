@@ -466,12 +466,14 @@ export type EmployeeApiRecord = {
   user?: {
     id?: string;
     email?: string;
+    status?: string;
     roles?: Array<{
       role?: {
         code: string;
       } | null;
     }> | null;
   } | null;
+  altegioTeamMemberId?: string | null;
   company?: NamedEntityOption | null;
   department?: NamedEntityOption | null;
   primaryLocation?: (NamedEntityOption & { timezone?: string | null }) | null;
@@ -504,6 +506,7 @@ export type EmployeeDetailRecord = EmployeeApiRecord & {
   user: {
     email: string;
     id?: string;
+    status?: string;
     roles?: Array<{
       role?: {
         code: string;

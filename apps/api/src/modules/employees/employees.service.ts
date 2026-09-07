@@ -70,6 +70,7 @@ const COMPANY_SELECT = {
 const EMPLOYEE_USER_SELECT = {
   id: true,
   email: true,
+  status: true,
   preferredLocale: true,
   roles: {
     include: {
@@ -102,6 +103,7 @@ const EMPLOYEE_LIST_SELECT = {
   hireDate: true,
   createdAt: true,
   updatedAt: true,
+  altegioTeamMemberId: true,
   user: {
     select: EMPLOYEE_USER_SELECT,
   },
@@ -1652,6 +1654,56 @@ export class EmployeesService {
     };
   }
 
+  async inviteExistingEmployee(tenantId: string, actorUserId: string, employeeId: string, emailInput: string) {
+    const email = emailInput.trim().toLowerCase();
+    if (email.endsWith('@users.hiteam.local')) {
+      throw new BadRequestException('Укажите настоящий email сотрудника, а не технический адрес Altegio.');
+    }
+    const visibilityWhere = await this.resolveEmployeeVisibilityWhere(tenantId, actorUserId);
+    const employee = await this.prisma.employee.findFirstOrThrow({
+      where: { tenantId, id: employeeId, ...(visibilityWhere ?? {}) },
+      select: {
+        id: true, userId: true, companyId: true, altegioTeamMemberId: true, firstName: true, lastName: true,
+        position: { select: { name: true } },
+        user: { select: { status: true } },
+      },
+    });
+    if (!employee.altegioTeamMemberId || !employee.user || employee.user.status === UserStatus.ACTIVE) {
+      throw new BadRequestException('Пригласить можно только импортированного сотрудника без активного аккаунта.');
+    }
+    const owner = await this.prisma.user.findFirst({ where: { tenantId, email }, select: { id: true } });
+    if (owner && owner.id !== employee.userId) throw new ConflictException('Такой email уже зарегистрирован.');
+    const otherInvite = await this.prisma.employeeInvitation.findFirst({
+      where: { tenantId, email, NOT: { employeeId } }, select: { id: true },
+    });
+    if (otherInvite) throw new ConflictException('На этот email уже отправлено приглашение другому сотруднику.');
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, include: { companies: { take: 1 } } });
+    const locale = await this.resolveActorEmailLocale(actorUserId, tenant.locale);
+    const token = randomBytes(24).toString('hex');
+    const existing = await this.prisma.employeeInvitation.findFirst({ where: { tenantId, employeeId }, select: { id: true } });
+    const data = {
+      companyId: employee.companyId, email, invitedByUserId: actorUserId, userId: employee.userId, employeeId,
+      tokenHash: this.hashToken(token), expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      status: EmployeeInvitationStatus.INVITED, locale, lastSentAt: new Date(), submittedAt: null,
+      approvedAt: null, approvedByUserId: null, rejectedAt: null, rejectedReason: null,
+      firstName: employee.firstName, lastName: employee.lastName, positionTitle: employee.position.name,
+    };
+    const invitation = await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: employee.userId }, data: { email, status: UserStatus.INVITED, preferredLocale: locale } });
+      return existing
+        ? tx.employeeInvitation.update({ where: { id: existing.id }, data: { ...data, resentCount: { increment: 1 } } })
+        : tx.employeeInvitation.create({ data: { tenantId, ...data, resentCount: 0 } });
+    });
+    const delivery = await this.sendInvitationEmailSafely({
+      email, companyName: tenant.companies[0]?.name ?? tenant.name, tenantName: tenant.name, token, locale,
+    });
+    await this.auditService.log({
+      tenantId, actorUserId, entityType: 'employee_invitation', entityId: invitation.id,
+      action: 'employee.existing_altegio_employee_invited', metadata: { employeeId, email, emailDeliveryStatus: delivery.status },
+    });
+    return { id: invitation.id, email, status: invitation.status, invitationUrl: this.invitationsMailer.buildInvitationUrl(token), emailDeliveryStatus: delivery.status, emailDeliveryProvider: delivery.provider };
+  }
+
   async updateInvitationSetup(
     tenantId: string,
     actorUserId: string,
@@ -2040,7 +2092,7 @@ export class EmployeesService {
       },
     });
 
-    if (existingUser) {
+    if (existingUser && existingUser.id !== invitation.userId) {
       throw new ConflictException('Такой email уже зарегистрирован.');
     }
 
@@ -2092,7 +2144,10 @@ export class EmployeesService {
 
     try {
       result = await this.prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
+        const user = invitation.userId ? await tx.user.update({
+          where: { id: invitation.userId },
+          data: { email: registrationEmail, passwordHash, status: UserStatus.ACTIVE, preferredLocale, workspaceAccessAllowed: shouldAutoApprove },
+        }) : await tx.user.create({
           data: {
             tenantId: invitation.tenantId,
             email: registrationEmail,
@@ -2103,7 +2158,7 @@ export class EmployeesService {
           },
         });
 
-        await this.syncEmployeeAccessRole(tx, user.id, invitation.tenantId, approvedRole);
+        if (!invitation.userId) await this.syncEmployeeAccessRole(tx, user.id, invitation.tenantId, approvedRole);
 
         const companyId = await this.resolveInvitationCompanyId(tx, invitation.tenantId, invitation.companyId);
         const departmentId = await this.resolveDefaultDepartmentId(tx, invitation.tenantId);
@@ -2127,7 +2182,10 @@ export class EmployeesService {
         const employeeAvatarStorageKey = avatar?.key ?? invitation.avatarStorageKey ?? null;
         const employeeAvatarUrl = avatar?.url ?? invitation.avatarUrl ?? null;
 
-        const employee = await tx.employee.create({
+        const employee = invitation.employeeId ? await tx.employee.update({
+          where: { id: invitation.employeeId },
+          data: { firstName: dto.firstName.trim(), lastName: dto.lastName.trim(), middleName: dto.middleName?.trim() || null, birthDate: new Date(dto.birthDate), gender: dto.gender, phone: dto.phone.trim(), avatarStorageKey: employeeAvatarStorageKey, avatarUrl: employeeAvatarUrl },
+        }) : await tx.employee.create({
           data: {
             tenantId: invitation.tenantId,
             userId: user.id,
@@ -2150,12 +2208,12 @@ export class EmployeesService {
           },
         });
 
-        await this.syncPrimaryLocationAssignment(tx, employee, user.id);
-        if (invitation.approvedGroupId) {
+        if (!invitation.employeeId) await this.syncPrimaryLocationAssignment(tx, employee, user.id);
+        if (!invitation.employeeId && invitation.approvedGroupId) {
           await this.syncEmployeeGroupMembership(tx, invitation.tenantId, employee.id, invitation.approvedGroupId);
         }
 
-        if (effectiveWorkMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId) {
+        if (!invitation.employeeId && effectiveWorkMode === EmployeeWorkMode.STATIONARY && invitation.approvedShiftTemplateId) {
           await this.createInitialShiftFromTemplate(
             tx,
             invitation.tenantId,

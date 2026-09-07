@@ -94,8 +94,35 @@ function testInvitationDeletionIsSyncedToKommo() {
   );
 }
 
+function testImportedAltegioEmployeeInvitationReusesExistingProfile() {
+  const inviteExistingEmployee = methodBody('inviteExistingEmployee');
+  const registerFromInvitation = methodBody('registerFromInvitation');
+
+  assert.match(
+    inviteExistingEmployee,
+    /resolveEmployeeVisibilityWhere\(tenantId, actorUserId\)/,
+    'Managers may invite only employees in their assigned scope.',
+  );
+  assert.match(
+    inviteExistingEmployee,
+    /userId: employee\.userId, employeeId,/,
+    'An invitation for imported staff must be linked to the existing user and employee.',
+  );
+  assert.match(
+    registerFromInvitation,
+    /invitation\.userId \? await tx\.user\.update/,
+    'Registering an imported employee must activate the existing user instead of creating a duplicate.',
+  );
+  assert.match(
+    registerFromInvitation,
+    /invitation\.employeeId \? await tx\.employee\.update/,
+    'Registering an imported employee must update the existing employee instead of creating a duplicate.',
+  );
+}
+
 testInvitationEmailFailureDoesNotBlockKommoSync();
 testReviewEmailsAreSyncedToKommo();
 testInvitationDeletionIsSyncedToKommo();
+testImportedAltegioEmployeeInvitationReusesExistingProfile();
 
 console.log('employees flow tests passed');

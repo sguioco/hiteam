@@ -23,11 +23,35 @@ ALTEGIO_E2E_LOCATION_ID=123456
 
 The local API environment must also contain `ALTEGIO_PARTNER_TOKEN` and
 `ALTEGIO_PILOT_ENCRYPTION_KEY` in `.env.local`. Start the API with the current
-code, then run:
+code. If the default local ports are already in use, start the dependencies on
+alternative ports and run the API explicitly against them:
 
 ```bash
-pnpm --filter @smart/api test:altegio-pilot:e2e
+LOCAL_POSTGRES_PORT=5434 LOCAL_REDIS_PORT=6380 \
+  docker compose --profile local-backend up -d postgres redis
+
+DATABASE_URL='postgresql://smart:smart@localhost:5434/smart' \
+REDIS_URL='redis://localhost:6380' \
+  corepack pnpm --filter @smart/api dev
 ```
+
+In a second terminal, run:
+
+```bash
+ALTEGIO_E2E_ENABLED=true corepack pnpm --filter @smart/api test:altegio-pilot:e2e
+```
+
+The runner intentionally stops if the disposable tenant is already connected.
+To make a new local run against that same **disposable** tenant, explicitly opt
+into deleting only its local Pilot connection and links first:
+
+```bash
+ALTEGIO_E2E_ENABLED=true ALTEGIO_E2E_RESET_EXISTING_CONNECTION=true \
+  corepack pnpm --filter @smart/api test:altegio-pilot:e2e
+```
+
+This reset does not delete data from Altegio. Do not use it for a real customer
+tenant.
 
 The scenario verifies real HiTeam login, one-time Altegio credential exchange,
 the expected location entitlement, automatic synchronization on location

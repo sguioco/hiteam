@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: smart
       POSTGRES_PASSWORD: smart
     ports:
-      - '5433:5432'
+      - '${LOCAL_POSTGRES_PORT:-5433}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U smart -d smart']
       interval: 5s
@@ -20,7 +20,7 @@ services:
     profiles: ['local-backend']
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - '${LOCAL_REDIS_PORT:-6379}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
