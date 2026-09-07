@@ -17,6 +17,18 @@ const handlerEnd = authPanelSource.indexOf(
 );
 const handlerSource = authPanelSource.slice(handlerStart, handlerEnd);
 
+const loginHandlerStart = authPanelSource.indexOf(
+  'async function handleLoginSubmit',
+);
+const loginHandlerEnd = authPanelSource.indexOf(
+  '\n  async function ',
+  loginHandlerStart + 1,
+);
+const loginHandlerSource = authPanelSource.slice(
+  loginHandlerStart,
+  loginHandlerEnd,
+);
+
 assert.notEqual(handlerStart, -1, 'Password reset handler must exist.');
 assert.match(
   handlerSource,
@@ -27,6 +39,13 @@ assert.doesNotMatch(
   handlerSource,
   /\bgetTenantSlug\(\)/,
   'Password reset must not use a stale tenant stored by a previous session.',
+);
+
+assert.notEqual(loginHandlerStart, -1, 'Sign-in handler must exist.');
+assert.match(
+  loginHandlerSource,
+  /getExplicitTenantSlug\(\)/,
+  'Sign-in must preserve the tenant selected by a password-reset link.',
 );
 
 const explicitTenantStart = authSource.indexOf(
