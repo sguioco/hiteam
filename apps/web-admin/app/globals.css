@@ -591,6 +591,7 @@ body:has(.landing-shell) {
   grid-area: main;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   border-radius: 20px;
 }
@@ -657,6 +658,7 @@ body:has(.landing-shell) {
   gap: 16px;
   height: 100%;
   min-height: 0;
+  min-width: 0;
 }
 
 .daily-activity-panel,
@@ -666,6 +668,7 @@ body:has(.landing-shell) {
   gap: 14px;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -1156,6 +1159,7 @@ body:has(.landing-shell) {
   justify-content: flex-start;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .today-attendance-head h2 {
