@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { EmployeeStatus, ShiftStatus, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { withBusinessSpan } from '../../observability/tracing';
 import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError } from './altegio-b2b.client';
 import {
   ALTEGIO_SHIFT_SOURCE,
@@ -205,6 +206,14 @@ export class AltegioPilotService {
    * Pilot links, rather than Employee.altegioTeamMemberId, are the source of
    * truth: one HiTeam employee may legitimately work in several salons. */
   async sync(tenantId: string, pilotLocationId?: string) {
+    return withBusinessSpan(
+      'altegio.sync.pilot',
+      { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'pilot' },
+      () => this.syncInternal(tenantId, pilotLocationId),
+    );
+  }
+
+  private async syncInternal(tenantId: string, pilotLocationId?: string) {
     const connection = await this.prisma.altegioPilotConnection.findUnique({
       where: { tenantId },
       include: {

@@ -18,6 +18,10 @@
 {{- printf "%s-svc-web-admin" (include "hiteam.fullname" .) -}}
 {{- end -}}
 
+{{- define "hiteam.otelCollectorServiceName" -}}
+{{- printf "%s-otel-collector" (include "hiteam.fullname" .) -}}
+{{- end -}}
+
 {{- define "hiteam.postgresServiceName" -}}
 {{- default "svc-postgres" .Values.postgres.service.name -}}
 {{- end -}}

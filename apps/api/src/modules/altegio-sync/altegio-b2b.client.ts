@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { withBusinessSpan } from '../../observability/tracing';
 
 export class AltegioB2bError extends Error {
   constructor(
@@ -357,6 +358,27 @@ export class AltegioB2bClient {
     includeUserToken = true,
     userTokenOverride?: string,
   ) {
+    return withBusinessSpan(
+      'altegio.api.request',
+      {
+        'rpc.system': 'http',
+        'server.address': 'api.alteg.io',
+        'http.request.method': method,
+        'hiteam.integration.name': 'altegio',
+        'hiteam.integration.operation': altegioOperation(url),
+      },
+      async () => this.requestInternal(method, url, json, accept, includeUserToken, userTokenOverride),
+    );
+  }
+
+  private async requestInternal(
+    method: 'GET' | 'POST' | 'PUT',
+    url: string,
+    json?: Record<string, unknown>,
+    accept = 'application/vnd.api.v2+json',
+    includeUserToken = true,
+    userTokenOverride?: string,
+  ) {
     const partnerToken = this.partnerToken();
     const userToken = userTokenOverride?.trim() || this.systemUserToken();
     if (!partnerToken || (includeUserToken && !userToken)) {
@@ -401,6 +423,18 @@ export class AltegioB2bClient {
       unknown
     >;
   }
+}
+
+function altegioOperation(url: string) {
+  const pathname = new URL(url).pathname;
+  if (pathname.endsWith('/auth')) return 'authenticate_user';
+  if (pathname.includes('/team_members')) return 'list_team_members';
+  if (pathname.endsWith('/staff/quick')) return 'create_team_member';
+  if (pathname.endsWith('/staff/schedule')) return 'staff_schedule';
+  if (pathname.includes('/hooks_settings')) return 'hooks_settings';
+  if (pathname.endsWith('/companies')) return 'list_locations';
+  if (pathname.includes('/company/')) return 'location_profile';
+  return 'unknown';
 }
 
 function optionalString(value: unknown) {

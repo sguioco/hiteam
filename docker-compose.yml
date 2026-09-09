@@ -101,6 +101,11 @@ services:
       # into containers. Pass the Altegio credentials explicitly.
       ALTEGIO_PARTNER_TOKEN: ${ALTEGIO_PARTNER_TOKEN:-}
       ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN: ${ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN:-}
+      # Enable only together with the otel profile. The Collector is internal to
+      # the Compose network and prints sanitized traces to its own logs.
+      OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://otel-collector:4318/v1/traces}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-local}
     ports:
       - '4000:4000'
     depends_on:
@@ -112,6 +117,17 @@ services:
         condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+
+  otel-collector:
+    profiles: ['otel']
+    image: otel/opentelemetry-collector:0.151.0
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./infra/otel/collector.local.yaml:/etc/otelcol/config.yaml:ro
+    expose:
+      - '4317'
+      - '4318'
+      - '13133'
 
   web-admin:
     build:

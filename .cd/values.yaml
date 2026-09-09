@@ -71,6 +71,10 @@ api:
     ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN: ""
     ALTEGIO_CALLBACK_TOKEN: ""
     ALTEGIO_MARKETPLACE_PAYMENT_CURRENCY: "USD"
+    # Tracing is off unless the production values explicitly enable it.
+    OTEL_TRACES_ENABLED: "false"
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+    OTEL_SERVICE_VERSION: ""
 
   resources:
     requests:
@@ -79,6 +83,23 @@ api:
     limits:
       cpu: "1000m"
       memory: "1Gi"
+
+otelCollector:
+  # This in-cluster collector is deliberately disabled by default. In the
+  # initial production rollout it writes sanitized traces to its pod logs.
+  enabled: false
+  image: "otel/opentelemetry-collector:0.151.0"
+  replicas: 1
+  service:
+    port: 4318
+    targetPort: 4318
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
 
 migrations:
   enabled: false

@@ -5,6 +5,7 @@ const root = path.join(__dirname, '..');
 const suites = [
   'src/modules/auth/auth-login.test.ts',
   'src/config/validate-environment.test.ts',
+  'src/observability/request-attributes.test.ts',
   'src/modules/mail/email-flows.test.ts',
   'src/modules/billing/billing-flows.test.ts',
   'src/modules/kommo/kommo-flows.test.ts',

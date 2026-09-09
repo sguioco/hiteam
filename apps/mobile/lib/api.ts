@@ -56,6 +56,7 @@ import { API_URL, FALLBACK_API_URL } from "./api-config";
 import type { AppLanguage } from "./i18n";
 import type { NotificationPreferences } from "./notification-preferences";
 import { setScreenCacheScope } from "./screen-cache";
+import { addTraceparentHeader } from "./trace-context";
 
 const API_REQUEST_TIMEOUT_MS = 20_000;
 const EXTENDED_API_REQUEST_TIMEOUT_MS = 45_000;
@@ -185,6 +186,7 @@ function getMobileRequestHeaders(headers?: HeadersInit) {
     "X-HiTeam-Client-Version",
     Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "unknown",
   );
+  addTraceparentHeader(resolved);
   return resolved;
 }
 

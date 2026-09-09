@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: {{ include "hiteam.fullname" . }}-api
+      annotations:
+        # envFrom secrets are not hot-reloaded by Kubernetes. Rolling the API
+        # when OTel settings change makes chart-only telemetry updates effective.
+        hiteam.net/otel-config-hash: {{ printf "%s|%s|%s" .Values.api.env.OTEL_TRACES_ENABLED .Values.api.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT .Values.api.env.OTEL_SERVICE_VERSION | sha256sum }}
     spec:
       {{- if .Values.sharedInfo.pullSecret.dockerConfigJson }}
       imagePullSecrets:

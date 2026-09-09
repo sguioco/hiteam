@@ -1,0 +1,142 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hiteam.otelCollectorServiceName" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.otelCollectorServiceName" . }}
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      # Must be first: protects the collector from OOM during traffic bursts.
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 128
+        spike_limit_mib: 32
+      # These values are not needed to diagnose backend latency/errors and
+      # must not be written to persistent container logs.
+      attributes/redact:
+        actions:
+          - key: authorization
+            action: delete
+          - key: cookie
+            action: delete
+          - key: set-cookie
+            action: delete
+          - key: http.request.header.authorization
+            action: delete
+          - key: http.request.header.cookie
+            action: delete
+          - key: http.response.header.set-cookie
+            action: delete
+          - key: client.address
+            action: delete
+          - key: network.peer.address
+            action: delete
+          - key: user_agent.original
+            action: delete
+          - key: url.query
+            action: delete
+      batch:
+        timeout: 2s
+        send_batch_size: 128
+
+    exporters:
+      # Initial production sink: traces stay in cluster logs, accessible only
+      # through Kubernetes RBAC. Replace with a managed OTLP exporter later.
+      debug:
+        verbosity: detailed
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, attributes/redact, batch]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hiteam.otelCollectorServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.otelCollectorServiceName" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  replicas: {{ .Values.otelCollector.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "hiteam.otelCollectorServiceName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "hiteam.otelCollectorServiceName" . }}
+      annotations:
+        # ConfigMaps mounted as files update eventually, but the Collector only
+        # reads this configuration at startup; roll it on values changes.
+        hiteam.net/config-hash: {{ toYaml .Values.otelCollector | sha256sum }}
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.otelCollector.image | quote }}
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - name: otlp-http
+              containerPort: {{ .Values.otelCollector.service.targetPort }}
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+{{ toYaml .Values.otelCollector.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hiteam.otelCollectorServiceName" . }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hiteam.otelCollectorServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "hiteam.otelCollectorServiceName" . }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ include "hiteam.otelCollectorServiceName" . }}
+  ports:
+    - name: otlp-http
+      port: {{ .Values.otelCollector.service.port }}
+      targetPort: otlp-http
+      protocol: TCP
+{{- end }}

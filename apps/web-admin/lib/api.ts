@@ -8,6 +8,7 @@ import { demoApiDownload, demoApiRequest, shouldUseDemoApi } from "./demo-api";
 import { isDemoAccessToken } from "./demo-mode";
 import { humanizeValidationError } from "./humanize-validation-error";
 import { getRuntimeLocale } from "./runtime-locale";
+import { addTraceparentHeader } from "./trace-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 let sessionRefreshPromise: Promise<AuthSession | null> | null = null;
@@ -320,6 +321,7 @@ async function performApiFetch(
   const headers = new Headers(options?.headers ?? {});
   headers.set("X-HiTeam-Client", "web");
   headers.set("X-HiTeam-Client-Platform", "browser");
+  addTraceparentHeader(headers);
   if (!(options?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -361,6 +363,7 @@ async function performApiDownloadFetch(
   const headers = new Headers(options?.headers ?? {});
   headers.set("X-HiTeam-Client", "web");
   headers.set("X-HiTeam-Client-Platform", "browser");
+  addTraceparentHeader(headers);
   const token = overrideToken ?? options?.token;
 
   if (token) {
@@ -394,13 +397,15 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   if (!sessionRefreshPromise) {
     sessionRefreshPromise = (async () => {
       try {
+        const headers = new Headers({
+          "Content-Type": "application/json",
+          "X-HiTeam-Client": "web",
+          "X-HiTeam-Client-Platform": "browser",
+        });
+        addTraceparentHeader(headers);
         const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-HiTeam-Client": "web",
-            "X-HiTeam-Client-Platform": "browser",
-          },
+          headers,
           body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
         });
 

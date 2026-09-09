@@ -1,0 +1,45 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  filter/health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.route"] == "/api/v1/health"'
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: http.request.header.set-cookie
+        action: delete
+  batch:
+    timeout: 2s
+    send_batch_size: 128
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/health, attributes/redact, batch]
+      exporters: [debug]

@@ -3,6 +3,7 @@ import { EmployeeStatus, ShiftStatus, UserStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { withBusinessSpan } from '../../observability/tracing';
 import { AltegioB2bClient, type AltegioTeamMember } from './altegio-b2b.client';
 import {
   ALTEGIO_IMPORT_TEMPLATE_CODE,
@@ -75,10 +76,16 @@ export class AltegioStaffScheduleSyncService {
   }
 
   async syncAll(tenantId: string) {
-    const organization = await this.syncOrganization(tenantId);
-    const employees = await this.syncEmployees(tenantId);
-    const schedule = await this.syncSchedule(tenantId);
-    return { organization, employees, schedule };
+    return withBusinessSpan(
+      'altegio.sync.all',
+      { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
+      async () => {
+        const organization = await this.syncOrganization(tenantId);
+        const employees = await this.syncEmployees(tenantId);
+        const schedule = await this.syncSchedule(tenantId);
+        return { organization, employees, schedule };
+      },
+    );
   }
 
   async syncOrganization(tenantId: string) {
@@ -145,6 +152,14 @@ export class AltegioStaffScheduleSyncService {
   }
 
   async syncEmployees(tenantId: string) {
+    return withBusinessSpan(
+      'altegio.sync.employees',
+      { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
+      () => this.syncEmployeesInternal(tenantId),
+    );
+  }
+
+  private async syncEmployeesInternal(tenantId: string) {
     const ctx = await this.requireConnectedContext(tenantId);
     if (!this.altegioB2b.isConfigured()) {
       throw new HttpException(
@@ -280,6 +295,14 @@ export class AltegioStaffScheduleSyncService {
   }
 
   async syncSchedule(tenantId: string, range?: { from?: Date; to?: Date }) {
+    return withBusinessSpan(
+      'altegio.sync.schedule',
+      { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
+      () => this.syncScheduleInternal(tenantId, range),
+    );
+  }
+
+  private async syncScheduleInternal(tenantId: string, range?: { from?: Date; to?: Date }) {
     const ctx = await this.requireConnectedContext(tenantId);
     if (!this.altegioB2b.isConfigured()) {
       throw new HttpException(

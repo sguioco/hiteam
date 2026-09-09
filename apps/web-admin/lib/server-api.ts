@@ -1,4 +1,5 @@
 import type { AuthSession } from "./auth";
+import { addTraceparentHeader } from "./trace-context";
 
 const SERVER_API_URL =
   process.env.INTERNAL_API_URL ??
@@ -42,6 +43,7 @@ export async function serverApiRequest<T>(
   const headers = new Headers(options?.headers ?? {});
   headers.set("X-HiTeam-Client", "web-admin-server");
   headers.set("X-HiTeam-Client-Platform", "server");
+  addTraceparentHeader(headers);
 
   if (!(options?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
