@@ -19,6 +19,7 @@ import {
   Trophy,
   UsersRound,
   Plus,
+  Plug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -167,6 +168,10 @@ function resolveShellPageTitle(pathname: string, locale: Locale) {
     {
       href: toAdminHref("/billing"),
       label: "Billing",
+    },
+    {
+      href: toAdminHref("/integrations"),
+      label: locale === "ru" ? "Интеграции" : "Integrations",
     },
     {
       href: toAdminHref("/organization"),
@@ -1107,6 +1112,14 @@ export function AdminShell({
         href: scheduleHref,
         label: locale === "ru" ? "Календарь" : "Calendar",
         icon: CalendarRange,
+      });
+    }
+
+    if (!managerOnly) {
+      items.push({
+        href: toAdminHref("/integrations"),
+        label: locale === "ru" ? "Интеграции" : "Integrations",
+        icon: Plug,
       });
     }
 

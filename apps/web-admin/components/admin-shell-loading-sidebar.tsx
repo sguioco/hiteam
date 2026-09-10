@@ -8,6 +8,7 @@ import {
   FileText,
   Home,
   ListTodo,
+  Plug,
   Trophy,
   UsersRound,
 } from "lucide-react";
@@ -69,6 +70,11 @@ function getLoadingNavItems(
       href: "/schedule",
       label: isRu ? "Календарь" : "Calendar",
       icon: CalendarRange,
+    },
+    {
+      href: "/integrations",
+      label: isRu ? "Интеграции" : "Integrations",
+      icon: Plug,
     },
   ];
 }

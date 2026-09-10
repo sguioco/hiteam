@@ -198,5 +198,5 @@ export function resolvePostLoginRouteWithAltegio(defaultRoute: string) {
   if (pending.applicationId) {
     params.set("app_id", pending.applicationId);
   }
-  return `/billing?${params.toString()}`;
+  return `/integrations?${params.toString()}`;
 }

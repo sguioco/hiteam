@@ -9,6 +9,7 @@ export const ADMIN_ROUTE_PREFIXES = [
   "/collaboration",
   "/diagnostics",
   "/employees",
+  "/integrations",
   "/leaderboard",
   "/news",
   "/notifications",

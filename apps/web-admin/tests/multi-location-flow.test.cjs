@@ -159,10 +159,10 @@ assert.doesNotMatch(
   /"\/billing\/summary"/,
   "Organization must render Altegio state from its server bootstrap without a client waterfall.",
 );
-assert.match(
+assert.doesNotMatch(
   organization,
-  /initialData\?\.altegio[\s\S]*Boolean\(initialData\?\.altegio\)/,
-  "Altegio banner state must be ready during the first render.",
+  /AltegioIntegrationPanel/,
+  "Organization must not duplicate the dedicated Integrations UI.",
 );
 assert.match(
   organization,

@@ -168,10 +168,10 @@ export function middleware(request: NextRequest) {
     isAltegioEntry &&
     altegioLocationId
   ) {
-    // Marketplace return must land on Billing connect, not org setup / home.
-    const alreadyOnBilling = pathname === "/billing";
+    // Marketplace return must land on Integrations, not org setup / home.
+    const alreadyOnIntegrations = pathname === "/integrations";
     if (
-      !alreadyOnBilling &&
+      !alreadyOnIntegrations &&
       (pathname === "/login" ||
         pathname === "/signup" ||
         pathname === "/create" ||
@@ -179,18 +179,18 @@ export function middleware(request: NextRequest) {
         pathname === "/organization" ||
         pathname === "/")
     ) {
-      const billingUrl = getPublicRequestUrl(request, "/billing");
-      billingUrl.searchParams.set("from", "altegio");
-      billingUrl.searchParams.set("salon_id", altegioLocationId);
+      const integrationsUrl = getPublicRequestUrl(request, "/integrations");
+      integrationsUrl.searchParams.set("from", "altegio");
+      integrationsUrl.searchParams.set("salon_id", altegioLocationId);
 
       const applicationId =
         searchParams.get("app_id")?.trim() ||
         searchParams.get("application_id")?.trim();
       if (applicationId) {
-        billingUrl.searchParams.set("app_id", applicationId);
+        integrationsUrl.searchParams.set("app_id", applicationId);
       }
 
-      return NextResponse.redirect(billingUrl);
+      return NextResponse.redirect(integrationsUrl);
     }
   }
 

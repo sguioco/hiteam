@@ -17,8 +17,6 @@ type AltegioIntegrationPanelProps = {
   className?: string;
   marketplace?: AltegioMarketplaceStatus | null;
   onMarketplaceAction?: () => void;
-  onManageIntegration?: () => void;
-  variant: "billing" | "organization";
 };
 
 type AltegioSyncStatus = {
@@ -37,12 +35,9 @@ export function AltegioIntegrationPanel({
   className,
   marketplace,
   onMarketplaceAction,
-  onManageIntegration,
-  variant,
 }: AltegioIntegrationPanelProps) {
   const { locale } = useI18n();
   const [pilotStatus, setPilotStatus] = useState<AltegioPilotStatus | null>(null);
-  const [pilotLoaded, setPilotLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<AltegioSyncStatus | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -68,19 +63,11 @@ export function AltegioIntegrationPanel({
 
   useEffect(() => {
     const session = getSession();
-    if (!session) {
-      setPilotLoaded(true);
-      return;
-    }
+    if (!session) return;
 
     void apiRequest<AltegioPilotStatus>("/altegio/pilot", { token: session.accessToken })
-      .then((status) => {
-        setPilotStatus(status);
-        setPilotLoaded(true);
-      })
-      .catch(() => {
-        setPilotLoaded(true);
-      });
+      .then(setPilotStatus)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -117,10 +104,6 @@ export function AltegioIntegrationPanel({
   );
   const subtitle = formatAltegioIntegrationSubtitle(view, locale);
 
-  if (!pilotLoaded && variant === "organization") {
-    return null;
-  }
-
   const formatSyncDate = (value: string | null) =>
     value
       ? new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-GB", {
@@ -134,10 +117,8 @@ export function AltegioIntegrationPanel({
   return (
     <>
       <section
-      className={`flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between ${
-        variant === "organization" ? "mb-6 font-heading" : "font-heading"
-      } ${className ?? ""}`}
-    >
+        className={`flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
+      >
       <div className="flex min-w-0 items-center gap-3.5">
         <div className="flex -space-x-2">
           <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
@@ -164,45 +145,32 @@ export function AltegioIntegrationPanel({
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {variant === "billing" ? (
-          <button
-            className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-              marketplace?.connected
-                ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
-                : "cursor-not-allowed bg-slate-200 text-slate-500"
-            }`}
-            disabled={!marketplace?.connected}
-            onClick={onMarketplaceAction}
-            type="button"
-          >
-            {marketplace?.connected ? <Unlink className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-            {marketplace?.connected
-              ? locale === "ru"
-                ? "Отключить"
-                : "Disconnect"
-              : locale === "ru"
-                ? "Скоро в Marketplace"
-                : "Available soon"}
-          </button>
-        ) : onManageIntegration ? (
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-4 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
-            onClick={onManageIntegration}
-            type="button"
-          >
-            {locale === "ru" ? "Управлять интеграцией" : "Manage integration"}
-          </button>
-        ) : null}
-        {variant === "billing" ? (
-          <AltegioPilotConnect
-            onStatusChange={setPilotStatus}
-            pilotStatus={pilotStatus}
-            skipInitialFetch
-          />
-        ) : null}
+        <button
+          className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
+            marketplace?.connected
+              ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
+              : "bg-[#22262c] text-white hover:bg-[#111418]"
+          }`}
+          onClick={onMarketplaceAction}
+          type="button"
+        >
+          {marketplace?.connected ? <Unlink className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+          {marketplace?.connected
+            ? locale === "ru"
+              ? "Отключить"
+              : "Disconnect"
+            : locale === "ru"
+              ? "Подключить"
+              : "Connect"}
+        </button>
+        <AltegioPilotConnect
+          onStatusChange={setPilotStatus}
+          pilotStatus={pilotStatus}
+          skipInitialFetch
+        />
       </div>
       </section>
-      {variant === "billing" && syncStatus?.connected ? (
+      {syncStatus?.connected ? (
         <section className="mt-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>

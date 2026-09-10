@@ -40,45 +40,10 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
     ': "Buy seats"',
     "Billing page must expose the seat purchase button.",
   );
-  assertContains(
+  assert.doesNotMatch(
     source,
-    "openAltegioMarketplace",
-    "Unconnected workspaces must be able to start Altegio Marketplace consent.",
-  );
-  assertContains(
-    source,
-    "altegioDialogOpen",
-    "Altegio connection must use a dedicated dialog.",
-  );
-  assertContains(
-    source,
-    "/altegio-logo.png",
-    "Altegio connection dialog must display the Altegio logo.",
-  );
-  assertContains(
-    source,
-    "AltegioIntegrationPanel",
-    "Billing must render the shared Altegio integration panel.",
-  );
-  assertContains(
-    source,
-    "buildAltegioMarketplaceConnectUrl",
-    "Altegio connection must use the published marketplace short-link.",
-  );
-  assertContains(
-    source,
-    "confirmAltegioDisconnect",
-    "Connected workspaces must be able to disconnect Altegio.",
-  );
-  assertContains(
-    source,
-    '/billing/altegio/disconnect',
-    "Disconnect must call the Altegio disconnect API.",
-  );
-  assertContains(
-    source,
-    ': "Disconnect"',
-    "Connected Altegio card must expose a Disconnect action.",
+    /AltegioIntegrationPanel|altegioDialogOpen|buildAltegioMarketplaceConnectUrl/,
+    "Billing must not duplicate integration management UI.",
   );
 }
 
@@ -129,6 +94,9 @@ function testAltegioRegistrationPrefillsOrganization() {
   const organizationSource = read("app/organization/organization-page-client.tsx");
   const signupSource = read("app/signup/page.tsx");
   const marketplaceSource = read("lib/altegio-marketplace.ts");
+  const integrationsSource = read("app/integrations/integrations-page-client.tsx");
+  const middlewareSource = read("middleware.ts");
+  const shellSource = read("components/admin-shell.tsx");
 
   assertContains(
     authSource,
@@ -160,35 +128,40 @@ function testAltegioRegistrationPrefillsOrganization() {
     "buildAltegioMarketplaceConnectUrl",
     "Existing accounts must open the published Altegio short-link for consent.",
   );
-  assertContains(
+  assert.doesNotMatch(
     organizationSource,
-    'router.push(toAdminHref("/billing"))',
-    "Organization setup must route integration management to Billing.",
-  );
-  assertContains(
-    organizationSource,
-    "AltegioIntegrationPanel",
-    "Organization setup must render the shared Altegio integration panel.",
+    /AltegioIntegrationPanel/,
+    "Organization setup must not duplicate integration management UI.",
   );
   assertContains(
     integrationPanelSource,
     "/altegio-logo.png",
-    "Organization setup must show the Altegio logo.",
+    "The integration page must show the Altegio logo.",
   );
   assertContains(
-    integrationPanelSource,
-    'locale === "ru" ? "Управлять интеграцией" : "Manage integration"',
-    "Organization setup must link to centralized integration management.",
+    integrationsSource,
+    "AltegioIntegrationPanel",
+    "The dedicated Integrations page must render Altegio management.",
   );
-  assert.doesNotMatch(
-    integrationPanelSource,
-    /variant === "organization" && view\.marketplaceConnected/,
-    "Billing and Organization must not use separate connected Altegio cards.",
+  assertContains(
+    integrationsSource,
+    '"/billing/altegio/disconnect"',
+    "The Integrations page must support disconnecting Altegio.",
   );
-  assert.doesNotMatch(
-    integrationPanelSource,
-    /border-emerald-100 bg-\[linear-gradient/,
-    "Organization must use the same neutral integration card as Billing.",
+  assertContains(
+    marketplaceSource,
+    "return `/integrations?${params.toString()}`;",
+    "Post-login Altegio flow must land on Integrations.",
+  );
+  assertContains(
+    middlewareSource,
+    'getPublicRequestUrl(request, "/integrations")',
+    "Authenticated Marketplace returns must land on Integrations.",
+  );
+  assertContains(
+    shellSource,
+    'href: toAdminHref("/integrations")',
+    "The sidebar must expose the dedicated Integrations section.",
   );
 }
 

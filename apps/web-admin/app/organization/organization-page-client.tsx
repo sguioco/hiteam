@@ -12,7 +12,6 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
-import { AltegioIntegrationPanel } from "../../components/altegio-integration-panel";
 import { EmployeeDropdown } from "../../components/employee-dropdown";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
@@ -97,13 +96,6 @@ type WorkGroupOption = {
     employeeId: string;
   }>;
 };
-type AltegioBootstrapStatus = {
-  activatedAt?: string | null;
-  applicationId?: string | null;
-  connected: boolean;
-  locationId?: string | null;
-};
-
 type OrganizationSetupResponse = {
   attendanceTrackingEnabled: boolean;
   company: Company | null;
@@ -293,7 +285,6 @@ function buildAddEmployeePromptStorageKey(
 }
 
 export type OrganizationPageInitialData = {
-  altegio?: AltegioBootstrapStatus;
   companies?: Company[];
   employeeCount: number;
   employees?: EmployeeOption[];
@@ -353,12 +344,6 @@ export default function OrganizationPageClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
-  const [altegioStatus, setAltegioStatus] = useState<AltegioBootstrapStatus | null>(
-    initialData?.altegio ?? null,
-  );
-  const [altegioStatusLoaded, setAltegioStatusLoaded] = useState(
-    Boolean(initialData?.altegio),
-  );
   const [locationConfirmationPending, setLocationConfirmationPending] =
     useState(false);
   const [addressRequired, setAddressRequired] = useState(false);
@@ -394,12 +379,6 @@ export default function OrganizationPageClient({
 
     return groupsByEmployee;
   }, [availableGroups]);
-
-  function applyAltegioStatus(status?: AltegioBootstrapStatus) {
-    if (!status) return;
-    setAltegioStatus(status);
-    setAltegioStatusLoaded(true);
-  }
 
   function applyScope(company: Company, location?: Location | null) {
     const nextSetup: OrganizationSetupResponse = {
@@ -442,7 +421,6 @@ export default function OrganizationPageClient({
     setLocations(nextLocations);
     setAvailableEmployees(nextEmployees);
     setAvailableGroups(nextGroups);
-    applyAltegioStatus(snapshot.altegio);
 
     const currentCompany =
       nextCompanies.find(({ id }) => id === selectedCompanyId) ??
@@ -591,7 +569,6 @@ export default function OrganizationPageClient({
       });
 
       setSetup(snapshot.setup);
-      applyAltegioStatus(snapshot.altegio);
       setEmployeeCount(snapshot.employeeCount);
       setDraft(buildDraftFromSetup(snapshot.setup));
       setRadiusInput(String(normalizeRadius(snapshot.setup.location?.geofenceRadiusMeters ?? snapshot.setup.defaultGeofenceRadiusMeters)));
@@ -659,7 +636,7 @@ export default function OrganizationPageClient({
       if (pending.applicationId) {
         params.set("app_id", pending.applicationId);
       }
-      router.replace(toAdminHref(`/billing?${params.toString()}`));
+      router.replace(toAdminHref(`/integrations?${params.toString()}`));
       return;
     }
 
@@ -1123,14 +1100,6 @@ export default function OrganizationPageClient({
               <div className="organization-studio-feedback organization-studio-feedback--error">
                 {error}
               </div>
-            ) : null}
-
-            {altegioStatusLoaded ? (
-              <AltegioIntegrationPanel
-                marketplace={altegioStatus}
-                onManageIntegration={() => router.push(toAdminHref("/billing"))}
-                variant="organization"
-              />
             ) : null}
 
             <div className="organization-studio-identity">
