@@ -1,6 +1,16 @@
 "use client";
 
-import { ExternalLink, RefreshCw, Unlink } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowLeftRight,
+  ArrowUpFromLine,
+  CalendarRange,
+  CheckCircle2,
+  ExternalLink,
+  RefreshCw,
+  Unlink,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AltegioPilotConnect } from "@/components/altegio-pilot-connect";
 import { apiRequest } from "@/lib/api";
@@ -114,77 +124,111 @@ export function AltegioIntegrationPanel({
         ? "ещё не выполнялась"
         : "not run yet";
 
+  const employeeSyncPercent = syncStatus?.totalEmployees
+    ? Math.min(100, Math.round((syncStatus.linkedEmployees / syncStatus.totalEmployees) * 100))
+    : 0;
+
   return (
-    <>
-      <section
-        className={`flex flex-col gap-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 font-heading shadow-[0_14px_38px_rgba(15,23,42,0.07)] sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
-      >
-      <div className="flex min-w-0 items-center gap-3.5">
-        <div className="flex -space-x-2">
-          <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
-            <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
+    <section
+      className={`overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.07)] ${className ?? ""}`}
+    >
+      <div className="relative overflow-hidden border-b border-slate-100 bg-[linear-gradient(135deg,#ffffff_0%,#f7f9ff_62%,#fffbea_100%)] px-6 py-6 sm:px-7">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-[#ffe36a]/20 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex -space-x-3">
+              <div className="relative z-10 h-14 w-14 overflow-hidden rounded-2xl border-[3px] border-white shadow-[0_10px_28px_rgba(237,194,15,0.22)]">
+                <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border-[3px] border-white bg-[#eef3ff] shadow-sm">
+                <span className="font-serif text-lg font-semibold italic text-[#111827]">HT</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="font-heading text-xl font-semibold tracking-[-0.03em] text-foreground">
+                  Altegio
+                </h2>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    view.connected
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      view.connected ? "bg-emerald-500" : "bg-slate-400"
+                    }`}
+                  />
+                  {view.connected
+                    ? locale === "ru"
+                      ? "Подключено"
+                      : "Connected"
+                    : locale === "ru"
+                      ? "Не подключено"
+                      : "Not connected"}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+            </div>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
-            <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <button
+              className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
+                marketplace?.connected
+                  ? "border border-slate-200 bg-white text-foreground shadow-sm hover:bg-slate-50"
+                  : "bg-[#22262c] text-white shadow-sm hover:bg-[#111418]"
+              }`}
+              onClick={onMarketplaceAction}
+              type="button"
+            >
+              {marketplace?.connected ? (
+                <Unlink className="h-4 w-4" />
+              ) : (
+                <ExternalLink className="h-4 w-4" />
+              )}
+              {marketplace?.connected
+                ? locale === "ru"
+                  ? "Отключить"
+                  : "Disconnect"
+                : locale === "ru"
+                  ? "Подключить"
+                  : "Connect"}
+            </button>
+            <AltegioPilotConnect
+              onStatusChange={setPilotStatus}
+              pilotStatus={pilotStatus}
+              skipInitialFetch
+            />
           </div>
         </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-foreground">Altegio</p>
-            {view.connected ? (
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                {locale === "ru" ? "Подключено" : "Connected"}
-              </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                {locale === "ru" ? "Не подключено" : "Not connected"}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>
-        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <button
-          className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${
-            marketplace?.connected
-              ? "border border-[rgba(15,23,42,0.12)] bg-white text-foreground hover:bg-[#f7f8fa]"
-              : "bg-[#22262c] text-white hover:bg-[#111418]"
-          }`}
-          onClick={onMarketplaceAction}
-          type="button"
-        >
-          {marketplace?.connected ? <Unlink className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-          {marketplace?.connected
-            ? locale === "ru"
-              ? "Отключить"
-              : "Disconnect"
-            : locale === "ru"
-              ? "Подключить"
-              : "Connect"}
-        </button>
-        <AltegioPilotConnect
-          onStatusChange={setPilotStatus}
-          pilotStatus={pilotStatus}
-          skipInitialFetch
-        />
-      </div>
-      </section>
+
       {syncStatus?.connected ? (
-        <section className="mt-4 rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white px-5 py-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="p-6 sm:p-7">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-semibold text-foreground">
-                {locale === "ru" ? "Синхронизация Altegio" : "Altegio synchronization"}
-              </p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-heading text-lg font-semibold tracking-[-0.02em] text-foreground">
+                  {locale === "ru" ? "Состояние синхронизации" : "Synchronization status"}
+                </h3>
+                {!syncStatus.lastError && !syncActionError ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {locale === "ru" ? "Работает" : "Healthy"}
+                  </span>
+                ) : null}
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {locale === "ru"
-                  ? `Связано сотрудников: ${syncStatus.linkedEmployees} из ${syncStatus.totalEmployees} · смен из Altegio: ${syncStatus.altegioShifts} · опубликовано из HiTeam: ${syncStatus.hiteamPublishedShifts}`
-                  : `Linked employees: ${syncStatus.linkedEmployees} of ${syncStatus.totalEmployees} · shifts from Altegio: ${syncStatus.altegioShifts} · published from HiTeam: ${syncStatus.hiteamPublishedShifts}`}
+                  ? "Данные сотрудников и расписания обновляются между системами."
+                  : "Employee and schedule data are kept up to date across both systems."}
               </p>
             </div>
             <button
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#3d57c9] px-4 text-sm font-semibold text-white transition hover:bg-[#3048ae] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[color:var(--accent)] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(61,87,201,0.2)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-55"
               disabled={syncing || !syncStatus.b2bConfigured}
               onClick={() => void syncNow()}
               type="button"
@@ -195,27 +239,161 @@ export function AltegioIntegrationPanel({
                   ? "Синхронизация…"
                   : "Synchronizing…"
                 : locale === "ru"
-                  ? "Синхронизировать сейчас"
+                  ? "Синхронизировать"
                   : "Sync now"}
             </button>
           </div>
-          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-            <p>{locale === "ru" ? "Сотрудники:" : "Employees:"} {formatSyncDate(syncStatus.staffLastSyncedAt)}</p>
-            <p>{locale === "ru" ? "Расписание:" : "Schedule:"} {formatSyncDate(syncStatus.scheduleLastSyncedAt)}</p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-100 bg-[#f8faff] p-4">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="text-xs font-medium">
+                  {locale === "ru" ? "Связано сотрудников" : "Linked employees"}
+                </span>
+                <UsersRound className="h-4 w-4 text-[#5577e8]" />
+              </div>
+              <p className="mt-3 font-heading text-2xl font-semibold tracking-[-0.04em] text-foreground">
+                {syncStatus.linkedEmployees}
+                <span className="ml-1 text-base font-medium text-muted-foreground">
+                  / {syncStatus.totalEmployees}
+                </span>
+              </p>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#e7ecfb]">
+                <div
+                  className="h-full rounded-full bg-[#5577e8] transition-[width]"
+                  style={{ width: `${employeeSyncPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-[#fbfcfe] p-4">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="text-xs font-medium">
+                  {locale === "ru" ? "Смен из Altegio" : "Shifts from Altegio"}
+                </span>
+                <ArrowDownToLine className="h-4 w-4 text-[#5577e8]" />
+              </div>
+              <p className="mt-3 font-heading text-2xl font-semibold tracking-[-0.04em] text-foreground">
+                {syncStatus.altegioShifts}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {locale === "ru" ? "Импортировано в HiTeam" : "Imported into HiTeam"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-[#fbfcfe] p-4">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="text-xs font-medium">
+                  {locale === "ru" ? "Смен из HiTeam" : "Shifts from HiTeam"}
+                </span>
+                <ArrowUpFromLine className="h-4 w-4 text-[#5577e8]" />
+              </div>
+              <p className="mt-3 font-heading text-2xl font-semibold tracking-[-0.04em] text-foreground">
+                {syncStatus.hiteamPublishedShifts}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {locale === "ru" ? "Опубликовано в Altegio" : "Published to Altegio"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-[#fbfcfe] p-4">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="text-xs font-medium">
+                  {locale === "ru" ? "Последнее обновление" : "Last updated"}
+                </span>
+                <RefreshCw className={`h-4 w-4 text-[#5577e8] ${syncLoading ? "animate-spin" : ""}`} />
+              </div>
+              <p className="mt-3 text-sm font-semibold leading-6 text-foreground">
+                {formatSyncDate(syncStatus.scheduleLastSyncedAt ?? syncStatus.staffLastSyncedAt)}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {locale === "ru" ? "Автоматическая синхронизация" : "Automatic synchronization"}
+              </p>
+            </div>
           </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80">
+            <div className="grid items-center gap-3 border-b border-slate-100 px-4 py-3.5 sm:grid-cols-[1fr_auto_1fr] sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef3ff] text-[#5577e8]">
+                  <UsersRound className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {locale === "ru" ? "Сотрудники" : "Employees"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatSyncDate(syncStatus.staffLastSyncedAt)}
+                  </p>
+                </div>
+              </div>
+              <div className="hidden items-center gap-2 text-xs font-semibold text-[#5577e8] sm:flex">
+                Altegio <ArrowDownToLine className="h-3.5 w-3.5" /> HiTeam
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground sm:text-right">
+                {locale === "ru"
+                  ? "Импорт и привязка профилей без дублей"
+                  : "Profile import and linking without duplicates"}
+              </p>
+            </div>
+
+            <div className="grid items-center gap-3 px-4 py-3.5 sm:grid-cols-[1fr_auto_1fr] sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fff8dc] text-[#aa7b00]">
+                  <CalendarRange className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {locale === "ru" ? "Расписание" : "Schedule"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatSyncDate(syncStatus.scheduleLastSyncedAt)}
+                  </p>
+                </div>
+              </div>
+              <div className="hidden items-center gap-2 text-xs font-semibold text-[#5577e8] sm:flex">
+                Altegio <ArrowLeftRight className="h-3.5 w-3.5" /> HiTeam
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground sm:text-right">
+                {locale === "ru"
+                  ? "Импорт смен и публикация изменений"
+                  : "Shift import and change publishing"}
+              </p>
+            </div>
+          </div>
+
           {!syncStatus.b2bConfigured ? (
-            <p className="mt-3 text-sm text-amber-700">
+            <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {locale === "ru"
-                ? "Ручная синхронизация пока недоступна: для неё нужны партнёрские токены Altegio."
-                : "Manual synchronization is unavailable until Altegio partner tokens are configured."}
+                ? "Ручная синхронизация пока недоступна: нужны партнёрские токены Altegio."
+                : "Manual synchronization requires Altegio partner tokens."}
             </p>
           ) : null}
           {syncStatus.lastError || syncActionError ? (
-            <p className="mt-3 text-sm text-red-700">{syncActionError ?? syncStatus.lastError}</p>
+            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {syncActionError ?? syncStatus.lastError}
+            </p>
           ) : null}
-          {syncLoading ? <p className="mt-3 text-xs text-muted-foreground">…</p> : null}
-        </section>
-      ) : null}
-    </>
+        </div>
+      ) : view.connected ? (
+        <div className="flex min-h-44 items-center justify-center px-6 py-8 text-sm text-muted-foreground">
+          <RefreshCw className={`mr-2 h-4 w-4 ${syncLoading ? "animate-spin" : ""}`} />
+          {locale === "ru" ? "Получаем состояние синхронизации…" : "Loading synchronization status…"}
+        </div>
+      ) : (
+        <div className="px-6 py-7 sm:px-7">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-6 text-center">
+            <p className="font-heading font-semibold text-foreground">
+              {locale === "ru" ? "Подключите Altegio, чтобы начать" : "Connect Altegio to get started"}
+            </p>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              {locale === "ru"
+                ? "После подключения здесь появятся сотрудники, расписание и состояние обмена данными."
+                : "Once connected, employee, schedule, and synchronization details will appear here."}
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

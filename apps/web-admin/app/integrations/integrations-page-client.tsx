@@ -189,9 +189,12 @@ export default function IntegrationsPageClient({
 
   return (
     <AdminShell showTopbar={false}>
-      <main className="mx-auto flex w-full max-w-[1460px] flex-col gap-5 px-6 py-6 md:px-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 md:px-8 md:py-10">
         <header className="space-y-2">
-          <h1 className="font-heading text-[2rem] font-semibold leading-none tracking-[-0.04em] text-foreground">
+          <p className="font-heading text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--accent)]">
+            {locale === "ru" ? "Настройки рабочего пространства" : "Workspace settings"}
+          </p>
+          <h1 className="font-heading text-[2.5rem] font-semibold leading-none tracking-[-0.05em] text-foreground">
             {locale === "ru" ? "Интеграции" : "Integrations"}
           </h1>
           <p className="max-w-2xl font-heading text-sm text-muted-foreground">
@@ -219,28 +222,6 @@ export default function IntegrationsPageClient({
           />
         )}
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white p-5 shadow-[0_14px_38px_rgba(15,23,42,0.05)]">
-            <h2 className="font-heading font-semibold text-foreground">
-              {locale === "ru" ? "Сотрудники" : "Employees"}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {locale === "ru"
-                ? "Сотрудники Altegio связываются с профилями HiTeam без создания дублей."
-                : "Altegio staff are linked to HiTeam profiles without creating duplicates."}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white p-5 shadow-[0_14px_38px_rgba(15,23,42,0.05)]">
-            <h2 className="font-heading font-semibold text-foreground">
-              {locale === "ru" ? "Расписание" : "Schedule"}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {locale === "ru"
-                ? "Смены импортируются из Altegio, а изменения HiTeam публикуются обратно."
-                : "Shifts are imported from Altegio and HiTeam changes are published back."}
-            </p>
-          </div>
-        </section>
       </main>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !connecting && !disconnecting && setDialogOpen(open)}>
