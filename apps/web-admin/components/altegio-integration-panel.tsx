@@ -11,7 +11,6 @@ import {
   type AltegioMarketplaceStatus,
   type AltegioPilotStatus,
 } from "@/lib/altegio-integration";
-import { buildAltegioMarketplaceConnectUrl } from "@/lib/altegio-marketplace";
 import { useI18n } from "@/lib/i18n";
 
 type AltegioIntegrationPanelProps = {
@@ -117,40 +116,9 @@ export function AltegioIntegrationPanel({
     [marketplace, pilotStatus],
   );
   const subtitle = formatAltegioIntegrationSubtitle(view, locale);
-  const marketplaceConnectUrl = buildAltegioMarketplaceConnectUrl(marketplace?.applicationId);
 
   if (!pilotLoaded && variant === "organization") {
     return null;
-  }
-
-  if (variant === "organization" && view.marketplaceConnected) {
-    return (
-      <div
-        className={`mb-6 flex flex-col gap-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(135deg,#f4fff9_0%,#ffffff_100%)] px-5 py-4 shadow-[0_12px_36px_rgba(16,185,129,0.08)] sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
-      >
-        <div className="flex min-w-0 items-center gap-3.5">
-          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[15px] shadow-[0_8px_20px_rgba(236,193,23,0.22)]">
-            <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-foreground">
-              {locale === "ru" ? "Altegio подключён" : "Altegio connected"}
-              {view.locationLabel ? ` · ${view.locationLabel}` : ""}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
-          </div>
-        </div>
-        {onManageIntegration ? (
-          <button
-            className="shrink-0 text-sm font-semibold text-[color:var(--accent)]"
-            onClick={onManageIntegration}
-            type="button"
-          >
-            {locale === "ru" ? "Управлять интеграцией" : "Manage integration"}
-          </button>
-        ) : null}
-      </div>
-    );
   }
 
   const formatSyncDate = (value: string | null) =>
@@ -171,37 +139,26 @@ export function AltegioIntegrationPanel({
       } ${className ?? ""}`}
     >
       <div className="flex min-w-0 items-center gap-3.5">
-        {variant === "billing" ? (
-          <div className="flex -space-x-2">
-            <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
-              <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
-              <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
-            </div>
-          </div>
-        ) : (
-          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
+        <div className="flex -space-x-2">
+          <div className="relative z-10 h-11 w-11 overflow-hidden rounded-xl border-2 border-white shadow-sm">
             <img alt="Altegio" className="h-full w-full object-cover" src="/altegio-logo.png" />
           </div>
-        )}
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-[#eef4ff] shadow-sm">
+            <span className="font-serif text-base font-semibold italic text-[#111827]">HT</span>
+          </div>
+        </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold text-foreground">Altegio</p>
-            {variant === "organization" ? (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                Marketplace
-              </span>
-            ) : null}
             {view.connected ? (
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                 {locale === "ru" ? "Подключено" : "Connected"}
               </span>
-            ) : variant === "billing" ? (
+            ) : (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                 {locale === "ru" ? "Не подключено" : "Not connected"}
               </span>
-            ) : null}
+            )}
           </div>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>
         </div>
@@ -227,22 +184,22 @@ export function AltegioIntegrationPanel({
                 ? "Скоро в Marketplace"
                 : "Available soon"}
           </button>
-        ) : (
-          <a
+        ) : onManageIntegration ? (
+          <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#22262c] px-4 text-sm font-semibold !text-white transition hover:bg-[#111418] [&_svg]:stroke-white"
-            href={marketplaceConnectUrl || "#"}
-            rel="noreferrer"
-            target="_blank"
+            onClick={onManageIntegration}
+            type="button"
           >
-            {locale === "ru" ? "Открыть в Altegio" : "Open in Altegio"}
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        )}
-        <AltegioPilotConnect
-          onStatusChange={setPilotStatus}
-          pilotStatus={pilotStatus}
-          skipInitialFetch
-        />
+            {locale === "ru" ? "Управлять интеграцией" : "Manage integration"}
+          </button>
+        ) : null}
+        {variant === "billing" ? (
+          <AltegioPilotConnect
+            onStatusChange={setPilotStatus}
+            pilotStatus={pilotStatus}
+            skipInitialFetch
+          />
+        ) : null}
       </div>
       </section>
       {variant === "billing" && syncStatus?.connected ? (

@@ -61,7 +61,7 @@ function testBillingPageShowsBackendHistoryAndSeatCheckout() {
     "Billing must render the shared Altegio integration panel.",
   );
   assertContains(
-    read("components/altegio-integration-panel.tsx"),
+    source,
     "buildAltegioMarketplaceConnectUrl",
     "Altegio connection must use the published marketplace short-link.",
   );
@@ -161,9 +161,9 @@ function testAltegioRegistrationPrefillsOrganization() {
     "Existing accounts must open the published Altegio short-link for consent.",
   );
   assertContains(
-    integrationPanelSource,
-    "buildAltegioMarketplaceConnectUrl",
-    "Organization setup must link directly to the published Altegio application.",
+    organizationSource,
+    'router.push(toAdminHref("/billing"))',
+    "Organization setup must route integration management to Billing.",
   );
   assertContains(
     organizationSource,
@@ -174,6 +174,21 @@ function testAltegioRegistrationPrefillsOrganization() {
     integrationPanelSource,
     "/altegio-logo.png",
     "Organization setup must show the Altegio logo.",
+  );
+  assertContains(
+    integrationPanelSource,
+    'locale === "ru" ? "Управлять интеграцией" : "Manage integration"',
+    "Organization setup must link to centralized integration management.",
+  );
+  assert.doesNotMatch(
+    integrationPanelSource,
+    /variant === "organization" && view\.marketplaceConnected/,
+    "Billing and Organization must not use separate connected Altegio cards.",
+  );
+  assert.doesNotMatch(
+    integrationPanelSource,
+    /border-emerald-100 bg-\[linear-gradient/,
+    "Organization must use the same neutral integration card as Billing.",
   );
 }
 
