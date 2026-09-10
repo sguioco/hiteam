@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { withBusinessSpan } from '../../observability/tracing';
+import { setActiveBusinessSpanAttributes, withBusinessSpan } from '../../observability/tracing';
 
 export class AltegioB2bError extends Error {
   constructor(
@@ -400,6 +400,7 @@ export class AltegioB2bClient {
       headers,
       body: json ? JSON.stringify(json) : undefined,
     });
+    setActiveBusinessSpanAttributes({ 'http.response.status_code': response.status });
 
     const rawText = await response.text();
     let payload: unknown = null;

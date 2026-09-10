@@ -1,4 +1,3 @@
-import './instrumentation';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { json, raw, urlencoded } from 'express';

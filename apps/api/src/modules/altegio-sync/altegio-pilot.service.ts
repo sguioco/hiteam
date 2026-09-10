@@ -7,6 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { withBusinessSpan } from '../../observability/tracing';
 import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError } from './altegio-b2b.client';
 import {
+  normalizeWebhookResource,
+  pilotLocationTraceAttributes,
+  pilotSyncTraceAttributes,
+  webhookTraceAttributes,
+} from './altegio-tracing';
+import {
   ALTEGIO_SHIFT_SOURCE,
   HITEAM_SHIFT_SOURCE,
   defaultSyncWindow,
@@ -210,6 +216,10 @@ export class AltegioPilotService {
       'altegio.sync.pilot',
       { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'pilot' },
       () => this.syncInternal(tenantId, pilotLocationId),
+      {
+        attributesFromResult: pilotSyncTraceAttributes,
+        successEventName: 'altegio.sync.pilot.completed',
+      },
     );
   }
 
@@ -231,9 +241,23 @@ export class AltegioPilotService {
 
     const userToken = this.decrypt(connection.userTokenCiphertext);
     const results = [];
-    for (const location of connection.locations) {
+    for (const [index, location] of connection.locations.entries()) {
       try {
-        results.push(await this.syncLocation(tenantId, location, userToken));
+        results.push(
+          await withBusinessSpan(
+            'altegio.sync.pilot.location',
+            {
+              'hiteam.integration.name': 'altegio',
+              'hiteam.sync.mode': 'pilot',
+              'hiteam.altegio.location.ordinal': index + 1,
+            },
+            () => this.syncLocation(tenantId, location, userToken),
+            {
+              attributesFromResult: pilotLocationTraceAttributes,
+              successEventName: 'altegio.sync.pilot.location.completed',
+            },
+          ),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
         await this.prisma.altegioPilotLocation.update({ where: { id: location.id }, data: { lastError: message } });
@@ -244,8 +268,24 @@ export class AltegioPilotService {
   }
 
   async handleWebhookEvent(payload: Record<string, unknown>) {
-    const locationId = String(payload.company_id || payload.salon_id || payload.location_id || '').trim();
     const resource = String(payload.resource || payload.entity || payload.type || '').trim().toLowerCase();
+    return withBusinessSpan(
+      'altegio.webhook.handle',
+      {
+        'hiteam.integration.name': 'altegio',
+        'hiteam.sync.mode': 'pilot',
+        'hiteam.altegio.webhook.resource': normalizeWebhookResource(resource),
+      },
+      () => this.handleWebhookEventInternal(payload, resource),
+      {
+        attributesFromResult: webhookTraceAttributes,
+        successEventName: 'altegio.webhook.handled',
+      },
+    );
+  }
+
+  private async handleWebhookEventInternal(payload: Record<string, unknown>, resource: string) {
+    const locationId = String(payload.company_id || payload.salon_id || payload.location_id || '').trim();
     if (!locationId || !['staff', 'master', 'schedule'].includes(resource)) {
       return { ok: true, ignored: 'unknown_event' };
     }
@@ -457,7 +497,14 @@ export class AltegioPilotService {
       where: { id: pilotLocation.id },
       data: { staffLastSyncedAt: new Date(), scheduleLastSyncedAt: new Date(), lastError: null },
     });
-    return { altegioLocationId: pilotLocation.altegioLocationId, importedEmployees, linkedEmployees, exportedEmployees, ...schedule };
+    return {
+      altegioLocationId: pilotLocation.altegioLocationId,
+      remoteStaff: staff.length,
+      importedEmployees,
+      linkedEmployees,
+      exportedEmployees,
+      ...schedule,
+    };
   }
 
   private async syncLocationSchedule(tenantId: string, pilotLocation: { id: string; altegioLocationId: string; hiteamLocationId: string; hiteamLocation: { id: string; timezone: string; companyId: string } }, userToken: string) {
@@ -474,7 +521,7 @@ export class AltegioPilotService {
       update: {},
       create: { tenantId, name: 'Altegio Pilot Import', code: `altegio-pilot-${pilotLocation.id}`, locationId: pilotLocation.hiteamLocationId, positionId: links[0]?.employee.positionId ?? (await this.prisma.position.findFirstOrThrow({ where: { tenantId }, orderBy: { createdAt: 'asc' } })).id, startsAtLocal: '09:00', endsAtLocal: '18:00', weekDaysJson: '[1,2,3,4,5]', gracePeriodMinutes: 10 },
     });
-    const seen = new Set<string>(); let importedShifts = 0;
+    const seen = new Set<string>(); let importedShifts = 0; let cancelledShifts = 0;
     for (const day of remoteDays) {
       const employee = byStaff.get(day.teamMemberId); if (!employee) continue;
       for (const slot of day.slots) {
@@ -491,12 +538,22 @@ export class AltegioPilotService {
       }
     }
     const existing = await this.prisma.shift.findMany({ where: { tenantId, source, status: { not: ShiftStatus.CANCELLED }, shiftDate: { gte: window.from, lte: window.to } }, select: { id: true, employeeId: true, startsAt: true } });
-    for (const shift of existing) if (!seen.has(`${shift.employeeId}:${shift.startsAt.toISOString()}`)) await this.prisma.shift.update({ where: { id: shift.id }, data: { status: ShiftStatus.CANCELLED } });
+    for (const shift of existing) {
+      if (!seen.has(`${shift.employeeId}:${shift.startsAt.toISOString()}`)) {
+        await this.prisma.shift.update({ where: { id: shift.id }, data: { status: ShiftStatus.CANCELLED } });
+        cancelledShifts += 1;
+      }
+    }
 
     const hiteamShifts = await this.prisma.shift.findMany({ where: { tenantId, locationId: pilotLocation.hiteamLocationId, source: HITEAM_SHIFT_SOURCE, status: ShiftStatus.PUBLISHED, shiftDate: { gte: window.from, lt: window.to }, employee: { altegioPilotStaffLinks: { some: { pilotLocationId: pilotLocation.id } } } }, select: { shiftDate: true, startsAt: true, endsAt: true, employee: { select: { altegioPilotStaffLinks: { where: { pilotLocationId: pilotLocation.id }, select: { altegioStaffId: true } } } } } });
     const grouped = groupHiteamShiftsForAltegioPush(hiteamShifts.flatMap((shift) => shift.employee.altegioPilotStaffLinks.map((link) => ({ altegioTeamMemberId: link.altegioStaffId, shiftDate: shift.shiftDate, startsAt: shift.startsAt, endsAt: shift.endsAt, timeZone: pilotLocation.hiteamLocation.timezone || 'UTC' }))));
     if (grouped.length) await this.altegio.setStaffSchedule({ locationId: pilotLocation.altegioLocationId, schedulesToSet: grouped.map((item) => ({ teamMemberId: item.teamMemberId, dates: [item.date], slots: item.slots })), userToken });
-    return { remoteScheduleDays: remoteDays.length, importedShifts, exportedShiftDays: grouped.length };
+    return {
+      remoteScheduleDays: remoteDays.length,
+      importedShifts,
+      cancelledShifts,
+      exportedShiftDays: grouped.length,
+    };
   }
 
   private async createPilotEmployee(

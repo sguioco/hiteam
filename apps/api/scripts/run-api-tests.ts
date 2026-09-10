@@ -16,6 +16,7 @@ const suites = [
   'src/modules/org/org-radius.test.ts',
   'src/modules/org/org-multi-location.test.ts',
   'src/modules/altegio-sync/altegio-sync.helpers.test.ts',
+  'src/modules/altegio-sync/altegio-tracing.test.ts',
   'src/modules/altegio-sync/altegio-pilot-outbound.test.ts',
   'scripts/test-altegio-marketplace-helpers.ts',
   'src/modules/attendance/attendance-location.test.ts',

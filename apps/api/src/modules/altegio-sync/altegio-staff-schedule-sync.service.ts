@@ -6,6 +6,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { withBusinessSpan } from '../../observability/tracing';
 import { AltegioB2bClient, type AltegioTeamMember } from './altegio-b2b.client';
 import {
+  marketplaceEmployeesTraceAttributes,
+  marketplaceOrganizationTraceAttributes,
+  marketplaceScheduleTraceAttributes,
+  normalizeWebhookResource,
+  webhookTraceAttributes,
+} from './altegio-tracing';
+import {
   ALTEGIO_IMPORT_TEMPLATE_CODE,
   ALTEGIO_SHIFT_SOURCE,
   HITEAM_SHIFT_SOURCE,
@@ -89,6 +96,18 @@ export class AltegioStaffScheduleSyncService {
   }
 
   async syncOrganization(tenantId: string) {
+    return withBusinessSpan(
+      'altegio.sync.organization',
+      { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
+      () => this.syncOrganizationInternal(tenantId),
+      {
+        attributesFromResult: marketplaceOrganizationTraceAttributes,
+        successEventName: 'altegio.sync.organization.completed',
+      },
+    );
+  }
+
+  private async syncOrganizationInternal(tenantId: string) {
     const ctx = await this.requireConnectedContext(tenantId);
     const local = await this.prisma.location.findFirst({
       where: { tenantId, id: ctx.primaryLocationId },
@@ -156,6 +175,10 @@ export class AltegioStaffScheduleSyncService {
       'altegio.sync.employees',
       { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
       () => this.syncEmployeesInternal(tenantId),
+      {
+        attributesFromResult: marketplaceEmployeesTraceAttributes,
+        successEventName: 'altegio.sync.employees.completed',
+      },
     );
   }
 
@@ -299,6 +322,10 @@ export class AltegioStaffScheduleSyncService {
       'altegio.sync.schedule',
       { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
       () => this.syncScheduleInternal(tenantId, range),
+      {
+        attributesFromResult: marketplaceScheduleTraceAttributes,
+        successEventName: 'altegio.sync.schedule.completed',
+      },
     );
   }
 
@@ -544,6 +571,22 @@ export class AltegioStaffScheduleSyncService {
     const resource = String(payload.resource || payload.entity || payload.type || '')
       .trim()
       .toLowerCase();
+    return withBusinessSpan(
+      'altegio.webhook.handle',
+      {
+        'hiteam.integration.name': 'altegio',
+        'hiteam.sync.mode': 'marketplace',
+        'hiteam.altegio.webhook.resource': normalizeWebhookResource(resource),
+      },
+      () => this.handleWebhookEventInternal(payload, resource),
+      {
+        attributesFromResult: webhookTraceAttributes,
+        successEventName: 'altegio.webhook.handled',
+      },
+    );
+  }
+
+  private async handleWebhookEventInternal(payload: Record<string, unknown>, resource: string) {
     const locationId = String(
       payload.company_id || payload.salon_id || payload.location_id || payload.salonId || '',
     ).trim();

@@ -6,7 +6,7 @@
     "dev": "nest start --watch",
     "prebuild": "pnpm prisma:generate",
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node --require ./dist/instrumentation.js dist/main.js",
     "lint": "tsc --noEmit",
     "pretest": "pnpm prisma:generate",
     "pretypecheck": "pnpm prisma:generate",
