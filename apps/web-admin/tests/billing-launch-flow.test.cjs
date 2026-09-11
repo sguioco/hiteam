@@ -99,6 +99,27 @@ function testAltegioRegistrationPrefillsOrganization() {
   const shellSource = read("components/admin-shell.tsx");
 
   assertContains(
+    integrationsSource,
+    'type AltegioDialogMode = "connecting" | "disconnect" | null',
+    "Altegio connect progress and disconnect confirmation must use distinct dialog modes.",
+  );
+  assertContains(
+    integrationsSource,
+    'setDialogMode("connecting")',
+    "Marketplace return must open only the connection-progress dialog.",
+  );
+  assertContains(
+    integrationsSource,
+    'setDialogMode("disconnect")',
+    "Only an explicit connected-state action may open the disconnect confirmation.",
+  );
+  assert.doesNotMatch(
+    integrationsSource,
+    /setDialogOpen\(true\)/,
+    "A shared boolean dialog state must not switch from connect to disconnect after reconnect.",
+  );
+
+  assertContains(
     authSource,
     "/altegio/onboarding/preview",
     "Marketplace registration must preview the selected Altegio location.",

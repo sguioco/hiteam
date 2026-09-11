@@ -29,6 +29,8 @@ type AltegioStatus = {
   activatedAt: string | null;
 };
 
+type AltegioDialogMode = "connecting" | "disconnect" | null;
+
 export type IntegrationsPageInitialData = {
   altegio?: AltegioStatus;
 };
@@ -53,7 +55,7 @@ export default function IntegrationsPageClient({
   const [summary, setSummary] = useState<IntegrationsPageInitialData | null>(initialData ?? null);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<AltegioDialogMode>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const connectAttempted = useRef(false);
@@ -92,10 +94,10 @@ export default function IntegrationsPageClient({
     const pending = peekAltegioMarketplaceParams();
     if (!pending?.locationId) return;
 
-    setDialogOpen(true);
     if (summary.altegio?.connected && summary.altegio.locationId === pending.locationId) {
       clearAltegioMarketplaceParams();
       clearMarketplaceQuery();
+      setDialogMode(null);
       return;
     }
     if (connectAttempted.current) return;
@@ -103,6 +105,7 @@ export default function IntegrationsPageClient({
     const session = getSession();
     if (!session) return;
     connectAttempted.current = true;
+    setDialogMode("connecting");
     void (async () => {
       try {
         setConnecting(true);
@@ -122,8 +125,10 @@ export default function IntegrationsPageClient({
         setSummary(nextSummary);
         clearAltegioMarketplaceParams();
         clearMarketplaceQuery();
+        setDialogMode(null);
       } catch (cause) {
         connectAttempted.current = false;
+        setDialogMode(null);
         setError(
           cause instanceof Error
             ? cause.message
@@ -139,7 +144,7 @@ export default function IntegrationsPageClient({
 
   function handleMarketplaceAction() {
     if (summary?.altegio?.connected) {
-      setDialogOpen(true);
+      setDialogMode("disconnect");
       return;
     }
     const url = buildAltegioMarketplaceConnectUrl(summary?.altegio?.applicationId);
@@ -171,7 +176,7 @@ export default function IntegrationsPageClient({
       setSummary(nextSummary);
       clearAltegioMarketplaceParams();
       clearMarketplaceQuery();
-      setDialogOpen(false);
+      setDialogMode(null);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -185,7 +190,7 @@ export default function IntegrationsPageClient({
     }
   }
 
-  const connected = Boolean(summary?.altegio?.connected);
+  const disconnectDialog = dialogMode === "disconnect";
 
   return (
     <AdminShell showTopbar={false}>
@@ -224,17 +229,22 @@ export default function IntegrationsPageClient({
 
       </main>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => !connecting && !disconnecting && setDialogOpen(open)}>
+      <Dialog
+        open={dialogMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !connecting && !disconnecting) setDialogMode(null);
+        }}
+      >
         <DialogContent className="w-[min(560px,calc(100vw-2rem))] overflow-hidden border-0 bg-white p-0 shadow-[0_36px_110px_rgba(18,24,38,0.25)]">
           <div className="bg-[linear-gradient(135deg,#f4f7ff_0%,#ffffff_55%,#fff8d6_100%)] px-7 py-8 sm:px-9">
             <DialogHeader>
               <DialogTitle className="text-center font-heading text-2xl">
-                {connected
+                {disconnectDialog
                   ? locale === "ru" ? "Отключить Altegio?" : "Disconnect Altegio?"
                   : locale === "ru" ? "Подключение Altegio" : "Connecting Altegio"}
               </DialogTitle>
               <DialogDescription className="text-center leading-6">
-                {connected
+                {disconnectDialog
                   ? locale === "ru"
                     ? "Синхронизация сотрудников и расписания будет остановлена."
                     : "Employee and schedule synchronization will stop."
@@ -248,8 +258,8 @@ export default function IntegrationsPageClient({
               <div className="flex h-20 w-28 items-center justify-center rounded-2xl bg-white shadow-sm">
                 <img alt="Altegio" className="h-11 w-11 rounded-xl" src="/altegio-logo.png" />
               </div>
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full ${connected ? "bg-red-50 text-red-600" : "bg-emerald-500 text-white"}`}>
-                {connecting || disconnecting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : connected ? <Unlink className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+              <div className={`flex h-9 w-9 items-center justify-center rounded-full ${disconnectDialog ? "bg-red-50 text-red-600" : "bg-emerald-500 text-white"}`}>
+                {connecting || disconnecting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : disconnectDialog ? <Unlink className="h-4 w-4" /> : <Check className="h-4 w-4" />}
               </div>
               <div className="flex h-20 w-28 items-center justify-center rounded-2xl bg-white shadow-sm">
                 <BrandWordmark className="text-xl" />
@@ -257,9 +267,9 @@ export default function IntegrationsPageClient({
             </div>
           </div>
 
-          {connected ? (
+          {disconnectDialog ? (
             <div className="flex flex-col-reverse gap-3 px-7 pb-7 pt-5 sm:flex-row sm:justify-center sm:px-9">
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium text-muted-foreground hover:bg-muted" disabled={disconnecting} onClick={() => setDialogOpen(false)} type="button">
+              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium text-muted-foreground hover:bg-muted" disabled={disconnecting} onClick={() => setDialogMode(null)} type="button">
                 <X className="h-4 w-4" />
                 {locale === "ru" ? "Отмена" : "Cancel"}
               </button>
