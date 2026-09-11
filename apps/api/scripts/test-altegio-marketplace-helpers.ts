@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   classifyMarketplaceLifecycleEvent,
   formatAltegioMarketplaceDatetime,
+  isMarketplaceAlreadyInstalledResponse,
   parseAltegioMarketplaceDatetime,
   parseMarketplaceSubscriptionSnapshot,
   resolveMarketplaceStatusFromSnapshot,
@@ -121,10 +122,30 @@ function testFormatDatetime() {
   assert.equal(formatted, '2026-07-27 10:15:30');
 }
 
+function testAlreadyInstalledResponse() {
+  assert.equal(isMarketplaceAlreadyInstalledResponse(409, null), true);
+  assert.equal(
+    isMarketplaceAlreadyInstalledResponse(403, {
+      success: false,
+      data: null,
+      meta: { message: 'The user has already installed this application.' },
+    }),
+    true,
+  );
+  assert.equal(
+    isMarketplaceAlreadyInstalledResponse(403, {
+      meta: { message: 'The user does not have permission to install this application.' },
+    }),
+    false,
+  );
+  assert.equal(isMarketplaceAlreadyInstalledResponse(403, null), false);
+}
+
 testParseSnapshotTrial();
 testParseSnapshotPicksLatestPayment();
 testShouldPushLocalPeriod();
 testResolveStatus();
 testClassifyLifecycleEvent();
 testFormatDatetime();
+testAlreadyInstalledResponse();
 console.log('altegio marketplace helpers: ok');

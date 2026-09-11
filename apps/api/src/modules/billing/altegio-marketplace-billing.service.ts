@@ -5,6 +5,7 @@ import { AltegioMarketplaceClient, AltegioMarketplaceError } from './altegio-mar
 import {
   classifyMarketplaceLifecycleEvent,
   formatAltegioMarketplaceDatetime,
+  isMarketplaceAlreadyInstalledResponse,
   parseMarketplaceSubscriptionSnapshot,
   resolveMarketplaceTrialGrant,
   resolveMarketplaceStatusFromSnapshot,
@@ -105,7 +106,10 @@ export class AltegioMarketplaceBillingService {
         webhookUrl: this.configService.get<string>('ALTEGIO_WEBHOOK_URL')?.trim(),
       });
     } catch (error) {
-      if (error instanceof AltegioMarketplaceError && error.statusCode === 409) {
+      if (
+        error instanceof AltegioMarketplaceError &&
+        isMarketplaceAlreadyInstalledResponse(error.statusCode, error.payload)
+      ) {
         this.logger.log(
           `Altegio marketplace already installed tenantId=${args.tenantId} locationId=${locationId}`,
         );

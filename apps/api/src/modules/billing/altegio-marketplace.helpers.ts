@@ -126,6 +126,31 @@ export function parseMarketplaceSubscriptionSnapshot(
 
 export type MarketplaceLifecycleEvent = 'connect' | 'uninstall' | 'freeze' | 'unknown';
 
+const ALTEGIO_ALREADY_INSTALLED_MESSAGE = 'the user has already installed this application';
+
+export function isMarketplaceAlreadyInstalledResponse(
+  statusCode: number,
+  payload: unknown,
+): boolean {
+  if (statusCode === 409) {
+    return true;
+  }
+  if (statusCode !== 403 || !payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  const meta = (payload as Record<string, unknown>).meta;
+  if (!meta || typeof meta !== 'object') {
+    return false;
+  }
+
+  const message = String((meta as Record<string, unknown>).message || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.!]+$/, '');
+  return message === ALTEGIO_ALREADY_INSTALLED_MESSAGE;
+}
+
 const MARKETPLACE_CONNECT_EVENTS = new Set([
   'active',
   'connected',
