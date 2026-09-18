@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { validateOrganizationSetup } from "@/lib/organization-validation";
+import { validateOrganizationName, validateOrganizationSetup } from "@/lib/organization-validation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -343,6 +343,11 @@ export default function OrganizationPageClient({
   );
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<ReturnType<typeof validateOrganizationSetup>>(null);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const onboardingHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  useEffect(() => {
+    onboardingHeadingRef.current?.focus();
+  }, [onboardingStep]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
@@ -734,6 +739,7 @@ export default function OrganizationPageClient({
   }
 
   async function persistConfirmedLocation(next: LocationSelection) {
+    if (!setup.configured) return;
     if (!selectedCompanyId) {
       return;
     }
@@ -878,6 +884,17 @@ export default function OrganizationPageClient({
 
   async function handleSetupSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!setup.configured && onboardingStep === 1) {
+      const nameIssue = validateOrganizationName(draft.companyName, locale);
+      if (nameIssue) {
+        setValidation(nameIssue);
+        companyNameInputRef.current?.focus();
+        return;
+      }
+      setValidation(null);
+      setOnboardingStep(2);
+      return;
+    }
     const session = getSession();
     if (!session) {
       setError(
@@ -891,13 +908,14 @@ export default function OrganizationPageClient({
     setValidation(issue);
     setError(null);
     if (issue) {
+      if (issue.field === "companyName") setOnboardingStep(1);
       const target = event.currentTarget.querySelector<HTMLElement>(`[data-setup-field="${issue.field}"]`);
       target?.focus();
       target?.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
     }
     const shouldRedirectToEmployees =
-      setupMode === "create" && !setup.configured;
+      !setup.configured;
     const shouldUpdateAttendanceSettings =
       setupMode !== "create" &&
       draft.attendanceTrackingEnabled !== setup.attendanceTrackingEnabled;
@@ -1078,6 +1096,20 @@ export default function OrganizationPageClient({
     <AdminShell showTopbar={false}>
       <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 pt-10 pb-6 md:px-10 md:pt-12 md:pb-6 animate-in fade-in duration-500">
         <form noValidate className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
+          {!setup.configured ? (
+            <section className="mb-6 rounded-3xl border bg-white p-6" aria-label={locale === "ru" ? "Настройка компании" : "Company setup"}>
+              <p role="status" className="text-sm text-blue-600">{locale === "ru" ? `Шаг ${onboardingStep} из 2` : `Step ${onboardingStep} of 2`}</p>
+              <h1 ref={onboardingHeadingRef} tabIndex={-1} className="mt-2 text-2xl font-semibold">{onboardingStep === 1 ? (locale === "ru" ? "Компания и режим работы" : "Company and work mode") : (locale === "ru" ? "Рабочая локация" : "Work location")}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{locale === "ru" ? "Данные сохраняются при переходе между шагами. После настройки вы сможете пригласить сотрудников." : "Your entries are kept between steps. After setup, you can invite employees."}</p>
+              {onboardingStep === 1 ? <fieldset className="mt-4 grid gap-3 sm:grid-cols-2">
+                <legend className="mb-2 text-sm font-medium">{locale === "ru" ? "Что будете использовать?" : "What will you use?"}</legend>
+                {[true, false].map((attendance) => <label key={String(attendance)} className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4">
+                  <input type="radio" name="onboarding-mode" checked={draft.attendanceTrackingEnabled === attendance} onChange={() => updateDraft("attendanceTrackingEnabled", attendance)} />
+                  <span>{attendance ? (locale === "ru" ? "Посещаемость, смены и задачи" : "Attendance, shifts and tasks") : (locale === "ru" ? "Только задачи и чек-листы" : "Tasks and checklists only")}</span>
+                </label>)}
+              </fieldset> : <Button className="mt-4" type="button" variant="outline" disabled={isSaving} onClick={() => setOnboardingStep(1)}>{locale === "ru" ? "Назад к компании" : "Back to company"}</Button>}
+            </section>
+          ) : null}
           <div className="organization-studio-body">
             {error ? (
               <div className="organization-studio-feedback organization-studio-feedback--error">
@@ -1085,7 +1117,7 @@ export default function OrganizationPageClient({
               </div>
             ) : null}
 
-            <div className="organization-studio-identity">
+            <div className="organization-studio-identity" style={!setup.configured && onboardingStep === 2 ? { display: "none" } : undefined}>
               <div className="organization-studio-name-field">
                 <div className="organization-studio-name-row">
                   <span
@@ -1195,7 +1227,7 @@ export default function OrganizationPageClient({
               </div>
             </div>
 
-            <div className="organization-studio-grid">
+            <div className="organization-studio-grid" style={!setup.configured && onboardingStep === 1 ? { display: "none" } : undefined}>
               <div className="organization-studio-sidebar">
                 <section className="organization-studio-fieldset organization-studio-logo-field">
                   <span className="organization-studio-label">{locale === "ru" ? "Логотип" : "Logo"}</span>
@@ -1292,6 +1324,7 @@ export default function OrganizationPageClient({
                       {locale === "ru" ? "Минимум" : "Minimum"} {MIN_GEOFENCE_RADIUS_METERS} {locale === "ru" ? "м" : "m"}
                     </span>
                   </div>
+                  <p className="text-sm text-muted-foreground">{locale === "ru" ? "Радиус задаёт зону вокруг точки на карте, в которой сотрудник может отметить приход. Это не точность GPS: она зависит от устройства и условий приёма сигнала." : "The radius defines the area around the map point where employees can check in. It is not GPS accuracy, which depends on the device and signal conditions."}</p>
                 </section>
 
                 <section className="organization-studio-fieldset">
@@ -1564,7 +1597,7 @@ export default function OrganizationPageClient({
             size="lg"
             type="submit"
           >
-            {isSaving ? (
+            {!setup.configured && onboardingStep === 1 ? (locale === "ru" ? "Далее: рабочая локация" : "Next: work location") : isSaving ? (
               <span className="flex items-center gap-2">
                 <Swirling className="h-4 w-4" />
                 {setupMode === "create-location"

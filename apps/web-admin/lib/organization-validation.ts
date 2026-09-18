@@ -1,3 +1,7 @@
+export function validateOrganizationName(companyName: string, locale: string): { field: 'companyName'; message: string } | null {
+  return companyName.trim() ? null : { field: 'companyName', message: locale === 'ru' ? 'Укажи название организации.' : 'Enter the organization name.' };
+}
+
 export function validateOrganizationSetup(
   draft: { companyName: string; locationName: string; address: string; latitude: string; longitude: string },
   mode: string,
@@ -5,7 +9,8 @@ export function validateOrganizationSetup(
   locale: string,
 ): { field: 'companyName' | 'locationName' | 'map'; message: string } | null {
   const ru = locale === 'ru';
-  if (!draft.companyName.trim()) return { field: 'companyName', message: ru ? 'Укажи название организации.' : 'Enter the organization name.' };
+  const nameIssue = validateOrganizationName(draft.companyName, locale);
+  if (nameIssue) return nameIssue;
   if (mode === 'create-location' && !draft.locationName.trim()) return { field: 'locationName', message: ru ? 'Укажи название локации.' : 'Enter the location name.' };
   if (confirmationPending) return { field: 'map', message: ru ? 'Подтверди выбранную точку на карте перед сохранением.' : 'Confirm the selected map point before saving.' };
   if (!draft.address.trim()) return { field: 'map', message: ru ? 'Укажи адрес организации.' : 'Enter the organization address.' };

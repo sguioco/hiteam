@@ -22,7 +22,10 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
-const { validateOrganizationSetup } = load('lib/organization-validation.ts');
+const { validateOrganizationSetup, validateOrganizationName } = load('lib/organization-validation.ts');
+assert.equal(validateOrganizationName('Company', 'en'), null);
+assert.equal(validateOrganizationName('   ', 'ru').field, 'companyName');
+assert.equal(validateOrganizationName('', 'en').message, 'Enter the organization name.');
 const setupDraft = { companyName: 'Company', locationName: 'Office', address: 'Address', latitude: '0', longitude: '0' };
 assert.equal(validateOrganizationSetup(setupDraft, 'create', false, 'en'), null);
 assert.equal(validateOrganizationSetup({ ...setupDraft, companyName: ' ' }, 'create', false, 'ru').field, 'companyName');
