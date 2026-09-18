@@ -771,7 +771,30 @@ export function ManagerTasksPage({
   const [dateTo, setDateTo] = useState(() => formatDateInput(new Date()));
   const [expandedEmployeeIds, setExpandedEmployeeIds] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const selectedTask = tasks.find(task => task.id === selectedTaskId) ?? null;
+  const [linkedTask, setLinkedTask] = useState<TaskItem | null>(null);
+  const [linkedTaskMessage, setLinkedTaskMessage] = useState<string | null>(null);
+  const selectedTask = tasks.find(task => task.id === selectedTaskId) ?? (linkedTask?.id === selectedTaskId ? linkedTask : null);
+  useEffect(() => {
+    if (!accessChecked || !accessToken) return;
+    const taskId = new URLSearchParams(window.location.search).get("taskId");
+    if (!taskId) return;
+    let active = true;
+    setLinkedTaskMessage(localize(locale, "Загружаем задачу…", "Loading task…"));
+    void apiRequest<CollaborationTaskBoardResponse>(`/collaboration/tasks?taskId=${encodeURIComponent(taskId)}`, { token: accessToken, skipClientCache: true }).then(board => {
+      if (!active) return;
+      const task = board.tasks.find(item => item.id === taskId);
+      if (!task) {
+        setLinkedTaskMessage(localize(locale, "Задача удалена или недоступна для вашего аккаунта.", "This task was deleted or is not available to your account."));
+        return;
+      }
+      setLinkedTask(task);
+      setSelectedTaskId(task.id);
+      setLinkedTaskMessage(null);
+    }).catch((cause: unknown) => {
+      if (active) setLinkedTaskMessage(cause instanceof Error ? cause.message : localize(locale, "Не удалось загрузить задачу", "Could not load task"));
+    });
+    return () => { active = false; };
+  }, [accessChecked, accessToken, locale]);
   const [photoProofDialogTask, setPhotoProofDialogTask] = useState<{
     title: string;
     proofs: { id: string; url: string }[];
@@ -2029,6 +2052,7 @@ export function ManagerTasksPage({
   return (
     <AdminShell>
       <main className="page-shell section-stack team-tasks-page">
+        {linkedTaskMessage && <p role="status" className="warning-banner">{linkedTaskMessage}</p>}
         <section className={`team-tasks-toolbar${preset === "custom" ? " is-custom-open" : ""}`}>
           <div className="team-tasks-heading">
             <p
@@ -2657,6 +2681,7 @@ export function ManagerTasksPage({
             groups={groups}
             locale={locale}
             onUpdated={(previousId, updated) => {
+              setLinkedTask(current => current?.id === previousId ? updated : current);
               setTasks(current => current.map(task => task.id === previousId ? updated : task));
               setSelectedTaskId(current => current === previousId ? updated.id : current);
             }}

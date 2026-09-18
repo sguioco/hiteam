@@ -2621,6 +2621,7 @@ export class CollaborationService {
       action: "task.created",
       metadata: {
         taskCount: tasks.length,
+        taskIds: tasks.map((task) => task.id),
         title: dto.title,
         groupId: dto.groupId ?? null,
         groupName: tasks[0]?.group?.name ?? null,
@@ -3068,6 +3069,7 @@ export class CollaborationService {
     const tasks = await this.prisma.task.findMany({
       where: {
         tenantId: manager.tenantId,
+        id: query.taskId,
         title: query.search
           ? {
               contains: query.search,

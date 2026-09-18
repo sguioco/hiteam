@@ -75,6 +75,7 @@ type NormalizedActivityVisibilityScope = {
 
 export type CompanyActivityItem = {
   id: string;
+  taskIds?: string[];
   kind: ActivityKind;
   action: ActivityAction;
   createdAt: string;
@@ -756,6 +757,9 @@ export class AuditService {
         return {
           id: log.id,
           kind: 'task',
+          taskIds: Array.isArray(metadata.taskIds)
+            ? metadata.taskIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+            : [],
           action: 'created',
           createdAt: log.createdAt.toISOString(),
           actor,

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   ActivityTargetAvatars,
+  ActivityTaskLinks,
   type DashboardActivityItem,
   formatTimeLabel,
   getActivityIcon,
@@ -233,6 +234,7 @@ function ActivityFeedItem({
                 </>
               ) : null}
             </p>
+            <ActivityTaskLinks item={item} locale={locale} />
             <div className="daily-activity-meta">
               <time dateTime={item.createdAt}>
                 {formatTimeLabel(item.createdAt, locale)}

@@ -15,6 +15,7 @@ import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
+import { toAdminHref } from "@/lib/admin-routes";
 
 export type DashboardActivityPerson = {
   id: string;
@@ -26,6 +27,7 @@ export type DashboardActivityPerson = {
 
 export type DashboardActivityItem = {
   id: string;
+  taskIds?: string[];
   kind: "attendance" | "announcement" | "task" | "shift" | "employee" | "request";
   action:
     | "check_in"
@@ -51,6 +53,14 @@ type DailyActivityPanelProps = {
   items: DashboardActivityItem[];
   locale: "ru" | "en";
 };
+
+export function ActivityTaskLinks({ item, locale }: { item: DashboardActivityItem; locale: "ru" | "en" }) {
+  if (item.kind !== "task" || !item.taskIds?.length) return null;
+  const ids = Array.from(new Set(item.taskIds));
+  return <div className="flex flex-wrap gap-2 py-1">{ids.map((id, index) => <a key={id} className="text-sm text-blue-600 underline" href={toAdminHref(`/tasks?taskId=${encodeURIComponent(id)}`)}>
+    {locale === "ru" ? "Открыть задачу" : "Open task"}{ids.length > 1 ? ` ${index + 1}` : ""}
+  </a>)}</div>;
+}
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
   return locale === "ru" ? ru : en;
@@ -363,6 +373,7 @@ export function DailyActivityPanel({
                             <span>{item.locationName}</span>
                           ) : null}
                         </div>
+                        <ActivityTaskLinks item={item} locale={locale} />
                       </div>
                     </div>
 
