@@ -1,5 +1,7 @@
 "use client";
 
+import { TaskDetailsDialog } from "@/components/task-details-dialog";
+
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
   AttendanceBootstrapResponse,
@@ -766,6 +768,8 @@ export function ManagerTasksPage({
   const [dateFrom, setDateFrom] = useState(() => formatDateInput(new Date()));
   const [dateTo, setDateTo] = useState(() => formatDateInput(new Date()));
   const [expandedEmployeeIds, setExpandedEmployeeIds] = useState<string[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectedTask = tasks.find(task => task.id === selectedTaskId) ?? null;
   const [photoProofDialogTask, setPhotoProofDialogTask] = useState<{
     title: string;
     proofs: { id: string; url: string }[];
@@ -1914,8 +1918,6 @@ export function ManagerTasksPage({
         Boolean(proof.url),
     );
     const embedded = options?.embedded ?? false;
-    const canOpenPhotos = photoProofs.length > 0;
-    const canExpand = canOpenPhotos || Boolean(taskMeta.meeting?.meetingLink);
     const title = getTaskTitle(task, { normalize: true });
     const overdue = isTaskOverdue(task, today);
     const done = task.status === "DONE";
@@ -1961,37 +1963,16 @@ export function ManagerTasksPage({
       <article
         className={`team-tasks-task-line ${
           done ? "is-done" : overdue ? "is-overdue" : ""
-        } ${canExpand ? "is-expandable" : ""} ${embedded ? "is-embedded" : ""}`}
+        } is-expandable ${embedded ? "is-embedded" : ""}`}
         key={task.id}
       >
-        {canOpenPhotos ? (
           <button
             className="team-tasks-task-line-button"
-            onClick={() =>
-              setPhotoProofDialogTask({
-                title,
-                proofs: photoProofs.map((proof) => ({
-                  id: proof.id,
-                  url: proof.url,
-                })),
-              })
-            }
+            onClick={() => setSelectedTaskId(task.id)}
             type="button"
           >
             {taskRow}
           </button>
-        ) : taskMeta.meeting?.meetingLink ? (
-          <a
-            className="team-tasks-task-line-button"
-            href={taskMeta.meeting.meetingLink}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {taskRow}
-          </a>
-        ) : (
-          <div className="team-tasks-task-line-static">{taskRow}</div>
-        )}
 
       </article>
     );
@@ -2670,6 +2651,12 @@ export function ManagerTasksPage({
             </div>
           </DialogContent>
         </Dialog>
+        <TaskDetailsDialog
+          task={selectedTask}
+          title={selectedTask ? getTaskTitle(selectedTask, { normalize: true }) : ""}
+          locale={locale}
+          onClose={() => setSelectedTaskId(null)}
+        />
       </main>
     </AdminShell>
   );
