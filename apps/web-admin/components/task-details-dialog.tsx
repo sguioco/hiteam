@@ -1,6 +1,7 @@
 "use client";
 
 import type { TaskItem, TaskStatus } from "@smart/types";
+import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseTaskMeta } from "@/lib/task-meta";
 
@@ -11,12 +12,12 @@ const statuses: Record<TaskStatus, [string, string]> = {
   CANCELLED: ["Отменена", "Cancelled"],
 };
 
-/** Read-only task details. Mutations must use the server's task permission contract. */
-export function TaskDetailsDialog({ task, title, locale, onClose }: {
+export function TaskDetailsDialog({ task, title, locale, onClose, actions }: {
   task: TaskItem | null;
   title: string;
   locale: string;
   onClose: () => void;
+  actions?: ReactNode;
 }) {
   const ru = locale === "ru";
   const label = (r: string, en: string) => ru ? r : en;
@@ -47,6 +48,7 @@ export function TaskDetailsDialog({ task, title, locale, onClose }: {
             {!proofs.length && <p className="text-[color:var(--muted-foreground)]">{task.requiresPhoto ? label("Фото обязательно, но ещё не добавлено", "Photo required, not uploaded yet") : label("Нет фотографий", "No photos")}</p>}
             <div className="grid grid-cols-2 gap-3">{proofs.map(proof => proof.url ? <a href={proof.url} key={proof.id} target="_blank" rel="noopener noreferrer"><img className="aspect-square w-full rounded-xl object-cover" src={proof.url} alt={label("Фотоотчёт", "Photo proof")} /></a> : <p key={proof.id}>{label("Фотография недоступна", "Photo unavailable")}</p>)}</div>
           </section>
+          {actions}
           <section className="grid gap-2"><h3 className="font-semibold">{label("История и комментарии", "History and comments")}</h3>
             {!task.activities.length && <p>{label("Пока нет событий", "No activity yet")}</p>}
             <ol className="grid gap-3">{[...task.activities].sort((a,b) => a.createdAt.localeCompare(b.createdAt)).map(activity => <li key={activity.id} className="rounded-xl border border-[color:var(--border)] p-3"><div className="text-sm text-[color:var(--muted-foreground)]">{person(activity.actorEmployee)} · {date(activity.createdAt)}</div><p className="whitespace-pre-wrap">{activity.body || ({ CREATED: label("Задача создана", "Task created"), COMMENT: label("Комментарий", "Comment"), STATUS_CHANGED: label("Статус изменён", "Status changed"), CHECKLIST_TOGGLED: label("Чек-лист обновлён", "Checklist updated") }[activity.kind])}</p></li>)}</ol>

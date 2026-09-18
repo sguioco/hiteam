@@ -1,6 +1,7 @@
 "use client";
 
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
+import { TaskActions } from "@/components/task-actions";
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
@@ -2656,6 +2657,17 @@ export function ManagerTasksPage({
           title={selectedTask ? getTaskTitle(selectedTask, { normalize: true }) : ""}
           locale={locale}
           onClose={() => setSelectedTaskId(null)}
+          actions={selectedTask && accessToken ? <TaskActions
+            key={selectedTask.id}
+            task={selectedTask}
+            token={accessToken}
+            groups={groups}
+            locale={locale}
+            onUpdated={(previousId, updated) => {
+              setTasks(current => current.map(task => task.id === previousId ? updated : task));
+              setSelectedTaskId(current => current === previousId ? updated.id : current);
+            }}
+          /> : null}
         />
       </main>
     </AdminShell>
