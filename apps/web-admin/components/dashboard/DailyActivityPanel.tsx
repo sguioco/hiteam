@@ -55,10 +55,13 @@ type DailyActivityPanelProps = {
 };
 
 export function ActivityTaskLinks({ item, locale }: { item: DashboardActivityItem; locale: "ru" | "en" }) {
-  if (item.kind !== "task" || !item.taskIds?.length) return null;
-  const ids = Array.from(new Set(item.taskIds));
+  const ids = Array.from(new Set(item.kind === "task" ? item.taskIds ?? [] : []));
+  const employees = Array.from(new Map(item.targetEmployees.map((person) => [person.id, person])).values());
+  if (!ids.length && !employees.length) return null;
   return <div className="flex flex-wrap gap-2 py-1">{ids.map((id, index) => <a key={id} className="text-sm text-blue-600 underline" href={toAdminHref(`/tasks?taskId=${encodeURIComponent(id)}`)}>
     {locale === "ru" ? "Открыть задачу" : "Open task"}{ids.length > 1 ? ` ${index + 1}` : ""}
+  </a>)}{employees.map((person) => <a key={`employee:${person.id}`} className="text-sm text-blue-600 underline" href={toAdminHref(`/employees/${encodeURIComponent(person.id)}`)}>
+    {locale === "ru" ? "Сотрудник: " : "Employee: "}{person.displayName}
   </a>)}</div>;
 }
 

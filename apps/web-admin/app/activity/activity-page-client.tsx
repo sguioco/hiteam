@@ -30,6 +30,7 @@ import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { cn } from "@/lib/utils";
+import { readActivityContext } from "@/lib/activity-context";
 
 type PeriodPreset = "7d" | "14d" | "custom";
 
@@ -275,8 +276,35 @@ export default function ActivityPageClient({
   const [companyId, setCompanyId] = useState("all");
   const [locationId, setLocationId] = useState("all");
   const didUseInitialData = useRef(Boolean(initialData));
+  const [contextReady, setContextReady] = useState(false);
 
   useEffect(() => {
+    const restore = () => {
+      const context = readActivityContext(window.location.search, initialRange);
+      setDateFrom(context.dateFrom);
+      setDateTo(context.dateTo);
+      setPreset(context.preset);
+      setCompanyId(context.companyId);
+      setLocationId(context.locationId);
+      didUseInitialData.current = false;
+      setContextReady(true);
+    };
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [initialRange]);
+
+  useEffect(() => {
+    if (!contextReady) return;
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries({ dateFrom, dateTo, companyId, locationId })) {
+      url.searchParams.set(key, value);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }, [contextReady, dateFrom, dateTo, companyId, locationId]);
+
+  useEffect(() => {
+    if (!contextReady) return;
     if (didUseInitialData.current && initialData) {
       didUseInitialData.current = false;
       setLoading(false);
@@ -300,6 +328,7 @@ export default function ActivityPageClient({
 
     setLoading(true);
     setError(null);
+    let active = true;
 
     void fetchActivitySnapshot(
       session.accessToken,
@@ -308,10 +337,12 @@ export default function ActivityPageClient({
       locationId,
     )
       .then((snapshot) => {
+        if (!active) return;
         setItems(snapshot.items ?? []);
         setCollapsedDays(new Set());
       })
       .catch((loadError) => {
+        if (!active) return;
         setItems([]);
         setError(
           loadError instanceof Error
@@ -324,9 +355,11 @@ export default function ActivityPageClient({
         );
       })
       .finally(() => {
+        if (!active) return;
         setLoading(false);
       });
-  }, [companyId, dateFrom, dateTo, initialData, locale, locationId]);
+    return () => { active = false; };
+  }, [contextReady, companyId, dateFrom, dateTo, initialData, locale, locationId]);
 
   useEffect(() => {
     const session = getSession();

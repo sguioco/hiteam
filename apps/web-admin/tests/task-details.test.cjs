@@ -12,7 +12,7 @@ function load(file, overrides = {}) {
   const output = ts.transpileModule(source, { compilerOptions: {
     jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
   } }).outputText;
-  vm.runInNewContext(output, { exports, require(name) {
+  vm.runInNewContext(output, { exports, URLSearchParams, require(name) {
     if (Object.hasOwn(overrides, name)) return overrides[name];
     if (name === '@/lib/task-meta') return load('lib/task-meta.ts');
     // Render dialog content without the browser-only portal; retain actual component logic.
@@ -22,6 +22,18 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { readActivityContext } = load('lib/activity-context.ts');
+const defaults = { dateFrom: '2026-09-01', dateTo: '2026-09-18' };
+const restored = readActivityContext('?dateFrom=2026-08-01&dateTo=2026-08-31&companyId=c1&locationId=l1', defaults);
+assert.equal(restored.dateFrom, '2026-08-01');
+assert.equal(restored.dateTo, '2026-08-31');
+assert.equal(restored.companyId, 'c1');
+assert.equal(restored.locationId, 'l1');
+assert.equal(restored.preset, 'custom');
+for (const query of ['', '?dateFrom=2026-02-30&dateTo=2026-03-01', '?dateFrom=2026-09-19&dateTo=2026-09-01']) {
+  assert.equal(readActivityContext(query, defaults).dateFrom, defaults.dateFrom);
+  assert.equal(readActivityContext(query, defaults).dateTo, defaults.dateTo);
+}
 const person = { firstName: 'Anna', lastName: 'Smith' };
 const task = {
   id: 'task-1', description: 'Clean the desk', status: 'TODO', dueAt: null,
