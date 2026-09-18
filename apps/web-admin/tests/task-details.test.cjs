@@ -65,6 +65,22 @@ assert.equal(taskActionAvailability({ ...ownTask, requiresPhoto: true, photoProo
 assert.equal(taskActionAvailability({ ...ownTask, requiresPhoto: true }, 'creator', []).complete, true);
 console.log('task details rendering tests passed');
 
+const { TaskList } = load('components/task-list.tsx');
+const listTasks = [
+  { ...task, id: 'unassigned', title: 'Unassigned job', assigneeEmployee: null, group: null, locationId: 'north', location: { id: 'north', name: 'North' } },
+  { ...task, id: 'team-task', title: 'Team job', assigneeEmployee: null, group: { name: 'Kitchen' }, locationId: 'south', location: { id: 'south', name: 'South' } },
+];
+const renderList = (locationId, query) => renderToStaticMarkup(React.createElement(TaskList, {
+  tasks: listTasks, locale: 'en', locationId, query, onQueryChange() {}, getTitle: value => value.title, onOpen() {},
+}));
+assert.ok(renderList('', '').includes('Unassigned job'));
+assert.ok(renderList('', '').includes('Team job'));
+assert.ok(!renderList('north', '').includes('Team job'));
+assert.ok(renderList('', 'Kitchen').includes('Team job'));
+assert.ok(!renderList('', 'Kitchen').includes('Unassigned job'));
+assert.ok(renderList('', 'missing').includes('No matching tasks'));
+assert.ok(renderList('missing', '').includes('No tasks in the selected period'));
+
 // Exercise the actual checkbox handler: one in-flight request, server-confirmed
 // state only, visible failure, and a subsequent successful attempt.
 (async () => {

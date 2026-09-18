@@ -2,6 +2,7 @@
 
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
 import { TaskActions } from "@/components/task-actions";
+import { TaskList } from "@/components/task-list";
 
 import { getLocalTimeZone, parseDate } from "@internationalized/date";
 import {
@@ -781,6 +782,7 @@ export function ManagerTasksPage({
   const [taskPresenceFilter, setTaskPresenceFilter] = useState("all");
   const [taskCountFilter, setTaskCountFilter] = useState("0");
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"tasks" | "employees">("tasks");
   const [showFilters, setShowFilters] = useState(false);
   const [openFilterSelect, setOpenFilterSelect] =
     useState<FilterSelectKey | null>(null);
@@ -2135,7 +2137,7 @@ export function ManagerTasksPage({
               ))}
             </div>
 
-            <div className="team-tasks-filter-menu" ref={filterMenuRef}>
+            <div className="team-tasks-filter-menu" ref={filterMenuRef} hidden={viewMode !== "employees"}>
               <button
                 aria-controls="team-tasks-filter-popover"
                 aria-expanded={showFilters}
@@ -2261,6 +2263,9 @@ export function ManagerTasksPage({
           </div>
         ) : null}
 
+        <div className="flex flex-wrap gap-2" role="group" aria-label={localize(locale, "Представление задач", "Task view")}>
+          {(["tasks", "employees"] as const).map(mode => <button key={mode} type="button" aria-pressed={viewMode === mode} className={`rounded-xl border px-4 py-2 ${viewMode === mode ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => { setViewMode(mode); setShowFilters(false); }}>{mode === "tasks" ? localize(locale, "Задачи", "Tasks") : localize(locale, "По сотрудникам", "By employee")}</button>)}
+        </div>
         {loading ? (
           <WorkspaceLoading
             className="team-tasks-loading-panel"
@@ -2270,6 +2275,8 @@ export function ManagerTasksPage({
               "Loading team tasks",
             )}
           />
+        ) : viewMode === "tasks" ? (
+          <TaskList tasks={visibleTasks} locale={locale} locationId={locationFilter} query={employeeSearch} onQueryChange={setEmployeeSearch} getTitle={task => getTaskTitle(task, { normalize: true })} onOpen={setSelectedTaskId} />
         ) : (
           <section className="team-tasks-list">
             <div className="relative mb-2 min-w-[280px]">
