@@ -191,7 +191,7 @@ function resolveShellPageTitle(pathname: string, locale: Locale) {
     },
     {
       href: toAdminHref("/schedule"),
-      label: locale === "ru" ? "График" : "Calendar",
+      label: locale === "ru" ? "Календарь" : "Calendar",
     },
     {
       href: toAdminHref("/tasks"),

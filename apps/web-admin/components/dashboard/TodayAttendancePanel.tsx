@@ -482,7 +482,7 @@ export function TodayAttendancePanel({
         </div>
         <div className="today-attendance-title-group">
           <div className="today-attendance-title-row">
-            <h2>{localize(locale, "Attendance", "Attendance")}</h2>
+            <h2>{localize(locale, "Посещаемость", "Attendance")}</h2>
             <span className="today-attendance-head-count">
               {presentCount}/{expectedCount}
             </span>

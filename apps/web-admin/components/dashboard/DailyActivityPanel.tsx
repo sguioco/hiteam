@@ -222,7 +222,10 @@ export function ActivityTargetAvatars({
   const overflowCount = people.length > 5 ? people.length - 4 : 0;
 
   return (
-    <div className="daily-activity-targets">
+    <div className="daily-activity-targets" aria-label={localize(locale, "Участники события", "Event participants")}>
+      <span className="text-xs text-muted-foreground">
+        {localize(locale, "Участники:", "Participants:")}
+      </span>
       {visiblePeople.map((person) => {
         const displayName = resolvePersonName(person, locale);
         const avatarSource = getAvatarSource(person, locale);

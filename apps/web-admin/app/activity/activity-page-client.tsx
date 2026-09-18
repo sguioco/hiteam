@@ -100,26 +100,26 @@ function parseCalendarDateRangeInput(startValue: string, endValue: string) {
   }
 }
 
-function formatDayHeader(value: string) {
+function formatDayHeader(value: string, locale: "ru" | "en") {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return {
       key: value,
-      weekday: "DAY",
+      weekday: localize(locale, "День", "Day"),
       dateLabel: "—",
     };
   }
 
   const monthLabel = parsed
-    .toLocaleDateString("en-US", { month: "long" })
+    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { month: "long", day: "numeric" })
     .toUpperCase();
 
   return {
     key: formatDateKey(parsed),
     weekday: parsed
-      .toLocaleDateString("en-US", { weekday: "long" })
+      .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { weekday: "long" })
       .toUpperCase(),
-    dateLabel: `${parsed.getDate()} ${monthLabel}`,
+    dateLabel: monthLabel,
   };
 }
 
@@ -374,7 +374,7 @@ export default function ActivityPageClient({
           return;
         }
 
-        const header = formatDayHeader(item.createdAt);
+        const header = formatDayHeader(item.createdAt, locale);
         const currentGroup = groups.get(header.key);
 
         if (currentGroup) {
@@ -389,7 +389,7 @@ export default function ActivityPageClient({
       });
 
     return Array.from(groups.values());
-  }, [dateFrom, dateTo, items]);
+  }, [dateFrom, dateTo, items, locale]);
 
   function applyPreset(nextPreset: Exclude<PeriodPreset, "custom">) {
     const range = buildPresetRange(nextPreset);
@@ -553,7 +553,7 @@ export default function ActivityPageClient({
             {loading ? (
               <WorkspaceLoading
                 className="activity-page-loading"
-                label={localize(locale, "Загружаем activity", "Loading activity")}
+                label={localize(locale, "Загружаем активность", "Loading activity")}
               />
             ) : groupedItems.length ? (
               <div className="activity-feed-groups">

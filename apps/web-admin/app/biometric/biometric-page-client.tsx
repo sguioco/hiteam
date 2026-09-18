@@ -304,9 +304,9 @@ function getEnrollmentStatusLabel(
                 <SelectItem className="biometric-select-item" value="__all">
                   {locale === 'ru' ? 'Все результаты' : 'All results'}
                 </SelectItem>
-                <SelectItem className="biometric-select-item" value="PASSED">Passed</SelectItem>
-                <SelectItem className="biometric-select-item" value="FAILED">Failed</SelectItem>
-                <SelectItem className="biometric-select-item" value="REVIEW">Review</SelectItem>
+                <SelectItem className="biometric-select-item" value="PASSED">{locale === "ru" ? "Пройдена" : "Passed"}</SelectItem>
+                <SelectItem className="biometric-select-item" value="FAILED">{locale === "ru" ? "Не пройдена" : "Failed"}</SelectItem>
+                <SelectItem className="biometric-select-item" value="REVIEW">{locale === "ru" ? "На проверке" : "Review"}</SelectItem>
               </SelectContent>
             </Select>
           </div>

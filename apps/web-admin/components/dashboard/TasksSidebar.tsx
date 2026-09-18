@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, CheckCircle2, Circle, Filter, ListTodo } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle2, Circle, Filter, ListTodo } from "lucide-react";
 import { TaskItem } from "@smart/types";
 import Radio, { type RadioItem } from "@/components/ui/Radio";
 import { useI18n } from "@/lib/i18n";
@@ -307,11 +307,12 @@ export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: Task
 
       <div className="mt-4 shrink-0">
         <button
-          className="tasks-overdue-switch"
+          aria-pressed={showOverdue}
+          className={`tasks-overdue-switch${overdueTasks.length && !showOverdue ? " has-overdue" : ""}`}
           onClick={() => setShowOverdue((current) => !current)}
           type="button"
         >
-          <ArrowLeftRight className="h-4 w-4" />
+          {showOverdue ? <ArrowLeft className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span>
             {showOverdue
               ? localize(locale, "Текущие задачи", "Current tasks")
