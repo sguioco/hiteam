@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { validateOrganizationSetup } from "@/lib/organization-validation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -341,6 +342,7 @@ export default function OrganizationPageClient({
     ),
   );
   const [error, setError] = useState<string | null>(null);
+  const [validation, setValidation] = useState<ReturnType<typeof validateOrganizationSetup>>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [lastSavedMode, setLastSavedMode] = useState<SetupMode | null>(null);
@@ -885,32 +887,13 @@ export default function OrganizationPageClient({
       );
       return;
     }
-    if (!draft.companyName.trim()) {
-      setError(locale === "ru" ? "Укажи название организации." : "Enter the organization name.");
-      return;
-    }
-    if (setupMode === "create-location" && !draft.locationName.trim()) {
-      setError(locale === "ru" ? "Укажи название локации." : "Enter the location name.");
-      return;
-    }
-    if (locationConfirmationPending) {
-      setError(
-        locale === "ru"
-          ? "Подтверди выбранную точку на карте перед сохранением."
-          : "Confirm the selected map point before saving.",
-      );
-      return;
-    }
-    if (!draft.address.trim()) {
-      setError(locale === "ru" ? "Укажи адрес организации." : "Enter the organization address.");
-      return;
-    }
-    if (!draft.latitude || !draft.longitude) {
-      setError(
-        locale === "ru"
-          ? "Поставь точку на карте или выбери адрес из подсказок."
-          : "Place a point on the map or choose an address from suggestions.",
-      );
+    const issue = validateOrganizationSetup(draft, setupMode, locationConfirmationPending, locale);
+    setValidation(issue);
+    setError(null);
+    if (issue) {
+      const target = event.currentTarget.querySelector<HTMLElement>(`[data-setup-field="${issue.field}"]`);
+      target?.focus();
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
     }
     const shouldRedirectToEmployees =
@@ -1094,7 +1077,7 @@ export default function OrganizationPageClient({
   return (
     <AdminShell showTopbar={false}>
       <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 pt-10 pb-6 md:px-10 md:pt-12 md:pb-6 animate-in fade-in duration-500">
-        <form className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
+        <form noValidate className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
           <div className="organization-studio-body">
             {error ? (
               <div className="organization-studio-feedback organization-studio-feedback--error">
@@ -1114,6 +1097,9 @@ export default function OrganizationPageClient({
                   >
                     <Input
                       aria-label={locale === "ru" ? "Название организации" : "Organization name"}
+                      data-setup-field="companyName"
+                      aria-invalid={validation?.field === "companyName"}
+                      aria-describedby={validation?.field === "companyName" ? "company-name-error" : undefined}
                       className="organization-studio-name-input"
                       onChange={(e) => updateDraft("companyName", e.target.value)}
                       placeholder={locale === "ru" ? "Название организации" : "Organization name"}
@@ -1122,6 +1108,7 @@ export default function OrganizationPageClient({
                       size={1}
                       value={draft.companyName}
                     />
+                    {validation?.field === "companyName" ? <span id="company-name-error" role="alert" className="block text-sm text-red-600">{validation.message}</span> : null}
                   </span>
                   <button
                     aria-label={locale === "ru" ? "Редактировать название организации" : "Edit organization name"}
@@ -1452,6 +1439,9 @@ export default function OrganizationPageClient({
                     </span>
                     <Input
                       className="h-11 rounded-2xl bg-[color:var(--panel)]"
+                      data-setup-field="locationName"
+                      aria-invalid={validation?.field === "locationName"}
+                      aria-describedby={validation?.field === "locationName" ? "location-name-error" : undefined}
                       onChange={(event) =>
                         updateDraft("locationName", event.target.value)
                       }
@@ -1460,9 +1450,11 @@ export default function OrganizationPageClient({
                       }
                       value={draft.locationName}
                     />
+                    {validation?.field === "locationName" ? <span id="location-name-error" role="alert" className="text-sm text-red-600">{validation.message}</span> : null}
                   </label>
                 ) : null}
-                <div className="organization-studio-map-shell">
+                <div className="organization-studio-map-shell" data-setup-field="map" tabIndex={-1} aria-describedby={validation?.field === "map" ? "setup-map-error" : undefined}>
+                  {validation?.field === "map" ? <p id="setup-map-error" role="alert" className="text-sm text-red-600">{validation.message}</p> : null}
                   <LocationMapPicker
                     address={draft.address}
                     apiKey={apiKey}

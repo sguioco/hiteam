@@ -22,6 +22,15 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { validateOrganizationSetup } = load('lib/organization-validation.ts');
+const setupDraft = { companyName: 'Company', locationName: 'Office', address: 'Address', latitude: '0', longitude: '0' };
+assert.equal(validateOrganizationSetup(setupDraft, 'create', false, 'en'), null);
+assert.equal(validateOrganizationSetup({ ...setupDraft, companyName: ' ' }, 'create', false, 'ru').field, 'companyName');
+assert.equal(validateOrganizationSetup({ ...setupDraft, locationName: '' }, 'create-location', false, 'en').field, 'locationName');
+assert.equal(validateOrganizationSetup(setupDraft, 'create', true, 'en').field, 'map');
+for (const invalid of [{ address: '' }, { latitude: '' }, { latitude: 'NaN' }, { longitude: '181' }]) {
+  assert.equal(validateOrganizationSetup({ ...setupDraft, ...invalid }, 'create', false, 'en').field, 'map');
+}
 const { readActivityContext } = load('lib/activity-context.ts');
 const defaults = { dateFrom: '2026-09-01', dateTo: '2026-09-18' };
 const restored = readActivityContext('?dateFrom=2026-08-01&dateTo=2026-08-31&companyId=c1&locationId=l1', defaults);
