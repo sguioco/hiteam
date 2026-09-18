@@ -10,6 +10,7 @@ export function taskActionAvailability(task: TaskItem, employeeId: string | null
   return {
     allowed,
     comment: allowed && !recurring,
+    checklist: allowed && !recurring,
     reschedule: allowed && task.status !== "DONE" && task.status !== "CANCELLED",
     complete: allowed && (!task.requiresPhoto || task.photoProofs.some(proof => !proof.deletedAt && !proof.supersededByProofId)),
   };

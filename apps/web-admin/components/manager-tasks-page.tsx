@@ -2310,24 +2310,10 @@ export function ManagerTasksPage({
                           }
 
                           event.preventDefault();
-                          const employeeId = match.employeeId;
-                          if (employeeId) {
-                            setExpandedEmployeeIds((current) =>
-                              current.includes(employeeId)
-                                ? current
-                                : [...current, employeeId],
-                            );
-                          }
+                          setSelectedTaskId(match.id);
                         }}
                         onClick={() => {
-                          const employeeId = match.employeeId;
-                          if (employeeId) {
-                            setExpandedEmployeeIds((current) =>
-                              current.includes(employeeId)
-                                ? current
-                                : [...current, employeeId],
-                            );
-                          }
+                          setSelectedTaskId(match.id);
                         }}
                         role="button"
                         tabIndex={0}

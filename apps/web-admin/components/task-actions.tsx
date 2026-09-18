@@ -30,7 +30,7 @@ export function TaskActions({ task, token, groups, locale, onUpdated }: {
     return () => { active = false; };
   }, [token]);
   const available = taskActionAvailability(task, employeeId, groups);
-  async function submit(action: "status" | "reschedule" | "comments", body: object) {
+  async function submit(action: "status" | "reschedule" | "comments" | `checklist/${string}/toggle`, body: object) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true); setError(null); setNotice("");
@@ -56,6 +56,13 @@ export function TaskActions({ task, token, groups, locale, onUpdated }: {
     <h3 className="font-semibold">{text("Действия", "Actions")}</h3>
     {error && <p role="alert" className="text-red-600">{error}</p>}
     {notice && <p role="status">{notice}</p>}
+    {task.checklistItems.length > 0 && <fieldset className="grid gap-2" disabled={busy || !identityLoaded || !available.checklist}>
+      <legend className="mb-2 font-semibold">{text("Чек-лист", "Checklist")}</legend>
+      {[...task.checklistItems].sort((a, b) => a.sortOrder - b.sortOrder).map(item => <label key={item.id} className="flex items-start gap-3 rounded-xl border border-[color:var(--border)] p-3">
+        <input type="checkbox" className="mt-1 size-4" checked={item.isCompleted} onChange={() => void submit(`checklist/${encodeURIComponent(item.id)}/toggle`, {})} />
+        <span className={item.isCompleted ? "line-through text-[color:var(--muted-foreground)]" : ""}>{item.title}</span>
+      </label>)}
+    </fieldset>}
     {!identityLoaded ? <p>{text("Проверяем права…", "Checking permissions…")}</p> : !available.allowed ? <p>{text("Для этой задачи доступен только просмотр. Изменения доступны автору, исполнителю или участнику команды; повторяющуюся задачу меняет её исполнитель.", "This task is read-only. Changes are available to its creator, assignee or team member; recurring tasks can only be changed by their assignee.")}</p> : <>
       <div className="flex flex-wrap gap-2">{statuses.map(([status, label]) => <button key={status} type="button" className={button} disabled={busy || task.status === status || (status === "DONE" && !available.complete)} onClick={() => void submit("status", { status })}>{label}</button>)}</div>
       {!available.complete && <p className="text-sm">{text("Для завершения нужен фотоотчёт. Добавьте его из приложения сотрудника.", "Completion requires a photo proof. Upload it from the employee app.")}</p>}
