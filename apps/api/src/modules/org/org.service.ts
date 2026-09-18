@@ -126,11 +126,12 @@ export class OrgService {
 
   private isConfiguredLocation(location: {
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
   } | null) {
     return Boolean(
       location &&
+        typeof location.latitude === 'number' && typeof location.longitude === 'number' &&
         location.address !== "Not set yet" &&
         !(location.latitude === 0 && location.longitude === 0),
     );
@@ -397,12 +398,12 @@ export class OrgService {
           locations.find(
             (location) =>
               location.companyId === company.id &&
-              this.isConfiguredLocation(location),
+              (attendanceTrackingEnabled ? this.isConfiguredLocation(location) : Boolean(location.country)),
           ) ?? null,
       }))
       .find(
         ({ company, location }) =>
-          location && !this.isPlaceholderSetup({ company, location }),
+          location && (!attendanceTrackingEnabled || !this.isPlaceholderSetup({ company, location })),
       );
     const company = configuredPair?.company ?? companies[0] ?? null;
     const location =
@@ -411,7 +412,7 @@ export class OrgService {
         ? locations.find(({ companyId }) => companyId === company.id) ?? null
         : null);
 
-    if (this.isPlaceholderSetup({ company, location })) {
+    if (attendanceTrackingEnabled && this.isPlaceholderSetup({ company, location })) {
       return {
         organizationId: tenant?.businessId ?? null,
         configured: false,
@@ -422,7 +423,7 @@ export class OrgService {
       };
     }
 
-    const configured = Boolean(company && this.isConfiguredLocation(location));
+    const configured = Boolean(company && (attendanceTrackingEnabled ? this.isConfiguredLocation(location) : location?.country));
 
     return {
       organizationId: tenant?.businessId ?? null,
@@ -552,6 +553,13 @@ export class OrgService {
   }
 
   async upsertSetup(tenantId: string, dto: UpsertOrgSetupDto) {
+    const tasksOnly = dto.attendanceTrackingEnabled === false;
+    if (dto.mode === 'create-location' && (!dto.companyId || !dto.locationName?.trim() || dto.locationId)) throw new BadRequestException('Company and new location name are required.');
+    if (!dto.companyName.trim()) throw new BadRequestException('Company name is required.');
+    if (tasksOnly && !dto.billingCountry) throw new BadRequestException('Billing country is required.');
+    if (!tasksOnly && (!dto.address?.trim() || !Number.isFinite(dto.latitude) || !Number.isFinite(dto.longitude) || Math.abs(dto.latitude!) > 90 || Math.abs(dto.longitude!) > 180)) {
+      throw new BadRequestException('A valid address and map point are required for attendance.');
+    }
     const setup = await this.prisma.$transaction(async (tx) => {
       const nextAttendanceTrackingEnabled =
         typeof dto.attendanceTrackingEnabled === "boolean"
@@ -583,12 +591,18 @@ export class OrgService {
 
       const shouldCreateNew = existingCompanies.length === 0;
 
-      const existingCompany = shouldCreateNew ? null : existingCompanies[0];
-      const existingLocation = existingCompany
+      const existingCompany = dto.companyId ? existingCompanies.find((company) => company.id === dto.companyId) : shouldCreateNew ? null : existingCompanies[0];
+      if (dto.companyId && !existingCompany) throw new BadRequestException('Company not found in this workspace.');
+      const existingLocation = existingCompany && dto.mode !== 'create-location'
         ? (existingLocations.find(
-            (location) => location.companyId === existingCompany.id,
+            (location) => location.companyId === existingCompany.id && (!dto.locationId || location.id === dto.locationId),
           ) ?? null)
         : null;
+
+      if (dto.locationId && !existingLocation) throw new BadRequestException('Location not found in this company.');
+      if (dto.attendanceTrackingEnabled === true && existingLocations.some((location) => location.id !== existingLocation?.id && !this.isConfiguredLocation(location))) {
+        throw new BadRequestException('Configure map points for other active locations before enabling attendance.');
+      }
 
       const company = existingCompany
         ? await tx.company.update({
@@ -596,7 +610,7 @@ export class OrgService {
             data: {
               name: dto.companyName,
               logoUrl: dto.companyLogoUrl ?? null,
-              googlePlaceId: dto.googlePlaceId ?? null,
+              googlePlaceId: dto.googlePlaceId ?? (tasksOnly ? existingCompany.googlePlaceId : null),
             },
           })
         : await tx.company.create({
@@ -623,13 +637,13 @@ export class OrgService {
 
       const locationPayload = {
         companyId: company.id,
-        name: dto.companyName,
+        name: dto.locationName?.trim() || existingLocation?.name || dto.companyName,
         code: locationCode,
-        address: dto.address,
-        country: dto.country?.trim() || inferCountryFromAddress(dto.address),
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        geofenceRadiusMeters: normalizeGeofenceRadius(dto.geofenceRadiusMeters),
+        address: tasksOnly ? (existingLocation?.address === 'Not set yet' ? '' : existingLocation?.address ?? '') : dto.address!,
+        country: tasksOnly ? dto.billingCountry!.toUpperCase() : dto.country?.trim() || inferCountryFromAddress(dto.address!),
+        latitude: tasksOnly ? (existingLocation && this.isConfiguredLocation(existingLocation) ? existingLocation.latitude : null) : dto.latitude!,
+        longitude: tasksOnly ? (existingLocation && this.isConfiguredLocation(existingLocation) ? existingLocation.longitude : null) : dto.longitude!,
+        geofenceRadiusMeters: tasksOnly ? existingLocation?.geofenceRadiusMeters ?? DEFAULT_GEOFENCE_RADIUS_METERS : normalizeGeofenceRadius(dto.geofenceRadiusMeters),
         timezone: dto.timezone,
       };
 
@@ -733,6 +747,15 @@ export class OrgService {
   }
 
   async updateSettings(tenantId: string, dto: UpdateOrgSettingsDto) {
+    if (dto.attendanceTrackingEnabled) {
+      const locations = await this.prisma.location.findMany({ where: { tenantId, archivedAt: null } });
+      if (!locations.length || locations.some((location) => !this.isConfiguredLocation(location))) {
+        throw new BadRequestException('Configure an address and map point for every active location before enabling attendance.');
+      }
+    } else {
+      const locations = await this.prisma.location.findMany({ where: { tenantId, archivedAt: null } });
+      if (!locations.length || locations.some((location) => !location.country)) throw new BadRequestException('Set the billing country before enabling tasks-only mode.');
+    }
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {

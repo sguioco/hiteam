@@ -52,6 +52,10 @@ export class AttendanceService {
       include: { primaryLocation: true },
     });
 
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: employee.tenantId }, select: { attendanceTrackingEnabled: true } });
+    if (!tenant.attendanceTrackingEnabled) throw new BadRequestException('Attendance is disabled for this workspace.');
+    if (employee.primaryLocation.latitude === null || employee.primaryLocation.longitude === null) throw new BadRequestException('Configure the location map point before recording attendance.');
+
     const [shift, nextShift, policy] = await Promise.all([
       this.scheduleService.findCurrentShift(employee.id),
       this.scheduleService.findNextShift(employee.id),
@@ -1970,12 +1974,17 @@ export class AttendanceService {
         id: string;
         companyId: string;
         name: string;
-        latitude: number;
-        longitude: number;
+        latitude: number | null;
+        longitude: number | null;
         geofenceRadiusMeters: number;
       };
     },
   ) {
+    if (context.location.latitude === null || context.location.longitude === null) {
+      throw new BadRequestException('Configure the location map point before recording attendance.');
+    }
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: employee.tenantId }, select: { attendanceTrackingEnabled: true } });
+    if (!tenant.attendanceTrackingEnabled) throw new BadRequestException('Attendance is disabled for this workspace.');
     const device = await this.devicesService.resolveActiveDevice(
       employee.id,
       dto.deviceFingerprint,
@@ -2083,8 +2092,8 @@ export class AttendanceService {
     eventType: AttendanceEventType;
     location: {
       id: string;
-      latitude: number;
-      longitude: number;
+      latitude: number | null;
+      longitude: number | null;
       geofenceRadiusMeters: number;
     };
     reason: string;
@@ -2095,6 +2104,7 @@ export class AttendanceService {
       deviceName: string | null;
     } | null;
   }) {
+    if (args.location.latitude === null || args.location.longitude === null) throw new BadRequestException('Location map point is not configured.');
     const distanceMeters = this.distanceMeters(
       args.dto.latitude,
       args.dto.longitude,

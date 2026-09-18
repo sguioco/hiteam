@@ -15,6 +15,7 @@ function load(file, overrides = {}) {
   vm.runInNewContext(output, { exports, URLSearchParams, require(name) {
     if (Object.hasOwn(overrides, name)) return overrides[name];
     if (name === '@/lib/task-meta') return load('lib/task-meta.ts');
+    if (name === './billing-countries') return load('lib/billing-countries.ts');
     // Render dialog content without the browser-only portal; retain actual component logic.
     if (name === '@/components/ui/dialog') return new Proxy({}, { get: () => ({ children }) => React.createElement('div', null, children) });
     return require(name);
@@ -27,6 +28,9 @@ assert.equal(validateOrganizationName('Company', 'en'), null);
 assert.equal(validateOrganizationName('   ', 'ru').field, 'companyName');
 assert.equal(validateOrganizationName('', 'en').message, 'Enter the organization name.');
 const setupDraft = { companyName: 'Company', locationName: 'Office', address: 'Address', latitude: '0', longitude: '0' };
+assert.equal(validateOrganizationSetup({ ...setupDraft, attendanceTrackingEnabled: false, billingCountry: 'AE', address: '', latitude: '', longitude: '' }, 'update', true, 'en'), null);
+assert.equal(validateOrganizationSetup({ ...setupDraft, attendanceTrackingEnabled: false, billingCountry: 'XX' }, 'update', false, 'en').field, 'billingCountry');
+assert.equal(validateOrganizationSetup({ ...setupDraft, attendanceTrackingEnabled: true, billingCountry: 'AE', latitude: '' }, 'update', false, 'en').field, 'map');
 assert.equal(validateOrganizationSetup(setupDraft, 'create', false, 'en'), null);
 assert.equal(validateOrganizationSetup({ ...setupDraft, companyName: ' ' }, 'create', false, 'ru').field, 'companyName');
 assert.equal(validateOrganizationSetup({ ...setupDraft, locationName: '' }, 'create-location', false, 'en').field, 'locationName');

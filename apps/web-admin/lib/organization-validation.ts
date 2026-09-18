@@ -3,18 +3,20 @@ export function validateOrganizationName(companyName: string, locale: string): {
 }
 
 export function validateOrganizationSetup(
-  draft: { companyName: string; locationName: string; address: string; latitude: string; longitude: string },
+  draft: { companyName: string; locationName: string; address: string; latitude: string; longitude: string; attendanceTrackingEnabled?: boolean; billingCountry?: string },
   mode: string,
   confirmationPending: boolean,
   locale: string,
-): { field: 'companyName' | 'locationName' | 'map'; message: string } | null {
+): { field: 'companyName' | 'locationName' | 'map' | 'billingCountry'; message: string } | null {
   const ru = locale === 'ru';
   const nameIssue = validateOrganizationName(draft.companyName, locale);
   if (nameIssue) return nameIssue;
   if (mode === 'create-location' && !draft.locationName.trim()) return { field: 'locationName', message: ru ? 'Укажи название локации.' : 'Enter the location name.' };
+  if (draft.attendanceTrackingEnabled === false) return BILLING_COUNTRIES.includes(draft.billingCountry ?? '') ? null : { field: 'billingCountry', message: ru ? 'Выбери страну для расчёта тарифа.' : 'Select your billing country.' };
   if (confirmationPending) return { field: 'map', message: ru ? 'Подтверди выбранную точку на карте перед сохранением.' : 'Confirm the selected map point before saving.' };
   if (!draft.address.trim()) return { field: 'map', message: ru ? 'Укажи адрес организации.' : 'Enter the organization address.' };
   const lat = Number(draft.latitude), lng = Number(draft.longitude);
   if (!draft.latitude.trim() || !draft.longitude.trim() || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { field: 'map', message: ru ? 'Поставь точку на карте или выбери адрес из подсказок.' : 'Place a point on the map or choose an address from suggestions.' };
   return null;
 }
+import { BILLING_COUNTRIES } from './billing-countries';

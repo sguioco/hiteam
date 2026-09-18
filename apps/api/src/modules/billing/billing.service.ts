@@ -1548,20 +1548,20 @@ export class BillingService {
     const locationConfigured = Boolean(
       location &&
         location.address !== 'Not set yet' &&
+        location.latitude !== null && location.longitude !== null &&
         !(location.latitude === 0 && location.longitude === 0),
     );
-    const country = locationConfigured
-      ? location?.country?.trim() || this.inferCountryFromAddress(location?.address)
-      : null;
-    const haystack = `${country ?? ''} ${location?.address ?? ''}`.toLowerCase();
+    const country = location?.country?.trim() || (locationConfigured ? this.inferCountryFromAddress(location?.address) : null);
+    const countryName = country && /^[A-Z]{2}$/.test(country) ? new Intl.DisplayNames(['en'], { type: 'region' }).of(country) : country;
+    const haystack = `${countryName ?? ''} ${country ? '' : location?.address ?? ''}`.toLowerCase();
     const matchedRule =
-      (locationConfigured
+      (country || locationConfigured
         ? PRICE_RULES.find((rule) =>
             rule.matchers.some((matcher) => haystack.includes(matcher.toLowerCase())),
           ) ??
-          PRICE_RULES.find((rule) =>
+          (!country || !/^[A-Z]{2}$/.test(country) ? PRICE_RULES.find((rule) =>
             Boolean(location?.timezone && rule.timeZones?.includes(location.timezone)),
-          )
+          ) : undefined)
         : null) ??
       FALLBACK_PRICE_RULE;
 

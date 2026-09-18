@@ -710,8 +710,8 @@ model Location {
   code                 String
   address              String
   country              String?
-  latitude             Float
-  longitude            Float
+  latitude             Float?
+  longitude            Float?
   geofenceRadiusMeters Int      @default(100)
   timezone             String
   archivedAt           DateTime?

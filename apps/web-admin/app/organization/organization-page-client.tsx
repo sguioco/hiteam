@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { BILLING_COUNTRIES } from "@/lib/billing-countries";
 import { validateOrganizationName, validateOrganizationSetup } from "@/lib/organization-validation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import {
@@ -75,8 +76,8 @@ type Location = {
   address: string;
   country?: string | null;
   geofenceRadiusMeters?: number;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   timezone: string;
 };
 type EmployeeOption = {
@@ -107,6 +108,7 @@ type OrganizationSetupResponse = {
 };
 
 type SetupDraft = {
+  billingCountry: string;
   address: string;
   companyLogoUrl: string;
   companyName: string;
@@ -231,7 +233,7 @@ function getLocationAddressLabel(location: Pick<Location, "address" | "name">) {
 function createEmptyDraft(): SetupDraft {
   const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   return {
-    address: "", companyLogoUrl: "", companyName: "", details: null,
+    address: "", billingCountry: "", companyLogoUrl: "", companyName: "", details: null,
     geofenceRadiusMeters: DEFAULT_GEOFENCE_RADIUS_METERS, googlePlaceId: "",
     attendanceTrackingEnabled: true,
     latitude: "", locationName: "", longitude: "", timezone: detectedTimeZone,
@@ -260,6 +262,7 @@ function buildDraftFromSetup(setup: OrganizationSetupResponse): SetupDraft {
 
   return {
     address: configuredLocation?.address ?? "",
+    billingCountry: BILLING_COUNTRIES.includes(setup.location?.country ?? '') ? setup.location!.country! : '',
     companyLogoUrl: setup.company?.logoUrl ?? "",
     companyName: setup.company?.name ?? "",
     details: null,
@@ -392,7 +395,7 @@ export default function OrganizationPageClient({
       ...setup,
       company,
       location: location ?? null,
-      configured: isConfiguredLocation(location),
+      configured: setup.attendanceTrackingEnabled ? isConfiguredLocation(location) : Boolean(location?.country),
     };
     setSelectedCompanyId(company.id);
     setSelectedLocationId(location?.id ?? "");
@@ -443,7 +446,7 @@ export default function OrganizationPageClient({
       ...snapshot.setup,
       company: currentCompany,
       location: currentLocation,
-      configured: isConfiguredLocation(currentLocation),
+      configured: snapshot.setup.attendanceTrackingEnabled ? isConfiguredLocation(currentLocation) : Boolean(currentLocation?.country),
     };
     setSelectedCompanyId(currentCompany.id);
     setSelectedLocationId(currentLocation?.id ?? "");
@@ -924,7 +927,22 @@ export default function OrganizationPageClient({
       setIsSaving(true); setError(null); setSaveSuccess(false); setLastSavedMode(setupMode);
       let nextSetup: OrganizationSetupResponse;
 
-      if (setupMode === "create-location" && selectedCompanyId) {
+      if (!draft.attendanceTrackingEnabled) {
+        nextSetup = await apiRequest<OrganizationSetupResponse>("/org/setup", {
+          method: "POST", token: session.accessToken,
+          body: JSON.stringify({
+            mode: setupMode,
+            locationName: draft.locationName,
+            companyId: selectedCompanyId || undefined,
+            locationId: selectedLocationId || undefined,
+            companyName: draft.companyName.trim(),
+            companyLogoUrl: draft.companyLogoUrl || undefined,
+            attendanceTrackingEnabled: false,
+            billingCountry: draft.billingCountry,
+            timezone: draft.timezone,
+          }),
+        });
+      } else if (setupMode === "create-location" && selectedCompanyId) {
         const company = companies.find(({ id }) => id === selectedCompanyId);
         if (!company) {
           throw new Error(
@@ -1012,7 +1030,7 @@ export default function OrganizationPageClient({
           }),
         });
       }
-      if (shouldUpdateAttendanceSettings) {
+      if (shouldUpdateAttendanceSettings && draft.attendanceTrackingEnabled) {
         await apiRequest("/org/settings", {
           method: "PATCH",
           token: session.accessToken,
@@ -1279,7 +1297,7 @@ export default function OrganizationPageClient({
                   />
                 </section>
 
-                <section className="organization-studio-fieldset">
+                <section className="organization-studio-fieldset" style={!draft.attendanceTrackingEnabled ? { display: "none" } : undefined}>
                   <div className="organization-studio-label-row">
                     <span className="organization-studio-label">
                       {locale === "ru" ? "Радиус геозоны, метры" : "Geofence radius, meters"}
@@ -1392,7 +1410,7 @@ export default function OrganizationPageClient({
                   </button>
                 </section>
 
-                {setupMode === "create-location" &&
+                {draft.attendanceTrackingEnabled && setupMode === "create-location" &&
                 availableEmployees.length ? (
                   <section className="organization-studio-fieldset">
                     <div className="organization-studio-label-row">
@@ -1486,7 +1504,15 @@ export default function OrganizationPageClient({
                     {validation?.field === "locationName" ? <span id="location-name-error" role="alert" className="text-sm text-red-600">{validation.message}</span> : null}
                   </label>
                 ) : null}
-                <div className="organization-studio-map-shell" data-setup-field="map" tabIndex={-1} aria-describedby={validation?.field === "map" ? "setup-map-error" : undefined}>
+                {!draft.attendanceTrackingEnabled ? <label className="organization-studio-fieldset">
+                  <span className="organization-studio-label">{locale === "ru" ? "Страна для расчёта тарифа" : "Billing country"}</span>
+                  <select className="h-12 rounded-2xl border bg-white px-4" data-setup-field="billingCountry" value={draft.billingCountry} onChange={(event) => updateDraft("billingCountry", event.target.value)} aria-invalid={validation?.field === "billingCountry"} aria-describedby="billing-country-help">
+                    <option value="">{locale === "ru" ? "Выберите страну" : "Select country"}</option>
+                    {BILLING_COUNTRIES.map((code) => <option key={code} value={code}>{new Intl.DisplayNames([locale], { type: "region" }).of(code)}</option>)}
+                  </select>
+                  <span id="billing-country-help" className="text-sm text-muted-foreground">{validation?.field === "billingCountry" ? validation.message : locale === "ru" ? "Страна определяет региональный тариф. Карта и геозона для задач не нужны." : "Country determines regional pricing. Tasks do not require a map or geofence."}</span>
+                </label> : null}
+                {draft.attendanceTrackingEnabled ? <div className="organization-studio-map-shell" data-setup-field="map" tabIndex={-1} aria-describedby={validation?.field === "map" ? "setup-map-error" : undefined}>
                   {validation?.field === "map" ? <p id="setup-map-error" role="alert" className="text-sm text-red-600">{validation.message}</p> : null}
                   <LocationMapPicker
                     address={draft.address}
@@ -1582,7 +1608,7 @@ export default function OrganizationPageClient({
                     showCopy={false}
                     onSelect={handleMapSelect}
                   />
-                </div>
+                </div> : null}
               </div>
             </div>
           </div>

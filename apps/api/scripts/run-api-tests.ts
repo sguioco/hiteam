@@ -14,6 +14,7 @@ const suites = [
   'src/modules/employees/employees-flows.test.ts',
   'src/modules/employees/employee-removal.test.ts',
   'src/modules/org/org-radius.test.ts',
+  'src/modules/org/org-tasks-setup.test.ts',
   'src/modules/org/org-multi-location.test.ts',
   'src/modules/altegio-sync/altegio-sync.helpers.test.ts',
   'src/modules/altegio-sync/altegio-tracing.test.ts',
