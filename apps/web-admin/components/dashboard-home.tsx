@@ -107,6 +107,8 @@ import {
 import { TodayAttendancePanel } from "@/components/dashboard/TodayAttendancePanel";
 import { ManagerPerformancePanel } from "@/components/dashboard/ManagerPerformancePanel";
 import { TasksSidebar as DashboardTasksSidebar } from "@/components/dashboard/TasksSidebar";
+import { TaskDetailsDialog } from "@/components/task-details-dialog";
+import { TaskActions } from "@/components/task-actions";
 import { BirthdaysSidebar as DashboardBirthdaysSidebar } from "@/components/dashboard/BirthdaysSidebar";
 import { localizePersonName } from "@/lib/transliteration";
 import {
@@ -1292,6 +1294,7 @@ export default function DashboardHome({
   const canUseDesktopAdminTools = hasDesktopAdminAccess(
     session?.user.roleCodes ?? [],
   );
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const dashboardTasks = useMemo(() => {
     const apiTasks = taskBoard?.tasks ?? [];
 
@@ -1319,6 +1322,7 @@ export default function DashboardHome({
   }, [dashboardTasks, isEmployeeMode, managerEmployee]);
   const { getTaskBody, getTaskMeetingLocation, getTaskTitle } =
     useTranslatedTaskCopy(dashboardTasks, locale);
+  const selectedTask = dashboardTasks.find(task => task.id === selectedTaskId) ?? null;
   const activeTaskDueAt =
     taskDraft.mode === "meeting" ||
     (taskDraft.hasDueTime && !taskDraft.isRecurring)
@@ -2795,9 +2799,7 @@ export default function DashboardHome({
             <aside className="dashboard-tasks-rail">
               <DashboardTasksSidebar
                 locale={locale}
-                onTaskToggle={(taskId, nextDone) =>
-                  void handleTaskStatus(taskId, nextDone ? "DONE" : "TODO")
-                }
+                onTaskOpen={setSelectedTaskId}
                 tasks={personalTasks}
               />
             </aside>
@@ -2918,6 +2920,20 @@ export default function DashboardHome({
             </div>
           ) : null}
         </section>
+        <TaskDetailsDialog
+          task={selectedTask}
+          title={selectedTask ? getTaskTitle(selectedTask) : ""}
+          locale={locale}
+          onClose={() => setSelectedTaskId(null)}
+          actions={selectedTask && session ? selectedTask.id.startsWith("mock-task-") ? (
+            <Button onClick={() => void handleTaskStatus(selectedTask.id, selectedTask.status === "DONE" ? "TODO" : "DONE")}>
+              {selectedTask.status === "DONE" ? localize(locale, "Вернуть в работу", "Reopen") : localize(locale, "Завершить", "Complete")}
+            </Button>
+          ) : <TaskActions key={selectedTask.id} task={selectedTask} token={session.accessToken} groups={groups} locale={locale} onUpdated={(previousId, updated) => {
+            setTaskBoard(current => current ? { ...current, tasks: current.tasks.map(task => task.id === previousId ? updated : task) } : current);
+            setSelectedTaskId(current => current === previousId ? updated.id : current);
+          }} /> : null}
+        />
       </main>
     </AdminShell>
   );

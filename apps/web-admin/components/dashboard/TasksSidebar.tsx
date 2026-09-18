@@ -12,7 +12,7 @@ type TaskFilter = "today" | "tomorrow" | "week";
 
 type TasksSidebarProps = {
   locale?: "ru" | "en";
-  onTaskToggle?: (taskId: string, nextDone: boolean) => void;
+  onTaskOpen: (taskId: string) => void;
   tasks: TaskItem[];
 };
 
@@ -111,7 +111,7 @@ function toggleVisibleKind(
   return next;
 }
 
-export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: TasksSidebarProps) => {
+export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks }: TasksSidebarProps) => {
   const { locale: activeLocale } = useI18n();
   const locale = forcedLocale ?? activeLocale;
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
@@ -261,7 +261,7 @@ export const TasksSidebar = ({ locale: forcedLocale, onTaskToggle, tasks }: Task
               <button
                 className={`flex items-start gap-2.5 p-2.5 rounded-xl w-full text-left hover:bg-[var(--panel-muted)] transition-colors animate-fade-in${isOverdue ? " is-overdue" : ""}`}
                 key={task.id}
-                onClick={() => onTaskToggle?.(task.id, !isDone)}
+                onClick={() => onTaskOpen(task.id)}
                 style={{ animationDelay: `${index * 40}ms` }}
                 type="button"
               >
