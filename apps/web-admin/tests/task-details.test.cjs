@@ -23,6 +23,15 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { calendarDayHref, WeekCalendarNavigation } = load('components/dashboard/week-calendar-navigation.tsx', { '../../lib/admin-routes': { toAdminHref: value => value } });
+const localDay = new Date(2026, 11, 29, 0, 15);
+assert.equal(calendarDayHref(localDay), '/schedule?date=2026-12-29');
+for (const locale of ['ru', 'en']) {
+  const html = renderToStaticMarkup(React.createElement(WeekCalendarNavigation, { start: localDay, locale }));
+  assert.match(html, /date=2026-12-22/);
+  assert.match(html, /date=2027-01-05/);
+  assert.match(html, /date=2026-12-29/);
+}
 const { onboardingDraftKey, encodeOnboardingDraft, decodeOnboardingDraft } = load('lib/onboarding-draft.ts');
 const draftDefaults = { companyName: '', latitude: '', attendanceTrackingEnabled: true, geofenceRadiusMeters: 100, companyLogoUrl: '', details: null };
 const savedDraft = encodeOnboardingDraft({ ...draftDefaults, companyName: 'Salon', latitude: '25', attendanceTrackingEnabled: false, companyLogoUrl: 'private-image', details: { address: 'provider-data' } }, 2, 1000);

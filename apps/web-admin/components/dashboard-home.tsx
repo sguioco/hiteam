@@ -43,6 +43,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { WeekCalendarNavigation, calendarDayHref } from "./dashboard/week-calendar-navigation";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import type { CreateDialogAction } from "@/components/CreateDialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
@@ -2775,7 +2776,7 @@ export default function DashboardHome({
                       <Button
                         onClick={(event) =>
                           openDashboardRoute(
-                            `/schedule?date=${selectedCalendarEvent.date.toISOString().slice(0, 10)}&eventType=${
+                            `${calendarDayHref(selectedCalendarEvent.date)}&eventType=${
                               selectedCalendarEvent.kind === "meeting" ? "meetings" : "tasks"
                             }`,
                             event,
@@ -2841,11 +2842,12 @@ export default function DashboardHome({
             </div>
 
             <div className="dashboard-calendar-card">
+              <WeekCalendarNavigation start={weeklyCalendar[0].date} locale={locale} />
               <div className="manager-week-shell">
                 <div className="manager-week-grid manager-week-grid--bottom">
                   {weeklyCalendar.map((day) => (
                     <article
-                      className={`manager-week-day${day.tasks.length ? " has-tasks" : ""}`}
+                      className={`manager-week-day${day.tasks.length ? " has-tasks" : ""}${formatDateKey(day.date) === formatDateKey(today) ? " is-today" : ""}`}
                       key={day.label}
                     >
                       <div className="manager-week-day-head">
@@ -2853,7 +2855,7 @@ export default function DashboardHome({
                           <span className="manager-week-day-weekday">
                             {day.weekdayLongLabel}
                           </span>
-                          <strong>{day.monthLabel}</strong>
+                          {formatDateKey(day.date) === formatDateKey(today) ? <span className="text-xs font-semibold text-blue-600">{localize(locale, "Сегодня", "Today")}</span> : null}
                           {day.tasks.length > 0 && (
                             <span className="manager-week-day-count">
                               {day.taskCountLabel}
@@ -2861,7 +2863,7 @@ export default function DashboardHome({
                           )}
                         </div>
                         <div className="manager-week-day-date">
-                          <strong>{day.dateNumber}</strong>
+                          <a href={calendarDayHref(day.date)} aria-label={`${localize(locale, "Открыть календарь", "Open calendar")}: ${day.label}`} aria-current={formatDateKey(day.date) === formatDateKey(today) ? "date" : undefined}><strong>{day.dateNumber}</strong></a>
                         </div>
                       </div>
                       {day.tasks.length ? (
@@ -2887,6 +2889,7 @@ export default function DashboardHome({
                       ) : (
                         <p className="manager-week-empty">
                           {localize(locale, "СОБЫТИЙ НЕТ", "NO EVENTS")}
+                          <a className="mt-2 block text-sm normal-case text-blue-600 underline" href={calendarDayHref(day.date)}>{localize(locale, "Открыть день", "Open day")}</a>
                         </p>
                       )}
                     </article>
