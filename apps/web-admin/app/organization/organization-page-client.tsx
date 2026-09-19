@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminShell } from "../../components/admin-shell";
+import { OrganizationNextSteps } from "../../components/organization-next-steps";
 import { EmployeeDropdown } from "../../components/employee-dropdown";
 import { ImageAdjustField } from "../../components/image-adjust-field";
 import { Swirling } from "../../components/ui/swirling";
@@ -53,7 +54,6 @@ import { getSession } from "../../lib/auth";
 import {
   peekAltegioMarketplaceParams,
 } from "../../lib/altegio-marketplace";
-import { writeBrowserStorageItem } from "../../lib/browser-storage";
 import { useI18n } from "../../lib/i18n";
 
 type Company = {
@@ -152,8 +152,6 @@ const EMPTY_SETUP: OrganizationSetupResponse = {
 };
 const ORGANIZATION_UPDATED_EVENT = "smart:organization-updated";
 const ADD_LOCATION_SELECT_VALUE = "__add_location__";
-const ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX = "smart:add-employee-prompt";
-const ADD_EMPLOYEE_PROMPT_PENDING = "pending";
 const STREET_ADDRESS_MARKERS =
   /(?:^|[\s.])(street|st\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|lane|ln\.?|drive|dr\.?|highway|hwy\.?|улица|ул\.?|проспект|пр-т|переулок|пер\.?|шоссе|набережная|площадь|проезд|ถนน)(?:[\s.]|$)/iu;
 
@@ -282,11 +280,6 @@ function resolveSetupMode(setup: OrganizationSetupResponse): SetupMode {
   return "create";
 }
 
-function buildAddEmployeePromptStorageKey(
-  session: NonNullable<ReturnType<typeof getSession>>,
-) {
-  return `${ADD_EMPLOYEE_PROMPT_STORAGE_PREFIX}:${session.user.tenantId}:${session.user.id}`;
-}
 
 export type OrganizationPageInitialData = {
   companies?: Company[];
@@ -361,7 +354,6 @@ export default function OrganizationPageClient({
     resolveSetupMode(initialData?.setup ?? EMPTY_SETUP),
   );
   const successTimeoutRef = useRef<number | null>(null);
-  const employeesRedirectTimeoutRef = useRef<number | null>(null);
   const didUseInitialData = useRef(Boolean(initialData));
   const companyNameInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -690,14 +682,6 @@ export default function OrganizationPageClient({
     };
   }, [saveSuccess]);
 
-  useEffect(() => {
-    return () => {
-      if (employeesRedirectTimeoutRef.current !== null) {
-        window.clearTimeout(employeesRedirectTimeoutRef.current);
-        employeesRedirectTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   function updateDraft<K extends keyof SetupDraft>(key: K, value: SetupDraft[K]) {
     if (saveSuccess) {
@@ -917,8 +901,6 @@ export default function OrganizationPageClient({
       target?.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
     }
-    const shouldRedirectToEmployees =
-      !setup.configured;
     const shouldUpdateAttendanceSettings =
       setupMode !== "create" &&
       draft.attendanceTrackingEnabled !== setup.attendanceTrackingEnabled;
@@ -1085,20 +1067,6 @@ export default function OrganizationPageClient({
         }),
       );
       setSaveSuccess(true);
-      if (shouldRedirectToEmployees && nextSetup.configured) {
-        writeBrowserStorageItem(
-          buildAddEmployeePromptStorageKey(session),
-          ADD_EMPLOYEE_PROMPT_PENDING,
-          { includeSessionFallback: true },
-        );
-        if (employeesRedirectTimeoutRef.current !== null) {
-          window.clearTimeout(employeesRedirectTimeoutRef.current);
-        }
-        employeesRedirectTimeoutRef.current = window.setTimeout(() => {
-          employeesRedirectTimeoutRef.current = null;
-          router.replace(toAdminHref("/employees?focusAddEmployee=1"));
-        }, 650);
-      }
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -1113,12 +1081,14 @@ export default function OrganizationPageClient({
   return (
     <AdminShell showTopbar={false}>
       <div className="organization-studio-page mx-auto w-full max-w-6xl px-6 pt-10 pb-6 md:px-10 md:pt-12 md:pb-6 animate-in fade-in duration-500">
+        {setup.configured && employeeCount <= 1 ? <OrganizationNextSteps attendance={setup.attendanceTrackingEnabled} locale={locale} /> : null}
         <form noValidate className="organization-studio" onSubmit={(event) => void handleSetupSubmit(event)}>
           {!setup.configured ? (
             <section className="mb-6 rounded-3xl border bg-white p-6" aria-label={locale === "ru" ? "Настройка компании" : "Company setup"}>
               <p role="status" className="text-sm text-blue-600">{locale === "ru" ? `Шаг ${onboardingStep} из 2` : `Step ${onboardingStep} of 2`}</p>
               <h1 ref={onboardingHeadingRef} tabIndex={-1} className="mt-2 text-2xl font-semibold">{onboardingStep === 1 ? (locale === "ru" ? "Компания и режим работы" : "Company and work mode") : (locale === "ru" ? "Рабочая локация" : "Work location")}</h1>
               <p className="mt-2 text-sm text-muted-foreground">{locale === "ru" ? "Данные сохраняются при переходе между шагами. После настройки вы сможете пригласить сотрудников." : "Your entries are kept between steps. After setup, you can invite employees."}</p>
+              <p role={addressRequired ? "alert" : undefined} className="mt-3 rounded-xl bg-blue-50 p-3 text-sm">{locale === "ru" ? "Пока доступны настройка компании и биллинг. Завершите оба шага и сохраните настройки, чтобы открыть рабочие разделы. В режиме «только задачи» посещаемость и смены не используются." : "Company setup and billing are available now. Complete both steps and save to unlock your workspace. Tasks-only mode does not use attendance or shifts."}</p>
               {onboardingStep === 1 ? <fieldset className="mt-4 grid gap-3 sm:grid-cols-2">
                 <legend className="mb-2 text-sm font-medium">{locale === "ru" ? "Что будете использовать?" : "What will you use?"}</legend>
                 {[true, false].map((attendance) => <label key={String(attendance)} className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4">

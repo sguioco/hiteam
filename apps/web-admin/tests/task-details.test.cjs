@@ -23,6 +23,16 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { OrganizationNextSteps } = load('components/organization-next-steps.tsx', { '../lib/admin-routes': { toAdminHref: value => value } });
+for (const locale of ['ru', 'en']) {
+  const tasksOnly = renderToStaticMarkup(React.createElement(OrganizationNextSteps, { attendance: false, locale }));
+  assert.match(tasksOnly, /href="\/employees\?focusAddEmployee=1"/);
+  assert.match(tasksOnly, /href="\/tasks"/);
+  assert.doesNotMatch(tasksOnly, /href="\/schedule"/);
+  const full = renderToStaticMarkup(React.createElement(OrganizationNextSteps, { attendance: true, locale }));
+  assert.match(full, /href="\/schedule"/);
+  assert.match(full, /setup-next-steps/);
+}
 const { validateOrganizationSetup, validateOrganizationName } = load('lib/organization-validation.ts');
 assert.equal(validateOrganizationName('Company', 'en'), null);
 assert.equal(validateOrganizationName('   ', 'ru').field, 'companyName');

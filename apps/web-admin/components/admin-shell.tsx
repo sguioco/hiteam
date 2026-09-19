@@ -1585,6 +1585,11 @@ export function AdminShell({
         </div>
 
         <nav className="sidebar-nav sidebar-nav-untitled">
+          {mode === "admin" && organizationGuardReady && organization?.configured === false ? (
+            <p className="mx-3 mb-3 rounded-xl bg-blue-50 p-3 text-xs text-blue-900" role="status">
+              {locale === "ru" ? "Рабочие разделы откроются после настройки компании. Сейчас доступны настройка и биллинг." : "Complete company setup to unlock workspace sections. Setup and billing are available now."}
+            </p>
+          ) : null}
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasChildren = Boolean(item.items?.length);
