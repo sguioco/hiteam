@@ -7,6 +7,7 @@ import Radio, { type RadioItem } from "@/components/ui/Radio";
 import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
+import { EmptyStateAction } from "./empty-state-action";
 
 type TaskFilter = "today" | "tomorrow" | "week";
 
@@ -14,6 +15,7 @@ type TasksSidebarProps = {
   locale?: "ru" | "en";
   onTaskOpen: (taskId: string) => void;
   tasks: TaskItem[];
+  onCreateTask?: (day: Date) => void;
 };
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -111,7 +113,7 @@ function toggleVisibleKind(
   return next;
 }
 
-export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks }: TasksSidebarProps) => {
+export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks, onCreateTask }: TasksSidebarProps) => {
   const { locale: activeLocale } = useI18n();
   const locale = forcedLocale ?? activeLocale;
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
@@ -301,6 +303,7 @@ export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks }: TasksS
             {showOverdue
               ? localize(locale, "Просроченных задач нет", "No overdue tasks")
               : localize(locale, "Задач на этот период нет", "No tasks for this period")}
+            {!showOverdue && onCreateTask ? <div><EmptyStateAction action={{ label: localize(locale, "Создать задачу", "Create task"), onClick: () => onCreateTask(filter === "tomorrow" ? tomorrow : today) }} /></div> : null}
           </div>
         )}
       </div>

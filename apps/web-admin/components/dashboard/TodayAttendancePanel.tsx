@@ -11,6 +11,8 @@ import type { EmployeeScheduleShift } from "@/lib/employee-workdays";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { localizePersonName } from "@/lib/transliteration";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
+import { EmptyStateAction } from "./empty-state-action";
+import { calendarDayHref } from "./week-calendar-navigation";
 
 type TodayAttendanceEmployee = {
   id: string;
@@ -48,6 +50,7 @@ type TodayAttendancePanelProps = {
   onNextDay: () => void;
   onPreviousDay: () => void;
   onToday: () => void;
+  canOpenSchedule?: boolean;
 };
 
 type AttendanceRowTone = "late" | "early" | "neutral";
@@ -296,6 +299,7 @@ export function TodayAttendancePanel({
   onNextDay,
   onPreviousDay,
   onToday,
+  canOpenSchedule = false,
 }: TodayAttendancePanelProps) {
   const now = new Date();
   const todayKey = formatDateKey(now);
@@ -532,7 +536,8 @@ export function TodayAttendancePanel({
           ) : (
             <div className="today-attendance-empty">
               <div>
-                {localize(locale, "На сегодня смен не запланировано", "No scheduled shifts for today")}
+                {localize(locale, "На выбранный день смен не запланировано", "No scheduled shifts for the selected day")}
+                <div><EmptyStateAction action={canOpenSchedule ? { label: localize(locale, "Открыть календарь", "Open calendar"), href: calendarDayHref(parseDateKey(selectedDate)) } : undefined} /></div>
               </div>
             </div>
           )}

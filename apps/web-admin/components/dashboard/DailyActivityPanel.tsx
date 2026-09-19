@@ -52,6 +52,7 @@ export type DashboardActivityItem = {
 type DailyActivityPanelProps = {
   items: DashboardActivityItem[];
   locale: "ru" | "en";
+  inviteHref?: string;
 };
 
 export function ActivityTaskLinks({ item, locale }: { item: DashboardActivityItem; locale: "ru" | "en" }) {
@@ -271,6 +272,7 @@ export function ActivityTargetAvatars({
 export function DailyActivityPanel({
   items,
   locale,
+  inviteHref,
 }: DailyActivityPanelProps) {
   const translatableTexts = useMemo(
     () =>
@@ -404,6 +406,7 @@ export function DailyActivityPanel({
                 "Once your team starts using the app, activity will show up here.",
               )}
             </p>
+            {inviteHref ? <a className="mt-3 inline-flex rounded-xl border px-3 py-2 text-sm text-blue-600 focus-visible:outline focus-visible:outline-2" href={inviteHref}>{localize(locale, "Пригласить сотрудников", "Invite employees")}</a> : null}
           </div>
         )}
       </div>

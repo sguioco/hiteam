@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { toAdminHref } from "@/lib/admin-routes";
 import {
   ApprovalInboxItem,
   AttendanceAnomalyResponse,
@@ -2802,6 +2803,11 @@ export default function DashboardHome({
                 locale={locale}
                 onTaskOpen={setSelectedTaskId}
                 tasks={personalTasks}
+                onCreateTask={createAction ? (day) => {
+                  setTaskDraft({ ...initialTaskDraft, dueAt: formatDateKey(day), hasDueTime: true });
+                  setTaskDayOffConfirmOpen(false);
+                  setCreateTaskOpen(true);
+                } : undefined}
               />
             </aside>
 
@@ -2817,6 +2823,7 @@ export default function DashboardHome({
                   <DailyActivityPanel
                     items={dailyActivity}
                     locale={locale}
+                    inviteHref={toAdminHref("/employees?focusAddEmployee=1")}
                   />
                   <TodayAttendancePanel
                     anomalies={
@@ -2836,6 +2843,7 @@ export default function DashboardHome({
                     onToday={() => setDashboardAttendanceDate(attendanceTodayKey)}
                     scheduleShifts={scheduleShifts}
                     selectedDate={dashboardAttendanceDate}
+                    canOpenSchedule
                   />
                 </div>
               )}

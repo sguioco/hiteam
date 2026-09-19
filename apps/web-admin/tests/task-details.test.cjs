@@ -23,6 +23,15 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { EmptyStateAction } = load('components/dashboard/empty-state-action.tsx');
+assert.equal(EmptyStateAction({}), null, 'No action is exposed without permission from the parent');
+let emptyActionCalls = 0;
+const emptyButton = EmptyStateAction({ action: { label: 'Create task', onClick: () => emptyActionCalls++ } });
+assert.equal(emptyButton.props.type, 'button');
+emptyButton.props.onClick();
+assert.equal(emptyActionCalls, 1);
+const emptyLink = renderToStaticMarkup(React.createElement(EmptyStateAction, { action: { label: 'Open calendar', href: '/schedule?date=2026-09-19' } }));
+assert.match(emptyLink, /href="\/schedule\?date=2026-09-19"/);
 const { calendarDayHref, WeekCalendarNavigation } = load('components/dashboard/week-calendar-navigation.tsx', { '../../lib/admin-routes': { toAdminHref: value => value } });
 const localDay = new Date(2026, 11, 29, 0, 15);
 assert.equal(calendarDayHref(localDay), '/schedule?date=2026-12-29');
