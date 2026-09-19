@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { BILLING_COUNTRIES } from "@/lib/billing-countries";
+import { onboardingDraftKey, encodeOnboardingDraft, decodeOnboardingDraft } from "@/lib/onboarding-draft";
 import { validateOrganizationName, validateOrganizationSetup } from "@/lib/organization-validation";
 import { FormEvent, useMemo, useEffect, useRef, useState } from "react";
 import {
@@ -340,6 +341,9 @@ export default function OrganizationPageClient({
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<ReturnType<typeof validateOrganizationSetup>>(null);
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [setupLoaded, setSetupLoaded] = useState(Boolean(initialData));
+  const [draftStorageKey, setDraftStorageKey] = useState<string | null>(null);
+  const [draftStorageNotice, setDraftStorageNotice] = useState(false);
   const onboardingHeadingRef = useRef<HTMLHeadingElement | null>(null);
   useEffect(() => {
     onboardingHeadingRef.current?.focus();
@@ -356,6 +360,40 @@ export default function OrganizationPageClient({
   const successTimeoutRef = useRef<number | null>(null);
   const didUseInitialData = useRef(Boolean(initialData));
   const companyNameInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!setupLoaded || !session) return;
+    const key = onboardingDraftKey(session.user.tenantId, session.user.id, setup.company?.id, setup.location?.id);
+    try {
+      if (setup.configured) {
+        window.sessionStorage.removeItem(key);
+        setDraftStorageKey(null);
+        return;
+      }
+      const restored = decodeOnboardingDraft(window.sessionStorage.getItem(key), buildDraftFromSetup(setup));
+      if (restored) {
+        setDraft(restored.draft);
+        setOnboardingStep(restored.step);
+        setRadiusInput(String(normalizeRadius(restored.draft.geofenceRadiusMeters)));
+        // Map provider details are not persisted; require confirmation again.
+        setLocationConfirmationPending(Boolean(restored.draft.address));
+      }
+      setDraftStorageKey(key);
+    } catch {
+      setDraftStorageNotice(true);
+    }
+  }, [setupLoaded, setup.configured, setup.company?.id, setup.location?.id]);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session || !draftStorageKey || setup.configured || draftStorageKey !== onboardingDraftKey(session.user.tenantId, session.user.id, setup.company?.id, setup.location?.id)) return;
+    try {
+      window.sessionStorage.setItem(draftStorageKey, encodeOnboardingDraft(draft, onboardingStep));
+    } catch {
+      setDraftStorageNotice(true);
+    }
+  }, [draft, onboardingStep, draftStorageKey, setup.configured, setup.company?.id, setup.location?.id]);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(draft.timezone), [draft.timezone]);
@@ -571,6 +609,7 @@ export default function OrganizationPageClient({
       });
 
       setSetup(snapshot.setup);
+      setSetupLoaded(true);
       setEmployeeCount(snapshot.employeeCount);
       setDraft(buildDraftFromSetup(snapshot.setup));
       setRadiusInput(String(normalizeRadius(snapshot.setup.location?.geofenceRadiusMeters ?? snapshot.setup.defaultGeofenceRadiusMeters)));
@@ -1066,6 +1105,11 @@ export default function OrganizationPageClient({
           },
         }),
       );
+      if (draftStorageKey) {
+        try { window.sessionStorage.removeItem(draftStorageKey); }
+        catch { setDraftStorageNotice(true); }
+        setDraftStorageKey(null);
+      }
       setSaveSuccess(true);
     } catch (submitError) {
       setError(
@@ -1088,6 +1132,7 @@ export default function OrganizationPageClient({
               <p role="status" className="text-sm text-blue-600">{locale === "ru" ? `Шаг ${onboardingStep} из 2` : `Step ${onboardingStep} of 2`}</p>
               <h1 ref={onboardingHeadingRef} tabIndex={-1} className="mt-2 text-2xl font-semibold">{onboardingStep === 1 ? (locale === "ru" ? "Компания и режим работы" : "Company and work mode") : (locale === "ru" ? "Рабочая локация" : "Work location")}</h1>
               <p className="mt-2 text-sm text-muted-foreground">{locale === "ru" ? "Данные сохраняются при переходе между шагами. После настройки вы сможете пригласить сотрудников." : "Your entries are kept between steps. After setup, you can invite employees."}</p>
+              <p className="mt-2 text-sm text-muted-foreground" role="status">{draftStorageNotice ? (locale === "ru" ? "Браузер не разрешил сохранить черновик. Не перезагружайте страницу до сохранения." : "Your browser could not save the draft. Avoid reloading until you save.") : (locale === "ru" ? "Черновик хранится в этой вкладке до 24 часов и восстанавливается при перезагрузке. Логотип нужно выбрать заново, точку на карте — подтвердить." : "The draft stays in this tab for up to 24 hours and survives reloads. Select the logo again and confirm the map point.")}</p>
               <p role={addressRequired ? "alert" : undefined} className="mt-3 rounded-xl bg-blue-50 p-3 text-sm">{locale === "ru" ? "Пока доступны настройка компании и биллинг. Завершите оба шага и сохраните настройки, чтобы открыть рабочие разделы. В режиме «только задачи» посещаемость и смены не используются." : "Company setup and billing are available now. Complete both steps and save to unlock your workspace. Tasks-only mode does not use attendance or shifts."}</p>
               {onboardingStep === 1 ? <fieldset className="mt-4 grid gap-3 sm:grid-cols-2">
                 <legend className="mb-2 text-sm font-medium">{locale === "ru" ? "Что будете использовать?" : "What will you use?"}</legend>

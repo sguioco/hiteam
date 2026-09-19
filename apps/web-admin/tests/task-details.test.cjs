@@ -23,6 +23,21 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { onboardingDraftKey, encodeOnboardingDraft, decodeOnboardingDraft } = load('lib/onboarding-draft.ts');
+const draftDefaults = { companyName: '', latitude: '', attendanceTrackingEnabled: true, geofenceRadiusMeters: 100, companyLogoUrl: '', details: null };
+const savedDraft = encodeOnboardingDraft({ ...draftDefaults, companyName: 'Salon', latitude: '25', attendanceTrackingEnabled: false, companyLogoUrl: 'private-image', details: { address: 'provider-data' } }, 2, 1000);
+const recoveredDraft = decodeOnboardingDraft(savedDraft, draftDefaults, 2000);
+assert.equal(recoveredDraft.step, 2);
+assert.equal(recoveredDraft.draft.companyName, 'Salon');
+assert.equal(recoveredDraft.draft.attendanceTrackingEnabled, false);
+assert.equal(recoveredDraft.draft.companyLogoUrl, '');
+assert.equal(recoveredDraft.draft.details, null);
+assert.equal(decodeOnboardingDraft(savedDraft, draftDefaults, 1000 + 86400001), null);
+assert.equal(decodeOnboardingDraft('{broken', draftDefaults), null);
+assert.equal(decodeOnboardingDraft(JSON.stringify({ version: 1, savedAt: 1000, step: 2, fields: { attendanceTrackingEnabled: 'false' } }), draftDefaults, 2000), null);
+assert.notEqual(onboardingDraftKey('a', 'user', 'company', 'location'), onboardingDraftKey('b', 'user', 'company', 'location'));
+assert.notEqual(onboardingDraftKey('a', 'user', 'company', 'location'), onboardingDraftKey('a', 'other', 'company', 'location'));
+assert.notEqual(onboardingDraftKey('a', 'user', 'company', 'location'), onboardingDraftKey('a', 'user', 'company', 'other'));
 const { OrganizationNextSteps } = load('components/organization-next-steps.tsx', { '../lib/admin-routes': { toAdminHref: value => value } });
 for (const locale of ['ru', 'en']) {
   const tasksOnly = renderToStaticMarkup(React.createElement(OrganizationNextSteps, { attendance: false, locale }));
