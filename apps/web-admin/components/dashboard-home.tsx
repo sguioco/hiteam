@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { toAdminHref } from "@/lib/admin-routes";
+import { inDashboardLocation } from "@/lib/dashboard-location";
 import {
   ApprovalInboxItem,
   AttendanceAnomalyResponse,
@@ -346,7 +347,7 @@ function buildDashboardCacheKey(
   session: NonNullable<ReturnType<typeof getSession>>,
   isEmployeeMode: boolean,
 ) {
-  return `dashboard:v2:${isEmployeeMode ? "employee" : "admin"}:${session.user.tenantId}:${session.user.id}`;
+  return `dashboard:v3:${isEmployeeMode ? "employee" : "admin"}:${session.user.tenantId}:${session.user.id}`;
 }
 
 const initialTaskDraft: TaskDraft = {
@@ -927,6 +928,11 @@ export default function DashboardHome({
   const [locations, setLocations] = useState<OrganizationLocationSummary[]>(
     initialData?.locations ?? [],
   );
+  const [dashboardLocationId, setDashboardLocationId] = useState("");
+  const activeLocationId = isEmployeeMode ? "" : dashboardLocationId;
+  useEffect(() => {
+    if (dashboardLocationId && !locations.some(location => location.id === dashboardLocationId)) setDashboardLocationId("");
+  }, [locations, dashboardLocationId]);
 
   useEffect(() => {
     if (locations.length !== 1) return;
@@ -1243,7 +1249,7 @@ export default function DashboardHome({
   const createAction = isEmployeeMode
     ? undefined
     : () => {
-        setTaskDraft(initialTaskDraft);
+        setTaskDraft({ ...initialTaskDraft, locationId: activeLocationId });
         setTaskDayOffConfirmOpen(false);
         setCreateTaskOpen(true);
       };
@@ -1298,7 +1304,7 @@ export default function DashboardHome({
   );
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const dashboardTasks = useMemo(() => {
-    const apiTasks = taskBoard?.tasks ?? [];
+    const apiTasks = (taskBoard?.tasks ?? []).filter(task => inDashboardLocation(task, activeLocationId));
 
     if (!isDemoSession) {
       return apiTasks;
@@ -1312,7 +1318,7 @@ export default function DashboardHome({
           ? new Date().toISOString()
           : task.completedAt,
     }));
-  }, [isDemoSession, mockTaskStatuses, taskBoard?.tasks]);
+  }, [isDemoSession, mockTaskStatuses, taskBoard?.tasks, activeLocationId]);
   const personalTasks = useMemo(() => {
     if (isEmployeeMode) {
       return dashboardTasks;
@@ -2007,6 +2013,14 @@ export default function DashboardHome({
       mode={mode}
     >
       <main className="page-shell manager-page-shell">
+        {!isEmployeeMode ? <label className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-4">
+          <span className="text-sm font-medium">{localize(locale, "Локация виджетов", "Widget location")}</span>
+          <select className="min-w-0 max-w-full rounded-xl border px-3 py-2" value={dashboardLocationId} onChange={event => { setDashboardLocationId(event.target.value); setSelectedTaskId(null); setSelectedCalendarEvent(null); }}>
+            <option value="">{localize(locale, "Все доступные локации", "All available locations")}</option>
+            {locations.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}
+          </select>
+          <span className="text-xs text-muted-foreground">{localize(locale, "Задачи, активность, посещаемость и мой календарь", "Tasks, activity, attendance and my calendar")}</span>
+        </label> : null}
         <section className="manager-home">
           {isBootstrapping ? (
             <WorkspaceLoading
@@ -2777,7 +2791,7 @@ export default function DashboardHome({
                       <Button
                         onClick={(event) =>
                           openDashboardRoute(
-                            `${calendarDayHref(selectedCalendarEvent.date)}&eventType=${
+                            `${calendarDayHref(selectedCalendarEvent.date, activeLocationId)}&eventType=${
                               selectedCalendarEvent.kind === "meeting" ? "meetings" : "tasks"
                             }`,
                             event,
@@ -2804,7 +2818,7 @@ export default function DashboardHome({
                 onTaskOpen={setSelectedTaskId}
                 tasks={personalTasks}
                 onCreateTask={createAction ? (day) => {
-                  setTaskDraft({ ...initialTaskDraft, dueAt: formatDateKey(day), hasDueTime: true });
+                  setTaskDraft({ ...initialTaskDraft, locationId: activeLocationId, dueAt: formatDateKey(day), hasDueTime: true });
                   setTaskDayOffConfirmOpen(false);
                   setCreateTaskOpen(true);
                 } : undefined}
@@ -2821,36 +2835,38 @@ export default function DashboardHome({
               ) : (
                 <div className="dashboard-activity-shell">
                   <DailyActivityPanel
-                    items={dailyActivity}
+                    items={dailyActivity.filter(item => inDashboardLocation(item, activeLocationId))}
                     locale={locale}
                     inviteHref={toAdminHref("/employees?focusAddEmployee=1")}
                   />
                   <TodayAttendancePanel
-                    anomalies={
-                      dashboardAttendanceDate === attendanceTodayKey
+                    anomalies={(() => {
+                      const source = dashboardAttendanceDate === attendanceTodayKey
                         ? anomalies
-                        : dashboardAttendanceAnomalies
-                    }
+                        : dashboardAttendanceAnomalies;
+                      return source ? { ...source, items: source.items.filter(item => inDashboardLocation(item, activeLocationId)) } : null;
+                    })()}
                     canGoNext={dashboardAttendanceCanGoNext}
                     canGoPrevious={dashboardAttendanceCanGoPrevious}
                     employees={employees}
-                    history={dashboardAttendanceHistory}
+                    history={dashboardAttendanceHistory ? { ...dashboardAttendanceHistory, rows: dashboardAttendanceHistory.rows.filter(row => inDashboardLocation(row, activeLocationId)) } : null}
                     isLoading={dashboardAttendanceLoading}
-                    liveSessions={liveSessions}
+                    liveSessions={liveSessions.filter(row => inDashboardLocation(row, activeLocationId))}
                     locale={locale}
                     onNextDay={() => shiftDashboardAttendanceDay(1)}
                     onPreviousDay={() => shiftDashboardAttendanceDay(-1)}
                     onToday={() => setDashboardAttendanceDate(attendanceTodayKey)}
-                    scheduleShifts={scheduleShifts}
+                    scheduleShifts={scheduleShifts.filter(shift => inDashboardLocation(shift, activeLocationId))}
                     selectedDate={dashboardAttendanceDate}
                     canOpenSchedule
+                    locationId={activeLocationId}
                   />
                 </div>
               )}
             </div>
 
             <div className="dashboard-calendar-card">
-              <WeekCalendarNavigation start={weeklyCalendar[0].date} locale={locale} />
+              <WeekCalendarNavigation start={weeklyCalendar[0].date} locale={locale} locationId={activeLocationId} />
               <div className="manager-week-shell">
                 <div className="manager-week-grid manager-week-grid--bottom">
                   {weeklyCalendar.map((day) => (
@@ -2871,7 +2887,7 @@ export default function DashboardHome({
                           )}
                         </div>
                         <div className="manager-week-day-date">
-                          <a href={calendarDayHref(day.date)} aria-label={`${localize(locale, "Открыть календарь", "Open calendar")}: ${day.label}`} aria-current={formatDateKey(day.date) === formatDateKey(today) ? "date" : undefined}><strong>{day.dateNumber}</strong></a>
+                          <a href={calendarDayHref(day.date, activeLocationId)} aria-label={`${localize(locale, "Открыть календарь", "Open calendar")}: ${day.label}`} aria-current={formatDateKey(day.date) === formatDateKey(today) ? "date" : undefined}><strong>{day.dateNumber}</strong></a>
                         </div>
                       </div>
                       {day.tasks.length ? (
@@ -2897,7 +2913,7 @@ export default function DashboardHome({
                       ) : (
                         <p className="manager-week-empty">
                           {localize(locale, "СОБЫТИЙ НЕТ", "NO EVENTS")}
-                          <a className="mt-2 block text-sm normal-case text-blue-600 underline" href={calendarDayHref(day.date)}>{localize(locale, "Открыть день", "Open day")}</a>
+                          <a className="mt-2 block text-sm normal-case text-blue-600 underline" href={calendarDayHref(day.date, activeLocationId)}>{localize(locale, "Открыть день", "Open day")}</a>
                         </p>
                       )}
                     </article>

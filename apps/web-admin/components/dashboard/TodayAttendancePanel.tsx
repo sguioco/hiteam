@@ -51,6 +51,7 @@ type TodayAttendancePanelProps = {
   onPreviousDay: () => void;
   onToday: () => void;
   canOpenSchedule?: boolean;
+  locationId?: string;
 };
 
 type AttendanceRowTone = "late" | "early" | "neutral";
@@ -300,6 +301,7 @@ export function TodayAttendancePanel({
   onPreviousDay,
   onToday,
   canOpenSchedule = false,
+  locationId = "",
 }: TodayAttendancePanelProps) {
   const now = new Date();
   const todayKey = formatDateKey(now);
@@ -537,7 +539,7 @@ export function TodayAttendancePanel({
             <div className="today-attendance-empty">
               <div>
                 {localize(locale, "На выбранный день смен не запланировано", "No scheduled shifts for the selected day")}
-                <div><EmptyStateAction action={canOpenSchedule ? { label: localize(locale, "Открыть календарь", "Open calendar"), href: calendarDayHref(parseDateKey(selectedDate)) } : undefined} /></div>
+                <div><EmptyStateAction action={canOpenSchedule ? { label: localize(locale, "Открыть календарь", "Open calendar"), href: calendarDayHref(parseDateKey(selectedDate), locationId) } : undefined} /></div>
               </div>
             </div>
           )}

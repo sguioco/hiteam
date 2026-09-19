@@ -2,6 +2,8 @@
 
 export type EmployeeScheduleShift = {
   shiftDate: string;
+  locationId?: string;
+  location?: { id: string; name: string };
   employee?: {
     id: string;
   };

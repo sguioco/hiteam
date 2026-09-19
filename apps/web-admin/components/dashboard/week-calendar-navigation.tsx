@@ -1,11 +1,11 @@
 import { toAdminHref } from "../../lib/admin-routes";
 
-export function calendarDayHref(date: Date) {
+export function calendarDayHref(date: Date, locationId = "") {
   const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return toAdminHref(`/schedule?date=${key}`);
+  return toAdminHref(`/schedule?date=${key}${locationId ? `&locationId=${encodeURIComponent(locationId)}` : ""}`);
 }
 
-export function WeekCalendarNavigation({ start, locale }: { start: Date; locale: string }) {
+export function WeekCalendarNavigation({ start, locale, locationId = "" }: { start: Date; locale: string; locationId?: string }) {
   const ru = locale === 'ru';
   const end = new Date(start); end.setDate(end.getDate() + 6);
   const previous = new Date(start); previous.setDate(previous.getDate() - 7);
@@ -14,9 +14,9 @@ export function WeekCalendarNavigation({ start, locale }: { start: Date; locale:
   return <header className="dashboard-week-navigation">
     <div><h2>{ru ? 'Мой календарь' : 'My calendar'}</h2><p>{format(start)} — {format(end)}</p></div>
     <nav aria-label={ru ? 'Переходы в полный календарь' : 'Open full calendar'}>
-      <a href={calendarDayHref(previous)} aria-label={ru ? 'Предыдущая неделя в календаре' : 'Previous week in calendar'}>←</a>
-      <a href={calendarDayHref(start)}>{ru ? 'Открыть календарь' : 'Open calendar'}</a>
-      <a href={calendarDayHref(next)} aria-label={ru ? 'Следующая неделя в календаре' : 'Next week in calendar'}>→</a>
+      <a href={calendarDayHref(previous, locationId)} aria-label={ru ? 'Предыдущая неделя в календаре' : 'Previous week in calendar'}>←</a>
+      <a href={calendarDayHref(start, locationId)}>{ru ? 'Открыть календарь' : 'Open calendar'}</a>
+      <a href={calendarDayHref(next, locationId)} aria-label={ru ? 'Следующая неделя в календаре' : 'Next week in calendar'}>→</a>
     </nav>
   </header>;
 }

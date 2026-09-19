@@ -1314,6 +1314,7 @@ export type PayrollPolicy = {
 
 export type AttendanceLiveSession = {
   sessionId: string;
+  locationId?: string;
   employeeId: string;
   employeeName: string;
   employeeNumber: string;
@@ -1349,6 +1350,7 @@ export type AttendanceHistoryResponse = {
   };
   rows: Array<{
     sessionId: string;
+    locationId?: string;
     employeeId: string;
     employeeName: string;
     employeeNumber: string;
@@ -1407,6 +1409,8 @@ export type AttendanceAnomalyResponse = {
   };
   items: Array<{
     anomalyId: string;
+    /** Absent for employee-wide anomalies spanning multiple locations. */
+    locationId?: string;
     type: 'MISSED_CHECK_IN' | 'MISSED_CHECK_OUT' | 'LONG_BREAK' | 'EARLY_LEAVE' | 'REPEATED_LATENESS';
     severity: 'critical' | 'warning';
     employeeId: string;

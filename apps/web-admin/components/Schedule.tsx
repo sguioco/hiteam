@@ -2084,6 +2084,19 @@ export default function Schedule({
     }
   }, [searchParams]);
 
+  const appliedLocationParam = useRef<string | null>(null);
+  const requestedLocationId = searchParams.get("locationId");
+  useEffect(() => {
+    if (!requestedLocationId) {
+      appliedLocationParam.current = null;
+      return;
+    }
+    if (appliedLocationParam.current !== requestedLocationId && locations.some(location => location.id === requestedLocationId)) {
+      setLocationFilter(requestedLocationId);
+      appliedLocationParam.current = requestedLocationId;
+    }
+  }, [requestedLocationId, locations]);
+
   useEffect(() => {
     if (!createShiftOpen) return;
 

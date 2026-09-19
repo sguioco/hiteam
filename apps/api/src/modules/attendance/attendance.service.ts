@@ -665,6 +665,7 @@ export class AttendanceService {
         startedAt: { gte: startOfDay },
       },
       include: {
+        checkInEvent: { select: { locationId: true, location: { select: { name: true } } } },
         employee: {
           include: {
             department: true,
@@ -1504,6 +1505,7 @@ export class AttendanceService {
 
     const anomalies: Array<{
       anomalyId: string;
+      locationId?: string;
       type: 'MISSED_CHECK_IN' | 'MISSED_CHECK_OUT' | 'LONG_BREAK' | 'EARLY_LEAVE' | 'REPEATED_LATENESS';
       severity: 'critical' | 'warning';
       employeeId: string;
@@ -1528,6 +1530,7 @@ export class AttendanceService {
         employeeName,
         employeeNumber: shift.employee.employeeNumber,
         department: shift.employee.department.name,
+        locationId: shift.locationId,
         location: shift.location.name,
         shiftLabel: shift.template.name,
         actionUrl: `/employees/${shift.employee.id}`,
@@ -2399,7 +2402,7 @@ export class AttendanceService {
             location: true,
           },
         },
-        checkInEvent: true,
+        checkInEvent: { include: { location: true } },
         checkOutEvent: true,
         breaks: {
           include: {
@@ -2428,6 +2431,7 @@ export class AttendanceService {
       },
       rows: sessions.map((session) => ({
         sessionId: session.id,
+        locationId: session.checkInEvent.locationId,
         employeeId: session.employee.id,
         employeeName: `${session.employee.lastName} ${session.employee.firstName}`,
         employeeNumber: session.employee.employeeNumber,
@@ -2435,7 +2439,7 @@ export class AttendanceService {
         department: session.employee.department.name,
         location: session.employee.workMode === EmployeeWorkMode.FIELD
           ? 'Field visit'
-          : session.shift?.location.name ?? session.employee.primaryLocation.name,
+          : session.checkInEvent.location.name,
         shiftLabel:
           session.employee.workMode === EmployeeWorkMode.FIELD
             ? null
@@ -2510,6 +2514,7 @@ export class AttendanceService {
 
   private serializeLiveSession(session: {
     id: string;
+    checkInEvent: { locationId: string; location: { name: string } };
     employee: {
       id: string;
       firstName: string;
@@ -2544,6 +2549,7 @@ export class AttendanceService {
 
     return {
       sessionId: session.id,
+      locationId: session.checkInEvent.locationId,
       employeeId: session.employee.id,
       employeeName: `${session.employee.lastName} ${session.employee.firstName}`,
       employeeNumber: session.employee.employeeNumber,
@@ -2551,7 +2557,7 @@ export class AttendanceService {
       location:
         session.employee.workMode === EmployeeWorkMode.FIELD
           ? 'Field visit'
-          : session.employee.primaryLocation.name,
+          : session.checkInEvent.location.name,
       shiftLabel:
         session.employee.workMode === EmployeeWorkMode.FIELD
           ? null
