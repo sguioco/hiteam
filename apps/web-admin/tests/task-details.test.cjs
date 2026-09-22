@@ -23,6 +23,12 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { retainVisibleEmployees } = load('lib/employee-selection.ts');
+const selectedEmployees = new Set(['a', 'b']);
+assert.equal(retainVisibleEmployees(selectedEmployees, ['a', 'b', 'c']), selectedEmployees);
+assert.deepEqual([...retainVisibleEmployees(selectedEmployees, ['b', 'c'])], ['b']);
+assert.equal(retainVisibleEmployees(selectedEmployees, []).size, 0);
+assert.deepEqual([...selectedEmployees], ['a', 'b'], 'Filtering must not mutate the original selection');
 const { CalendarFilterSummary } = load('components/calendar-filter-summary.tsx');
 assert.equal(CalendarFilterSummary({ labels: [], locale: 'ru', onReset() {} }), null);
 let calendarResets = 0;

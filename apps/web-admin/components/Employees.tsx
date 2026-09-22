@@ -1,5 +1,7 @@
 "use client";
 
+import { retainVisibleEmployees } from "@/lib/employee-selection";
+
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -1436,6 +1438,11 @@ const Employees = ({
       );
     });
   }, [employees, search, showFormerEmployees, teamFilterId]);
+
+  useEffect(() => {
+    if (bulkSubmitting) return;
+    setSelectedEmployeeIds(current => retainVisibleEmployees(current, filteredEmployees.map(employee => employee.id)));
+  }, [filteredEmployees, bulkSubmitting]);
 
   const sortedEmployees = useMemo(() => {
     const collator = new Intl.Collator(locale === "ru" ? "ru" : "en", {
@@ -3317,6 +3324,8 @@ const Employees = ({
                   <Table.Cell className="align-middle">
                     <div className="flex items-center gap-3">
                       <Checkbox
+                        aria-label={runtimeLocalize(`Выбрать: ${employee.name}`, `Select: ${employee.name}`, locale)}
+                        disabled={bulkSubmitting}
                         checked={selectedEmployeeIds.has(employee.id)}
                         onCheckedChange={(checked) =>
                           toggleEmployeeSelection(employee.id, checked === true)
@@ -3699,7 +3708,7 @@ const Employees = ({
             </div>
           ) : null}
 
-          {viewMode === "employees" && selectedEmployeeIds.size >= 2 ? (
+          {viewMode === "employees" && selectedEmployeeIds.size > 0 ? (
             <div className="mb-4 rounded-2xl border border-[rgba(49,84,255,0.24)] bg-[rgba(49,84,255,0.07)] p-3 shadow-[0_14px_36px_rgba(37,99,235,0.08)]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-[220px] items-center gap-3 font-heading text-sm font-semibold text-[color:var(--foreground)]">
@@ -3707,14 +3716,15 @@ const Employees = ({
                     <Check className="h-4 w-4" />
                   </span>
                   {runtimeLocalize(
-                    `${selectedEmployeeIds.size} сотрудников выбрано`,
-                    `${selectedEmployeeIds.size} employees selected`,
+                    `Выбрано: ${selectedEmployeeIds.size}`,
+                    `Selected: ${selectedEmployeeIds.size}`,
                     locale,
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     className="rounded-xl font-heading"
+                    disabled={selectedEmployeeIds.size < 2 || bulkSubmitting}
                     onClick={() => {
                       setBulkError(null);
                       setBulkAssignDialogOpen(true);
@@ -3730,6 +3740,7 @@ const Employees = ({
                   </Button>
                   <Button
                     className="rounded-xl font-heading"
+                    disabled={selectedEmployeeIds.size < 2 || bulkSubmitting}
                     onClick={() => {
                       setBulkRole("team_leader");
                       setBulkError(null);
@@ -3743,6 +3754,7 @@ const Employees = ({
                   </Button>
                   <Button
                     className="rounded-xl font-heading"
+                    disabled={selectedEmployeeIds.size < 2 || bulkSubmitting}
                     onClick={() => {
                       setBulkError(null);
                       setBulkAssignDialogOpen(true);
@@ -3760,6 +3772,7 @@ const Employees = ({
                   <Button
                     className="rounded-xl font-heading"
                     onClick={clearEmployeeSelection}
+                    disabled={bulkSubmitting}
                     type="button"
                     variant="outline"
                   >
@@ -3767,6 +3780,11 @@ const Employees = ({
                   </Button>
                 </div>
               </div>
+              <p className="mt-3 text-sm text-muted-foreground" role="status">
+                {selectedEmployeeIds.size < 2
+                  ? runtimeLocalize("Выберите ещё сотрудника для массового назначения. При изменении фильтров скрытые сотрудники снимаются с выбора.", "Select one more employee for bulk assignment. Employees hidden by filters are removed from the selection.", locale)
+                  : runtimeLocalize("Действия применяются только к выбранным сотрудникам. При изменении фильтров скрытые сотрудники снимаются с выбора.", "Actions apply only to selected employees. Employees hidden by filters are removed from the selection.", locale)}
+              </p>
               {bulkError ? (
                 <div className="error-box mt-3">{bulkError}</div>
               ) : null}
