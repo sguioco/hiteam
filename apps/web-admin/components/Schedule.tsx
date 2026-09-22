@@ -1,5 +1,7 @@
 "use client";
 
+import { CalendarFilterSummary } from "./calendar-filter-summary";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -974,6 +976,13 @@ export default function Schedule({
   const [calendarEventFilter, setCalendarEventFilter] =
     useState<CalendarEventFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const resetCalendarFilters = () => {
+    setSelectedEmployeeId("all");
+    setLocationFilter("all");
+    setDepartmentFilter("all");
+    setRoleFilter("all");
+    setCalendarEventFilter("all");
+  };
   const [overdueOpen, setOverdueOpen] = useState(false);
   const [overdueSearch, setOverdueSearch] = useState("");
   const [overdueEmployeeId, setOverdueEmployeeId] = useState("all");
@@ -2172,7 +2181,7 @@ export default function Schedule({
     setCreateShiftDraft({
       shiftDate: formatDateInput(day),
       employeeIds: selectedEmployeeId !== "all" ? [selectedEmployeeId] : [],
-      locationId: locations.length === 1 ? locations[0]?.id ?? "" : "",
+      locationId: locationFilter !== "all" ? locationFilter : locations.length === 1 ? locations[0]?.id ?? "" : "",
       templateId: "",
       fixedBreakEnabled: false,
       fixedBreakStartsAtLocal: "13:00",
@@ -2760,10 +2769,11 @@ export default function Schedule({
                 <h2>
                   {formatCalendarLabel(currentDate, period, calendarDays, localeTag)}
                 </h2>
-                <div className="schedule-calendar-nav">
+                <div className="schedule-calendar-nav" role="group" aria-label={locale === "ru" ? "Навигация по месяцам" : "Month navigation"}>
                   <button
                     className={`schedule-calendar-nav-button ${canGoToPreviousMonth ? "" : "opacity-40"}`}
                     disabled={!canGoToPreviousMonth}
+                    aria-label={locale === "ru" ? "Предыдущий месяц" : "Previous month"}
                     onClick={() => {
                       if (!canGoToPreviousMonth) {
                         return;
@@ -2777,17 +2787,21 @@ export default function Schedule({
                   </button>
                   <button
                     className="schedule-calendar-nav-button"
+                    aria-label={locale === "ru" ? "Следующий месяц" : "Next month"}
                     onClick={() => setCurrentDate((current) => addMonths(current, 1))}
                     type="button"
                   >
                     <ChevronRight className="size-4" />
                   </button>
+                  <Button variant="outline" type="button" onClick={() => setCurrentDate(new Date())}>
+                    {locale === "ru" ? "Сегодня" : "Today"}
+                  </Button>
                 </div>
               </div>
 
               <div className="schedule-calendar-actions">
                 {!isEmployeeMode ? (
-                  <div className="schedule-calendar-primary-actions">
+                  <div className="schedule-calendar-primary-actions" role="group" aria-label={locale === "ru" ? "Планирование смен" : "Shift planning"}>
                     <Button
                       className="font-heading"
                       onClick={() => openCreateShiftForDay(today)}
@@ -2856,6 +2870,8 @@ export default function Schedule({
                       showFilters ? "bg-foreground text-background hover:bg-foreground/90" : ""
                     }`}
                     onClick={() => setShowFilters((current) => !current)}
+                    aria-expanded={showFilters}
+                    aria-controls="schedule-filters"
                     type="button"
                     variant="outline"
                   >
@@ -2866,8 +2882,16 @@ export default function Schedule({
               </div>
             </div>
 
+            <CalendarFilterSummary locale={locale} onReset={resetCalendarFilters} labels={[
+              ...(!isEmployeeMode && selectedEmployeeId !== "all" ? [ui.employees] : []),
+              ...(!isEmployeeMode && locationFilter !== "all" ? [`${ui.locations}: ${locations.find(item => item.id === locationFilter)?.name ?? locationFilter}`] : []),
+              ...(!isEmployeeMode && departmentFilter !== "all" ? [`${ui.departments}: ${departments.find(item => item.id === departmentFilter)?.name ?? departmentFilter}`] : []),
+              ...(!isEmployeeMode && roleFilter !== "all" ? [`${ui.roles}: ${positions.find(item => item.id === roleFilter)?.name ?? roleFilter}`] : []),
+              ...(calendarEventFilter !== "all" ? [calendarEventFilter === "shifts" ? ui.shiftsOnly : calendarEventFilter === "tasks" ? ui.tasksOnly : ui.meetingsOnly] : []),
+            ]} />
+
             {showFilters ? (
-              <section className="dashboard-card relative z-20 mb-5 overflow-visible animate-fade-in">
+              <section id="schedule-filters" aria-label={ui.filters} className="dashboard-card relative z-20 mb-5 overflow-visible animate-fade-in">
                 <div className="overflow-visible">
                   <div className="flex flex-wrap gap-3">
                     {!isEmployeeMode ? (
@@ -3015,13 +3039,7 @@ export default function Schedule({
                     <div className="flex w-[140px] items-end">
                       <Button
                         className="h-8 w-full rounded-xl px-3 text-xs font-heading"
-                        onClick={() => {
-                          setSelectedEmployeeId("all");
-                          setLocationFilter("all");
-                          setDepartmentFilter("all");
-                          setRoleFilter("all");
-                          setCalendarEventFilter("all");
-                        }}
+                        onClick={resetCalendarFilters}
                         type="button"
                         variant="outline"
                       >
@@ -4137,8 +4155,8 @@ export default function Schedule({
         }}
         open={Boolean(selectedDay)}
       >
-        <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-3xl flex-col overflow-hidden rounded-[28px]">
-          <DialogHeader>
+        <DialogContent className="schedule-day-panel">
+          <DialogHeader className="shrink-0 pr-10">
             <DialogTitle className="font-heading text-[clamp(0.95rem,1.35vw,1.3rem)] leading-[0.92] tracking-[-0.08em] uppercase text-foreground">
               {selectedDay
                 ? formatDateTime(selectedDay, {
@@ -4158,7 +4176,7 @@ export default function Schedule({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="scrollbar-hide flex-1 overflow-y-auto">
+          <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto">
             <div>
               {selectedDayEntries.length ? (
                 selectedDayEntries.map((entry) => {
@@ -4340,7 +4358,7 @@ export default function Schedule({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-border/70 pt-3">
+          {!isEmployeeMode ? <div className="shrink-0 border-t border-border/70 pt-3">
             <div className="flex justify-end">
               <Button
                 onClick={() => openCreateShiftForDay(selectedDay ?? today)}
@@ -4350,7 +4368,7 @@ export default function Schedule({
                 {ui.addShiftForDay}
               </Button>
             </div>
-          </div>
+          </div> : null}
         </DialogContent>
       </Dialog>
 

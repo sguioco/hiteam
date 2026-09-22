@@ -23,6 +23,18 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { CalendarFilterSummary } = load('components/calendar-filter-summary.tsx');
+assert.equal(CalendarFilterSummary({ labels: [], locale: 'ru', onReset() {} }), null);
+let calendarResets = 0;
+const filterSummary = CalendarFilterSummary({ labels: ['Dubai', 'Shifts'], locale: 'en', onReset: () => calendarResets++ });
+filterSummary.props.children[1].props.onClick();
+assert.equal(calendarResets, 1);
+for (const locale of ['ru', 'en']) {
+  const markup = renderToStaticMarkup(React.createElement(CalendarFilterSummary, { labels: ['Dubai', 'Shifts'], locale, onReset() {} }));
+  assert.match(markup, /Dubai/);
+  assert.match(markup, /Shifts/);
+  assert.match(markup, locale === 'ru' ? /Сбросить фильтры/ : /Clear filters/);
+}
 const { EmptyStateAction } = load('components/dashboard/empty-state-action.tsx');
 assert.equal(EmptyStateAction({}), null, 'No action is exposed without permission from the parent');
 let emptyActionCalls = 0;
