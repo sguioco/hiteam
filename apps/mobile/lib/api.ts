@@ -2351,6 +2351,12 @@ export async function loadManagerAttendanceHistory(
   );
 }
 
+export async function loadMyAttendanceHistory(dateFrom: string, dateTo: string) {
+  return authRequest<AttendanceHistoryResponse>(
+    `/attendance/me/history?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+  );
+}
+
 export type MobileEmployeesBootstrapResponse = Omit<
   EmployeesBootstrapResponse,
   "employeeRecords"

@@ -406,16 +406,29 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
       >
         <View className="gap-5">
           {attendanceTrackingEnabled ? (
-            <View style={{ marginHorizontal: -16 }}>
-              <ShiftStatusCard
-                displayTimeZone={businessTimeZone}
-                greetingName={profile?.firstName ?? null}
-                loading={showLoadingState}
-                onBreakAction={openBreakAction}
-                onPrimaryAction={openAttendanceAction}
-                status={effectiveAttendanceStatus}
-                topInset={insets.top}
-              />
+            <View>
+              <View style={{ marginHorizontal: -16 }}>
+                <ShiftStatusCard
+                  displayTimeZone={businessTimeZone}
+                  greetingName={profile?.firstName ?? null}
+                  loading={showLoadingState}
+                  onBreakAction={openBreakAction}
+                  onPrimaryAction={openAttendanceAction}
+                  status={effectiveAttendanceStatus}
+                  topInset={insets.top}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                className="mx-4 mt-3 flex-row items-center gap-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-3"
+                onPress={() => router.push('/attendance/history' as never)}
+              >
+                <Ionicons color="#315cf6" name="time-outline" size={20} />
+                <Text className="flex-1 font-body text-sm font-semibold text-foreground">
+                  {t('attendanceHistory.open')}
+                </Text>
+                <Ionicons color="#6b7a90" name="chevron-forward" size={17} style={directionalIconStyle} />
+              </Pressable>
             </View>
           ) : null}
 
@@ -472,4 +485,3 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
 };
 
 export default TodayScreen;
-
