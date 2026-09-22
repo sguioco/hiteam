@@ -272,15 +272,13 @@ export default function RegisterInvitationScreen() {
 
   async function pickPhoto(source: 'camera' | 'library') {
     try {
-      const permission =
-        source === 'camera'
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        hapticError();
-        setError(copy.addPhoto);
-        return;
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          hapticError();
+          setError(copy.addPhoto);
+          return;
+        }
       }
 
       const result =
@@ -299,7 +297,13 @@ export default function RegisterInvitationScreen() {
               selectionLimit: 1,
             });
 
-      if (result.canceled || !result.assets?.[0]?.uri || !result.assets[0].base64) {
+      if (result.canceled) {
+        return;
+      }
+
+      if (!result.assets?.[0]?.uri || !result.assets[0].base64) {
+        hapticError();
+        setError(copy.photoFailed);
         return;
       }
 

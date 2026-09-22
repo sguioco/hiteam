@@ -310,9 +310,6 @@ export default function OrganizationOnboardingScreen() {
   }
 
   async function pickLogo() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       aspect: [1, 1],

@@ -464,20 +464,19 @@ export default function TaskList({
   async function pickFromLibrary() {
     try {
       setMediaBusy(true);
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        hapticError();
-        setMediaError(t('today.photoLibraryPermissionRequired'));
-        return;
-      }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: false,
         quality: 0.72,
         selectionLimit: 1,
       });
 
-      if (result.canceled || !result.assets?.[0]?.uri) {
+      if (result.canceled) {
+        return;
+      }
+
+      if (!result.assets?.[0]?.uri) {
+        hapticError();
+        setMediaError(t('today.photoSelectionFailed'));
         return;
       }
 

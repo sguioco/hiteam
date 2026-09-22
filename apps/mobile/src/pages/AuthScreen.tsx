@@ -995,15 +995,13 @@ const AuthScreen = () => {
     try {
       setMessage(null);
 
-      const permission =
-        source === 'camera'
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        hapticError();
-        setMessage(joinProfileCopy.photoRequired);
-        return;
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          hapticError();
+          setMessage(joinProfileCopy.photoRequired);
+          return;
+        }
       }
 
       const result =
@@ -1022,7 +1020,13 @@ const AuthScreen = () => {
             selectionLimit: 1,
           });
 
-      if (result.canceled || !result.assets?.[0]?.uri || !result.assets[0].base64) {
+      if (result.canceled) {
+        return;
+      }
+
+      if (!result.assets?.[0]?.uri || !result.assets[0].base64) {
+        hapticError();
+        setMessage(joinProfileCopy.photoFailed);
         return;
       }
 

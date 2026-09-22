@@ -635,18 +635,16 @@ export default function CreateNewsScreen() {
 
   async function handlePickImage(source: 'camera' | 'library') {
     try {
-      const permission =
-        source === 'camera'
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        hapticError();
-        Alert.alert(
-          'Error',
-          t('manager.createNewsPhotoPermissionDenied'),
-        );
-        return;
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          hapticError();
+          Alert.alert(
+            'Error',
+            t('manager.createNewsPhotoPermissionDenied'),
+          );
+          return;
+        }
       }
 
       const result =
