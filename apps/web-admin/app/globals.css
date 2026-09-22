@@ -12141,6 +12141,11 @@ body {
   overscroll-behavior: contain;
 }
 
+.employees-table-card .team-tasks-table-shell {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
 .team-tasks-table-row {
   cursor: pointer;
   height: auto !important;

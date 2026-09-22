@@ -17,6 +17,7 @@ import {
   FolderOpen,
   ListTodo,
   Mail,
+  MoreHorizontal,
   Phone,
   Plus,
   Search,
@@ -3281,7 +3282,7 @@ const Employees = ({
       : "";
 
     return (
-      <div className={`team-tasks-table-card${cardClassName}`}>
+      <div className={`team-tasks-table-card employees-table-card${cardClassName}`}>
         <div className="team-tasks-table-shell">
           <Table
             aria-label={runtimeLocalize(
@@ -3289,6 +3290,7 @@ const Employees = ({
               "Employees table",
               locale,
             )}
+            className="min-w-[960px]"
             onSortChange={setSortDescriptor}
             size="sm"
             sortDescriptor={sortDescriptor}
@@ -3463,12 +3465,13 @@ const Employees = ({
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
+                            aria-label={runtimeLocalize(`Действия: ${employee.name}`, `Actions: ${employee.name}`, locale)}
                             className="h-7 w-7 rounded-lg p-0"
                             size="sm"
                             type="button"
                             variant="ghost"
                           >
-                            <Plus className="h-3.5 w-3.5" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
@@ -3513,26 +3516,6 @@ const Employees = ({
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button
-                        className={`h-8 rounded-lg px-2.5 text-xs transition ${
-                          employee.group
-                            ? "opacity-0 group-hover:opacity-100"
-                            : "border border-[rgba(37,99,235,0.16)] bg-[rgba(37,99,235,0.08)] text-[color:var(--accent)] opacity-100 hover:bg-[rgba(37,99,235,0.12)]"
-                        }`}
-                        onClick={() => openMoveDialog(employee)}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <ArrowRightLeft className="h-3.5 w-3.5" />
-                        {employee.group
-                          ? runtimeLocalize("Изменить", "Change", locale)
-                          : runtimeLocalize(
-                              "Назначить бригаду",
-                              "Assign team",
-                              locale,
-                            )}
-                      </Button>
                     </div>
                   </Table.Cell>
                 </Table.Row>
