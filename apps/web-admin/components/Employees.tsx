@@ -1,6 +1,7 @@
 "use client";
 
 import { retainVisibleEmployees } from "@/lib/employee-selection";
+import { filterInvitations, invitationPage } from "@/lib/invitation-list";
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -984,6 +985,9 @@ const Employees = ({
     InvitationRecord[]
   >(initialData?.pendingInvitations ?? []);
   const [invitationsLoading, setInvitationsLoading] = useState(!initialData);
+  const [invitationSearch, setInvitationSearch] = useState("");
+  const [invitationStatusFilter, setInvitationStatusFilter] = useState<"all" | InvitationRecord["status"]>("all");
+  const [invitationPageNumber, setInvitationPageNumber] = useState(1);
   const [selectedInvitation, setSelectedInvitation] =
     useState<InvitationRecord | null>(null);
   const [invitationDialogMode, setInvitationDialogMode] =
@@ -1656,6 +1660,18 @@ const Employees = ({
     selectedEmployeeBiometric?.profile?.enrolledAt ?? null;
   const biometricLastVerifiedAt =
     selectedEmployeeBiometric?.profile?.lastVerifiedAt ?? null;
+
+  const filteredInvitations = useMemo(
+    () => filterInvitations(pendingInvitations, invitationSearch, invitationStatusFilter),
+    [pendingInvitations, invitationSearch, invitationStatusFilter],
+  );
+  const invitationsPage = useMemo(
+    () => invitationPage(filteredInvitations, invitationPageNumber),
+    [filteredInvitations, invitationPageNumber],
+  );
+  useEffect(() => {
+    setInvitationPageNumber(current => current === invitationsPage.currentPage ? current : invitationsPage.currentPage);
+  }, [invitationsPage.currentPage]);
 
   function applyDirectorySnapshot(
     snapshot: EmployeesDirectorySnapshot,
@@ -3799,8 +3815,28 @@ const Employees = ({
           ) : null}
 
           {!invitationsLoading && pendingInvitations.length > 0 ? (
-            <div className="mb-4 space-y-2">
-              {pendingInvitations.map((invitation) => (
+            <section className="mb-5 rounded-2xl border border-border bg-white p-4" aria-label={runtimeLocalize("Приглашения", "Invitations", locale)}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-base font-semibold">{runtimeLocalize("Приглашения", "Invitations", locale)}</h2>
+                  <p className="text-sm text-muted-foreground">{runtimeLocalize(`Ожидают действия: ${pendingInvitations.length}`, `${pendingInvitations.length} need attention`, locale)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="relative min-w-[220px]">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input aria-label={runtimeLocalize("Поиск приглашений", "Search invitations", locale)} className="pl-9" value={invitationSearch} onChange={event => { setInvitationSearch(event.target.value); setInvitationPageNumber(1); }} placeholder={runtimeLocalize("Email или телефон", "Email or phone", locale)} />
+                  </label>
+                  <Select value={invitationStatusFilter} onValueChange={value => { setInvitationStatusFilter(value as typeof invitationStatusFilter); setInvitationPageNumber(1); }}>
+                    <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{runtimeLocalize("Все статусы", "All statuses", locale)}</SelectItem>
+                      {(["INVITED", "PENDING_APPROVAL", "REJECTED"] as const).map(status => <SelectItem key={status} value={status}>{getInvitationLabel(status, locale)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {invitationsPage.items.length ? <div className="space-y-2">
+              {invitationsPage.items.map((invitation) => (
                 <div
                   className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-secondary/20 px-4 py-3"
                   key={invitation.id}
@@ -3879,7 +3915,13 @@ const Employees = ({
                   </div>
                 </div>
               ))}
-            </div>
+              </div> : <p className="rounded-xl bg-secondary/30 px-4 py-6 text-center text-sm text-muted-foreground">{runtimeLocalize("По приглашениям нет совпадений.", "No invitations match the filters.", locale)}</p>}
+              {invitationsPage.totalPages > 1 ? <nav className="mt-3 flex items-center justify-end gap-3" aria-label={runtimeLocalize("Страницы приглашений", "Invitation pages", locale)}>
+                <Button size="sm" variant="outline" disabled={invitationsPage.currentPage === 1} onClick={() => setInvitationPageNumber(current => current - 1)}>{runtimeLocalize("Назад", "Previous", locale)}</Button>
+                <span className="text-sm text-muted-foreground">{invitationsPage.currentPage} / {invitationsPage.totalPages}</span>
+                <Button size="sm" variant="outline" disabled={invitationsPage.currentPage === invitationsPage.totalPages} onClick={() => setInvitationPageNumber(current => current + 1)}>{runtimeLocalize("Далее", "Next", locale)}</Button>
+              </nav> : null}
+            </section>
           ) : null}
 
           {directoryLoading ? (

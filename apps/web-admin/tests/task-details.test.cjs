@@ -24,6 +24,12 @@ function load(file, overrides = {}) {
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
 const { retainVisibleEmployees } = load('lib/employee-selection.ts');
+const { filterInvitations, invitationPage, INVITATIONS_PER_PAGE } = load('lib/invitation-list.ts');
+const inviteItems = Array.from({ length: INVITATIONS_PER_PAGE + 2 }, (_, index) => ({ email: `person${index}@example.com`, phone: null, status: index % 2 ? 'INVITED' : 'PENDING_APPROVAL' }));
+assert.equal(filterInvitations(inviteItems, 'PERSON1', 'all').length, 1);
+assert.equal(filterInvitations(inviteItems, '', 'INVITED').every(item => item.status === 'INVITED'), true);
+assert.equal(invitationPage(inviteItems, 1).items.length, INVITATIONS_PER_PAGE);
+assert.equal(invitationPage(inviteItems, 99).currentPage, 2);
 const selectedEmployees = new Set(['a', 'b']);
 assert.equal(retainVisibleEmployees(selectedEmployees, ['a', 'b', 'c']), selectedEmployees);
 assert.deepEqual([...retainVisibleEmployees(selectedEmployees, ['b', 'c'])], ['b']);
