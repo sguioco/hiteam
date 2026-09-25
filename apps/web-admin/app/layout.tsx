@@ -8,6 +8,7 @@ import { Providers } from './providers';
 import { petersburgHero } from './landing-hero-font';
 import { cn } from "@/lib/utils";
 import { getServerSessionSnapshot } from "@/lib/server-auth";
+import { resolveInitialLocale } from "@/lib/locale-preference";
 import {
   LANDING_HERO_POSTER_SRC,
 } from "@/lib/landing-assets";
@@ -69,63 +70,6 @@ const umnicoWidgetScript = `
     document.body.appendChild(x);
   }
 `;
-
-function parsePreferredLocaleFromAcceptLanguage(
-  acceptLanguageHeader: string | null,
-): "en" | "ru" | null {
-  if (!acceptLanguageHeader) {
-    return null;
-  }
-
-  const tokens = acceptLanguageHeader
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .filter(Boolean);
-
-  for (const token of tokens) {
-    const locale = token.split(";")[0]?.trim();
-    if (!locale) {
-      continue;
-    }
-
-    if (locale === "ru" || locale.startsWith("ru-")) {
-      return "ru";
-    }
-
-    if (locale === "en" || locale.startsWith("en-")) {
-      return "en";
-    }
-  }
-
-  return null;
-}
-
-function resolveInitialLocale(
-  acceptLanguageHeader: string | null,
-  localeCookie: string | undefined,
-  isPublicRoute: boolean,
-  sessionPreferredLocale?: string | null,
-): "en" | "ru" {
-  const browserLocale = parsePreferredLocaleFromAcceptLanguage(acceptLanguageHeader);
-
-  if (isPublicRoute) {
-    if (localeCookie === "ru" || localeCookie === "en") {
-      return localeCookie;
-    }
-
-    return browserLocale ?? "en";
-  }
-
-  if (sessionPreferredLocale === "ru" || sessionPreferredLocale === "en") {
-    return sessionPreferredLocale;
-  }
-
-  if (localeCookie === "ru" || localeCookie === "en") {
-    return localeCookie;
-  }
-
-  return browserLocale ?? "en";
-}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const requestHeaders = await headers();

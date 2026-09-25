@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, AlertCircle, CheckCircle2, Circle, Filter, ListTodo } from "lucide-react";
 import { TaskItem } from "@smart/types";
 import Radio, { type RadioItem } from "@/components/ui/Radio";
@@ -8,6 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { parseTaskMeta } from "@/lib/task-meta";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { EmptyStateAction } from "./empty-state-action";
+import { toAdminHref } from "@/lib/admin-routes";
 
 type TaskFilter = "today" | "tomorrow" | "week";
 
@@ -16,6 +18,7 @@ type TasksSidebarProps = {
   onTaskOpen: (taskId: string) => void;
   tasks: TaskItem[];
   onCreateTask?: (day: Date) => void;
+  showTeamTasksLink?: boolean;
 };
 
 function localize(locale: "ru" | "en", ru: string, en: string) {
@@ -113,7 +116,7 @@ function toggleVisibleKind(
   return next;
 }
 
-export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks, onCreateTask }: TasksSidebarProps) => {
+export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks, onCreateTask, showTeamTasksLink = false }: TasksSidebarProps) => {
   const { locale: activeLocale } = useI18n();
   const locale = forcedLocale ?? activeLocale;
   const { getTaskTitle } = useTranslatedTaskCopy(tasks, locale);
@@ -194,10 +197,13 @@ export const TasksSidebar = ({ locale: forcedLocale, onTaskOpen, tasks, onCreate
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-2">
           <ListTodo className="w-4 h-4" />
-          <h2 className="tasks-sidebar-title">{localize(locale, "Задачи", "Tasks")}</h2>
+          <h2 className="tasks-sidebar-title">{localize(locale, "Мои задачи", "My tasks")}</h2>
         </div>
+        {showTeamTasksLink ? <Link className="text-xs font-semibold text-[color:var(--accent)] underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--accent)]" href={toAdminHref("/tasks")}>{localize(locale, "Все задачи", "All tasks")}</Link> : null}
         <div className="tasks-filter-dropdown" ref={kindFilterRef}>
           <button
+            aria-expanded={showKindFilter}
+            aria-label={localize(locale, "Фильтр типов задач", "Task type filter")}
             className={`tasks-filter-trigger${showKindFilter ? " is-open" : ""}`}
             onClick={() => setShowKindFilter((current) => !current)}
             type="button"

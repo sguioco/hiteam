@@ -42,6 +42,22 @@ function run() {
   };
   assert.equal(validateEnvironment(productionConfig), productionConfig);
 
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...productionConfig,
+        ALTEGIO_PARTNER_TOKEN: 'partner-token',
+      }),
+    /ALTEGIO_CALLBACK_TOKEN is required/,
+  );
+
+  const productionWithAltegio = {
+    ...productionConfig,
+    ALTEGIO_PARTNER_TOKEN: 'partner-token',
+    ALTEGIO_CALLBACK_TOKEN: 'callback-token',
+  };
+  assert.equal(validateEnvironment(productionWithAltegio), productionWithAltegio);
+
   console.log('environment validation tests passed');
 }
 

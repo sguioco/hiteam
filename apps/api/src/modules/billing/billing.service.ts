@@ -309,12 +309,19 @@ export class BillingService {
 
   async connectAltegioMarketplace(
     tenantId: string,
-    args: { locationId: string; applicationId?: string },
+    args: {
+      locationId: string;
+      applicationId?: string;
+      userData?: string;
+      userDataSign?: string;
+    },
   ) {
     await this.altegioMarketplaceBilling.connectMarketplace({
       tenantId,
       locationId: args.locationId,
       applicationId: args.applicationId,
+      userData: args.userData,
+      userDataSign: args.userDataSign,
     });
     try {
       await this.altegioStaffScheduleSync?.syncAll(tenantId);

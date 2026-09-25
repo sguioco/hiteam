@@ -5,6 +5,8 @@ const CONNECT_WINDOW_MS = 60 * 60 * 1000;
 export type AltegioMarketplaceConnectPayload = {
   locationId: string;
   applicationId: string | null;
+  userData: string;
+  userDataSign: string;
   capturedAt: number;
 };
 
@@ -66,8 +68,40 @@ export function readAltegioMarketplaceParams(
   return {
     locationId,
     applicationId,
+    userData: String(params.get("user_data") || "").trim(),
+    userDataSign: String(params.get("user_data_sign") || "").trim(),
     capturedAt: Date.now(),
   };
+}
+
+function readStoredAltegioMarketplacePayload(): AltegioMarketplaceConnectPayload | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<AltegioMarketplaceConnectPayload>;
+    if (!parsed?.locationId) {
+      return null;
+    }
+    if (!parsed.capturedAt || Date.now() - parsed.capturedAt > CONNECT_WINDOW_MS) {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return {
+      locationId: parsed.locationId,
+      applicationId: parsed.applicationId ?? null,
+      userData: parsed.userData || "",
+      userDataSign: parsed.userDataSign || "",
+      capturedAt: parsed.capturedAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function captureAltegioMarketplaceParams(
@@ -93,26 +127,19 @@ export function peekAltegioMarketplaceParams(): AltegioMarketplaceConnectPayload
 
   const fromUrl = readAltegioMarketplaceParams();
   if (fromUrl) {
+    const stored = readStoredAltegioMarketplacePayload();
+    if (
+      stored &&
+      stored.locationId === fromUrl.locationId &&
+      (!fromUrl.userData || !fromUrl.userDataSign)
+    ) {
+      fromUrl.userData = fromUrl.userData || stored.userData || "";
+      fromUrl.userDataSign = fromUrl.userDataSign || stored.userDataSign || "";
+    }
     return fromUrl;
   }
 
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as AltegioMarketplaceConnectPayload;
-    if (!parsed?.locationId) {
-      return null;
-    }
-    if (!parsed.capturedAt || Date.now() - parsed.capturedAt > CONNECT_WINDOW_MS) {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
+  return readStoredAltegioMarketplacePayload();
 }
 
 export function saveAltegioOnboardingPreview(preview: AltegioOnboardingPreview) {
@@ -197,6 +224,12 @@ export function resolvePostLoginRouteWithAltegio(defaultRoute: string) {
   });
   if (pending.applicationId) {
     params.set("app_id", pending.applicationId);
+  }
+  if (pending.userData) {
+    params.set("user_data", pending.userData);
+  }
+  if (pending.userDataSign) {
+    params.set("user_data_sign", pending.userDataSign);
   }
   return `/integrations?${params.toString()}`;
 }

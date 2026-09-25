@@ -9,6 +9,7 @@ export function taskActionAvailability(task: TaskItem, employeeId: string | null
       groups.some(group => group.id === task.groupId && group.memberships.some(member => member.employeeId === employeeId))));
   return {
     allowed,
+    edit: allowed && !recurring && task.managerEmployee.id === employeeId && task.status !== "DONE" && task.status !== "CANCELLED",
     comment: allowed && !recurring,
     checklist: allowed && !recurring,
     reschedule: allowed && task.status !== "DONE" && task.status !== "CANCELLED",

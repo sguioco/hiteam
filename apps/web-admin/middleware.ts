@@ -190,6 +190,15 @@ export function middleware(request: NextRequest) {
         integrationsUrl.searchParams.set("app_id", applicationId);
       }
 
+      const userData = searchParams.get("user_data")?.trim();
+      const userDataSign = searchParams.get("user_data_sign")?.trim();
+      if (userData) {
+        integrationsUrl.searchParams.set("user_data", userData);
+      }
+      if (userDataSign) {
+        integrationsUrl.searchParams.set("user_data_sign", userDataSign);
+      }
+
       return NextResponse.redirect(integrationsUrl);
     }
   }

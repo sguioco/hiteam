@@ -695,6 +695,31 @@ export class AttendanceService {
     });
   }
 
+  async myCorrectionRequests(userId: string, query: AttendanceHistoryQueryDto) {
+    const employee = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const range = this.resolveRange(query.dateFrom, query.dateTo);
+    const requests = await this.prisma.attendanceCorrectionRequest.findMany({
+      where: {
+        tenantId: employee.tenantId,
+        employeeId: employee.id,
+        session: { startedAt: { gte: range.start, lte: range.end } },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, sessionId: true, status: true, reason: true,
+        proposedStartedAt: true, proposedEndedAt: true,
+        decisionComment: true, finalDecisionAt: true, createdAt: true,
+      },
+    });
+    return requests.map((request) => ({
+      ...request,
+      proposedStartedAt: request.proposedStartedAt?.toISOString() ?? null,
+      proposedEndedAt: request.proposedEndedAt?.toISOString() ?? null,
+      finalDecisionAt: request.finalDecisionAt?.toISOString() ?? null,
+      createdAt: request.createdAt.toISOString(),
+    }));
+  }
+
   async teamHistory(tenantId: string, query: AttendanceHistoryQueryDto) {
     return this.buildHistory(tenantId, query);
   }
@@ -1061,6 +1086,7 @@ export class AttendanceService {
   async createCorrectionRequest(
     tenantId: string,
     actorUserId: string,
+    actorRoleCodes: string[],
     sessionId: string,
     dto: CreateAttendanceCorrectionRequestDto,
   ) {
@@ -1074,6 +1100,23 @@ export class AttendanceService {
         employee: true,
       },
     });
+
+    if (session.employeeId !== requester.id && !actorRoleCodes.some((role) =>
+      ['tenant_owner', 'hr_admin', 'operations_admin', 'manager'].includes(role))) {
+      throw new ForbiddenException('Employees can request corrections only for their own attendance.');
+    }
+
+    const reason = dto.reason?.trim();
+    if (!reason) throw new BadRequestException('A correction reason is required.');
+    if (!dto.startedAt && !dto.endedAt && dto.breakMinutes === undefined && dto.paidBreakMinutes === undefined) {
+      throw new BadRequestException('Specify at least one attendance value to correct.');
+    }
+
+    const requestedStart = dto.startedAt ? new Date(dto.startedAt) : session.startedAt;
+    const requestedEnd = dto.endedAt ? new Date(dto.endedAt) : session.endedAt;
+    if (requestedEnd && requestedEnd < requestedStart) {
+      throw new BadRequestException('Check-out must be after check-in.');
+    }
 
     const existingPending = await this.prisma.attendanceCorrectionRequest.findFirst({
       where: {
@@ -1097,7 +1140,7 @@ export class AttendanceService {
         employeeId: session.employeeId,
         requestedByEmployeeId: requester.id,
         approverEmployeeId: approver.id,
-        reason: dto.reason,
+        reason,
         proposedStartedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
         proposedEndedAt: dto.endedAt ? new Date(dto.endedAt) : undefined,
         proposedBreakMinutes: dto.breakMinutes,
@@ -1125,7 +1168,7 @@ export class AttendanceService {
           endedAt: dto.endedAt ?? null,
           breakMinutes: dto.breakMinutes ?? null,
           paidBreakMinutes: dto.paidBreakMinutes ?? null,
-          reason: dto.reason,
+          reason,
         },
       },
     });
@@ -2017,9 +2060,10 @@ export class AttendanceService {
         location: context.location,
         resolvedDevice: device,
       });
-      throw new BadRequestException(
-        `Location accuracy must be ${MAX_ATTENDANCE_LOCATION_ACCURACY_METERS} meters or better.`,
-      );
+      throw new BadRequestException({
+        code: 'ATTENDANCE_LOCATION_INACCURATE',
+        message: `Location accuracy must be ${MAX_ATTENDANCE_LOCATION_ACCURACY_METERS} meters or better.`,
+      });
     }
 
     const distanceMeters = this.distanceMeters(
@@ -2039,7 +2083,10 @@ export class AttendanceService {
         location: context.location,
         resolvedDevice: device,
       });
-      throw new ForbiddenException('Employee is outside the allowed work area.');
+      throw new ForbiddenException({
+        code: 'ATTENDANCE_OUTSIDE_GEOFENCE',
+        message: 'Employee is outside the allowed work area.',
+      });
     }
 
     let biometricVerificationId: string | null = null;
@@ -2055,7 +2102,10 @@ export class AttendanceService {
           location: context.location,
           resolvedDevice: device,
         });
-        throw new ForbiddenException('A fresh biometric verification is required for this attendance action.');
+        throw new ForbiddenException({
+          code: 'ATTENDANCE_BIOMETRIC_REQUIRED',
+          message: 'A fresh biometric verification is required for this attendance action.',
+        });
       }
 
       try {

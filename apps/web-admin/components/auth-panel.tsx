@@ -543,6 +543,12 @@ export function AuthPanel() {
       locationId: pending.locationId,
       ...(pending.applicationId ? { applicationId: pending.applicationId } : {}),
     });
+    if (pending.userData) {
+      query.set("user_data", pending.userData);
+    }
+    if (pending.userDataSign) {
+      query.set("user_data_sign", pending.userDataSign);
+    }
     void apiRequest<AltegioOnboardingPreview>(
       `/altegio/onboarding/preview?${query.toString()}`,
       {

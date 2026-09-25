@@ -1,7 +1,7 @@
 "use client";
 
 import type { TaskItem, TaskStatus } from "@smart/types";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseTaskMeta } from "@/lib/task-meta";
 
@@ -19,6 +19,7 @@ export function TaskDetailsDialog({ task, title, locale, onClose, actions }: {
   onClose: () => void;
   actions?: ReactNode;
 }) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const ru = locale === "ru";
   const label = (r: string, en: string) => ru ? r : en;
   const date = (value: string) => new Date(value).toLocaleString(ru ? "ru-RU" : "en-US");
@@ -27,7 +28,18 @@ export function TaskDetailsDialog({ task, title, locale, onClose, actions }: {
   const proofs = task?.photoProofs.filter(p => !p.deletedAt && !p.supersededByProofId) ?? [];
   return (
     <Dialog open={Boolean(task)} onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto break-words">
+      <DialogContent
+        className="max-h-[85dvh] overflow-y-auto break-words"
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef.current?.isConnected) {
+            event.preventDefault();
+            returnFocusRef.current.focus();
+          }
+        }}
+      >
         <DialogHeader className="pr-10">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{label("Информация о задаче", "Task details")}</DialogDescription>

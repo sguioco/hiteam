@@ -45,6 +45,12 @@ export function validateEnvironment(
     errors.push('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
   }
 
+  if (getString(config.ALTEGIO_PARTNER_TOKEN) && !getString(config.ALTEGIO_CALLBACK_TOKEN)) {
+    errors.push(
+      'ALTEGIO_CALLBACK_TOKEN is required when the Altegio marketplace is configured',
+    );
+  }
+
   if (errors.length > 0) {
     throw new Error(
       `Invalid production environment configuration:\n${errors

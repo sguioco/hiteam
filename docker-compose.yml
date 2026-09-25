@@ -81,7 +81,8 @@ services:
       S3_BUCKET: smart-local
       S3_PUBLIC_BASE_URL: http://localhost:9000/smart-local
       BIOMETRIC_PROVIDER: compreface
-      COMPRE_FACE_BASE_URL: http://host.docker.internal:8000
+      # Port 8000 belongs to another local service; point this at an x86 CompreFace host when available.
+      COMPRE_FACE_BASE_URL: ${COMPRE_FACE_BASE_URL:-http://host.docker.internal:8010}
       AWS_REGION: us-east-1
       AWS_REKOGNITION_SIMILARITY_THRESHOLD: 90
       AWS_BIOMETRIC_ASSUME_ROLE_ARN: ''

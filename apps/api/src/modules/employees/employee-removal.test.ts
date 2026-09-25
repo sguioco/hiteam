@@ -27,6 +27,13 @@ async function main() {
   service.syncBillingSeatsInBackground = () => {};
   service.kommoService = { recordEmployeeUpdated: () => {} };
   service.emitWorkspaceRefreshForUser = () => {};
+  let remotePushes = 0;
+  service.altegioStaffScheduleSync = {
+    pushEmployeeToAltegio: async () => { remotePushes += 1; return { skipped: true }; },
+  };
+  service.altegioPilot = {
+    pushEmployeeToAltegio: async () => { remotePushes += 1; return { skipped: true }; },
+  };
   const remove = () => service.removeEmployee('company-a','owner','employee-a');
   actorAllowed = false;
   await assert.rejects(remove(), /Only the owner/);
@@ -46,6 +53,7 @@ async function main() {
   }
   assert.equal(writes.find(w => w.model === 'employeeInvitation')?.args.where.tenantId, 'company-a');
   assert.equal(writes.find(w => w.model === 'employeeInvitation')?.args.data.status, 'EXPIRED');
+  assert.equal(remotePushes, 2, 'terminated employees must be deactivated in both Altegio integrations');
   const sync = Object.create(AltegioStaffScheduleSyncService.prototype) as any;
   sync.requireConnectedContext = async () => ({ locationId: 'location' });
   sync.altegioB2b = { isConfigured: () => true, listTeamMembers: async () => [{ id: 'remote', name: 'Former Employee', fired: false }] };

@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { verifyAltegioInstallClaim } from './altegio-install-claim';
 import { AltegioMarketplaceClient, AltegioMarketplaceError } from './altegio-marketplace.client';
 import {
   classifyMarketplaceLifecycleEvent,
@@ -12,6 +13,7 @@ import {
   shouldPushLocalPeriodToAltegio,
   type MarketplaceSubscriptionSnapshot,
 } from './altegio-marketplace.helpers';
+import { appendWebhookTokenToUrl } from './altegio-webhook-url';
 
 type BillingSubscriptionRow = {
   id: string;
@@ -50,10 +52,18 @@ export class AltegioMarketplaceBillingService {
     return this.altegioClient.applicationId() || null;
   }
 
+  private webhookUrl() {
+    const baseUrl = this.configService.get<string>('ALTEGIO_WEBHOOK_URL')?.trim() || '';
+    const token = this.configService.get<string>('ALTEGIO_CALLBACK_TOKEN')?.trim() || '';
+    return appendWebhookTokenToUrl(baseUrl, token);
+  }
+
   async connectMarketplace(args: {
     tenantId: string;
     locationId: string;
     applicationId?: string | null;
+    userData?: string;
+    userDataSign?: string;
   }) {
     if (!this.altegioClient.isConfigured()) {
       throw new HttpException(
@@ -99,11 +109,32 @@ export class AltegioMarketplaceBillingService {
       );
     }
 
+    // A signed install claim (user_data + user_data_sign from the Altegio
+    // redirect) is the only server-verifiable proof that the visitor owns this
+    // salon. When a partner key is configured, refuse to bind salons without it
+    // so an unrelated HiTeam account cannot claim someone else's salon.
+    const partnerKey = this.altegioClient.partnerKey();
+    if (partnerKey) {
+      const claim = verifyAltegioInstallClaim({
+        userData: String(args.userData ?? ''),
+        userDataSign: String(args.userDataSign ?? ''),
+        claimedLocationId: locationId,
+        partnerKey,
+      });
+      if (!claim.claim || !("valid" in claim)) {
+        throw new HttpException(
+          { message: 'invalid_altegio_install_claim' },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
+    const webhookBaseUrl = this.webhookUrl();
     try {
       await this.altegioClient.activateIntegration({
         locationId,
         applicationId,
-        webhookUrl: this.configService.get<string>('ALTEGIO_WEBHOOK_URL')?.trim(),
+        webhookUrl: webhookBaseUrl,
       });
     } catch (error) {
       if (

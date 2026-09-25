@@ -10,4 +10,14 @@ export class AltegioConnectDto {
   @IsString()
   @MaxLength(64)
   applicationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  userData?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  userDataSign?: string;
 }

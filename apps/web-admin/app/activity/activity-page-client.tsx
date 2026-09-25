@@ -7,6 +7,7 @@ import type { DashboardBootstrapResponse } from "@smart/types";
 import { DateRangePicker } from "@/components/application/date-picker/date-range-picker";
 import { AdminShell } from "@/components/admin-shell";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { WorkspaceFeedback, WorkspaceFilterBar, WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import { useI18n } from "@/lib/i18n";
 import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { cn } from "@/lib/utils";
 import { readActivityContext } from "@/lib/activity-context";
+import { activityReturnHref } from "@/lib/activity-task-navigation";
 
 type PeriodPreset = "7d" | "14d" | "custom";
 
@@ -183,10 +185,12 @@ function ActivityFeedItem({
   item,
   locale,
   showLine,
+  returnTo,
 }: {
   item: DashboardActivityItem;
   locale: "ru" | "en";
   showLine: boolean;
+  returnTo: string;
 }) {
   const Icon = getActivityIcon(item);
   const { actorName, actionLabel } = resolveActionCopy(item, locale);
@@ -235,7 +239,7 @@ function ActivityFeedItem({
                 </>
               ) : null}
             </p>
-            <ActivityTaskLinks item={item} locale={locale} />
+            <ActivityTaskLinks item={item} locale={locale} returnTo={returnTo} />
             <div className="daily-activity-meta">
               <time dateTime={item.createdAt}>
                 {formatTimeLabel(item.createdAt, locale)}
@@ -448,6 +452,7 @@ export default function ActivityPageClient({
   return (
     <AdminShell>
       <main className="page-shell section-stack activity-page">
+        <WorkspacePageHeader description={localize(locale, "События команды за выбранный период", "Team events for the selected period")} />
         <section
           className={`team-tasks-toolbar activity-page-toolbar${
             preset === "custom" ? " is-custom-open" : ""
@@ -519,7 +524,7 @@ export default function ActivityPageClient({
               </div>
             ) : null}
           </div>
-          <div className="activity-page-scope-filters">
+          <WorkspaceFilterBar className="activity-page-scope-filters" label={localize(locale, "Фильтры активности", "Activity filters")}>
             <Select
               onValueChange={(value) => {
                 setCompanyId(value);
@@ -574,13 +579,16 @@ export default function ActivityPageClient({
                   ))}
               </SelectContent>
             </Select>
-          </div>
+          </WorkspaceFilterBar>
+          {(companyId !== "all" || locationId !== "all") ? (
+            <button className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600" onClick={() => { setCompanyId("all"); setLocationId("all"); }} type="button">
+              {localize(locale, "Сбросить фильтры", "Clear filters")}
+            </button>
+          ) : null}
         </section>
 
         {error ? (
-          <section className="dashboard-card activity-page-message activity-page-message--error">
-            {error}
-          </section>
+          <WorkspaceFeedback className="activity-page-message" title={error} tone="error" />
         ) : null}
 
         <section className="dashboard-card activity-feed-card">
@@ -622,6 +630,7 @@ export default function ActivityPageClient({
                             item={item}
                             key={item.id}
                             locale={locale}
+                            returnTo={activityReturnHref({ dateFrom, dateTo, companyId, locationId })}
                             showLine={index < group.items.length - 1}
                           />
                         ))}
@@ -638,15 +647,19 @@ export default function ActivityPageClient({
                 <p className="daily-activity-empty-title">
                   {localize(
                     locale,
-                    "Нет активности за выбранный период",
-                    "No activity for selected period",
+                    companyId !== "all" || locationId !== "all" ? "По выбранным фильтрам событий нет" : "Нет активности за выбранный период",
+                    companyId !== "all" || locationId !== "all" ? "No matching events" : "No activity for selected period",
                   )}
                 </p>
                 <p className="daily-activity-empty-copy">
                   {localize(
                     locale,
-                    "Попробуй изменить диапазон дат.",
-                    "Try a different date range.",
+                    companyId !== "all" || locationId !== "all"
+                      ? "Сбросьте фильтры или выберите другой период."
+                      : "События появятся здесь, когда команда начнёт работать. Можно также выбрать другой период.",
+                    companyId !== "all" || locationId !== "all"
+                      ? "Clear the filters or choose another period."
+                      : "Events will appear here as your team starts working. You can also choose another period.",
                   )}
                 </p>
               </div>

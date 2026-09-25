@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { WorkspaceFeedback, WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -708,18 +709,10 @@ export default function BillingPageClient({
         }
       `}</style>
       <main className="mx-auto flex w-full max-w-[1460px] flex-col gap-5 px-6 py-6 md:px-8">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-2">
-            <h1 className="font-heading text-[2rem] font-semibold leading-none tracking-[-0.04em] text-foreground">
-              Billing
-            </h1>
-            <p className="max-w-2xl font-heading text-sm text-muted-foreground">
-              {locale === "ru"
-                ? "Управляйте местами, тарифом и платежными деталями"
-                : "Manage your seats, plan and billing details"}
-            </p>
-          </div>
-        </header>
+        <WorkspacePageHeader
+          title={locale === "ru" ? "Оплата и тариф" : "Billing"}
+          description={locale === "ru" ? "Управляйте местами, тарифом и платежными деталями" : "Manage your seats, plan and billing details"}
+        />
 
 
         <nav
@@ -728,7 +721,8 @@ export default function BillingPageClient({
         >
           {billingTabs.map((item) => (
             <button
-              className={`relative pb-4 font-medium transition-colors ${
+              aria-pressed={activeTab === item.id}
+              className={`relative pb-4 font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                 activeTab === item.id
                   ? "text-[color:var(--accent)] after:absolute after:bottom-[-1px] after:left-0 after:h-0.5 after:w-full after:bg-[color:var(--accent)]"
                   : "text-[color:var(--foreground)] hover:text-[color:var(--accent)]"
@@ -748,9 +742,7 @@ export default function BillingPageClient({
             label={locale === "ru" ? "Загружаем биллинг" : "Loading billing"}
           />
         ) : error ? (
-          <div className="rounded-2xl bg-red-50 p-6 font-heading text-sm text-red-900 shadow-[0_14px_38px_rgba(220,38,38,0.08)]">
-            {error}
-          </div>
+          <WorkspaceFeedback title={error} tone="error" />
         ) : summary && activeTab === "overview" ? (
           <>
             {summary.trialActive ? (

@@ -34,6 +34,12 @@ export class AttendanceController {
   }
 
   @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Get('me/correction-requests')
+  myCorrectionRequests(@CurrentUser() user: JwtUser, @Query() query: AttendanceHistoryQueryDto) {
+    return this.attendanceService.myCorrectionRequests(user.sub, query);
+  }
+
+  @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Post('check-in')
   checkIn(@CurrentUser() user: JwtUser, @Body() dto: AttendanceActionDto) {
     return this.attendanceService.checkIn(user.sub, dto);
@@ -120,14 +126,14 @@ export class AttendanceController {
     return this.attendanceService.correctSession(user.tenantId, user.sub, user.roleCodes, sessionId, dto);
   }
 
-  @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
+  @Roles('employee', 'tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Post('sessions/:sessionId/correction-requests')
   createCorrectionRequest(
     @CurrentUser() user: JwtUser,
     @Param('sessionId') sessionId: string,
     @Body() dto: CreateAttendanceCorrectionRequestDto,
   ) {
-    return this.attendanceService.createCorrectionRequest(user.tenantId, user.sub, sessionId, dto);
+    return this.attendanceService.createCorrectionRequest(user.tenantId, user.sub, user.roleCodes, sessionId, dto);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

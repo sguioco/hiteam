@@ -18,7 +18,6 @@ import {
   Star,
   Target,
   Trophy,
-  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Table } from "@/components/application/table/table";
@@ -26,10 +25,11 @@ import { Avatar } from "@/components/base/avatar/avatar";
 import { AppSelectField } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { WorkspaceFeedback, WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { createAttendanceLiveSocket } from "@/lib/attendance-socket";
-import { readClientCache, writeClientCache } from "@/lib/client-cache";
+import { clearClientCache, readClientCache, writeClientCache } from "@/lib/client-cache";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
 
@@ -337,14 +337,6 @@ function getProgressDayLabel(locale: Locale, isCurrentMonth: boolean) {
   );
 }
 
-function getProgressTotalLabel(locale: Locale, isCurrentMonth: boolean) {
-  return localize(
-    locale,
-    isCurrentMonth ? "Итого за сегодня" : "Итог последнего дня",
-    isCurrentMonth ? "Today total" : "Last day total",
-  );
-}
-
 function getTopLeaderFrameClass(rank: number) {
   if (rank === 1) {
     return "min-h-[122px] border-amber-300 bg-amber-50/70 py-3 shadow-[0_18px_42px_rgba(245,158,11,0.12)] md:-mt-3 md:min-h-[124px]";
@@ -445,6 +437,7 @@ export function LeaderboardCenter({
   );
   const [loading, setLoading] = useState(!initialData);
   const [savingVisibility, setSavingVisibility] = useState(false);
+  const [visibilityFeedback, setVisibilityFeedback] = useState<"saved" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cacheKey = useMemo(
     () => buildLeaderboardCacheKey(session, selectedMonthKey),
@@ -599,27 +592,30 @@ export function LeaderboardCenter({
       return;
     }
 
-    const previousOverview = overview;
-    const nextOverview = {
-      ...overview,
-      visibility: {
-        ...overview.visibility,
-        hidePeersFromEmployees: checked,
-      },
-    };
-
-    setOverview(nextOverview);
     setSavingVisibility(true);
+    setVisibilityFeedback(null);
     setError(null);
 
     try {
-      await apiRequest("/leaderboard/settings", {
+      const saved = await apiRequest<{ hidePeersFromEmployees: boolean }>("/leaderboard/settings", {
         method: "PATCH",
         token: session?.accessToken,
         body: JSON.stringify({ hidePeersFromEmployees: checked }),
       });
+      const firstMonth = overview.earliestMonthKey ?? currentMonthKey;
+      for (let monthKey = firstMonth; monthKey <= currentMonthKey; monthKey = shiftMonthKey(monthKey, 1)) {
+        const monthCacheKey = buildLeaderboardCacheKey(session, monthKey);
+        if (monthCacheKey) clearClientCache(monthCacheKey);
+      }
+      setOverview((current) => current ? {
+        ...current,
+        visibility: {
+          ...current.visibility,
+          hidePeersFromEmployees: saved.hidePeersFromEmployees,
+        },
+      } : current);
+      setVisibilityFeedback("saved");
     } catch (saveError) {
-      setOverview(previousOverview);
       setError(
         saveError instanceof Error
           ? saveError.message
@@ -724,7 +720,6 @@ export function LeaderboardCenter({
     locale,
   );
   const progressDayLabel = getProgressDayLabel(locale, isCurrentMonth);
-  const progressTotalLabel = getProgressTotalLabel(locale, isCurrentMonth);
   const safeTodayMaxPoints = Math.max(
     overview?.me.todayMaxPoints ?? overview?.summary.maxDailyPoints ?? 1,
     1,
@@ -735,10 +730,6 @@ export function LeaderboardCenter({
         Math.round((overview.me.todayPoints / safeTodayMaxPoints) * 100),
       )
     : 0;
-  const completedDaySteps = Math.min(
-    9,
-    Math.max(0, Math.round((todayCompletionPercent / 100) * 9)),
-  );
   const firstPlacePoints = peersHiddenForViewer
     ? (overview?.me.points ?? 0)
     : (leaderboard[0]?.points ?? overview?.me.points ?? 0);
@@ -751,7 +742,10 @@ export function LeaderboardCenter({
     : "";
 
   return (
-    <div className="flex min-h-0 flex-col gap-5">
+    <div className="flex min-h-0 min-w-0 flex-col gap-5">
+      <WorkspacePageHeader
+        description={localize(locale, "Результаты команды и ваш прогресс за выбранный месяц", "Team results and your progress for the selected month")}
+      />
       {topLeaders.length > 0 ? (
         <section
           className={`leaderboard-month-surface px-1 ${monthTransitionClass}`}
@@ -878,55 +872,48 @@ export function LeaderboardCenter({
 
         <div className="flex flex-wrap items-center justify-end gap-3">
           {overview?.visibility?.canManage ? (
-            <div
-              aria-disabled={savingVisibility}
-              aria-pressed={overview.visibility.hidePeersFromEmployees}
-              className="flex min-h-12 cursor-pointer items-center gap-3 px-1 text-left text-sm transition-colors"
-              onClick={() =>
-                handleLeaderboardPrivacyChange(
-                  !overview.visibility.hidePeersFromEmployees,
-                )
-              }
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                  return;
-                }
-
-                event.preventDefault();
-                handleLeaderboardPrivacyChange(
-                  !overview.visibility.hidePeersFromEmployees,
-                );
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <span
-                className={`flex size-5 shrink-0 items-center justify-center rounded-md border shadow-sm ${
-                  overview.visibility.hidePeersFromEmployees
-                    ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
-                    : "border-[color:var(--border-strong)] bg-white"
-                }`}
+            <div className="max-w-[340px] px-1 text-sm">
+              <button
+                aria-checked={overview.visibility.hidePeersFromEmployees}
+                aria-describedby="leaderboard-visibility-description"
+                className="flex min-h-12 w-full items-center gap-3 rounded-xl text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)] disabled:cursor-wait disabled:opacity-60"
+                disabled={savingVisibility}
+                onClick={() => void handleLeaderboardPrivacyChange(!overview.visibility.hidePeersFromEmployees)}
+                role="switch"
+                type="button"
               >
-                {overview.visibility.hidePeersFromEmployees ? (
-                  <CheckCircle2 className="size-3.5" />
-                ) : null}
-              </span>
-              <span className="min-w-0">
-                <span className="block font-heading font-medium text-[color:var(--foreground)]">
+                <span
+                  aria-hidden="true"
+                  className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                    overview.visibility.hidePeersFromEmployees
+                      ? "bg-[color:var(--accent)]"
+                      : "bg-slate-300"
+                  }`}
+                >
+                  <span className={`size-5 rounded-full bg-white shadow-sm transition-transform ${overview.visibility.hidePeersFromEmployees ? "translate-x-5" : ""}`} />
+                </span>
+                <span className="font-heading font-medium text-[color:var(--foreground)]">
                   {localize(
                     locale,
-                    "Скрыть рейтинг сотрудников",
-                    "Hide employee leaderboard",
+                    "Скрыть результаты коллег от сотрудников",
+                    "Hide coworkers’ results from employees",
                   )}
                 </span>
-                <span className="block text-xs text-[color:var(--muted-foreground)]">
-                  {localize(
-                    locale,
-                    "Сотрудники видят только места и свой результат",
-                    "Employees see ranks and their own result only",
-                  )}
-                </span>
-              </span>
+              </button>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]" id="leaderboard-visibility-description">
+                {localize(
+                  locale,
+                  "Для всей компании, включая все локации и месяцы. Сотрудники видят своё место и очки; результаты коллег скрыты. Руководители видят полный рейтинг.",
+                  "Applies to the whole company across locations and months. Employees see their own rank and points, while coworkers’ results are hidden. Managers see the full leaderboard.",
+                )}
+              </p>
+              <p aria-live="polite" className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                {savingVisibility
+                  ? localize(locale, "Сохраняем…", "Saving…")
+                  : visibilityFeedback === "saved"
+                    ? localize(locale, "Настройка сохранена", "Setting saved")
+                    : null}
+              </p>
             </div>
           ) : null}
 
@@ -951,7 +938,8 @@ export function LeaderboardCenter({
 
           <div className="flex h-12 overflow-hidden rounded-xl border border-border bg-white">
             <button
-              className={`flex h-full items-center gap-2 px-4 text-sm font-heading font-medium transition-colors ${
+              aria-pressed={tab === "table"}
+              className={`flex h-full items-center gap-2 px-4 text-sm font-heading font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                 tab === "table"
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -963,7 +951,8 @@ export function LeaderboardCenter({
               {localize(locale, "Таблица", "Table")}
             </button>
             <button
-              className={`flex h-full items-center gap-2 px-4 text-sm font-heading font-medium transition-colors ${
+              aria-pressed={tab === "progress"}
+              className={`flex h-full items-center gap-2 px-4 text-sm font-heading font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                 tab === "progress"
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -978,6 +967,7 @@ export function LeaderboardCenter({
 
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[rgba(15,23,42,0.08)] bg-white/90 px-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
             <button
+              aria-label={localize(locale, "Предыдущий месяц", "Previous month")}
               className={`schedule-calendar-nav-button ${canGoBack ? "" : "opacity-40"}`}
               disabled={!canGoBack}
               onClick={() => handleMonthShift(-1)}
@@ -994,6 +984,7 @@ export function LeaderboardCenter({
               </span>
             </div>
             <button
+              aria-label={localize(locale, "Следующий месяц", "Next month")}
               className="schedule-calendar-nav-button"
               disabled={!canGoForward}
               onClick={() => {
@@ -1016,9 +1007,7 @@ export function LeaderboardCenter({
         key={selectedMonthKey}
       >
         {error ? (
-          <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
-          </div>
+          <WorkspaceFeedback title={error} tone="error" />
         ) : null}
 
         {tab === "table" ? (
@@ -1029,13 +1018,7 @@ export function LeaderboardCenter({
                 label={localize(locale, "Загружаем рейтинг", "Loading leaderboard")}
               />
             ) : !overview || leaderboard.length === 0 ? (
-              <div className="flex min-h-[260px] items-center justify-center px-5 text-center text-sm font-heading text-muted-foreground">
-                {localize(
-                  locale,
-                  "Пока нет данных для рейтинга.",
-                  "No leaderboard data yet.",
-                )}
-              </div>
+              <WorkspaceFeedback className="m-5 min-h-[220px] content-center" title={locationFilter ? localize(locale, "По выбранной локации результатов нет", "No results for this location") : localize(locale, "Пока нет данных для рейтинга", "No leaderboard data yet")} action={locationFilter ? <button className="rounded-xl border border-border bg-white px-4 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600" onClick={() => setLocationFilter("")} type="button">{localize(locale, "Все локации", "All locations")}</button> : undefined} />
             ) : (
               <div className="team-tasks-table-shell leaderboard-table-shell">
                 <Table
@@ -1182,151 +1165,47 @@ export function LeaderboardCenter({
             )}
           </div>
         ) : (
-          <article className="h-[min(72vh,800px)] overflow-hidden">
+          <article>
             {loading ? (
               <WorkspaceLoading
-                className="h-full min-h-0 rounded-2xl bg-white"
+                className="min-h-64 rounded-2xl bg-white"
                 label={localize(locale, "Загружаем рейтинг", "Loading leaderboard")}
               />
             ) : !overview ? (
-              <div className="flex h-full items-center justify-center rounded-2xl bg-white px-5 text-center text-sm font-heading text-muted-foreground">
-                {localize(
-                  locale,
-                  "Пока нет данных для рейтинга.",
-                  "No leaderboard data yet.",
-                )}
-              </div>
+              <WorkspaceFeedback className="min-h-64 content-center" title={localize(locale, "Пока нет данных для рейтинга", "No leaderboard data yet")} />
             ) : (
-            <div className="h-full overflow-y-auto pr-1">
+            <div>
               <div className="grid gap-3">
-                <article className="rounded-2xl bg-blue-600 px-5 py-4 text-white shadow-[0_18px_42px_rgba(37,99,235,0.28)]">
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(120px,0.5fr)_minmax(120px,0.5fr)_auto] md:items-center">
-                    <div className="flex items-center gap-4">
-                      <Trophy className="size-9 shrink-0" />
-                      <div>
-                        <strong className="block text-xl font-semibold tracking-[-0.03em]">
-                          {progressTotalLabel}
-                        </strong>
-                        <p className="mt-1 text-sm text-white/75">
-                          {localize(
-                            locale,
-                            "Вы на шаг ближе к лидерству",
-                            "You are one step closer to the lead",
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="border-white/20 md:border-l md:pl-6">
-                      <strong className="block text-3xl font-semibold leading-none tracking-[-0.05em] tabular-nums">
-                        {overview.me.todayPoints}/{overview.me.todayMaxPoints}
-                      </strong>
-                      <span className="mt-1 block text-xs font-medium text-white/75">
-                        {localize(locale, "Сегодня", "today")}
-                      </span>
-                    </div>
-                    <div className="border-white/20 md:border-l md:pl-6">
-                      <strong className="block text-3xl font-semibold leading-none tracking-[-0.05em] tabular-nums">
-                        {safeTodayMaxPoints}
-                      </strong>
-                      <span className="mt-1 block text-xs font-medium text-white/75">
-                        {localize(locale, "максимум за день", "daily maximum")}
-                      </span>
-                    </div>
-                    <button
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/18 active:translate-y-px"
-                      onClick={() => setTab("table")}
-                      type="button"
-                    >
-                      {localize(locale, "Посмотреть таблицу", "View table")}
-                      <ChevronRight className="size-4" />
-                    </button>
-                  </div>
-                </article>
-
                 <div className="grid gap-3 xl:grid-cols-[minmax(340px,0.95fr)_minmax(460px,1.45fr)]">
                   <article className="rounded-2xl border border-[rgba(15,23,42,0.08)] bg-white p-5 shadow-[0_14px_32px_rgba(15,23,42,0.05)]">
                     <h2 className="text-base font-semibold tracking-[-0.02em] text-[color:var(--foreground)]">
                       {localize(
                         locale,
-                        "Прогресс сегодня",
-                        "Today progress",
+                        isCurrentMonth ? "Прогресс сегодня" : "Прогресс последнего дня",
+                        isCurrentMonth ? "Today progress" : "Last day progress",
                       )}
                     </h2>
-                    <div className="mt-5 grid gap-5 md:grid-cols-[128px_minmax(0,1fr)] md:items-center">
-                      <div className="relative size-32">
-                        <svg
-                          className="size-32 -rotate-90"
-                          viewBox="0 0 120 120"
-                        >
-                          <circle
-                            cx="60"
-                            cy="60"
-                            fill="none"
-                            r="50"
-                            stroke="rgba(37,99,235,0.08)"
-                            strokeWidth="10"
-                          />
-                          <circle
-                            cx="60"
-                            cy="60"
-                            fill="none"
-                            pathLength={100}
-                            r="50"
-                            stroke="rgb(40,75,255)"
-                            strokeDasharray={`${todayCompletionPercent} 100`}
-                            strokeLinecap="round"
-                            strokeWidth="10"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                          <strong className="text-3xl font-semibold leading-none tracking-[-0.05em] tabular-nums text-[color:var(--foreground)]">
-                            {overview.me.todayPoints}/
-                            {overview.me.todayMaxPoints}
-                          </strong>
-                          <span className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                            {localize(locale, "выполнено", "done")}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <strong className="text-lg font-semibold tracking-[-0.02em] text-[color:var(--foreground)]">
-                          {localize(locale, "Отличный темп", "Great pace")}
+                    <div className="mt-5">
+                      <div className="flex items-end gap-3">
+                        <strong className="text-4xl font-semibold leading-none tracking-[-0.05em] tabular-nums text-blue-600">
+                          {overview.me.todayPoints}
                         </strong>
-                        <p className="mt-3 max-w-[34ch] text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {localize(
-                            locale,
-                            "Ты на пути к победе. Заверши оставшиеся задачи, чтобы дойти до дневного максимума",
-                            "You're on track to win. Complete the remaining tasks to reach today's maximum",
-                          )}
-                        </p>
-                        <div className="mt-4 flex items-center gap-2">
-                          {Array.from({ length: 9 }).map((_, index) => (
-                            <span
-                              className={`flex size-5 items-center justify-center rounded-full border text-[10px] ${
-                                index < Math.max(1, completedDaySteps)
-                                  ? "border-blue-600 bg-blue-600 text-white"
-                                  : "border-[rgba(148,163,184,0.28)] bg-white text-transparent"
-                              }`}
-                              key={index}
-                            >
-                              {index < Math.max(1, completedDaySteps)
-                                ? "✓"
-                                : ""}
-                            </span>
-                          ))}
-                        </div>
-                        <button
-                          className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(37,99,235,0.22)] transition hover:bg-blue-700 active:translate-y-px"
-                          onClick={() => setTab("table")}
-                          type="button"
-                        >
-                          {localize(
-                            locale,
-                            "Продолжить работу",
-                            "Continue work",
-                          )}
-                          <Zap className="size-4" />
-                        </button>
+                        <span className="text-sm text-[color:var(--muted-foreground)]">
+                          {localize(locale, `из ${safeTodayMaxPoints} возможных очков`, `of ${safeTodayMaxPoints} possible points`)}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {localize(locale, "За своевременный приход, уход и задачи. Бонусы за серию входят в общий счёт месяца.", "For on-time arrival, departure and tasks. Streak bonuses count toward the monthly total.")}
+                      </p>
+                      <div
+                        aria-label={localize(locale, "Дневной прогресс", "Daily progress")}
+                        aria-valuemax={100}
+                        aria-valuemin={0}
+                        aria-valuenow={todayCompletionPercent}
+                        className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"
+                        role="progressbar"
+                      >
+                        <div className="h-full rounded-full bg-blue-600" style={{ width: `${todayCompletionPercent}%` }} />
                       </div>
                     </div>
                   </article>
@@ -1342,7 +1221,7 @@ export function LeaderboardCenter({
                     <div className="mt-4 grid gap-2">
                       {overview.me.progress.map((metric) => (
                         <div
-                          className={`grid grid-cols-[40px_minmax(0,1fr)_auto_24px] items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                          className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border px-3 py-2.5 ${
                             metric.completed
                               ? "border-emerald-100 bg-emerald-50/70"
                               : "border-[rgba(148,163,184,0.18)] bg-white"
@@ -1366,21 +1245,18 @@ export function LeaderboardCenter({
                               {getScoreActionSubtitle(metric, locale)}
                             </p>
                           </div>
-                          <span className="text-sm font-semibold tabular-nums text-emerald-600">
-                            {localize(
-                              locale,
-                              `+${metric.maxPoints} очков`,
-                              `+${metric.maxPoints} points`,
-                            )}
+                          <span className="text-right text-sm font-semibold tabular-nums text-emerald-600">
+                            {metric.earnedPoints}/{metric.maxPoints}
+                            <span className="block text-xs font-normal text-[color:var(--muted-foreground)]">
+                              {localize(locale, "очков", "points")}
+                            </span>
                           </span>
-                          {metric.completed ? (
-                            <CheckCircle2 className="size-5 text-emerald-600" />
-                          ) : (
-                            <Circle className="size-5 text-[rgba(148,163,184,0.5)]" />
-                          )}
                         </div>
                       ))}
                     </div>
+                    <p className="mt-3 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                      {localize(locale, "Приход и уход вовремя — по 5 очков. Задачи дня — 5 очков без просрочек или 3, если есть просроченные задачи; незавершённые задачи дня — 0.", "On-time arrival and departure earn 5 points each. Daily tasks earn 5 with no overdue tasks, 3 with overdue tasks, or 0 if today's tasks are incomplete.")}
+                    </p>
                   </article>
                 </div>
 
@@ -1398,8 +1274,8 @@ export function LeaderboardCenter({
                     <p className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]">
                       {localize(
                         locale,
-                        "Сохраняйте серию и получайте дополнительные бонусы",
-                        "Keep your streak and earn extra bonuses",
+                        "За 5, 10 и 20 своевременных приходов подряд начисляется 10, 20 и 30 очков соответственно.",
+                        "Earn 10, 20 and 30 bonus points for 5, 10 and 20 consecutive on-time arrivals, respectively.",
                       )}
                     </p>
                     <div className="mt-4">
@@ -1476,8 +1352,16 @@ export function LeaderboardCenter({
                         <BarChart3 className="size-4 text-blue-600" />
                         {localize(
                           locale,
-                          `До 1 места осталось ${pointsToFirst} очков`,
-                          `${pointsToFirst} points to 1st place`,
+                          peersHiddenForViewer
+                            ? "Результаты коллег скрыты настройкой компании"
+                            : pointsToFirst === 0
+                              ? "Вы делите первое место или лидируете"
+                              : `До лидера ${pointsToFirst} очков`,
+                          peersHiddenForViewer
+                            ? "Peer results are hidden by company settings"
+                            : pointsToFirst === 0
+                              ? "You are leading or tied for first"
+                              : `${pointsToFirst} points behind the leader`,
                         )}
                       </div>
                     </div>
@@ -1529,7 +1413,7 @@ export function LeaderboardCenter({
                     </div>
                     <div className="mt-3 flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
                       <span className="size-2 rounded-full bg-blue-600" />
-                      {localize(locale, "Выполнено задач", "Completed tasks")}
+                      {localize(locale, "Очки за день (без бонуса серии)", "Daily points (excluding streak bonus)")}
                     </div>
                   </article>
                 </div>

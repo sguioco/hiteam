@@ -5,6 +5,7 @@ import {
   writeBrowserStorageItem,
 } from './browser-storage';
 import { isDemoAccessToken, isDemoModeEnabled } from './demo-mode';
+import { persistBrowserLocalePreference } from './locale-preference';
 
 export const DESKTOP_ADMIN_ROLES = [
   'tenant_owner',
@@ -260,6 +261,10 @@ export async function persistSession(session: AuthSession): Promise<void> {
 
   window.__SMART_INITIAL_SESSION__ = session;
   persistSessionSnapshot(session);
+
+  if (session.user.preferredLocale === 'en' || session.user.preferredLocale === 'ru') {
+    persistBrowserLocalePreference(session.user.preferredLocale);
+  }
 
   const response = await fetch('/api/session', {
     method: 'POST',

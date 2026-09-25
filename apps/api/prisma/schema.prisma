@@ -1360,6 +1360,7 @@ model Task {
   lastEscalatedAt    DateTime?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+  deletedAt          DateTime?
 
   tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   managerEmployee  Employee            @relation("TaskManager", fields: [managerEmployeeId], references: [id], onDelete: Cascade)
@@ -1371,6 +1372,7 @@ model Task {
   photoProofs      TaskPhotoProof[]
 
   @@index([tenantId, managerEmployeeId, createdAt])
+  @@index([tenantId, deletedAt])
   @@index([tenantId, assigneeEmployeeId, status, createdAt])
   @@index([tenantId, groupId, status, createdAt])
   @@index([tenantId, locationId, status, createdAt])

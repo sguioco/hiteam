@@ -5446,6 +5446,7 @@ export default function CalendarScreen({
         }}
         onClose={() => setTemplateBreakDurationPickerVisible(false)}
         title={t("calendar.fixedBreakDuration")}
+        timeMode="duration"
         visible={templateBreakDurationPickerVisible}
       />
 
@@ -5468,6 +5469,7 @@ export default function CalendarScreen({
         }}
         onClose={() => setAssignShiftBreakDurationPickerVisible(false)}
         title={t("calendar.fixedBreakDuration")}
+        timeMode="duration"
         visible={assignShiftBreakDurationPickerVisible}
       />
 

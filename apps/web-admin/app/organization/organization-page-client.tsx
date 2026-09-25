@@ -677,6 +677,12 @@ export default function OrganizationPageClient({
       if (pending.applicationId) {
         params.set("app_id", pending.applicationId);
       }
+      if (pending.userData) {
+        params.set("user_data", pending.userData);
+      }
+      if (pending.userDataSign) {
+        params.set("user_data_sign", pending.userDataSign);
+      }
       router.replace(toAdminHref(`/integrations?${params.toString()}`));
       return;
     }

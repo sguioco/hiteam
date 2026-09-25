@@ -896,6 +896,7 @@ export class EmployeesService {
     await this.auditService.log({ tenantId, actorUserId, entityType: 'employee', entityId: employeeId, action: 'employee.removed' });
     this.syncBillingSeatsInBackground(tenantId);
     this.kommoService.recordEmployeeUpdated(tenantId, employeeId, 'removed');
+    this.pushEmployeeToAltegioInBackground(tenantId, employeeId);
     this.emitWorkspaceRefreshForUser(employee.userId, 'employee_removed');
     return { deleted: true, employeeId };
   }

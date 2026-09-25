@@ -1721,6 +1721,7 @@ export function AdminShell({
                 <div className="sidebar-user-menu-locale">
                   <div
                     className="sidebar-flag-switch"
+                    data-no-live-translate="true"
                     role="group"
                     aria-label={t("common.language")}
                   >
@@ -1775,7 +1776,12 @@ export function AdminShell({
 
             <button
               className="sidebar-user-card"
-              onClick={() => setAccountMenuOpen((current) => !current)}
+              onClick={() => {
+                if (!accountMenuOpen && window.matchMedia("(max-width: 1180px)").matches) {
+                  setCompactSidebarOpen(true);
+                }
+                setAccountMenuOpen((current) => !current);
+              }}
               type="button"
             >
               <div className="sidebar-user-avatar">

@@ -5,7 +5,14 @@ import { EmployeeStatus, ShiftStatus, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { withBusinessSpan } from '../../observability/tracing';
-import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError } from './altegio-b2b.client';
+import { appendWebhookTokenToUrl } from '../billing/altegio-webhook-url';
+import {
+  AltegioB2bClient,
+  AltegioB2bError,
+  isAltegioInvalidCredentialsError,
+  parseSingleTeamMemberPayload,
+  type AltegioTeamMember,
+} from './altegio-b2b.client';
 import {
   normalizeWebhookResource,
   pilotLocationTraceAttributes,
@@ -147,14 +154,18 @@ export class AltegioPilotService {
   }
 
   private async registerPilotWebhooks(userToken: string, altegioLocationIds: string[]) {
-    const webhookUrl = this.config.get<string>('ALTEGIO_WEBHOOK_URL')?.trim() || '';
-    if (!webhookUrl) {
+    const baseWebhookUrl = this.config.get<string>('ALTEGIO_WEBHOOK_URL')?.trim() || '';
+    if (!baseWebhookUrl) {
       return altegioLocationIds.map((altegioLocationId) => ({
         altegioLocationId,
         ok: false,
         skipped: 'webhook_url_not_configured' as const,
       }));
     }
+    const webhookUrl = appendWebhookTokenToUrl(
+      baseWebhookUrl,
+      this.config.get<string>('ALTEGIO_CALLBACK_TOKEN')?.trim() || '',
+    );
 
     const results: Array<{
       altegioLocationId: string;
@@ -286,51 +297,293 @@ export class AltegioPilotService {
 
   private async handleWebhookEventInternal(payload: Record<string, unknown>, resource: string) {
     const locationId = String(payload.company_id || payload.salon_id || payload.location_id || '').trim();
+    const resourceId = String(payload.resource_id || payload.staff_id || payload.team_member_id || '').trim();
+    const status = String(payload.status || '').trim().toLowerCase();
     if (!locationId || !['staff', 'master', 'schedule'].includes(resource)) {
       return { ok: true, ignored: 'unknown_event' };
     }
     const pilotLocation = await this.prisma.altegioPilotLocation.findFirst({
       where: { altegioLocationId: locationId },
-      include: { connection: { select: { tenantId: true } } },
+      include: {
+        connection: { select: { tenantId: true, userTokenCiphertext: true } },
+        hiteamLocation: { select: { id: true, timezone: true, companyId: true } },
+      },
     });
     if (!pilotLocation) return { ok: true, ignored: 'unknown_location' };
-    const result = await this.sync(pilotLocation.connection.tenantId, pilotLocation.id);
-    return { ok: true, kind: resource, result };
+    const tenantId = pilotLocation.connection.tenantId;
+
+    if (resource === 'staff' || resource === 'master') {
+      if (!resourceId) {
+        const result = await this.sync(tenantId, pilotLocation.id);
+        return { ok: true, kind: resource, result, resourceId: null, mode: 'full' as const };
+      }
+      const result = await this.handlePilotStaffMemberIncremental(
+        tenantId,
+        pilotLocation,
+        resourceId,
+        status,
+        payload.data,
+      );
+      return { ok: true, kind: resource, result, resourceId, mode: 'incremental' as const };
+    }
+
+    if (resource === 'schedule') {
+      if (!resourceId) {
+        const result = await this.sync(tenantId, pilotLocation.id);
+        return { ok: true, kind: resource, result, resourceId: null, mode: 'full' as const };
+      }
+      const result = await this.handlePilotScheduleIncremental(tenantId, pilotLocation, resourceId);
+      return { ok: true, kind: resource, result, resourceId, mode: 'incremental' as const };
+    }
+
+    return { ok: true, ignored: 'unknown_event', resource };
   }
 
-  /** Push a newly created HiTeam employee into every selected Pilot location
-   * matching the employee's primary location. Existing staff records are not
-   * overwritten: the documented B2B surface exposes staff creation, but no
-   * staff profile update operation. Remote profile edits remain authoritative
-   * through the staff webhook/full reconciliation path. */
+  /** Reconcile one remote team member for one connected Pilot location and
+   * mirror the full sync's import/link/terminate semantics. A deletion or fire
+   * in Altegio demotes the linked local employee to INACTIVE; a live staff
+   * record is linked to a matching local employee or imported as new. */
+  private async handlePilotStaffMemberIncremental(
+    tenantId: string,
+    pilotLocation: {
+      id: string;
+      altegioLocationId: string;
+      hiteamLocationId: string;
+      hiteamLocation: { id: string; timezone: string; companyId: string };
+      connection: { userTokenCiphertext: string };
+    },
+    resourceId: string,
+    status: string,
+    payloadData?: unknown,
+  ) {
+    const userToken = this.decrypt(pilotLocation.connection.userTokenCiphertext);
+    const remote = await this.fetchPilotRemoteStaffMember(
+      pilotLocation.altegioLocationId,
+      resourceId,
+      status,
+      payloadData,
+      userToken,
+    );
+    const existingLink = await this.prisma.altegioPilotStaffLink.findFirst({
+      where: { pilotLocationId: pilotLocation.id, altegioStaffId: resourceId },
+      select: { employeeId: true, employee: { select: { status: true } } },
+    });
+
+    if (!remote || remote.fired || remote.deleted) {
+      if (existingLink && existingLink.employee.status !== EmployeeStatus.TERMINATED) {
+        await this.prisma.employee.update({
+          where: { id: existingLink.employeeId },
+          data: { status: EmployeeStatus.INACTIVE },
+        });
+        return { resourceId, mode: 'incremental' as const, deactivatedLocal: 1 };
+      }
+      return { resourceId, mode: 'incremental' as const, ignored: 'no_live_local_link' };
+    }
+
+    if (existingLink) {
+      if (existingLink.employee.status === EmployeeStatus.TERMINATED) {
+        return { resourceId, mode: 'incremental' as const, ignored: 'linked_terminated' };
+      }
+      const name = splitAltegioStaffName(remote.name);
+      await this.prisma.employee.update({
+        where: { id: existingLink.employeeId },
+        data: {
+          firstName: name.firstName,
+          lastName: name.lastName,
+          phone: normalizeAltegioPhone(remote.phone) ?? undefined,
+          status: EmployeeStatus.ACTIVE,
+        },
+      });
+      await this.prisma.altegioPilotLocation.update({
+        where: { id: pilotLocation.id },
+        data: { staffLastSyncedAt: new Date(), lastError: null },
+      });
+      return { resourceId, mode: 'incremental' as const, linkedLocal: 1 };
+    }
+
+    // No link yet: replicate the resolution order of the full sync (employee
+    // number for the pilot location, then phone/email) before creating.
+    const localEmployees = await this.prisma.employee.findMany({
+      where: { tenantId, primaryLocationId: pilotLocation.hiteamLocationId },
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        status: true,
+        altegioTeamMemberId: true,
+        user: { select: { email: true } },
+      },
+    });
+    const matchable = localEmployees.map((employee) => ({
+      id: employee.id,
+      altegioTeamMemberId: employee.altegioTeamMemberId,
+      employeeNumber: employee.employeeNumber,
+      phone: employee.phone,
+      email: employee.user.email,
+    }));
+    const matched = matchEmployeeToAltegioStaff(matchable, remote, pilotLocation.altegioLocationId);
+    if (matched) {
+      const targetStatus = localEmployees.find((employee) => employee.id === matched.id)?.status;
+      if (targetStatus === EmployeeStatus.TERMINATED) {
+        return { resourceId, mode: 'incremental' as const, ignored: 'matched_terminated' };
+      }
+      const name = splitAltegioStaffName(remote.name);
+      await this.prisma.employee.update({
+        where: { id: matched.id },
+        data: {
+          firstName: name.firstName,
+          lastName: name.lastName,
+          phone: normalizeAltegioPhone(remote.phone) ?? undefined,
+          status: remote.fired ? EmployeeStatus.INACTIVE : EmployeeStatus.ACTIVE,
+        },
+      });
+      await this.prisma.altegioPilotStaffLink.upsert({
+        where: { pilotLocationId_altegioStaffId: { pilotLocationId: pilotLocation.id, altegioStaffId: remote.id } },
+        update: { employeeId: matched.id },
+        create: { pilotLocationId: pilotLocation.id, altegioStaffId: remote.id, employeeId: matched.id },
+      });
+      await this.prisma.altegioPilotLocation.update({
+        where: { id: pilotLocation.id },
+        data: { staffLastSyncedAt: new Date(), lastError: null },
+      });
+      return { resourceId, mode: 'incremental' as const, linkedLocal: 1 };
+    }
+
+    const [department, position] = await Promise.all([
+      this.prisma.department.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.position.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
+    ]);
+    if (!department || !position) throw new BadRequestException('Workspace org setup is incomplete (department/position).');
+    const employeeId = await this.createPilotEmployee(tenantId, pilotLocation, department.id, position.id, remote);
+    await this.prisma.altegioPilotStaffLink.upsert({
+      where: { pilotLocationId_altegioStaffId: { pilotLocationId: pilotLocation.id, altegioStaffId: remote.id } },
+      update: { employeeId },
+      create: { pilotLocationId: pilotLocation.id, altegioStaffId: remote.id, employeeId },
+    });
+    await this.prisma.altegioPilotLocation.update({
+      where: { id: pilotLocation.id },
+      data: { staffLastSyncedAt: new Date(), lastError: null },
+    });
+    return { resourceId, mode: 'incremental' as const, createdLocal: 1 };
+  }
+
+  private async fetchPilotRemoteStaffMember(
+    altegioLocationId: string,
+    resourceId: string,
+    status: string,
+    payloadData: unknown,
+    userToken: string,
+  ): Promise<AltegioTeamMember | null> {
+    if (status === 'delete') {
+      return null;
+    }
+    if (payloadData && typeof payloadData === 'object') {
+      const parsed = parseSingleTeamMemberPayload({ data: [payloadData] }, resourceId);
+      if (parsed) {
+        return parsed;
+      }
+    }
+    try {
+      return await this.altegio.getTeamMember({ locationId: altegioLocationId, teamMemberId: resourceId, userToken });
+    } catch (error) {
+      if (error instanceof AltegioB2bError && error.statusCode === 404 && !isAltegioInvalidCredentialsError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /** Reconcile the schedule of a single team member inside one connected Pilot
+   * location, so a schedule webhook no longer re-pulls every staff member. */
+  private async handlePilotScheduleIncremental(
+    tenantId: string,
+    pilotLocation: {
+      id: string;
+      altegioLocationId: string;
+      hiteamLocationId: string;
+      hiteamLocation: { id: string; timezone: string; companyId: string };
+      connection: { userTokenCiphertext: string };
+    },
+    resourceId: string,
+  ) {
+    const userToken = this.decrypt(pilotLocation.connection.userTokenCiphertext);
+    const schedule = await this.syncLocationSchedule(tenantId, pilotLocation, userToken, [resourceId]);
+    await this.prisma.altegioPilotLocation.update({
+      where: { id: pilotLocation.id },
+      data: { scheduleLastSyncedAt: new Date(), lastError: null },
+    });
+    return { resourceId, mode: 'incremental' as const, ...schedule };
+  }
+
+  /** Push a created, edited or terminated HiTeam employee into every selected
+   * Pilot location matching the employee's primary location. New staff records
+   * are created on the remote side, already-linked staff get their display
+   * name propagated (Altegio's update surface does not expose phone/email, so
+   * those stay Altegio-authoritative through the staff webhook/full
+   * reconciliation path). Employees terminated in HiTeam are deactivated
+   * (fired) on every remote location they were linked to. */
   async pushEmployeeToAltegio(tenantId: string, employeeId: string) {
     const employee = await this.prisma.employee.findFirst({
-      where: { id: employeeId, tenantId, status: EmployeeStatus.ACTIVE },
+      where: { id: employeeId, tenantId },
       select: {
         id: true,
         firstName: true,
         lastName: true,
         phone: true,
+        status: true,
         primaryLocationId: true,
         user: { select: { email: true } },
       },
     });
-    if (!employee) return { skipped: true as const, reason: 'employee_missing_or_inactive' };
+    if (!employee) return { skipped: true as const, reason: 'employee_missing' };
+
+    if (employee.status === EmployeeStatus.TERMINATED) {
+      const links = await this.prisma.altegioPilotStaffLink.findMany({
+        where: { employeeId: employee.id, pilotLocation: { connection: { tenantId } } },
+        include: {
+          pilotLocation: { include: { connection: { select: { userTokenCiphertext: true } } } },
+        },
+      });
+      let deactivated = 0;
+      for (const link of links) {
+        await this.altegio.updateTeamMember({
+          locationId: link.pilotLocation.altegioLocationId,
+          teamMemberId: link.altegioStaffId,
+          fired: true,
+          userToken: this.decrypt(link.pilotLocation.connection.userTokenCiphertext),
+        });
+        deactivated += 1;
+      }
+      return { skipped: false as const, created: 0, updated: 0, deactivated };
+    }
 
     const locations = await this.prisma.altegioPilotLocation.findMany({
       where: { hiteamLocationId: employee.primaryLocationId, connection: { tenantId } },
       include: { connection: { select: { userTokenCiphertext: true } } },
     });
     let created = 0;
+    let updated = 0;
+    const name = `${employee.lastName} ${employee.firstName}`.trim();
     for (const location of locations) {
       const existing = await this.prisma.altegioPilotStaffLink.findFirst({
         where: { pilotLocationId: location.id, employeeId: employee.id },
-        select: { id: true },
+        select: { altegioStaffId: true },
       });
-      if (existing) continue;
+      if (existing) {
+        await this.altegio.updateTeamMember({
+          locationId: location.altegioLocationId,
+          teamMemberId: existing.altegioStaffId,
+          name,
+          userToken: this.decrypt(location.connection.userTokenCiphertext),
+        });
+        updated += 1;
+        continue;
+      }
       const remote = await this.altegio.createTeamMember({
         locationId: location.altegioLocationId,
-        name: `${employee.lastName} ${employee.firstName}`.trim(),
+        name,
         specialization: 'HiTeam',
         phone: employee.phone,
         email: employee.user.email.endsWith('@users.hiteam.local') ? null : employee.user.email,
@@ -343,7 +596,7 @@ export class AltegioPilotService {
       });
       created += 1;
     }
-    return { skipped: false as const, created };
+    return { skipped: false as const, created, updated };
   }
 
   /** Push a changed HiTeam-authored staff-day immediately. Passing an empty
@@ -507,10 +760,19 @@ export class AltegioPilotService {
     };
   }
 
-  private async syncLocationSchedule(tenantId: string, pilotLocation: { id: string; altegioLocationId: string; hiteamLocationId: string; hiteamLocation: { id: string; timezone: string; companyId: string } }, userToken: string) {
+  private async syncLocationSchedule(
+    tenantId: string,
+    pilotLocation: { id: string; altegioLocationId: string; hiteamLocationId: string; hiteamLocation: { id: string; timezone: string; companyId: string } },
+    userToken: string,
+    staffIds?: string[],
+  ) {
     const window = defaultSyncWindow();
     const links = await this.prisma.altegioPilotStaffLink.findMany({
-      where: { pilotLocationId: pilotLocation.id, employee: { status: EmployeeStatus.ACTIVE } },
+      where: {
+        pilotLocationId: pilotLocation.id,
+        employee: { status: EmployeeStatus.ACTIVE },
+        ...(staffIds?.length ? { altegioStaffId: { in: staffIds } } : {}),
+      },
       select: { altegioStaffId: true, employee: { select: { id: true, positionId: true } } },
     });
     const byStaff = new Map(links.map((link) => [link.altegioStaffId, link.employee]));
@@ -537,7 +799,16 @@ export class AltegioPilotService {
         importedShifts += 1;
       }
     }
-    const existing = await this.prisma.shift.findMany({ where: { tenantId, source, status: { not: ShiftStatus.CANCELLED }, shiftDate: { gte: window.from, lte: window.to } }, select: { id: true, employeeId: true, startsAt: true } });
+    const existing = await this.prisma.shift.findMany({
+      where: {
+        tenantId,
+        source,
+        status: { not: ShiftStatus.CANCELLED },
+        shiftDate: { gte: window.from, lte: window.to },
+        ...(staffIds?.length ? { employeeId: { in: links.map((link) => link.employee.id) } } : {}),
+      },
+      select: { id: true, employeeId: true, startsAt: true },
+    });
     for (const shift of existing) {
       if (!seen.has(`${shift.employeeId}:${shift.startsAt.toISOString()}`)) {
         await this.prisma.shift.update({ where: { id: shift.id }, data: { status: ShiftStatus.CANCELLED } });
@@ -545,7 +816,24 @@ export class AltegioPilotService {
       }
     }
 
-    const hiteamShifts = await this.prisma.shift.findMany({ where: { tenantId, locationId: pilotLocation.hiteamLocationId, source: HITEAM_SHIFT_SOURCE, status: ShiftStatus.PUBLISHED, shiftDate: { gte: window.from, lt: window.to }, employee: { altegioPilotStaffLinks: { some: { pilotLocationId: pilotLocation.id } } } }, select: { shiftDate: true, startsAt: true, endsAt: true, employee: { select: { altegioPilotStaffLinks: { where: { pilotLocationId: pilotLocation.id }, select: { altegioStaffId: true } } } } } });
+    const hiteamShifts = await this.prisma.shift.findMany({
+      where: {
+        tenantId,
+        locationId: pilotLocation.hiteamLocationId,
+        source: HITEAM_SHIFT_SOURCE,
+        status: ShiftStatus.PUBLISHED,
+        shiftDate: { gte: window.from, lt: window.to },
+        employee: {
+          altegioPilotStaffLinks: {
+            some: {
+              pilotLocationId: pilotLocation.id,
+              ...(staffIds?.length ? { altegioStaffId: { in: staffIds } } : {}),
+            },
+          },
+        },
+      },
+      select: { shiftDate: true, startsAt: true, endsAt: true, employee: { select: { altegioPilotStaffLinks: { where: { pilotLocationId: pilotLocation.id }, select: { altegioStaffId: true } } } } },
+    });
     const grouped = groupHiteamShiftsForAltegioPush(hiteamShifts.flatMap((shift) => shift.employee.altegioPilotStaffLinks.map((link) => ({ altegioTeamMemberId: link.altegioStaffId, shiftDate: shift.shiftDate, startsAt: shift.startsAt, endsAt: shift.endsAt, timeZone: pilotLocation.hiteamLocation.timezone || 'UTC' }))));
     if (grouped.length) await this.altegio.setStaffSchedule({ locationId: pilotLocation.altegioLocationId, schedulesToSet: grouped.map((item) => ({ teamMemberId: item.teamMemberId, dates: [item.date], slots: item.slots })), userToken });
     return {

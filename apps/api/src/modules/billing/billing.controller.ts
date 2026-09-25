@@ -47,6 +47,8 @@ export class BillingController {
     return this.billingService.connectAltegioMarketplace(user.tenantId, {
       locationId: body.locationId,
       applicationId: body.applicationId,
+      userData: body.userData,
+      userDataSign: body.userDataSign,
     });
   }
 

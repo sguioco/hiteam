@@ -34,6 +34,7 @@ export type PilotLocationSyncResult = {
 type WebhookResult = {
   ignored?: string;
   kind?: string;
+  mode?: 'full' | 'incremental';
 };
 
 const completed = { 'hiteam.altegio.sync.result': 'completed' } as const;
@@ -129,6 +130,9 @@ export function webhookTraceAttributes(result: WebhookResult): Attributes {
   };
   if (result.kind) {
     attributes['hiteam.altegio.webhook.resource'] = normalizeWebhookResource(result.kind);
+  }
+  if (result.mode) {
+    attributes['hiteam.altegio.webhook.mode'] = result.mode;
   }
   return attributes;
 }

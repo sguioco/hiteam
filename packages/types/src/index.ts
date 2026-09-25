@@ -1487,6 +1487,18 @@ export type AttendanceAuditResponse = {
   }>;
 };
 
+export type MyAttendanceCorrectionRequestItem = {
+  id: string;
+  sessionId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  proposedStartedAt: string | null;
+  proposedEndedAt: string | null;
+  decisionComment: string | null;
+  finalDecisionAt: string | null;
+  createdAt: string;
+};
+
 export type AttendanceCorrectionRequestItem = {
   id: string;
   sessionId: string;

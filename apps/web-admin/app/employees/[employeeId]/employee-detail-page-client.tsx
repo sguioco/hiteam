@@ -280,8 +280,10 @@ export type EmployeeDetailPageInitialData = EmployeeDetailBootstrapResponse;
 
 export default function EmployeeCardPageClient({
   initialData,
+  activityReturn,
 }: {
   initialData?: EmployeeDetailPageInitialData | null;
+  activityReturn?: string | null;
 }) {
   const { locale } = useI18n();
   const employeeId = initialData?.employeeId ?? "";
@@ -978,10 +980,10 @@ export default function EmployeeCardPageClient({
         <div className="mb-6">
           <Link
             className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            href="/employees"
+            href={activityReturn ?? "/employees"}
           >
             <ArrowLeft className="size-4" />
-            {locale === "ru" ? "Сотрудники" : "Employees"}
+            {activityReturn ? (locale === "ru" ? "К активности" : "Back to activity") : (locale === "ru" ? "Сотрудники" : "Employees")}
           </Link>
 
           {canRemoveEmployee ? (

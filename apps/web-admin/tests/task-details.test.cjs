@@ -15,6 +15,7 @@ function load(file, overrides = {}) {
   vm.runInNewContext(output, { exports, URLSearchParams, require(name) {
     if (Object.hasOwn(overrides, name)) return overrides[name];
     if (name === '@/lib/task-meta') return load('lib/task-meta.ts');
+    if (name === '@/components/ui/workspace-patterns') return load('components/ui/workspace-patterns.tsx', { '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
     if (name === './billing-countries') return load('lib/billing-countries.ts');
     // Render dialog content without the browser-only portal; retain actual component logic.
     if (name === '@/components/ui/dialog') return new Proxy({}, { get: () => ({ children }) => React.createElement('div', null, children) });
@@ -23,6 +24,11 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const patterns = load('components/ui/workspace-patterns.tsx', { '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
+assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspacePageHeader, { title: 'A very long workspace title', description: 'Context' })), /break-words/);
+assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspaceFeedback, { title: 'Request failed', tone: 'error' })), /role="alert"/);
+assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspaceFeedback, { title: 'No tasks', tone: 'empty' })), /role="status"/);
+assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspaceStatus, { tone: 'danger' }, 'Overdue')), /Overdue/);
 const { retainVisibleEmployees } = load('lib/employee-selection.ts');
 const { filterInvitations, invitationPage, INVITATIONS_PER_PAGE } = load('lib/invitation-list.ts');
 const inviteItems = Array.from({ length: INVITATIONS_PER_PAGE + 2 }, (_, index) => ({ email: `person${index}@example.com`, phone: null, status: index % 2 ? 'INVITED' : 'PENDING_APPROVAL' }));
@@ -120,6 +126,13 @@ for (const invalid of [{ address: '' }, { latitude: '' }, { latitude: 'NaN' }, {
   assert.equal(validateOrganizationSetup({ ...setupDraft, ...invalid }, 'create', false, 'en').field, 'map');
 }
 const { readActivityContext } = load('lib/activity-context.ts');
+const { activityReturnHref, taskHref, employeeHref, safeActivityReturnHref } = load('lib/activity-task-navigation.ts', { '@/lib/admin-routes': { toAdminHref: value => value } });
+const returnHref = activityReturnHref({ dateFrom: '2026-09-01', dateTo: '2026-09-18', companyId: 'c1', locationId: 'l1' });
+const linkedHref = taskHref('task/a', returnHref);
+assert.equal(safeActivityReturnHref(new URL(linkedHref, 'https://hiteam.net').search), returnHref);
+assert.match(linkedHref, /taskId=task%2Fa/);
+assert.equal(safeActivityReturnHref(new URL(employeeHref('employee/a', returnHref), 'https://hiteam.net').search), returnHref);
+assert.equal(safeActivityReturnHref('?returnTo=https%3A%2F%2Fevil.example'), null);
 const defaults = { dateFrom: '2026-09-01', dateTo: '2026-09-18' };
 const restored = readActivityContext('?dateFrom=2026-08-01&dateTo=2026-08-31&companyId=c1&locationId=l1', defaults);
 assert.equal(restored.dateFrom, '2026-08-01');
@@ -162,12 +175,16 @@ for (const id of ['creator', 'worker', 'member']) {
 }
 assert.equal(taskActionAvailability(ownTask, 'outsider', [group]).allowed, false);
 assert.equal(taskActionAvailability(ownTask, null, [group]).allowed, false);
+assert.equal(taskActionAvailability(ownTask, 'creator', []).edit, true);
+assert.equal(taskActionAvailability(ownTask, 'worker', []).edit, false);
 for (const status of ['DONE', 'CANCELLED']) assert.equal(taskActionAvailability({ ...ownTask, status }, 'creator', []).reschedule, false);
+for (const status of ['DONE', 'CANCELLED']) assert.equal(taskActionAvailability({ ...ownTask, status }, 'creator', []).edit, false);
 const recurring = { ...ownTask, id: 'recurring:template:worker:2026-09-18' };
 assert.equal(taskActionAvailability(recurring, 'creator', [group]).allowed, false);
 assert.equal(taskActionAvailability(recurring, 'member', [group]).allowed, false);
 assert.equal(taskActionAvailability(recurring, 'worker', [group]).allowed, true);
 assert.equal(taskActionAvailability(recurring, 'worker', [group]).comment, false);
+assert.equal(taskActionAvailability(recurring, 'worker', [group]).edit, false);
 assert.equal(taskActionAvailability(recurring, 'worker', [group]).checklist, false);
 assert.equal(taskActionAvailability(ownTask, 'worker', []).checklist, true);
 assert.equal(taskActionAvailability({ ...ownTask, requiresPhoto: true, photoProofs: task.photoProofs.slice(1) }, 'creator', []).complete, false);
@@ -205,6 +222,7 @@ assert.ok(renderList('missing', '').includes('No tasks in the selected period'))
       useEffect() {},
     },
     '@/lib/task-actions': { taskActionAvailability },
+    '@/components/task-details-editor': { TaskDetailsEditor: () => null },
     '@/lib/api': { apiRequest(url, options) { requests.push({ url, options }); return new Promise((resolve, reject) => { complete = resolve; fail = reject; }); } },
   });
   function renderActions() {

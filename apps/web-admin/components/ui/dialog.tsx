@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const Dialog = DialogPrimitive.Root;
@@ -28,8 +29,10 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
+>(({ className, children, ...props }, ref) => {
+  const { locale } = useI18n();
+
+  return <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       className={cn(
@@ -42,11 +45,11 @@ const DialogContent = React.forwardRef<
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-2 text-[color:var(--muted-foreground)] transition hover:bg-[color:var(--panel)] hover:text-[color:var(--foreground)]">
         <X className="size-4" />
-        <span className="sr-only">Close</span>
+        <span className="sr-only">{locale === "ru" ? "Закрыть" : "Close"}</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
-  </DialogPortal>
-));
+  </DialogPortal>;
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

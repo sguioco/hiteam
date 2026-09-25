@@ -62,6 +62,7 @@ import { DateOfBirthField } from "@/components/ui/date-of-birth-field";
 import { ImageAdjustField } from "@/components/image-adjust-field";
 import { InvitationDeliveryDialog } from "@/components/invitation-delivery-dialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { WorkspaceFeedback, WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import { Input } from "@/components/ui/input";
 import {
   AppSelectField,
@@ -3530,28 +3531,35 @@ const Employees = ({
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-5 overflow-hidden p-6">
+        <WorkspacePageHeader
+          description={runtimeLocalize("Профили, бригады и приглашения в одном месте", "Profiles, teams and invitations in one place", locale)}
+        />
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex overflow-hidden rounded-xl border border-border">
               <button
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors ${
+                aria-pressed={viewMode === "employees"}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                   viewMode === "employees"
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setViewMode("employees")}
+                type="button"
               >
                 <Users className="h-4 w-4" />{" "}
                 {runtimeLocalize("Сотрудники", "Employees", locale)}{" "}
                 {filteredEmployees.length}
               </button>
               <button
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors ${
+                aria-pressed={viewMode === "groups"}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-heading font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                   viewMode === "groups"
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setViewMode("groups")}
+                type="button"
               >
                 <FolderOpen className="h-4 w-4" />{" "}
                 {runtimeLocalize("Бригады", "Teams", locale)} {groups.length}
@@ -3637,6 +3645,11 @@ const Employees = ({
                 locale,
               )}
             </label>
+            {(search || teamFilterId !== "all" || showFormerEmployees) ? (
+              <Button className="rounded-xl font-heading" onClick={() => { setSearch(""); setTeamFilterId("all"); setShowFormerEmployees(false); }} size="sm" type="button" variant="outline">
+                {runtimeLocalize("Сбросить фильтры", "Clear filters", locale)}
+              </Button>
+            ) : null}
             {viewMode === "groups" ? (
               <Button
                 className="w-[184px] justify-center rounded-xl font-heading"
@@ -3683,7 +3696,8 @@ const Employees = ({
                 })),
               ].map((item) => (
                 <button
-                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-heading transition ${
+                  aria-pressed={teamFilterId === item.id}
+                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-heading transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                     teamFilterId === item.id
                       ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
                       : "border-border bg-white text-muted-foreground hover:text-foreground"
@@ -3920,13 +3934,12 @@ const Employees = ({
             sortedEmployees.length > 0 ? (
               renderEmployeesTable(sortedEmployees, { cardClassName: "flex-1" })
             ) : (
-              <p className="rounded-2xl border border-border bg-secondary/20 px-5 py-12 text-center text-sm font-heading text-muted-foreground">
-                {runtimeLocalize(
-                  "По текущему фильтру сотрудники не найдены.",
-                  "No employees found for the current filter.",
-                  locale,
-                )}
-              </p>
+              <WorkspaceFeedback
+                className="py-12"
+                title={employees.length ? runtimeLocalize("Сотрудники не найдены", "No matching employees", locale) : runtimeLocalize("Сотрудников пока нет", "No employees yet", locale)}
+                description={employees.length ? runtimeLocalize("Попробуйте изменить поиск или фильтр бригады.", "Try another search or team filter.", locale) : runtimeLocalize("Пригласите первого сотрудника, чтобы начать работу.", "Invite your first employee to get started.", locale)}
+                action={employees.length ? <Button onClick={() => { setSearch(""); setTeamFilterId("all"); setShowFormerEmployees(false); }} size="sm" type="button" variant="outline">{runtimeLocalize("Сбросить фильтры", "Clear filters", locale)}</Button> : <Button onClick={() => { dismissAddEmployeePrompt(); resetInviteDraft(); setInviteDialogOpen(true); setInviteError(null); }} size="sm" type="button">{runtimeLocalize("Добавить сотрудника", "Add employee", locale)}</Button>}
+              />
             )
           ) : (
             <div className="space-y-3">

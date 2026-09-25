@@ -42,10 +42,92 @@ async function testNewEmployeeIsCreatedAndLinked() {
   };
 
   const result = await service(prisma, altegio).pushEmployeeToAltegio('tenant-1', 'employee-1');
-  assert.deepEqual(result, { skipped: false, created: 1 });
+  assert.deepEqual(result, { skipped: false, created: 1, updated: 0 });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].userToken, 'pilot-user-token');
   assert.equal(links.length, 1);
+}
+
+async function testLinkedEmployeeNameIsUpdated() {
+  const updates: Array<Record<string, unknown>> = [];
+  const prisma = {
+    employee: {
+      findFirst: async () => ({
+        id: 'employee-1', firstName: 'Anna', lastName: 'Petrova', phone: '+971501234567',
+        primaryLocationId: 'location-1', status: EmployeeStatus.ACTIVE,
+        user: { email: 'anna@example.com' },
+      }),
+    },
+    altegioPilotLocation: {
+      findMany: async () => [{
+        id: 'pilot-location-1', altegioLocationId: '759658',
+        connection: { userTokenCiphertext: 'ciphertext' },
+      }],
+    },
+    altegioPilotStaffLink: {
+      findFirst: async () => ({ altegioStaffId: 'remote-1' }),
+    },
+  };
+  const altegio = {
+    updateTeamMember: async (args: Record<string, unknown>) => {
+      updates.push(args);
+      return { id: 'remote-1' };
+    },
+  };
+
+  const result = await service(prisma, altegio).pushEmployeeToAltegio('tenant-1', 'employee-1');
+  assert.deepEqual(result, { skipped: false, created: 0, updated: 1 });
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].teamMemberId, 'remote-1');
+  assert.equal(updates[0].name, 'Petrova Anna');
+  assert.equal(updates[0].userToken, 'pilot-user-token');
+}
+
+async function testTerminatedLinkedEmployeeIsDeactivated() {
+  const updates: Array<Record<string, unknown>> = [];
+  const prisma = {
+    employee: {
+      findFirst: async () => ({
+        id: 'employee-1', firstName: 'Anna', lastName: 'Petrova', phone: '+971501234567',
+        primaryLocationId: 'location-1', status: EmployeeStatus.TERMINATED,
+        user: { email: 'anna@example.com' },
+      }),
+    },
+    altegioPilotStaffLink: {
+      findMany: async () => [
+        {
+          altegioStaffId: 'remote-1',
+          pilotLocation: {
+            altegioLocationId: '759658',
+            connection: { userTokenCiphertext: 'ciphertext' },
+          },
+        },
+        {
+          altegioStaffId: 'remote-2',
+          pilotLocation: {
+            altegioLocationId: '759659',
+            connection: { userTokenCiphertext: 'ciphertext' },
+          },
+        },
+      ],
+    },
+  };
+  const altegio = {
+    updateTeamMember: async (args: Record<string, unknown>) => {
+      updates.push(args);
+      return { id: 'remote-1' };
+    },
+  };
+
+  const result = await service(prisma, altegio).pushEmployeeToAltegio('tenant-1', 'employee-1');
+  assert.deepEqual(result, { skipped: false, created: 0, updated: 0, deactivated: 2 });
+  assert.equal(updates.length, 2);
+  for (const update of updates) {
+    assert.equal(update.fired, true);
+    assert.equal(update.name, undefined);
+    assert.equal(update.userToken, 'pilot-user-token');
+  }
+  assert.deepEqual(updates.map((update) => update.teamMemberId), ['remote-1', 'remote-2']);
 }
 
 async function testShiftDaySetsSlotsAndDeletesEmptyDay() {
@@ -84,5 +166,10 @@ async function testShiftDaySetsSlotsAndDeletesEmptyDay() {
   assert.deepEqual(requests[1].schedulesToDelete, [{ teamMemberId: 'remote-1', dates: ['2026-08-03'] }]);
 }
 
-void Promise.all([testNewEmployeeIsCreatedAndLinked(), testShiftDaySetsSlotsAndDeletesEmptyDay()])
+void Promise.all([
+  testNewEmployeeIsCreatedAndLinked(),
+  testLinkedEmployeeNameIsUpdated(),
+  testTerminatedLinkedEmployeeIsDeactivated(),
+  testShiftDaySetsSlotsAndDeletesEmptyDay(),
+])
   .then(() => console.log('altegio pilot outbound: ok'));

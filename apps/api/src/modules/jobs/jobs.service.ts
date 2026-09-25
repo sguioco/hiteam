@@ -318,6 +318,7 @@ export class JobsService {
     const lookAhead = new Date(now.getTime() + 60 * 60000);
     const tasks = await this.prisma.task.findMany({
       where: {
+        deletedAt: null,
         status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS] },
         dueAt: {
           gte: catchupStart,

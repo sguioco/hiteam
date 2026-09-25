@@ -8,12 +8,17 @@
 |----------|----------|-------|
 | `ALTEGIO_MARKETPLACE_APPLICATION_ID` | yes | ID единственного приложения |
 | `ALTEGIO_PARTNER_TOKEN` | yes | BearerPartner для Marketplace и B2B API |
-| `ALTEGIO_MARKETPLACE_PARTNER_KEY` | optional | Signing key для проверки `user_data_sign`, не API token |
+| `ALTEGIO_MARKETPLACE_PARTNER_KEY` | recommended | Signing key для проверки `user_data_sign` (claim install). Если задан — `onboarding/preview` и `connect` требуют валидную подпись |
 | `ALTEGIO_MARKETPLACE_SYSTEM_USER_TOKEN` | yes for staff/schedule | User token для B2B staff/schedule API |
-| `ALTEGIO_CALLBACK_TOKEN` | optional | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks` для вызовов без `partner_token` |
+| `ALTEGIO_CALLBACK_TOKEN` | yes when Altegio configured | Защита `/api/v1/altegio/callback` и `/api/v1/altegio/webhooks`; в проде требуется `validate-environment`; без него приём webhook'ов отвечает `503 callback_token_not_configured` |
 | `ALTEGIO_MARKETPLACE_PAYMENT_CURRENCY` | optional | Fallback currency для notify (default `USD`) |
-| `ALTEGIO_WEBHOOK_URL` | optional | Регистрируется в Altegio при connect, обычно `https://api.hiteam.net/api/v1/altegio/webhooks` |
+| `ALTEGIO_WEBHOOK_URL` | optional | Регистрируется в Altegio при connect, обычно `https://api.hiteam.net/api/v1/altegio/webhooks`; при регистрации к URL автоматически добавляется `?token=<ALTEGIO_CALLBACK_TOKEN>` |
 | `ALTEGIO_PILOT_ENCRYPTION_KEY` | yes for pilot | Отдельный сильный секрет для AES-256-GCM шифрования пользовательских токенов Altegio |
+| `ALTEGIO_WEBHOOK_QUEUE_CONCURRENCY` | optional | Сколько webhook-джоб обрабатывается параллельно (default `2`) |
+| `ALTEGIO_WEBHOOK_QUEUE_MAX_BACKLOG` | optional | При `waiting + active >= N` эндпоинт отвечает `503 webhook_queue_backpressure` (default `500`) |
+| `ALTEGIO_WEBHOOK_QUEUE_ATTEMPTS` | optional | Повторные попытки обработки джобы BullMQ (default `1`) |
+| `ALTEGIO_WEBHOOK_RATE_LIMIT_MAX` | optional | Rate-limit вебхуков на воркер: max джоб за интервал (default `10`) |
+| `ALTEGIO_WEBHOOK_RATE_LIMIT_DURATION_MS` | optional | Интервал rate-limit в ms (default `1000`) |
 
 ## Pilot direct connection (before Marketplace approval)
 
@@ -36,8 +41,25 @@ Pilot endpoints (JWT; tenant owner, HR admin, operations admin):
 ## URLs в кабинете разработчика Altegio
 
 - Website / Registration Redirect: `https://hiteam.net/login?from=altegio&app_id=<APPLICATION_ID>`
+- Altegio добавляет к редиректу `user_data` + `user_data_sign` (FastSign-подпись: hex HMAC-SHA256 от `user_data`, ключ — `ALTEGIO_MARKETPLACE_PARTNER_KEY`). Web-admin сохраняет их в sessionStorage и пробрасывает через редиректы на `/integrations?...&user_data=...&user_data_sign=...`.
 - `/signup?...` сохраняет query и редиректит на `/create?...`
 - После login/signup пользователь попадает на `/billing?from=altegio&salon_id=...`
+
+## Install claim (защита от чужого занятия салона)
+
+`user_data` + `user_data_sign` из редиректа Altegio — единственное серверно
+проверяемое доказательство, что пришедший браузер принадлежит владельцу салона.
+Пока `ALTEGIO_MARKETPLACE_PARTNER_KEY` сконфигурирован:
+
+- `GET /api/v1/altegio/onboarding/preview` → валидная подпись обязательна, иначе
+  `403 invalid_altegio_install_claim`. Это закрывает публичный PII-ORACLE (нельзя
+  перебирать `locationId` и читать имя/адрес/телефон чужих pending-салонов);
+- `POST /api/v1/altegio/connect` → валидная подпись обязательна, иначе
+  `403 invalid_altegio_install_claim`. Чужой HiTeam-аккаунт не может занять
+  непереподключённый салон.
+- Дополнительно, если `user_data` парсится и содержит `salon_id`/`location_id`,
+  он обязан совпадать с запрашиваемым `locationId` (защита от переписанного
+  query в редиректе).
 - Callback disconnect/connect: `https://api.hiteam.net/api/v1/altegio/callback`
 - Marketplace lifecycle webhook (`uninstall` / `freeze`): `https://api.hiteam.net/api/v1/altegio/callback`
 - Staff/schedule webhooks: `https://api.hiteam.net/api/v1/altegio/webhooks`
@@ -60,7 +82,7 @@ lifecycle-события (`event: uninstall|freeze`) в marketplace-обрабо
 | POST | `/api/v1/altegio/sync/employees` | JWT | Sync employees only |
 | POST | `/api/v1/altegio/sync/schedule` | JWT | Sync schedule only |
 | GET | `/api/v1/altegio/sync/status` | JWT | Staff/schedule sync status |
-| GET | `/api/v1/altegio/onboarding/preview` | public + pending consent | Preview location for signup |
+| GET | `/api/v1/altegio/onboarding/preview` | claim (при `ALTEGIO_MARKETPLACE_PARTNER_KEY`) + pending consent | Preview location for signup |
 | ALL | `/api/v1/altegio/callback` | token | Connect/disconnect from Altegio |
 | ALL | `/api/v1/altegio/webhooks` | token | StaffEvent / ScheduleEvent |
 
@@ -80,7 +102,27 @@ lifecycle-события (`event: uninstall|freeze`) в marketplace-обрабо
 Аутентификация входящих вызовов: если в теле есть `partner_token`, он сверяется с
 `ALTEGIO_PARTNER_TOKEN` (так приходят lifecycle-webhooks Altegio). Иначе
 используется `ALTEGIO_CALLBACK_TOKEN` из заголовка `x-altegio-callback-token`
-или query `token`.
+или query `token` (время регистрации URL подставляется автоматически).
+Если токен не сконфигурирован вовсе — приём отвечает `503 callback_token_not_configured`,
+анонимные доставки не принимаются.
+
+Кроме того, при наличии в теле `user_data` + `user_data_sign` и сконфигурированном
+`ALTEGIO_MARKETPLACE_PARTNER_KEY` проверяется HMAC-SHA256-подпись `user_data`
+(constant-time); валидная подпись шорт-катит проверку токенов, невалидная —
+`401 invalid_user_data_sign`. Без подписи запрос падает на токен-проверки выше.
+
+## Webhook queue
+
+Staff/schedule webhooks возвращают `2xx` сразу после авторизации, а сама
+обработка уходит в BullMQ-очередь `altegio-webhooks`: разбор payload и работа
+с БД/API Altegio больше не выполняются в event-loop HTTP-запроса. Воркер
+ограничен concurrency и rate-limit (см. env выше). Если очередь заполнена
+(`waiting + active >= ALTEGIO_WEBHOOK_QUEUE_MAX_BACKLOG`), эндпоинт отвечает
+`503 webhook_queue_backpressure` — это единственный осознанный случай 503, и он
+ограничен, поэтому ретраи Altegio не усиливают нагрузку на event-loop. Если
+`REDIS_URL` не сконфигурирован, обработка выполняется inline (прежнее
+поведение). Lifecycle-события (`uninstall`/`freeze`) обрабатываются синхронно
+и в очередь не помещаются.
 
 Три источника события «интеграция выключена»:
 

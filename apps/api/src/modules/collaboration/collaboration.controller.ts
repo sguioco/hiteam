@@ -34,6 +34,7 @@ import { UpdateAnnouncementDto } from "./dto/update-announcement.dto";
 import { UpdateAnnouncementTemplateDto } from "./dto/update-announcement-template.dto";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
+import { UpdateTaskDetailsDto } from "./dto/update-task-details.dto";
 import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
 import { CollaborationService } from "./collaboration.service";
 
@@ -452,6 +453,22 @@ export class CollaborationController {
     @Body() dto: SetTaskStatusDto,
   ) {
     return this.collaborationService.setTaskStatus(user.sub, taskId, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Patch("tasks/:taskId")
+  updateTaskDetails(
+    @CurrentUser() user: JwtUser,
+    @Param("taskId") taskId: string,
+    @Body() dto: UpdateTaskDetailsDto,
+  ) {
+    return this.collaborationService.updateTaskDetails(user.sub, taskId, dto);
+  }
+
+  @Roles("tenant_owner", "hr_admin", "operations_admin", "manager")
+  @Delete("tasks/:taskId")
+  deleteTask(@CurrentUser() user: JwtUser, @Param("taskId") taskId: string) {
+    return this.collaborationService.deleteTask(user.sub, taskId);
   }
 
   @Roles("employee", "tenant_owner", "hr_admin", "operations_admin", "manager")

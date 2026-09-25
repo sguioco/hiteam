@@ -13,6 +13,7 @@ type ErrorResponseBody = {
   statusCode: number;
   message: string | string[];
   error?: string;
+  code?: string;
   path?: string;
   timestamp?: string;
 };
@@ -110,6 +111,7 @@ export class AppExceptionFilter implements ExceptionFilter {
         statusCode: status,
         message,
         error,
+        ...(typeof exceptionResponse.code === 'string' ? { code: exceptionResponse.code } : {}),
         path: request.url,
         timestamp: new Date().toISOString(),
       };

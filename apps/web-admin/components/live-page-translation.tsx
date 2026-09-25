@@ -128,7 +128,9 @@ function collectTranslatableAttributes(root: HTMLElement) {
   );
 
   return elements.flatMap((element) =>
-    (["placeholder", "title", "aria-label"] as const)
+    element.closest("[data-no-live-translate='true']")
+      ? []
+      : (["placeholder", "title", "aria-label"] as const)
       .filter((attribute) => isTranslatableText(element.getAttribute(attribute) ?? ""))
       .map((attribute) => ({ attribute, element })),
   );

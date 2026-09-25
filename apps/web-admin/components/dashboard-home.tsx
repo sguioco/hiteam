@@ -2817,6 +2817,7 @@ export default function DashboardHome({
                 locale={locale}
                 onTaskOpen={setSelectedTaskId}
                 tasks={personalTasks}
+                showTeamTasksLink={!isEmployeeMode}
                 onCreateTask={createAction ? (day) => {
                   setTaskDraft({ ...initialTaskDraft, locationId: activeLocationId, dueAt: formatDateKey(day), hasDueTime: true });
                   setTaskDayOffConfirmOpen(false);
@@ -2834,11 +2835,6 @@ export default function DashboardHome({
                 />
               ) : (
                 <div className="dashboard-activity-shell">
-                  <DailyActivityPanel
-                    items={dailyActivity.filter(item => inDashboardLocation(item, activeLocationId))}
-                    locale={locale}
-                    inviteHref={toAdminHref("/employees?focusAddEmployee=1")}
-                  />
                   <TodayAttendancePanel
                     anomalies={(() => {
                       const source = dashboardAttendanceDate === attendanceTodayKey
@@ -2860,6 +2856,11 @@ export default function DashboardHome({
                     selectedDate={dashboardAttendanceDate}
                     canOpenSchedule
                     locationId={activeLocationId}
+                  />
+                  <DailyActivityPanel
+                    items={dailyActivity.filter(item => inDashboardLocation(item, activeLocationId))}
+                    locale={locale}
+                    inviteHref={toAdminHref("/employees?focusAddEmployee=1")}
                   />
                 </div>
               )}
@@ -2959,6 +2960,9 @@ export default function DashboardHome({
           ) : <TaskActions key={selectedTask.id} task={selectedTask} token={session.accessToken} groups={groups} locale={locale} onUpdated={(previousId, updated) => {
             setTaskBoard(current => current ? { ...current, tasks: current.tasks.map(task => task.id === previousId ? updated : task) } : current);
             setSelectedTaskId(current => current === previousId ? updated.id : current);
+          }} onDeleted={(taskId) => {
+            setTaskBoard(current => current ? { ...current, tasks: current.tasks.filter(task => task.id !== taskId) } : current);
+            setSelectedTaskId(null);
           }} /> : null}
         />
       </main>

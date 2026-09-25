@@ -717,7 +717,7 @@ export class KommoService {
     }
 
     void this.prisma.task.findFirst({
-      where: { id: taskId, tenantId },
+      where: { id: taskId, tenantId, deletedAt: null },
       select: {
         id: true,
         title: true,

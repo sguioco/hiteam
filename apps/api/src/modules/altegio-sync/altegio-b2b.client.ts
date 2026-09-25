@@ -202,6 +202,23 @@ export class AltegioB2bClient {
     return parseTeamMembersPayload(payload);
   }
 
+  async getTeamMember(args: {
+    locationId: string;
+    teamMemberId: string;
+    userToken?: string;
+  }): Promise<AltegioTeamMember | null> {
+    const payload = await this.request(
+      'GET',
+      `${this.apiBase}/api/v1/staff/${encodeURIComponent(args.locationId)}/${encodeURIComponent(args.teamMemberId)}`,
+      undefined,
+      'application/vnd.api.v2+json',
+      true,
+      args.userToken,
+    );
+
+    return parseSingleTeamMemberPayload(payload, args.teamMemberId);
+  }
+
   async createTeamMember(args: {
     locationId: string;
     name: string;
@@ -237,6 +254,44 @@ export class AltegioB2bClient {
     const id = String(data.id ?? '').trim();
     if (!id) {
       throw new AltegioB2bError('altegio_create_team_member_missing_id', 502, payload);
+    }
+    return { id, raw: payload };
+  }
+
+  /**
+   * Update an existing team member. Altegio's B2B update surface is limited to
+   * the staff record (name and status-like fields); phone/email belong to the
+   * linked employment profile and are not writable through this endpoint, so we
+   * only push the display name here. Used to propagate HiTeam profile edits to
+   * already-linked staff so the remote record does not become stale, and to
+   * deactivate (fire) staff terminated in HiTeam.
+   */
+  async updateTeamMember(args: {
+    locationId: string;
+    teamMemberId: string;
+    name?: string;
+    fired?: boolean;
+    userToken?: string;
+  }) {
+    const payload = await this.request(
+      'PUT',
+      `${this.apiBase}/api/v1/staff/${encodeURIComponent(args.locationId)}/${encodeURIComponent(args.teamMemberId)}`,
+      {
+        ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+        ...(args.fired !== undefined ? { fired: args.fired ? 1 : 0 } : {}),
+      },
+      'application/vnd.api.v2+json',
+      true,
+      args.userToken,
+    );
+
+    const data = (payload.data && typeof payload.data === 'object' ? payload.data : payload) as Record<
+      string,
+      unknown
+    >;
+    const id = String(data.id ?? args.teamMemberId).trim();
+    if (!id) {
+      throw new AltegioB2bError('altegio_update_team_member_missing_id', 502, payload);
     }
     return { id, raw: payload };
   }
@@ -365,7 +420,7 @@ export class AltegioB2bClient {
         'server.address': 'api.alteg.io',
         'http.request.method': method,
         'hiteam.integration.name': 'altegio',
-        'hiteam.integration.operation': altegioOperation(url),
+        'hiteam.integration.operation': altegioOperation(method, url),
       },
       async () => this.requestInternal(method, url, json, accept, includeUserToken, userTokenOverride),
     );
@@ -426,11 +481,14 @@ export class AltegioB2bClient {
   }
 }
 
-function altegioOperation(url: string) {
+function altegioOperation(method: 'GET' | 'POST' | 'PUT', url: string) {
   const pathname = new URL(url).pathname;
   if (pathname.endsWith('/auth')) return 'authenticate_user';
   if (pathname.includes('/team_members')) return 'list_team_members';
   if (pathname.endsWith('/staff/quick')) return 'create_team_member';
+  if (/\/staff\/[^/]+\/[^/]+$/.test(pathname)) {
+    return method === 'PUT' ? 'update_team_member' : 'get_team_member';
+  }
   if (pathname.endsWith('/staff/schedule')) return 'staff_schedule';
   if (pathname.includes('/hooks_settings')) return 'hooks_settings';
   if (pathname.endsWith('/companies')) return 'list_locations';
@@ -485,6 +543,47 @@ export function parseLocationProfilePayload(
 
 function digitsOnly(value?: string | null) {
   return String(value || '').replace(/\D/g, '');
+}
+
+/** Parse the single-team-member detail response
+   * (`GET /api/v1/staff/{location_id}/{team_member_id}`). Data is an array with
+   * a single record; an empty result means the staff member is gone. */
+export function parseSingleTeamMemberPayload(
+  payload: Record<string, unknown>,
+  teamMemberId: string,
+): AltegioTeamMember | null {
+  const rows = Array.isArray(payload.data)
+    ? payload.data
+    : payload.data && typeof payload.data === 'object'
+      ? [payload.data]
+      : [];
+  if (rows.length === 0) {
+    return null;
+  }
+  const row = rows[0] as Record<string, unknown>;
+  const attributes =
+    row.attributes && typeof row.attributes === 'object'
+      ? (row.attributes as Record<string, unknown>)
+      : row;
+  const position =
+    attributes.position && typeof attributes.position === 'object'
+      ? (attributes.position as Record<string, unknown>)
+      : null;
+  return {
+    id: String(row.id ?? teamMemberId),
+    name: pickString(attributes.name) || `Staff ${teamMemberId}`,
+    specialization: pickString(attributes.specialization),
+    positionId: position ? pickString(position.id) : null,
+    positionTitle: position ? pickString(position.title, position.name) : null,
+    phone: pickString(attributes.phone, attributes.phone_number),
+    email: pickString(attributes.email, attributes.user_email),
+    fired: isTruthyFlag(attributes.fired),
+    deleted: isTruthyFlag(attributes.deleted),
+  };
+}
+
+function isTruthyFlag(value: unknown) {
+  return value === true || value === 1 || value === '1';
 }
 
 export function parseTeamMembersPayload(payload: Record<string, unknown>): AltegioTeamMember[] {

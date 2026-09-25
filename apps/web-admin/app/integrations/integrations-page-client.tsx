@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WorkspaceLoading } from "@/components/workspace-loading";
+import { WorkspaceFeedback, WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -43,6 +44,8 @@ function clearMarketplaceQuery() {
   url.searchParams.delete("salon_id");
   url.searchParams.delete("app_id");
   url.searchParams.delete("application_id");
+  url.searchParams.delete("user_data");
+  url.searchParams.delete("user_data_sign");
   window.history.replaceState({}, "", url.toString());
 }
 
@@ -116,6 +119,8 @@ export default function IntegrationsPageClient({
             body: JSON.stringify({
               locationId: pending.locationId,
               ...(pending.applicationId ? { applicationId: pending.applicationId } : {}),
+              ...(pending.userData ? { userData: pending.userData } : {}),
+              ...(pending.userDataSign ? { userDataSign: pending.userDataSign } : {}),
             }),
             method: "POST",
             token: session.accessToken,
@@ -195,24 +200,14 @@ export default function IntegrationsPageClient({
   return (
     <AdminShell showTopbar={false}>
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 md:px-8 md:py-10">
-        <header className="space-y-2">
-          <p className="font-heading text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--accent)]">
-            {locale === "ru" ? "Настройки рабочего пространства" : "Workspace settings"}
-          </p>
-          <h1 className="font-heading text-[2.5rem] font-semibold leading-none tracking-[-0.05em] text-foreground">
-            {locale === "ru" ? "Интеграции" : "Integrations"}
-          </h1>
-          <p className="max-w-2xl font-heading text-sm text-muted-foreground">
-            {locale === "ru"
-              ? "Подключайте внешние сервисы и контролируйте обмен данными."
-              : "Connect external services and control data synchronization."}
-          </p>
-        </header>
+        <WorkspacePageHeader
+          eyebrow={locale === "ru" ? "Настройки рабочего пространства" : "Workspace settings"}
+          title={locale === "ru" ? "Интеграции" : "Integrations"}
+          description={locale === "ru" ? "Подключайте внешние сервисы и контролируйте обмен данными." : "Connect external services and control data synchronization."}
+        />
 
         {error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <WorkspaceFeedback title={error} tone="error" />
         ) : null}
 
         {loading ? (

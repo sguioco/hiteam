@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import type { TaskItem, TaskStatus, WorkGroupItem } from "@smart/types";
 import { apiRequest } from "@/lib/api";
 import { taskActionAvailability } from "@/lib/task-actions";
+import { TaskDetailsEditor } from "@/components/task-details-editor";
 
-export function TaskActions({ task, token, groups, locale, onUpdated }: {
+export function TaskActions({ task, token, groups, locale, onUpdated, onDeleted }: {
   task: TaskItem; token: string; groups: WorkGroupItem[]; locale: string;
   onUpdated: (previousId: string, task: TaskItem) => void;
+  onDeleted: (taskId: string) => void;
 }) {
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [identityLoaded, setIdentityLoaded] = useState(false);
@@ -64,6 +66,7 @@ export function TaskActions({ task, token, groups, locale, onUpdated }: {
       </label>)}
     </fieldset>}
     {!identityLoaded ? <p>{text("Проверяем права…", "Checking permissions…")}</p> : !available.allowed ? <p>{text("Для этой задачи доступен только просмотр. Изменения доступны автору, исполнителю или участнику команды; повторяющуюся задачу меняет её исполнитель.", "This task is read-only. Changes are available to its creator, assignee or team member; recurring tasks can only be changed by their assignee.")}</p> : <>
+      {available.edit && <TaskDetailsEditor task={task} token={token} locale={locale} onUpdated={onUpdated} onDeleted={onDeleted} />}
       <div className="flex flex-wrap gap-2">{statuses.map(([status, label]) => <button key={status} type="button" className={button} disabled={busy || task.status === status || (status === "DONE" && !available.complete)} onClick={() => void submit("status", { status })}>{label}</button>)}</div>
       {!available.complete && <p className="text-sm">{text("Для завершения нужен фотоотчёт. Добавьте его из приложения сотрудника.", "Completion requires a photo proof. Upload it from the employee app.")}</p>}
       {available.reschedule && <form className="flex flex-wrap items-end gap-2" onSubmit={event => {

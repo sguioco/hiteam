@@ -4,10 +4,21 @@ import { AltegioStaffScheduleSyncService } from './altegio-staff-schedule-sync.s
 import { AltegioSyncController } from './altegio-sync.controller';
 import { AltegioPilotController } from './altegio-pilot.controller';
 import { AltegioPilotService } from './altegio-pilot.service';
+import { AltegioWebhookQueueService } from './altegio-webhook-queue.service';
 
 @Module({
   controllers: [AltegioSyncController, AltegioPilotController],
-  providers: [AltegioB2bClient, AltegioStaffScheduleSyncService, AltegioPilotService],
-  exports: [AltegioStaffScheduleSyncService, AltegioPilotService, AltegioB2bClient],
+  providers: [
+    AltegioB2bClient,
+    AltegioStaffScheduleSyncService,
+    AltegioPilotService,
+    AltegioWebhookQueueService,
+  ],
+  exports: [
+    AltegioStaffScheduleSyncService,
+    AltegioPilotService,
+    AltegioWebhookQueueService,
+    AltegioB2bClient,
+  ],
 })
 export class AltegioSyncModule {}

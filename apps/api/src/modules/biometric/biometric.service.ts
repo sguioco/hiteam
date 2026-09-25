@@ -445,22 +445,22 @@ export class BiometricService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!verification) {
-      throw new ForbiddenException('Biometric verification for this employee was not found.');
+      throw new ForbiddenException({ code: 'ATTENDANCE_BIOMETRIC_REJECTED', message: 'Biometric verification for this employee was not found.' });
     }
 
     if (verification.attendanceEventId) {
-      throw new ForbiddenException('Biometric verification has already been used for another attendance event.');
+      throw new ForbiddenException({ code: 'ATTENDANCE_BIOMETRIC_REJECTED', message: 'Biometric verification has already been used for another attendance event.' });
     }
 
     if (Date.now() - verification.capturedAt.getTime() > ATTENDANCE_VERIFICATION_MAX_AGE_MS) {
-      throw new ForbiddenException('Biometric verification is too old. Capture a fresh face scan.');
+      throw new ForbiddenException({ code: 'ATTENDANCE_BIOMETRIC_REJECTED', message: 'Biometric verification is too old. Capture a fresh face scan.' });
     }
 
     if (verification.result === BiometricVerificationResult.PASSED) {
       return verification;
     }
 
-    throw new ForbiddenException('Biometric verification did not pass.');
+    throw new ForbiddenException({ code: 'ATTENDANCE_BIOMETRIC_REJECTED', message: 'Biometric verification did not pass.' });
   }
 
   async attachVerificationToAttendanceEvent(employeeId: string, verificationId: string, attendanceEventId: string) {

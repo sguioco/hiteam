@@ -44,6 +44,8 @@ import { UpdateAnnouncementDto } from "./dto/update-announcement.dto";
 import { UpdateAnnouncementTemplateDto } from "./dto/update-announcement-template.dto";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpdateTaskTemplateDto } from "./dto/update-task-template.dto";
+import { UpdateTaskDetailsDto } from "./dto/update-task-details.dto";
+import { replaceTaskDescriptionBody } from "./task-description";
 import { UpdateTaskAutomationPolicyDto } from "./dto/update-task-automation-policy.dto";
 
 type PrismaTx = Prisma.TransactionClient;
@@ -406,7 +408,7 @@ export class CollaborationService {
         },
         _count: {
           select: {
-            tasks: true,
+            tasks: { where: { deletedAt: null } },
           },
         },
       },
@@ -526,7 +528,7 @@ export class CollaborationService {
             orderBy: { createdAt: "asc" },
           },
           _count: {
-            select: { tasks: true },
+            select: { tasks: { where: { deletedAt: null } } },
           },
         },
       });
@@ -569,7 +571,7 @@ export class CollaborationService {
         },
         _count: {
           select: {
-            tasks: true,
+            tasks: { where: { deletedAt: null } },
           },
         },
       },
@@ -654,7 +656,7 @@ export class CollaborationService {
             orderBy: { createdAt: "asc" },
           },
           _count: {
-            select: { tasks: true },
+            select: { tasks: { where: { deletedAt: null } } },
           },
         },
       });
@@ -684,7 +686,7 @@ export class CollaborationService {
             orderBy: { createdAt: "asc" },
           },
           _count: {
-            select: { tasks: true },
+            select: { tasks: { where: { deletedAt: null } } },
           },
         },
         orderBy: [{ name: "asc" }],
@@ -693,6 +695,7 @@ export class CollaborationService {
         where: {
           tenantId: manager.tenantId,
           managerEmployeeId: manager.id,
+          deletedAt: null,
         },
         include: this.taskListInclude(),
         orderBy: [{ createdAt: "desc" }],
@@ -704,6 +707,7 @@ export class CollaborationService {
           tenantId: manager.tenantId,
           managerEmployeeId: manager.id,
           assigneeEmployeeId: { not: null },
+          deletedAt: null,
         },
         _count: { _all: true },
       }),
@@ -813,6 +817,7 @@ export class CollaborationService {
           where: {
             tenantId: manager.tenantId,
             managerEmployeeId: manager.id,
+            deletedAt: null,
             createdAt: {
               gte: rangeStart,
             },
@@ -3070,6 +3075,7 @@ export class CollaborationService {
       where: {
         tenantId: manager.tenantId,
         id: query.taskId,
+        deletedAt: null,
         title: query.search
           ? {
               contains: query.search,
@@ -3254,6 +3260,7 @@ export class CollaborationService {
   async runTaskAutomationForAllManagers() {
     const scopes = await this.prisma.task.findMany({
       where: {
+        deletedAt: null,
         status: {
           in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
         },
@@ -3316,6 +3323,7 @@ export class CollaborationService {
       where: {
         tenantId: manager.tenantId,
         managerEmployeeId: manager.id,
+        deletedAt: null,
         status: {
           in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
         },
@@ -3511,6 +3519,7 @@ export class CollaborationService {
         id: taskId,
         tenantId: manager.tenantId,
         managerEmployeeId: manager.id,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -3539,6 +3548,7 @@ export class CollaborationService {
         tenantId: manager.tenantId,
         managerEmployeeId: manager.id,
         groupId: dto.groupId,
+        deletedAt: null,
         status: {
           in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
         },
@@ -3626,6 +3636,7 @@ export class CollaborationService {
       where: {
         tenantId: employee.tenantId,
         assigneeEmployeeId: employee.id,
+        deletedAt: null,
         ...this.buildTaskDateWhere(taskWindow),
       },
       include: this.taskListInclude(),
@@ -3697,6 +3708,7 @@ export class CollaborationService {
         where: {
           tenantId: employee.tenantId,
           assigneeEmployeeId: employee.id,
+          deletedAt: null,
         },
         include: this.taskInclude(),
         orderBy: [{ updatedAt: "desc" }],
@@ -4127,6 +4139,97 @@ export class CollaborationService {
     return { success: true };
   }
 
+  async updateTaskDetails(userId: string, taskId: string, dto: UpdateTaskDetailsDto) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, tenantId: manager.tenantId, deletedAt: null },
+      include: this.taskInclude(),
+    });
+    if (!task) throw new NotFoundException("Task not found.");
+    if (task.managerEmployeeId !== manager.id) {
+      throw new ForbiddenException("Only the task creator can edit task details.");
+    }
+    if (task.status === TaskStatus.DONE || task.status === TaskStatus.CANCELLED) {
+      throw new BadRequestException("Only open tasks can be edited.");
+    }
+    const title = dto.title.trim();
+    if (!title) throw new BadRequestException("Task title cannot be empty.");
+    let description = task.description;
+    if (dto.description !== undefined) {
+      try {
+        description = replaceTaskDescriptionBody(task.description, dto.description);
+      } catch {
+        throw new BadRequestException("Task description contains reserved metadata marker.");
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: task.id },
+        data: { title, description, priority: dto.priority ?? task.priority },
+      });
+      await tx.taskActivity.create({
+        data: {
+          tenantId: manager.tenantId,
+          taskId: task.id,
+          actorEmployeeId: manager.id,
+          kind: TaskActivityKind.COMMENT,
+          body: "Task details updated.",
+        },
+      });
+      return tx.task.findUniqueOrThrow({ where: { id: task.id }, include: this.taskInclude() });
+    });
+    await this.auditService.log({
+      tenantId: manager.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: task.id,
+      action: "task.details_updated",
+      metadata: { titleChanged: title !== task.title, descriptionChanged: description !== task.description, priorityChanged: updated.priority !== task.priority },
+    });
+    this.kommoService.recordTaskUpdated(manager.tenantId, task.id, "task_details_updated");
+    await this.emitWorkspaceRefreshForTasks([updated], "task.details_updated");
+    return this.serializeTaskWithPhotoProofUrls(updated);
+  }
+
+  async deleteTask(userId: string, taskId: string) {
+    const manager = await this.prisma.employee.findUniqueOrThrow({ where: { userId } });
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, tenantId: manager.tenantId, deletedAt: null },
+      include: this.taskInclude(),
+    });
+    if (!task) throw new NotFoundException("Task not found.");
+    if (task.managerEmployeeId !== manager.id) {
+      throw new ForbiddenException("Only the task creator can delete this task.");
+    }
+    if (task.status === "DONE" || task.status === "CANCELLED") {
+      throw new BadRequestException("Completed or cancelled tasks cannot be deleted.");
+    }
+    const deletedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: task.id }, data: { deletedAt } });
+      await tx.taskActivity.create({
+        data: {
+          tenantId: manager.tenantId,
+          taskId: task.id,
+          actorEmployeeId: manager.id,
+          kind: TaskActivityKind.COMMENT,
+          body: "Task removed from active lists.",
+        },
+      });
+    });
+    await this.auditService.log({
+      tenantId: manager.tenantId,
+      actorUserId: userId,
+      entityType: "task",
+      entityId: task.id,
+      action: "task.deleted",
+      metadata: { deletedAt: deletedAt.toISOString() },
+    });
+    await this.emitWorkspaceRefreshForTasks([task], "task.deleted");
+    return { deletedTaskId: task.id };
+  }
+
   async setTaskStatus(userId: string, taskId: string, dto: SetTaskStatusDto) {
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
@@ -4154,6 +4257,7 @@ export class CollaborationService {
       where: {
         id: taskId,
         tenantId: employee.tenantId,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -4254,6 +4358,7 @@ export class CollaborationService {
       where: {
         id: taskId,
         tenantId: employee.tenantId,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -4338,6 +4443,7 @@ export class CollaborationService {
         id: itemId,
         taskId,
         tenantId: employee.tenantId,
+        task: { deletedAt: null },
       },
       include: {
         task: {
@@ -4440,6 +4546,7 @@ export class CollaborationService {
       where: {
         id: taskId,
         tenantId: employee.tenantId,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -4503,6 +4610,7 @@ export class CollaborationService {
       where: {
         id: taskId,
         tenantId: employee.tenantId,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -4628,6 +4736,7 @@ export class CollaborationService {
       where: {
         id: taskId,
         tenantId: employee.tenantId,
+        deletedAt: null,
       },
       include: this.taskInclude(),
     });
@@ -7407,6 +7516,7 @@ export class CollaborationService {
     const directTaskConflict = await this.prisma.task.findFirst({
       where: {
         tenantId,
+        deletedAt: null,
         assigneeEmployeeId: {
           in: assigneeEmployeeIds,
         },

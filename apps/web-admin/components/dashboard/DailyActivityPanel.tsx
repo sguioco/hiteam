@@ -15,7 +15,7 @@ import { getAvatarInitials } from "@/lib/avatar-placeholder";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { localizePersonName } from "@/lib/transliteration";
 import { cn } from "@/lib/utils";
-import { toAdminHref } from "@/lib/admin-routes";
+import { employeeHref, taskHref } from "@/lib/activity-task-navigation";
 
 export type DashboardActivityPerson = {
   id: string;
@@ -55,13 +55,13 @@ type DailyActivityPanelProps = {
   inviteHref?: string;
 };
 
-export function ActivityTaskLinks({ item, locale }: { item: DashboardActivityItem; locale: "ru" | "en" }) {
+export function ActivityTaskLinks({ item, locale, returnTo }: { item: DashboardActivityItem; locale: "ru" | "en"; returnTo?: string }) {
   const ids = Array.from(new Set(item.kind === "task" ? item.taskIds ?? [] : []));
   const employees = Array.from(new Map(item.targetEmployees.map((person) => [person.id, person])).values());
   if (!ids.length && !employees.length) return null;
-  return <div className="flex flex-wrap gap-2 py-1">{ids.map((id, index) => <a key={id} className="text-sm text-blue-600 underline" href={toAdminHref(`/tasks?taskId=${encodeURIComponent(id)}`)}>
+  return <div className="flex flex-wrap gap-2 py-1">{ids.map((id, index) => <a key={id} className="text-sm text-blue-600 underline" href={taskHref(id, returnTo)}>
     {locale === "ru" ? "Открыть задачу" : "Open task"}{ids.length > 1 ? ` ${index + 1}` : ""}
-  </a>)}{employees.map((person) => <a key={`employee:${person.id}`} className="text-sm text-blue-600 underline" href={toAdminHref(`/employees/${encodeURIComponent(person.id)}`)}>
+  </a>)}{employees.map((person) => <a key={`employee:${person.id}`} className="text-sm text-blue-600 underline" href={employeeHref(person.id, returnTo)}>
     {locale === "ru" ? "Сотрудник: " : "Employee: "}{person.displayName}
   </a>)}</div>;
 }

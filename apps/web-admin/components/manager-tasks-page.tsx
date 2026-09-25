@@ -11,6 +11,7 @@ import {
   AttendanceLiveSession,
   CollaborationTaskBoardResponse,
   ManagerTasksBootstrapResponse,
+  OrganizationLocationSummary,
   TaskItem,
   TaskPriority,
   TaskStatus,
@@ -57,6 +58,7 @@ import { localizePersonName } from "@/lib/transliteration";
 import { useTranslatedTaskCopy } from "@/lib/use-translated-task-copy";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { useWorkspaceAutoRefresh } from "@/lib/use-workspace-auto-refresh";
+import { safeActivityReturnHref } from "@/lib/activity-task-navigation";
 
 export type EmployeeDirectoryItem = {
   id: string;
@@ -757,6 +759,8 @@ export function ManagerTasksPage({
     initialData?.employees ?? [],
   );
   const [groups, setGroups] = useState<WorkGroupItem[]>(initialData?.groups ?? []);
+  const [availableLocations, setAvailableLocations] = useState<OrganizationLocationSummary[]>([]);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [liveSessions, setLiveSessions] = useState<AttendanceLiveSession[]>(
     initialData?.liveSessions ?? [],
   );
@@ -773,6 +777,8 @@ export function ManagerTasksPage({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [linkedTask, setLinkedTask] = useState<TaskItem | null>(null);
   const [linkedTaskMessage, setLinkedTaskMessage] = useState<string | null>(null);
+  const [activityReturn, setActivityReturn] = useState<string | null>(null);
+  useEffect(() => { setActivityReturn(safeActivityReturnHref(window.location.search)); }, []);
   const selectedTask = tasks.find(task => task.id === selectedTaskId) ?? (linkedTask?.id === selectedTaskId ? linkedTask : null);
   useEffect(() => {
     if (!accessChecked || !accessToken) return;
@@ -905,6 +911,28 @@ export function ManagerTasksPage({
 
     setAccessChecked(true);
   }, [router]);
+
+  useEffect(() => {
+    if (!accessChecked || !accessToken) return;
+
+    let active = true;
+    void apiRequest<OrganizationLocationSummary[]>("/org/locations", {
+      token: accessToken,
+    }).then((locations) => {
+      if (!active) return;
+      setAvailableLocations(locations);
+      setLocationError(null);
+    }).catch((cause: unknown) => {
+      if (!active) return;
+      setLocationError(
+        cause instanceof Error
+          ? cause.message
+          : localize(locale, "Не удалось загрузить локации.", "Could not load locations."),
+      );
+    });
+
+    return () => { active = false; };
+  }, [accessChecked, accessToken, locale]);
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
@@ -1554,19 +1582,11 @@ export function ManagerTasksPage({
   );
 
   const locationOptions = useMemo(() => {
-    const locations = new Map<string, string>();
-
-    for (const row of tableRows) {
-      for (const location of row.locations) {
-        locations.set(location.id, location.name);
-      }
-    }
-
-    return Array.from(locations, ([value, label]) => ({ value, label })).sort(
+    return availableLocations.map((location) => ({ value: location.id, label: location.name })).sort(
       (left, right) =>
         left.label.localeCompare(right.label, locale === "ru" ? "ru" : "en"),
     );
-  }, [locale, tableRows]);
+  }, [availableLocations, locale]);
 
   const filteredRows = useMemo(() => {
     const minTasks = Number(taskCountFilter) || 0;
@@ -1874,7 +1894,7 @@ export function ManagerTasksPage({
   );
   const isCustomMultiDayRange =
     preset === "custom" && formatDateKey(rangeStart) !== formatDateKey(rangeEnd);
-  const pageError = error ?? attendanceHistoryError;
+  const pageError = error ?? locationError ?? attendanceHistoryError;
 
   function renderTaskStatusIcon(
     task: TaskItem,
@@ -2052,6 +2072,7 @@ export function ManagerTasksPage({
   return (
     <AdminShell>
       <main className="page-shell section-stack team-tasks-page">
+        {activityReturn && <a className="text-sm text-blue-600 underline" href={activityReturn}>{localize(locale, "← Вернуться к активности", "← Back to activity")}</a>}
         {linkedTaskMessage && <p role="status" className="warning-banner">{linkedTaskMessage}</p>}
         <section className={`team-tasks-toolbar${preset === "custom" ? " is-custom-open" : ""}`}>
           <div className="team-tasks-heading">
@@ -2287,7 +2308,7 @@ export function ManagerTasksPage({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2" role="group" aria-label={localize(locale, "Представление задач", "Task view")}>
+        <div className="team-tasks-view-switch flex flex-wrap gap-2" role="group" aria-label={localize(locale, "Представление задач", "Task view")}>
           {(["tasks", "employees"] as const).map(mode => <button key={mode} type="button" aria-pressed={viewMode === mode} className={`rounded-xl border px-4 py-2 ${viewMode === mode ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => { setViewMode(mode); setShowFilters(false); }}>{mode === "tasks" ? localize(locale, "Задачи", "Tasks") : localize(locale, "По сотрудникам", "By employee")}</button>)}
         </div>
         {loading ? (
@@ -2684,6 +2705,12 @@ export function ManagerTasksPage({
               setLinkedTask(current => current?.id === previousId ? updated : current);
               setTasks(current => current.map(task => task.id === previousId ? updated : task));
               setSelectedTaskId(current => current === previousId ? updated.id : current);
+            }}
+            onDeleted={(taskId) => {
+              setTasks(current => current.filter(task => task.id !== taskId));
+              setLinkedTask(current => current?.id === taskId ? null : current);
+              setSelectedTaskId(null);
+              setLinkedTaskMessage(localize(locale, "Задача удалена из рабочих списков.", "Task removed from working lists."));
             }}
           /> : null}
         />

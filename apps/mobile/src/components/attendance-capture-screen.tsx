@@ -3,17 +3,16 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { SaveFormat, manipulateAsync } from "expo-image-manipulator";
-import { AppState, Image, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "../../components/ui/text";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import MapView, { Circle, Marker } from "react-native-maps";
-import type {
-  AttendanceStatusResponse,
-  BiometricPolicyResponse,
-} from "@smart/types";
+import type { BiometricPolicyResponse } from "@smart/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   bootstrapDemoDevice,
+  ApiConnectivityError,
+  ApiHttpError,
   type AttendanceActionName,
   loadAttendanceStatus,
   loadBiometricPolicy,
@@ -120,8 +119,8 @@ export function AttendanceCaptureScreen({
   const permissionRefreshTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const completionGuardRef = useRef(false);
   const locationCheckRequestRef = useRef(0);
+  const uncertainSubmissionRef = useRef(false);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(
     !initialTodaySnapshot?.value.attendanceStatus,
@@ -130,6 +129,7 @@ export function AttendanceCaptureScreen({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorAction, setErrorAction] = useState<"settings" | "status" | "location" | null>(null);
   const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
   const [status, setStatus] = useState<Awaited<
     ReturnType<typeof loadAttendanceStatus>
@@ -173,6 +173,7 @@ export function AttendanceCaptureScreen({
     cameraPermissionSettingsCta: t(
       "biometricMobile.cameraPermissionSettingsCta",
     ),
+    locationPermissionSettingsCta: t("attendanceCapture.locationSettings"),
     cameraPromptTitle: t("attendanceCapture.cameraPromptTitle"),
     cameraPromptBody: t("attendanceCapture.cameraPromptBody"),
     cameraPromptConfirm: t("attendanceCapture.cameraPromptConfirm"),
@@ -300,6 +301,7 @@ export function AttendanceCaptureScreen({
   const primaryButtonDisabled =
     submitting ||
     faceProcessing ||
+    errorAction === "status" ||
     locationCheck.state === "running" ||
     loading;
 
@@ -372,7 +374,10 @@ export function AttendanceCaptureScreen({
     if (!options?.silent) {
       setLoading(true);
     }
-    setError(null);
+    if (!uncertainSubmissionRef.current) {
+      setError(null);
+      setErrorAction(null);
+    }
 
     try {
       void bootstrapDemoDevice().catch(() => undefined);
@@ -387,6 +392,10 @@ export function AttendanceCaptureScreen({
         return;
       }
 
+      if (uncertainSubmissionRef.current) {
+        return;
+      }
+
       if (nextBiometricPolicy.enrollmentStatus !== "ENROLLED") {
         redirectToBiometricSetup();
         return;
@@ -394,17 +403,19 @@ export function AttendanceCaptureScreen({
 
       void runLocationCheck(activeStatus);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : isBreakAction
-            ? language === "ru"
-              ? "Не удалось загрузить данные перерыва."
-              : "Unable to load break data."
-            : isCheckIn
-              ? t("arrival.loadError")
-              : t("departure.loadError"),
-      );
+      if (!uncertainSubmissionRef.current) {
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : isBreakAction
+              ? language === "ru"
+                ? "Не удалось загрузить данные перерыва."
+                : "Unable to load break data."
+              : isCheckIn
+                ? t("arrival.loadError")
+                : t("departure.loadError"),
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -439,7 +450,7 @@ export function AttendanceCaptureScreen({
   async function syncCameraPermission() {
     try {
       const nextPermission = await getPermission();
-      if (nextPermission.granted) {
+      if (nextPermission.granted && !uncertainSubmissionRef.current) {
         setError(null);
       }
     } catch {
@@ -485,12 +496,16 @@ export function AttendanceCaptureScreen({
     const result = await requestPermission();
     if (!result.granted) {
       setError(t("biometric.permissionRequired"));
+      setErrorAction("settings");
     }
 
     return result.granted;
   }
 
   async function runLocationCheck(baseStatus = status) {
+    if (uncertainSubmissionRef.current) {
+      return null;
+    }
     if (!baseStatus?.location) {
       return null;
     }
@@ -504,6 +519,7 @@ export function AttendanceCaptureScreen({
       errorMessage: null,
     });
     setError(null);
+    setErrorAction(null);
 
     try {
       const snapshot = await capturePreciseAttendanceLocation();
@@ -597,6 +613,12 @@ export function AttendanceCaptureScreen({
       } as const;
       setLocationCheck(nextState);
       setError(errorMessage);
+      setErrorAction(
+        isPreciseLocationError(nextError) &&
+        (nextError.code === "LOCATION_PERMISSION_REQUIRED" || nextError.code === "PRECISE_LOCATION_REQUIRED")
+          ? "settings"
+          : "location",
+      );
       return nextState;
     }
   }
@@ -640,7 +662,9 @@ export function AttendanceCaptureScreen({
 
     setFaceProcessing(true);
     setError(null);
+    setErrorAction(null);
     setMessage(null);
+    let attendanceSubmissionStarted = false;
 
     try {
       const picture = await cameraRef.current.takePictureAsync({
@@ -704,205 +728,89 @@ export function AttendanceCaptureScreen({
         );
       }
 
-      completionGuardRef.current = true;
       setBiometricVerificationId(verificationResult.verificationId);
-      finalizeAttendanceInBackground(
+      attendanceSubmissionStarted = true;
+      await finalizeAttendance(
         verificationResult.verificationId,
         nextLocationCheck.snapshot,
       );
     } catch (nextError) {
       setCapturedArtifact(null);
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("biometric.submitFailed"),
-      );
+      if (nextError instanceof ApiConnectivityError && attendanceSubmissionStarted) {
+        uncertainSubmissionRef.current = true;
+        setError(t("attendanceCapture.networkUnconfirmed"));
+        setErrorAction("status");
+      } else if (nextError instanceof ApiConnectivityError) {
+        setError(t("attendanceCapture.networkBeforeSubmission"));
+        setBiometricVerificationId(null);
+      } else if (nextError instanceof ApiHttpError && nextError.code === "ATTENDANCE_OUTSIDE_GEOFENCE") {
+        setError(t("attendanceCapture.locationOutsideBody"));
+        setErrorAction("location");
+      } else if (nextError instanceof ApiHttpError && nextError.code === "ATTENDANCE_LOCATION_INACCURATE") {
+        setError(t("attendanceCapture.locationInaccurate"));
+        setErrorAction("location");
+      } else if (nextError instanceof ApiHttpError &&
+        (nextError.code === "ATTENDANCE_BIOMETRIC_REQUIRED" || nextError.code === "ATTENDANCE_BIOMETRIC_REJECTED")) {
+        setError(t("attendanceCapture.faceRetry"));
+        setBiometricVerificationId(null);
+      } else {
+        setError(nextError instanceof Error ? nextError.message : t("biometric.submitFailed"));
+      }
     } finally {
       setFaceProcessing(false);
     }
   }
 
-  function finalizeAttendanceInBackground(
+  async function finalizeAttendance(
     verificationId: string,
     snapshot: AttendanceLocationSnapshot,
   ) {
-    const currentStatus =
-      status ?? initialTodaySnapshot?.value.attendanceStatus ?? null;
-    const optimisticRecordedAt = new Date().toISOString();
-    const optimisticStatus = buildOptimisticAttendanceStatus(currentStatus, {
-      sessionId:
-        currentStatus?.activeSession?.id ??
-        `pending-${action}-${optimisticRecordedAt}`,
-      recordedAt: optimisticRecordedAt,
-    });
-
-    if (optimisticStatus) {
-      setStatus(optimisticStatus);
-      void syncTodayScreenCache(optimisticStatus);
-    }
-
-    void clearScreenCache(LEADERBOARD_CELEBRATION_CACHE_KEY);
-    void clearScreenCache(MANAGER_SCREEN_CACHE_KEY);
-    router.replace("/today" as never);
-
-    void submitAttendanceAction(action, {
-      ...snapshot,
-      biometricVerificationId: verificationId,
-      notes: isCheckIn
-        ? "Mobile attendance check-in"
-        : isCheckOut
-          ? "Mobile attendance check-out"
-          : isBreakStart
-            ? "Mobile attendance break start"
-            : "Mobile attendance break end",
-    })
-      .then((attendanceResult) => {
-        const reconciledStatus = optimisticStatus
-          ? buildOptimisticAttendanceStatus(
-              optimisticStatus,
-              attendanceResult as {
-                sessionId: string;
-                recordedAt: string;
-                breakId?: string;
-                isPaid?: boolean;
-                breakMinutes?: number;
-                paidBreakMinutes?: number;
-              },
-            )
-          : null;
-
-        if (reconciledStatus) {
-          void syncTodayScreenCache(reconciledStatus);
-        }
-
-        void clearScreenCache(MANAGER_SCREEN_CACHE_KEY);
-
-        if (attendanceResult.leaderboardCelebration) {
-          void writeScreenCache(
-            LEADERBOARD_CELEBRATION_CACHE_KEY,
-            attendanceResult.leaderboardCelebration,
-          );
-        }
-
-        return warmTodayScreenCache(undefined, language);
-      })
-      .catch(() => warmTodayScreenCache(undefined, language))
-      .finally(() => {
-        completionGuardRef.current = false;
+    setSubmitting(true);
+    try {
+      const attendanceResult = await submitAttendanceAction(action, {
+        ...snapshot,
+        biometricVerificationId: verificationId,
+        notes: `Mobile attendance ${action}`,
       });
+      await Promise.all([
+        clearScreenCache(TODAY_SCREEN_CACHE_KEY),
+        clearScreenCache(MANAGER_SCREEN_CACHE_KEY),
+        clearScreenCache(LEADERBOARD_CELEBRATION_CACHE_KEY),
+      ]);
+      if (attendanceResult.leaderboardCelebration) {
+        await writeScreenCache(LEADERBOARD_CELEBRATION_CACHE_KEY, attendanceResult.leaderboardCelebration);
+      }
+      void warmTodayScreenCache(undefined, language);
+      router.replace("/today" as never);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function buildOptimisticAttendanceStatus(
-    currentStatus: AttendanceStatusResponse | null,
-    actionResult: {
-      sessionId: string;
-      recordedAt: string;
-      breakId?: string;
-      isPaid?: boolean;
-      breakMinutes?: number;
-      paidBreakMinutes?: number;
-    },
-  ): AttendanceStatusResponse | null {
-    if (!currentStatus) {
-      return null;
+  async function checkAfterUncertainSubmission() {
+    try {
+      const latest = await loadAttendanceStatus();
+      if (hasInvalidAttendanceState(latest)) {
+        await clearScreenCache(TODAY_SCREEN_CACHE_KEY);
+        router.replace("/today" as never);
+        return;
+      }
+      setStatus(latest);
+      uncertainSubmissionRef.current = false;
+      setError(t("attendanceCapture.notRecorded"));
+      setErrorAction(null);
+      setBiometricVerificationId(null);
+    } catch {
+      setError(t("attendanceCapture.networkUnconfirmed"));
+      setErrorAction("status");
     }
-
-    if (isCheckIn) {
-      return {
-        ...currentStatus,
-        attendanceState: "checked_in",
-        allowedActions: currentStatus.breakPolicy.enabled
-          ? ["check_out", "start_break"]
-          : ["check_out"],
-        activeSession: {
-          id: actionResult.sessionId,
-          startedAt: actionResult.recordedAt,
-          endedAt: null,
-          breakMinutes: 0,
-          paidBreakMinutes: 0,
-          activeBreak: null,
-        },
-      };
-    }
-
-    if (isBreakStart) {
-      const activeSession = currentStatus.activeSession ?? {
-        id: actionResult.sessionId,
-        startedAt: actionResult.recordedAt,
-        endedAt: null,
-        breakMinutes: 0,
-        paidBreakMinutes: 0,
-        activeBreak: null,
-      };
-
-      return {
-        ...currentStatus,
-        attendanceState: "on_break",
-        allowedActions: ["end_break", "check_out"],
-        activeSession: {
-          ...activeSession,
-          activeBreak: {
-            id: actionResult.breakId ?? `pending-break-${actionResult.recordedAt}`,
-            startedAt: actionResult.recordedAt,
-            isPaid: actionResult.isPaid ?? currentStatus.breakPolicy.defaultBreakIsPaid,
-          },
-        },
-      };
-    }
-
-    if (isBreakEnd) {
-      return {
-        ...currentStatus,
-        attendanceState: "checked_in",
-        allowedActions: currentStatus.breakPolicy.enabled
-          ? ["start_break", "check_out"]
-          : ["check_out"],
-        activeSession: currentStatus.activeSession
-          ? {
-              ...currentStatus.activeSession,
-              breakMinutes:
-                currentStatus.activeSession.breakMinutes + (actionResult.breakMinutes ?? 0),
-              paidBreakMinutes:
-                currentStatus.activeSession.paidBreakMinutes + (actionResult.paidBreakMinutes ?? 0),
-              activeBreak: null,
-            }
-          : null,
-      };
-    }
-
-    return {
-      ...currentStatus,
-      attendanceState: "checked_out",
-      allowedActions:
-        currentStatus.workMode === "FIELD" ? ["check_in"] : [],
-      activeSession: null,
-    };
-  }
-
-  async function syncTodayScreenCache(
-    nextAttendanceStatus: AttendanceStatusResponse,
-  ) {
-    const currentSnapshot =
-      peekScreenCache<TodayScreenCacheValue>(
-        TODAY_SCREEN_CACHE_KEY,
-        TODAY_SCREEN_CACHE_TTL_MS,
-      ) ??
-      (await readScreenCache<TodayScreenCacheValue>(
-        TODAY_SCREEN_CACHE_KEY,
-        TODAY_SCREEN_CACHE_TTL_MS,
-      ));
-
-    await writeScreenCache(TODAY_SCREEN_CACHE_KEY, {
-      attendanceStatus: nextAttendanceStatus,
-      attendanceTrackingEnabled:
-        currentSnapshot?.value.attendanceTrackingEnabled ?? true,
-      profile: currentSnapshot?.value.profile ?? null,
-      shifts: currentSnapshot?.value.shifts ?? [],
-      tasks: currentSnapshot?.value.tasks ?? [],
-    } satisfies TodayScreenCacheValue);
   }
 
   async function handlePrimaryAction() {
+    if (errorAction === "settings") {
+      await Linking.openSettings();
+      return;
+    }
     if (biometricVerificationId && locationCheck.state !== "ready") {
       await runLocationCheck();
       return;
@@ -1072,6 +980,22 @@ export function AttendanceCaptureScreen({
             </Text>
           ) : null}
 
+          {errorAction === "settings" || errorAction === "status" ? (
+            <PressableScale
+              className="min-h-[54px] items-center justify-center rounded-[18px] border border-[#d8deea] bg-white"
+              haptic="selection"
+              onPress={() => void (errorAction === "settings" ? Linking.openSettings() : checkAfterUncertainSubmission())}
+            >
+              <Text style={styles.secondaryButtonLabel}>
+                {errorAction === "settings"
+                  ? locationCheck.state === "error"
+                    ? copy.locationPermissionSettingsCta
+                    : copy.cameraPermissionSettingsCta
+                  : t("attendanceCapture.checkStatus")}
+              </Text>
+            </PressableScale>
+          ) : null}
+
           <View className="mt-auto gap-3 pt-5">
             <PressableScale
               className={`min-h-[58px] items-center justify-center rounded-[20px] bg-[#546cf2] ${
@@ -1089,7 +1013,7 @@ export function AttendanceCaptureScreen({
             {(locationCheck.state === "outside" ||
               locationCheck.state === "error") &&
             !faceProcessing &&
-            !submitting ? (
+            !submitting && errorAction !== "status" ? (
               <PressableScale
                 className="min-h-[54px] items-center justify-center rounded-[18px] border border-[#d8deea] bg-white"
                 haptic="selection"

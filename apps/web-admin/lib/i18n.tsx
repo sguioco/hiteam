@@ -10,8 +10,8 @@ import {
 } from "react";
 import { apiRequest } from "./api";
 import { getSession, saveSession } from "./auth";
-import { writeBrowserStorageItem } from "./browser-storage";
 import { isDemoAccessToken } from "./demo-mode";
+import { persistBrowserLocalePreference } from "./locale-preference";
 
 export type Locale = "en" | "ru";
 
@@ -23,7 +23,6 @@ type I18nContextValue = {
   t: (key: string) => string;
 };
 
-const STORAGE_KEY = "smart-admin-locale";
 const fallbackLocale: Locale = "en";
 
 function normalizeSessionLocale(locale?: string | null): Locale {
@@ -1751,10 +1750,7 @@ export function I18nProvider({
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    writeBrowserStorageItem(STORAGE_KEY, locale);
-    writeBrowserStorageItem("hiteam-landing-locale", locale);
-    document.cookie = `${STORAGE_KEY}=${locale}; path=/; max-age=31536000; samesite=lax`;
-    document.cookie = `hiteam-landing-locale=${locale}; path=/; max-age=31536000; samesite=lax`;
+    persistBrowserLocalePreference(locale);
 
     const session = getSession();
     if (

@@ -13,6 +13,8 @@ import { localizePersonName } from "@/lib/transliteration";
 import { useLiveTextMap } from "@/lib/use-live-text-map";
 import { EmptyStateAction } from "./empty-state-action";
 import { calendarDayHref } from "./week-calendar-navigation";
+import { summarizeAttendance } from "@/lib/attendance-overview";
+import { toAdminHref } from "@/lib/admin-routes";
 
 type TodayAttendanceEmployee = {
   id: string;
@@ -306,6 +308,7 @@ export function TodayAttendancePanel({
   const now = new Date();
   const todayKey = formatDateKey(now);
   const isToday = selectedDate === todayKey;
+  const isFuture = selectedDate > todayKey;
   const sessionByEmployeeId = new Map(
     isToday ? liveSessions.map((session) => [session.employeeId, session] as const) : [],
   );
@@ -424,6 +427,9 @@ export function TodayAttendancePanel({
         timeTone: arrivalState.tone,
         fullName,
         hasSession: Boolean(session || historyRow),
+        isActive: Boolean(session && session.status !== "checked_out"),
+        isLate: Boolean((session || historyRow) && arrivalState.tone === "late"),
+        hasEmployeeProfile: Boolean(employee),
         arrivalDeltaMinutes,
       };
     })
@@ -438,6 +444,7 @@ export function TodayAttendancePanel({
     (row) => sessionByEmployeeId.has(row.id) || historyByEmployeeId.has(row.id),
   ).length;
   const expectedCount = rows.length || (isToday ? liveSessions.length : 0);
+  const overview = summarizeAttendance(rows);
   const translatableTexts = useMemo(
     () =>
       rows.flatMap((row) => [row.department, row.note, row.shiftLabel].filter(Boolean)),
@@ -499,6 +506,14 @@ export function TodayAttendancePanel({
         </div>
       </div>
 
+      <div className={`today-attendance-overview${isFuture ? " is-future" : ""}`} aria-label={localize(locale, "Сводка посещаемости", "Attendance summary")} role="group">
+        {isFuture ? <div><strong>{rows.length}</strong><span>{localize(locale, "Запланировано смен", "Scheduled shifts")}</span></div> : <>
+          <div><strong>{isToday ? overview.active : overview.checked}</strong><span>{isToday ? localize(locale, "На смене", "On shift") : localize(locale, "Отметились", "Checked in")}</span></div>
+          <div><strong>{overview.late}</strong><span>{localize(locale, "Опоздали", "Arrived late")}</span></div>
+          <div><strong>{overview.missing}</strong><span>{localize(locale, "Без отметки", "No check-in")}</span></div>
+        </>}
+      </div>
+
       <div className={`today-attendance-body${rows.length === 0 ? " is-empty" : ""}`}>
         <div className="today-attendance-list">
           {localizedRows.length ? (
@@ -513,7 +528,7 @@ export function TodayAttendancePanel({
                 </div>
 
                 <div className="today-attendance-row-copy">
-                  <strong>{row.fullName}</strong>
+                  <strong>{row.hasEmployeeProfile ? <a href={toAdminHref(`/employees/${encodeURIComponent(row.id)}`)}>{row.fullName}</a> : row.fullName}</strong>
                   <div className="today-attendance-row-metrics">
                     <div className="today-attendance-row-lines">
                       <span>{row.department}</span>

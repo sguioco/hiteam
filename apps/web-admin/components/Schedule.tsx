@@ -35,6 +35,7 @@ import {
   TaskItem,
 } from "@smart/types";
 import { AdminShell } from "@/components/admin-shell";
+import { WorkspacePageHeader } from "@/components/ui/workspace-patterns";
 import { EmployeeDropdown } from "@/components/employee-dropdown";
 import { TimePicker } from "@/components/application/time-picker/time-picker";
 import { TaskDatePicker } from "@/components/task-schedule-pickers";
@@ -2703,6 +2704,9 @@ export default function Schedule({
       }
     >
       <main className="page-shell section-stack min-h-0 overflow-y-auto scrollbar-hide">
+        <WorkspacePageHeader
+          description={locale === "ru" ? "Смены, задачи и события команды" : "Team shifts, tasks and events"}
+        />
           <section className="mb-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             {!isEmployeeMode && activeTab !== "schedules" ? (
@@ -2742,7 +2746,8 @@ export default function Schedule({
             <div className="mt-6 flex flex-wrap gap-2">
               {tabs.map((tab) => (
                 <button
-                  className={`filter-chip ${
+                  aria-pressed={activeTab === tab.key}
+                  className={`filter-chip focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${
                     activeTab === tab.key
                       ? "filter-chip-active"
                       : "filter-chip-inactive"
@@ -3084,6 +3089,11 @@ export default function Schedule({
 
                   return (
                     <button
+                      aria-label={day.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
                       className={`flex min-h-[148px] flex-col rounded-none p-2 text-left transition-colors duration-200 ${
                         !isLastColumn ? "border-r border-border/80" : ""
                       } ${!isLastRow ? "border-b border-border/80" : ""} ${

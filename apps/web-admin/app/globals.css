@@ -672,6 +672,62 @@ body:has(.landing-shell) {
   overflow: hidden;
 }
 
+.today-attendance-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.today-attendance-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.today-attendance-overview.is-future {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.today-attendance-overview > div {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(18, 24, 37, 0.08);
+  border-radius: 12px;
+  background: rgba(40, 75, 255, 0.04);
+}
+
+.today-attendance-overview strong {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-attendance-overview span {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.today-attendance-overview > div:nth-child(2) strong {
+  color: #b45309;
+}
+
+.today-attendance-overview > div:nth-child(3) strong {
+  color: #b91c1c;
+}
+
+.today-attendance-row-copy a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.today-attendance-row-copy a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .daily-activity-head,
 .today-attendance-head {
   display: flex;
@@ -954,11 +1010,11 @@ body:has(.landing-shell) {
   overflow: hidden;
   align-content: stretch;
   gap: 10px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .activity-page:has(.activity-page-message) {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .activity-page-toolbar {
@@ -2415,6 +2471,7 @@ textarea {
 
 .page-shell {
   display: block;
+  min-width: 0;
   min-height: max-content;
   overflow: visible;
   padding: 24px;
@@ -5998,6 +6055,7 @@ body {
 }
 
 .leaderboard-month-surface {
+  min-width: 0;
   will-change: transform, opacity;
 }
 
@@ -6013,6 +6071,7 @@ body {
 
 .leaderboard-month-content {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   gap: 1.25rem;
@@ -6020,11 +6079,14 @@ body {
 }
 
 .team-tasks-table-card.leaderboard-table-card {
+  min-width: 0;
   flex: 0 0 auto;
   height: auto !important;
 }
 
 .team-tasks-table-shell.leaderboard-table-shell {
+  min-width: 0;
+  overflow-x: auto;
   height: auto;
   overflow-y: visible;
   overscroll-behavior-y: auto;
@@ -11445,25 +11507,34 @@ body {
   overflow: hidden;
   align-content: stretch;
   gap: 10px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.team-tasks-page > .team-tasks-view-switch {
+  grid-row: 2;
+  align-self: start;
 }
 
 .team-tasks-page > .team-tasks-list,
 .team-tasks-page > .team-tasks-loading-panel {
-  grid-row: 2;
+  grid-row: 3;
 }
 
 .team-tasks-page:has(.warning-banner) {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .team-tasks-page:has(.warning-banner) > .warning-banner {
   grid-row: 2;
 }
 
+.team-tasks-page:has(.warning-banner) > .team-tasks-view-switch {
+  grid-row: 3;
+}
+
 .team-tasks-page:has(.warning-banner) > .team-tasks-list,
 .team-tasks-page:has(.warning-banner) > .team-tasks-loading-panel {
-  grid-row: 3;
+  grid-row: 4;
 }
 
 .team-tasks-toolbar {

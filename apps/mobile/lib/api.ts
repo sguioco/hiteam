@@ -7,6 +7,7 @@ import {
   AttendanceActionResponse,
   AttendanceStatusResponse,
   AttendanceHistoryResponse,
+  MyAttendanceCorrectionRequestItem,
   AttendanceBootstrapResponse,
   ApprovalInboxItem,
   AnnouncementAudience,
@@ -441,7 +442,7 @@ async function fetchOnceWithTimeout(
     });
   } catch (error) {
     if (isAbortError(error) || isNetworkError(error)) {
-      throw new Error(getApiConnectivityErrorMessage(apiUrl));
+      throw new ApiConnectivityError(getApiConnectivityErrorMessage(apiUrl));
     }
 
     throw error;
@@ -450,42 +451,56 @@ async function fetchOnceWithTimeout(
   }
 }
 
-async function fetchWithTimeout(path: string, options?: RequestInit) {
+export class ApiConnectivityError extends Error {
+  name = "ApiConnectivityError";
+}
+
+export class ApiHttpError extends Error {
+  name = "ApiHttpError";
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+  }
+}
+
+type ApiRequestOptions = RequestInit & { retryOnNetwork?: boolean };
+
+async function fetchWithTimeout(path: string, options?: ApiRequestOptions) {
+  const { retryOnNetwork = true, ...fetchOptions } = options ?? {};
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < (retryOnNetwork ? 2 : 1); attempt += 1) {
     try {
-      const response = await fetchOnceWithTimeout(path, options);
+      const response = await fetchOnceWithTimeout(path, fetchOptions);
 
       if (
-        FALLBACK_API_URL &&
+        retryOnNetwork && FALLBACK_API_URL &&
         !response.ok &&
         (await responseLooksLikeHtml(response))
       ) {
-        return await fetchOnceWithTimeout(path, options, FALLBACK_API_URL);
+        return await fetchOnceWithTimeout(path, fetchOptions, FALLBACK_API_URL);
       }
 
       return response;
     } catch (error) {
       lastError = error;
 
-      if (FALLBACK_API_URL) {
+      if (retryOnNetwork && FALLBACK_API_URL) {
         try {
-          return await fetchOnceWithTimeout(path, options, FALLBACK_API_URL);
+          return await fetchOnceWithTimeout(path, fetchOptions, FALLBACK_API_URL);
         } catch (fallbackError) {
           lastError = fallbackError;
         }
       }
 
-      if (attempt === 0) {
+      if (retryOnNetwork && attempt === 0) {
         await wait(API_REQUEST_RETRY_DELAY_MS);
       }
     }
   }
 
-  throw lastError instanceof Error
-    ? new Error(getApiConnectivityErrorMessage())
-    : new Error(getApiConnectivityErrorMessage());
+  throw lastError instanceof ApiConnectivityError
+    ? lastError
+    : new ApiConnectivityError(getApiConnectivityErrorMessage());
 }
 
 async function readPersistedSession(): Promise<AppSession | null> {
@@ -670,7 +685,7 @@ async function authenticateSession(payload: {
 async function performAuthorizedRequest(
   path: string,
   accessToken: string,
-  options?: RequestInit,
+  options?: ApiRequestOptions,
 ) {
   const headers = new Headers(options?.headers ?? {});
 
@@ -686,7 +701,7 @@ async function performAuthorizedRequest(
   });
 }
 
-async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
+async function authRequest<T>(path: string, options?: ApiRequestOptions): Promise<T> {
   let session = await getDemoSession();
   let response = await performAuthorizedRequest(
     path,
@@ -716,11 +731,11 @@ async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(
-        response,
-        `Request failed with status ${response.status}`,
-      ),
+    const payload = await response.clone().json().catch(() => null);
+    throw new ApiHttpError(
+      await readErrorMessage(response, `Request failed with status ${response.status}`),
+      response.status,
+      typeof payload?.code === "string" ? payload.code : undefined,
     );
   }
 
@@ -1748,6 +1763,7 @@ export async function submitAttendanceAction(
   const deviceFingerprint = await getCurrentDeviceFingerprint();
   return authRequest(`/attendance/${action}`, {
     method: "POST",
+    retryOnNetwork: false,
     body: JSON.stringify({
       latitude: payload.latitude,
       longitude: payload.longitude,
@@ -2354,6 +2370,22 @@ export async function loadManagerAttendanceHistory(
 export async function loadMyAttendanceHistory(dateFrom: string, dateTo: string) {
   return authRequest<AttendanceHistoryResponse>(
     `/attendance/me/history?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+  );
+}
+
+export async function loadMyAttendanceCorrectionRequests(dateFrom: string, dateTo: string) {
+  return authRequest<MyAttendanceCorrectionRequestItem[]>(
+    `/attendance/me/correction-requests?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+  );
+}
+
+export async function requestMyAttendanceCorrection(
+  sessionId: string,
+  input: { reason: string; startedAt?: string; endedAt?: string },
+) {
+  return authRequest<{ requestId: string; status: 'PENDING' }>(
+    `/attendance/sessions/${encodeURIComponent(sessionId)}/correction-requests`,
+    { method: 'POST', body: JSON.stringify(input) },
   );
 }
 
