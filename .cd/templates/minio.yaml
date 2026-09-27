@@ -39,6 +39,8 @@ spec:
       labels:
         app: {{ include "hiteam.minioServiceName" . }}
     spec:
+      imagePullSecrets:
+        - name: {{ .Values.sharedInfo.pullSecret.name }}
       containers:
         - name: minio
           image: {{ .Values.minio.image | quote }}

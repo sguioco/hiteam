@@ -31,7 +31,10 @@ services:
 
   minio:
     profiles: ['local-backend']
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: infra/storage/Dockerfile
+      target: minio
     command: server /data --console-address ':9001'
     environment:
       MINIO_ROOT_USER: minio
@@ -49,7 +52,10 @@ services:
 
   createbuckets:
     profiles: ['local-backend']
-    image: minio/mc:latest
+    build:
+      context: .
+      dockerfile: infra/storage/Dockerfile
+      target: mc
     depends_on:
       minio:
         condition: service_healthy

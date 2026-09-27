@@ -158,3 +158,15 @@ The old SSH/docker-compose workflow is still in the repo as a manual fallback:
 
 It is no longer the primary deployment path.
 If `/root/hiteam/.env` is absent on the VPS, the workflow skips compose steps and leaves deployment to ArgoCD.
+# Storage images
+
+The release workflow builds MinIO and its client from the pinned official source
+commits in `infra/storage/Dockerfile`. Upstream Docker Hub and Quay image pulls
+returned authorization errors on 2026-09-27. Both images are published to GHCR
+with the release SHA and use the existing pull secret. The storage volume and
+S3 contract are unchanged. Local Compose builds the same Dockerfile targets.
+
+The installed ArgoCD v3.3.6 repo-server init container failed after restarting
+because `ln -s` found its existing symlink. Its `copyutil` command was corrected
+in the cluster to `ln -sf`, preserving the same link target. Preserve this
+idempotent command when managing the ArgoCD installation.

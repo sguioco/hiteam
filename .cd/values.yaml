@@ -218,8 +218,8 @@ redis:
 
 minio:
   enabled: false
-  image: "minio/minio:latest"
-  mcImage: "minio/mc:latest"
+  image: "ghcr.io/sguioco/hiteam-minio:main-latest"
+  mcImage: "ghcr.io/sguioco/hiteam-mc:main-latest"
   rootUser: "minio"
   rootPassword: "change-me"
   bucket: "smart-prod"

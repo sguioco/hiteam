@@ -12,6 +12,8 @@ spec:
   backoffLimit: 3
   template:
     spec:
+      imagePullSecrets:
+        - name: {{ .Values.sharedInfo.pullSecret.name }}
       restartPolicy: Never
       containers:
         - name: create-bucket
