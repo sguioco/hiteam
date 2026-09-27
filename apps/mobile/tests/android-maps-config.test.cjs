@@ -3,9 +3,9 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const expo = path.join(root, 'node_modules', '.bin', 'expo');
+const expo = require.resolve('expo/bin/cli', { paths: [root] });
 const testKey = 'android-maps-config-test-key';
-const withKey = spawnSync(expo, ['config', '--type', 'introspect', '--json'], {
+const withKey = spawnSync(process.execPath, [expo, 'config', '--type', 'introspect', '--json'], {
   cwd: root,
   env: { ...process.env, GOOGLE_MAPS_ANDROID_API_KEY: testKey },
   encoding: 'utf8',
@@ -19,7 +19,7 @@ assert.equal(keyEntries[0].$['android:value'], testKey);
 
 const envWithoutKey = { ...process.env };
 delete envWithoutKey.GOOGLE_MAPS_ANDROID_API_KEY;
-const withoutKey = spawnSync(expo, ['config', '--type', 'introspect'], {
+const withoutKey = spawnSync(process.execPath, [expo, 'config', '--type', 'introspect'], {
   cwd: root,
   env: envWithoutKey,
   encoding: 'utf8',
