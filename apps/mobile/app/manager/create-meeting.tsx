@@ -337,32 +337,32 @@ export default function CreateMeetingScreen() {
 
   function handleNext() {
     if (!title.trim()) {
-      Alert.alert('Error', t('manager.meetingTopicRequired'));
+      Alert.alert(t('common.error'), t('manager.meetingTopicRequired'));
       return;
     }
 
     if (isDateTimeInPast(selectedDate, startTime)) {
-      Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
+      Alert.alert(t('common.error'), t('manager.meetingPastTimeNotAllowed'));
       return;
     }
 
     if (mode === 'online' && !link.trim()) {
-      Alert.alert('Error', t('manager.meetingLinkRequired'));
+      Alert.alert(t('common.error'), t('manager.meetingLinkRequired'));
       return;
     }
 
     if (mode === 'offline' && !location.trim()) {
-      Alert.alert('Error', t('manager.meetingLocationRequired'));
+      Alert.alert(t('common.error'), t('manager.meetingLocationRequired'));
       return;
     }
 
     if (invitedEmployeeIds.length === 0) {
-      Alert.alert('Error', t('manager.meetingParticipantsRequired'));
+      Alert.alert(t('common.error'), t('manager.meetingParticipantsRequired'));
       return;
     }
 
     if (endTime && buildDateTime(selectedDate, endTime).getTime() <= buildDateTime(selectedDate, startTime).getTime()) {
-      Alert.alert('Error', t('manager.meetingEndAfterStart'));
+      Alert.alert(t('common.error'), t('manager.meetingEndAfterStart'));
       return;
     }
 
@@ -374,7 +374,7 @@ export default function CreateMeetingScreen() {
 
     try {
       if (isDateTimeInPast(selectedDate, startTime)) {
-        Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
+        Alert.alert(t('common.error'), t('manager.meetingPastTimeNotAllowed'));
         setSubmitting(false);
         return;
       }
@@ -402,10 +402,10 @@ export default function CreateMeetingScreen() {
         ),
       );
 
-      Alert.alert('Success', t('manager.meetingCreated'));
+      Alert.alert(t('common.success'), t('manager.meetingCreated'));
       router.back();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : t('manager.meetingCreateError'));
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('manager.meetingCreateError'));
     } finally {
       setSubmitting(false);
     }

@@ -6,6 +6,7 @@ import DateTimePicker, {
 import { StatusBar } from "expo-status-bar";
 import {
   Image,
+  Keyboard,
   Platform,
   RefreshControl,
   ScrollView,
@@ -41,6 +42,7 @@ import {
 } from "../components/bottom-sheet-actions";
 import {
   TimeWheelPicker,
+  TimeWheelPickerPanel,
   type TimeValue,
 } from "../components/TimeWheelPicker";
 import { hasManagerAccess, useAuthFlowState } from "../../lib/auth-flow";
@@ -72,6 +74,7 @@ import { parseTaskMeta } from "../../lib/task-meta";
 import { resolveEmployeeAvatarSource } from "../../lib/employee-avatar";
 import {
   isTaskMeeting,
+  isTaskOverdue,
   isTaskOpen,
   parseTaskDueAt,
 } from "../../lib/task-utils";
@@ -328,17 +331,6 @@ function buildClientTemplateCode(value: string) {
   const base = normalized || "SHIFT";
 
   return `${base.slice(0, Math.max(1, 23 - suffix.length))}-${suffix}`;
-}
-
-function isOverdueTask(task: TaskItem, referenceDate: Date) {
-  if (!isTaskOpen(task.status)) {
-    return false;
-  }
-
-  const dueAt = parseTaskDueAt(task);
-  return Boolean(
-    dueAt && startOfDay(dueAt).getTime() < startOfDay(referenceDate).getTime(),
-  );
 }
 
 function getTaskCalendarDate(task: TaskItem) {
@@ -619,6 +611,8 @@ export default function CalendarScreen({
   const [assignShiftEmployeeIds, setAssignShiftEmployeeIds] = useState<
     string[]
   >([]);
+  const [assignEmployeeSearch, setAssignEmployeeSearch] = useState("");
+  const [assignGroupFilter, setAssignGroupFilter] = useState("");
   const [assignShiftTemplateId, setAssignShiftTemplateId] = useState("");
   const [assignShiftBreakEnabled, setAssignShiftBreakEnabled] = useState(false);
   const [assignShiftBreakStartsAt, setAssignShiftBreakStartsAt] =
@@ -1082,7 +1076,7 @@ export default function CalendarScreen({
 
       const key = formatDateKey(dueAt);
       const nextItems = map.get(key) ?? [];
-      const overdue = isOverdueTask(task, today);
+      const overdue = isTaskOverdue(task, today);
       const authorName = task.managerEmployee
         ? buildEmployeeName(
             task.managerEmployee.firstName,
@@ -1155,8 +1149,7 @@ export default function CalendarScreen({
       .filter(
         (task) =>
           task.status !== "CANCELLED" &&
-          isOverdueTask(task, today) &&
-          buildTaskPhotos(task, locale).length === 0,
+          isTaskOverdue(task, today),
       )
       .sort((left, right) => {
         const leftDueAt = parseTaskDueAt(left)?.getTime() ?? Infinity;
@@ -1573,7 +1566,42 @@ export default function CalendarScreen({
       ),
     [activeManagerEmployeeIdSet, sortedManagerEmployees],
   );
-  const assignShiftEmployeeOptions = sortedManagerEmployees;
+  const assignShiftEmployeeOptions = useMemo(() => {
+    const query = assignEmployeeSearch.trim().toLocaleLowerCase();
+    const group = managerGroups.find(({ id }) => id === assignGroupFilter);
+    const memberIds = group
+      ? new Set(group.memberships.map(({ employeeId }) => employeeId))
+      : null;
+    return sortedManagerEmployees.filter(
+      (employee) =>
+        (!memberIds || memberIds.has(employee.id)) &&
+        (!query ||
+          [
+            employee.firstName,
+            employee.lastName,
+            employee.employeeNumber,
+            employee.position?.name,
+            employee.department?.name,
+          ]
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(query)),
+    );
+  }, [
+    sortedManagerEmployees,
+    managerGroups,
+    assignGroupFilter,
+    assignEmployeeSearch,
+  ]);
+  const assignmentTimePickerVisible =
+    Boolean(templateTimePickerTarget) ||
+    templateBreakDurationPickerVisible ||
+    assignShiftBreakPickerVisible ||
+    assignShiftBreakDurationPickerVisible;
+
+  useEffect(() => {
+    if (assignmentTimePickerVisible) Keyboard.dismiss();
+  }, [assignmentTimePickerVisible]);
 
   const managerFilterLabel = useMemo(() => {
     const selectedCount = activeManagerEmployeeIdSet.size;
@@ -1721,7 +1749,7 @@ export default function CalendarScreen({
         lastName,
         photoCount,
         visuallyDone,
-        isOverdue: !visuallyDone && isOverdueTask(task, today),
+        isOverdue: !visuallyDone && isTaskOverdue(task, today),
       });
     });
 
@@ -1792,7 +1820,7 @@ export default function CalendarScreen({
           isTaskOpen(task.status),
         );
         const pendingOpenTasks = openTasks.filter(
-          (task) => !isOverdueTask(task, today),
+          (task) => !isTaskOverdue(task, today),
         );
 
         stats.all += 1;
@@ -1824,7 +1852,7 @@ export default function CalendarScreen({
         isTaskOpen(task.status),
       );
       const overdueTasks = openTasks.filter((task) =>
-        isOverdueTask(task, today),
+        isTaskOverdue(task, today),
       );
       const pendingTasksCount = openTasks.length - overdueTasks.length;
 
@@ -2012,20 +2040,6 @@ export default function CalendarScreen({
   ]);
 
   useEffect(() => {
-    if (!assignShiftSheetVisible) {
-      return;
-    }
-
-    if (!assignShiftTemplateId && shiftTemplates[0]) {
-      setAssignShiftTemplateId(shiftTemplates[0].id);
-    }
-  }, [
-    assignShiftSheetVisible,
-    assignShiftTemplateId,
-    shiftTemplates,
-  ]);
-
-  useEffect(() => {
     const groupIds = managerShiftGroups.map((group) => group.id);
     const groupKey = groupIds.join("|");
     const groupsChanged = managerShiftGroupKeyRef.current !== groupKey;
@@ -2190,13 +2204,15 @@ export default function CalendarScreen({
   function openAssignShiftSheet(employeeId?: string) {
     hapticSelection();
     setAssignShiftError(null);
+    setAssignEmployeeSearch("");
+    setAssignGroupFilter("");
     setEditingShiftId(null);
     const nextTemplateId = shiftTemplates[0]?.id ?? "";
     setAssignShiftEmployeeIds(
       employeeId
         ? [employeeId]
-        : assignShiftEmployeeOptions[0]
-          ? [assignShiftEmployeeOptions[0].id]
+        : selectedManagerEmployeeIds.length || selectedManagerGroupIds.length
+          ? visibleManagerEmployees.map(({ id }) => id)
           : [],
     );
     setAssignShiftTemplateId(nextTemplateId);
@@ -2212,6 +2228,8 @@ export default function CalendarScreen({
   function openEditShiftSheet(shift: ManagerScheduleShift) {
     hapticSelection();
     setAssignShiftError(null);
+    setAssignEmployeeSearch("");
+    setAssignGroupFilter("");
     setEditingShiftId(shift.id);
     setAssignShiftEmployeeIds([shift.employeeId]);
     setAssignShiftTemplateId(shift.template.id);
@@ -2317,18 +2335,18 @@ export default function CalendarScreen({
 
   async function submitShiftTemplateCreation() {
     const name = templateDraft.name.trim();
-    const fixedBreakDuration = Number(
-      templateDraft.fixedBreakDurationMinutes,
-    );
+    const fixedBreakDuration = Number(templateDraft.fixedBreakDurationMinutes);
 
-    if (!name || !templateLocationId || templateDraft.weekDays.length === 0) {
+    if (!name || templateDraft.weekDays.length === 0) {
       setAssignShiftError(t("calendar.shiftTemplateValidation"));
       return;
     }
 
     if (
       templateDraft.fixedBreakEnabled &&
-      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+      (!Number.isInteger(fixedBreakDuration) ||
+        fixedBreakDuration <= 0 ||
+        fixedBreakDuration > 240)
     ) {
       setAssignShiftError(t("calendar.fixedBreakValidation"));
       return;
@@ -2352,11 +2370,23 @@ export default function CalendarScreen({
           ? fixedBreakDuration
           : 0,
         fixedBreakIsPaid: false,
-        locationId: templateLocationId,
+        locationId: templateLocationId || undefined,
       });
 
       setShiftTemplates((current) => [createdTemplate, ...current]);
       setAssignShiftTemplateId(createdTemplate.id);
+      setAssignShiftBreakEnabled(
+        (createdTemplate.fixedBreakDurationMinutes ?? 0) > 0,
+      );
+      setAssignShiftBreakStartsAt(
+        parseLocalTime(createdTemplate.fixedBreakStartsAtLocal) ?? {
+          hour: 13,
+          minute: 0,
+        },
+      );
+      setAssignShiftBreakDurationMinutes(
+        String(createdTemplate.fixedBreakDurationMinutes ?? 0),
+      );
       setTemplateDraft(createDefaultShiftTemplateDraft());
       setTemplateComposerVisible(false);
       setTemplateTimePickerTarget(null);
@@ -2382,7 +2412,9 @@ export default function CalendarScreen({
 
     if (
       assignShiftBreakEnabled &&
-      (!Number.isFinite(fixedBreakDuration) || fixedBreakDuration <= 0)
+      (!Number.isInteger(fixedBreakDuration) ||
+        fixedBreakDuration <= 0 ||
+        fixedBreakDuration > 240)
     ) {
       setAssignShiftError(t("calendar.fixedBreakValidation"));
       return;
@@ -2424,7 +2456,7 @@ export default function CalendarScreen({
         return;
       }
 
-      const createdShifts = await Promise.all(
+      const results = await Promise.allSettled(
         assignShiftEmployeeIds.map((employeeId) =>
           createManagerShift({
             employeeId,
@@ -2441,7 +2473,22 @@ export default function CalendarScreen({
         ),
       );
 
+      const createdShifts = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
       setManagerShifts((current) => [...createdShifts, ...current]);
+      const failedEmployeeIds = assignShiftEmployeeIds.filter(
+        (_, index) => results[index].status === "rejected",
+      );
+      if (failedEmployeeIds.length) {
+        setAssignShiftEmployeeIds(failedEmployeeIds);
+        setAssignShiftError(
+          t("calendar.assignmentPartialFailure", {
+            count: failedEmployeeIds.length,
+          }),
+        );
+        return;
+      }
       setAssignShiftSheetVisible(false);
       setAssignShiftEmployeeIds([]);
       setAssignShiftTemplateId("");
@@ -3669,7 +3716,7 @@ export default function CalendarScreen({
                         isTaskOpen(task.status),
                       );
                       const pendingTasks = openTasks.filter(
-                        (task) => !isOverdueTask(task, today),
+                        (task) => !isTaskOverdue(task, today),
                       );
                       const visibleRowTasks =
                         managerCalendarTab === "pending"
@@ -4606,502 +4653,681 @@ export default function CalendarScreen({
         solidBackground
         visible={assignShiftSheetVisible}
       >
-        <View
-          className="max-h-[78vh] gap-4 px-5 pt-8"
-          style={{ paddingBottom: bottomSheetActionBottomOffset }}
-        >
-          <View className="items-center">
-            <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
-              {editingShiftId
-                ? t("calendar.editShift")
-                : t("calendar.assignShiftTitle")}
-            </Text>
-            <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
-              {selectedDayLabel}
-            </Text>
-          </View>
-
-          {assignShiftError ? (
-            <View className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
-              <Text className="font-body text-sm leading-6 text-danger">
-                {assignShiftError}
-              </Text>
-            </View>
-          ) : null}
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View className="gap-4 pb-3">
-              <View className="gap-2">
-                <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
-                  {t("calendar.assignShiftEmployee")}
-                  {!editingShiftId && assignShiftEmployeeIds.length > 0
-                    ? ` (${assignShiftEmployeeIds.length})`
-                    : ""}
-                </Text>
-                <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
-                  {assignShiftEmployeeOptions.length ? (
-                    assignShiftEmployeeOptions.map((employee, index) => {
-                      const isSelected = assignShiftEmployeeIds.includes(
-                        employee.id,
-                      );
-                      const showAvatar =
-                        employee.avatar && !failedAvatarEmployeeIds.has(employee.id);
-
-                      return (
-                        <PressableScale
-                          className={`px-4 py-3 ${
-                            index < assignShiftEmployeeOptions.length - 1
-                              ? "border-b border-[#e7ecf5]"
-                              : ""
-                          }`}
-                          haptic="selection"
-                          key={employee.id}
-                          onPress={() => toggleAssignShiftEmployee(employee.id)}
-                        >
-                          <View className="flex-row items-center gap-3">
-                            <View
-                              className={`h-6 w-6 items-center justify-center rounded-full border ${
-                                isSelected
-                                  ? "border-primary bg-primary"
-                                  : "border-[#d7deeb] bg-white"
-                              }`}
-                            >
-                              {isSelected ? (
-                                <Ionicons color="#ffffff" name="checkmark" size={13} />
-                              ) : null}
-                            </View>
-                            {showAvatar ? (
-                              <EmployeeAvatarImage
-                                className="h-10 w-10 rounded-full"
-                                onError={() => markAvatarFailed(employee.id)}
-                                source={employee.avatar}
-                              />
-                            ) : (
-                              <EmployeeAvatarImage
-                                className="h-10 w-10 rounded-full"
-                                source={resolveEmployeeAvatarSource(employee)}
-                              />
-                            )}
-                            <Text
-                              className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
-                              numberOfLines={1}
-                            >
-                              {buildEmployeeName(
-                                employee.firstName,
-                                employee.lastName,
-                              )}
-                            </Text>
-                          </View>
-                        </PressableScale>
-                      );
-                    })
-                  ) : (
-                    <View className="px-4 py-5">
-                      <Text className="text-center font-body text-sm text-muted-foreground">
-                        {t("manager.meetingNoEmployees")}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <View className="gap-3">
-                <View className="flex-row items-center justify-between gap-3 px-1">
-                  <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
-                    {t("calendar.assignShiftTemplate")}
-                  </Text>
-                  <PressableScale
-                    className="min-h-10 flex-row items-center gap-1 px-1 py-2"
-                    disabled={templateSubmitting}
-                    haptic="selection"
-                    onPress={() => {
-                      setAssignShiftError(null);
-                      if (templateComposerVisible) {
-                        setTemplateTimePickerTarget(null);
-                        setTemplateBreakDurationPickerVisible(false);
-                      }
-                      setTemplateComposerVisible((current) => !current);
-                    }}
-                  >
-                    <Ionicons
-                      color="#315cf6"
-                      name={templateComposerVisible ? "close" : "add"}
-                      size={14}
-                    />
-                    <Text className="font-body text-[12px] font-extrabold text-[#315cf6]">
-                      {templateComposerVisible
-                        ? t("calendar.shiftTemplateHide")
-                        : t("calendar.shiftTemplateNew")}
-                    </Text>
-                  </PressableScale>
-                </View>
-
-                {templateComposerVisible ? (
-                  <View className="gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
-                    <View className="gap-2">
-                      <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
-                        {language === "ru" ? "Локация" : "Location"}
-                      </Text>
-                      <ScrollView
-                        contentContainerStyle={{ gap: 8 }}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                      >
-                        {managerLocations.map((location) => {
-                          const selected =
-                            location.id === templateLocationId;
-                          return (
-                            <PressableScale
-                              className={`h-10 justify-center rounded-2xl border px-3 ${
-                                selected
-                                  ? "border-primary bg-primary"
-                                  : "border-[#dce4f2] bg-white"
-                              }`}
-                              haptic="selection"
-                              key={location.id}
-                              onPress={() =>
-                                setTemplateLocationId(location.id)
-                              }
-                            >
-                              <Text
-                                className={`font-body text-[13px] font-bold ${
-                                  selected
-                                    ? "text-white"
-                                    : "text-foreground"
-                                }`}
-                              >
-                                {location.name}
-                              </Text>
-                            </PressableScale>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                    <View>
-                      <Input
-                        autoCapitalize="words"
-                        autoCorrect={false}
-                        className="border-[#dce4f2] bg-white shadow-none"
-                        editable={!templateSubmitting}
-                        keyboardType={
-                          Platform.OS === "android" ? "visible-password" : "default"
-                        }
-                        onChangeText={(name) =>
-                          setTemplateDraft((current) => ({
-                            ...current,
-                            name,
-                          }))
-                        }
-                        placeholder={t("calendar.shiftTemplateNamePlaceholder")}
-                        value={templateDraft.name}
-                      />
-                    </View>
-
-                    <View className="flex-row gap-3">
-                      <PressableScale
-                        className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
-                        containerClassName="flex-1"
-                        haptic="selection"
-                        onPress={() => setTemplateTimePickerTarget("start")}
-                      >
-                        <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                          {t("calendar.shiftTemplateStart")}
-                        </Text>
-                        <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
-                          {formatLocalTime(templateDraft.startsAt)}
-                        </Text>
-                      </PressableScale>
-                      <PressableScale
-                        className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
-                        containerClassName="flex-1"
-                        haptic="selection"
-                        onPress={() => setTemplateTimePickerTarget("end")}
-                      >
-                        <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                          {t("calendar.shiftTemplateEnd")}
-                        </Text>
-                        <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
-                          {formatLocalTime(templateDraft.endsAt)}
-                        </Text>
-                      </PressableScale>
-                    </View>
-
-                    <View className="rounded-[24px] border border-[#dce4f2] bg-white p-4">
-                      <PressableScale
-                        className="flex-row items-center gap-3"
-                        haptic="selection"
-                        onPress={() =>
-                          setTemplateDraft((current) => ({
-                            ...current,
-                            fixedBreakEnabled: !current.fixedBreakEnabled,
-                          }))
-                        }
-                      >
-                        <View
-                          className={`h-6 w-6 items-center justify-center rounded-full border ${
-                            templateDraft.fixedBreakEnabled
-                              ? "border-primary bg-primary"
-                              : "border-[#d7deeb] bg-white"
-                          }`}
-                        >
-                          {templateDraft.fixedBreakEnabled ? (
-                            <Ionicons color="#ffffff" name="checkmark" size={13} />
-                          ) : null}
-                        </View>
-                        <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
-                          {t("calendar.fixedBreak")}
-                        </Text>
-                      </PressableScale>
-
-                      {templateDraft.fixedBreakEnabled ? (
-                        <View className="mt-4 gap-3">
-                          <View className="flex-row gap-3">
-                            <PressableScale
-                              className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
-                              containerClassName="flex-1"
-                              haptic="selection"
-                              onPress={() => setTemplateTimePickerTarget("break")}
-                            >
-                              <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                                {t("calendar.fixedBreakStart")}
-                              </Text>
-                              <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
-                                {formatLocalTime(templateDraft.fixedBreakStartsAt)}
-                              </Text>
-                            </PressableScale>
-                            <PressableScale
-                              className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
-                              containerClassName="flex-1"
-                              haptic="selection"
-                              onPress={() => setTemplateBreakDurationPickerVisible(true)}
-                            >
-                              <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                                {t("calendar.fixedBreakDuration")}
-                              </Text>
-                              <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
-                                {formatBreakDurationLabel(
-                                  templateDraft.fixedBreakDurationMinutes,
-                                  language,
-                                )}
-                              </Text>
-                            </PressableScale>
-                          </View>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <View className="mt-3">
-                      <View className="flex-row items-center justify-between">
-                        {weekdayLabels.map((label, index) => {
-                          const day = index + 1;
-                          const activeDay = templateDraft.weekDays.includes(day);
-
-                          return (
-                            <PressableScale
-                              className={`h-10 w-10 items-center justify-center rounded-full border ${
-                                activeDay
-                                  ? "border-primary bg-primary"
-                                  : "border-[#dce4f2] bg-white"
-                              }`}
-                              haptic="selection"
-                              key={label}
-                              onPress={() => toggleTemplateDraftWeekDay(day)}
-                            >
-                              <Text
-                                className={`font-body text-[11px] font-extrabold ${
-                                  activeDay ? "text-white" : "text-foreground"
-                                }`}
-                                numberOfLines={1}
-                              >
-                                {label}
-                              </Text>
-                            </PressableScale>
-                          );
-                        })}
-                      </View>
-                    </View>
-
-                    <Button
-                      className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
-                      disabled={templateSubmitting || !templateDraft.name.trim()}
-                      fullWidth
-                      label={
-                        templateSubmitting
-                          ? t("common.processing")
-                          : t("calendar.shiftTemplateCreate")
-                      }
-                      onPress={() => {
-                        void submitShiftTemplateCreation();
-                      }}
-                      textClassName="text-white"
-                    />
-                  </View>
-                ) : null}
-
-                {shiftTemplates.length ? (
-                  <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
-                    {shiftTemplates.map((template, index) => {
-                      const isSelected = assignShiftTemplateId === template.id;
-
-                      return (
-                        <PressableScale
-                          className={`px-4 py-3 ${
-                            index < shiftTemplates.length - 1
-                              ? "border-b border-[#e7ecf5]"
-                              : ""
-                          }`}
-                          haptic="selection"
-                          key={template.id}
-                          onPress={() => {
-                            setAssignShiftTemplateId(template.id);
-                            applyAssignShiftBreakDefaults(template.id);
-                          }}
-                        >
-                          <View className="flex-row items-center gap-3">
-                            <View
-                              className={`h-6 w-6 items-center justify-center rounded-full border ${
-                                isSelected
-                                  ? "border-primary bg-primary"
-                                  : "border-[#d7deeb] bg-white"
-                              }`}
-                            >
-                              {isSelected ? (
-                                <Ionicons
-                                  color="#ffffff"
-                                  name="checkmark"
-                                  size={13}
-                                />
-                              ) : null}
-                            </View>
-                            <View className="flex-1">
-                              <Text className="font-body text-[14px] font-semibold text-foreground">
-                                {template.name}
-                              </Text>
-                              <Text className="mt-1 font-body text-[12px] text-muted-foreground">
-                                {template.startsAtLocal} - {template.endsAtLocal}
-                              </Text>
-                            </View>
-                          </View>
-                        </PressableScale>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <Text className="px-1 py-2 text-center font-body text-sm text-muted-foreground">
-                    {t("calendar.noShiftTemplates")}
-                  </Text>
-                )}
-
-                <View className="rounded-[24px] border border-[#e7ecf5] bg-white p-4">
-                  <PressableScale
-                    className="flex-row items-center gap-3"
-                    haptic="selection"
-                    onPress={() =>
-                      setAssignShiftBreakEnabled((current) => !current)
-                    }
-                  >
-                    <View
-                      className={`h-6 w-6 items-center justify-center rounded-full border ${
-                        assignShiftBreakEnabled
-                          ? "border-primary bg-primary"
-                          : "border-[#d7deeb] bg-white"
-                      }`}
-                    >
-                      {assignShiftBreakEnabled ? (
-                        <Ionicons color="#ffffff" name="checkmark" size={13} />
-                      ) : null}
-                    </View>
-                    <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
-                      {t("calendar.fixedBreak")}
-                    </Text>
-                  </PressableScale>
-
-                  {assignShiftBreakEnabled ? (
-                    <View className="mt-4 gap-3">
-                      <View className="flex-row gap-3">
-                        <PressableScale
-                          className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
-                          containerClassName="flex-1"
-                          haptic="selection"
-                          onPress={() => setAssignShiftBreakPickerVisible(true)}
-                        >
-                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                            {t("calendar.fixedBreakStart")}
-                          </Text>
-                          <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
-                            {formatLocalTime(assignShiftBreakStartsAt)}
-                          </Text>
-                        </PressableScale>
-                        <PressableScale
-                          className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
-                          containerClassName="flex-1"
-                          haptic="selection"
-                          onPress={() =>
-                            setAssignShiftBreakDurationPickerVisible(true)
-                          }
-                        >
-                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
-                            {t("calendar.fixedBreakDuration")}
-                          </Text>
-                          <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
-                            {formatBreakDurationLabel(
-                              assignShiftBreakDurationMinutes,
-                              language,
-                            )}
-                          </Text>
-                        </PressableScale>
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-
-          <View className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
-            <View className="flex-1">
-              <Button
-                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#dce4f2] bg-white`}
-                fullWidth
-                label={t("profile.cancel")}
-                onPress={() => {
-                  setAssignShiftSheetVisible(false);
-                  setEditingShiftId(null);
-                  setTemplateComposerVisible(false);
+        {assignmentTimePickerVisible ? (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            className="max-h-[78vh] px-5 pt-8"
+          >
+            {Boolean(templateTimePickerTarget) ? (
+              <TimeWheelPickerPanel
+                bottomPadding={bottomSheetActionBottomOffset}
+                initialValue={
+                  templateTimePickerTarget === "break"
+                    ? templateDraft.fixedBreakStartsAt
+                    : templateTimePickerTarget === "end"
+                      ? templateDraft.endsAt
+                      : templateDraft.startsAt
+                }
+                onApply={(value) => {
+                  setTemplateDraft((current) =>
+                    templateTimePickerTarget === "break"
+                      ? { ...current, fixedBreakStartsAt: value }
+                      : templateTimePickerTarget === "end"
+                        ? { ...current, endsAt: value }
+                        : { ...current, startsAt: value },
+                  );
                   setTemplateTimePickerTarget(null);
+                }}
+                onClose={() => setTemplateTimePickerTarget(null)}
+                title={
+                  templateTimePickerTarget === "break"
+                    ? t("calendar.fixedBreakStart")
+                    : templateTimePickerTarget === "end"
+                      ? t("calendar.shiftTemplateEnd")
+                      : t("calendar.shiftTemplateStart")
+                }
+              />
+            ) : null}
+            {templateBreakDurationPickerVisible ? (
+              <TimeWheelPickerPanel
+                bottomPadding={bottomSheetActionBottomOffset}
+                initialValue={durationStringToTimeValue(
+                  templateDraft.fixedBreakDurationMinutes,
+                )}
+                onApply={(value) => {
+                  setTemplateDraft((current) => ({
+                    ...current,
+                    fixedBreakDurationMinutes:
+                      timeValueToDurationMinutes(value),
+                  }));
                   setTemplateBreakDurationPickerVisible(false);
+                }}
+                onClose={() => setTemplateBreakDurationPickerVisible(false)}
+                title={t("calendar.fixedBreakDuration")}
+                timeMode="duration"
+              />
+            ) : null}
+            {assignShiftBreakPickerVisible ? (
+              <TimeWheelPickerPanel
+                bottomPadding={bottomSheetActionBottomOffset}
+                initialValue={assignShiftBreakStartsAt}
+                onApply={(value) => {
+                  setAssignShiftBreakStartsAt(value);
                   setAssignShiftBreakPickerVisible(false);
+                }}
+                onClose={() => setAssignShiftBreakPickerVisible(false)}
+                title={t("calendar.fixedBreakStart")}
+              />
+            ) : null}
+            {assignShiftBreakDurationPickerVisible ? (
+              <TimeWheelPickerPanel
+                bottomPadding={bottomSheetActionBottomOffset}
+                initialValue={durationStringToTimeValue(
+                  assignShiftBreakDurationMinutes,
+                )}
+                onApply={(value) => {
+                  setAssignShiftBreakDurationMinutes(
+                    timeValueToDurationMinutes(value),
+                  );
                   setAssignShiftBreakDurationPickerVisible(false);
                 }}
-                textClassName="text-foreground"
-                variant="secondary"
+                onClose={() => setAssignShiftBreakDurationPickerVisible(false)}
+                title={t("calendar.fixedBreakDuration")}
+                timeMode="duration"
               />
+            ) : null}
+          </ScrollView>
+        ) : (
+          <View
+            className="max-h-[78vh] gap-4 px-5 pt-8"
+            style={{ paddingBottom: bottomSheetActionBottomOffset }}
+          >
+            <View className="items-center">
+              <Text className="text-center font-display text-[26px] font-extrabold text-foreground">
+                {editingShiftId
+                  ? t("calendar.editShift")
+                  : t("calendar.assignShiftTitle")}
+              </Text>
+              <Text className="mt-2 text-center font-body text-[15px] leading-6 text-muted-foreground">
+                {selectedDayLabel}
+              </Text>
             </View>
-            <View className="flex-1">
-              <Button
-                className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25`}
-                disabled={
-                  assignShiftSubmitting ||
-                  assignShiftEmployeeIds.length === 0 ||
-                  !assignShiftTemplateId ||
-                  !canAssignShiftForSelectedDay
-                }
-                fullWidth
-                label={
-                  assignShiftSubmitting
-                    ? t("common.processing")
-                    : editingShiftId
-                      ? t("calendar.saveShiftChanges")
-                      : t("calendar.assignShiftSave")
-                }
-                onPress={() => {
-                  void submitManagerShiftAssignment();
-                }}
-                textClassName="text-white"
-              />
+
+            {assignShiftError ? (
+              <View className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3">
+                <Text className="font-body text-sm leading-6 text-danger">
+                  {assignShiftError}
+                </Text>
+              </View>
+            ) : null}
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            >
+              <View className="gap-4 pb-3">
+                <View className="gap-2">
+                  <Text className="px-1 font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                    {t("calendar.assignShiftEmployee")}
+                    {!editingShiftId && assignShiftEmployeeIds.length > 0
+                      ? ` (${assignShiftEmployeeIds.length})`
+                      : ""}
+                  </Text>
+                  <Input
+                    accessibilityLabel={t("calendar.employeeSearch")}
+                    placeholder={t("calendar.employeeSearch")}
+                    value={assignEmployeeSearch}
+                    onChangeText={setAssignEmployeeSearch}
+                    autoCorrect={false}
+                    className="border-[#dce4f2] bg-white shadow-none"
+                  />
+                  <ScrollView
+                    horizontal
+                    keyboardShouldPersistTaps="handled"
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8 }}
+                  >
+                    {[
+                      { id: "", name: t("calendar.managerAllEmployees") },
+                      ...managerGroups,
+                    ].map((group) => (
+                      <PressableScale
+                        key={group.id}
+                        onPress={() => setAssignGroupFilter(group.id)}
+                        className={`min-h-10 justify-center rounded-2xl border px-3 py-2 ${assignGroupFilter === group.id ? "border-primary bg-primary" : "border-[#dce4f2] bg-white"}`}
+                      >
+                        <Text
+                          className={`font-body text-sm ${assignGroupFilter === group.id ? "text-white" : "text-foreground"}`}
+                        >
+                          {group.name}
+                        </Text>
+                      </PressableScale>
+                    ))}
+                  </ScrollView>
+                  {!editingShiftId && assignShiftEmployeeOptions.length > 0 ? (
+                    <PressableScale
+                      className="min-h-10 justify-center px-1 py-2"
+                      onPress={() => {
+                        const ids = assignShiftEmployeeOptions.map(
+                          ({ id }) => id,
+                        );
+                        setAssignShiftEmployeeIds((current) =>
+                          ids.every((id) => current.includes(id))
+                            ? current.filter((id) => !ids.includes(id))
+                            : [...new Set([...current, ...ids])],
+                        );
+                      }}
+                    >
+                      <Text className="font-body text-sm font-semibold text-primary">
+                        {t(
+                          assignShiftEmployeeOptions.every(({ id }) =>
+                            assignShiftEmployeeIds.includes(id),
+                          )
+                            ? "calendar.deselectVisible"
+                            : "calendar.selectVisible",
+                        )}
+                      </Text>
+                    </PressableScale>
+                  ) : null}
+                  <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                    {assignShiftEmployeeOptions.length ? (
+                      assignShiftEmployeeOptions.map((employee, index) => {
+                        const isSelected = assignShiftEmployeeIds.includes(
+                          employee.id,
+                        );
+                        const showAvatar =
+                          employee.avatar &&
+                          !failedAvatarEmployeeIds.has(employee.id);
+
+                        return (
+                          <PressableScale
+                            className={`px-4 py-3 ${
+                              index < assignShiftEmployeeOptions.length - 1
+                                ? "border-b border-[#e7ecf5]"
+                                : ""
+                            }`}
+                            haptic="selection"
+                            key={employee.id}
+                            onPress={() =>
+                              toggleAssignShiftEmployee(employee.id)
+                            }
+                          >
+                            <View className="flex-row items-center gap-3">
+                              <View
+                                className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                  isSelected
+                                    ? "border-primary bg-primary"
+                                    : "border-[#d7deeb] bg-white"
+                                }`}
+                              >
+                                {isSelected ? (
+                                  <Ionicons
+                                    color="#ffffff"
+                                    name="checkmark"
+                                    size={13}
+                                  />
+                                ) : null}
+                              </View>
+                              {showAvatar ? (
+                                <EmployeeAvatarImage
+                                  className="h-10 w-10 rounded-full"
+                                  onError={() => markAvatarFailed(employee.id)}
+                                  source={employee.avatar}
+                                />
+                              ) : (
+                                <EmployeeAvatarImage
+                                  className="h-10 w-10 rounded-full"
+                                  source={resolveEmployeeAvatarSource(employee)}
+                                />
+                              )}
+                              <Text
+                                className="min-w-0 flex-1 font-body text-[14px] font-semibold text-foreground"
+                                numberOfLines={1}
+                              >
+                                {buildEmployeeName(
+                                  employee.firstName,
+                                  employee.lastName,
+                                )}
+                              </Text>
+                            </View>
+                          </PressableScale>
+                        );
+                      })
+                    ) : (
+                      <View className="px-4 py-5">
+                        <Text className="text-center font-body text-sm text-muted-foreground">
+                          {t("manager.meetingNoEmployees")}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View className="gap-3">
+                  <View className="flex-row items-center justify-between gap-3 px-1">
+                    <Text className="font-body text-[12px] font-semibold uppercase tracking-[1.1px] text-[#8a96ab]">
+                      {t("calendar.assignShiftTemplate")}
+                    </Text>
+                    <PressableScale
+                      className="min-h-10 flex-row items-center gap-1 px-1 py-2"
+                      disabled={templateSubmitting}
+                      haptic="selection"
+                      onPress={() => {
+                        setAssignShiftError(null);
+                        if (templateComposerVisible) {
+                          setTemplateTimePickerTarget(null);
+                          setTemplateBreakDurationPickerVisible(false);
+                        }
+                        setTemplateComposerVisible((current) => !current);
+                      }}
+                    >
+                      <Ionicons
+                        color="#315cf6"
+                        name={templateComposerVisible ? "close" : "add"}
+                        size={14}
+                      />
+                      <Text className="font-body text-[12px] font-extrabold text-[#315cf6]">
+                        {templateComposerVisible
+                          ? t("calendar.shiftTemplateHide")
+                          : t("calendar.shiftTemplateNew")}
+                      </Text>
+                    </PressableScale>
+                  </View>
+
+                  {templateComposerVisible ? (
+                    <View className="gap-4 rounded-[24px] border border-[#dfe7f2] bg-[#f8fbff] p-4">
+                      {managerLocations.length > 0 ? (
+                        <View className="gap-2">
+                          <Text className="font-body text-[11px] font-semibold uppercase tracking-[1px] text-[#8a96ab]">
+                            {language === "ru" ? "Локация" : "Location"}
+                          </Text>
+                          <ScrollView
+                            contentContainerStyle={{ gap: 8 }}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                          >
+                            {managerLocations.map((location) => {
+                              const selected =
+                                location.id === templateLocationId;
+                              return (
+                                <PressableScale
+                                  className={`h-10 justify-center rounded-2xl border px-3 ${
+                                    selected
+                                      ? "border-primary bg-primary"
+                                      : "border-[#dce4f2] bg-white"
+                                  }`}
+                                  haptic="selection"
+                                  key={location.id}
+                                  onPress={() =>
+                                    setTemplateLocationId(location.id)
+                                  }
+                                >
+                                  <Text
+                                    className={`font-body text-[13px] font-bold ${
+                                      selected
+                                        ? "text-white"
+                                        : "text-foreground"
+                                    }`}
+                                  >
+                                    {location.name}
+                                  </Text>
+                                </PressableScale>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      ) : null}
+                      <View>
+                        <Input
+                          autoCapitalize="words"
+                          autoCorrect={false}
+                          className="border-[#dce4f2] bg-white shadow-none"
+                          editable={!templateSubmitting}
+                          keyboardType={
+                            Platform.OS === "android"
+                              ? "visible-password"
+                              : "default"
+                          }
+                          onChangeText={(name) =>
+                            setTemplateDraft((current) => ({
+                              ...current,
+                              name,
+                            }))
+                          }
+                          placeholder={t(
+                            "calendar.shiftTemplateNamePlaceholder",
+                          )}
+                          value={templateDraft.name}
+                        />
+                      </View>
+
+                      <View className="flex-row gap-3">
+                        <PressableScale
+                          className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
+                          containerClassName="flex-1"
+                          haptic="selection"
+                          onPress={() => setTemplateTimePickerTarget("start")}
+                        >
+                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                            {t("calendar.shiftTemplateStart")}
+                          </Text>
+                          <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
+                            {formatLocalTime(templateDraft.startsAt)}
+                          </Text>
+                        </PressableScale>
+                        <PressableScale
+                          className="h-20 justify-center rounded-2xl border border-[#dce4f2] bg-white px-4"
+                          containerClassName="flex-1"
+                          haptic="selection"
+                          onPress={() => setTemplateTimePickerTarget("end")}
+                        >
+                          <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                            {t("calendar.shiftTemplateEnd")}
+                          </Text>
+                          <Text className="mt-1 font-display text-[19px] font-extrabold leading-6 text-foreground">
+                            {formatLocalTime(templateDraft.endsAt)}
+                          </Text>
+                        </PressableScale>
+                      </View>
+
+                      <View className="rounded-[24px] border border-[#dce4f2] bg-white p-4">
+                        <PressableScale
+                          className="flex-row items-center gap-3"
+                          haptic="selection"
+                          onPress={() =>
+                            setTemplateDraft((current) => ({
+                              ...current,
+                              fixedBreakEnabled: !current.fixedBreakEnabled,
+                            }))
+                          }
+                        >
+                          <View
+                            className={`h-6 w-6 items-center justify-center rounded-full border ${
+                              templateDraft.fixedBreakEnabled
+                                ? "border-primary bg-primary"
+                                : "border-[#d7deeb] bg-white"
+                            }`}
+                          >
+                            {templateDraft.fixedBreakEnabled ? (
+                              <Ionicons
+                                color="#ffffff"
+                                name="checkmark"
+                                size={13}
+                              />
+                            ) : null}
+                          </View>
+                          <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
+                            {t("calendar.fixedBreak")}
+                          </Text>
+                        </PressableScale>
+
+                        {templateDraft.fixedBreakEnabled ? (
+                          <View className="mt-4 gap-3">
+                            <View className="flex-row gap-3">
+                              <PressableScale
+                                className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                                containerClassName="flex-1"
+                                haptic="selection"
+                                onPress={() =>
+                                  setTemplateTimePickerTarget("break")
+                                }
+                              >
+                                <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                                  {t("calendar.fixedBreakStart")}
+                                </Text>
+                                <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                                  {formatLocalTime(
+                                    templateDraft.fixedBreakStartsAt,
+                                  )}
+                                </Text>
+                              </PressableScale>
+                              <PressableScale
+                                className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                                containerClassName="flex-1"
+                                haptic="selection"
+                                onPress={() =>
+                                  setTemplateBreakDurationPickerVisible(true)
+                                }
+                              >
+                                <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                                  {t("calendar.fixedBreakDuration")}
+                                </Text>
+                                <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                                  {formatBreakDurationLabel(
+                                    templateDraft.fixedBreakDurationMinutes,
+                                    language,
+                                  )}
+                                </Text>
+                              </PressableScale>
+                            </View>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View className="mt-3">
+                        <View className="flex-row items-center justify-between">
+                          {weekdayLabels.map((label, index) => {
+                            const day = index + 1;
+                            const activeDay =
+                              templateDraft.weekDays.includes(day);
+
+                            return (
+                              <PressableScale
+                                className={`h-10 w-10 items-center justify-center rounded-full border ${
+                                  activeDay
+                                    ? "border-primary bg-primary"
+                                    : "border-[#dce4f2] bg-white"
+                                }`}
+                                haptic="selection"
+                                key={label}
+                                onPress={() => toggleTemplateDraftWeekDay(day)}
+                              >
+                                <Text
+                                  className={`font-body text-[11px] font-extrabold ${
+                                    activeDay ? "text-white" : "text-foreground"
+                                  }`}
+                                  numberOfLines={1}
+                                >
+                                  {label}
+                                </Text>
+                              </PressableScale>
+                            );
+                          })}
+                        </View>
+                      </View>
+
+                      <Button
+                        className="min-h-12 rounded-[20px] border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25"
+                        disabled={templateSubmitting}
+                        fullWidth
+                        label={
+                          templateSubmitting
+                            ? t("common.processing")
+                            : t("calendar.shiftTemplateCreate")
+                        }
+                        onPress={() => {
+                          void submitShiftTemplateCreation();
+                        }}
+                        textClassName="text-white"
+                      />
+                    </View>
+                  ) : null}
+
+                  {shiftTemplates.length ? (
+                    <View className="overflow-hidden rounded-[24px] border border-[#e7ecf5] bg-white">
+                      {shiftTemplates.map((template, index) => {
+                        const isSelected =
+                          assignShiftTemplateId === template.id;
+
+                        return (
+                          <PressableScale
+                            className={`px-4 py-3 ${
+                              index < shiftTemplates.length - 1
+                                ? "border-b border-[#e7ecf5]"
+                                : ""
+                            }`}
+                            haptic="selection"
+                            key={template.id}
+                            onPress={() => {
+                              const nextId = isSelected ? "" : template.id;
+                              setAssignShiftTemplateId(nextId);
+                              applyAssignShiftBreakDefaults(nextId);
+                            }}
+                          >
+                            <View className="flex-row items-center gap-3">
+                              <View
+                                className={`h-6 w-6 items-center justify-center rounded-full border ${
+                                  isSelected
+                                    ? "border-primary bg-primary"
+                                    : "border-[#d7deeb] bg-white"
+                                }`}
+                              >
+                                {isSelected ? (
+                                  <Ionicons
+                                    color="#ffffff"
+                                    name="checkmark"
+                                    size={13}
+                                  />
+                                ) : null}
+                              </View>
+                              <View className="flex-1">
+                                <Text className="font-body text-[14px] font-semibold text-foreground">
+                                  {template.name}
+                                </Text>
+                                <Text className="mt-1 font-body text-[12px] text-muted-foreground">
+                                  {template.startsAtLocal} -{" "}
+                                  {template.endsAtLocal}
+                                </Text>
+                              </View>
+                            </View>
+                          </PressableScale>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text className="px-1 py-2 text-center font-body text-sm text-muted-foreground">
+                      {t("calendar.noShiftTemplates")}
+                    </Text>
+                  )}
+
+                  <View className="rounded-[24px] border border-[#e7ecf5] bg-white p-4">
+                    <PressableScale
+                      className="flex-row items-center gap-3"
+                      haptic="selection"
+                      onPress={() =>
+                        setAssignShiftBreakEnabled((current) => !current)
+                      }
+                    >
+                      <View
+                        className={`h-6 w-6 items-center justify-center rounded-full border ${
+                          assignShiftBreakEnabled
+                            ? "border-primary bg-primary"
+                            : "border-[#d7deeb] bg-white"
+                        }`}
+                      >
+                        {assignShiftBreakEnabled ? (
+                          <Ionicons
+                            color="#ffffff"
+                            name="checkmark"
+                            size={13}
+                          />
+                        ) : null}
+                      </View>
+                      <Text className="flex-1 font-body text-[14px] font-semibold text-foreground">
+                        {t("calendar.fixedBreak")}
+                      </Text>
+                    </PressableScale>
+
+                    {assignShiftBreakEnabled ? (
+                      <View className="mt-4 gap-3">
+                        <View className="flex-row gap-3">
+                          <PressableScale
+                            className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                            containerClassName="flex-1"
+                            haptic="selection"
+                            onPress={() =>
+                              setAssignShiftBreakPickerVisible(true)
+                            }
+                          >
+                            <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                              {t("calendar.fixedBreakStart")}
+                            </Text>
+                            <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                              {formatLocalTime(assignShiftBreakStartsAt)}
+                            </Text>
+                          </PressableScale>
+                          <PressableScale
+                            className="h-16 justify-center rounded-2xl border border-[#dce4f2] bg-[#f8fbff] px-4"
+                            containerClassName="flex-1"
+                            haptic="selection"
+                            onPress={() =>
+                              setAssignShiftBreakDurationPickerVisible(true)
+                            }
+                          >
+                            <Text className="font-body text-[11px] font-semibold uppercase leading-[14px] tracking-[1px] text-[#8a96ab]">
+                              {t("calendar.fixedBreakDuration")}
+                            </Text>
+                            <Text className="mt-1 font-display text-[18px] font-extrabold leading-6 text-foreground">
+                              {formatBreakDurationLabel(
+                                assignShiftBreakDurationMinutes,
+                                language,
+                              )}
+                            </Text>
+                          </PressableScale>
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View className={BOTTOM_SHEET_ACTION_ROW_CLASS}>
+              <View className="flex-1">
+                <Button
+                  className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-[#dce4f2] bg-white`}
+                  fullWidth
+                  label={t("profile.cancel")}
+                  onPress={() => {
+                    setAssignShiftSheetVisible(false);
+                    setEditingShiftId(null);
+                    setTemplateComposerVisible(false);
+                    setTemplateTimePickerTarget(null);
+                    setTemplateBreakDurationPickerVisible(false);
+                    setAssignShiftBreakPickerVisible(false);
+                    setAssignShiftBreakDurationPickerVisible(false);
+                  }}
+                  textClassName="text-foreground"
+                  variant="secondary"
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  className={`${BOTTOM_SHEET_ACTION_BUTTON_CLASS} border-transparent bg-[#315cf6] shadow-sm shadow-[#315cf6]/25`}
+                  disabled={
+                    assignShiftSubmitting ||
+                    assignShiftEmployeeIds.length === 0 ||
+                    !assignShiftTemplateId ||
+                    !canAssignShiftForSelectedDay
+                  }
+                  fullWidth
+                  label={
+                    assignShiftSubmitting
+                      ? t("common.processing")
+                      : editingShiftId
+                        ? t("calendar.saveShiftChanges")
+                        : t("calendar.assignShiftSave")
+                  }
+                  onPress={() => {
+                    void submitManagerShiftAssignment();
+                  }}
+                  textClassName="text-white"
+                />
+              </View>
             </View>
           </View>
-        </View>
+        )}
       </BottomSheetModal>
 
       <BottomSheetModal
@@ -5403,75 +5629,6 @@ export default function CalendarScreen({
           </View>
         </View>
       </BottomSheetModal>
-
-      <TimeWheelPicker
-        initialValue={
-          templateTimePickerTarget === "break"
-            ? templateDraft.fixedBreakStartsAt
-            : templateTimePickerTarget === "end"
-              ? templateDraft.endsAt
-              : templateDraft.startsAt
-        }
-        onApply={(value) => {
-          setTemplateDraft((current) =>
-            templateTimePickerTarget === "break"
-              ? { ...current, fixedBreakStartsAt: value }
-              : templateTimePickerTarget === "end"
-                ? { ...current, endsAt: value }
-                : { ...current, startsAt: value },
-          );
-          setTemplateTimePickerTarget(null);
-        }}
-        onClose={() => setTemplateTimePickerTarget(null)}
-        title={
-          templateTimePickerTarget === "break"
-            ? t("calendar.fixedBreakStart")
-            : templateTimePickerTarget === "end"
-              ? t("calendar.shiftTemplateEnd")
-              : t("calendar.shiftTemplateStart")
-        }
-        visible={Boolean(templateTimePickerTarget)}
-      />
-
-      <TimeWheelPicker
-        initialValue={durationStringToTimeValue(
-          templateDraft.fixedBreakDurationMinutes,
-        )}
-        onApply={(value) => {
-          setTemplateDraft((current) => ({
-            ...current,
-            fixedBreakDurationMinutes: timeValueToDurationMinutes(value),
-          }));
-          setTemplateBreakDurationPickerVisible(false);
-        }}
-        onClose={() => setTemplateBreakDurationPickerVisible(false)}
-        title={t("calendar.fixedBreakDuration")}
-        timeMode="duration"
-        visible={templateBreakDurationPickerVisible}
-      />
-
-      <TimeWheelPicker
-        initialValue={assignShiftBreakStartsAt}
-        onApply={(value) => {
-          setAssignShiftBreakStartsAt(value);
-          setAssignShiftBreakPickerVisible(false);
-        }}
-        onClose={() => setAssignShiftBreakPickerVisible(false)}
-        title={t("calendar.fixedBreakStart")}
-        visible={assignShiftBreakPickerVisible}
-      />
-
-      <TimeWheelPicker
-        initialValue={durationStringToTimeValue(assignShiftBreakDurationMinutes)}
-        onApply={(value) => {
-          setAssignShiftBreakDurationMinutes(timeValueToDurationMinutes(value));
-          setAssignShiftBreakDurationPickerVisible(false);
-        }}
-        onClose={() => setAssignShiftBreakDurationPickerVisible(false)}
-        title={t("calendar.fixedBreakDuration")}
-        timeMode="duration"
-        visible={assignShiftBreakDurationPickerVisible}
-      />
 
       {Platform.OS === "android" && rescheduleDatePickerVisible ? (
         <DateTimePicker

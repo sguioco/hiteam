@@ -416,17 +416,17 @@ export default function CreateTaskScreen() {
 
   async function handleSubmit() {
     if (!title.trim()) {
-      Alert.alert('Error', 'Task title is required.');
+      Alert.alert(t('common.error'), t('manager.createTaskTitleRequired'));
       return;
     }
 
     if (hasDueTime && isDateTimeInPast(selectedDate, dueTime)) {
-      Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
+      Alert.alert(t('common.error'), t('manager.meetingPastTimeNotAllowed'));
       return;
     }
 
     if (selectedAssigneeIds.length === 0) {
-      Alert.alert('Error', 'Select at least one assignee.');
+      Alert.alert(t('common.error'), t('manager.createTaskAssigneeRequired'));
       return;
     }
 
@@ -468,10 +468,10 @@ export default function CreateTaskScreen() {
         );
       }
 
-      Alert.alert('Success', isRecurring ? 'Recurring tasks created successfully.' : 'Tasks created successfully.');
+      Alert.alert(t('common.success'), t(isRecurring ? 'manager.createTaskRecurringCreated' : 'manager.createTaskCreated'), [{ text: t('common.done') }]);
       router.back();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create tasks.');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('manager.createTaskError'));
     } finally {
       setSubmitting(false);
     }
@@ -545,44 +545,35 @@ export default function CreateTaskScreen() {
             </ScrollView>
           </View>
 
-          <View className="rounded-[24px] border border-white/30 bg-white px-4 py-3 shadow-sm shadow-[#1f2687]/10">
-            <View className="flex-row items-center gap-3">
-              <PressableScale
-                className={`h-6 w-6 items-center justify-center rounded-[7px] border ${
-                  hasDueTime ? 'border-primary bg-primary' : 'border-[#bcc8da] bg-white'
-                }`}
-                haptic="selection"
-                onPress={toggleDueTime}
-              >
-                {hasDueTime ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
-              </PressableScale>
-              <PressableScale
-                className="flex-1"
-                haptic="selection"
-                onPress={toggleDueTime}
-              >
-                <Text className="text-[14px] font-semibold text-foreground">{t('manager.createTaskDeadlineToggle')}</Text>
-                <Text className="mt-1 text-[12px] text-muted-foreground">
-                  {dateOptions.find((option) => option.key === selectedDateKey)?.title}
-                </Text>
-              </PressableScale>
-              <PressableScale
-                className={`min-h-11 min-w-[96px] flex-row items-center justify-center gap-2 rounded-full border px-4 ${
-                  hasDueTime ? 'border-primary/25 bg-primary/10' : 'border-[#d8e2f0] bg-[#f8fafc]'
-                }`}
-                haptic="selection"
-                onPress={() => {
-                  setDueTime((current) => normalizeDueTimeForDate(selectedDate, current));
-                  setHasDueTime(true);
-                  setTimePickerOpen(true);
-                }}
-              >
-                <Ionicons color={hasDueTime ? '#546cf2' : '#6b7a90'} name="time-outline" size={17} />
-                <Text className={`text-[14px] font-bold ${hasDueTime ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {hasDueTime ? formatTime(dueTime.hour, dueTime.minute) : language === 'ru' ? 'Время' : 'Time'}
-                </Text>
-              </PressableScale>
-            </View>
+          <View className="flex-row items-center gap-3">
+            <PressableScale
+              accessibilityLabel={t('manager.createTaskDeadlineToggle')}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: hasDueTime }}
+              className={`h-6 w-6 items-center justify-center rounded-[7px] border ${
+                hasDueTime ? 'border-primary bg-primary' : 'border-[#bcc8da] bg-white'
+              }`}
+              haptic="selection"
+              onPress={toggleDueTime}
+            >
+              {hasDueTime ? <Ionicons color="#ffffff" name="checkmark" size={15} /> : null}
+            </PressableScale>
+            <PressableScale
+              className={`min-h-11 min-w-[96px] flex-row items-center justify-center gap-2 rounded-full border px-4 ${
+                hasDueTime ? 'border-primary/25 bg-primary/10' : 'border-[#d8e2f0] bg-[#f8fafc]'
+              }`}
+              haptic="selection"
+              onPress={() => {
+                setDueTime((current) => normalizeDueTimeForDate(selectedDate, current));
+                setHasDueTime(true);
+                setTimePickerOpen(true);
+              }}
+            >
+              <Ionicons color={hasDueTime ? '#546cf2' : '#6b7a90'} name="time-outline" size={17} />
+              <Text className={`text-[14px] font-bold ${hasDueTime ? 'text-primary' : 'text-muted-foreground'}`}>
+                {hasDueTime ? formatTime(dueTime.hour, dueTime.minute) : language === 'ru' ? 'Время' : 'Time'}
+              </Text>
+            </PressableScale>
           </View>
 
           <View className="flex-row items-start px-1">
@@ -773,7 +764,7 @@ export default function CreateTaskScreen() {
         initialValue={dueTime}
         onApply={(value) => {
           if (isDateTimeInPast(selectedDate, value)) {
-            Alert.alert('Error', t('manager.meetingPastTimeNotAllowed'));
+            Alert.alert(t('common.error'), t('manager.meetingPastTimeNotAllowed'));
             setDueTime(normalizeDueTimeForDate(selectedDate, value));
           } else {
             setDueTime(value);

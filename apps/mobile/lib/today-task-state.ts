@@ -1,6 +1,6 @@
 import type { TaskItem } from '@smart/types';
-import { formatDateKeyInTimeZone, isDateKeyBefore } from './timezone';
-import { isTaskMeeting, isTaskOpen, parseTaskDueAt } from './task-utils';
+import { formatDateKeyInTimeZone } from './timezone';
+import { isTaskMeeting, isTaskOpen, isTaskOverdue } from './task-utils';
 
 function normalizeTodayTaskTitle(title: string) {
   return title
@@ -105,25 +105,8 @@ export function countOpenTodayTasks(
   ).length;
 }
 
-export function countOverdueTodayTasks(
-  tasks: TaskItem[],
-  dateKey: string,
-  timeZone?: string | null,
-) {
-  return tasks.filter((task) => {
-    if (!isTaskOpen(task.status)) {
-      return false;
-    }
-
-    const dueAt = parseTaskDueAt(task);
-    return Boolean(
-      dueAt &&
-        isDateKeyBefore(
-          formatDateKeyInTimeZone(dueAt, timeZone),
-          dateKey,
-        ),
-    );
-  }).length;
+export function countOverdueTodayTasks(tasks: TaskItem[], now = new Date()) {
+  return tasks.filter((task) => isTaskOverdue(task, now)).length;
 }
 
 export function getTodayNavBadgeState(
@@ -134,7 +117,7 @@ export function getTodayNavBadgeState(
   const visibleTasks = collapseDuplicateTodayTasks(tasks, timeZone);
   const todayDateKey = formatDateKeyInTimeZone(now, timeZone);
   const openTodayTaskCount = countOpenTodayTasks(visibleTasks, todayDateKey, timeZone);
-  const overdueCount = countOverdueTodayTasks(visibleTasks, todayDateKey, timeZone);
+  const overdueCount = countOverdueTodayTasks(visibleTasks, now);
 
   return {
     openTodayTaskCount,

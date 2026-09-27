@@ -1,3 +1,4 @@
+import { serializeAnnouncement } from "./announcement-upload";
 import { Platform } from "react-native";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
@@ -599,6 +600,11 @@ export function getCachedDemoSession() {
 }
 
 async function readErrorMessage(response: Response, fallbackMessage: string) {
+  if (response.status === 413) {
+    return getRuntimeBackendLocale() === "ru"
+      ? "Файл или вложения слишком большие. Уменьшите их размер и попробуйте ещё раз."
+      : "The file or attachments are too large. Reduce their size and try again.";
+  }
   const text = await response.text();
 
   if (response.status >= 500) {
@@ -2125,7 +2131,7 @@ export async function createManagerAnnouncement(input: {
 
   return authRequest<AnnouncementItem>("/collaboration/announcements", {
     method: "POST",
-    body: JSON.stringify({
+    body: serializeAnnouncement({
       audience:
         input.audience ?? (locationId ? "LOCATION" : "ALL"),
       ...(locationId ? { locationId } : {}),
@@ -2157,7 +2163,7 @@ export async function createManagerAnnouncement(input: {
         ? { imageAspectRatio: input.imageAspectRatio }
         : {}),
       ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
-    }),
+    }, getRuntimeBackendLocale()),
   });
 }
 

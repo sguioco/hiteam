@@ -29,7 +29,7 @@ import {
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
   getBottomSheetActionBottomOffset,
 } from './bottom-sheet-actions';
-import { parseTaskDueAt } from '../../lib/task-utils';
+import { isTaskOverdue, parseTaskDueAt } from '../../lib/task-utils';
 
 type TaskListProps = {
   loading?: boolean;
@@ -146,6 +146,19 @@ function buildTaskPhotos(task: TaskItem, locale: string, t: (key: string, vars?:
       }),
       uri: proof.url ?? '',
     }));
+}
+
+function photoErrorMessage(error: unknown, fallback: string, incompatibleApp: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (/NoSuchMethodError|NoClassDefFoundError|UnsatisfiedLinkError/.test(error.message)) {
+    console.warn('Photo module is incompatible with the installed app:', error);
+    return incompatibleApp;
+  }
+  if (/ExponentImagePicker|expo\.modules|Call to function/.test(error.message)) {
+    console.warn('Photo selection failed:', error);
+    return fallback;
+  }
+  return error.message;
 }
 
 export default function TaskList({
@@ -268,7 +281,7 @@ export default function TaskList({
     });
   }, [activeTaskPhotos]);
 
-  const totalCountLabel = useMemo(() => `${visibleTaskCount}`, [visibleTaskCount]);
+  const totalCountLabel = String(activeTasks.length);
 
   function photoLimitErrorMessage() {
     return t('today.photoLimitError', { limit: 7 });
@@ -455,7 +468,7 @@ export default function TaskList({
       await uploadPhotoAsset(result.assets[0], photoSourceAction);
     } catch (error) {
       hapticError();
-      setMediaError(error instanceof Error ? error.message : t('today.photoCaptureFailed'));
+      setMediaError(photoErrorMessage(error, t('today.photoCaptureFailed'), t('today.photoAppUpdateRequired')));
     } finally {
       setMediaBusy(false);
     }
@@ -483,7 +496,7 @@ export default function TaskList({
       await uploadPhotoAsset(result.assets[0], photoSourceAction);
     } catch (error) {
       hapticError();
-      setMediaError(error instanceof Error ? error.message : t('today.photoSelectionFailed'));
+      setMediaError(photoErrorMessage(error, t('today.photoSelectionFailed'), t('today.photoAppUpdateRequired')));
     } finally {
       setMediaBusy(false);
     }
@@ -588,16 +601,10 @@ export default function TaskList({
     const photoCount =
       (taskPhotos[task.id]?.length ?? 0) +
       (pendingPhotosByTaskId[task.id]?.length ?? 0);
-    const dueAt = parseTaskDueAt(task);
     const dueTimeLabel = formatTaskDueTime(task, locale);
-    const isOverdue = Boolean(dueAt && task.status !== 'DONE' && task.status !== 'CANCELLED' && dueAt.getTime() < Date.now());
+    const isOverdue = isTaskOverdue(task);
     const metaColor = completed ? '#8fa1bb' : isOverdue ? '#ef4444' : '#64748b';
-    const photoMetaLabel =
-      task.requiresPhoto && photoCount > 0
-        ? completed
-          ? t('today.photosSaved', { count: photoCount })
-          : t('today.photosAttached', { count: photoCount })
-        : null;
+    const previewPhotos = [...(taskPhotos[task.id] ?? []), ...(pendingPhotosByTaskId[task.id] ?? [])].slice(0, 3);
 
     return (
       <Animated.View
@@ -628,10 +635,19 @@ export default function TaskList({
             ) : (
               <View className="mt-1 h-4 w-[72%] rounded-full bg-[#e2eaf6]" />
             )}
-            {photoMetaLabel ? (
-              <Text className="mt-1 text-[11px]" style={{ color: completed ? '#8fa1bb' : '#94a3b8' }}>
-                {photoMetaLabel}
-              </Text>
+            {photoCount > 0 ? (
+              <View className="mt-2 flex-row items-center gap-2">
+                {previewPhotos.map((photo) => failedPhotoIds.includes(photo.id) ? (
+                  <View key={photo.id} className="h-10 w-10 items-center justify-center rounded-lg bg-[#eef3fb]">
+                    <Ionicons name="image-outline" size={20} color="#64748b" />
+                  </View>
+                ) : (
+                  <Image key={photo.id} source={{ uri: photo.uri }} accessibilityLabel={photo.label}
+                    className="h-10 w-10 rounded-lg" resizeMode="cover"
+                    onError={() => setFailedPhotoIds((current) => [...new Set([...current, photo.id])])} />
+                ))}
+                <Text className="flex-shrink text-[12px] text-[#64748b]">{t('today.photoReportCount', { count: photoCount })}</Text>
+              </View>
             ) : null}
           </View>
           {dueTimeLabel ? (
@@ -680,29 +696,33 @@ export default function TaskList({
             </View>
           </View>
         ) : visibleTaskCount > 0 ? (
-          <View className="overflow-hidden rounded-[28px] bg-white">
-            {activeTasks.map((task, index) => (
-              <View key={task.id}>
-                {renderTaskRow(task, index)}
-                {index < activeTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
+          <View className="gap-5">
+            {activeTasks.length > 0 ? (
+              <View className="overflow-hidden rounded-[28px] bg-white">
+                {activeTasks.map((task, index) => (
+                  <View key={task.id}>
+                    {renderTaskRow(task, index)}
+                    {index < activeTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
+                  </View>
+                ))}
               </View>
-            ))}
-
+            ) : null}
             {completedTasks.length > 0 ? (
-              <>
-                {activeTasks.length > 0 ? <View className="mx-5 mt-1 h-px bg-[#edf1f7]" /> : null}
+              <View className="gap-2">
                 <View className="px-5 pb-2 pt-4">
                   <Text className="text-[12px] uppercase text-[#8a96ab]" style={sectionMetaStyle}>
                     {t('today.completedSection')} ({completedTasks.length})
                   </Text>
                 </View>
-                {completedTasks.map((task, index) => (
-                  <View key={task.id}>
-                    {renderTaskRow(task, index, true)}
-                    {index < completedTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
+                <View className="overflow-hidden rounded-[28px] border border-white/80 bg-white/70">
+                  {completedTasks.map((task, index) => (
+                    <View key={task.id}>
+                      {renderTaskRow(task, index, true)}
+                      {index < completedTasks.length - 1 ? <View className="ml-14 h-px bg-[#edf1f7]" /> : null}
                   </View>
                 ))}
-              </>
+                </View>
+              </View>
             ) : null}
           </View>
         ) : (

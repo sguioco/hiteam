@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { AppState, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../components/ui/text';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { AttendanceStatusResponse, TaskItem } from '@smart/types';
@@ -95,10 +95,15 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<string[]>([]);
   const businessTimeZone = profile?.primaryLocation?.timezone ?? null;
-  const todayDateKey = useMemo(
-    () => formatDateKeyInTimeZone(new Date(), businessTimeZone),
-    [businessTimeZone],
-  );
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setNow(new Date());
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
+  const todayDateKey = formatDateKeyInTimeZone(now, businessTimeZone);
 
   const refreshAttendance = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -244,9 +249,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
     [businessTimeZone, todayDateKey, visibleTasks],
   );
 
-  const overdueCount = useMemo(() => {
-    return countOverdueTodayTasks(visibleTasks, todayDateKey, businessTimeZone);
-  }, [businessTimeZone, todayDateKey, visibleTasks]);
+  const overdueCount = countOverdueTodayTasks(visibleTasks, new Date());
 
   const effectiveAttendanceStatus = useMemo<AttendanceStatusResponse | null>(() => {
     if (!attendanceTrackingEnabled) {
@@ -460,7 +463,7 @@ const TodayScreen = ({ onOpenOverdue }: TodayScreenProps) => {
                 >
                   <Ionicons color="#ef4444" name="warning-outline" size={20} />
                   <Text className="flex-1 font-body text-sm font-semibold text-[#dc2626]">
-                    {t('today.overdueBanner', { count: overdueCount })}
+                    {t(attendanceStatus?.attendanceState === 'checked_out' ? 'today.overdueAfterShift' : 'today.overdueBanner', { count: overdueCount })}
                   </Text>
                   <Ionicons color="#ef4444" name="chevron-forward" size={16} style={directionalIconStyle} />
                 </Pressable>

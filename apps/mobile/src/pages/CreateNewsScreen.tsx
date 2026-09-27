@@ -1,3 +1,4 @@
+import { ANNOUNCEMENT_MAX_BINARY_BYTES, announcementSizeError } from "../../lib/announcement-upload";
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -126,15 +127,15 @@ function normalizeAnnouncementLink(value: string) {
 }
 
 function formatAttachmentSize(sizeBytes: number | null, language: string) {
-  if (!sizeBytes || sizeBytes <= 0) {
+  if (sizeBytes == null) {
     return localizeText(language, 'Документ', 'Document');
   }
 
   if (sizeBytes < 1024 * 1024) {
     return localizeText(
       language,
-      `${Math.max(1, Math.round(sizeBytes / 1024))} КБ`,
-      `${Math.max(1, Math.round(sizeBytes / 1024))} KB`,
+      `${Math.ceil(sizeBytes / 1024)} КБ`,
+      `${Math.ceil(sizeBytes / 1024)} KB`,
     );
   }
 
@@ -640,7 +641,7 @@ export default function CreateNewsScreen() {
         if (!permission.granted) {
           hapticError();
           Alert.alert(
-            'Error',
+            t('common.error'),
             t('manager.createNewsPhotoPermissionDenied'),
           );
           return;
@@ -673,7 +674,7 @@ export default function CreateNewsScreen() {
     } catch (error) {
       hapticError();
       Alert.alert(
-        'Error',
+        t('common.error'),
         error instanceof Error ? error.message : t('manager.createNewsPhotoError'),
       );
     }
@@ -742,6 +743,17 @@ export default function CreateNewsScreen() {
     const nextAssets = result.assets.slice(0, remainingSlots);
 
     try {
+      // Check sizes before reading files into memory; metadata can be absent.
+      let totalBytes = attachments.reduce((sum, item) => sum + (item.dataUrl.split(',')[1]?.length ?? 0) * 3 / 4, 0)
+        + (imageDraft?.dataUrl.split(',')[1]?.length ?? 0) * 3 / 4;
+      for (const asset of nextAssets) {
+        const info = typeof asset.size === 'number' ? null : await FileSystem.getInfoAsync(asset.uri);
+        const size = asset.size ?? (info?.exists ? info.size : undefined);
+        if (size === undefined) throw new Error(localizeText(language, 'Не удалось прочитать размер файла. Выберите файл ещё раз.', 'Unable to read the file size. Please select it again.'));
+        if (asset.name.length > 180) throw new Error(localizeText(language, 'Название файла слишком длинное. Сократите его до 180 символов.', 'The file name is too long. Shorten it to 180 characters.'));
+        totalBytes += size;
+        if (totalBytes >= ANNOUNCEMENT_MAX_BINARY_BYTES) throw new Error(announcementSizeError(language));
+      }
       const nextAttachments = await Promise.all(
         nextAssets.map(async (asset) => {
           const base64 = await FileSystem.readAsStringAsync(asset.uri, {
@@ -1051,12 +1063,12 @@ export default function CreateNewsScreen() {
 
   async function handleSubmit() {
     if (!title.trim()) {
-      Alert.alert('Error', t('manager.createNewsTitleRequired'));
+      Alert.alert(t('common.error'), t('manager.createNewsTitleRequired'));
       return;
     }
 
     if (!body.trim()) {
-      Alert.alert('Error', t('manager.createNewsBodyRequired'));
+      Alert.alert(t('common.error'), t('manager.createNewsBodyRequired'));
       return;
     }
 
@@ -1192,6 +1204,7 @@ export default function CreateNewsScreen() {
             autoCorrect={false}
             className="w-full rounded-2xl border-2 border-border bg-white text-[16px] text-foreground"
             keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
+            maxLength={160}
             onChangeText={setTitle}
             placeholder={t('manager.createNewsTitlePlaceholder')}
             style={[textDirectionStyle, { paddingHorizontal: 18, paddingVertical: 16 }]}
@@ -1204,6 +1217,7 @@ export default function CreateNewsScreen() {
             keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
             multiline
             numberOfLines={8}
+            maxLength={4000}
             onChangeText={setBody}
             placeholder={t('manager.createNewsBodyPlaceholder')}
             style={textDirectionStyle}
@@ -1317,8 +1331,8 @@ export default function CreateNewsScreen() {
                   <Text className="mt-1 text-[13px] text-muted-foreground">
                     {localizeText(
                       language,
-                      'PDF, Excel, Word, CSV, TXT и архивы.',
-                      'PDF, Excel, Word, CSV, TXT, and archives.',
+                      'До 5 документов. Общий размер фото и документов — меньше 6 МБ.',
+                      'Up to 5 documents. Photo and documents combined must be below 6 MB.',
                     )}
                   </Text>
                 </View>
@@ -1566,15 +1580,6 @@ export default function CreateNewsScreen() {
 
             {scheduleEnabled ? (
               <View className="gap-2">
-                <View className="rounded-[18px] bg-[#f8fbff] px-4 py-3">
-                  <Text className="text-[11px] font-bold uppercase tracking-[1px] text-muted-foreground">
-                    {localizeText(language, 'Публикация', 'Publish at')}
-                  </Text>
-                  <Text className="mt-1 text-[15px] font-semibold leading-5 text-foreground">
-                    {`${formatDateLabel(scheduledAt, language)}, ${formatTimeLabel(scheduledAt)}`}
-                  </Text>
-                </View>
-
                 <View className="gap-2">
                   {Platform.OS === 'ios' ? (
                     <View className="min-h-[58px] flex-row items-center justify-between gap-3 rounded-[18px] border border-[#d8e2f0] bg-white px-4 py-3">

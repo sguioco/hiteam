@@ -23,6 +23,11 @@ export function isTaskOpen(status: TaskStatus) {
   return status !== 'DONE' && status !== 'CANCELLED';
 }
 
+export function isTaskOverdue(task: TaskItem, now = new Date()) {
+  const dueAt = parseTaskDueAt(task);
+  return isTaskOpen(task.status) && dueAt !== null && dueAt.getTime() < now.getTime();
+}
+
 export function isTaskMeeting(task: TaskItem) {
   const meta = parseTaskMeta(task.description);
   return Boolean(meta.meeting) || task.title.startsWith('Встреча:') || task.title.startsWith('Meeting:');
