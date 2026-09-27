@@ -1,6 +1,6 @@
 {
   "name": "@smart/mobile",
-  "version": "5.0.10",
+  "version": "5.0.11",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
