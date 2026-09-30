@@ -991,7 +991,7 @@ export class KommoService {
   private async syncLifecycleEvent(
     tenantId: string,
     event: KommoLifecycleEvent,
-    options: KommoLifecycleEventOptions,
+    options: KommoLifecycleEventOptions & { sendEmail?: boolean },
   ) {
     const kommoEnabled = this.getConfig().enabled;
     const lifecycleEmailsEnabled = this.lifecycleEmailService.isEnabled();
@@ -1009,20 +1009,31 @@ export class KommoService {
       return;
     }
 
-    const lifecycleEmailResult = await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
+    const emailKey = `${key}:email`;
+    const emailAlreadySent = options.sendEmail === false || Boolean(await this.prisma.kommoAutomationLog.findFirst({
+      where: { tenantId, key: emailKey },
+      select: { id: true },
+    }));
+    const lifecycleEmailResult = emailAlreadySent ? undefined : await this.lifecycleEmailService.sendLifecycleEmail({ tenantId, event }).catch((error) => {
       this.logger.warn(
         `Lifecycle email ${event} failed for tenant ${tenantId}: ${this.getErrorMessage(error)}`,
       );
       return undefined;
     });
 
-    if (
+    // Email delivery and Kommo synchronization are independent: a Kommo outage
+    // must not cause an accepted email to be sent again on the next cron run.
+    if (lifecycleEmailResult?.status === 'accepted') {
+      await this.createAutomationLogOnce(tenantId, emailKey);
+    }
+
+    if (!emailAlreadySent && (
       !lifecycleEmailResult ||
       lifecycleEmailResult.status === 'failed' ||
       lifecycleEmailResult.status === 'disabled' ||
       lifecycleEmailResult.status === 'no_recipient' ||
       lifecycleEmailResult.status === 'missing_tenant'
-    ) {
+    )) {
       this.logger.warn(
         `Lifecycle event ${event} for tenant ${tenantId} continues with email delivery status ${lifecycleEmailResult?.status ?? 'unknown'}.`,
       );
@@ -1030,6 +1041,7 @@ export class KommoService {
 
     const shouldRetryEmail =
       lifecycleEmailsEnabled &&
+      !emailAlreadySent &&
       lifecycleEmailResult?.status !== 'accepted' &&
       lifecycleEmailResult?.status !== 'missing_tenant';
 
@@ -1114,6 +1126,9 @@ export class KommoService {
           note: `Trial expired on ${this.toDateKey(snapshot.trialEndDate)}.`,
           taskText: 'HiTeam trial expired. Contact the customer and help activate subscription.',
           key: `lifecycle:trial_expired:${this.toDateKey(snapshot.trialEndDate)}`,
+          // An expiry notice is timely only around the end of the trial. An old
+          // unpaid workspace must not receive a new notice after every outage.
+          sendEmail: now - snapshot.trialEndDate.getTime() <= oneDayMs,
         },
       );
     }

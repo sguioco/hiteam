@@ -884,6 +884,62 @@ async function testEmployeeEmailDeliveryIsVisibleInKommoNote() {
   });
 }
 
+async function testAcceptedEmailIsNotResentWhenKommoFails() {
+  const sent: string[] = [];
+  const keys = new Set<string>();
+  const service = createKommoService({
+    config: { KOMMO_ENABLED: 'true' },
+    lifecycleEmailService: {
+      isEnabled: () => true,
+      sendLifecycleEmail: async ({ event }) => {
+        sent.push(event);
+        return { status: 'accepted', event };
+      },
+    },
+  });
+  (service as unknown as { prisma: { kommoAutomationLog: unknown } }).prisma.kommoAutomationLog = {
+    findFirst: async ({ where }: { where: { key: string } }) => keys.has(where.key) ? { id: where.key } : null,
+    create: async ({ data }: { data: { key: string } }) => {
+      keys.add(data.key);
+      return { id: data.key };
+    },
+  };
+  (service as unknown as { syncTenant: () => Promise<never> }).syncTenant = async () => {
+    throw new Error('Kommo unavailable');
+  };
+  const sync = (service as unknown as {
+    syncLifecycleEvent: (tenantId: string, event: string, options: { key: string; note: string }) => Promise<void>;
+  }).syncLifecycleEvent.bind(service);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await assert.rejects(sync('tenant-1', 'trial_expired', {
+      key: 'lifecycle:trial_expired:2026-09-30', note: 'Trial expired.',
+    }), /Kommo unavailable/);
+  }
+  assert.deepEqual(sent, ['trial_expired']);
+  assert.equal(keys.has('lifecycle:trial_expired:2026-09-30:email'), true);
+}
+
+async function testOldTrialDoesNotSendEmail() {
+  let emailCalls = 0;
+  const service = createKommoService({
+    config: { KOMMO_ENABLED: 'true' },
+    lifecycleEmailService: {
+      isEnabled: () => true,
+      sendLifecycleEmail: async () => {
+        emailCalls += 1;
+        return { status: 'accepted' };
+      },
+    },
+  });
+  (service as unknown as { syncTenant: () => Promise<{ leadId: null }> }).syncTenant = async () => ({ leadId: null });
+  await (service as unknown as {
+    syncLifecycleEvent: (tenantId: string, event: string, options: { key: string; note: string; sendEmail: boolean }) => Promise<void>;
+  }).syncLifecycleEvent('tenant-1', 'trial_expired', {
+    key: 'lifecycle:trial_expired:2026-08-03', note: 'Trial expired.', sendEmail: false,
+  });
+  assert.equal(emailCalls, 0);
+}
+
 async function main() {
   await testSeatPurchaseReasonRoutesToPaymentLifecycle();
   await testOrganizationRegistrationIncludesManagerEmailDeliveryInKommoNote();
@@ -897,6 +953,8 @@ async function main() {
   await testTaskTemplateCreateBuildsKommoNote();
   await testTaskTemplateDeleteBuildsKommoNote();
   await testEmployeeEmailDeliveryIsVisibleInKommoNote();
+  await testAcceptedEmailIsNotResentWhenKommoFails();
+  await testOldTrialDoesNotSendEmail();
   console.log('kommo flow tests passed');
 }
 
