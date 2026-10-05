@@ -194,7 +194,7 @@ async function prefetchImageSources(
     new Set(
       sources
         .map(getRemoteImageUri)
-        .filter((uri): uri is string => Boolean(uri)),
+        .filter((uri): uri is string => Boolean(uri) && !uri!.includes('/media/task-photo-proofs/')),
     ),
   );
 

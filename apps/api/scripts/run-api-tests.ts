@@ -31,6 +31,7 @@ const suites = [
   'src/modules/attendance/attendance-correction-access.test.ts',
   'src/modules/audit/activity-task-links.test.ts',
   'src/common/access/access-regression.test.ts',
+  'src/modules/storage/task-photo-access.test.ts',
 ] as const;
 
 function runSuite(relativePath: (typeof suites)[number]) {

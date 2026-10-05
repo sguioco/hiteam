@@ -23,6 +23,7 @@ import { Button } from "../../components/ui/button";
 import { PressableScale } from "../../components/ui/pressable-scale";
 import BottomSheetModal from "../components/BottomSheetModal";
 import { EmployeeAvatarImage } from "../components/employee-avatar-image";
+import { TaskProofImage } from "../components/task-proof-image";
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_TEXT_CLASS,
@@ -1262,7 +1263,7 @@ export default function ManagerScreen({
                   className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
                   style={{ height: photoViewerPreviewHeight }}
                 >
-                  <Image
+                  <TaskProofImage
                     onError={() => markPhotoLoadFailed(selectedPhoto.id)}
                     onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                     resizeMode="contain"

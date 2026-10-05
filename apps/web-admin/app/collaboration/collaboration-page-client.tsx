@@ -1,4 +1,5 @@
 'use client';
+import { taskPhotoUrl } from '@/lib/task-photo-url';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -334,7 +335,7 @@ export default function CollaborationPageClient({
                   return (
                     <a
                       className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--panel)]"
-                      href={proof.url ?? '#'}
+                      href={proof.url ? taskPhotoUrl(proof.url) : '#'}
                       key={proof.id}
                       rel="noreferrer"
                       style={{ opacity: isActive ? 1 : 0.56 }}
@@ -344,7 +345,7 @@ export default function CollaborationPageClient({
                         <img
                           alt={proof.fileName}
                           className="block h-20 w-20 object-cover"
-                          src={proof.url}
+                          src={taskPhotoUrl(proof.url)}
                         />
                       ) : (
                         <div className="flex h-20 w-20 items-center justify-center text-xs text-[color:var(--muted-foreground)]">

@@ -15,6 +15,7 @@ function load(file, overrides = {}) {
   vm.runInNewContext(output, { exports, URLSearchParams, require(name) {
     if (Object.hasOwn(overrides, name)) return overrides[name];
     if (name === '@/lib/task-meta') return load('lib/task-meta.ts');
+    if (name === '@/lib/task-photo-url') return load('lib/task-photo-url.ts');
     if (name === '@/components/ui/workspace-patterns') return load('components/ui/workspace-patterns.tsx', { '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
     if (name === './billing-countries') return load('lib/billing-countries.ts');
     // Render dialog content without the browser-only portal; retain actual component logic.
@@ -24,6 +25,10 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+const { taskPhotoUrl } = load('lib/task-photo-url.ts');
+assert.equal(taskPhotoUrl('https://api.hiteam.net/api/v1/media/task-photo-proofs/abc/file'), '/api/task-photo-proofs/abc');
+assert.equal(taskPhotoUrl('data:image/png;base64,abc'), 'data:image/png;base64,abc');
+assert.equal(taskPhotoUrl('https://demo.invalid/avatar.png'), 'https://demo.invalid/avatar.png');
 const patterns = load('components/ui/workspace-patterns.tsx', { '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
 assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspacePageHeader, { title: 'A very long workspace title', description: 'Context' })), /break-words/);
 assert.match(renderToStaticMarkup(React.createElement(patterns.WorkspaceFeedback, { title: 'Request failed', tone: 'error' })), /role="alert"/);

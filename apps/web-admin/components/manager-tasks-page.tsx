@@ -1,4 +1,5 @@
 "use client";
+import { taskPhotoUrl } from "@/lib/task-photo-url";
 
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
 import { TaskActions } from "@/components/task-actions";
@@ -1505,7 +1506,7 @@ export function ManagerTasksPage({
           )
           .map((proof) => ({
             id: proof.id,
-            url: proof.url,
+            url: taskPhotoUrl(proof.url),
           }));
 
         const match: TaskSearchMatch = {
@@ -2675,7 +2676,7 @@ export function ManagerTasksPage({
               {photoProofDialogTask?.proofs.map((proof) => (
                 <a
                   className="team-tasks-photo-dialog-card"
-                  href={proof.url}
+                  href={taskPhotoUrl(proof.url)}
                   key={proof.id}
                   rel="noreferrer"
                   target="_blank"
@@ -2683,7 +2684,7 @@ export function ManagerTasksPage({
                   <img
                     alt={localize(locale, "Фотоотчёт по задаче", "Task photo proof")}
                     className="team-tasks-photo-dialog-image"
-                    src={proof.url}
+                    src={taskPhotoUrl(proof.url)}
                   />
                 </a>
               ))}

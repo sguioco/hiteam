@@ -797,6 +797,19 @@ export async function getDemoAccessToken(): Promise<string> {
   return session.accessToken;
 }
 
+// Image requests cannot use authRequest's 401 refresh flow themselves.
+// Validate the session through the same flow before handing a token to Image.
+let photoSessionValidation: Promise<unknown> | null = null;
+export async function getTaskPhotoAccessToken(): Promise<string> {
+  if (!photoSessionValidation) {
+    photoSessionValidation = authRequest('/auth/me').finally(() => {
+      photoSessionValidation = null;
+    });
+  }
+  await photoSessionValidation;
+  return (await getDemoSession()).accessToken;
+}
+
 export async function translateTexts(
   texts: string[],
   targetLocale: AppLanguage,

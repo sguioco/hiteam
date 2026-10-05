@@ -30,6 +30,7 @@ import {
   getBottomSheetActionBottomOffset,
 } from './bottom-sheet-actions';
 import { isTaskOverdue, parseTaskDueAt } from '../../lib/task-utils';
+import { TaskProofImage } from './task-proof-image';
 
 type TaskListProps = {
   loading?: boolean;
@@ -96,7 +97,7 @@ function prewarmPhotoUris(uris: Array<string | null | undefined>) {
         .map((uri) => uri?.trim())
         .filter((uri): uri is string => Boolean(uri)),
     ),
-  ).filter((uri) => !warmedPhotoUris.has(uri));
+  ).filter((uri) => !uri.includes('/media/task-photo-proofs/') && !warmedPhotoUris.has(uri));
 
   if (!nextUris.length) {
     return;
@@ -642,7 +643,7 @@ export default function TaskList({
                     <Ionicons name="image-outline" size={20} color="#64748b" />
                   </View>
                 ) : (
-                  <Image key={photo.id} source={{ uri: photo.uri }} accessibilityLabel={photo.label}
+                  <TaskProofImage key={photo.id} source={{ uri: photo.uri }} accessibilityLabel={photo.label}
                     className="h-10 w-10 rounded-lg" resizeMode="cover"
                     onError={() => setFailedPhotoIds((current) => [...new Set([...current, photo.id])])} />
                 ))}
@@ -824,7 +825,7 @@ export default function TaskList({
                       className="overflow-hidden rounded-[26px] bg-[#dbe7ff]"
                       style={{ height: photoPreviewHeight }}
                     >
-                      <Image
+                      <TaskProofImage
                         onError={() => markPhotoLoadFailed(selectedPhoto.id)}
                         onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                         resizeMode="contain"

@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"AWS": ["*"]},
+    "Action": ["s3:GetObject"],
+    "Resource": [
+      "arn:aws:s3:::smart-local/employees/*/avatars/*",
+      "arn:aws:s3:::smart-local/tenants/*/announcements/*",
+      "arn:aws:s3:::smart-local/tenants/*/requests/*",
+      "arn:aws:s3:::smart-local/exports/*",
+      "arn:aws:s3:::smart-local/biometric/*"
+    ]
+  }]
+}

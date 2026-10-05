@@ -59,11 +59,13 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    volumes:
+      - ./infra/storage/local-public-policy.json:/config/public-policy.json:ro
     entrypoint: >
       /bin/sh -c "
       until (/usr/bin/mc alias set local http://minio:9000 minio miniosecret) do echo 'waiting for minio' && sleep 1; done;
       /usr/bin/mc mb -p local/smart-local || true;
-      /usr/bin/mc anonymous set download local/smart-local || true;
+      /usr/bin/mc anonymous set-json /config/public-policy.json local/smart-local || exit 1;
       exit 0;
       "
 
@@ -152,7 +154,7 @@ services:
       NEXT_PUBLIC_GRAPHQL_URL: ${NEXT_PUBLIC_GRAPHQL_URL:-http://localhost:4000/graphql}
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
       NEXT_PUBLIC_WEB_ADMIN_BASE_URL: ${NEXT_PUBLIC_WEB_ADMIN_BASE_URL:-http://localhost:3000}
-      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://localhost:4000}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://host.docker.internal:4000}
       WEB_ADMIN_BASE_URL: ${WEB_ADMIN_BASE_URL:-http://localhost:3000}
     ports:
       - '3000:3000'

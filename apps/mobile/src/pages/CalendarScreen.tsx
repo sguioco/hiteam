@@ -34,6 +34,7 @@ import type {
 } from "@smart/types";
 import BottomSheetModal from "../components/BottomSheetModal";
 import { EmployeeAvatarImage } from "../components/employee-avatar-image";
+import { TaskProofImage } from "../components/task-proof-image";
 import {
   BOTTOM_SHEET_ACTION_BUTTON_CLASS,
   BOTTOM_SHEET_ACTION_ROW_CLASS,
@@ -4290,7 +4291,7 @@ export default function CalendarScreen({
                   className="mb-1 overflow-hidden rounded-[26px] bg-[#dbe7ff]"
                   style={{ height: photoViewerPreviewHeight }}
                 >
-                  <Image
+                  <TaskProofImage
                     onError={() => markPhotoLoadFailed(selectedPhoto.id)}
                     onLoad={() => clearPhotoLoadFailed(selectedPhoto.id)}
                     resizeMode="contain"

@@ -1,4 +1,5 @@
 "use client";
+import { taskPhotoUrl } from "@/lib/task-photo-url";
 
 import { CalendarFilterSummary } from "./calendar-filter-summary";
 
@@ -1383,7 +1384,7 @@ export default function Schedule({
           departmentName: department,
           photoProofs: getActivePhotoProofs(task).map((proof) => ({
             id: proof.id,
-            url: proof.url,
+            url: taskPhotoUrl(proof.url),
           })),
           requiresPhoto: task.requiresPhoto,
           roleId: employeeMeta?.roleId ?? null,
@@ -4404,7 +4405,7 @@ export default function Schedule({
             {photoProofDialogTask?.proofs.map((proof) => (
               <a
                 className="team-tasks-photo-dialog-card"
-                href={proof.url}
+                href={taskPhotoUrl(proof.url)}
                 key={proof.id}
                 rel="noreferrer"
                 target="_blank"
@@ -4412,7 +4413,7 @@ export default function Schedule({
                 <img
                   alt={ui.photoProofs}
                   className="team-tasks-photo-dialog-image"
-                  src={proof.url}
+                  src={taskPhotoUrl(proof.url)}
                 />
               </a>
             ))}

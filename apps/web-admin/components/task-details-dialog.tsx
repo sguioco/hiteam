@@ -4,6 +4,7 @@ import type { TaskItem, TaskStatus } from "@smart/types";
 import { useRef, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseTaskMeta } from "@/lib/task-meta";
+import { taskPhotoUrl } from "@/lib/task-photo-url";
 
 const statuses: Record<TaskStatus, [string, string]> = {
   TODO: ["К выполнению", "To do"],
@@ -58,7 +59,7 @@ export function TaskDetailsDialog({ task, title, locale, onClose, actions }: {
           {!actions && task.checklistItems.length > 0 && <section className="grid gap-2"><h3 className="font-semibold">{label("Чек-лист", "Checklist")}</h3><ul className="grid gap-2">{[...task.checklistItems].sort((a,b) => a.sortOrder - b.sortOrder).map(item => <li key={item.id} className="flex gap-2"><span aria-label={item.isCompleted ? label("Выполнено", "Completed") : label("Не выполнено", "Not completed")}>{item.isCompleted ? "✓" : "○"}</span><span>{item.title}</span></li>)}</ul></section>}
           <section className="grid gap-2"><h3 className="font-semibold">{label("Фотоотчёты", "Photo proofs")}</h3>
             {!proofs.length && <p className="text-[color:var(--muted-foreground)]">{task.requiresPhoto ? label("Фото обязательно, но ещё не добавлено", "Photo required, not uploaded yet") : label("Нет фотографий", "No photos")}</p>}
-            <div className="grid grid-cols-2 gap-3">{proofs.map(proof => proof.url ? <a href={proof.url} key={proof.id} target="_blank" rel="noopener noreferrer"><img className="aspect-square w-full rounded-xl object-cover" src={proof.url} alt={label("Фотоотчёт", "Photo proof")} /></a> : <p key={proof.id}>{label("Фотография недоступна", "Photo unavailable")}</p>)}</div>
+            <div className="grid grid-cols-2 gap-3">{proofs.map(proof => proof.url ? <a href={taskPhotoUrl(proof.url)} key={proof.id} target="_blank" rel="noopener noreferrer"><img className="aspect-square w-full rounded-xl object-cover" src={taskPhotoUrl(proof.url)} alt={label("Фотоотчёт", "Photo proof")} /></a> : <p key={proof.id}>{label("Фотография недоступна", "Photo unavailable")}</p>)}</div>
           </section>
           {actions}
           <section className="grid gap-2"><h3 className="font-semibold">{label("История и комментарии", "History and comments")}</h3>

@@ -144,10 +144,7 @@ export class StorageService {
   }
 
   getTaskPhotoProofUrl(proofId: string, storageKey?: string) {
-    return (
-      this.resolveApiUrl(`/media/task-photo-proofs/${encodeURIComponent(proofId)}/file`) ??
-      (storageKey ? this.resolveUrl(storageKey) : null)
-    );
+    return this.resolveApiUrl(`/media/task-photo-proofs/${encodeURIComponent(proofId)}/file`);
   }
 
   private resolveUrl(key: string) {

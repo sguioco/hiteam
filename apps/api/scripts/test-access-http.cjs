@@ -1,6 +1,7 @@
 // Run only against the isolated local audit fixture, never production.
 const assert = require('node:assert/strict');
 const { PrismaClient } = require('@prisma/client');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const db = new PrismaClient();
 const base = 'http://localhost:4000/api/v1';
 const slug = 'qa-functional-audit-2026-10-05';
@@ -23,14 +24,18 @@ async function run() {
   const employee = users.find(u => u.email.startsWith('qa-employee@'));
   const manager = users.find(u => u.email.startsWith('qa-manager@'));
   const tokens = {};
+  const sessions = {};
   for (const user of users) {
     const login = await request('/auth/login', null, { email: user.email, tenantSlug: slug, password: process.env.QA_ACCEPTANCE_PASSWORD });
-    assert.equal(login.status, 201); tokens[user.id] = login.data.accessToken;
+    assert.equal(login.status, 201); tokens[user.id] = login.data.accessToken; sessions[user.id] = login.data;
   }
   assert.equal((await request('/collaboration/tasks/me')).status, 401);
   const roles = await db.userRole.findMany({ where: { userId: manager.id } });
   const subscription = await db.billingSubscription.findUnique({ where: { tenantId: tenant.id } });
   let groupId;
+  let photoTaskId;
+  let photoKey;
+  const storage = new S3Client({ region: 'us-east-1', endpoint: 'http://localhost:9000', forcePathStyle: true, credentials: { accessKeyId: 'minio', secretAccessKey: 'miniosecret' } });
   try {
     await db.user.update({ where: { id: employee.id }, data: { workspaceAccessAllowed: false } });
     assert.equal((await request('/collaboration/tasks/me', tokens[employee.id])).status, 403);
@@ -62,8 +67,51 @@ async function run() {
     const exported = await fetch(base + '/payroll/export?format=csv&dateFrom=2026-10-05&dateTo=2026-10-06', { headers: { Authorization: `Bearer ${tokens[manager.id]}` } });
     assert.equal(exported.status, 200);
     assert.ok(!(await exported.text()).includes('Olivia'), 'Scoped export must not contain the HQ owner');
+    const task = await db.task.create({ data: { tenantId: tenant.id, managerEmployeeId: owner.employee.id, assigneeEmployeeId: employee.employee.id, locationId: owner.employee.primaryLocationId, title: 'Temporary private photo regression' } });
+    photoTaskId = task.id;
+    photoKey = `tenants/${tenant.id}/tasks/${task.id}/http-photo-test.jpg`;
+    await storage.send(new PutObjectCommand({ Bucket: 'smart-local', Key: photoKey, Body: Buffer.from('test-photo'), ContentType: 'image/jpeg' }));
+    const proof = await db.taskPhotoProof.create({ data: { tenantId: tenant.id, taskId: task.id, uploadedByEmployeeId: employee.employee.id, fileName: 'test.jpg', storageKey: photoKey } });
+    const photoPath = `/media/task-photo-proofs/${proof.id}/file`;
+    const photo = token => fetch(base + photoPath, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    assert.equal((await photo()).status, 401);
+    assert.equal((await photo(tokens[manager.id])).status, 404, 'South-scoped manager cannot access HQ task proof');
+    const readable = await photo(tokens[employee.id]);
+    assert.equal(readable.status, 200);
+    assert.equal(readable.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(await readable.text(), 'test-photo');
+    if (process.env.QA_TEST_WEB === 'true') {
+      const webPhotoUrl = `http://localhost:3000/api/task-photo-proofs/${proof.id}`;
+      assert.equal((await fetch(webPhotoUrl)).status, 401);
+      const cookie = `smart_admin_session=${Buffer.from(JSON.stringify(sessions[employee.id])).toString('base64url')}`;
+      const webPhoto = await fetch(webPhotoUrl, { headers: { Cookie: cookie } });
+      assert.equal(webPhoto.status, 200);
+      assert.equal(webPhoto.headers.get('Cache-Control'), 'private, no-store');
+      assert.equal(webPhoto.headers.get('Content-Security-Policy'), "default-src 'none'; sandbox");
+      assert.equal(await webPhoto.text(), 'test-photo');
+      const managerCookie = `smart_admin_session=${Buffer.from(JSON.stringify(sessions[manager.id])).toString('base64url')}`;
+      assert.equal((await fetch(webPhotoUrl, { headers: { Cookie: managerCookie } })).status, 404);
+      console.log('Web photo proxy HTTP tests passed');
+    }
+    assert.equal((await fetch(`http://localhost:9000/smart-local/${photoKey}`)).status, 403, 'Raw storage URL must not bypass API authorization');
+    assert.equal((await photo(tokens[owner.id])).status, 200);
+    const replacement = await db.taskPhotoProof.create({ data: { tenantId: tenant.id, taskId: task.id, uploadedByEmployeeId: employee.employee.id, fileName: 'replacement.jpg', storageKey: photoKey } });
+    await db.taskPhotoProof.update({ where: { id: proof.id }, data: { supersededByProofId: replacement.id } });
+    assert.equal((await photo(tokens[employee.id])).status, 404);
+    await db.taskPhotoProof.update({ where: { id: proof.id }, data: { supersededByProofId: null } });
+    await db.task.update({ where: { id: task.id }, data: { assigneeEmployeeId: owner.employee.id } });
+    assert.equal((await photo(tokens[employee.id])).status, 404, 'Hot object cache must not bypass changed task access');
+    await db.task.update({ where: { id: task.id }, data: { assigneeEmployeeId: employee.employee.id } });
+    await db.taskPhotoProof.update({ where: { id: proof.id }, data: { deletedAt: new Date() } });
+    assert.equal((await photo(tokens[employee.id])).status, 404);
+    await db.taskPhotoProof.update({ where: { id: proof.id }, data: { deletedAt: null } });
+    await db.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } });
+    assert.equal((await photo(tokens[employee.id])).status, 404);
+    console.log('HTTP protected photos passed: anonymous, scoped denial, authorized bytes, no-store, raw storage denial, superseded/deleted proof/task, access revocation.');
     console.log('HTTP access regressions passed: anonymous, pending, auth exception, private chat, balances, payroll.');
   } finally {
+    if (photoTaskId) await db.task.delete({ where: { id: photoTaskId } });
+    if (photoKey) await storage.send(new DeleteObjectCommand({ Bucket: 'smart-local', Key: photoKey }));
     await db.user.update({ where: { id: employee.id }, data: { workspaceAccessAllowed: employee.workspaceAccessAllowed } });
     for (const role of roles) await db.userRole.update({ where: { id: role.id }, data: { scopeType: role.scopeType, scopeId: role.scopeId } });
     if (subscription) await db.billingSubscription.update({ where: { tenantId: tenant.id }, data: { paidSeats: subscription.paidSeats, status: subscription.status, trialStartedAt: subscription.trialStartedAt, trialEndsAt: subscription.trialEndsAt } });
