@@ -2,7 +2,9 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 
-const slug = 'qa-ux-acceptance';
+const functionalAudit = process.env.QA_FIXTURE_KIND === 'functional-audit';
+const slug = functionalAudit ? 'qa-functional-audit-2026-10-05' : 'qa-ux-acceptance';
+const emailDomain = functionalAudit ? 'functional-audit.invalid' : 'ux-acceptance.invalid';
 const databaseUrl = process.env.DATABASE_URL;
 const password = process.env.QA_ACCEPTANCE_PASSWORD;
 
@@ -65,7 +67,7 @@ async function main() {
       { key: 'employee', role: 'employee', number: 'QA-003', first: 'Evan', last: 'Employee', location: 'SOUTH', position: 'EMPLOYEE' },
     ]) {
       const user = await tx.user.create({ data: {
-        tenantId: tenant.id, email: `qa-${person.key}@ux-acceptance.invalid`,
+        tenantId: tenant.id, email: `qa-${person.key}@${emailDomain}`,
         passwordHash, status: 'ACTIVE', preferredLocale: 'en',
       } });
       await tx.userRole.create({ data: {

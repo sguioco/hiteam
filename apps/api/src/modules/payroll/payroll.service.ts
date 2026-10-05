@@ -3,6 +3,7 @@ import { RequestStatus, RequestType, ShiftStatus } from '@prisma/client';
 import PDFDocument = require('pdfkit');
 import * as XLSX from 'xlsx';
 import { AuditService } from '../audit/audit.service';
+import { EmployeeScopeService } from '../../common/access/employee-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateHolidayCalendarDayDto } from './dto/create-holiday-calendar-day.dto';
 import { UpdatePayrollPolicyDto } from './dto/update-payroll-policy.dto';
@@ -12,15 +13,17 @@ export class PayrollService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly employeeScope: EmployeeScopeService,
   ) {}
 
-  async summary(tenantId: string, dateFrom?: string, dateTo?: string) {
+  async summary(tenantId: string, actorUserId: string, dateFrom?: string, dateTo?: string) {
     const range = this.resolveRange(dateFrom, dateTo);
     const policy = await this.getPolicy(tenantId);
+    const employeeWhere = await this.employeeScope.where(tenantId, actorUserId);
 
     const [employees, shifts, sessions, requests, holidays] = await Promise.all([
       this.prisma.employee.findMany({
-        where: { tenantId },
+        where: employeeWhere,
         include: {
           department: true,
           position: true,
@@ -30,6 +33,7 @@ export class PayrollService {
       this.prisma.shift.findMany({
         where: {
           tenantId,
+          employee: employeeWhere,
           shiftDate: {
             gte: range.start,
             lte: range.end,
@@ -42,6 +46,7 @@ export class PayrollService {
       this.prisma.attendanceSession.findMany({
         where: {
           tenantId,
+          employee: employeeWhere,
           startedAt: {
             gte: range.start,
             lte: range.end,
@@ -54,6 +59,7 @@ export class PayrollService {
       this.prisma.employeeRequest.findMany({
         where: {
           tenantId,
+          employee: employeeWhere,
           status: RequestStatus.APPROVED,
           startsOn: {
             lte: range.end,
@@ -238,7 +244,7 @@ export class PayrollService {
   }
 
   async exportSummary(tenantId: string, actorUserId: string, format: 'csv' | 'xlsx' | 'pdf', dateFrom?: string, dateTo?: string) {
-    const payload = await this.generateSummaryExportArtifact(tenantId, format, dateFrom, dateTo);
+    const payload = await this.generateSummaryExportArtifact(tenantId, actorUserId, format, dateFrom, dateTo);
     const summary = payload.summary;
 
     await this.auditService.log({
@@ -260,11 +266,12 @@ export class PayrollService {
 
   async generateSummaryExportArtifact(
     tenantId: string,
+    actorUserId: string,
     format: 'csv' | 'xlsx' | 'pdf',
     dateFrom?: string,
     dateTo?: string,
   ) {
-    const summary = await this.summary(tenantId, dateFrom, dateTo);
+    const summary = await this.summary(tenantId, actorUserId, dateFrom, dateTo);
     const exportRows = summary.rows.map((row) => ({
       'Employee Number': row.employeeNumber,
       'Employee Name': row.employeeName,

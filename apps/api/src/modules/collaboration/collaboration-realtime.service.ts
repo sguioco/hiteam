@@ -49,7 +49,7 @@ export class CollaborationRealtimeService
       await this.subscriber.connect();
       await this.subscriber.subscribe(COLLABORATION_REDIS_CHANNEL);
       this.subscriber.on('message', (_channel: string, rawMessage: string) => {
-        this.handleMessage(rawMessage);
+        void this.handleMessage(rawMessage);
       });
 
       this.redisEnabled = true;
@@ -119,25 +119,25 @@ export class CollaborationRealtimeService
       }
     }
 
-    this.dispatch(message);
+    await this.dispatch(message);
   }
 
-  private handleMessage(rawMessage: string) {
+  private async handleMessage(rawMessage: string) {
     try {
       const message = JSON.parse(rawMessage) as CollaborationRealtimeEnvelope;
-      this.dispatch(message);
+      await this.dispatch(message);
     } catch (error) {
       this.logger.warn(
-        `Failed to parse collaboration realtime message. ${
+        `Failed to process collaboration realtime message. ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     }
   }
 
-  private dispatch(message: CollaborationRealtimeEnvelope) {
+  private async dispatch(message: CollaborationRealtimeEnvelope) {
     if (message.type === 'workspace.refresh') {
-      this.collaborationGateway.emitWorkspaceRefresh(
+      await this.collaborationGateway.emitWorkspaceRefresh(
         message.userId,
         message.payload,
       );
@@ -145,14 +145,14 @@ export class CollaborationRealtimeService
     }
 
     if (message.type === 'chat.thread-updated') {
-      this.collaborationGateway.emitThreadUpdated(
+      await this.collaborationGateway.emitThreadUpdated(
         message.userId,
         message.payload,
       );
       return;
     }
 
-    this.collaborationGateway.emitThreadMessage(
+    await this.collaborationGateway.emitThreadMessage(
       message.threadId,
       message.payload,
     );

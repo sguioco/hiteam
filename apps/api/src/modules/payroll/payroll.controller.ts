@@ -29,7 +29,7 @@ export class PayrollController {
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('summary')
   summary(@CurrentUser() user: JwtUser, @Query() query: PayrollSummaryQueryDto) {
-    return this.payrollService.summary(user.tenantId, query.dateFrom, query.dateTo);
+    return this.payrollService.summary(user.tenantId, user.sub, query.dateFrom, query.dateTo);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

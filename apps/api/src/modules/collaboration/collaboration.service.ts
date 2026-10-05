@@ -648,6 +648,20 @@ export class CollaborationService {
         });
       }
 
+      // Keep chat recipients aligned with the group in the same transaction.
+      await tx.chatParticipant.deleteMany({
+        where: { thread: { groupId: group.id }, employeeId: { notIn: employeeIds } },
+      });
+      const threads = await tx.chatThread.findMany({ where: { groupId: group.id }, select: { id: true } });
+      if (employeeIds.length > 0 && threads.length > 0) {
+        await tx.chatParticipant.createMany({
+          data: threads.flatMap(thread => employeeIds.map(employeeId => ({
+            tenantId: manager.tenantId, threadId: thread.id, employeeId,
+          }))),
+          skipDuplicates: true,
+        });
+      }
+
       return tx.workGroup.findUniqueOrThrow({
         where: { id: group.id },
         include: {
@@ -3843,6 +3857,7 @@ export class CollaborationService {
     const participations = await this.prisma.chatParticipant.findMany({
       where: {
         employeeId: employee.id,
+        thread: this.chatMembershipWhere(employee.id, employee.tenantId),
       },
       include: {
         thread: {
@@ -3953,6 +3968,10 @@ export class CollaborationService {
       throw new NotFoundException("Group not found.");
     }
 
+    if (!group.memberships.some(member => member.employeeId === employee.id)) {
+      throw new ForbiddenException("You are not a member of this group.");
+    }
+
     const existing = await this.prisma.chatThread.findFirst({
       where: {
         tenantId: employee.tenantId,
@@ -3963,6 +3982,11 @@ export class CollaborationService {
     });
 
     if (existing) {
+      await this.prisma.chatParticipant.upsert({
+        where: { threadId_employeeId: { threadId: existing.id, employeeId: employee.id } },
+        create: { threadId: existing.id, employeeId: employee.id, tenantId: employee.tenantId },
+        update: {},
+      });
       return existing;
     }
 
@@ -4000,6 +4024,7 @@ export class CollaborationService {
         tenantId: employee.tenantId,
         employeeId: employee.id,
         threadId,
+        thread: this.chatMembershipWhere(employee.id, employee.tenantId),
       },
     });
 
@@ -4024,7 +4049,7 @@ export class CollaborationService {
     const thread = await this.prisma.chatThread.findFirst({
       where: {
         id: threadId,
-        tenantId: employee.tenantId,
+        ...this.chatMembershipWhere(employee.id, employee.tenantId),
         participants: {
           some: {
             employeeId: employee.id,
@@ -4112,6 +4137,7 @@ export class CollaborationService {
   }
 
   async markChatRead(userId: string, threadId: string) {
+    await this.getChat(userId, threadId);
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { userId },
     });
@@ -6455,6 +6481,16 @@ export class CollaborationService {
     );
   }
 
+  private chatMembershipWhere(employeeId: string, tenantId: string): Prisma.ChatThreadWhereInput {
+    return {
+      tenantId,
+      OR: [
+        { kind: ChatThreadKind.DIRECT },
+        { kind: ChatThreadKind.GROUP, group: { memberships: { some: { employeeId } } } },
+      ],
+    };
+  }
+
   private canAccessTask(
     employeeId: string,
     task: {
@@ -8352,7 +8388,7 @@ export class CollaborationService {
         include: {
           employee: {
             include: {
-              user: true,
+              user: { select: { id: true, email: true } },
             },
           },
         },

@@ -17,6 +17,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { EmployeeScopeService } from '../../common/access/employee-scope.service';
 import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,6 +46,7 @@ export class RequestsService {
     private readonly collaborationRealtimeService: CollaborationRealtimeService,
     private readonly notificationsService: NotificationsService,
     private readonly storageService: StorageService,
+    private readonly employeeScope: EmployeeScopeService,
   ) {}
 
   async create(userId: string, dto: CreateRequestDto) {
@@ -286,10 +288,12 @@ export class RequestsService {
     };
   }
 
-  async listBalances(tenantId: string, search?: string) {
+  async listBalances(tenantId: string, actorUserId: string, search?: string) {
+    const scope = await this.employeeScope.where(tenantId, actorUserId);
     const employees = await this.prisma.employee.findMany({
       where: {
         tenantId,
+        AND: [scope],
         ...(search
           ? {
               OR: [
@@ -319,6 +323,7 @@ export class RequestsService {
       by: ['employeeId'],
       where: {
         tenantId,
+        employeeId: { in: employees.map(employee => employee.id) },
         requestType: RequestType.SICK_LEAVE,
         status: RequestStatus.APPROVED,
       },
@@ -357,6 +362,7 @@ export class RequestsService {
     employeeId: string,
     dto: TimeOffBalanceUpsertDto,
   ) {
+    await this.employeeScope.assertEmployees(tenantId, actorUserId, [employeeId]);
     const employee = await this.prisma.employee.findFirst({
       where: { id: employeeId, tenantId },
       select: { id: true, firstName: true, lastName: true },
@@ -414,9 +420,13 @@ export class RequestsService {
   }
 
   async applyBulkAccrual(tenantId: string, actorUserId: string, dto: BulkTimeOffAccrualDto) {
+    if (!dto.applyToAll) {
+      await this.employeeScope.assertEmployees(tenantId, actorUserId, dto.employeeIds ?? []);
+    }
     const employees = await this.prisma.employee.findMany({
       where: {
         tenantId,
+        AND: [await this.employeeScope.where(tenantId, actorUserId)],
         ...(dto.applyToAll ? {} : { id: { in: dto.employeeIds ?? [] } }),
       },
       select: { id: true },

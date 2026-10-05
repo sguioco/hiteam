@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ExportJobStatus, ExportJobType } from '@prisma/client';
 import { Job, Queue, Worker } from 'bullmq';
 import { AuditService } from '../audit/audit.service';
+import { EmployeeScopeService } from '../../common/access/employee-scope.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { PayrollService } from '../payroll/payroll.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +31,7 @@ export class ExportsService implements OnModuleInit, OnModuleDestroy {
     private readonly attendanceService: AttendanceService,
     private readonly payrollService: PayrollService,
     private readonly auditService: AuditService,
+    private readonly employeeScope: EmployeeScopeService,
   ) {
     this.redisUrl = this.configService.get<string>('REDIS_URL') ?? null;
   }
@@ -81,11 +83,12 @@ export class ExportsService implements OnModuleInit, OnModuleDestroy {
     return this.createJob(tenantId, requestedByUserId, ExportJobType.PAYROLL_SUMMARY, dto);
   }
 
-  async listJobs(tenantId: string, query: ListExportJobsQueryDto) {
+  async listJobs(tenantId: string, actorUserId: string, query: ListExportJobsQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where = {
       tenantId,
+      ...((await this.employeeScope.where(tenantId, actorUserId)).OR ? { requestedByUserId: actorUserId } : {}),
       type: query.type ?? undefined,
       status: query.status ?? undefined,
       OR: query.search
@@ -115,11 +118,12 @@ export class ExportsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async getJob(tenantId: string, jobId: string) {
+  async getJob(tenantId: string, actorUserId: string, jobId: string) {
     const job = await this.prisma.exportJob.findFirstOrThrow({
       where: {
         tenantId,
         id: jobId,
+        ...((await this.employeeScope.where(tenantId, actorUserId)).OR ? { requestedByUserId: actorUserId } : {}),
       },
     });
 
@@ -300,6 +304,7 @@ export class ExportsService implements OnModuleInit, OnModuleDestroy {
         record.type === ExportJobType.PAYROLL_SUMMARY
           ? await this.payrollService.generateSummaryExportArtifact(
               record.tenantId,
+              record.requestedByUserId,
               record.format as 'csv' | 'xlsx' | 'pdf',
               params.dateFrom ?? undefined,
               params.dateTo ?? undefined,

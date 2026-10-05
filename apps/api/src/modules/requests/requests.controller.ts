@@ -57,7 +57,7 @@ export class RequestsController {
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('balances')
   balances(@CurrentUser() user: JwtUser, @Query('search') search?: string) {
-    return this.requestsService.listBalances(user.tenantId, search);
+    return this.requestsService.listBalances(user.tenantId, user.sub, search);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')

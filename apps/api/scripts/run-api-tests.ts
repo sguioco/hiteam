@@ -28,6 +28,9 @@ const suites = [
   'src/modules/altegio-sync/altegio-webhook-queue.test.ts',
   'scripts/test-altegio-marketplace-helpers.ts',
   'src/modules/attendance/attendance-location.test.ts',
+  'src/modules/attendance/attendance-correction-access.test.ts',
+  'src/modules/audit/activity-task-links.test.ts',
+  'src/common/access/access-regression.test.ts',
 ] as const;
 
 function runSuite(relativePath: (typeof suites)[number]) {

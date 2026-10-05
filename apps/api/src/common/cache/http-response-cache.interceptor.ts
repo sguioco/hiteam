@@ -123,7 +123,8 @@ export class HttpResponseCacheInterceptor implements NestInterceptor {
     const userVersion = await this.responseCacheService.getNamespaceVersion('user', request.user?.sub);
 
     return [
-      'smart:http-cache:v1',
+      // Invalidate responses produced before scoped access and safe chat DTOs.
+      'smart:http-cache:v2',
       request.path,
       this.normalizeQuery(request.query as Record<string, unknown>),
       `tenant:${tenantId}:${tenantVersion}`,

@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { AllowPendingAccess } from '../../common/decorators/allow-pending-access.decorator';
+import { AllowUnpaidAccess } from '../../common/decorators/allow-unpaid-access.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -21,6 +22,7 @@ function isEmployeeOnlyRole(roleCodes: string[]) {
 }
 
 @Controller('auth')
+@AllowUnpaidAccess()
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

@@ -29,13 +29,13 @@ export class ExportsController {
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('jobs')
   listJobs(@CurrentUser() user: JwtUser, @Query() query: ListExportJobsQueryDto) {
-    return this.exportsService.listJobs(user.tenantId, query);
+    return this.exportsService.listJobs(user.tenantId, user.sub, query);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin', 'manager')
   @Get('jobs/:jobId')
   getJob(@CurrentUser() user: JwtUser, @Param('jobId') jobId: string) {
-    return this.exportsService.getJob(user.tenantId, jobId);
+    return this.exportsService.getJob(user.tenantId, user.sub, jobId);
   }
 
   @Roles('tenant_owner', 'hr_admin', 'operations_admin')
