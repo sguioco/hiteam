@@ -21,12 +21,14 @@ spec:
           command:
             - sh
             - -c
-            - >
+            - |
+              set -eu
               until /usr/bin/mc alias set local http://{{ include "hiteam.minioServiceName" . }}:{{ .Values.minio.service.port }} {{ .Values.minio.rootUser }} {{ .Values.minio.rootPassword }};
               do
                 echo "waiting for minio";
                 sleep 2;
               done;
-              /usr/bin/mc mb -p local/{{ .Values.minio.bucket }} || true;
-              /usr/bin/mc anonymous set download local/{{ .Values.minio.bucket }} || true;
+              /usr/bin/mc mb --ignore-existing -p local/{{ .Values.minio.bucket }}
+              printf '%s' {{ tpl (.Files.Get "files/minio-public-policy.json") . | fromJson | toJson | squote }} > /tmp/public-policy.json
+              /usr/bin/mc anonymous set-json /tmp/public-policy.json local/{{ .Values.minio.bucket }}
 {{- end }}
