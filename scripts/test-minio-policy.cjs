@@ -15,6 +15,8 @@ assert.deepEqual(policy.Statement[0].Action, ['s3:GetBucketLocation', 's3:ListBu
 const job = fs.readFileSync(path.join(root, '.cd/templates/job-minio-bucket.yaml'), 'utf8');
 assert.ok(job.includes('set -eu'));
 assert.ok(job.includes('anonymous set-json'));
+assert.ok(job.includes('mc mb --ignore-existing local/'));
+assert.ok(!/mc mb[^\n]*\s-p(?:\s|$)/.test(job), 'mc -p aliases --ignore-existing; do not combine them');
 assert.ok(!job.includes('anonymous set download'));
 assert.ok(!job.includes('|| true'));
 console.log('MinIO policy regression passed');

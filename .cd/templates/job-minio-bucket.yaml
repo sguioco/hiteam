@@ -28,7 +28,7 @@ spec:
                 echo "waiting for minio";
                 sleep 2;
               done;
-              /usr/bin/mc mb --ignore-existing -p local/{{ .Values.minio.bucket }}
+              /usr/bin/mc mb --ignore-existing local/{{ .Values.minio.bucket }}
               printf '%s' {{ tpl (.Files.Get "files/minio-public-policy.json") . | fromJson | toJson | squote }} > /tmp/public-policy.json
               /usr/bin/mc anonymous set-json /tmp/public-policy.json local/{{ .Values.minio.bucket }}
 {{- end }}
