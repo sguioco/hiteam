@@ -229,6 +229,10 @@ export class AltegioB2bClient {
     userToken?: string;
   }) {
     const phoneDigits = digitsOnly(args.phone);
+    const email = (args.email || '').trim();
+    if (!phoneDigits || !/^\d{9,15}$/.test(phoneDigits) || !email || email.endsWith('@users.hiteam.local')) {
+      throw new AltegioB2bError('Altegio staff export requires a real email and a phone number with 9–15 digits.', 422);
+    }
     const payload = await this.request(
       'POST',
       `${this.apiBase}/api/v1/company/${encodeURIComponent(args.locationId)}/staff/quick`,
@@ -237,8 +241,8 @@ export class AltegioB2bClient {
         specialization: (args.specialization || 'Specialist').trim(),
         position_id: args.positionId ?? null,
         phone_number: phoneDigits || null,
-        user_email: (args.email || '').trim() || `altegio+${Date.now()}@users.hiteam.local`,
-        user_phone: phoneDigits || '0000000000',
+        user_email: email,
+        user_phone: phoneDigits,
         is_user_invite: false,
         is_paid_staff: false,
       },

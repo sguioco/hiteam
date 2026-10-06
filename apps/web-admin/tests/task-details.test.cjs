@@ -25,14 +25,14 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
-function renderAltegioState({ loading = false, error = null, syncing = false, status = null } = {}) {
+function renderAltegioState({ loading = false, error = null, syncing = false, status = null, capturePilotChange, requests } = {}) {
   const values = [null, status, loading, error, syncing, null];
   let cursor = 0;
   const { AltegioIntegrationPanel } = load('components/altegio-integration-panel.tsx', {
-    react: { ...React, useState: () => [values[cursor++], () => {}], useEffect: () => {}, useMemo: fn => fn() },
-    '@/components/altegio-pilot-connect': { AltegioPilotConnect: () => null },
-    '@/lib/api': { apiRequest: () => { throw new Error('Unexpected request during render'); } },
-    '@/lib/auth': { getSession: () => null },
+    react: { ...React, useState: () => [values[cursor++], () => {}], useEffect: () => {}, useMemo: fn => fn(), useRef: value => ({ current: value }) },
+    '@/components/altegio-pilot-connect': { AltegioPilotConnect: props => { capturePilotChange?.(props.onStatusChange); return null; } },
+    '@/lib/api': { apiRequest: (url, options) => { if (!requests) throw new Error('Unexpected request during render'); requests.push({ url, options }); return Promise.resolve(status); } },
+    '@/lib/auth': { getSession: () => requests ? { accessToken: 'test-token' } : null },
     '@/lib/i18n': { useI18n: () => ({ locale: 'ru' }) },
     '@/lib/altegio-integration': {
       resolveAltegioIntegrationView: () => ({ connected: true }),
@@ -51,6 +51,15 @@ assert.match(failedAltegio, /Повторить/);
 assert.doesNotMatch(failedAltegio, /Получаем состояние|animate-spin/);
 assert.match(renderAltegioState(), /синхронизация marketplace не настроена/);
 assert.doesNotMatch(renderAltegioState(), /Получаем состояние|animate-spin/);
+let pilotChanged;
+const statusRequests = [];
+renderAltegioState({ requests: statusRequests, capturePilotChange: callback => { pilotChanged = callback; } });
+pilotChanged({ connected: true, locations: [] });
+assert.equal(statusRequests.length, 1, 'Saving a pilot connection must refresh synchronization without a page reload');
+assert.equal(statusRequests[0].url, '/altegio/sync/status');
+assert.equal(statusRequests[0].options.skipClientCache, true);
+const integrationsPageSource = fs.readFileSync(path.join(__dirname, '..', 'app/integrations/integrations-page-client.tsx'), 'utf8');
+assert.match(integrationsPageSource, /key=\{JSON\.stringify\(summary\?\.altegio \?\? null\)\}/, 'Marketplace connect/disconnect must invalidate the previous panel snapshot');
 const { taskPhotoUrl } = load('lib/task-photo-url.ts');
 assert.equal(taskPhotoUrl('https://api.hiteam.net/api/v1/media/task-photo-proofs/abc/file'), '/api/task-photo-proofs/abc');
 assert.equal(taskPhotoUrl('data:image/png;base64,abc'), 'data:image/png;base64,abc');

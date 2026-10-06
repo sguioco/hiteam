@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   formatDateOnly,
   groupHiteamShiftsForAltegioPush,
+  isImportedAltegioEmployee,
   matchEmployeeToAltegioStaff,
   mergeLocalTimeOnDate,
   normalizeAltegioEmail,
@@ -14,6 +15,7 @@ import {
 } from './altegio-sync.helpers';
 import {
   AltegioB2bError,
+  AltegioB2bClient,
   isAltegioInvalidCredentialsError,
   mergeAltegioHooksSettings,
   parseLocationProfilePayload,
@@ -289,4 +291,18 @@ testInvalidAltegioCredentialsAreRecognized();
 testMarketplaceTrialCannotBeExtendedOrTransferred();
 testHooksSettingsMerge();
 
-console.log('altegio staff/schedule sync helpers: ok');
+assert.equal(isImportedAltegioEmployee('ALT-759658-42', 'real@example.com'), true);
+assert.equal(isImportedAltegioEmployee('E-42', 'altegio+42@users.hiteam.local'), true);
+assert.equal(isImportedAltegioEmployee('E-42', 'real@example.com'), false);
+async function testStaffExportRequiresRealContacts() {
+  const client = new AltegioB2bClient({ get: () => '' } as never);
+  for (const contact of [
+    { phone: null, email: 'real@example.com' },
+    { phone: '+971501234567', email: null },
+    { phone: '123', email: 'real@example.com' },
+    { phone: '+971501234567', email: 'altegio+42@users.hiteam.local' },
+  ]) {
+    await assert.rejects(client.createTeamMember({ locationId: '759658', name: 'Test', ...contact }), /requires a real email/);
+  }
+}
+void testStaffExportRequiresRealContacts().then(() => console.log('altegio staff/schedule sync helpers: ok'));

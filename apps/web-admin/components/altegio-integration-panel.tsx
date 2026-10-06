@@ -11,7 +11,7 @@ import {
   Unlink,
   UsersRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AltegioPilotConnect } from "@/components/altegio-pilot-connect";
 import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
@@ -53,8 +53,10 @@ export function AltegioIntegrationPanel({
   const [syncStatusError, setSyncStatusError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncActionError, setSyncActionError] = useState<string | null>(null);
+  const statusRequest = useRef(0);
 
   async function loadSyncStatus() {
+    const request = ++statusRequest.current;
     const session = getSession();
     if (!session) {
       setSyncStatusError(locale === "ru" ? "Войдите снова, чтобы получить состояние синхронизации." : "Sign in again to load synchronization status.");
@@ -64,17 +66,18 @@ export function AltegioIntegrationPanel({
     try {
       setSyncLoading(true);
       setSyncStatusError(null);
-      setSyncStatus(
-        await apiRequest<AltegioSyncStatus>("/altegio/sync/status", {
+      const nextStatus = await apiRequest<AltegioSyncStatus>("/altegio/sync/status", {
           token: session.accessToken,
           skipClientCache: true,
-        }),
-      );
+        });
+      if (request !== statusRequest.current) return;
+      setSyncStatus(nextStatus);
     } catch (cause) {
+      if (request !== statusRequest.current) return;
       setSyncStatus(null);
       setSyncStatusError(cause instanceof Error ? cause.message : locale === "ru" ? "Не удалось получить состояние синхронизации." : "Unable to load synchronization status.");
     } finally {
-      setSyncLoading(false);
+      if (request === statusRequest.current) setSyncLoading(false);
     }
   }
 
@@ -89,6 +92,7 @@ export function AltegioIntegrationPanel({
 
   useEffect(() => {
     void loadSyncStatus();
+    return () => { ++statusRequest.current; };
   }, []);
 
   async function syncNow() {
@@ -205,7 +209,10 @@ export function AltegioIntegrationPanel({
                   : "Connect"}
             </button>
             <AltegioPilotConnect
-              onStatusChange={setPilotStatus}
+              onStatusChange={(status) => {
+                setPilotStatus(status);
+                void loadSyncStatus();
+              }}
               pilotStatus={pilotStatus}
               skipInitialFetch
             />

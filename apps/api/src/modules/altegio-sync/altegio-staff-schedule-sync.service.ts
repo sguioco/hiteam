@@ -19,6 +19,7 @@ import {
   defaultSyncWindow,
   formatDateOnly,
   groupHiteamShiftsForAltegioPush,
+  isImportedAltegioEmployee,
   matchEmployeeToAltegioStaff,
   mergeLocalTimeOnDate,
   normalizeAltegioEmail,
@@ -197,6 +198,8 @@ export class AltegioStaffScheduleSyncService {
         where: { tenantId },
         select: {
           id: true,
+          employeeNumber: true,
+          primaryLocationId: true,
           firstName: true,
           lastName: true,
           phone: true,
@@ -210,6 +213,7 @@ export class AltegioStaffScheduleSyncService {
       const matchable = localEmployees.map((employee) => ({
         id: employee.id,
         altegioTeamMemberId: employee.altegioTeamMemberId,
+        employeeNumber: employee.employeeNumber,
         phone: employee.phone,
         email: employee.user.email,
       }));
@@ -225,7 +229,7 @@ export class AltegioStaffScheduleSyncService {
           id: staff.id,
           phone: staff.phone,
           email: staff.email,
-        });
+        }, ctx.locationId);
 
         if (matched) {
           usedEmployeeIds.add(matched.id);
@@ -264,10 +268,13 @@ export class AltegioStaffScheduleSyncService {
       const unlinked = localEmployees.filter(
         (employee) =>
           employee.status === EmployeeStatus.ACTIVE &&
+          employee.primaryLocationId === ctx.primaryLocationId &&
+          !isImportedAltegioEmployee(employee.employeeNumber, employee.user.email) &&
           !employee.altegioTeamMemberId &&
           !usedEmployeeIds.has(employee.id),
       );
 
+      const pushFailures: string[] = [];
       for (const employee of unlinked) {
         try {
           const created = await this.altegioB2b.createTeamMember({
@@ -287,12 +294,17 @@ export class AltegioStaffScheduleSyncService {
           createdRemote += 1;
           linked += 1;
         } catch (error) {
+          pushFailures.push(employee.id);
           this.logger.warn(
             `Failed to push employee ${employee.id} to Altegio: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
         }
+      }
+
+      if (pushFailures.length) {
+        throw new HttpException({ message: `Altegio staff synchronization partially failed: ${pushFailures.length} employee exports failed.`, failedEmployeeIds: pushFailures }, HttpStatus.BAD_GATEWAY);
       }
 
       await this.prisma.billingSubscription.update({
@@ -510,6 +522,8 @@ export class AltegioStaffScheduleSyncService {
       where: { tenantId, id: employeeId },
       select: {
         id: true,
+        employeeNumber: true,
+        primaryLocationId: true,
         firstName: true,
         lastName: true,
         phone: true,
@@ -557,6 +571,13 @@ export class AltegioStaffScheduleSyncService {
         return { skipped: true as const, reason: 'terminated_not_linked' };
       }
 
+      if (isImportedAltegioEmployee(employee.employeeNumber, employee.user.email)) {
+        return { skipped: true as const, reason: 'imported_not_linked' };
+      }
+      if (employee.primaryLocationId !== ctx.primaryLocationId) {
+        return { skipped: true as const, reason: 'different_location' };
+      }
+
       const created = await this.altegioB2b.createTeamMember({
         locationId: ctx.locationId,
         name,
@@ -573,6 +594,7 @@ export class AltegioStaffScheduleSyncService {
       });
       return { skipped: false as const, teamMemberId: created.id };
     } catch (error) {
+      await this.rememberSyncError(tenantId, error);
       this.logger.warn(
         `pushEmployeeToAltegio failed tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
@@ -666,7 +688,7 @@ export class AltegioStaffScheduleSyncService {
         phone: employee.phone,
         email: employee.user.email,
       }));
-      const matched = matchEmployeeToAltegioStaff(matchable, remote);
+      const matched = matchEmployeeToAltegioStaff(matchable, remote, ctx.locationId);
       if (matched) {
         const targetStatus = localEmployees.find((employee) => employee.id === matched.id)?.status;
         if (targetStatus === EmployeeStatus.TERMINATED || matched.altegioTeamMemberId) {
@@ -1042,7 +1064,9 @@ export class AltegioStaffScheduleSyncService {
     const [company, department, location, position] = await Promise.all([
       this.prisma.company.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
       this.prisma.department.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
-      this.prisma.location.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.location.findFirst({
+        where: { tenantId, altegioPilotLocations: { some: { altegioLocationId: locationId, connection: { tenantId } } } },
+      }).then(mapped => mapped ?? this.prisma.location.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } })),
       this.prisma.position.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' } }),
     ]);
 

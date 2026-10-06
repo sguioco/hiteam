@@ -110,6 +110,7 @@ async function testUnlinkedEmployeeIsCreatedAndLinked() {
   const saved: Array<Record<string, unknown>> = [];
   const unlinked = {
     id: 'employee-1',
+    primaryLocationId: 'location-1',
     firstName: 'Anna',
     lastName: 'Petrova',
     phone: '+971501234567',
@@ -138,10 +139,54 @@ async function testUnlinkedEmployeeIsCreatedAndLinked() {
   assert.deepEqual((saved[0].data as Record<string, unknown>).altegioTeamMemberId, 'remote-9');
 }
 
+async function testImportedAndOtherLocationStaffAreNotExported() {
+  for (const employee of [
+    { employeeNumber: 'ALT-759658-100', primaryLocationId: 'location-1', user: { email: 'real@example.com' }, expected: 'imported_not_linked' },
+    { employeeNumber: 'E-2', primaryLocationId: 'other-location', user: { email: 'real@example.com' }, expected: 'different_location' },
+  ]) {
+    let creates = 0;
+    const result = await service(connectedPrisma({ id: 'e', firstName: 'A', lastName: 'B', phone: null, status: EmployeeStatus.ACTIVE, altegioTeamMemberId: null, ...employee }), {
+      isConfigured: () => true, createTeamMember: async () => { creates++; return { id: 'new' }; },
+    }).pushEmployeeToAltegio('tenant-1', 'e');
+    assert.equal(result.reason, employee.expected);
+    assert.equal(creates, 0);
+  }
+}
+
+async function testPartialExportFailureIsNotReportedAsSuccess() {
+  const local = { id: 'local-1', employeeNumber: 'E-1', primaryLocationId: 'location-1', firstName: 'A', lastName: 'B', phone: null, status: EmployeeStatus.ACTIVE, altegioTeamMemberId: null, user: { email: 'a@example.com' } };
+  const prisma = connectedPrisma(local);
+  const saved: Record<string, unknown>[] = [];
+  Object.assign(prisma.employee, { findMany: async () => [local] });
+  Object.assign(prisma.billingSubscription, { update: async (args: Record<string, unknown>) => { saved.push(args); }, updateMany: async (args: Record<string, unknown>) => { saved.push(args); } });
+  await assert.rejects(service(prisma, { isConfigured: () => true, listTeamMembers: async () => [], createTeamMember: async () => { throw new Error('invalid contact'); } }).syncEmployees('tenant-1'), /partially failed/);
+  assert.equal(saved.length, 1);
+  assert.match(String((saved[0].data as Record<string, unknown>).altegioSyncLastError), /partially failed/);
+}
+
+async function testPilotImportsAreReconciledWithoutRemoteDuplicates() {
+  const pilot = { id: 'pilot-1', employeeNumber: 'ALT-759658-100', primaryLocationId: 'location-1', firstName: 'A', lastName: 'B', phone: null, status: EmployeeStatus.ACTIVE, altegioTeamMemberId: null, user: { email: 'altegio+old-link-100@users.hiteam.local' } };
+  const unrelated = { ...pilot, id: 'other', employeeNumber: 'ALT-1292583-999', primaryLocationId: 'other-location' };
+  const prisma = connectedPrisma(pilot);
+  const updates: Record<string, unknown>[] = [];
+  Object.assign(prisma.employee, { findMany: async () => [pilot, unrelated], update: async (args: Record<string, unknown>) => { updates.push(args); return pilot; } });
+  Object.assign(prisma.billingSubscription, { update: async () => ({}) });
+  let creates = 0;
+  const result = await service(prisma, { isConfigured: () => true, listTeamMembers: async () => [{ id: '100', name: 'A B', phone: null, email: null, fired: false }], createTeamMember: async () => { creates++; return { id: 'new' }; } }).syncEmployees('tenant-1');
+  assert.equal(result.createdLocal, 0);
+  assert.equal(result.createdRemote, 0);
+  assert.equal(creates, 0);
+  assert.equal(updates.length, 1);
+  assert.equal((updates[0].data as Record<string, unknown>).altegioTeamMemberId, '100');
+}
+
 void Promise.all([
   testLinkedEmployeeProfileIsUpdated(),
   testTerminatedLinkedEmployeeIsDeactivated(),
   testUnlinkedTerminatedEmployeeIsNotCreated(),
   testUnlinkedEmployeeIsCreatedAndLinked(),
+  testImportedAndOtherLocationStaffAreNotExported(),
+  testPartialExportFailureIsNotReportedAsSuccess(),
+  testPilotImportsAreReconciledWithoutRemoteDuplicates(),
 ])
   .then(() => console.log('altegio marketplace outbound: ok'));

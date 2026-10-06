@@ -64,6 +64,11 @@ export function syntheticAltegioEmail(teamMemberId: string) {
   return `altegio+${teamMemberId}@users.hiteam.local`;
 }
 
+/** Imported staff must be reconciled by remote identity, never recreated remotely. */
+export function isImportedAltegioEmployee(employeeNumber: string | null | undefined, email: string | null | undefined) {
+  return Boolean(employeeNumber?.startsWith('ALT-') || normalizeAltegioEmail(email)?.endsWith('@users.hiteam.local'));
+}
+
 export function pilotAltegioEmployeeNumber(altegioLocationId: string, staffId: string) {
   return `ALT-${altegioLocationId}-${staffId}`.slice(0, 32);
 }

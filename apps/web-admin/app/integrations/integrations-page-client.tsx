@@ -217,6 +217,7 @@ export default function IntegrationsPageClient({
           />
         ) : (
           <AltegioIntegrationPanel
+            key={JSON.stringify(summary?.altegio ?? null)}
             marketplace={summary?.altegio}
             onMarketplaceAction={handleMarketplaceAction}
           />

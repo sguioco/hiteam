@@ -25,6 +25,7 @@ import {
   defaultSyncWindow,
   formatDateOnly,
   groupHiteamShiftsForAltegioPush,
+  isImportedAltegioEmployee,
   matchEmployeeToAltegioStaff,
   mergeLocalTimeOnDate,
   normalizeAltegioEmail,
@@ -534,6 +535,7 @@ export class AltegioPilotService {
         phone: true,
         status: true,
         primaryLocationId: true,
+        employeeNumber: true,
         user: { select: { email: true } },
       },
     });
@@ -581,6 +583,7 @@ export class AltegioPilotService {
         updated += 1;
         continue;
       }
+      if (isImportedAltegioEmployee(employee.employeeNumber, employee.user.email)) continue;
       const remote = await this.altegio.createTeamMember({
         locationId: location.altegioLocationId,
         name,
@@ -732,7 +735,7 @@ export class AltegioPilotService {
     // identity matching is stable and a retry cannot create a duplicate.
     let exportedEmployees = 0;
     for (const employee of localEmployees.filter(
-      (item) => item.status === EmployeeStatus.ACTIVE && !linkedLocalEmployeeIds.has(item.id),
+      (item) => item.status === EmployeeStatus.ACTIVE && !linkedLocalEmployeeIds.has(item.id) && !isImportedAltegioEmployee(item.employeeNumber, item.user.email),
     )) {
       const created = await this.altegio.createTeamMember({
         locationId: pilotLocation.altegioLocationId,
