@@ -16,6 +16,7 @@ import {
 import {
   AltegioB2bError,
   AltegioB2bClient,
+  altegioRequestErrorMessage,
   isAltegioInvalidCredentialsError,
   mergeAltegioHooksSettings,
   parseLocationProfilePayload,
@@ -290,6 +291,9 @@ testPayloadParsers();
 testInvalidAltegioCredentialsAreRecognized();
 testMarketplaceTrialCannotBeExtendedOrTransferred();
 testHooksSettingsMerge();
+assert.match(altegioRequestErrorMessage(403, 'PUT', 'https://api.alteg.io/api/v1/company/759658/staff/schedule', {}), /timetable_schedule_edit_access/);
+assert.match(altegioRequestErrorMessage(400, 'POST', 'https://api.alteg.io/api/v1/company/759658/staff/quick', { meta: { message: 'A team member with service access has already been added to the schedule' } }), /contacts already belong/);
+assert.equal(altegioRequestErrorMessage(500, 'GET', 'https://api.alteg.io/api/v1/companies', {}), 'Altegio B2B request failed with 500');
 
 assert.equal(isImportedAltegioEmployee('ALT-759658-42', 'real@example.com'), true);
 assert.equal(isImportedAltegioEmployee('E-42', 'altegio+42@users.hiteam.local'), true);

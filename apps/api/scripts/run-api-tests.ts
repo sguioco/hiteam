@@ -16,6 +16,7 @@ const suites = [
   'src/modules/collaboration/task-details-update.test.ts',
   'src/modules/employees/employees-flows.test.ts',
   'src/modules/employees/employee-removal.test.ts',
+  'src/modules/schedule/schedule-timezone.test.ts',
   'src/modules/org/org-radius.test.ts',
   'src/modules/org/org-tasks-setup.test.ts',
   'src/modules/org/org-multi-location.test.ts',

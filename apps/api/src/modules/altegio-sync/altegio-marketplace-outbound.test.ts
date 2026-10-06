@@ -180,6 +180,17 @@ async function testPilotImportsAreReconciledWithoutRemoteDuplicates() {
   assert.equal((updates[0].data as Record<string, unknown>).altegioTeamMemberId, '100');
 }
 
+async function testScheduleExportErrorIsPersisted() {
+  const prisma = connectedPrisma(null);
+  const saved: Record<string, unknown>[] = [];
+  Object.assign(prisma.billingSubscription, { updateMany: async (args: Record<string, unknown>) => { saved.push(args); } });
+  Object.assign(prisma, { shift: { findMany: async () => { throw new Error('Altegio schedule export denied (403)'); } } });
+  const result = await service(prisma, { isConfigured: () => true }).pushShiftDayToAltegio('tenant-1', 'employee-1', new Date('2026-10-08'));
+  assert.deepEqual(result, { skipped: true, reason: 'push_failed' });
+  assert.equal(saved.length, 1);
+  assert.match(String((saved[0].data as Record<string, unknown>).altegioSyncLastError), /schedule export denied/);
+}
+
 void Promise.all([
   testLinkedEmployeeProfileIsUpdated(),
   testTerminatedLinkedEmployeeIsDeactivated(),
@@ -188,5 +199,6 @@ void Promise.all([
   testImportedAndOtherLocationStaffAreNotExported(),
   testPartialExportFailureIsNotReportedAsSuccess(),
   testPilotImportsAreReconciledWithoutRemoteDuplicates(),
+  testScheduleExportErrorIsPersisted(),
 ])
   .then(() => console.log('altegio marketplace outbound: ok'));

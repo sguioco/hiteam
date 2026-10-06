@@ -622,6 +622,7 @@ export class AltegioStaffScheduleSyncService {
       }, [employeeId], true);
       return { skipped: false as const, pushed };
     } catch (error) {
+      await this.rememberSyncError(tenantId, error);
       this.logger.warn(
         `pushShiftDayToAltegio failed tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)

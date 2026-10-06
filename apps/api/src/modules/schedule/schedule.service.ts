@@ -9,6 +9,7 @@ import { CollaborationRealtimeService } from '../collaboration/collaboration-rea
 import { CreateShiftTemplateDto } from './dto/create-shift-template.dto';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { UpdateShiftDto } from './dto/update-shift.dto';
+import { localTimeToInstant, locationDate } from '../../common/time/location-time';
 
 const WORKSPACE_MANAGER_ROLE_CODES = [
   'tenant_owner',
@@ -401,6 +402,7 @@ export class ScheduleService {
             id: true,
             companyId: true,
             name: true,
+            timezone: true,
           },
         },
       },
@@ -441,18 +443,10 @@ export class ScheduleService {
       );
     }
 
-    const shiftDate = new Date(dto.shiftDate);
-    shiftDate.setHours(0, 0, 0, 0);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    if (Number.isNaN(shiftDate.getTime()) || shiftDate < todayStart) {
-      throw new BadRequestException('Shift date cannot be in the past.');
-    }
-
-    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal);
-    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
-    const fixedBreak = this.resolveShiftFixedBreak(dto, template, shiftDate);
+    const shiftDate = this.resolveShiftDate(dto.shiftDate, template.location.timezone);
+    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal, template.location.timezone);
+    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal, template.location.timezone);
+    const fixedBreak = this.resolveShiftFixedBreak(dto, template, shiftDate, template.location.timezone);
     const createdByEmployeeId = await this.resolveActorEmployeeId(tenantId, actorUserId);
 
     const shift = await this.prisma.shift.create({
@@ -545,6 +539,7 @@ export class ScheduleService {
             id: true,
             companyId: true,
             name: true,
+            timezone: true,
           },
         },
       },
@@ -585,26 +580,16 @@ export class ScheduleService {
       );
     }
 
-    const shiftDate = dto.shiftDate
-      ? new Date(dto.shiftDate)
-      : new Date(existingShift.shiftDate);
-    shiftDate.setHours(0, 0, 0, 0);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    if (Number.isNaN(shiftDate.getTime()) || shiftDate < todayStart) {
-      throw new BadRequestException('Shift date cannot be in the past.');
-    }
-
-    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal);
-    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal);
+    const shiftDate = this.resolveShiftDate(dto.shiftDate ?? existingShift.shiftDate.toISOString(), template.location.timezone);
+    const startsAt = this.mergeDateAndTime(shiftDate, template.startsAtLocal, template.location.timezone);
+    const endsAt = this.mergeShiftEnd(shiftDate, template.startsAtLocal, template.endsAtLocal, template.location.timezone);
     const hasBreakOverride =
       dto.fixedBreakStartsAtLocal !== undefined ||
       dto.fixedBreakDurationMinutes !== undefined ||
       dto.fixedBreakIsPaid !== undefined;
     const fixedBreak =
       hasBreakOverride || dto.templateId
-        ? this.resolveShiftFixedBreak(dto, template, shiftDate)
+        ? this.resolveShiftFixedBreak(dto, template, shiftDate, template.location.timezone)
         : {
             startsAt: existingShift.fixedBreakStartsAt
               ? new Date(existingShift.fixedBreakStartsAt)
@@ -847,6 +832,7 @@ export class ScheduleService {
       fixedBreakIsPaid: boolean;
     },
     shiftDate: Date,
+    timeZone: string,
   ) {
     const hasShiftBreakOverride =
       dto.fixedBreakStartsAtLocal !== undefined ||
@@ -869,7 +855,7 @@ export class ScheduleService {
 
     return {
       startsAt: fixedBreak.startsAtLocal
-        ? this.mergeDateAndTime(shiftDate, fixedBreak.startsAtLocal)
+        ? this.mergeDateAndTime(shiftDate, fixedBreak.startsAtLocal, timeZone)
         : null,
       durationMinutes: fixedBreak.durationMinutes,
       isPaid: fixedBreak.isPaid,
@@ -880,22 +866,29 @@ export class ScheduleService {
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
   }
 
-  private mergeDateAndTime(baseDate: Date, localTime: string): Date {
-    const [hoursRaw, minutesRaw] = localTime.split(':');
-    const merged = new Date(baseDate);
-    merged.setHours(Number(hoursRaw), Number(minutesRaw), 0, 0);
-    return merged;
+  private resolveShiftDate(value: string, timeZone: string): Date {
+    const date = value.slice(0, 10);
+    const shiftDate = new Date(`${date}T00:00:00.000Z`);
+    if (Number.isNaN(shiftDate.getTime()) || shiftDate.toISOString().slice(0, 10) !== date) {
+      throw new BadRequestException('Invalid shift date.');
+    }
+    let today: string;
+    try { today = locationDate(new Date(), timeZone); }
+    catch { throw new BadRequestException('Invalid location timezone.'); }
+    if (date < today) throw new BadRequestException('Shift date cannot be in the past.');
+    return shiftDate;
   }
 
-  private mergeShiftEnd(baseDate: Date, startsAtLocal: string, endsAtLocal: string): Date {
-    const startsAt = this.mergeDateAndTime(baseDate, startsAtLocal);
-    const endsAt = this.mergeDateAndTime(baseDate, endsAtLocal);
+  private mergeDateAndTime(baseDate: Date, localTime: string, timeZone: string): Date {
+    const instant = localTimeToInstant(baseDate.toISOString().slice(0, 10), localTime, timeZone);
+    if (!instant) throw new BadRequestException('Invalid local shift time or location timezone.');
+    return instant;
+  }
 
-    if (endsAt <= startsAt) {
-      endsAt.setDate(endsAt.getDate() + 1);
-    }
-
-    return endsAt;
+  private mergeShiftEnd(baseDate: Date, startsAtLocal: string, endsAtLocal: string, timeZone: string): Date {
+    const endDate = new Date(baseDate);
+    if (endsAtLocal <= startsAtLocal) endDate.setUTCDate(endDate.getUTCDate() + 1);
+    return this.mergeDateAndTime(endDate, endsAtLocal, timeZone);
   }
 
   private async emitScheduleWorkspaceRefreshForEmployees(

@@ -133,55 +133,7 @@ export function parseDateOnlyToUtc(date: string) {
   return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 }
 
-export function mergeLocalTimeOnDate(date: string, hhmm: string, timeZone: string) {
-  const [hoursRaw, minutesRaw] = hhmm.split(':');
-  const hours = Number.parseInt(hoursRaw || '0', 10);
-  const minutes = Number.parseInt(minutesRaw || '0', 10);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-    return null;
-  }
-
-  // Interpret HH:mm in the location timezone by approximating with a Date in that zone via offset probe.
-  const utcGuess = new Date(`${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`);
-  const offsetMinutes = getTimeZoneOffsetMinutes(timeZone, utcGuess);
-  if (offsetMinutes === null) {
-    return utcGuess;
-  }
-  return new Date(utcGuess.getTime() - offsetMinutes * 60_000);
-}
-
-function getTimeZoneOffsetMinutes(timeZone: string, date: Date) {
-  try {
-    const dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hour12: false,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-    const parts = dtf.formatToParts(date);
-    const values: Record<string, string> = {};
-    for (const part of parts) {
-      if (part.type !== 'literal') {
-        values[part.type] = part.value;
-      }
-    }
-    const asUtc = Date.UTC(
-      Number(values.year),
-      Number(values.month) - 1,
-      Number(values.day),
-      Number(values.hour === '24' ? '0' : values.hour),
-      Number(values.minute),
-      Number(values.second),
-    );
-    return (asUtc - date.getTime()) / 60_000;
-  } catch {
-    return null;
-  }
-}
+export { localTimeToInstant as mergeLocalTimeOnDate } from '../../common/time/location-time';
 
 export function defaultSyncWindow(now = new Date()) {
   const from = new Date(now);

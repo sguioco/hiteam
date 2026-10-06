@@ -13,6 +13,21 @@ export class AltegioB2bError extends Error {
   }
 }
 
+export function altegioRequestErrorMessage(status: number, method: string, url: string, payload: unknown) {
+  const path = new URL(url).pathname;
+  if (status === 403 && method === 'PUT' && path.endsWith('/staff/schedule')) {
+    return 'Altegio schedule export denied (403): enable timetable_schedule_edit_access and settings_schedule_edit_access for the HiTeam application in the Altegio developer cabinet, then reconnect the location.';
+  }
+  if (status === 403 && method === 'PUT' && /\/staff\/[^/]+\/[^/]+$/.test(path)) {
+    return 'Altegio employee update denied (403): check settings_staff_edit_access and settings_staff_dismiss_access for the HiTeam application.';
+  }
+  const message = String((payload as { meta?: { message?: unknown } } | null)?.meta?.message ?? '');
+  if (status === 400 && path.endsWith('/staff/quick') && message === 'A team member with service access has already been added to the schedule') {
+    return 'Altegio staff export conflict (400): these contacts already belong to a user added to the location. Use the existing linked employee or distinct test contacts; do not create a duplicate.';
+  }
+  return `Altegio B2B request failed with ${status}`;
+}
+
 /**
  * Altegio's auth endpoint currently answers an invalid login/password with 404
  * and a `Wrong login or password` message. Keep this endpoint-specific
@@ -475,7 +490,7 @@ export class AltegioB2bClient {
 
     if (response.status >= 400) {
       this.logger.warn(`Altegio B2B ${method} ${url} -> ${response.status}: ${rawText.slice(0, 400)}`);
-      throw new AltegioB2bError(`Altegio B2B request failed with ${response.status}`, response.status, payload);
+      throw new AltegioB2bError(altegioRequestErrorMessage(response.status, method, url, payload), response.status, payload);
     }
 
     return (payload && typeof payload === 'object' ? payload : { success: true, data: payload }) as Record<
