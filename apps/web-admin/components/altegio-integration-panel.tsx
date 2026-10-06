@@ -49,23 +49,30 @@ export function AltegioIntegrationPanel({
   const { locale } = useI18n();
   const [pilotStatus, setPilotStatus] = useState<AltegioPilotStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<AltegioSyncStatus | null>(null);
-  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(true);
+  const [syncStatusError, setSyncStatusError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncActionError, setSyncActionError] = useState<string | null>(null);
 
   async function loadSyncStatus() {
     const session = getSession();
-    if (!session) return;
+    if (!session) {
+      setSyncStatusError(locale === "ru" ? "Войдите снова, чтобы получить состояние синхронизации." : "Sign in again to load synchronization status.");
+      setSyncLoading(false);
+      return;
+    }
     try {
       setSyncLoading(true);
+      setSyncStatusError(null);
       setSyncStatus(
         await apiRequest<AltegioSyncStatus>("/altegio/sync/status", {
           token: session.accessToken,
           skipClientCache: true,
         }),
       );
-    } catch {
+    } catch (cause) {
       setSyncStatus(null);
+      setSyncStatusError(cause instanceof Error ? cause.message : locale === "ru" ? "Не удалось получить состояние синхронизации." : "Unable to load synchronization status.");
     } finally {
       setSyncLoading(false);
     }
@@ -206,7 +213,19 @@ export function AltegioIntegrationPanel({
         </div>
       </div>
 
-      {syncStatus?.connected ? (
+      {syncStatusError ? (
+        <div className="px-6 py-7 sm:px-7">
+          <div role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p className="font-semibold">{locale === "ru" ? "Не удалось получить состояние синхронизации" : "Unable to load synchronization status"}</p>
+            <p className="mt-1">{syncStatusError}</p>
+          </div>
+          <button type="button" onClick={() => void loadSyncStatus()} disabled={syncLoading}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-55">
+            <RefreshCw className={`h-4 w-4 ${syncLoading ? "animate-spin" : ""}`} />
+            {locale === "ru" ? "Повторить" : "Retry"}
+          </button>
+        </div>
+      ) : syncStatus?.connected ? (
         <div className="p-6 sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -375,10 +394,16 @@ export function AltegioIntegrationPanel({
             </p>
           ) : null}
         </div>
-      ) : view.connected ? (
-        <div className="flex min-h-44 items-center justify-center px-6 py-8 text-sm text-muted-foreground">
-          <RefreshCw className={`mr-2 h-4 w-4 ${syncLoading ? "animate-spin" : ""}`} />
+      ) : syncLoading ? (
+        <div role="status" aria-live="polite" className="flex min-h-44 items-center justify-center px-6 py-8 text-sm text-muted-foreground">
+          <RefreshCw aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
           {locale === "ru" ? "Получаем состояние синхронизации…" : "Loading synchronization status…"}
+        </div>
+      ) : view.connected ? (
+        <div className="px-6 py-7 text-sm text-muted-foreground sm:px-7">
+          {locale === "ru"
+            ? "Подключение Altegio есть, но синхронизация marketplace не настроена. Проверьте настройки подключения."
+            : "Altegio is connected, but marketplace synchronization is not configured. Check the connection settings."}
         </div>
       ) : (
         <div className="px-6 py-7 sm:px-7">

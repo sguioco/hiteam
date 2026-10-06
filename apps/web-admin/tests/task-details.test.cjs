@@ -25,6 +25,32 @@ function load(file, overrides = {}) {
   return exports;
 }
 const { TaskDetailsDialog } = load('components/task-details-dialog.tsx');
+function renderAltegioState({ loading = false, error = null, syncing = false, status = null } = {}) {
+  const values = [null, status, loading, error, syncing, null];
+  let cursor = 0;
+  const { AltegioIntegrationPanel } = load('components/altegio-integration-panel.tsx', {
+    react: { ...React, useState: () => [values[cursor++], () => {}], useEffect: () => {}, useMemo: fn => fn() },
+    '@/components/altegio-pilot-connect': { AltegioPilotConnect: () => null },
+    '@/lib/api': { apiRequest: () => { throw new Error('Unexpected request during render'); } },
+    '@/lib/auth': { getSession: () => null },
+    '@/lib/i18n': { useI18n: () => ({ locale: 'ru' }) },
+    '@/lib/altegio-integration': {
+      resolveAltegioIntegrationView: () => ({ connected: true }),
+      formatAltegioIntegrationSubtitle: () => 'Altegio UAE',
+    },
+  });
+  return renderToStaticMarkup(React.createElement(AltegioIntegrationPanel));
+}
+const loadingAltegio = renderAltegioState({ loading: true });
+assert.match(loadingAltegio, /animate-spin/);
+assert.match(loadingAltegio, /Получаем состояние/);
+const failedAltegio = renderAltegioState({ error: 'Access denied' });
+assert.match(failedAltegio, /role="alert"/);
+assert.match(failedAltegio, /Access denied/);
+assert.match(failedAltegio, /Повторить/);
+assert.doesNotMatch(failedAltegio, /Получаем состояние|animate-spin/);
+assert.match(renderAltegioState(), /синхронизация marketplace не настроена/);
+assert.doesNotMatch(renderAltegioState(), /Получаем состояние|animate-spin/);
 const { taskPhotoUrl } = load('lib/task-photo-url.ts');
 assert.equal(taskPhotoUrl('https://api.hiteam.net/api/v1/media/task-photo-proofs/abc/file'), '/api/task-photo-proofs/abc');
 assert.equal(taskPhotoUrl('data:image/png;base64,abc'), 'data:image/png;base64,abc');
