@@ -106,4 +106,12 @@ assert.match(
   /\.today-attendance-row-metrics\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) max-content/,
 );
 
+// Build-time font loading must be offline and preserve both font families.
+assert.doesNotMatch(layout, /next\/font\/google/);
+for (const family of ["Montserrat", "Onest"]) {
+  assert.ok(layout.includes(`${family}-Variable.ttf`));
+  const font = fs.readFileSync(path.join(root, "public", "fonts", `${family}-Variable.ttf`));
+  assert.equal(font.readUInt32BE(0), 0x00010000, `${family} must be a valid TrueType asset`);
+  assert.match(fs.readFileSync(path.join(root, "public", "fonts", `${family}-OFL.txt`), "utf8"), /SIL OPEN FONT LICENSE/);
+}
 console.log("runtime localization checks passed");

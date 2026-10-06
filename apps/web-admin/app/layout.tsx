@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
 import localFont from 'next/font/local';
-import { Montserrat, Onest } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import { Providers } from './providers';
@@ -30,17 +29,20 @@ const teodor = localFont({
   variable: '--font-brand',
 });
 
-const montserrat = Montserrat({
+const montserrat = localFont({
+  src: '../public/fonts/Montserrat-Variable.ttf',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
-  subsets: ['latin', 'cyrillic'],
   variable: '--font-landing',
 });
 
-const onest = Onest({
+const onest = localFont({
+  src: '../public/fonts/Onest-Variable.ttf',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
-  subsets: ['latin', 'cyrillic'],
   variable: '--font-hero-display',
-  weight: ['500', '600', '700', '800', '900'],
 });
 
 export const metadata: Metadata = {
