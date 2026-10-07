@@ -49,6 +49,8 @@ export type AltegioTeamMember = {
   email: string | null;
   fired: boolean;
   deleted: boolean;
+  hasAccessTimetable?: boolean | null;
+  bookable?: boolean | null;
 };
 
 export type AltegioScheduleSlot = {
@@ -598,11 +600,36 @@ export function parseSingleTeamMemberPayload(
     email: pickString(attributes.email, attributes.user_email),
     fired: isTruthyFlag(attributes.fired),
     deleted: isTruthyFlag(attributes.deleted),
+    hasAccessTimetable: parseOptionalFlag(attributes.has_access_timetable),
+    bookable: parseOptionalFlag(attributes.bookable),
   };
 }
 
 function isTruthyFlag(value: unknown) {
   return value === true || value === 1 || value === '1';
+}
+
+function parseOptionalFlag(value: unknown): boolean | null {
+  if (value === true || value === 1 || value === '1') return true;
+  if (value === false || value === 0 || value === '0') return false;
+  return null;
+}
+
+export function scheduleAccessSnapshot(staff: AltegioTeamMember) {
+  return {
+    hasAccessTimetable: staff.hasAccessTimetable ?? null,
+    bookable: staff.bookable ?? null,
+    fired: staff.fired,
+    deleted: staff.deleted,
+  };
+}
+
+export function scheduleAccessBlockReason(staff: Pick<AltegioTeamMember, 'deleted' | 'fired' | 'hasAccessTimetable'> | null) {
+  if (!staff || staff.deleted) return 'employee_missing';
+  if (staff.fired) return 'employee_fired';
+  if (staff.hasAccessTimetable === false) return 'timetable_disabled';
+  if (staff.hasAccessTimetable !== true) return 'timetable_unknown';
+  return null;
 }
 
 export function parseTeamMembersPayload(payload: Record<string, unknown>): AltegioTeamMember[] {
@@ -680,6 +707,8 @@ export function parseTeamMembersPayload(payload: Record<string, unknown>): Alteg
       email,
       fired: Boolean(attributes.fired === true || attributes.fired === 1 || attributes.fired === '1'),
       deleted: Boolean(attributes.deleted === true || attributes.deleted === 1 || attributes.deleted === '1'),
+      hasAccessTimetable: parseOptionalFlag(attributes.has_access_timetable),
+      bookable: parseOptionalFlag(attributes.bookable),
     });
   }
 

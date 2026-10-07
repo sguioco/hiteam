@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { withBusinessSpan } from '../../observability/tracing';
 import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError, parseSingleTeamMemberPayload, type AltegioTeamMember } from './altegio-b2b.client';
+import { scheduleAccessSnapshot, scheduleAccessBlockReason } from './altegio-b2b.client';
 import {
   marketplaceEmployeesTraceAttributes,
   marketplaceOrganizationTraceAttributes,
@@ -67,6 +68,21 @@ export class AltegioStaffScheduleSyncService {
       }),
     ]);
 
+    const scheduleEmployees = await this.prisma.employee.findMany({
+      where: { tenantId, altegioTeamMemberId: { not: null }, status: EmployeeStatus.ACTIVE },
+      select: { id: true, firstName: true, lastName: true, altegioScheduleAccess: true },
+      orderBy: { lastName: 'asc' },
+    });
+    const blockedScheduleEmployees = scheduleEmployees.flatMap((employee) => {
+      const snapshot = employee.altegioScheduleAccess as Record<string, unknown> | null;
+      const reason = scheduleAccessBlockReason({
+        deleted: snapshot?.deleted === true,
+        fired: snapshot?.fired === true,
+        hasAccessTimetable: snapshot?.hasAccessTimetable === true ? true : snapshot?.hasAccessTimetable === false ? false : null,
+      });
+      return reason ? [{ id: employee.id, name: `${employee.firstName} ${employee.lastName}`.trim(), reason }] : [];
+    });
+
     return {
       connected: Boolean(subscription?.altegioLocationId),
       locationId: subscription?.altegioLocationId ?? null,
@@ -76,6 +92,8 @@ export class AltegioStaffScheduleSyncService {
       scheduleLastSyncedAt: subscription?.altegioScheduleLastSyncedAt?.toISOString() ?? null,
       lastError: subscription?.altegioSyncLastError ?? null,
       linkedEmployees,
+      scheduleReadyEmployees: scheduleEmployees.length - blockedScheduleEmployees.length,
+      blockedScheduleEmployees,
       totalEmployees,
       altegioShifts,
       hiteamPublishedShifts: hiteamShifts,
@@ -240,6 +258,7 @@ export class AltegioStaffScheduleSyncService {
             data: {
               altegioTeamMemberId: staff.id,
               altegioLinkedAt: new Date(),
+              altegioScheduleAccess: scheduleAccessSnapshot(staff),
               firstName,
               lastName,
               phone: normalizeAltegioPhone(staff.phone) ?? undefined,
@@ -739,6 +758,7 @@ export class AltegioStaffScheduleSyncService {
       data: {
         altegioTeamMemberId: staff.id,
         altegioLinkedAt: new Date(),
+        altegioScheduleAccess: scheduleAccessSnapshot(staff),
         firstName,
         lastName,
         phone: normalizeAltegioPhone(staff.phone) ?? undefined,
@@ -874,6 +894,28 @@ export class AltegioStaffScheduleSyncService {
       }
     }
 
+    // Never enable paid/calendar access implicitly. The remote staff card owns
+    // eligibility, so recheck it before every outbound batch (including cancel).
+    const memberIds = new Set([...byMemberSlots.values(), ...schedulesToDelete].map(item => item.teamMemberId));
+    for (const teamMemberId of memberIds) {
+      const remote = await this.altegioB2b.getTeamMember({ locationId, teamMemberId });
+      if (remote) {
+        await this.prisma.employee.updateMany({
+          where: { tenantId, altegioTeamMemberId: teamMemberId },
+          data: { altegioScheduleAccess: scheduleAccessSnapshot(remote) },
+        });
+      }
+      const reason = scheduleAccessBlockReason(remote);
+      if (reason) {
+        throw new HttpException({
+          message: `Altegio schedule export blocked for ${remote?.name || teamMemberId}: ${reason}. Enable the employee in the Altegio work schedule, then synchronize again.`,
+          code: 'ALTEGIO_EMPLOYEE_SCHEDULE_BLOCKED',
+          teamMemberId,
+          reason,
+        }, HttpStatus.CONFLICT);
+      }
+    }
+
     await this.altegioB2b.setStaffSchedule({
       locationId,
       schedulesToSet: [...byMemberSlots.values()],
@@ -955,6 +997,7 @@ export class AltegioStaffScheduleSyncService {
         data: {
           altegioTeamMemberId: staff.id,
           altegioLinkedAt: new Date(),
+          altegioScheduleAccess: scheduleAccessSnapshot(staff),
           firstName,
           lastName,
           phone: phone ?? undefined,
@@ -1008,6 +1051,7 @@ export class AltegioStaffScheduleSyncService {
           hireDate: new Date(),
           altegioTeamMemberId: staff.id,
           altegioLinkedAt: new Date(),
+          altegioScheduleAccess: scheduleAccessSnapshot(staff),
         },
       });
 

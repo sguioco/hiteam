@@ -35,6 +35,8 @@ type AltegioSyncStatus = {
   scheduleLastSyncedAt: string | null;
   lastError: string | null;
   linkedEmployees: number;
+  scheduleReadyEmployees: number;
+  blockedScheduleEmployees: Array<{ id: string; name: string; reason: string }>;
   totalEmployees: number;
   altegioShifts: number;
   hiteamPublishedShifts: number;
@@ -336,6 +338,36 @@ export function AltegioIntegrationPanel({
                 {locale === "ru" ? "Автоматическая синхронизация" : "Automatic synchronization"}
               </p>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200/80 p-5">
+            <p className="text-sm font-semibold">
+              {locale === "ru" ? "Готовы к экспорту расписания" : "Ready for schedule export"}: {syncStatus.scheduleReadyEmployees ?? 0} / {syncStatus.linkedEmployees}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {locale === "ru"
+                ? "Связь профиля не включает сотрудника в рабочее расписание Altegio. HiTeam не активирует платные места автоматически."
+                : "A linked profile does not enable the employee in Altegio's work schedule. HiTeam never activates paid seats automatically."}
+            </p>
+            {!!syncStatus.blockedScheduleEmployees?.length && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {locale === "ru" ? "Требуют проверки" : "Need attention"} ({syncStatus.blockedScheduleEmployees.length})
+                </summary>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {syncStatus.blockedScheduleEmployees.map((employee) => (
+                    <li key={employee.id}>
+                      <span className="font-medium">{employee.name}</span>
+                      <span className="text-muted-foreground"> — {employee.reason === "timetable_disabled"
+                        ? (locale === "ru" ? "Включите сотрудника в рабочее расписание Altegio, затем синхронизируйте снова" : "Enable the employee in Altegio's work schedule, then synchronize again")
+                        : employee.reason === "timetable_unknown"
+                          ? (locale === "ru" ? "Доступ к расписанию ещё не подтверждён — выполните синхронизацию" : "Schedule access is not confirmed yet — synchronize")
+                          : (locale === "ru" ? "Карточка отсутствует или сотрудник уволен в Altegio" : "Employee is missing or dismissed in Altegio")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80">

@@ -22,8 +22,16 @@ import {
   parseLocationProfilePayload,
   parseSchedulePayload,
   parseTeamMembersPayload,
+  parseSingleTeamMemberPayload,
+  scheduleAccessBlockReason,
 } from './altegio-b2b.client';
 import { resolveMarketplaceTrialGrant } from '../billing/altegio-marketplace.helpers';
+
+const disabledScheduleMember = parseSingleTeamMemberPayload({ data: { id: 123, has_access_timetable: false, bookable: true } }, '123');
+assert.equal(disabledScheduleMember?.hasAccessTimetable, false);
+assert.equal(scheduleAccessBlockReason(disabledScheduleMember), 'timetable_disabled');
+assert.equal(scheduleAccessBlockReason(parseSingleTeamMemberPayload({ data: { id: 123 } }, '123')), 'timetable_unknown');
+assert.equal(scheduleAccessBlockReason(parseSingleTeamMemberPayload({ data: { id: 123, has_access_timetable: true, bookable: false } }, '123')), null);
 
 function testPhoneMatching() {
   assert.equal(phonesMatch('+971501234567', '971501234567'), true);

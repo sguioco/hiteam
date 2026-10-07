@@ -191,6 +191,46 @@ async function testScheduleExportErrorIsPersisted() {
   assert.match(String((saved[0].data as Record<string, unknown>).altegioSyncLastError), /schedule export denied/);
 }
 
+async function testScheduleEligibilityGuardsOutboundWrites() {
+  for (const enabled of [false, true]) {
+    let writes = 0;
+    const prisma = {
+      shift: { findMany: async () => [{
+        shiftDate: new Date('2026-10-09'), startsAt: new Date('2026-10-09T05:00Z'), endsAt: new Date('2026-10-09T14:00Z'),
+        employee: { altegioTeamMemberId: '123', primaryLocation: { timezone: 'Asia/Dubai' } },
+      }] },
+      employee: { updateMany: async () => ({ count: 1 }) },
+    };
+    const sync = service(prisma, {
+      getTeamMember: async () => ({ id: '123', name: 'Test', hasAccessTimetable: enabled, bookable: false, fired: false, deleted: false }),
+      setStaffSchedule: async () => { writes++; },
+    });
+    const run = () => (sync as any).pushHiteamShiftsToAltegio('tenant-1', '759658', { from: new Date('2026-10-09'), to: new Date('2026-10-10') });
+    if (enabled) assert.equal(await run(), 1);
+    else await assert.rejects(run, /timetable_disabled/);
+    assert.equal(writes, enabled ? 1 : 0);
+  }
+}
+
+async function testStatusSeparatesLinkedAndReady() {
+  const prisma = {
+    billingSubscription: { findUnique: async () => ({ altegioLocationId: '759658' }) },
+    employee: {
+      count: async () => 3,
+      findMany: async () => [
+        { id: 'ready', firstName: 'Ready', lastName: '', altegioScheduleAccess: { hasAccessTimetable: true, bookable: false } },
+        { id: 'blocked', firstName: 'Blocked', lastName: '', altegioScheduleAccess: { hasAccessTimetable: false } },
+        { id: 'unknown', firstName: 'Unknown', lastName: '', altegioScheduleAccess: null },
+      ],
+    },
+    shift: { count: async () => 0 },
+  };
+  const result = await service(prisma, { isConfigured: () => true }).getStatus('tenant-1');
+  assert.equal(result.linkedEmployees, 3);
+  assert.equal(result.scheduleReadyEmployees, 1);
+  assert.deepEqual(result.blockedScheduleEmployees.map(e => e.reason), ['timetable_disabled', 'timetable_unknown']);
+}
+
 void Promise.all([
   testLinkedEmployeeProfileIsUpdated(),
   testTerminatedLinkedEmployeeIsDeactivated(),
@@ -200,5 +240,7 @@ void Promise.all([
   testPartialExportFailureIsNotReportedAsSuccess(),
   testPilotImportsAreReconciledWithoutRemoteDuplicates(),
   testScheduleExportErrorIsPersisted(),
+  testScheduleEligibilityGuardsOutboundWrites(),
+  testStatusSeparatesLinkedAndReady(),
 ])
   .then(() => console.log('altegio marketplace outbound: ok'));
