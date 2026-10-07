@@ -260,11 +260,8 @@ export class AltegioB2bClient {
     positionId?: number | null;
     userToken?: string;
   }) {
-    const phoneDigits = digitsOnly(args.phone);
-    const email = (args.email || '').trim();
-    if (!phoneDigits || !/^\d{9,15}$/.test(phoneDigits) || !email || email.endsWith('@users.hiteam.local')) {
-      throw new AltegioB2bError('Altegio staff export requires a real email and a phone number with 9–15 digits.', 422);
-    }
+    // Export a staff card, not an Altegio login. Non-null user contacts make
+    // quick creation link/invite a CRM user and can conflict with existing staff.
     const payload = await this.request(
       'POST',
       `${this.apiBase}/api/v1/company/${encodeURIComponent(args.locationId)}/staff/quick`,
@@ -272,11 +269,11 @@ export class AltegioB2bClient {
         name: args.name.trim(),
         specialization: (args.specialization || 'Specialist').trim(),
         position_id: args.positionId ?? null,
-        phone_number: phoneDigits || null,
-        user_email: email,
-        user_phone: phoneDigits,
+        user_email: null,
+        user_phone: null,
         is_user_invite: false,
         is_paid_staff: false,
+        has_timetable_access: false,
       },
       'application/vnd.api.v2+json',
       true,

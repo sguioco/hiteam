@@ -314,15 +314,32 @@ assert.equal(altegioRequestErrorMessage(500, 'GET', 'https://api.alteg.io/api/v1
 assert.equal(isImportedAltegioEmployee('ALT-759658-42', 'real@example.com'), true);
 assert.equal(isImportedAltegioEmployee('E-42', 'altegio+42@users.hiteam.local'), true);
 assert.equal(isImportedAltegioEmployee('E-42', 'real@example.com'), false);
-async function testStaffExportRequiresRealContacts() {
+async function testStaffExportCreatesCardWithoutUserAccount() {
   const client = new AltegioB2bClient({ get: () => '' } as never);
+  const bodies: Record<string, unknown>[] = [];
+  (client as any).request = async (method: string, url: string, body: Record<string, unknown>) => {
+    assert.equal(method, 'POST');
+    assert.match(url, /company\/759658\/staff\/quick$/);
+    bodies.push(body);
+    return { data: { id: 123 } };
+  };
   for (const contact of [
     { phone: null, email: 'real@example.com' },
     { phone: '+971501234567', email: null },
     { phone: '123', email: 'real@example.com' },
     { phone: '+971501234567', email: 'altegio+42@users.hiteam.local' },
   ]) {
-    await assert.rejects(client.createTeamMember({ locationId: '759658', name: 'Test', ...contact }), /requires a real email/);
+    const result = await client.createTeamMember({ locationId: '759658', name: 'Test', ...contact });
+    assert.equal(result.id, '123');
+  }
+  await client.createTeamMember({ locationId: '759658', name: 'Test', phone: '+79873991298', email: 'test@example.com' });
+  for (const body of bodies) {
+    assert.equal(body.user_email, null);
+    assert.equal(body.user_phone, null);
+    assert.equal(body.is_user_invite, false);
+    assert.equal(body.is_paid_staff, false);
+    assert.equal(body.has_timetable_access, false);
+    assert.equal('phone_number' in body, false);
   }
 }
 async function testListHydratesScheduleAccess() {
@@ -340,4 +357,4 @@ async function testListHydratesScheduleAccess() {
   (client as any).request = async () => { throw new Error('access denied'); };
   await assert.rejects(client.listTeamMembers('759658'), /access denied/);
 }
-void Promise.all([testStaffExportRequiresRealContacts(), testListHydratesScheduleAccess()]).then(() => console.log('altegio staff/schedule sync helpers: ok'));
+void Promise.all([testStaffExportCreatesCardWithoutUserAccount(), testListHydratesScheduleAccess()]).then(() => console.log('altegio staff/schedule sync helpers: ok'));
