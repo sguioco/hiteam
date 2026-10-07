@@ -54,6 +54,13 @@ async function main() {
   assert.equal(writes.find(w => w.model === 'employeeInvitation')?.args.where.tenantId, 'company-a');
   assert.equal(writes.find(w => w.model === 'employeeInvitation')?.args.data.status, 'EXPIRED');
   assert.equal(remotePushes, 2, 'terminated employees must be deactivated in both Altegio integrations');
+  const warnings: string[] = [];
+  service.logger = { warn: (message: string) => warnings.push(message) };
+  service.altegioStaffScheduleSync = { pushEmployeeToAltegio: async () => { throw new Error('export unavailable'); } };
+  service.altegioPilot = { pushEmployeeToAltegio: async () => { throw new Error('pilot unavailable'); } };
+  assert.doesNotThrow(() => service.pushEmployeeToAltegioInBackground('company-a', 'employee-a'), 'Remote failures must not undo a committed profile operation.');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(warnings.length, 2, 'Both background export failures must be reported instead of silently swallowed.');
   const sync = Object.create(AltegioStaffScheduleSyncService.prototype) as any;
   sync.requireConnectedContext = async () => ({ locationId: 'location' });
   sync.altegioB2b = { isConfigured: () => true, listTeamMembers: async () => [{ id: 'remote', name: 'Former Employee', fired: false }] };

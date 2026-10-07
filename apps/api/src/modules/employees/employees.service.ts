@@ -22,6 +22,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { JwtUser } from '../../common/interfaces/jwt-user.interface';
 import { AltegioStaffScheduleSyncService } from '../altegio-sync/altegio-staff-schedule-sync.service';
 import { AltegioPilotService } from '../altegio-sync/altegio-pilot.service';
+import { withBusinessSpan } from '../../observability/tracing';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { CollaborationRealtimeService } from '../collaboration/collaboration-realtime.service';
@@ -235,7 +236,15 @@ export class EmployeesService {
   }
 
   private pushEmployeeToAltegioInBackground(tenantId: string, employeeId: string) {
-    void this.altegioStaffScheduleSync?.pushEmployeeToAltegio(tenantId, employeeId).catch((error) => {
+    void withBusinessSpan('altegio.employee.export', { 'integration.system': 'marketplace' },
+      async () => this.altegioStaffScheduleSync?.pushEmployeeToAltegio(tenantId, employeeId), {
+        attributesFromResult: (result) => ({
+          'integration.export.skipped': result?.skipped ?? true,
+          'integration.export.reason': result && 'reason' in result ? result.reason : result ? 'completed' : 'not_configured',
+          'hiteam.operation.status': result && 'reason' in result && result.reason === 'push_failed' ? 'error' : 'success',
+          'integration.export.linked': Boolean(result && 'teamMemberId' in result && result.teamMemberId),
+        }),
+      }).catch((error) => {
       this.logger.warn(
         `Unable to push employee ${employeeId} to Altegio: ${
           error instanceof Error ? error.message : String(error)
@@ -2314,6 +2323,11 @@ export class EmployeesService {
         migratedFromPendingApproval: canRegisterPendingInvitation,
       },
     });
+    if (result.invitation.employeeId) {
+      // The committed profile is now complete. Export both new and imported
+      // employees through the same path as ordinary profile edits.
+      this.pushEmployeeToAltegioInBackground(invitation.tenantId, result.invitation.employeeId);
+    }
     const companyName = invitation.company?.name ?? invitation.tenant.companies[0]?.name ?? invitation.tenant.name;
     const statusEmailResult = await this.sendInvitationStatusEmailSafely({
       email: registrationEmail,

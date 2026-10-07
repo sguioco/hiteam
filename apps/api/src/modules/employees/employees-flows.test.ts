@@ -125,4 +125,12 @@ testReviewEmailsAreSyncedToKommo();
 testInvitationDeletionIsSyncedToKommo();
 testImportedAltegioEmployeeInvitationReusesExistingProfile();
 
+const registration = methodBody('registerFromInvitation');
+const exportCall = 'this.pushEmployeeToAltegioInBackground(invitation.tenantId, result.invitation.employeeId)';
+assert.ok(registration.includes(exportCall), 'Completed invitation registration must export the saved employee to Altegio.');
+assert.ok(registration.indexOf(exportCall) > registration.indexOf('action: \'employee.profile_submitted\''), 'Export must start only after the profile transaction has committed.');
+assert.ok(registration.indexOf(exportCall) < registration.indexOf('await this.sendInvitationStatusEmailSafely'), 'Mail delivery must not delay or prevent profile export.');
+assert.match(registration, /if \(result\.invitation\.employeeId\) \{[\s\S]*?pushEmployeeToAltegioInBackground/, 'Both new and reused imported profiles must use the resulting employee ID.');
+assert.match(source, /withBusinessSpan\('altegio\.employee\.export'/, 'Background export must emit a business trace.');
+
 console.log('employees flow tests passed');
