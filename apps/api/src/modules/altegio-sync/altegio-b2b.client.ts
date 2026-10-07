@@ -216,7 +216,22 @@ export class AltegioB2bClient {
       userToken,
     );
 
-    return parseTeamMembersPayload(payload);
+    const members = parseTeamMembersPayload(payload);
+    // The v2 list omits timetable access. The v1 card owns this setting;
+    // fetch it sequentially to avoid an unbounded burst against Altegio.
+    for (const member of members) {
+      const card = await this.getTeamMember({ locationId, teamMemberId: member.id, userToken });
+      if (!card) {
+        member.deleted = true;
+        member.hasAccessTimetable = null;
+        continue;
+      }
+      member.hasAccessTimetable = card.hasAccessTimetable;
+      member.bookable = card.bookable;
+      member.fired = card.fired;
+      member.deleted = card.deleted;
+    }
+    return members;
   }
 
   async getTeamMember(args: {
@@ -617,6 +632,7 @@ function parseOptionalFlag(value: unknown): boolean | null {
 
 export function scheduleAccessSnapshot(staff: AltegioTeamMember) {
   return {
+    checkedAt: new Date().toISOString(),
     hasAccessTimetable: staff.hasAccessTimetable ?? null,
     bookable: staff.bookable ?? null,
     fired: staff.fired,

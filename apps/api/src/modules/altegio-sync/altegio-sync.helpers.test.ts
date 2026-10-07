@@ -317,4 +317,19 @@ async function testStaffExportRequiresRealContacts() {
     await assert.rejects(client.createTeamMember({ locationId: '759658', name: 'Test', ...contact }), /requires a real email/);
   }
 }
-void testStaffExportRequiresRealContacts().then(() => console.log('altegio staff/schedule sync helpers: ok'));
+async function testListHydratesScheduleAccess() {
+  const client = new AltegioB2bClient({ get: () => '' } as never);
+  const calls: string[] = [];
+  (client as any).request = async (_method: string, url: string) => {
+    calls.push(url);
+    if (url.includes('/api/v2/')) return { data: [{ id: '42', attributes: { name: 'Test' } }] };
+    return { data: { id: 42, name: 'Test', has_access_timetable: false, bookable: false, fired: 0 } };
+  };
+  const members = await client.listTeamMembers('759658');
+  assert.equal(members[0].hasAccessTimetable, false);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1], /staff\/759658\/42$/);
+  (client as any).request = async () => { throw new Error('access denied'); };
+  await assert.rejects(client.listTeamMembers('759658'), /access denied/);
+}
+void Promise.all([testStaffExportRequiresRealContacts(), testListHydratesScheduleAccess()]).then(() => console.log('altegio staff/schedule sync helpers: ok'));

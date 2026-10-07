@@ -90,12 +90,12 @@ export function AltegioIntegrationPanel({
     void apiRequest<AltegioPilotStatus>("/altegio/pilot", { token: session.accessToken })
       .then(setPilotStatus)
       .catch(() => undefined);
-  }, []);
+  }, [marketplace]);
 
   useEffect(() => {
     void loadSyncStatus();
     return () => { ++statusRequest.current; };
-  }, []);
+  }, [marketplace]);
 
   async function syncNow() {
     const session = getSession();
@@ -107,7 +107,6 @@ export function AltegioIntegrationPanel({
         method: "POST",
         token: session.accessToken,
       });
-      await loadSyncStatus();
     } catch (cause) {
       setSyncActionError(
         cause instanceof Error
@@ -117,6 +116,8 @@ export function AltegioIntegrationPanel({
             : "Unable to start synchronization.",
       );
     } finally {
+      // A failed sync can still update employee readiness and persisted errors.
+      await loadSyncStatus();
       setSyncing(false);
     }
   }
