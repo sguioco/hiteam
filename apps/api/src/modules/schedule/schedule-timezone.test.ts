@@ -19,12 +19,13 @@ async function testCreateAndUpdateUseLocationTimezone() {
     location: { id: 'location', companyId: 'company', name: 'Dubai', timezone: 'Asia/Dubai' },
   };
   let saved: Record<string, any> = {};
+  let employeeId = 'employee';
   const prisma = {
     shiftTemplate: { findFirst: async (args: any) => {
       assert.equal(args.select.location.select.timezone, true);
       return template;
     } },
-    employee: { findFirst: async () => ({ id: 'employee', firstName: 'Test', lastName: 'User', primaryLocationId: 'location' }) },
+    employee: { findFirst: async () => ({ id: employeeId, firstName: 'Test', lastName: 'User', primaryLocationId: 'location' }) },
     shift: {
       create: async ({ data }: any) => (saved = { ...data, id: 'shift', status: 'PUBLISHED', location: template.location }),
       findFirst: async () => saved,
@@ -32,7 +33,9 @@ async function testCreateAndUpdateUseLocationTimezone() {
     },
   };
   const service = new ScheduleService(prisma as never, { log: async () => {} } as never, {} as never);
+  const pushes: string[] = [];
   Object.assign(service, {
+    pushShiftDayToAltegioInBackground: (_tenant: string, employee: string, date: Date) => pushes.push(`${employee}:${date.toISOString().slice(0, 10)}`),
     assertLocationReadable: async () => {},
     resolveActorEmployeeId: async () => null,
     emitScheduleWorkspaceRefreshForEmployees: async () => {},
@@ -46,6 +49,11 @@ async function testCreateAndUpdateUseLocationTimezone() {
   assert.equal(saved.startsAt.toISOString(), '2099-10-09T05:00:00.000Z');
   assert.equal(saved.endsAt.toISOString(), '2099-10-09T14:00:00.000Z');
   assert.equal(saved.fixedBreakStartsAt.toISOString(), '2099-10-09T08:00:00.000Z');
+  assert.deepEqual(pushes.slice(-2), ['employee:2099-10-08', 'employee:2099-10-09']);
+  employeeId = 'employee-2';
+  await service.updateShift('tenant', 'owner', 'shift', { employeeId });
+  assert.deepEqual(pushes.slice(-2), ['employee:2099-10-09', 'employee-2:2099-10-09']);
+  employeeId = 'employee';
   template.startsAtLocal = '22:00'; template.endsAtLocal = '06:00';
   await service.createShift('tenant', 'owner', { templateId: 'template', employeeId: 'employee', shiftDate: '2099-10-10' });
   assert.equal(saved.startsAt.toISOString(), '2099-10-10T18:00:00.000Z');
@@ -54,4 +62,26 @@ async function testCreateAndUpdateUseLocationTimezone() {
   await assert.rejects(service.createShift('tenant', 'owner', { templateId: 'template', employeeId: 'employee', shiftDate: '2099-10-11' }), /Invalid location timezone/);
 }
 
-void testCreateAndUpdateUseLocationTimezone().then(() => console.log('schedule location timezone: ok'));
+async function testBackgroundWritesAreSerialized() {
+  const calls: number[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const s = new ScheduleService({} as never, {} as never, {} as never, {
+    pushShiftDayToAltegio: async (_tenant: string, _employee: string, day: Date) => {
+      calls.push(day.getUTCDate());
+      if (day.getUTCDate() === 8) await gate;
+    },
+  } as never) as any;
+  s.pushShiftDayToAltegioInBackground('tenant', 'employee', new Date('2099-10-08'));
+  s.pushShiftDayToAltegioInBackground('tenant', 'employee', new Date('2099-10-09'));
+  await Promise.resolve();
+  assert.deepEqual(calls, [8]);
+  const completion = s.altegioScheduleWrites.get('tenant');
+  release();
+  await completion;
+  assert.deepEqual(calls, [8, 9]);
+  await Promise.resolve();
+  assert.equal(s.altegioScheduleWrites.size, 0);
+}
+
+void Promise.all([testCreateAndUpdateUseLocationTimezone(), testBackgroundWritesAreSerialized()]).then(() => console.log('schedule location timezone: ok'));

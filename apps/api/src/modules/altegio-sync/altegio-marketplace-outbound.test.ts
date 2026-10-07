@@ -3,6 +3,7 @@ import { EmployeeStatus } from '@prisma/client';
 import { AltegioStaffScheduleSyncService } from './altegio-staff-schedule-sync.service';
 
 function service(prisma: Record<string, unknown>, b2b: Record<string, unknown>) {
+  prisma.$transaction ??= async (fn: (tx: unknown) => unknown) => fn({ $executeRaw: async () => 1 });
   return new AltegioStaffScheduleSyncService(prisma as never, b2b as never);
 }
 
@@ -243,6 +244,10 @@ async function testErrorsClearOnlyTheirOwnDomain() {
   assert.deepEqual(writes[1].where.OR[1], { altegioSyncLastErrorScope: { startsWith: 'staff:' } });
   await (s as any).clearSyncError('tenant-1', 'schedule:employee-1');
   assert.deepEqual(writes[2].where.OR, [{ altegioSyncLastErrorScope: 'schedule:employee-1' }]);
+  const start = new Date('2026-10-07T00:00:00Z');
+  await (s as any).clearSyncError('tenant-1', 'schedule:employee-1:2026-10-08', start);
+  assert.deepEqual(writes[3].where.OR, [{ altegioSyncLastErrorScope: 'schedule:employee-1:2026-10-08' }]);
+  assert.equal(writes[3].where.altegioSyncLastErrorAt.lte, start);
 }
 
 async function testCancellationDeletesOnlyEmptyOwnedDays() {

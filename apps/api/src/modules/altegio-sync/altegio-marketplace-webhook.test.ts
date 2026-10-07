@@ -8,6 +8,7 @@ function service(prisma: Record<string, unknown>, b2b: Record<string, unknown>) 
 
 function basePrisma(overrides: Record<string, unknown> = {}) {
   return {
+    $transaction: async (fn: (tx: unknown) => unknown) => fn({ $executeRaw: async () => 1 }),
     billingSubscription: {
       findFirst: async () => ({ tenantId: 'tenant-1' }),
       findUnique: async () => ({ altegioLocationId: '759658' }),

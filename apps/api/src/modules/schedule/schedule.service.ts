@@ -170,6 +170,7 @@ const SHIFT_SELECT = {
 @Injectable()
 export class ScheduleService {
   private readonly logger = new Logger(ScheduleService.name);
+  private readonly altegioScheduleWrites = new Map<string, Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -180,19 +181,20 @@ export class ScheduleService {
   ) {}
 
   private pushShiftDayToAltegioInBackground(tenantId: string, employeeId: string, shiftDate: Date) {
-    void this.altegioStaffScheduleSync?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate).catch((error) => {
+    const previous = this.altegioScheduleWrites.get(tenantId) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      await this.altegioStaffScheduleSync?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate);
+      await this.altegioPilot?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate);
+    }).catch((error) => {
       this.logger.warn(
         `Unable to push shift day to Altegio tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     });
-    void this.altegioPilot?.pushShiftDayToAltegio(tenantId, employeeId, shiftDate).catch((error) => {
-      this.logger.warn(
-        `Unable to push shift day to Altegio Pilot tenantId=${tenantId} employeeId=${employeeId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+    this.altegioScheduleWrites.set(tenantId, next);
+    void next.then(() => {
+      if (this.altegioScheduleWrites.get(tenantId) === next) this.altegioScheduleWrites.delete(tenantId);
     });
   }
 
@@ -640,6 +642,9 @@ export class ScheduleService {
       'schedule.shift_updated',
     );
 
+    if (existingShift.employeeId !== employee.id || existingShift.shiftDate.getTime() !== shiftDate.getTime()) {
+      this.pushShiftDayToAltegioInBackground(tenantId, existingShift.employeeId, existingShift.shiftDate);
+    }
     this.pushShiftDayToAltegioInBackground(tenantId, employee.id, shiftDate);
 
     return shift;

@@ -210,6 +210,7 @@ export class AltegioStaffScheduleSyncService {
   }
 
   private async syncEmployeesInternal(tenantId: string) {
+    const startedAt = new Date();
     const ctx = await this.requireConnectedContext(tenantId);
     if (!this.altegioB2b.isConfigured()) {
       throw new HttpException(
@@ -341,7 +342,7 @@ export class AltegioStaffScheduleSyncService {
         },
       });
 
-      await this.clearSyncError(tenantId, 'staff');
+      await this.clearSyncError(tenantId, 'staff', startedAt);
 
       return {
         locationId: ctx.locationId,
@@ -374,6 +375,7 @@ export class AltegioStaffScheduleSyncService {
     range?: { from?: Date; to?: Date },
     staffIds?: string[],
   ) {
+    const startedAt = new Date();
     const ctx = await this.requireConnectedContext(tenantId);
     if (!this.altegioB2b.isConfigured()) {
       throw new HttpException(
@@ -524,7 +526,7 @@ export class AltegioStaffScheduleSyncService {
         },
       });
 
-      await this.clearSyncError(tenantId, 'schedule');
+      await this.clearSyncError(tenantId, 'schedule', startedAt);
 
       return {
         locationId: ctx.locationId,
@@ -646,16 +648,18 @@ export class AltegioStaffScheduleSyncService {
     dayStart.setUTCHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const errorScope = `schedule:${employeeId}:${formatDateOnly(dayStart)}`;
+    const startedAt = new Date();
 
     try {
       const pushed = await this.pushHiteamShiftsToAltegio(tenantId, ctx.locationId, {
         from: dayStart,
         to: dayEnd,
       }, [employeeId], true);
-      await this.clearSyncError(tenantId, `schedule:${employeeId}`);
+      await this.clearSyncError(tenantId, errorScope, startedAt);
       return { skipped: false as const, pushed };
     } catch (error) {
-      await this.rememberSyncError(tenantId, error, `schedule:${employeeId}`);
+      await this.rememberSyncError(tenantId, error, errorScope);
       this.logger.warn(
         `pushShiftDayToAltegio failed tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
@@ -843,6 +847,21 @@ export class AltegioStaffScheduleSyncService {
   }
 
   private async pushHiteamShiftsToAltegio(
+    tenantId: string,
+    locationId: string,
+    window: { from: Date; to: Date },
+    employeeIds?: string[],
+    deleteEmptyDays = false,
+  ) {
+    // Serialize remote writes across API replicas and manual/background sync.
+    // Read the current shifts only after acquiring the transaction-scoped lock.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`altegio-schedule:${tenantId}`}, 0))`;
+      return this.pushHiteamShiftsToAltegioUnlocked(tenantId, locationId, window, employeeIds, deleteEmptyDays);
+    }, { timeout: 60000, maxWait: 60000 });
+  }
+
+  private async pushHiteamShiftsToAltegioUnlocked(
     tenantId: string,
     locationId: string,
     window: { from: Date; to: Date },
@@ -1145,9 +1164,9 @@ export class AltegioStaffScheduleSyncService {
     };
   }
 
-  private async clearSyncError(tenantId: string, scope: string) {
+  private async clearSyncError(tenantId: string, scope: string, startedAt = new Date()) {
     await this.prisma.billingSubscription.updateMany({
-      where: { tenantId, OR: [
+      where: { tenantId, altegioSyncLastErrorAt: { lte: startedAt }, OR: [
         { altegioSyncLastErrorScope: scope },
         ...(scope.includes(':') ? [] : [{ altegioSyncLastErrorScope: { startsWith: `${scope}:` } }]),
       ] },
