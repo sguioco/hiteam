@@ -52,7 +52,7 @@ async function testLinkedEmployeeProfileIsUpdated() {
   assert.deepEqual(result, { skipped: false, updated: true, teamMemberId: 'remote-1' });
   assert.equal(updates.length, 1);
   assert.equal(updates[0].teamMemberId, 'remote-1');
-  assert.equal(updates[0].name, 'Petrova Anna');
+  assert.equal(updates[0].name, 'Anna Petrova');
   assert.equal(creates.length, 0);
 }
 
@@ -137,7 +137,7 @@ async function testUnlinkedEmployeeIsCreatedAndLinked() {
   const result = await service(prisma, altegio).pushEmployeeToAltegio('tenant-1', 'employee-1');
   assert.deepEqual(result, { skipped: false, teamMemberId: 'remote-9' });
   assert.equal(creates.length, 1);
-  assert.equal(creates[0].name, 'Petrova Anna');
+  assert.equal(creates[0].name, 'Anna Petrova');
   assert.deepEqual((saved[0].data as Record<string, unknown>).altegioTeamMemberId, 'remote-9');
 }
 

@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { withBusinessSpan } from '../../observability/tracing';
-import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError, parseSingleTeamMemberPayload, type AltegioTeamMember } from './altegio-b2b.client';
+import { AltegioB2bClient, AltegioB2bError, isAltegioInvalidCredentialsError, type AltegioTeamMember } from './altegio-b2b.client';
 import { scheduleAccessSnapshot, scheduleAccessBlockReason } from './altegio-b2b.client';
 import {
   marketplaceEmployeesTraceAttributes,
@@ -28,6 +28,7 @@ import {
   parseDateOnlyToUtc,
   phoneDigits,
   splitAltegioStaffName,
+  formatAltegioStaffName,
   syntheticAltegioEmail,
 } from './altegio-sync.helpers';
 
@@ -307,7 +308,7 @@ export class AltegioStaffScheduleSyncService {
         try {
           const created = await this.altegioB2b.createTeamMember({
             locationId: ctx.locationId,
-            name: `${employee.lastName} ${employee.firstName}`.trim(),
+            name: formatAltegioStaffName(employee),
             specialization: 'HiTeam',
             phone: employee.phone,
             email: employee.user.email.endsWith('@users.hiteam.local') ? null : employee.user.email,
@@ -568,7 +569,7 @@ export class AltegioStaffScheduleSyncService {
     }
 
     try {
-      const name = `${employee.lastName} ${employee.firstName}`.trim();
+      const name = formatAltegioStaffName(employee);
       if (employee.altegioTeamMemberId) {
         if (employee.status === EmployeeStatus.TERMINATED) {
           await this.altegioB2b.updateTeamMember({
@@ -753,12 +754,7 @@ export class AltegioStaffScheduleSyncService {
     if (status === 'delete') {
       return null;
     }
-    if (payloadData && typeof payloadData === 'object') {
-      const parsed = parseSingleTeamMemberPayload({ data: [payloadData] }, resourceId);
-      if (parsed) {
-        return parsed;
-      }
-    }
+    // Webhooks can contain the previous card; read the authoritative current state.
     try {
       return await this.altegioB2b.getTeamMember({ locationId, teamMemberId: resourceId });
     } catch (error) {

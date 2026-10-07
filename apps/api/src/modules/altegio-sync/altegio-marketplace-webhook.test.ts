@@ -56,7 +56,7 @@ async function testStaffUpdateEventIsIncrementalAndLinksExistingEmployee() {
     },
     getTeamMember: async () => {
       b2bCalls.push('getTeamMember');
-      return null;
+      return { id: '100', name: 'Updated Compound Name', fired: false, phone: null, email: null };
     },
   };
 
@@ -77,7 +77,9 @@ async function testStaffUpdateEventIsIncrementalAndLinksExistingEmployee() {
   assert.equal(employeeUpdates.length, 1);
   assert.equal((employeeUpdates[0].data as Record<string, unknown>).altegioTeamMemberId, '100');
   assert.equal((employeeUpdates[0].data as Record<string, unknown>).status, EmployeeStatus.ACTIVE);
-  assert.deepEqual(b2bCalls, [], 'payload data must be used without a remote fetch or full listing');
+  assert.equal((employeeUpdates[0].data as Record<string, unknown>).firstName, 'Updated');
+  assert.equal((employeeUpdates[0].data as Record<string, unknown>).lastName, 'Compound Name');
+  assert.deepEqual(b2bCalls, ['getTeamMember'], 'stale webhook must trigger an authoritative card fetch');
 }
 
 async function testStaffDeleteEventDeactivatesLinkedLocalEmployee() {

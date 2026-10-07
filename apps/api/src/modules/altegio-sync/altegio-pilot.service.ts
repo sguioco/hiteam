@@ -10,7 +10,6 @@ import {
   AltegioB2bClient,
   AltegioB2bError,
   isAltegioInvalidCredentialsError,
-  parseSingleTeamMemberPayload,
   type AltegioTeamMember,
 } from './altegio-b2b.client';
 import {
@@ -34,6 +33,7 @@ import {
   pilotAltegioEmployeeNumber,
   pilotAltegioSyntheticEmail,
   splitAltegioStaffName,
+  formatAltegioStaffName,
 } from './altegio-sync.helpers';
 
 const MAX_PILOT_LOCATIONS = 3;
@@ -480,12 +480,7 @@ export class AltegioPilotService {
     if (status === 'delete') {
       return null;
     }
-    if (payloadData && typeof payloadData === 'object') {
-      const parsed = parseSingleTeamMemberPayload({ data: [payloadData] }, resourceId);
-      if (parsed) {
-        return parsed;
-      }
-    }
+    // Webhooks can contain the previous card; read the authoritative current state.
     try {
       return await this.altegio.getTeamMember({ locationId: altegioLocationId, teamMemberId: resourceId, userToken });
     } catch (error) {
@@ -567,7 +562,7 @@ export class AltegioPilotService {
     });
     let created = 0;
     let updated = 0;
-    const name = `${employee.lastName} ${employee.firstName}`.trim();
+    const name = formatAltegioStaffName(employee);
     for (const location of locations) {
       const existing = await this.prisma.altegioPilotStaffLink.findFirst({
         where: { pilotLocationId: location.id, employeeId: employee.id },
@@ -739,7 +734,7 @@ export class AltegioPilotService {
     )) {
       const created = await this.altegio.createTeamMember({
         locationId: pilotLocation.altegioLocationId,
-        name: `${employee.lastName} ${employee.firstName}`.trim(),
+        name: formatAltegioStaffName(employee),
         specialization: 'HiTeam', phone: employee.phone,
         email: employee.user.email.endsWith('@users.hiteam.local') ? null : employee.user.email,
         userToken,

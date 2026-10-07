@@ -79,7 +79,7 @@ async function testLinkedEmployeeNameIsUpdated() {
   assert.deepEqual(result, { skipped: false, created: 0, updated: 1 });
   assert.equal(updates.length, 1);
   assert.equal(updates[0].teamMemberId, 'remote-1');
-  assert.equal(updates[0].name, 'Petrova Anna');
+  assert.equal(updates[0].name, 'Anna Petrova');
   assert.equal(updates[0].userToken, 'pilot-user-token');
 }
 

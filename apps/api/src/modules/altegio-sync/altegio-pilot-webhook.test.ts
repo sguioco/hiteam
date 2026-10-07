@@ -44,7 +44,7 @@ async function testStaffUpdateEventIsIncrementalWithPayloadData() {
     },
     getTeamMember: async () => {
       b2bCalls.push('getTeamMember');
-      return null;
+      return { id: '777', name: 'Updated Compound Name', fired: false, phone: null, email: null };
     },
   };
 
@@ -57,10 +57,10 @@ async function testStaffUpdateEventIsIncrementalWithPayloadData() {
   });
   assert.equal(result.mode, 'incremental');
   assert.deepEqual(result.result, { resourceId: '777', mode: 'incremental', linkedLocal: 1 });
-  assert.equal((employeeUpdates[0].data as Record<string, unknown>).firstName, 'Anna');
-  assert.equal((employeeUpdates[0].data as Record<string, unknown>).lastName, 'Petrova');
+  assert.equal((employeeUpdates[0].data as Record<string, unknown>).firstName, 'Updated');
+  assert.equal((employeeUpdates[0].data as Record<string, unknown>).lastName, 'Compound Name');
   assert.equal((employeeUpdates[0].data as Record<string, unknown>).status, EmployeeStatus.ACTIVE);
-  assert.deepEqual(b2bCalls, [], 'payload data must be used without any remote call');
+  assert.deepEqual(b2bCalls, ['getTeamMember'], 'stale webhook must trigger an authoritative card fetch');
 }
 
 async function testStaffDeleteEventDeactivatesLinkedLocalEmployee() {

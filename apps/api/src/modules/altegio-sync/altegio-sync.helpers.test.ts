@@ -11,6 +11,7 @@ import {
   pilotAltegioEmployeeNumber,
   pilotAltegioSyntheticEmail,
   splitAltegioStaffName,
+  formatAltegioStaffName,
   syntheticAltegioEmail,
 } from './altegio-sync.helpers';
 import {
@@ -48,9 +49,16 @@ function testNameSplitAndSyntheticEmail() {
   });
   assert.deepEqual(splitAltegioStaffName('Solo'), {
     firstName: 'Solo',
-    lastName: 'Staff',
+    lastName: '',
   });
   assert.equal(syntheticAltegioEmail('42'), 'altegio+42@users.hiteam.local');
+  for (const original of ['Solo', 'Yakov Pogosyan test', 'Anna Petrova']) {
+    let name = original;
+    for (let round = 0; round < 3; round++) {
+      name = formatAltegioStaffName(splitAltegioStaffName(name));
+      assert.equal(name, original);
+    }
+  }
 }
 
 function testEmployeeMatching() {

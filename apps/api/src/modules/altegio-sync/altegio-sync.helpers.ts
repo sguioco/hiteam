@@ -46,13 +46,17 @@ export function phonesMatch(left?: string | null, right?: string | null) {
   return shorter.length >= 8 && longer.endsWith(shorter);
 }
 
+export function formatAltegioStaffName(employee: { firstName: string; lastName: string }): string {
+  return [employee.firstName, employee.lastName].map((part) => part.trim()).filter(Boolean).join(' ');
+}
+
 export function splitAltegioStaffName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {
     return { firstName: 'Altegio', lastName: 'Staff' };
   }
   if (parts.length === 1) {
-    return { firstName: parts[0], lastName: 'Staff' };
+    return { firstName: parts[0], lastName: '' };
   }
   return {
     firstName: parts[0],
