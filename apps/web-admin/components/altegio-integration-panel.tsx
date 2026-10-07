@@ -34,6 +34,7 @@ type AltegioSyncStatus = {
   staffLastSyncedAt: string | null;
   scheduleLastSyncedAt: string | null;
   lastError: string | null;
+  lastErrorAt?: string | null;
   linkedEmployees: number;
   scheduleReadyEmployees: number;
   blockedScheduleEmployees: Array<{ id: string; name: string; reason: string }>;
@@ -431,6 +432,7 @@ export function AltegioIntegrationPanel({
           {syncStatus.lastError || syncActionError ? (
             <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
               {syncActionError ?? syncStatus.lastError}
+              {!syncActionError && syncStatus.lastErrorAt ? <span className="mt-1 block text-xs">{formatSyncDate(syncStatus.lastErrorAt)}</span> : null}
             </p>
           ) : null}
         </div>

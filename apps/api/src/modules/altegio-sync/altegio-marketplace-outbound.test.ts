@@ -10,6 +10,7 @@ function connectedPrisma(employee: Record<string, unknown> | null) {
   return {
     billingSubscription: {
       findUnique: async () => ({ altegioLocationId: '759658' }),
+      updateMany: async () => ({ count: 1 }),
     },
     company: { findFirst: async () => ({ id: 'company-1' }) },
     department: { findFirst: async () => ({ id: 'department-1' }) },
@@ -231,7 +232,28 @@ async function testStatusSeparatesLinkedAndReady() {
   assert.deepEqual(result.blockedScheduleEmployees.map(e => e.reason), ['timetable_disabled', 'timetable_unknown']);
 }
 
+async function testErrorsClearOnlyTheirOwnDomain() {
+  const writes: any[] = [];
+  const s = service({ billingSubscription: { updateMany: async (args: any) => { writes.push(args); return { count: 1 }; } } }, {});
+  await (s as any).rememberSyncError('tenant-1', new Error('blocked'), 'schedule:employee-1');
+  assert.equal(writes[0].data.altegioSyncLastErrorScope, 'schedule:employee-1');
+  assert.ok(writes[0].data.altegioSyncLastErrorAt instanceof Date);
+  await (s as any).clearSyncError('tenant-1', 'staff');
+  assert.deepEqual(writes[1].where.OR[0], { altegioSyncLastErrorScope: 'staff' });
+  assert.deepEqual(writes[1].where.OR[1], { altegioSyncLastErrorScope: { startsWith: 'staff:' } });
+  await (s as any).clearSyncError('tenant-1', 'schedule:employee-1');
+  assert.deepEqual(writes[2].where.OR, [{ altegioSyncLastErrorScope: 'schedule:employee-1' }]);
+}
+
+async function testCancellationDeletesOnlyEmptyOwnedDays() {
+  const s = service({ employee: { findMany: async () => [{ id: 'e1', altegioTeamMemberId: 'r1' }] }, shift: { findMany: async () => [{ employeeId: 'e1', shiftDate: new Date('2026-10-10T00:00:00Z') }] } }, {});
+  const result = await (s as any).emptyHiteamScheduleDays('tenant-1', ['e1'], { from: new Date('2026-10-09T00:00:00Z'), to: new Date('2026-10-11T00:00:00Z') });
+  assert.deepEqual(result, [{ teamMemberId: 'r1', dates: ['2026-10-09'] }]);
+}
+
 void Promise.all([
+  testErrorsClearOnlyTheirOwnDomain(),
+  testCancellationDeletesOnlyEmptyOwnedDays(),
   testLinkedEmployeeProfileIsUpdated(),
   testTerminatedLinkedEmployeeIsDeactivated(),
   testUnlinkedTerminatedEmployeeIsNotCreated(),

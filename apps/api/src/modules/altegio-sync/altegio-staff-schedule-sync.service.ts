@@ -50,6 +50,8 @@ export class AltegioStaffScheduleSyncService {
         altegioStaffLastSyncedAt: true,
         altegioScheduleLastSyncedAt: true,
         altegioSyncLastError: true,
+        altegioSyncLastErrorAt: true,
+        altegioSyncLastErrorScope: true,
       },
     });
 
@@ -91,6 +93,8 @@ export class AltegioStaffScheduleSyncService {
       staffLastSyncedAt: subscription?.altegioStaffLastSyncedAt?.toISOString() ?? null,
       scheduleLastSyncedAt: subscription?.altegioScheduleLastSyncedAt?.toISOString() ?? null,
       lastError: subscription?.altegioSyncLastError ?? null,
+      lastErrorAt: subscription?.altegioSyncLastErrorAt?.toISOString() ?? null,
+      lastErrorScope: subscription?.altegioSyncLastErrorScope ?? null,
       linkedEmployees,
       scheduleReadyEmployees: scheduleEmployees.length - blockedScheduleEmployees.length,
       blockedScheduleEmployees,
@@ -109,6 +113,10 @@ export class AltegioStaffScheduleSyncService {
         const organization = await this.syncOrganization(tenantId);
         const employees = await this.syncEmployees(tenantId);
         const schedule = await this.syncSchedule(tenantId);
+        await this.prisma.billingSubscription.updateMany({
+          where: { tenantId, altegioSyncLastErrorScope: null },
+          data: { altegioSyncLastError: null, altegioSyncLastErrorAt: null },
+        });
         return { organization, employees, schedule };
       },
     );
@@ -330,9 +338,10 @@ export class AltegioStaffScheduleSyncService {
         where: { tenantId },
         data: {
           altegioStaffLastSyncedAt: new Date(),
-          altegioSyncLastError: null,
         },
       });
+
+      await this.clearSyncError(tenantId, 'staff');
 
       return {
         locationId: ctx.locationId,
@@ -343,7 +352,7 @@ export class AltegioStaffScheduleSyncService {
         createdRemote,
       };
     } catch (error) {
-      await this.rememberSyncError(tenantId, error);
+      await this.rememberSyncError(tenantId, error, 'staff');
       throw error;
     }
   }
@@ -512,9 +521,10 @@ export class AltegioStaffScheduleSyncService {
         where: { tenantId },
         data: {
           altegioScheduleLastSyncedAt: new Date(),
-          altegioSyncLastError: null,
         },
       });
+
+      await this.clearSyncError(tenantId, 'schedule');
 
       return {
         locationId: ctx.locationId,
@@ -526,7 +536,7 @@ export class AltegioStaffScheduleSyncService {
         pushed,
       };
     } catch (error) {
-      await this.rememberSyncError(tenantId, error);
+      await this.rememberSyncError(tenantId, error, 'schedule');
       throw error;
     }
   }
@@ -564,6 +574,7 @@ export class AltegioStaffScheduleSyncService {
             teamMemberId: employee.altegioTeamMemberId,
             fired: true,
           });
+          await this.clearSyncError(tenantId, `staff:${employeeId}`);
           return {
             skipped: false as const,
             deactivated: true as const,
@@ -579,6 +590,7 @@ export class AltegioStaffScheduleSyncService {
           teamMemberId: employee.altegioTeamMemberId,
           name,
         });
+        await this.clearSyncError(tenantId, `staff:${employeeId}`);
         return {
           skipped: false as const,
           updated: true as const,
@@ -611,9 +623,10 @@ export class AltegioStaffScheduleSyncService {
           altegioLinkedAt: new Date(),
         },
       });
+      await this.clearSyncError(tenantId, `staff:${employeeId}`);
       return { skipped: false as const, teamMemberId: created.id };
     } catch (error) {
-      await this.rememberSyncError(tenantId, error);
+      await this.rememberSyncError(tenantId, error, `staff:${employeeId}`);
       this.logger.warn(
         `pushEmployeeToAltegio failed tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
@@ -639,9 +652,10 @@ export class AltegioStaffScheduleSyncService {
         from: dayStart,
         to: dayEnd,
       }, [employeeId], true);
+      await this.clearSyncError(tenantId, `schedule:${employeeId}`);
       return { skipped: false as const, pushed };
     } catch (error) {
-      await this.rememberSyncError(tenantId, error);
+      await this.rememberSyncError(tenantId, error, `schedule:${employeeId}`);
       this.logger.warn(
         `pushShiftDayToAltegio failed tenantId=${tenantId} employeeId=${employeeId}: ${
           error instanceof Error ? error.message : String(error)
@@ -1131,14 +1145,24 @@ export class AltegioStaffScheduleSyncService {
     };
   }
 
-  private async rememberSyncError(tenantId: string, error: unknown) {
+  private async clearSyncError(tenantId: string, scope: string) {
+    await this.prisma.billingSubscription.updateMany({
+      where: { tenantId, OR: [
+        { altegioSyncLastErrorScope: scope },
+        ...(scope.includes(':') ? [] : [{ altegioSyncLastErrorScope: { startsWith: `${scope}:` } }]),
+      ] },
+      data: { altegioSyncLastError: null, altegioSyncLastErrorAt: null, altegioSyncLastErrorScope: null },
+    });
+  }
+
+  private async rememberSyncError(tenantId: string, error: unknown, scope = 'staff') {
     const message = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
     await this.prisma.billingSubscription
       .updateMany({
         where: { tenantId },
-        data: { altegioSyncLastError: message },
+        data: { altegioSyncLastError: message, altegioSyncLastErrorAt: new Date(), altegioSyncLastErrorScope: scope },
       })
-      .catch(() => undefined);
+      .catch((cause) => this.logger.error(`Unable to persist Altegio sync failure: ${cause instanceof Error ? cause.message : String(cause)}`));
   }
 }
 

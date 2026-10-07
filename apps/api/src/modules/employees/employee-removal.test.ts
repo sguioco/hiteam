@@ -60,7 +60,7 @@ async function main() {
   sync.prisma = {
     employee: { findMany: async () => [{ id: 'employee-a', status: 'TERMINATED', altegioTeamMemberId: 'remote', phone: null, user: { email: 'former@example.com' } }],
       update: async () => { throw new Error('A removed employee must not be reactivated by sync'); } },
-    billingSubscription: { update: async () => ({}) },
+    billingSubscription: { update: async () => ({}), updateMany: async () => ({ count: 1 }) },
   };
   const synced = await sync.syncEmployees('company-a');
   assert.equal(synced.updatedLocal, 0);

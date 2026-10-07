@@ -394,6 +394,8 @@ model BillingSubscription {
   altegioStaffLastSyncedAt      DateTime?
   altegioScheduleLastSyncedAt   DateTime?
   altegioSyncLastError          String?
+  altegioSyncLastErrorAt        DateTime?
+  altegioSyncLastErrorScope     String?
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
 

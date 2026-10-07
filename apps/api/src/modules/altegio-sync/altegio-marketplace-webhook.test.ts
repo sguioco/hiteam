@@ -12,6 +12,7 @@ function basePrisma(overrides: Record<string, unknown> = {}) {
       findFirst: async () => ({ tenantId: 'tenant-1' }),
       findUnique: async () => ({ altegioLocationId: '759658' }),
       update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
     },
     company: { findFirst: async () => ({ id: 'company-1' }) },
     department: { findFirst: async () => ({ id: 'department-1' }) },

@@ -215,6 +215,8 @@ export class AltegioMarketplaceBillingService {
         altegioStaffLastSyncedAt: null,
         altegioScheduleLastSyncedAt: null,
         altegioSyncLastError: null,
+        altegioSyncLastErrorAt: null,
+        altegioSyncLastErrorScope: null,
       },
     });
     this.logger.log(
