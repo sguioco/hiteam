@@ -241,7 +241,7 @@ async function testErrorsClearOnlyTheirOwnDomain() {
   assert.ok(writes[0].data.altegioSyncLastErrorAt instanceof Date);
   await (s as any).clearSyncError('tenant-1', 'staff');
   assert.deepEqual(writes[1].where.OR[0], { altegioSyncLastErrorScope: 'staff' });
-  assert.deepEqual(writes[1].where.OR[1], { altegioSyncLastErrorScope: { startsWith: 'staff:' } });
+  assert.deepEqual(writes[1].where.OR, [{ altegioSyncLastErrorScope: 'staff' }]);
   await (s as any).clearSyncError('tenant-1', 'schedule:employee-1');
   assert.deepEqual(writes[2].where.OR, [{ altegioSyncLastErrorScope: 'schedule:employee-1' }]);
   const start = new Date('2026-10-07T00:00:00Z');

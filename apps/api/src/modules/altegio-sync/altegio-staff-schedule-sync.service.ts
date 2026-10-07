@@ -1170,7 +1170,7 @@ export class AltegioStaffScheduleSyncService {
     await this.prisma.billingSubscription.updateMany({
       where: { tenantId, altegioSyncLastErrorAt: { lte: startedAt }, OR: [
         { altegioSyncLastErrorScope: scope },
-        ...(scope.includes(':') ? [] : [{ altegioSyncLastErrorScope: { startsWith: `${scope}:` } }]),
+        // A bulk pull does not confirm delivery of individual failed exports.
       ] },
       data: { altegioSyncLastError: null, altegioSyncLastErrorAt: null, altegioSyncLastErrorScope: null },
     });

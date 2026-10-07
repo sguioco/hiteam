@@ -357,4 +357,20 @@ async function testListHydratesScheduleAccess() {
   (client as any).request = async () => { throw new Error('access denied'); };
   await assert.rejects(client.listTeamMembers('759658'), /access denied/);
 }
-void Promise.all([testStaffExportCreatesCardWithoutUserAccount(), testListHydratesScheduleAccess()]).then(() => console.log('altegio staff/schedule sync helpers: ok'));
+async function testDismissalPreservesRemoteName() {
+  const client = new AltegioB2bClient({ get: () => '' } as never);
+  const updates: any[] = [];
+  (client as any).request = async (method: string, _url: string, body: any) => {
+    if (method === 'GET') return { data: { id: 42, name: 'Remote Name', fired: updates.length ? 1 : 0 } };
+    updates.push(body);
+    return { data: { id: 42 } };
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await client.updateTeamMember({ locationId: '759658', teamMemberId: '42', name: 'Stale Local Name', fired: true });
+  }
+  assert.deepEqual(updates, [{ name: 'Remote Name', fired: 1 }, { name: 'Remote Name', fired: 1 }]);
+  (client as any).request = async () => { throw new Error('remote lookup denied'); };
+  await assert.rejects(client.updateTeamMember({ locationId: '759658', teamMemberId: '42', fired: true }), /remote lookup denied/);
+  assert.equal(updates.length, 2);
+}
+void Promise.all([testStaffExportCreatesCardWithoutUserAccount(), testListHydratesScheduleAccess(), testDismissalPreservesRemoteName()]).then(() => console.log('altegio staff/schedule sync helpers: ok'));

@@ -306,11 +306,19 @@ export class AltegioB2bClient {
     fired?: boolean;
     userToken?: string;
   }) {
+    // PUT requires name even for status changes. Preserve the remote name so
+    // dismissal cannot rename the card from a stale local profile.
+    const name = args.fired !== undefined
+      ? (await this.getTeamMember(args))?.name?.trim()
+      : args.name?.trim();
+    if (!name) {
+      throw new AltegioB2bError('altegio_update_team_member_name_required', 422);
+    }
     const payload = await this.request(
       'PUT',
       `${this.apiBase}/api/v1/staff/${encodeURIComponent(args.locationId)}/${encodeURIComponent(args.teamMemberId)}`,
       {
-        ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+        name,
         ...(args.fired !== undefined ? { fired: args.fired ? 1 : 0 } : {}),
       },
       'application/vnd.api.v2+json',
