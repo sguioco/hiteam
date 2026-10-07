@@ -256,7 +256,29 @@ async function testCancellationDeletesOnlyEmptyOwnedDays() {
   assert.deepEqual(result, [{ teamMemberId: 'r1', dates: ['2026-10-09'] }]);
 }
 
+async function testLegacyErrorsRequireCompleteSuccessfulSync() {
+  for (const failure of [null, 'organization', 'employees', 'schedule']) {
+    const writes: any[] = [];
+    const s = service({ billingSubscription: { updateMany: async (args: any) => { writes.push(args); return { count: 1 }; } } }, {}) as any;
+    for (const [method, phase] of [['syncOrganization', 'organization'], ['syncEmployees', 'employees'], ['syncSchedule', 'schedule']]) {
+      s[method] = async () => { if (phase === failure) throw new Error('sync failed'); return { ok: true }; };
+    }
+    if (failure) {
+      await assert.rejects(s.syncAll('tenant-1'), /sync failed/);
+      assert.equal(writes.length, 0, 'failed full sync must preserve legacy errors');
+    } else {
+      await s.syncAll('tenant-1');
+      assert.equal(writes.length, 1);
+      assert.equal(writes[0].where.altegioSyncLastErrorScope, null);
+      assert.deepEqual(writes[0].where.OR[0], { altegioSyncLastErrorAt: null });
+      assert.ok(writes[0].where.OR[1].altegioSyncLastErrorAt.lte instanceof Date);
+      assert.equal(writes[0].data.altegioSyncLastError, null);
+    }
+  }
+}
+
 void Promise.all([
+  testLegacyErrorsRequireCompleteSuccessfulSync(),
   testErrorsClearOnlyTheirOwnDomain(),
   testCancellationDeletesOnlyEmptyOwnedDays(),
   testLinkedEmployeeProfileIsUpdated(),

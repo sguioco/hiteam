@@ -111,11 +111,17 @@ export class AltegioStaffScheduleSyncService {
       'altegio.sync.all',
       { 'hiteam.integration.name': 'altegio', 'hiteam.sync.mode': 'marketplace' },
       async () => {
+        const startedAt = new Date();
         const organization = await this.syncOrganization(tenantId);
         const employees = await this.syncEmployees(tenantId);
         const schedule = await this.syncSchedule(tenantId);
         await this.prisma.billingSubscription.updateMany({
-          where: { tenantId, altegioSyncLastErrorScope: null },
+          // Only a complete successful reconciliation can resolve an unscoped
+          // legacy error. Never erase an error recorded after this run began.
+          where: { tenantId, altegioSyncLastErrorScope: null, OR: [
+            { altegioSyncLastErrorAt: null },
+            { altegioSyncLastErrorAt: { lte: startedAt } },
+          ] },
           data: { altegioSyncLastError: null, altegioSyncLastErrorAt: null },
         });
         return { organization, employees, schedule };
