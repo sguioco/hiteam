@@ -12,6 +12,12 @@ const scheduleSource = readFileSync(join(__dirname, "../components/Schedule.tsx"
 const taskDialogSource = readFileSync(join(__dirname, "../components/task-details-dialog.tsx"), "utf8");
 const dashboardHomeSource = readFileSync(join(__dirname, "../components/dashboard-home.tsx"), "utf8");
 const dashboardTasksSource = readFileSync(join(__dirname, "../components/dashboard/TasksSidebar.tsx"), "utf8");
+const invitationSource = readFileSync(join(__dirname, "../app/join/[token]/join-invitation-page-client.tsx"), "utf8");
+assert.match(invitationSource, /flex flex-wrap items-baseline gap-x-3 gap-y-1/, "Invitation email label and value must have an explicit wrapping gap.");
+assert.match(invitationSource, /ref=\{avatarInputRef\}[\s\S]*?className="hidden"[\s\S]*?type="file"/, "The native avatar file input must be hidden behind the photo control.");
+assert.match(invitationSource, /aria-label=\{locale === "ru" \? "Выбрать фото профиля" : "Choose profile photo"\}[\s\S]*?onClick=\{\(\) => avatarInputRef\.current\?\.click\(\)\}[\s\S]*?type="button"/, "Avatar selection must have an accessible non-submit button.");
+assert.match(invitationSource, /if \(!file\) \{\s*return;/, "Cancelling the file picker must preserve the current avatar.");
+assert.match(invitationSource, /className="size-full rounded-full object-cover" src=\{avatarDataUrl\}/, "The prepared avatar must be shown as a circular preview.");
 
 assert.match(activityPageSource, /<WorkspacePageHeader description=/, "Activity must leave its page title to AdminShell.");
 assert.match(leaderboardSource, /<WorkspacePageHeader\s+description=/, "Leaderboard must leave its page title to AdminShell.");

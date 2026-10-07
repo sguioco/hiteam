@@ -1,6 +1,7 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { Camera, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
@@ -77,6 +78,7 @@ export default function JoinInvitationPageClient({
   const [error, setError] = useState<string | null>(initialError);
   const [success, setSuccess] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<"password" | "profile">("password");
   const requiredMark = <span className="ml-1 text-[color:var(--destructive)]">*</span>;
   const [form, setForm] = useState(() => ({
@@ -99,9 +101,10 @@ export default function JoinInvitationPageClient({
   async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
-      setAvatarDataUrl(null);
       return;
     }
+    // Allow selecting the same file again after removing or replacing a photo.
+    event.target.value = "";
 
     try {
       setAvatarDataUrl(await prepareSquareAvatarDataUrl(file, locale));
@@ -307,8 +310,10 @@ export default function JoinInvitationPageClient({
             )}
           </p>
           <div className="preview-card mt-6">
-            <span className="section-kicker">{invitation.email ? "Email" : locale === "ru" ? "Приглашение" : "Invitation"}</span>
-            <strong>{displayEmail || invitation.phone || invitation.tenantName}</strong>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="section-kicker">{invitation.email ? "Email" : locale === "ru" ? "Приглашение" : "Invitation"}</span>
+              <strong className="min-w-0 break-all">{displayEmail || invitation.phone || invitation.tenantName}</strong>
+            </div>
             <p>
               {locale === "ru" ? "Ссылка действует до " : "The link is valid until "}
               {new Date(invitation.expiresAt).toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}.
@@ -413,10 +418,45 @@ export default function JoinInvitationPageClient({
                   value={form.phone}
                 />
               </label>
-              <label>
+              <div className="flex flex-col gap-3">
                 <span>{locale === "ru" ? "Аватар" : "Avatar"}</span>
-                <input accept="image/*" onChange={handleAvatarChange} type="file" />
-              </label>
+                <input
+                  ref={avatarInputRef}
+                  accept="image/*"
+                  aria-label={locale === "ru" ? "Выбрать фото профиля" : "Choose profile photo"}
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                  tabIndex={-1}
+                  type="file"
+                />
+                <div className="flex items-center gap-4">
+                  <button
+                    aria-label={locale === "ru" ? "Выбрать фото профиля" : "Choose profile photo"}
+                    className="relative flex size-20 shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--muted)] text-[color:var(--muted-foreground)] transition hover:border-[color:var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary)] focus-visible:ring-offset-2"
+                    disabled={submitting}
+                    onClick={() => avatarInputRef.current?.click()}
+                    type="button"
+                  >
+                    {avatarDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt={locale === "ru" ? "Фото профиля" : "Profile photo"} className="size-full rounded-full object-cover" src={avatarDataUrl} />
+                    ) : <UserRound aria-hidden="true" className="size-8" />}
+                    <span className="absolute -bottom-1 -right-1 flex size-7 items-center justify-center rounded-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)]">
+                      <Camera aria-hidden="true" className="size-4" />
+                    </span>
+                  </button>
+                  <div className="flex min-w-0 flex-col items-start gap-1">
+                    <button className="text-sm font-medium text-[color:var(--primary)] hover:underline" disabled={submitting} onClick={() => avatarInputRef.current?.click()} type="button">
+                      {avatarDataUrl ? (locale === "ru" ? "Изменить фото" : "Change photo") : (locale === "ru" ? "Добавить фото" : "Add photo")}
+                    </button>
+                    {avatarDataUrl ? (
+                      <button className="text-sm text-[color:var(--muted-foreground)] hover:underline" disabled={submitting} onClick={() => setAvatarDataUrl(null)} type="button">
+                        {locale === "ru" ? "Удалить фото" : "Remove photo"}
+                      </button>
+                    ) : <span className="text-sm text-[color:var(--muted-foreground)]">{locale === "ru" ? "Необязательно" : "Optional"}</span>}
+                  </div>
+                </div>
+              </div>
             </>
           )}
           {error ? <div className="error-box">{error}</div> : null}
