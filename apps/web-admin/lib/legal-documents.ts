@@ -36,6 +36,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
         body: [
           "These Terms of Use govern the relationship between ALT TECHNOLOGIES L.L.C (HiTeam, the Company) and any person accessing the HiTeam platform.",
           "By using the Platform, you fully and unconditionally accept this Agreement. If you do not agree with any of the terms, please stop using the Service immediately.",
+          "Acceptance of these Terms is not consent to unrelated marketing, biometric processing or background geolocation. The employer must establish a lawful basis, inform employees and obtain separate consent where required; optional consent must not be preselected. Restrict workspace roles and report recipients to authorised users.",
           "The Company may amend this Agreement unilaterally. Continued use of the Platform after publication of changes constitutes acceptance of those changes.",
           "By registering on HiTeam, you confirm that you use the Platform for business or professional purposes and not as a consumer for personal or household needs.",
           "All rights to the Platform, source code, design, algorithms, databases, trademarks and other intellectual property belong to the Company.",
@@ -297,7 +298,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
           "Biometric data is a special category of personal data and is processed only with explicit employee consent.",
           "HiTeam uses Amazon Rekognition. The system creates a mathematical facial feature vector. Original photographs are not retained for permanent storage. Transfer to AWS is based on EU Standard Contractual Clauses.",
           "The purpose is solely employee identity verification at the start and end of working shifts.",
-          "Biometric templates are stored on servers in the UAE and automatically deleted after 6 months.",
+          "Biometric records follow the six-month retention cleanup schedule. Processing locations depend on configured infrastructure and providers; ask info@hiteam.net for your workspace's details. Cleanup runs periodically and does not erase copies independently retained by an employer or provider.",
         ],
       },
       {
@@ -348,7 +349,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
       {
         title: "8. Data Retention",
         body: [
-          "All data is stored on servers in the UAE. The Company may change retention periods unilaterally. The current Policy is available at hiteam.net/privacy.",
+          "Storage and processing locations depend on the configured hosting and service providers, including biometric, SMS and payment providers; this Policy does not promise exclusive UAE storage. Contact info@hiteam.net for the processing locations applicable to your workspace. Retention changes are communicated through the updated Policy and applicable notices, subject to legal and contractual obligations.",
         ],
         bullets: [
           "biometric templates — 6 months;",
@@ -362,15 +363,15 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
       {
         title: "9. Security and Data Breaches",
         body: [
-          "Protective measures include TLS/SSL encryption, ISO 27001-compliant data centres in the UAE and restricted access.",
-          "The Company is not liable for breaches caused by third-party attacks, third-party vulnerabilities or User actions.",
-          "Affected Users will be notified within 72 hours of a detected breach. Such notice is not an admission of liability.",
+          "Protective measures include encrypted transport and access controls. Administrators should restrict roles, protect credentials and limit access to employee reports and exported files. No system guarantees absolute security.",
+          "Third-party attacks or user actions do not remove the Company's mandatory data-protection duties. Report suspected unauthorised access to info@hiteam.net without including credentials or unnecessary employee records.",
+          "We notify the relevant controller and, where required, affected individuals or authorities without undue delay and within applicable legal or contractual deadlines.",
         ],
       },
       {
         title: "10. Data Subject Rights",
         body: [
-          "You may request access, correction or deletion of your data, withdraw consent for biometric or geolocation processing, and file a complaint with the supervisory authority. Requests: info@hiteam.net",
+          "You may request access, correction or deletion of your data, withdraw consent where it is the processing basis, and file a complaint with the supervisory authority. Requests: info@hiteam.net; identify your account and workspace, not passwords or biometric images. We may verify authority and coordinate with your employer, which controls employment records. See /account-deletion for account removal; deleting an account does not necessarily erase legally retained employer records, backups or exported copies.",
         ],
       },
       {
@@ -410,6 +411,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
         title: "2. Managing Cookies",
         body: [
           "You can restrict cookies in your browser settings. Disabling technical cookies may prevent some parts of the website or Platform from working correctly.",
+          "Clearing browser cookies is not account deletion and does not remove employer records or exported reports. Use /account-deletion or info@hiteam.net for a verified deletion request. Optional analytics consent must be separate and not preselected.",
         ],
       },
       {
@@ -440,7 +442,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
         bullets: [
           "the Controller is the lawful employer or authorised representative;",
           "before adding each employee, it has obtained explicit consent for biometric data, geolocation and phone number processing;",
-          "employees have been informed about Amazon Rekognition, retention periods and servers in the UAE;",
+          "employees have been informed about the configured biometric provider, purposes, recipients, processing locations, retention periods and available alternatives where required;",
           "Platform use complies with employment law in the country of registration;",
           "employee consents are retained and provided upon request.",
         ],
@@ -451,8 +453,8 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
           "process data only for purposes set out in this DPA;",
           "ensure confidentiality and security;",
           "not share data except with AWS, Stripe, SMS providers and Umnico;",
-          "delete data after 6 months or upon written request;",
-          "notify security incidents within 72 hours.",
+          "apply the category-specific retention schedule and process verified deletion or return instructions, subject to applicable legal retention;",
+          "notify personal data breaches without undue delay and within applicable legal or contractual deadlines.",
         ],
       },
       {

@@ -88,13 +88,18 @@ export default function AccountDeletionPage() {
                 is permanently disabled.
               </li>
               <li>
-                Account data may be retained for up to 30 days after deletion
-                where required for backup, security, or legal obligations.
+                Some operational records and stored files may remain after account
+                removal. Backup, security, employer and legal records have separate
+                retention requirements; contact us for the applicable period and
+                scope of deletion. Account removal is not confirmation that every
+                copy has been erased.
               </li>
               <li>
-                Anonymized operational, audit, billing, and legally required
-                records may be retained when they can no longer identify the
-                deleted user.
+                Operational, audit, billing and legally required records may be
+                retained for their applicable purpose. We explain any exception
+                when handling a verified request; exported copies and records
+                independently controlled by your employer are not automatically
+                deleted. Do not email passwords or biometric images.
               </li>
             </ul>
             <p className="mt-5 text-sm leading-7 text-slate-700">

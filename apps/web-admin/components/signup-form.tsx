@@ -215,6 +215,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
               <Input id="signup-confirm" type="password" required autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
             </div>
 
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {lang === 'ru' ? 'Данные используются для создания аккаунта и управления командой. Перед добавлением сотрудников сообщите им цели обработки; не загружайте лишние персональные данные. Отдельное согласие, где оно требуется, не заменяется регистрацией. Запрос доступа или удаления: info@hiteam.net.' : 'We use these details to create your account and manage your team. Inform employees before adding their data; provide only necessary information. Registration does not replace separate consent where required. Access or deletion requests: info@hiteam.net.'}{' '}
+              <a href="/privacy" className="underline">{t.privacyLink}</a>
+            </p>
             <Button
               type="submit"
               disabled={loading}
