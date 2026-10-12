@@ -21,6 +21,7 @@ const suites = [
   'src/modules/org/org-tasks-setup.test.ts',
   'src/modules/org/org-multi-location.test.ts',
   'src/modules/altegio-sync/altegio-sync.helpers.test.ts',
+  'src/modules/altegio-sync/altegio-staff-identity.test.ts',
   'src/modules/altegio-sync/altegio-tracing.test.ts',
   'src/modules/altegio-sync/altegio-pilot-outbound.test.ts',
   'src/modules/altegio-sync/altegio-marketplace-outbound.test.ts',
