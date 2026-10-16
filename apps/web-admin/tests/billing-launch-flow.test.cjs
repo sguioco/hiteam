@@ -4,6 +4,25 @@ const { join } = require("node:path");
 
 const root = join(__dirname, "..");
 
+// Execute the shared state resolver, not just source assertions: a manual
+// connection must never masquerade as this workspace's Marketplace binding.
+const ts = require("typescript");
+const vm = require("node:vm");
+const integrationModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(read("lib/altegio-integration.ts"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText, { exports: integrationModule.exports });
+const { resolveAltegioIntegrationView, formatAltegioConnectionStatus } = integrationModule.exports;
+const pilot = { connected: true, locations: [{ id: "p1", altegioLocationId: "759658", name: "Altegio UAE" }] };
+const manual = resolveAltegioIntegrationView({ connected: false }, pilot);
+assert.equal(manual.marketplaceConnected, false);
+assert.equal(formatAltegioConnectionStatus(manual, "ru"), "Подключено вручную");
+assert.equal(resolveAltegioIntegrationView(null, { ...pilot, connected: false }).connected, false);
+const marketplace = resolveAltegioIntegrationView({ connected: true, locationId: "different" }, pilot);
+assert.equal(marketplace.locationLabel, "salon different");
+assert.equal(formatAltegioConnectionStatus(marketplace, "en"), "Marketplace connected");
+assert.equal(resolveAltegioIntegrationView({ connected: true, locationId: "759658" }, pilot).locationLabel, "Altegio UAE");
+
 function read(relativePath) {
   return readFileSync(join(root, relativePath), "utf8");
 }

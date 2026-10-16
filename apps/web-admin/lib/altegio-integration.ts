@@ -20,7 +20,7 @@ export function resolveAltegioIntegrationView(
   marketplace: AltegioMarketplaceStatus | null | undefined,
   pilot: AltegioPilotStatus | null | undefined,
 ) {
-  const pilotLocations = pilot?.locations ?? [];
+  const pilotLocations = pilot?.connected ? pilot.locations : [];
   const pilotLabels = pilotLocations.map((location) => location.name).filter(Boolean);
 
   if (marketplace?.connected) {
@@ -31,10 +31,10 @@ export function resolveAltegioIntegrationView(
     const marketplaceLabel = matchedPilot?.name
       ?? (marketplaceLocationId ? `salon ${marketplaceLocationId}` : null);
 
-    if (pilotLabels.length > 0) {
+    if (matchedPilot) {
       return {
         connected: true,
-        locationLabel: pilotLabels.join(", "),
+        locationLabel: marketplaceLabel,
         marketplaceConnected: true,
         pilotConnected: true,
       };
@@ -82,6 +82,15 @@ export function formatAltegioIntegrationSubtitle(
   }
 
   return locale === "ru"
-    ? `Подключено · ${view.locationLabel}`
-    : `Connected · ${view.locationLabel}`;
+      ? `Ручное подключение · ${view.locationLabel}`
+    : `Manual connection · ${view.locationLabel}`;
+}
+
+export function formatAltegioConnectionStatus(
+  view: ReturnType<typeof resolveAltegioIntegrationView>,
+  locale: "en" | "ru",
+) {
+  if (view.marketplaceConnected) return locale === "ru" ? "Marketplace подключён" : "Marketplace connected";
+  if (view.pilotConnected) return locale === "ru" ? "Подключено вручную" : "Connected manually";
+  return locale === "ru" ? "Не подключено" : "Not connected";
 }

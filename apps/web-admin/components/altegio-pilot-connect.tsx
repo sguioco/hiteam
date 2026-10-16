@@ -108,7 +108,7 @@ export function AltegioPilotConnect({
 
   return <>
     <button className="h-10 shrink-0 rounded-xl bg-foreground px-4 text-sm font-semibold text-background transition hover:opacity-90" onClick={() => setOpen(true)} type="button">
-      {hasLocations ? (locale === "ru" ? "Управлять подключением" : "Manage connection") : (locale === "ru" ? "Подключить вручную" : "Connect manually")}
+      {hasLocations ? (locale === "ru" ? "Управлять ручной связью" : "Manage manual connection") : (locale === "ru" ? "Подключить вручную" : "Connect manually")}
     </button>
     <Dialog open={open} onOpenChange={(next) => { if (!loading) { setOpen(next); if (!next) resetDialog(); } }}>
       <DialogContent className="max-w-lg overflow-hidden border-0 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.22)]">

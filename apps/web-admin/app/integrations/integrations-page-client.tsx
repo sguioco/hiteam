@@ -89,7 +89,8 @@ export default function IntegrationsPageClient({
   }
 
   useEffect(() => {
-    if (!initialData) void loadSummary();
+    // Bootstrap data may predate a Marketplace reconnect in another workspace.
+    void loadSummary();
   }, []);
 
   useEffect(() => {

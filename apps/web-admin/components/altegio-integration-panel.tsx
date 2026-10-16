@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import {
   formatAltegioIntegrationSubtitle,
+  formatAltegioConnectionStatus,
   resolveAltegioIntegrationView,
   type AltegioMarketplaceStatus,
   type AltegioPilotStatus,
@@ -88,7 +89,7 @@ export function AltegioIntegrationPanel({
     const session = getSession();
     if (!session) return;
 
-    void apiRequest<AltegioPilotStatus>("/altegio/pilot", { token: session.accessToken })
+    void apiRequest<AltegioPilotStatus>("/altegio/pilot", { token: session.accessToken, skipClientCache: true })
       .then(setPilotStatus)
       .catch(() => undefined);
   }, [marketplace]);
@@ -176,13 +177,7 @@ export function AltegioIntegrationPanel({
                       view.connected ? "bg-emerald-500" : "bg-slate-400"
                     }`}
                   />
-                  {view.connected
-                    ? locale === "ru"
-                      ? "Подключено"
-                      : "Connected"
-                    : locale === "ru"
-                      ? "Не подключено"
-                      : "Not connected"}
+                  {formatAltegioConnectionStatus(view, locale)}
                 </span>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
@@ -206,11 +201,11 @@ export function AltegioIntegrationPanel({
               )}
               {marketplace?.connected
                 ? locale === "ru"
-                  ? "Отключить"
-                  : "Disconnect"
+                  ? "Отключить Marketplace"
+                  : "Disconnect Marketplace"
                 : locale === "ru"
-                  ? "Подключить"
-                  : "Connect"}
+                  ? "Подключить Marketplace"
+                  : "Connect Marketplace"}
             </button>
             <AltegioPilotConnect
               onStatusChange={(status) => {
@@ -444,8 +439,8 @@ export function AltegioIntegrationPanel({
       ) : view.connected ? (
         <div className="px-6 py-7 text-sm text-muted-foreground sm:px-7">
           {locale === "ru"
-            ? "Подключение Altegio есть, но синхронизация marketplace не настроена. Проверьте настройки подключения."
-            : "Altegio is connected, but marketplace synchronization is not configured. Check the connection settings."}
+            ? "Локации подключены вручную. Marketplace в этом рабочем пространстве не подключён. Управляйте ручной связью отдельно; если локация уже привязана к другому рабочему пространству через Marketplace, откройте его — повторное подключение сюда не требуется."
+            : "Locations are connected manually. Marketplace is not connected to this workspace. Manage the manual connection separately; if the location is already linked to another workspace through Marketplace, open that workspace instead of connecting it here again."}
         </div>
       ) : (
         <div className="px-6 py-7 sm:px-7">
