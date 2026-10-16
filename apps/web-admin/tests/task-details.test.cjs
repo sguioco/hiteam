@@ -37,6 +37,7 @@ function renderAltegioState({ loading = false, error = null, syncing = false, st
     '@/lib/altegio-integration': {
       resolveAltegioIntegrationView: () => ({ connected: true }),
       formatAltegioIntegrationSubtitle: () => 'Altegio UAE',
+      formatAltegioConnectionStatus: () => 'Подключено вручную',
     },
   });
   return renderToStaticMarkup(React.createElement(AltegioIntegrationPanel));
@@ -49,7 +50,7 @@ assert.match(failedAltegio, /role="alert"/);
 assert.match(failedAltegio, /Access denied/);
 assert.match(failedAltegio, /Повторить/);
 assert.doesNotMatch(failedAltegio, /Получаем состояние|animate-spin/);
-assert.match(renderAltegioState(), /синхронизация marketplace не настроена/);
+assert.match(renderAltegioState(), /Marketplace в этом рабочем пространстве не подключён/);
 assert.doesNotMatch(renderAltegioState(), /Получаем состояние|animate-spin/);
 let pilotChanged;
 const statusRequests = [];
