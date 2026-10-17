@@ -32,3 +32,29 @@ const server = fs.readFileSync(path.join(__dirname, '../../api/src/main.ts'), 'u
 assert.match(server, /json\(\{ limit: '8mb' \}\)/);
 assert.equal(ANNOUNCEMENT_REQUEST_LIMIT_BYTES, 8 * 1024 * 1024);
 console.log('announcement upload: UTF-8, valid payload, exact boundary and RU/EN errors passed');
+
+const targetModule = { exports: {} };
+new Function('exports', 'module', ts.transpileModule(
+  fs.readFileSync(path.join(__dirname, '../lib/announcement-target.ts'), 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } },
+).outputText)(targetModule.exports, targetModule);
+const { buildAnnouncementTarget } = targetModule.exports;
+for (const workspaceLocationId of [undefined, 'workspace-location']) {
+  assert.deepEqual(buildAnnouncementTarget({ audience: 'ALL' }, workspaceLocationId), { audience: 'ALL' });
+  assert.deepEqual(buildAnnouncementTarget({ audience: 'GROUP', groupIds: ['g', 'g'] }, workspaceLocationId), { audience: 'GROUP', groupId: 'g' });
+  assert.deepEqual(buildAnnouncementTarget({ audience: 'EMPLOYEE', targetEmployeeIds: ['e1', 'e2'] }, workspaceLocationId), { audience: 'EMPLOYEE', targetEmployeeIds: ['e1', 'e2'] });
+  assert.deepEqual(buildAnnouncementTarget({ audience: 'GROUP', groupId: 'g', targetEmployeeId: 'e' }, workspaceLocationId), { audience: 'GROUP', groupId: 'g', targetEmployeeId: 'e' });
+}
+assert.deepEqual(buildAnnouncementTarget({}, 'workspace-location'), { audience: 'LOCATION', locationId: 'workspace-location' });
+assert.deepEqual(buildAnnouncementTarget({}), { audience: 'ALL' });
+assert.deepEqual(buildAnnouncementTarget({ audience: 'LOCATION', locationId: 'explicit' }, 'workspace-location'), { audience: 'LOCATION', locationId: 'explicit' });
+assert.deepEqual(buildAnnouncementTarget({ audience: 'LOCATION' }, 'workspace-location'), { audience: 'LOCATION', locationId: 'workspace-location' });
+// The geolocation attachment is content, not a target scope.
+const news = { ...payload, ...buildAnnouncementTarget({ audience: 'ALL' }, 'workspace-location') };
+assert.deepEqual(JSON.parse(serializeAnnouncement(news, 'en')).attachmentLocation, payload.attachmentLocation);
+const apiSource = fs.readFileSync(path.join(__dirname, '../lib/api.ts'), 'utf8');
+const createSource = apiSource.split('export async function createManagerAnnouncement(')[1].split('\nexport ')[0];
+assert.match(createSource, /buildAnnouncementTarget\(input, getWorkspaceScope\(\)\?\.locationId\)/);
+assert.match(createSource, /\.\.\.target/);
+assert.doesNotMatch(createSource, /\.\.\.\(locationId/);
+console.log('announcement audience: ALL, LOCATION, groups, employees and workspace isolation passed');

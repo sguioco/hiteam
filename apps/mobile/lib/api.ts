@@ -1,4 +1,5 @@
 import { serializeAnnouncement } from "./announcement-upload";
+import { buildAnnouncementTarget } from "./announcement-target";
 import { Platform } from "react-native";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
@@ -2130,40 +2131,16 @@ export async function createManagerAnnouncement(input: {
   scheduledFor?: string;
   locationId?: string;
 }) {
-  const locationId = input.locationId ?? getWorkspaceScope()?.locationId;
-  const normalizedGroupIds = Array.from(
-    new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean)),
-  );
-  const normalizedTargetEmployeeIds = Array.from(
-    new Set(
-      [input.targetEmployeeId, ...(input.targetEmployeeIds ?? [])].filter(
-        Boolean,
-      ),
-    ),
-  );
+  const target = buildAnnouncementTarget(input, getWorkspaceScope()?.locationId);
 
   return authRequest<AnnouncementItem>("/collaboration/announcements", {
     method: "POST",
     body: serializeAnnouncement({
-      audience:
-        input.audience ?? (locationId ? "LOCATION" : "ALL"),
-      ...(locationId ? { locationId } : {}),
+      ...target,
       title: input.title,
       body: input.body,
       isPinned: input.isPinned ?? false,
       notifyParticipants: input.notifyParticipants ?? false,
-      ...(normalizedGroupIds.length === 1
-        ? { groupId: normalizedGroupIds[0] }
-        : {}),
-      ...(normalizedGroupIds.length > 1
-        ? { groupIds: normalizedGroupIds }
-        : {}),
-      ...(normalizedTargetEmployeeIds.length === 1
-        ? { targetEmployeeId: normalizedTargetEmployeeIds[0] }
-        : {}),
-      ...(normalizedTargetEmployeeIds.length > 1
-        ? { targetEmployeeIds: normalizedTargetEmployeeIds }
-        : {}),
       ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}),
       ...(input.attachmentLocation
         ? { attachmentLocation: input.attachmentLocation }
