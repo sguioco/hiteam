@@ -41,4 +41,7 @@ Production semantic HiTeam knowledge build: 18 nodes from seven reviewed RU/EN
 articles and allowlisted UI source. The isolated AI runtime completed a real
 question/answer smoke test. Runtime secrets are supplied by the dedicated
 `hiteam-support-runtime` Kubernetes Secret; provider credentials stay on the
-support host. Telegram and operator delivery are deliberately postponed.
+support host. Telegram operator delivery is opt-in through private bot/chat/webhook
+settings and `SUPPORT_HUMAN_ESCALATION_ENABLED=true`. The shared bot webhook is
+owned by the FastSign gateway, which forwards HiTeam ticket callbacks here;
+never register another webhook for the same bot.

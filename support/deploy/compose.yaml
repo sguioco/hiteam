@@ -23,7 +23,7 @@ services:
       SUPPORT_CHAT_APP_NAME: HiTeam Support
       SUPPORT_CHAT_ENV: production
       SUPPORT_CHAT_CORS_ORIGINS: https://hiteam.net
-      SUPPORT_HUMAN_ESCALATION_ENABLED: "false"
+      SUPPORT_HUMAN_ESCALATION_ENABLED: ${SUPPORT_HUMAN_ESCALATION_ENABLED:-false}
       SUPPORT_CHAT_PROFILE_PATH: /profiles/hiteam.yaml
       SUPPORT_CHAT_KNOWLEDGE_GRAPH_PATH: /knowledge-graph
       SUPPORT_DATABASE_SCHEMA_PATH: /app/deploy/sql/support_platform_schema.sql
