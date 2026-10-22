@@ -26,9 +26,9 @@ Only one gateway may register the common Telegram bot's webhook. It must route
 project selection and ticket replies to their owner; never point the common bot
 directly at a second product instance and overwrite the first webhook.
 
-Activation remains pending the rotated shared bot token, operator group chat ID,
-semantic KB build and successful end-to-end reply test. Do not enable a broken
-widget while these are missing. New secrets belong only in ignored `.env` files
+AI-only activation does not depend on Telegram. Set
+`SUPPORT_HUMAN_ESCALATION_ENABLED=false` until the operator transport is configured;
+the assistant must not claim that anyone was notified. New secrets belong only in ignored `.env` files
 or the Kubernetes runtime Secret, never Git or chat.
 
 ## Verification
@@ -37,6 +37,8 @@ Web-admin typecheck, production Next build and all existing web-admin test scrip
 pass. The added proxy tests check missing/rejected auth, disabled configuration,
 path allowlisting, forged browser identities and server-side signing. Shared
 runtime HiTeam/FastSign, session-identity and Telegram tests: 22 passed.
-Static HiTeam knowledge build: 18 nodes from seven reviewed RU/EN articles and
-allowlisted UI source. This is not a semantic runtime release; a real embedding
-build and end-to-end operator delivery remain required before activation.
+Production semantic HiTeam knowledge build: 18 nodes from seven reviewed RU/EN
+articles and allowlisted UI source. The isolated AI runtime completed a real
+question/answer smoke test. Runtime secrets are supplied by the dedicated
+`hiteam-support-runtime` Kubernetes Secret; provider credentials stay on the
+support host. Telegram and operator delivery are deliberately postponed.
