@@ -1,0 +1,8 @@
+{
+  "repository": "git@gitlab.com:hrodwolf/fastsign.git",
+  "revision": "f621411900b4d01b6d8b361a7620a7e1b21bb681",
+  "source_path": "support/support_chat",
+  "schema_path": "support/deploy/sql/support_platform_schema.sql",
+  "widget_source_revision": "84c6425",
+  "product_id": "hiteam"
+}

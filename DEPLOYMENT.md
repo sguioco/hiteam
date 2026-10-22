@@ -1,5 +1,15 @@
 # Smart Deployment and Accounts
 
+## Alt-Tech Support (activation gated)
+
+The cabinet includes the shared Support widget; it defaults off until the
+dedicated HiTeam knowledge release and common Telegram gateway pass smoke tests.
+Set these server-only web-admin variables via the protected runtime Secret:
+`HITEAM_SUPPORT_ENABLED=true`, `HITEAM_SUPPORT_BASE_URL`,
+`HITEAM_SUPPORT_API_KEY`, `HITEAM_SUPPORT_IDENTITY_SECRET`.
+The API URL used for JWT verification is `INTERNAL_API_URL` (existing convention).
+Never add these credentials to NEXT_PUBLIC variables. See `support/README.md`.
+
 ## 1. Accounts You Should Create
 
 ### Required now

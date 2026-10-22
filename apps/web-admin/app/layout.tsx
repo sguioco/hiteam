@@ -102,7 +102,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head />
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
-        <Providers initialLocale={initialLocale}>{children}</Providers>
+        <Providers initialLocale={initialLocale} supportEnabled={process.env.HITEAM_SUPPORT_ENABLED === "true"}>{children}</Providers>
         {shouldRenderWidget ? (
           <>
             <a

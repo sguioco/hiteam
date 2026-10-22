@@ -1,0 +1,51 @@
+name: hiteam-support
+services:
+  support-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hiteam_support
+      POSTGRES_USER: support_app
+      POSTGRES_PASSWORD: ${SUPPORT_PLATFORM_DB_PASSWORD:?Configure private database password}
+    volumes:
+      - support_database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U support_app -d hiteam_support"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+  support-chat:
+    image: ${ALT_TECH_SUPPORT_IMAGE:?Pin the shared runtime image from runtime.lock.json}
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      SUPPORT_PRODUCT_ID: hiteam
+      SUPPORT_CHAT_APP_NAME: HiTeam Support
+      SUPPORT_CHAT_ENV: production
+      SUPPORT_CHAT_PROFILE_PATH: /profiles/hiteam.yaml
+      SUPPORT_CHAT_KNOWLEDGE_GRAPH_PATH: /knowledge-graph
+      SUPPORT_DATABASE_SCHEMA_PATH: /app/deploy/sql/support_platform_schema.sql
+      SUPPORT_DATABASE_URL: ${SUPPORT_DATABASE_URL:?Configure private support database URL}
+      SUPPORT_CHAT_API_KEY: ${SUPPORT_CHAT_API_KEY:?Configure private API key}
+      SUPPORT_PRODUCT_IDENTITY_MODE: signed_header
+      SUPPORT_IDENTITY_SIGNING_SECRET: ${SUPPORT_IDENTITY_SIGNING_SECRET:?Configure identity secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Configure model key}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      SUPPORT_ESCALATION_TELEGRAM_BOT_TOKEN: ${SUPPORT_ESCALATION_TELEGRAM_BOT_TOKEN:-}
+      SUPPORT_ESCALATION_TELEGRAM_CHAT_ID: ${SUPPORT_ESCALATION_TELEGRAM_CHAT_ID:-}
+      SUPPORT_TELEGRAM_WEBHOOK_SECRET: ${SUPPORT_TELEGRAM_WEBHOOK_SECRET:-}
+    ports:
+      - "127.0.0.1:8096:8094"
+    volumes:
+      - ./profiles/hiteam.yaml:/profiles/hiteam.yaml:ro
+      - ${SUPPORT_KNOWLEDGE_GRAPH_HOST_PATH:?Configure verified HiTeam knowledge artifact}:/knowledge-graph:ro
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8094/healthz', timeout=5).read()"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+    depends_on:
+      support-postgres:
+        condition: service_healthy
+volumes:
+  support_database:

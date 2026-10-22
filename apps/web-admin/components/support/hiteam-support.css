@@ -1,0 +1,4 @@
+.hiteam-support .support-widget__launcher { z-index: 260; width: 56px; height: 56px; background: linear-gradient(135deg,#2563eb,#635bff); box-shadow: 0 8px 24px #2563eb33; }
+.hiteam-support .support-widget__panel { z-index: 261; width: min(420px,calc(100vw - 32px)); max-height: min(680px,calc(100dvh - 112px)); }
+.hiteam-support .support-widget__lightbox { z-index: 282; }
+@media(max-width:719px) { .hiteam-support .support-widget__panel { inset: auto 16px calc(96px + env(safe-area-inset-bottom,0px)) 16px !important; width: calc(100vw - 32px); max-height: calc(100dvh - 120px); } }

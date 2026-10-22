@@ -78,6 +78,7 @@ import {
   ORGANIZATION_SETUP_REQUIRED_STORAGE_KEY,
 } from "../lib/organization-setup";
 import { WorkspaceLoading } from "./workspace-loading";
+import { ProductSupportChatRoot } from "./support/product-support-chat-root";
 
 type NavItem = {
   href: string;
@@ -1505,6 +1506,7 @@ export function AdminShell({
 
   return (
     <div className="admin-frame">
+      <ProductSupportChatRoot session={session} locale={locale} />
       <CreateDialog
         actions={createDialogActions}
         onCreateEmployee={() => setEmployeeCreateOpen(true)}
