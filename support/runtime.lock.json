@@ -1,6 +1,6 @@
 {
   "repository": "git@gitlab.com:hrodwolf/fastsign.git",
-  "revision": "f621411900b4d01b6d8b361a7620a7e1b21bb681",
+  "revision": "1f6602226737ca35e9266d249191b32d2ca79e77",
   "source_path": "support/support_chat",
   "schema_path": "support/deploy/sql/support_platform_schema.sql",
   "widget_source_revision": "84c6425",
