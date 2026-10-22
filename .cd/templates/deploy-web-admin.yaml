@@ -30,6 +30,9 @@ spec:
           envFrom:
             - secretRef:
                 name: envs-web-admin
+            - secretRef:
+                name: hiteam-support-runtime
+                optional: true
             {{- if .Values.sharedInfo.runtimeSecretName }}
             - secretRef:
                 name: {{ .Values.sharedInfo.runtimeSecretName }}

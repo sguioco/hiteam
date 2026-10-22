@@ -22,6 +22,8 @@ services:
       SUPPORT_PRODUCT_ID: hiteam
       SUPPORT_CHAT_APP_NAME: HiTeam Support
       SUPPORT_CHAT_ENV: production
+      SUPPORT_CHAT_CORS_ORIGINS: https://hiteam.net
+      SUPPORT_HUMAN_ESCALATION_ENABLED: "false"
       SUPPORT_CHAT_PROFILE_PATH: /profiles/hiteam.yaml
       SUPPORT_CHAT_KNOWLEDGE_GRAPH_PATH: /knowledge-graph
       SUPPORT_DATABASE_SCHEMA_PATH: /app/deploy/sql/support_platform_schema.sql
@@ -31,6 +33,9 @@ services:
       SUPPORT_IDENTITY_SIGNING_SECRET: ${SUPPORT_IDENTITY_SIGNING_SECRET:?Configure identity secret}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Configure model key}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      SUPPORT_AGENT_REACT_MODEL: ${SUPPORT_AGENT_REACT_MODEL:-gpt-5.6-sol}
+      SUPPORT_AGENT_SYNTHESIS_MODEL: ${SUPPORT_AGENT_SYNTHESIS_MODEL:-gpt-5.6-terra}
+      SUPPORT_AGENT_ATTACHMENT_MODEL: ${SUPPORT_AGENT_ATTACHMENT_MODEL:-gpt-5.6-terra}
       SUPPORT_ESCALATION_TELEGRAM_BOT_TOKEN: ${SUPPORT_ESCALATION_TELEGRAM_BOT_TOKEN:-}
       SUPPORT_ESCALATION_TELEGRAM_CHAT_ID: ${SUPPORT_ESCALATION_TELEGRAM_CHAT_ID:-}
       SUPPORT_TELEGRAM_WEBHOOK_SECRET: ${SUPPORT_TELEGRAM_WEBHOOK_SECRET:-}
@@ -47,5 +52,13 @@ services:
     depends_on:
       support-postgres:
         condition: service_healthy
+    networks:
+      default:
+      edge:
+        aliases: [hiteam-support]
 volumes:
   support_database:
+networks:
+  edge:
+    external: true
+    name: mapty-edge
