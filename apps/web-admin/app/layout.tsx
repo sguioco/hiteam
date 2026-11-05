@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
 import localFont from 'next/font/local';
 import Script from 'next/script';
+import { OptionalPublicChat } from '@/components/optional-public-chat';
 import './globals.css';
 import { Providers } from './providers';
 import { petersburgHero } from './landing-hero-font';
@@ -99,35 +100,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         petersburgHero.variable,
       )}
     >
-      <head />
+      <head>
+        <Script src="/cookie-consent.js" strategy="beforeInteractive" data-brand="hiteam" />
+      </head>
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
         <Providers initialLocale={initialLocale} supportEnabled={process.env.HITEAM_SUPPORT_ENABLED === "true"}>{children}</Providers>
-        {shouldRenderWidget ? (
-          <>
-            <a
-              className="umnico-widget-logo"
-              data-umnico-logo="true"
-              draggable={false}
-              href="https://umnico.com/?utm_source=widget&utm_medium=online_chat&utm_campaign=button"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              <img
-                alt="Umnico logo"
-                className="umnico-widget-logo-image"
-                draggable={false}
-                src="https://umnico.com/assets/index/umnico1.svg"
-              />
-            </a>
-            <div className="umnico-widget-loader" data-umnico-loader="true">
-              Loading
-            </div>
-            <Script id="umnico-widget-loader" strategy="afterInteractive">
-              {umnicoWidgetScript}
-            </Script>
-          </>
-        ) : null}
+        {shouldRenderWidget ? <OptionalPublicChat script={umnicoWidgetScript} /> : null}
       </body>
     </html>
   );
