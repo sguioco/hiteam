@@ -73,16 +73,20 @@
     warning.textContent = w[6];
     panel.dir = /^(ar|ur)/.test(document.documentElement.lang) ? 'rtl' : 'ltr';
   }
-  window.AltCookieConsent = {allowed:allowed, open:function () { if (panel) { panel.hidden=false; shadow.querySelector('#cc-reject').focus(); } }};
+  window.AltCookieConsent = {allowed:allowed, open:function () { if (panel) { panel.hidden=false; settings.hidden=true; shadow.querySelector('#cc-reject').focus(); } }};
   function mount() {
     var host = document.createElement('div');
     host.id = 'alt-cookie-consent';
     host.setAttribute('data-brand', brand);
-    host.style.cssText = 'position:fixed;inset:auto auto 18px 18px;z-index:2147483000;max-width:calc(100vw - 36px);font-family:inherit;';
+    // Only the initial dialog floats. The persistent control lives in the
+    // document footer flow, so it cannot cover forms, chat or legal links.
+    host.style.cssText = 'display:block;width:100%;clear:both;font-family:inherit;';
     shadow = host.attachShadow({mode:'open'});
     shadow.innerHTML = '<style>:host{'+(themes[brand]||themes.alt)+'}*{box-sizing:border-box}[hidden]{display:none!important}section{width:440px;max-width:calc(100vw - 36px);max-height:calc(100dvh - 36px);overflow:auto;background:var(--cc-bg);color:var(--cc-fg);border:1px solid color-mix(in srgb,var(--cc-fg) 18%,transparent);border-radius:16px;padding:22px;box-shadow:0 12px 50px #0003;font-family:inherit;font-size:14px;line-height:1.55}h2{font-family:inherit;font-size:18px;font-weight:700;line-height:1.3;margin:0 0 12px}p{margin:0 0 14px}a{color:var(--cc-fg);text-underline-offset:3px}nav{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0 12px}button{font-family:inherit;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer;border-radius:9px;min-height:44px;padding:10px;border:1px solid var(--cc-accent);background:var(--cc-bg);color:var(--cc-fg)}#cc-accept{background:var(--cc-accent);color:var(--cc-on)}button:focus-visible,a:focus-visible{outline:3px solid var(--cc-accent);outline-offset:3px}#cc-settings{background:var(--cc-bg);color:var(--cc-fg);box-shadow:0 2px 12px #0002;font-size:12px;min-height:36px}#cc-warning{font-size:12px;margin-top:12px}@media(max-width:480px){section{padding:18px}nav{grid-template-columns:1fr}}@media print{:host{display:none}}</style><section role="dialog" aria-labelledby="cc-title" aria-describedby="cc-description"><h2 id="cc-title"></h2><p id="cc-description"></p><nav><button id="cc-accept" type="button"></button><button id="cc-reject" type="button"></button></nav><a id="cc-policy" target="_blank" rel="noopener"></a><p id="cc-warning" role="status" hidden></p></section><button id="cc-settings" type="button" hidden></button>';
     panel = shadow.querySelector('section');
+    panel.style.cssText = 'position:fixed;bottom:18px;left:18px;z-index:2147483000;';
     settings = shadow.querySelector('#cc-settings');
+    settings.style.cssText = 'display:block;margin:12px auto;padding:4px 8px;min-height:36px;border:0;background:transparent;box-shadow:none;color:var(--cc-fg);text-decoration:underline;text-underline-offset:3px;';
     warning = shadow.querySelector('#cc-warning');
     shadow.querySelector('#cc-policy').href = policy;
     shadow.querySelector('#cc-accept').onclick = function () { save('accepted'); };
