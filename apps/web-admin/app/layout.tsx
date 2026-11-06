@@ -101,7 +101,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       )}
     >
       <head>
-        <Script src="/cookie-consent.js?v=20261106-footer" strategy="beforeInteractive" data-brand="hiteam" />
+        <Script src="/cookie-consent.js?v=20261106-accept-all" strategy="beforeInteractive" data-brand="hiteam" />
       </head>
       <body>
         <script dangerouslySetInnerHTML={{ __html: sessionBootstrapScript }} />
