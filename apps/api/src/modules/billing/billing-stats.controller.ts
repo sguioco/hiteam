@@ -21,18 +21,25 @@ export class BillingStatsController {
   async summary(
     @Headers('x-admin-token') token: string | undefined,
     @Query('periodDays') periodDaysRaw?: string,
+    @Query('period') period?: string,
   ) {
     this.assertAdminToken(token);
     const periodDays = this.parsePeriodDays(periodDaysRaw);
-    const from = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
-    const [subscriptions, payments] = await Promise.all([
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    if (period && !['mtd', 'all'].includes(period)) {
+      throw new HttpException({ message: 'invalid_period' }, HttpStatus.BAD_REQUEST);
+    }
+    const from = period === 'all' ? new Date(0) : period === 'mtd' ? monthStart : new Date(now.getTime() - periodDays * 86400000);
+    const [subscriptions, payments, newConnectionsThisMonth] = await Promise.all([
       this.prisma.billingSubscription.findMany({
         include: { tenant: { select: { name: true, slug: true } } },
       }),
       this.prisma.billingPayment.findMany({
-        where: { status: 'PAID', paidAt: { gte: from } },
+        where: { status: 'PAID', paidAt: { gte: from, lte: now } },
         orderBy: { paidAt: 'desc' },
       }),
+      this.prisma.tenant.count({ where: { createdAt: { gte: monthStart, lte: now } } }),
     ]);
 
     const statuses: Record<string, number> = {};
@@ -68,6 +75,12 @@ export class BillingStatsController {
     }
 
     return {
+      period: period ?? null,
+      newConnectionsThisMonth,
+      paidSubscriptions: subscriptions.filter((subscription) => this.subscriptionActive(subscription) &&
+        subscription.status.toUpperCase() === 'ACTIVE' && Boolean(subscription.stripeCurrentPeriodEnd && subscription.stripeCurrentPeriodEnd > now)).length,
+      trialSubscriptions: subscriptions.filter((subscription) => this.subscriptionActive(subscription) &&
+        subscription.status.toUpperCase() === 'TRIALING' && !subscription.firstPaidAt).length,
       periodDays,
       totalTenants: subscriptions.length,
       activeSubscriptions: tenants.filter((tenant) => tenant.subscriptionActive).length,
@@ -85,7 +98,7 @@ export class BillingStatsController {
     }
     const actual = (token ?? '').trim();
     if (
-      actual.length !== expected.length ||
+      Buffer.byteLength(actual) !== Buffer.byteLength(expected) ||
       !timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
     ) {
       throw new HttpException({ message: 'invalid_admin_token' }, HttpStatus.UNAUTHORIZED);

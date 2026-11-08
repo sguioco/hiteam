@@ -4,6 +4,7 @@
   if (window.AltCookieConsent) return;
   var config = document.currentScript ? document.currentScript.dataset : {};
   var brand = config.brand || 'alt';
+  var activityScriptUrl = new URL('product-activity.js?v=20261109', document.currentScript.src).href;
   var policy = config.privacy || (brand === 'fastsign' ? 'https://api.fastsign.ae/privacy' : '/privacy');
   var key = 'alt-cookie-choice-v1';
   var lifetime = 180 * 86400000;
@@ -35,6 +36,7 @@
   };
   function allowed() { return choice === 'accepted'; }
   function clearOptional() {
+    try { localStorage.removeItem('alt-product-visitor-v1'); } catch (_) {}
     try { localStorage.removeItem('alt-training-manager-v1'); localStorage.removeItem('mapty-outreach-source-v1'); }
     catch (_) { /* Storage can be disabled without blocking necessary features. */ }
     document.cookie.split(';').forEach(function (entry) {
@@ -47,6 +49,13 @@
   }
   var panel, settings, shadow, warning;
   function publish() {
+    if (allowed() && /^(fastsign|mapty|hiteam|send24)$/.test(brand) && !document.getElementById('alt-product-activity-script')) {
+      var tracker = document.createElement('script');
+      tracker.id = 'alt-product-activity-script';
+      tracker.src = activityScriptUrl;
+      tracker.dataset.product = brand;
+      document.head.appendChild(tracker);
+    }
     window.dispatchEvent(new CustomEvent('alt-cookie-consent', {detail: {optional: allowed()}}));
   }
   function save(next) {
@@ -62,10 +71,19 @@
     if (revoke) location.reload(); // Remove already-running optional scripts after withdrawing consent.
   }
   function words() { return copy[(document.documentElement.lang || 'en').split('-')[0]] || copy.en; }
+  var activityNotice = {
+    en: 'Product analytics counts page views and clicks using a random browser ID retained for up to 8 days. Alt Technologies processes these events in Germany.',
+    ru: 'Аналитика продукта считает просмотры и клики по случайному идентификатору браузера со сроком хранения до 8 дней. Alt Technologies обрабатывает эти события в Германии.',
+    es: 'La analítica del producto cuenta vistas y clics con un identificador aleatorio del navegador conservado hasta 8 días. Alt Technologies procesa estos eventos en Alemania.',
+    ar: 'تحسب تحليلات المنتج المشاهدات والنقرات باستخدام معرّف متصفح عشوائي يُحتفظ به لمدة تصل إلى 8 أيام. تعالج Alt Technologies هذه الأحداث في ألمانيا.',
+    hi: 'उत्पाद विश्लेषण एक यादृच्छिक ब्राउज़र आईडी से पेज व्यू और क्लिक गिनता है, जिसे अधिकतम 8 दिन रखा जाता है। Alt Technologies इन इवेंट को जर्मनी में संसाधित करता है।',
+    ur: 'پروڈکٹ تجزیات ایک بے ترتیب براؤزر شناخت سے صفحے کے مشاہدات اور کلکس گنتے ہیں، جسے زیادہ سے زیادہ 8 دن رکھا جاتا ہے۔ Alt Technologies ان واقعات پر جرمنی میں کارروائی کرتا ہے۔'
+  };
   function translate() {
     var w = words();
     shadow.querySelector('#cc-title').textContent = w[0];
-    shadow.querySelector('#cc-description').textContent = w[1];
+    var language = (document.documentElement.lang || 'en').split('-')[0];
+    shadow.querySelector('#cc-description').textContent = w[1] + ' ' + (activityNotice[language] || activityNotice.en);
     shadow.querySelector('#cc-accept').textContent = w[2];
     shadow.querySelector('#cc-reject').textContent = w[3];
     shadow.querySelector('#cc-policy').textContent = w[4];

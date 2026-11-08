@@ -8,6 +8,7 @@ const suites = [
   'src/observability/request-attributes.test.ts',
   'src/modules/mail/email-flows.test.ts',
   'src/modules/billing/billing-flows.test.ts',
+  'src/modules/billing/billing-stats.test.ts',
   'src/modules/billing/altegio-webhook-signature.test.ts',
   'src/modules/billing/altegio-install-claim.test.ts',
   'src/modules/kommo/kommo-flows.test.ts',
